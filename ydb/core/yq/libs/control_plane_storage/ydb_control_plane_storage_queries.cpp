@@ -1666,7 +1666,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
         YandexQuery::DescribeJobResult result;
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the id job or your access rights";
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
         }
         if (!result.mutable_job()->ParseFromString(*parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString())) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
@@ -1676,7 +1676,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
 
         bool hasViewAccces = HasViewAccess(permissions, visibility, result.job().meta().created_by(), user);
         if (!hasViewAccces) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the id job or your access rights";
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
         }
         return result;
     };

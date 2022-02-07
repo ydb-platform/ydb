@@ -19,7 +19,11 @@ import yaml
 from library.python import resource
 
 
-PDISK_SIZE = os.getenv("YDB_PDISK_SIZE", 64 * 1024 * 1024 * 1024)
+PDISK_SIZE_STR = os.getenv("YDB_PDISK_SIZE", str(64 * 1024 * 1024 * 1024))
+if PDISK_SIZE_STR.endswith("GB"):
+    PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024 * 1024
+else:
+    PDISK_SIZE = int(PDISK_SIZE_STR)
 
 
 def get_fqdn():

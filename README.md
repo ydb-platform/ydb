@@ -60,11 +60,11 @@ For development purposes we test that YDB could be built and run under latest ve
 
 ## Getting started with YDB in 5 minutes
 
-1. Install YDB Platform: using [pre-built executables](docs/ru/core/getting_started/ydb_local.md), build it from source or [use Docker container](docs/en/core/getting_started/ydb_docker.md).
-1. Start local cluster or container and run [YQL query](docs/en/core/yql/reference/index.md) via [YDB CLI](docs/en/core/reference/ydb-cli/index.md).
+1. Install YDB Platform: using [pre-built executables](ydb/docs/ru/core/getting_started/ydb_local.md), build it from source or [use Docker container](ydb/docs/en/core/getting_started/ydb_docker.md).
+1. Start local cluster or container and run [YQL query](ydb/docs/en/core/yql/reference/index.md) via [YDB CLI](docs/en/core/reference/ydb-cli/index.md).
 1. Access YDB Embedded UI via browser for schema navigation, query execution and other database development related tasks.
-1. Run available [example application](docs/en/core/reference/ydb-sdk/example/example-go.md).
-1. Develop an application using [YDB SDK](docs/en/core/reference/ydb-sdk)
+1. Run available [example application](ydb/docs/en/core/reference/ydb-sdk/example/example-go.md).
+1. Develop an application using [YDB SDK](ydb/docs/en/core/reference/ydb-sdk)
 
 
 ## How to build
@@ -107,8 +107,8 @@ Building YDB Embedded UI requires following tools:
 
 ## How to deploy
 
-* Deploy a cluster [using Kubernetes](docs/en/core/deploy/orchestrated/concepts.md).
-* Deploy a cluster using [pre-built executables](docs/ru/core/getting_started/ydb_local.md).
+* Deploy a cluster [using Kubernetes](ydb/docs/en/core/deploy/orchestrated/concepts.md).
+* Deploy a cluster using [pre-built executables](ydb/docs/ru/core/getting_started/ydb_local.md).
 
 ## How to contribute
 

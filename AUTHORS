@@ -1,50 +1,64 @@
-# The following authors have created the source code of «YDB Platform» published and distributed by YANDEX LLC as the owner:
+The following authors have created the source code of «YDB» published and distributed by YANDEX LLC as the owner.
 
-# Names should be added to this file as one of
-#     Organization's name
-#     Individual's name github_login@
+Note: This list does not necessarily list everyone who has contributed code, especially since many employees of
+one corporation may be contributing. The revision history in source control gives the full list of contributors.
 
-## YDB Core Team
+The project was started by Andrey Fomichev <fomichev@yandex-team.ru> and Denis Podluzhny <ddoarn@gmail.com>
+in the end of 2013, first commit was made on 2014-01-10.
 
-Andrey Fomichev fomichev3000@
-Denis Podluzhnyi ddoarn@
-Alexander Gololobov davenger@
-Sergey Puchin spuchin@
-Daniil Cherednik dcherednik@
-Alexey Ozeritskiy resetius@
-Andrey Neporada nepal@
-Alexey Borzenkov snaury@
-Alexey Efimov adameat@
-Maxim Gorbunov mvgorbunov@
+It's hard to imagine YDB project without these people even if they didn't contribute to the code much:
+    Alexander Chubinskiy <chubinskiy@yandex-team.ru>
+    Oleg Bondar <olegbondar@yandex-team.ru>
+    Anton Kovalenko <kovalad@yandex-team.ru>
 
-### NodeJS SDK
+List of most significant contributors:
+    Alexander Gololobov <davenger@yandex-team.ru>
+    Aleksey Stankevichus <cthulhu@yandex-team.ru>
+    Vitaly Stoyan <vvvv@yandex-team.ru>
+    Sergey Puchin <spuchin@yandex-team.ru>
+    Alexey Borzenkov <snaury@yandex-team.ru>
+    Vitalii Gridnev <gvit@yandex-team.ru>
+    Alexander Rutkovsky <alexvru@yandex-team.ru>
+    Alexey Efimov <xenoxeno@yandex-team.ru>
+    Maxim Gorbunov <stunder@yandex-team.ru>
+    Semen Checherinda <svc@yandex-team.ru>
+    Ilnaz Nizametdinov <ilnaz@yandex-team.ru>
+    Igor Makunin <imakunin@yandex-team.ru>
+    Anton Romanov <a-romanov@yandex-team.ru>
+    Roman Udovichenko <udovichenko-r@yandex-team.ru>
+    Artem Zuikov <chertus@yandex-team.ru>
+    Vladislav Kuznecov <va-kuznecov@yandex-team.ru>
+    Aleksei Nikolaevskii <alexnick@yandex-team.ru>
+    Sergey Ierusalimov <wint@yandex-team.ru>
+    Daniil Cherednik <dcherednik@yandex-team.ru>
+    Andrey Neporada <aneporada@yandex-team.ru>
+    Ilya Enkovich <ienkovich@yandex-team.ru>
+    Andrey Satarin <asatarin@yandex.ru>
+    Vadim Skipin <vskipin@yandex-team.ru>
+    Alexander Soloviev <single@yandex-team.ru>
+    Vasily Gerasimov <galaxycrab@yandex-team.ru>
+    Sergey Trifonov <serxa@yandex-team.ru>
+    Alexander Dmitriev <monster@yandex-team.ru>
+    Nikolay Perfilov <pnv1@yandex-team.ru>
+    Alexander Kryukov <kruall@yandex-team.ru>
+    Alexander Smirnov <alexv-smirnov@yandex-team.ru>
+    Alexey Ozeritskiy <aozeritsky@yandex-team.ru>
+    Sergey Polovko <http://www.jamel.org>
+    Igor Seliverstov <gvvinblade@yandex-team.ru>
+    Iuliia Sidorina <ulya-sidorina@yandex-team.ru>
+    Evgeniy Ivanov <eivanov89@yandex-team.ru>
+    Nikita Lapkov <laplab@yandex-team.ru>
+    Sergey Uzhakov <uzhas@yandex-team.ru>
+    Oleg Doronin <hcpp@yandex-team.ru>
+    Alexey Bogolyubskiy <alexbogo@yandex-team.ru>
+    Konstantin Melekhov <komels@yandex-team.ru>
+    Anton Zelenov <pcwur@yandex-team.ru>
+    Ivan Blinkov <yandex@blinkov.ru>
+    Stas Kelvich <stas.kelvich@gmail.com>
+    Dmitrii Mokhnatkin <d-mokhnatkin@yandex-team.ru>
+    Aleksandr Khoroshilov <hor911@yandex-team.ru>
+    Evgenii Beloshabskii <beloshabskiy@yandex-team.ru>
+    Aidar Samerkhanov <aidarsamer@yandex-team.ru>
 
-Timur Sufiev tsufiev@
+You can be added to this list by a request to Andrey Fomichev.
 
-### Python SDK
-
-Vitalii Gridnev gridnevvvit@
-Ischenko Alexis ale110i@
-
-### PHP SDK
-
-Alexei Shabalin alshabalin@
-
-### Java SDK
-
-Nikolai Perfilov nepal@
-Sergey Polovko jamel@
-
-### GO SDK
-
-Sergey Kamardin gobwas@
-Alexey Myasnikov asmyasnikov@
-
-### DotNet SDK
-
-Sergey Puchin spuchin@
-
-### CPP SDK
-
-Sergey Puchin spuchin@
-Daniil Cherednik dcherednik@

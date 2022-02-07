@@ -311,6 +311,7 @@ protected:
         OPTION_MERGE("auth-token-file", AuthConfig);
 
         LoadBaseConfig(config);
+        LoadYamlConfig();
 
         // start memorylog as soon as possible
         if (auto mem = OPTION("memorylog-file", MemoryLogConfig)) {

@@ -105,17 +105,10 @@ Building YDB Embedded UI requires following tools:
 1. `cd ydb/apps/ydbd`
 1. `cmake ../ && make`
 
-## Documentation links
-
-1. What is YDB platform
-1. Quick core features demo
-1. Application Development with YDB SDK
-
-
 ## How to deploy
 
-* Link to documentation about k8s deploy
-* Link to documentation about deploy with binaries
+* Deploy a cluster [using Kubernetes](docs/en/core/deploy/orchestrated/concepts.md).
+* Deploy a cluster using [pre-built executables](docs/ru/core/getting_started/ydb_local.md).
 
 ## How to contribute
 

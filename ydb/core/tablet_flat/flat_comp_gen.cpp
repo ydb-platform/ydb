@@ -409,7 +409,7 @@ ui64 TGenCompactionStrategy::BeginMemCompaction(TTaskId taskId, TSnapEdge edge, 
 
 bool TGenCompactionStrategy::ScheduleBorrowedCompaction() {
     // Find if we actually have borrowed parts
-    const ui32 ownerTabletId = Backend->OwnerTabletId();
+    const ui64 ownerTabletId = Backend->OwnerTabletId();
     bool haveBorrowed = false;
     for (const auto& pr : KnownParts) {
         if (pr.first.TabletID() != ownerTabletId) {

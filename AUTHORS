@@ -1,1 +1,50 @@
-The following authors have created the source code of «YDB Platform» published and distributed by YANDEX LLC as the owner:
+# The following authors have created the source code of «YDB Platform» published and distributed by YANDEX LLC as the owner:
+
+# Names should be added to this file as one of
+#     Organization's name
+#     Individual's name github_login@
+
+## YDB Core Team
+
+Andrey Fomichev fomichev3000@
+Denis Podluzhnyi ddoarn@
+Alexander Gololobov davenger@
+Sergey Puchin spuchin@
+Daniil Cherednik dcherednik@
+Alexey Ozeritskiy resetius@
+Andrey Neporada nepal@
+Alexey Borzenkov snaury@
+Alexey Efimov adameat@
+Maxim Gorbunov mvgorbunov@
+
+### NodeJS SDK
+
+Timur Sufiev tsufiev@
+
+### Python SDK
+
+Vitalii Gridnev gridnevvvit@
+Ischenko Alexis ale110i@
+
+### PHP SDK
+
+Alexei Shabalin alshabalin@
+
+### Java SDK
+
+Nikolai Perfilov nepal@
+Sergey Polovko jamel@
+
+### GO SDK
+
+Sergey Kamardin gobwas@
+Alexey Myasnikov asmyasnikov@
+
+### DotNet SDK
+
+Sergey Puchin spuchin@
+
+### CPP SDK
+
+Sergey Puchin spuchin@
+Daniil Cherednik dcherednik@

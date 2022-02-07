@@ -2689,6 +2689,7 @@ struct TBuiltinFuncData {
             {"combinemembers", BuildNamedBuiltinFactoryCallback<TCombineMembers>("FlattenMembers")},
             {"flattenmembers", BuildNamedBuiltinFactoryCallback<TFlattenMembers>("FlattenMembers")},
             {"staticmap", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticMap", 2, 2) },
+            {"staticzip", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticZip", 1, -1) },
 
             // File builtins
             {"filepath", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FilePath")},

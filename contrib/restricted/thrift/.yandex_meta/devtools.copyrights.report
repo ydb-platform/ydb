@@ -1,0 +1,87 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 368d549891fea2b4fff16d879818a915
+BELONGS compiler/ya.make
+    License text:
+           Copyright (C) 1984, 1989-1990, 2000-2015 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        compiler/thrift/thrifty.cc [5:5]
+        compiler/thrift/thrifty.hh [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e927acd55bef09087f9bb2b2b66334b
+BELONGS ya.make
+    License text:
+         * Copyright 2007 by Nathan C. Myers <ncm@cantrip.org>; some rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        thrift/windows/SocketPair.cpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 46d787a126d03ce8e9cb0b31bb56ef9a
+BELONGS compiler/ya.make
+    License text:
+         * Copyright (c) 2008- Patrick Collison <patrick@collison.ie>
+         * Copyright (c) 2006- Facebook
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        compiler/thrift/generate/t_cl_generator.cc [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 841a40d84dc2436787d5e4689b424aa7
+BELONGS compiler/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        compiler/thrift/generate/t_html_generator.h [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 97a8e68d757208fc4276d6800877a14f
+BELONGS compiler/ya.make
+    License text:
+         * Copyright (c) 2008- Patrick Collison <patrick@collison.ie>
+         * Copyright (c) 2006- Facebook
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        compiler/thrift/generate/t_cl_generator.cc [2:3]

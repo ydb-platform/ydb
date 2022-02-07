@@ -1,0 +1,22 @@
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_simple_q3_sql_plan/t1",
+            "reads": [
+                {
+                    "type": "FullScan",
+                    "scan_by": [
+                        "rowid"
+                    ],
+                    "columns": [
+                        "b"
+                    ]
+                }
+            ]
+        }
+    ]
+}

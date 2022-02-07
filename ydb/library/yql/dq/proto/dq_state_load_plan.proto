@@ -1,0 +1,46 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYql.NDqProto.NDqStateLoadPlan;
+
+enum EStateType {
+    STATE_TYPE_UNSPECIFIED = 0;
+
+    // Don't load state, init a new one.
+    STATE_TYPE_EMPTY = 1;
+
+    // Load own state.
+    STATE_TYPE_OWN = 2;
+
+    // Load state from the other task.
+    STATE_TYPE_FOREIGN = 3;
+}
+
+message TTaskPlan {
+    EStateType StateType = 1;
+
+    // Options for foreign state.
+    TProgramPlan Program = 2;
+    repeated TSourcePlan Sources = 3;
+    repeated TSinkPlan Sinks = 4;
+}
+
+message TProgramPlan {
+    EStateType StateType = 1;
+}
+
+message TSourcePlan {
+    EStateType StateType = 1;
+    uint64 InputIndex = 2;
+    repeated TForeignTaskSource ForeignTasksSources = 3;
+
+    message TForeignTaskSource {
+        uint64 TaskId = 1;
+        uint64 InputIndex = 2;
+    }
+}
+
+message TSinkPlan {
+    EStateType StateType = 1;
+    uint64 OutputIndex = 2;
+}

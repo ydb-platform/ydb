@@ -1,0 +1,36 @@
+ids { code: UNEXPECTED severity: S_FATAL }
+ids { code: DEFAULT_ERROR severity: S_ERROR }
+ids { code: INFO severity: S_INFO }
+ids { code: WARNING severity: S_WARNING }
+ids { code: SUCCESS severity: S_INFO }
+
+ids { code: ACCESS_DENIED severity: S_ERROR }
+
+ids { code: PATH_NOT_EXIST severity: S_ERROR }
+ids { code: DATABASE_NOT_EXIST severity: S_ERROR }
+ids { code: GENERIC_DATASHARD_ERROR severity: S_ERROR }
+ids { code: GENERIC_RESOLVE_ERROR severity: S_ERROR }
+ids { code: RESOLVE_LOOKUP_ERROR severity: S_ERROR }
+ids { code: GENERIC_TXPROXY_ERROR severity: S_ERROR }
+ids { code: KEY_PARSE_ERROR severity: S_ERROR }
+ids { code: EMPTY_OP_RANGE severity: S_ERROR }
+ids { code: ENGINE_ERROR severity: S_ERROR }
+ids { code: DOMAIN_LOCALITY_ERROR severity: S_ERROR }
+ids { code: SHARD_NOT_AVAILABLE severity: S_ERROR }
+ids { code: TX_STATE_UNKNOWN severity: S_ERROR }
+ids { code: TX_DECLINED_BY_COORDINATOR severity: S_ERROR }
+ids { code: TX_DECLINED_IMPLICIT_COORDINATOR severity: S_ERROR }
+ids { code: SHARD_PROGRAM_SIZE_EXCEEDED severity: S_ERROR }
+
+ids { code: SCOPE_REQPROXY severity: S_INFO}
+
+ids { code: SCOPE_TXPROXY_INTERPRET severity: S_INFO}
+ids { code: SCOPE_TXPROXY_RESOLVE severity: S_INFO}
+ids { code: SCOPE_TXPROXY_PREPARE severity: S_INFO}
+ids { code: SCOPE_TXPROXY_EXECUTE severity: S_INFO}
+
+ids { code: YDB_API_VALIDATION_ERROR severity: S_ERROR }
+ids { code: YDB_AUTH_UNAVAILABLE severity: S_ERROR }
+ids { code: YDB_DB_NOT_READY severity: S_ERROR }
+ids { code: YDB_RESOURCE_USAGE_LIMITED severity: S_ERROR }
+

@@ -1,0 +1,24 @@
+items:
+# Header
+- name: Оглавление
+  href: index.yaml
+- name: Начало работы
+  include: { mode: link, path: getting_started/toc_p.yaml }
+
+# Main
+# - { name: Сценарии использования,                  include: { mode: link, path: solutions/toc_i.yaml },       when: audience == "external" }
+- { name: Концепции,                               include: { mode: link, path: concepts/toc_p.yaml } }
+- { name: Пошаговые инструкции,                    include: { mode: link, path: operations/toc_p.yaml } }
+
+- { name: Рекомендации,                            include: { mode: link, path: best_practices/toc_p.yaml } }
+- { name: Обслуживание,                            include: { mode: link, path: maintenance/toc_p.yaml } }
+- { name: Диагностика,                             include: { mode: link, path: troubleshooting/toc_p.yaml } }
+
+# References  
+- { name: YQL,                                     include: { mode: link, path: yql/toc_p.yaml } }
+- { name: Работа с YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
+- { name: Работа с YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
+
+# Footer
+- { name: Вопросы и ответы,                        include: { mode: link, path: faq/toc_p.yaml } }
+

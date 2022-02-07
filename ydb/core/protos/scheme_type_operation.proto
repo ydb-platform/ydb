@@ -1,0 +1,23 @@
+
+package NKikimrSchemeTypeOperation;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TMetadata {
+
+    message TArg {
+        optional uint32 SchemeType = 1;
+        optional uint32 Flags = 2;
+    }
+
+    message TDescription {
+        repeated TArg Arg = 1;
+        optional bool Deterministic = 2;
+    }
+
+    message TOperation {
+        optional bytes Name = 1;
+        repeated TDescription Description  = 2;
+    }
+
+    repeated TOperation Operation = 1;
+}

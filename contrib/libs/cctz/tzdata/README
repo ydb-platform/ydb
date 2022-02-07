@@ -1,0 +1,4 @@
+A standalone distribution of tzdata. Run 'cat VERSION' in this directory to find out which IANA version it's based on.
+
+When a new version of tzdata is released, run ./update_tzdata.py from this directory
+to regenerate the CMakeLists.txt and the corresponding resources from a newer tzdata version.

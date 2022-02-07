@@ -1,0 +1,22 @@
+package NExt;
+
+import "library/cpp/protobuf/util/ut/sample_for_simple_reflection.proto";
+
+message TTestExt {
+    extend TSample {
+        optional string ExtField = 100;
+    }
+}
+
+extend TSample {
+    optional uint64 ExtField = 150; // the same name, but another full name
+}
+
+extend TSample {
+    repeated uint64 Ext2Field = 105;
+    optional TInnerSample SubMsgExt = 111;
+}
+
+extend TInnerSample {
+    optional uint64 Ext3Field = 100;
+}

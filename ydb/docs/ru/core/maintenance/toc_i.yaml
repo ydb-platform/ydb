@@ -1,0 +1,19 @@
+items:
+  - name: Резервное копирование
+    href: backup_and_recovery.md
+  - name: Средства интроспекции при самостоятельном развертывании
+    items:
+    - name: Обзор
+      href: embedded_monitoring/overview.md
+    - name: Viewer
+      href: embedded_monitoring/viewer.md
+      when: false
+    - name: YDB Monitoring
+      href: embedded_monitoring/ydb_monitoring.md
+    - name: Обзор соединений
+      href: embedded_monitoring/interconnect_overview.md
+      # when: false
+    - name: Логи
+      href: embedded_monitoring/logs.md
+    - name: Графики
+      href: embedded_monitoring/charts.md

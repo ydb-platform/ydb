@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package Ydb.LongTx.V1;
+option java_package = "com.yandex.ydb.long_tx.v1";
+
+import "ydb/public/api/protos/draft/ydb_long_tx.proto";
+
+service LongTxService {
+    rpc BeginTx(BeginTransactionRequest) returns (BeginTransactionResponse);
+    rpc CommitTx(CommitTransactionRequest) returns (CommitTransactionResponse);
+    rpc RollbackTx(RollbackTransactionRequest) returns (RollbackTransactionResponse);
+    rpc Write(WriteRequest) returns (WriteResponse);
+    rpc Read(ReadRequest) returns (ReadResponse);
+//  rpc ResolveNodes(ResolveNodesRequest) returns (stream ResolveNodesResponse);
+}

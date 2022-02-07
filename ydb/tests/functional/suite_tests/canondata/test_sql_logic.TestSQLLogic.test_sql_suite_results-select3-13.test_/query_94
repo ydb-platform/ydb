@@ -1,0 +1,119 @@
+[
+    {
+        "col1": null,
+        "col2": null,
+        "col3": null,
+        "col4": null,
+        "col5": 1,
+        "col6": null,
+        "col7": null
+    },
+    {
+        "col1": null,
+        "col2": null,
+        "col3": null,
+        "col4": 117,
+        "col5": 3,
+        "col6": null,
+        "col7": null
+    },
+    {
+        "col1": 206,
+        "col2": -2,
+        "col3": null,
+        "col4": null,
+        "col5": 1,
+        "col6": null,
+        "col7": 2
+    },
+    {
+        "col1": 124,
+        "col2": 1,
+        "col3": -3,
+        "col4": null,
+        "col5": 1,
+        "col6": 369,
+        "col7": 1
+    },
+    {
+        "col1": 130,
+        "col2": -4,
+        "col3": 1,
+        "col4": 132,
+        "col5": 1,
+        "col6": 391,
+        "col7": 4
+    },
+    {
+        "col1": 139,
+        "col2": 2,
+        "col3": -1,
+        "col4": 135,
+        "col5": 1,
+        "col6": 416,
+        "col7": 2
+    },
+    {
+        "col1": 143,
+        "col2": 2,
+        "col3": -1,
+        "col4": 144,
+        "col5": 1,
+        "col6": 428,
+        "col7": 2
+    },
+    {
+        "col1": 170,
+        "col2": -2,
+        "col3": 4,
+        "col4": 173,
+        "col5": 1,
+        "col6": 514,
+        "col7": 2
+    },
+    {
+        "col1": 181,
+        "col2": -3,
+        "col3": 1,
+        "col4": 180,
+        "col5": 1,
+        "col6": 544,
+        "col7": 3
+    },
+    {
+        "col1": 186,
+        "col2": -1,
+        "col3": 2,
+        "col4": 189,
+        "col5": 2,
+        "col6": 560,
+        "col7": 1
+    },
+    {
+        "col1": 194,
+        "col2": 1,
+        "col3": -3,
+        "col4": 192,
+        "col5": 3,
+        "col6": 579,
+        "col7": 1
+    },
+    {
+        "col1": 211,
+        "col2": -3,
+        "col3": 2,
+        "col4": 210,
+        "col5": 2,
+        "col6": 635,
+        "col7": 3
+    },
+    {
+        "col1": 223,
+        "col2": -1,
+        "col3": -3,
+        "col4": 221,
+        "col5": 2,
+        "col6": 666,
+        "col7": 1
+    }
+]

@@ -1,0 +1,129 @@
+commit 2e6aded5d64f6825e8e4e100d2234b3e89b62cd6
+Author: Lukas Fittl <lukas@fittl.com>
+Date:   Sun Jan 3 16:01:44 2021 -0800
+
+    pg_query: Track comments separately from whitespace in lexer/parser
+    
+    For syntax highlighting and extracting comments from a query, its very
+    helpful to know the exact locations of a comment in the query string.
+    
+    Previously the lexer discarded all comments as whitespace, making it
+    impossible to determine where they are located in the query string. With
+    this change, the lexer returns them as SQL_COMMENT/C_COMMENT tokens.
+
+diff --git a/src/backend/parser/gram.y b/src/backend/parser/gram.y
+index bcdda00a3a..9a581cbde6 100644
+--- a/src/backend/parser/gram.y
++++ b/src/backend/parser/gram.y
+@@ -620,6 +620,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
+ %token <ival>	ICONST PARAM
+ %token			TYPECAST DOT_DOT COLON_EQUALS EQUALS_GREATER
+ %token			LESS_EQUALS GREATER_EQUALS NOT_EQUALS
++%token			SQL_COMMENT C_COMMENT
+ 
+ /*
+  * If you want to make any keyword changes, update the keyword table in
+diff --git a/src/backend/parser/parser.c b/src/backend/parser/parser.c
+index be86eb37fe..07b8fd486f 100644
+--- a/src/backend/parser/parser.c
++++ b/src/backend/parser/parser.c
+@@ -131,6 +131,9 @@ base_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, core_yyscan_t yyscanner)
+ 		case USCONST:
+ 			cur_token_length = strlen(yyextra->core_yy_extra.scanbuf + *llocp);
+ 			break;
++		case SQL_COMMENT:
++		case C_COMMENT:
++			return base_yylex(lvalp, llocp, yyscanner);
+ 		default:
+ 			return cur_token;
+ 	}
+diff --git a/src/backend/parser/scan.l b/src/backend/parser/scan.l
+index 5caa03e395..6d7e2f0f12 100644
+--- a/src/backend/parser/scan.l
++++ b/src/backend/parser/scan.l
+@@ -223,7 +223,7 @@ non_newline		[^\n\r]
+ 
+ comment			("--"{non_newline}*)
+ 
+-whitespace		({space}+|{comment})
++whitespace		({space}+)
+ 
+ /*
+  * SQL requires at least one newline in the whitespace separating
+@@ -232,8 +232,8 @@ whitespace		({space}+|{comment})
+  * it, whereas {whitespace} should generally have a * after it...
+  */
+ 
+-special_whitespace		({space}+|{comment}{newline})
+-horiz_whitespace		({horiz_space}|{comment})
++special_whitespace		({space}+)
++horiz_whitespace		({horiz_space})
+ whitespace_with_newline	({horiz_whitespace}*{newline}{special_whitespace}*)
+ 
+ quote			'
+@@ -423,6 +423,11 @@ other			.
+ 					/* ignore */
+ 				}
+ 
++{comment}	{
++					SET_YYLLOC();
++					return SQL_COMMENT;
++				}
++
+ {xcstart}		{
+ 					/* Set location in case of syntax error in comment */
+ 					SET_YYLLOC();
+@@ -441,7 +446,11 @@ other			.
+ 
+ {xcstop}		{
+ 					if (yyextra->xcdepth <= 0)
++					{
+ 						BEGIN(INITIAL);
++						yyextra->yyllocend = yytext - yyextra->scanbuf + yyleng;
++						return C_COMMENT;
++					}
+ 					else
+ 						(yyextra->xcdepth)--;
+ 				}
+diff --git a/src/interfaces/ecpg/preproc/parser.c b/src/interfaces/ecpg/preproc/parser.c
+index a2eeeba217..cbfb92384a 100644
+--- a/src/interfaces/ecpg/preproc/parser.c
++++ b/src/interfaces/ecpg/preproc/parser.c
+@@ -84,6 +84,9 @@ filtered_base_yylex(void)
+ 		case UIDENT:
+ 		case USCONST:
+ 			break;
++		case SQL_COMMENT:
++		case C_COMMENT:
++			return filtered_base_yylex();
+ 		default:
+ 			return cur_token;
+ 	}
+diff --git a/src/pl/plpgsql/src/pl_gram.y b/src/pl/plpgsql/src/pl_gram.y
+index 3e84162487..d1e6e714ab 100644
+--- a/src/pl/plpgsql/src/pl_gram.y
++++ b/src/pl/plpgsql/src/pl_gram.y
+@@ -236,6 +236,7 @@ static	void			check_raise_parameters(PLpgSQL_stmt_raise *stmt);
+ %token <ival>	ICONST PARAM
+ %token			TYPECAST DOT_DOT COLON_EQUALS EQUALS_GREATER
+ %token			LESS_EQUALS GREATER_EQUALS NOT_EQUALS
++%token			SQL_COMMENT C_COMMENT
+ 
+ /*
+  * Other tokens recognized by plpgsql's lexer interface layer (pl_scanner.c).
+diff --git a/src/pl/plpgsql/src/pl_scanner.c b/src/pl/plpgsql/src/pl_scanner.c
+index 9cea2e42ac..a0b86ac587 100644
+--- a/src/pl/plpgsql/src/pl_scanner.c
++++ b/src/pl/plpgsql/src/pl_scanner.c
+@@ -342,6 +342,11 @@ internal_yylex(TokenAuxData *auxdata)
+ 		{
+ 			auxdata->lval.str = pstrdup(yytext);
+ 		}
++
++		else if (token == SQL_COMMENT || token == C_COMMENT)
++		{
++			token = internal_yylex(auxdata);
++		}
+ 	}
+ 
+ 	return token;

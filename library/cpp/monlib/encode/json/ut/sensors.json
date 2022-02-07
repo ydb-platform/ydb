@@ -1,0 +1,40 @@
+{
+  "commonLabels": {
+    "project": "solomon",
+    "cluster": "man",
+    "service": "stockpile"
+  },
+  "sensors": [
+    {
+      "labels": {
+        "metric": "Memory"
+      },
+      "value": 10
+    },
+    {
+      "mode": "deriv",
+      "value": 1,
+      "labels": { "metric": "UserTime" }
+    },
+    {
+      "value": 3.14159,
+      "labels": { "export": "Oxygen", "metric": "QueueSize" },
+      "ts": "2017-11-05T12:34:56.000Z",
+      "memOnly": true
+    },
+    {
+      "labels": { "metric": "Writes" },
+      "timeseries": [
+        {
+          "ts": "2017-08-28T12:32:11Z",
+          "value": -10
+        },
+        {
+          "value": 20,
+          "ts": 1503923187
+        }
+      ]
+    }
+  ],
+  "ts": "2017-08-27T12:34:56Z"
+}

@@ -1,0 +1,26 @@
+{
+  "sensors":
+    [
+      {
+        "kind":"LOGHIST",
+        "labels":
+          {
+            "metric":"ms"
+          },
+        "ts":1509843723,
+        "log_hist":
+          {
+            "base":1.5,
+            "zeros_count":1,
+            "start_power":0,
+            "buckets":
+              [
+                0.5,
+                0.25,
+                0.25,
+                0.5
+              ]
+          }
+      }
+    ]
+}

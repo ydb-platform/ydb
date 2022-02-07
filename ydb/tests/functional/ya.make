@@ -1,0 +1,24 @@
+OWNER(g:kikimr)
+
+RECURSE(
+    api
+    blobstorage
+    canonical
+    cms_config_cache
+    encryption
+    hive
+    large_serializable
+    large_serializable_new_engine
+    limits
+    rename
+    restarts
+    scheme_shard
+    scheme_tests
+    serializable
+    serverless
+    sqs
+    suite_tests
+    tenants
+    ttl
+    ydb_cli
+)

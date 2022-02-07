@@ -1,0 +1,6 @@
+[
+  {"rowid": 1, "a": "a", "b": "one"},
+  {"rowid": 2, "a": "b", "b": "two"},
+  {"rowid": 3, "a": "c", "b": "three"}
+]
+

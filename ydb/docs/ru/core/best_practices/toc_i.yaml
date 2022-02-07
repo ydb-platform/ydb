@@ -1,0 +1,16 @@
+items:
+- name: Обзор
+  href: index.md
+- name: Проектирование схемы
+  href: schema_design.md
+- name: Партицирование таблиц
+  href: table_sharding.md
+- name: Вторичные индексы
+  href: secondary_indexes.md
+- name: Постраничный вывод
+  href: paging.md
+- name: Загрузка больших объемов данных
+  href: batch_upload.md
+- name: Использование таймаутов
+  href: timeouts.md
+  

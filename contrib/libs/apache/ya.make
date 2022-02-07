@@ -1,0 +1,5 @@
+RECURSE(
+    arrow
+    avro
+    orc
+)

@@ -1,0 +1,45 @@
+package NKikimrNetClassifier;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+message TNetClassifierUpdaterConfig {
+    enum EFormat {
+        TSV = 0;
+        NETBOX = 1;
+    }
+
+    optional string NetDataSourceUrl = 1;
+    optional uint32 RetryIntervalSeconds = 2;
+    optional uint32 NetDataUpdateIntervalSeconds = 3;
+    optional EFormat Format = 4 [default = TSV];
+    repeated string NetBoxTags = 5;
+}
+
+message TSubnet {
+    optional string Mask = 1;
+    optional string Label = 2;
+}
+
+message TNetData {
+    repeated TSubnet Subnets = 1;
+}
+
+message TNetClassifierConfig {
+    optional TNetClassifierUpdaterConfig UpdaterConfig = 1;
+
+    // The file content is used if distributable config is empty or unavailable. May be empty
+    optional string NetDataFilePath = 2;
+
+    // CMS has to respond with distributable configuration before the time runs out
+    optional uint32 CmsConfigTimeoutSeconds = 3 [default = 30];
+
+    // Timed counters update interval (seconds):
+    optional uint32 TimedCountersUpdateIntervalSeconds = 4 [default = 15];
+}
+
+message TNetClassifierDistributableConfig {
+    // DO NOT SET the config fields manually
+    optional string LastUpdateDatetimeUTC = 1;
+    optional uint64 LastUpdateTimestamp = 2;
+    optional bytes PackedNetData = 3; // Contains serialized and deflated TNetData
+}

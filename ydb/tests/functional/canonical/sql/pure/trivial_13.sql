@@ -1,0 +1,2 @@
+select '' as two;
+

@@ -1,0 +1,501 @@
+#include <library/cpp/uri/parse.h>
+
+#ifdef __clang__
+    #pragma clang diagnostic ignored "-Wunused-variable"
+#endif
+
+%%{
+    machine TParser;
+
+    #================================================
+    # RFC 3986 http://tools.ietf.org/html/rfc3986
+    # with some modifications
+    #================================================
+    # The RegEx
+    #
+    # http://www.ics.uci.edu/pub/ietf/uri/#Related
+    # ^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?
+    #  12            3  4          5       6  7        8 9
+    #results in the following subexpression matches:
+    # $1 = http:
+    # $2 = http
+    # $3 = //www.ics.uci.edu
+    # $4 = www.ics.uci.edu
+    # $5 = /pub/ietf/uri/
+    # $6 = <undefined>
+    # $7 = <undefined>
+    # $8 = #Related
+    # $9 = Related
+    #
+    # So $2:scheme $4:authority $5:path $7:query $9:fragment
+    #================================================
+
+
+    #================================================
+    # List of all ASCII characters and where they can be used
+    #================================================
+
+    #   0-31  x00-1F  cntrl  ext_cntrl
+    #  32     x20     space  ext_space
+    #  33     x21     !      sub_delims
+    #  34     x22     "      ext_delims
+    #  35     x23     #      gen_delims / f=frag
+    #  36     x24     $      sub_delims
+    #  37     x25     %      PCT
+    #  38     x26     &      sub_delims
+    #  39     x27     '      sub_delims
+    #  40     x28     (      sub_delims
+    #  41     x29     )      sub_delims
+    #  42     x2A     *      sub_delims
+    #  43     x2B     +      sub_delims
+    #  44     x2C     ,      sub_delims
+    #  45     x2D     -      unreserved
+    #  46     x2E     .      unreserved
+    #  47     x2F     /      gen_delims / f=path,qry,frag
+    #  48-57  x30-39  0-9    unreserved
+    #  58     x3A     :      gen_delims / f=pass,path,qry,frag
+    #  59     x3B     ;      sub_delims
+    #  60     x3C     <      ext_delims
+    #  61     x3D     =      sub_delims
+    #  62     x3E     >      ext_delims
+    #  63     x3F     ?      gen_delims / f=qry,frag
+    #  64     x40     @      gen_delims / f=path,qry,frag
+    #  65-90  x41-5A  A-Z    unreserved
+    #  91     x5B     [      gen_delims / ext_delims
+    #  92     x5C     \      ext_delims
+    #  93     x5D     ]      gen_delims / ext_delims
+    #  94     x5E     ^      ext_delims
+    #  95     x5F     _      unreserved
+    #  96     x60     `      ext_delims
+    #  97-122 x61-7A  a-z    unreserved
+    # 123     x7B     {      ext_delims
+    # 124     x7C     |      ext_delims
+    # 125     x7D     }      ext_delims
+    # 126     x7E     ~      unreserved
+    # 127     x7F     DEL    ext_cntrl
+    # 128-255 x80-FF         ext_ascii
+
+
+    #================================================
+    # Actions used in multiple definitions
+    #================================================
+
+    action act_req_enc_sql   { REQ(fpc, FeatureEncodeForSQL) }
+
+    # REQ must apply to a char in range but not after the range has been reset
+    action act_req_pathop    { REQ(fpc - 1, FeaturePathOperation) }
+
+    action act_clr_scheme    { CLR(fpc, Scheme) }
+    action act_clr_user      { CLR(fpc, User)   }
+    action act_clr_host      { CLR(fpc, Host)   }
+    action act_beg_host      { BEG(fpc, Host)   }
+    action act_end_host      { END(fpc, Host)   }
+    action act_beg_path      { BEG(fpc, Path)   }
+    action act_end_path      { END(fpc, Path)   }
+
+
+    #================================================
+    # RFC 3986 ABNFs
+    #================================================
+
+    DIGIT = digit;
+
+    ALPHA = ( upper >{ REQ(fpc, FeatureToLower) } ) |
+                  lower;
+
+    ALNUM = ALPHA | DIGIT;
+
+    PCT   = "%" >{ PctBeg(fpc); } ;
+
+    HEXDIG = (
+        DIGIT   >{ HexDigit(fpc, fc); }
+        | [A-F] >{ HexUpper(fpc, fc); }
+        | [a-f] >{ HexLower(fpc, fc); }
+    );
+
+    # HexSet sets REQ so must apply in range
+    HEXNUM = ( HEXDIG HEXDIG ) %{ HexSet(fpc - 1); };
+
+    pct_encoded   = PCT HEXNUM;
+
+    unreserved    = ALNUM | "-" | "." | "_" | "~";
+
+    gen_delims    = ":" | "/" | "?" | "#" | "[" | "]" | "@";
+
+    sub_delims    = "!" | "$" | "&" | "(" | ")"
+                  | "*" | "+" | "," | ";" | "="
+                  | ( ['] >act_req_enc_sql );
+
+
+    #================================================
+    # Local ABNFs
+    #================================================
+
+    VALID    = ^(cntrl | space) | " ";
+
+    # safe character sequences
+    safe          = unreserved | pct_encoded | sub_delims;
+
+    # MOD: Yandex extensions
+
+    ext_ascii     = (VALID - ascii) >{ REQ(fpc, FeatureEncodeExtendedASCII) };
+    ext_delims    = ( "[" | "]" | "|" |  "{" | "}" | "`" | "^" | "<" | ">"
+                  | ( ["\\] >act_req_enc_sql )
+                  ) >{ REQ(fpc, FeatureEncodeExtendedDelim) }; # " fix hilite
+    ext_space     = " " >{ REQ(fpc, FeatureEncodeSpace) };
+    ext_cntrl     = cntrl >{ REQ(fpc, FeatureEncodeCntrl) };
+
+    pct_maybe_encoded = PCT (HEXDIG | HEXNUM)? ;
+    ext_safe      = unreserved
+                  | pct_maybe_encoded
+                  | sub_delims
+                  | ext_delims
+                  | ext_space
+                  | ext_cntrl
+                  | ext_ascii;
+
+    # pchar         = unreserved / pct-encoded / sub-delims / ":" / "@"
+    # uric (RFC 2396)
+    # MOD: extension to format, add extended delimiters and 8-bit ascii
+
+    pchar_nc      = ext_safe | "@";
+    pchar         = pchar_nc | ":";
+    path_sep      = "/";
+    uric          = pchar | path_sep | "?";
+
+
+    #================================================
+    # Fields
+    #================================================
+    # Single fields use fXXX as machine definitions
+
+
+    #================================================
+    # Scheme
+    # scheme        = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+    #================================================
+
+    scheme   = ( ALPHA ( ALPHA | DIGIT | "+" | "-" | "." )** );
+    fscheme  = scheme >{ BEG(fpc, Scheme) } %{ END(fpc, Scheme) };
+
+
+    #================================================
+    # UserInfo
+    # userinfo      = *( unreserved / pct-encoded / sub-delims / ":" )
+    #================================================
+
+    # MOD: split into a pair of sections: username and password
+
+    fuser    = ( ext_safe       )** >{ BEG(fpc, User) }   %{ END(fpc, User) };
+    fpass    = ( ext_safe | ":" )** >{ BEG(fpc, Pass) }   %{ END(fpc, Pass) };
+    userinfo = ( fuser ( ":" fpass )? ) ( "@" %act_clr_host @^act_clr_user );
+
+
+    #================================================
+    # Hostname
+    # host          = IP-literal / IPv4address / reg-name
+    #================================================
+
+    # MOD: simplify IP-literal for now
+    IPv6address   = (HEXDIG | ":" | ".")+;
+    IP_literal    = "[" IPv6address "]";
+
+    # IPv4address   = dec-octet "." dec-octet "." dec-octet "." dec-octet
+    # MOD: simplify dec-octet which originally matches only 0-255
+
+    dec_octet     = DIGIT+;
+    IPv4address   = dec_octet "." dec_octet "." dec_octet "." dec_octet;
+
+    # MOD: non-empty; will use host?
+    # reg-name      = *( unreserved / pct-encoded / sub-delims )
+    ### todo: allow ':' (need to fix grammar to disambiguate port)
+    achar         = any - (0x00 .. 0x20) - '/' - '#' - '?' - ':' - '%';
+    upperhalf     = any - (0x00 .. 0x7F);
+    hostname      = (((achar | pct_encoded)+) & (any* (alnum | upperhalf) any*));
+    reg_name      = hostname - IPv4address - IP_literal;
+
+    # uses first-match-wins approach
+    host          = IP_literal | IPv4address | (reg_name - IPv4address);
+    fhost         = host?    >act_beg_host   %act_end_host;
+    fhost_nempty  = host     >act_beg_host   %act_end_host;
+
+
+    #================================================
+    # Port
+    # port          = *DIGIT
+    #================================================
+
+    # MOD: use fport? for empty
+    fport         = DIGIT+   >{ BEG(fpc, Port) }   %{ END(fpc, Port) };
+
+
+    #================================================
+    # Authority
+    # authority     = [ userinfo "@" ] host [ ":" port ]
+    #================================================
+
+    authority = userinfo? fhost ( ":" fport? )? ;
+
+
+    #================================================
+    # Path
+    #================================================
+    # path          = path-abempty    ; begins with "/" or is empty
+    #               / path-absolute   ; begins with "/" but not "//"
+    #               / path-noscheme   ; begins with a non-colon segment
+    #               / path-rootless   ; begins with a segment
+    #               / path-empty      ; zero characters
+    #================================================
+
+    # checkPath rules
+
+    checkPathHead =
+        "." ( "."? path_sep VALID* )? %act_req_pathop ;
+
+    checkPathTail =
+        VALID*
+        ( path_sep "."{1,2} ) %act_req_pathop ;
+
+    checkPathMid = VALID*
+        ( path_sep "."{,2} path_sep ) %act_req_pathop
+        VALID*;
+
+    checkAbsPath = checkPathMid | checkPathTail | VALID*;
+    checkRelPath = checkPathHead | checkAbsPath;
+
+    # segment       = *pchar
+    segment        = pchar**;
+
+    # segment-nz    = 1*pchar
+    segment_nz     = pchar+;
+
+    # segment-nz-nc = 1*( unreserved / pct-encoded / sub-delims / "@" )
+    segment_nz_nc  = pchar_nc+;
+
+    sep_segment    = path_sep segment;
+
+    # non-standard definitions
+
+    fpath_abnempty =
+        (
+            ( sep_segment+ )
+            & checkAbsPath
+        )
+        >act_beg_path %act_end_path
+    ;
+
+    fpath_relative =
+        (
+            "."
+            ( "."? sep_segment+ )?
+        )
+        >act_beg_path %act_req_pathop %act_end_path
+    ;
+
+    # standard definitions
+
+    # do not save empty paths, they behave differently in relative resolutions
+    fpath_empty = zlen;
+
+    fpath_abempty = fpath_abnempty?;
+
+    fpath_absolute =
+        (
+            ( path_sep ( segment_nz sep_segment* )? )
+            & checkAbsPath
+        )
+        >act_beg_path %act_end_path
+    ;
+
+    fpath_noscheme =
+        (
+            ( segment_nz_nc sep_segment* )
+            & checkRelPath
+        )
+        >act_beg_path %act_end_path
+    ;
+
+    fpath_rootless =
+        (
+            ( segment_nz sep_segment* )
+        )
+        >act_beg_path %act_end_path
+    ;
+
+    #================================================
+    # Query and fragment
+    # query         = *( pchar / "/" / "?" )
+    # fragment      = *( pchar / "/" / "?" )
+    #================================================
+
+    # MOD: fragment allows '#' characters
+
+    fquery     = (uric      )** >{ BEG(fpc, Query) }  %{ END(fpc, Query) };
+    ffrag      = (uric | "#")** >{ BEG(fpc, Frag) }   %{ END(fpc, Frag) };
+    query_frag = ("?" fquery)? ("#" ffrag)? ;
+
+
+    #================================================
+    # final ABNFs
+    # URI-reference = URI / relative-ref
+    #================================================
+    # URI           = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
+    # hier-part     = "//" authority path-abempty
+    #               / path-absolute
+    #               / path-rootless
+    #               / path-empty
+    # relative-ref  = relative-part [ "?" query ] [ "#" fragment ]
+    # relative-part = "//" authority path-abempty
+    #               / path-absolute
+    #               / path-noscheme
+    #               / path-empty
+
+    net_path = "//" authority fpath_abempty;
+
+    URI =
+        fscheme ":"
+        (
+            net_path
+            | fpath_absolute
+            | fpath_rootless
+            | fpath_empty
+        )
+        $^act_clr_scheme
+        query_frag
+    ;
+
+    relative_ref =
+        (
+            net_path
+            | fpath_absolute
+            | fpath_noscheme
+            | fpath_empty
+        )
+        %act_clr_scheme
+        query_frag
+    ;
+
+    # non-standard definitions
+
+    URI_no_rootless =
+        fscheme ":"
+        (
+            net_path
+            | fpath_absolute
+            | fpath_empty
+        )
+        $^act_clr_scheme
+        query_frag
+    ;
+
+    host_path =
+        (
+               fhost_nempty                     fpath_abempty
+            | (fhost_nempty - scheme) ":" fport fpath_abempty
+        )
+        @^act_clr_host
+    ;
+
+    # no userinfo, path absolute, empty or clearly relative, starting with "./" | "../"
+    relative_ref_host_pabem =
+        (
+            net_path
+            | host_path
+            | fpath_absolute
+            | fpath_relative
+            | fpath_empty
+        )
+        %act_clr_scheme
+        query_frag
+    ;
+
+    # port must be non-empty, to avoid clash with "scheme:/..."
+    auth_path =
+        (
+                fhost_nempty ( ":" fport  )? fpath_abempty
+            | userinfo fhost ( ":" fport? )? fpath_abempty
+        )
+        @^act_clr_host
+        @^act_clr_user
+    ;
+
+    # userinfo, path absolute, empty or clearly relative, starting with "./" | "../"
+    relative_ref_auth_pabem =
+        (
+            net_path
+            | auth_path
+            | fpath_absolute
+            | fpath_relative
+            | fpath_empty
+        )
+        %act_clr_scheme
+        query_frag
+    ;
+
+
+    # machine instantiations
+
+    URI_ref_no_rootless :=
+        (
+            URI_no_rootless
+            # scheme://user@host preferred over user://pass@host/path
+            | relative_ref_auth_pabem
+        )
+    ;
+
+    URI_ref_no_relpath :=
+        (
+            relative_ref_host_pabem
+            # host:port/path preferred over scheme:path/rootless
+            | (URI - relative_ref_host_pabem)
+        )
+    ;
+
+    URI_ref :=
+        (
+            relative_ref
+            | URI
+        )
+    ;
+
+    write data;
+
+}%%
+
+namespace NUri {
+
+bool TParser::doParse(const char* str_beg, size_t length)
+{
+    const char* p = str_beg;
+    const char* pe = str_beg + length;
+    const char* eof = pe;
+    int cs;
+
+#define BEG(ptr, fld) startSection (ptr, TField::Field ## fld);
+#define END(ptr, fld) finishSection(ptr, TField::Field ## fld);
+#define SET(val, fld) storeSection(val, TField::Field ## fld);
+#define CLR(ptr, fld) ResetSection (TField::Field ## fld, ptr);
+#define REQ(ptr, req) setRequirement(ptr, TFeature :: req);
+
+    %% write init nocs;
+
+    if (0 == (Flags & TFeature::FeatureNoRelPath)) {
+        cs = TParser_en_URI_ref;
+    } else if (0 == (Flags & TFeature::FeatureAllowRootless)) {
+        cs = TParser_en_URI_ref_no_rootless;
+    } else {
+        cs = TParser_en_URI_ref_no_relpath;
+    }
+
+    %% write exec;
+
+#undef BEG
+#undef END
+#undef SET
+#undef CLR
+#undef REQ
+
+    return cs >= TParser_first_final;
+}
+
+}

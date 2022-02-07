@@ -1,0 +1,47 @@
+table.ds-info {
+    border-bottom-style: solid;
+    border-top-style: solid;
+    border-width: 1px;
+    border-color: darkgrey;
+}
+
+tfoot.ds-info {
+    border-top-style: solid;
+    border-width: 1px;
+    border-color: darkgrey;
+    padding: 5px 0px 5px 0px;
+}
+
+caption.ds-info {
+    font-weight: 700;
+    caption-side: top;
+    padding: 20px 0px 0px 10px;
+    color: black;
+}
+
+caption.ds-info-table-stats {
+    font-weight: 700;
+    caption-side: top;
+    padding: 0px 0px 0px 10px;
+    color: gray;
+}
+
+td.ds-info {
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+.ds-plan-executed {
+    color: green;
+    font-weight: 500;
+}
+
+.ds-plan-executing {
+    color: red;
+    font-weight: 500;
+}
+
+.ds-plan-to-execute {
+    color: gray;
+    font-weight: 500;
+}

@@ -1,0 +1,138 @@
+[
+    {
+        "col1": 159,
+        "col2": null,
+        "col3": 155,
+        "col4": null,
+        "col5": null,
+        "col6": 1
+    },
+    {
+        "col1": 168,
+        "col2": null,
+        "col3": 166,
+        "col4": null,
+        "col5": null,
+        "col6": 1
+    },
+    {
+        "col1": 131,
+        "col2": 1985,
+        "col3": 134,
+        "col4": 1325,
+        "col5": 1,
+        "col6": 1
+    },
+    {
+        "col1": 182,
+        "col2": 2728,
+        "col3": 184,
+        "col4": 1828,
+        "col5": 1,
+        "col6": 1
+    },
+    {
+        "col1": 199,
+        "col2": 2949,
+        "col3": 195,
+        "col4": 1964,
+        "col5": -1,
+        "col6": 1
+    },
+    {
+        "col1": 229,
+        "col2": 3399,
+        "col3": 225,
+        "col4": 2264,
+        "col5": -1,
+        "col6": 1
+    },
+    {
+        "col1": 153,
+        "col2": null,
+        "col3": 150,
+        "col4": null,
+        "col5": null,
+        "col6": 2
+    },
+    {
+        "col1": 107,
+        "col2": 1612,
+        "col3": 106,
+        "col4": 1067,
+        "col5": -2,
+        "col6": 2
+    },
+    {
+        "col1": 188,
+        "col2": 2806,
+        "col3": 187,
+        "col4": 1861,
+        "col5": 2,
+        "col6": 2
+    },
+    {
+        "col1": 213,
+        "col2": 3175,
+        "col3": 214,
+        "col4": 2125,
+        "col5": 2,
+        "col6": 2
+    },
+    {
+        "col1": 234,
+        "col2": 3473,
+        "col3": 231,
+        "col4": 2323,
+        "col5": -2,
+        "col6": 2
+    },
+    {
+        "col1": 239,
+        "col2": null,
+        "col3": null,
+        "col4": null,
+        "col5": null,
+        "col6": 3
+    },
+    {
+        "col1": 243,
+        "col2": null,
+        "col3": 244,
+        "col4": null,
+        "col5": null,
+        "col6": 3
+    },
+    {
+        "col1": 163,
+        "col2": 2432,
+        "col3": 161,
+        "col4": 1622,
+        "col5": -3,
+        "col6": 3
+    },
+    {
+        "col1": 149,
+        "col2": null,
+        "col3": 147,
+        "col4": null,
+        "col5": null,
+        "col6": 4
+    },
+    {
+        "col1": 179,
+        "col2": null,
+        "col3": 176,
+        "col4": null,
+        "col5": null,
+        "col6": 4
+    },
+    {
+        "col1": 174,
+        "col2": 2579,
+        "col3": 172,
+        "col4": 1714,
+        "col5": 1,
+        "col6": 4
+    }
+]

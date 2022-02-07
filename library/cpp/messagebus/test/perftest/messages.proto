@@ -1,0 +1,7 @@
+message TPerftestRequestRecord {
+    required string Data = 1;
+}
+
+message TPerftestResponseRecord {
+    required string Data = 1;
+}

@@ -1,0 +1,32 @@
+.tooltip-inner {
+    color:#fff;
+    background-color:#245973;
+}
+
+.vs-4px {
+    margin-top: 4px;
+}
+
+.help-icon {
+    width: 24px;
+    height: 24px;
+    background-color: transparent;
+    border: none;
+    margin: auto 0;
+    padding: 0;
+    background: url(/cms/res/help.png) no-repeat center;
+}
+
+.error {
+    color: red;
+    font-weight: bold;
+}
+
+.success {
+    color: green;
+    font-weight: bold;
+}
+
+.va-top {
+    vertical-align: top;
+}

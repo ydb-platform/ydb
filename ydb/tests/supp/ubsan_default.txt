@@ -1,0 +1,7 @@
+vptr:*.so
+function:yql/minikql/mkql_function_registry.cpp
+vptr:NYql::NUdf
+alignment:NYT
+nonnull-attribute:yt/yt/core/misc/string_builder-inl.h
+vptr:NYT::NConcurrency::TThreadPoolPoller
+vptr:NYT::TAllocationHolder

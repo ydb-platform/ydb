@@ -1,0 +1,59 @@
+[
+    [
+        {
+            "Group": null,
+            "MinAmount": 10,
+            "Value": ""
+        },
+        {
+            "Group": 1,
+            "MinAmount": 100,
+            "Value": ""
+        },
+        {
+            "Group": 2,
+            "MinAmount": 103,
+            "Value": ""
+        },
+        {
+            "Group": 3,
+            "MinAmount": 104,
+            "Value": ""
+        },
+        {
+            "Group": 4,
+            "MinAmount": 105,
+            "Value": ""
+        },
+        {
+            "Group": 5,
+            "MinAmount": 107,
+            "Value": ""
+        },
+        {
+            "Group": 6,
+            "MinAmount": 108,
+            "Value": ""
+        },
+        {
+            "Group": 10,
+            "MinAmount": 100,
+            "Value": ""
+        },
+        {
+            "Group": 100001,
+            "MinAmount": 100,
+            "Value": ""
+        },
+        {
+            "Group": 100002,
+            "MinAmount": 102,
+            "Value": ""
+        },
+        {
+            "Group": 100003,
+            "MinAmount": 103,
+            "Value": ""
+        }
+    ]
+]

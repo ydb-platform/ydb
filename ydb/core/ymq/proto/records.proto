@@ -1,0 +1,21 @@
+package NKikimr.NSQS;
+
+import "ydb/core/protos/sqs.proto";
+
+message TMessageAttributeList {
+    /// Message's attributes.
+    repeated TMessageAttribute Attributes = 1;
+}
+
+message TReceipt {
+    /// The group identifier.
+    optional string MessageGroupId = 1;
+    /// Unique message identifier.
+    optional uint64 Offset = 2;
+    /// The token is used for deduplication of ReceiveMessage calls.
+    optional string ReceiveRequestAttemptId = 3;
+    /// The lock timestamp of the message.
+    optional uint64 LockTimestamp = 4;
+    /// The number of queue shard.
+    optional uint64 Shard = 5;
+}

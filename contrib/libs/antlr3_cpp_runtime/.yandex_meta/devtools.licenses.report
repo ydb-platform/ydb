@@ -1,0 +1,138 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     LicenseRef-scancode-unknown-license-reference 1ea2485bc5ae3a83ea15a16e65f88cb5
+BELONGS ya.make
+    License text:
+        	/// Produce a DOT (see graphviz freeware suite) from a base tree
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        include/antlr3commontreeadaptor.hpp [175:175]
+
+KEEP     Unicode-Mappings     21a868edc7974974e055dab130756d20
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode-mappings
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode-mappings.LICENSE
+    Files with this license:
+        include/antlr3convertutf.hpp [4:20]
+
+KEEP     BSD-3-Clause         34338f662d2c64c570a2231b4cf8b4d6
+BELONGS ya.make
+    License text:
+         *  as covered by the BSD license under which ANTLR is issued. You can cut the code
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        include/antlr3collections.hpp [96:96]
+
+KEEP     BSD-3-Clause         b88430f0378e11c82525d52e66d2eea4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        include/antlr3.hpp [9:29]
+        include/antlr3baserecognizer.hpp [16:36]
+        include/antlr3bitset.hpp [17:37]
+        include/antlr3collections.hpp [10:30]
+        include/antlr3commontoken.hpp [20:40]
+        include/antlr3commontree.hpp [14:34]
+        include/antlr3commontreeadaptor.hpp [14:34]
+        include/antlr3commontreenodestream.hpp [14:34]
+        include/antlr3cyclicdfa.hpp [15:35]
+        include/antlr3debugeventlistener.hpp [24:44]
+        include/antlr3defs.hpp [13:33]
+        include/antlr3errors.hpp [10:30]
+        include/antlr3exception.hpp [24:44]
+        include/antlr3filestream.hpp [10:30]
+        include/antlr3input.hpp [17:37]
+        include/antlr3interfaces.hpp [15:35]
+        include/antlr3intstream.hpp [40:60]
+        include/antlr3lexer.hpp [39:59]
+        include/antlr3memory.hpp [10:30]
+        include/antlr3parser.hpp [15:35]
+        include/antlr3recognizersharedstate.hpp [23:43]
+        include/antlr3rewriterulesubtreestream.hpp [10:30]
+        include/antlr3rewriteruletokenstream.hpp [10:30]
+        include/antlr3rewritestreams.hpp [10:30]
+        include/antlr3tokenstream.hpp [15:35]
+        include/antlr3treeparser.hpp [10:30]
+
+KEEP     BSD-3-Clause         d377dec7c659f1f9f14adbdefe822aa2
+BELONGS ya.make
+    License text:
+        // [The "BSD licence"]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        include/antlr3.hpp [4:4]
+        include/antlr3baserecognizer.hpp [10:10]
+        include/antlr3bitset.hpp [11:11]
+        include/antlr3collections.hpp [4:4]
+        include/antlr3commontoken.hpp [14:14]
+        include/antlr3commontree.hpp [8:8]
+        include/antlr3commontreeadaptor.hpp [8:8]
+        include/antlr3commontreenodestream.hpp [8:8]
+        include/antlr3cyclicdfa.hpp [9:9]
+        include/antlr3debugeventlistener.hpp [18:18]
+        include/antlr3defs.hpp [7:7]
+        include/antlr3errors.hpp [4:4]
+        include/antlr3exception.hpp [18:18]
+        include/antlr3filestream.hpp [4:4]
+        include/antlr3input.hpp [11:11]
+        include/antlr3interfaces.hpp [10:10]
+        include/antlr3intstream.hpp [34:34]
+        include/antlr3lexer.hpp [33:33]
+        include/antlr3memory.hpp [4:4]
+        include/antlr3parser.hpp [9:9]
+        include/antlr3recognizersharedstate.hpp [17:17]
+        include/antlr3rewriterulesubtreestream.hpp [4:4]
+        include/antlr3rewriteruletokenstream.hpp [4:4]
+        include/antlr3rewritestreams.hpp [4:4]
+        include/antlr3tokenstream.hpp [9:9]
+        include/antlr3treeparser.hpp [4:4]

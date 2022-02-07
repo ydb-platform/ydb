@@ -1,0 +1,110 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.LongTx;
+option java_package = "com.yandex.ydb.long_tx";
+option java_outer_classname = "LongTxProtos";
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+message Data
+{
+    enum Format {
+        FORMAT_UNSPECIFIED      = 0x0000;
+        YDB_ROWS                = 0x0001;
+        //CLICKHOUSE            = 0x0002;
+        APACHE_ARROW            = 0x0003;
+        //APACHE_PARQUET        = 0x0004;
+        //APACHE_ORC            = 0x0005;
+    }
+
+    Format format = 1;
+    bytes data = 2;
+}
+
+message BeginTransactionRequest {
+    enum TxTypeId {
+        TX_TYPE_ID_UNSPECIFIED  = 0x0000;
+        WRITE                   = 0x0001;
+        READ                    = 0x0002;
+        //UPDATE                = 0x0003;
+        //DELETE                = 0x0004;
+    }
+
+    Ydb.Operations.OperationParams operation_params = 1;
+    TxTypeId tx_type = 2;
+}
+
+message BeginTransactionResult {
+    // Transaction id required for other requests.
+    string tx_id = 1;
+}
+
+message BeginTransactionResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message CommitTransactionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string tx_id = 2;
+}
+
+message CommitTransactionResult {
+    string tx_id = 1;
+}
+
+message CommitTransactionResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message RollbackTransactionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string tx_id = 2;
+}
+
+message RollbackTransactionResult {
+    string tx_id = 1;
+}
+
+message RollbackTransactionResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message WriteRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string tx_id = 2;
+    string path = 3;
+    string dedup_id = 4;
+    Data data = 5;
+}
+
+message WriteResult {
+    string tx_id = 1;
+    string path = 2;
+    string dedup_id = 3;
+}
+
+message WriteResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ReadRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string tx_id = 2;
+    string path = 3;
+    oneof query {
+        string sql = 11;
+    }
+}
+
+message ReadResult {
+    string tx_id = 1;
+    string path = 2;
+    uint64 chunk = 3;
+    bool finished = 4;
+    Data data = 5;
+}
+
+message ReadResponse {
+    Ydb.Operations.Operation operation = 1;
+}

@@ -1,0 +1,5 @@
+OWNER(snowball)
+
+RECURSE(
+    targets
+)

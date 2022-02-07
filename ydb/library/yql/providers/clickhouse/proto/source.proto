@@ -1,0 +1,11 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYql.NCH;
+
+message TSource {
+    string Scheme = 1;
+    string Token = 2;
+    string Endpoint = 3;
+    string Query = 4;
+}

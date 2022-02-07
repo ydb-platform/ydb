@@ -1,0 +1,11 @@
+package NTDigest;
+
+message TDigest {
+    optional double Delta = 1;
+    optional double K = 2;
+    message TCentroid {
+        optional double Mean = 1;
+        optional double Weight = 2;
+    }
+    repeated TCentroid Centroids = 3;
+}

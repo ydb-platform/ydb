@@ -1,0 +1,23 @@
+path: "/local/InputJoinIndex2"
+columns {
+  name: "Key1"
+  type { optional_type { item { type_id: INT32 } } }
+}
+columns {
+  name: "Key2"
+  type { optional_type { item { type_id: STRING } } }
+}
+columns {
+  name: "Fk2"
+  type { optional_type { item { type_id: INT32 } } }
+}
+columns {
+  name: "Value"
+  type { optional_type { item { type_id: STRING } } }
+}
+primary_key: "Key1"
+primary_key: "Key2"
+indexes {
+  name: "Index"
+  index_columns: "Fk2"
+}

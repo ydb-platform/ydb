@@ -1,0 +1,6 @@
+--!syntax_v1
+CREATE TABLE ResultLiteralDyNumber (
+    Key DyNumber,
+    Value Json,
+    PRIMARY KEY (Key)
+);

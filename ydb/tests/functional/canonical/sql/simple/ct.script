@@ -1,0 +1,11 @@
+--!syntax_v1
+
+CREATE TABLE Questions (
+  idx Uint64,
+  text Utf8,
+  PRIMARY KEY(idx)
+);
+
+COMMIT;
+
+UPSERT INTO Questions (idx, text) VALUES (1, Utf8("to do or not to do"));

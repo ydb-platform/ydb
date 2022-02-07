@@ -1,0 +1,1000 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+import "ydb/public/api/protos/annotations/validation.proto";
+import "ydb/public/api/protos/ydb_common.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_query_stats.proto";
+import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/ydb_scheme.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_formats.proto";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+package Ydb.Table;
+option java_package = "com.yandex.ydb.table";
+
+// Create new session
+message CreateSessionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+// Create new session
+message CreateSessionResponse {
+    // Holds CreateSessionResult in case of CreateSessionResult
+    Ydb.Operations.Operation operation = 1;
+}
+
+message CreateSessionResult {
+    // Session identifier
+    string session_id = 1;
+}
+
+// Delete session with given id string
+message DeleteSessionRequest {
+    // Session identifier
+    string session_id = 1;
+    Ydb.Operations.OperationParams operation_params = 2;
+}
+
+message DeleteSessionResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GlobalIndex {
+}
+
+message GlobalAsyncIndex {
+}
+
+// Represent secondary index
+message TableIndex {
+    // Name of index
+    string name = 1;
+    // list of columns
+    repeated string index_columns = 2;
+    // Type of index
+    oneof type {
+       GlobalIndex global_index = 3;
+       GlobalAsyncIndex global_async_index = 4;
+    }
+    // list of columns content to be copied in to index table
+    repeated string data_columns = 5;
+}
+
+// Represent secondary index with index state
+message TableIndexDescription {
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        // Index is ready to use
+        STATUS_READY = 1;
+        // index is being built
+        STATUS_BUILDING = 2;
+    }
+    // Name of index
+    string name = 1;
+    // list of columns
+    repeated string index_columns = 2;
+    // Type of index
+    oneof type {
+       GlobalIndex global_index = 3;
+       GlobalAsyncIndex global_async_index = 5;
+    }
+    Status status = 4;
+    // list of columns content to be copied in to index table
+    repeated string data_columns = 6;
+    // Size of index data in bytes
+    uint64 size_bytes = 7;
+}
+
+// State of index building operation
+message IndexBuildState {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_PREPARING = 1;
+        STATE_TRANSFERING_DATA = 2;
+        STATE_APPLYING = 3;
+        STATE_DONE = 4;
+        STATE_CANCELLATION = 5;
+        STATE_CANCELLED = 6;
+        STATE_REJECTION = 7;
+        STATE_REJECTED = 8;
+    }
+}
+
+// Description of index building operation
+message IndexBuildDescription {
+    string path = 1;
+    TableIndex index = 2;
+}
+
+message IndexBuildMetadata {
+    IndexBuildDescription description = 1;
+    IndexBuildState.State state = 2;
+    float progress = 3;
+}
+
+message StoragePool {
+    string media = 1;
+}
+
+message StoragePolicy {
+    string preset_name = 1;
+    StoragePool syslog = 2;
+    StoragePool log = 3;
+    StoragePool data = 4;
+    StoragePool external = 5;
+    Ydb.FeatureFlag.Status keep_in_memory = 6;
+    repeated ColumnFamilyPolicy column_families = 7;
+}
+
+message ColumnFamilyPolicy {
+    enum Compression {
+        COMPRESSION_UNSPECIFIED = 0;
+        UNCOMPRESSED = 1;
+        COMPRESSED = 2;
+    }
+
+    // Name of the column family, the name "default" must be used for the
+    // primary column family that contains as least primary key columns
+    string name = 1;
+
+    // Storage settings for the column group (default to values in storage policy)
+    StoragePool data = 2;
+    StoragePool external = 3;
+
+    // When enabled table data will be kept in memory
+    // WARNING: DO NOT USE
+    Ydb.FeatureFlag.Status keep_in_memory = 4;
+
+    // Optionally specify whether data should be compressed
+    Compression compression = 5;
+}
+
+message CompactionPolicy {
+    string preset_name = 1;
+}
+
+message ExplicitPartitions {
+    // Specify key values used to split table into partitions.
+    // Each value becomes the first key of a new partition.
+    // Key values should go in ascending order.
+    // Total number of created partitions is number of specified
+    // keys + 1.
+    repeated TypedValue split_points = 1;
+}
+
+message PartitionStats {
+    // Approximate number of rows in shard
+    uint64 rows_estimate = 1;
+    // Approximate size of shard (bytes)
+    uint64 store_size = 2;
+}
+
+message TableStats {
+    // Stats for each partition
+    repeated PartitionStats partition_stats = 1;
+    // Approximate number of rows in table
+    uint64 rows_estimate = 2;
+    // Approximate size of table (bytes)
+    uint64 store_size = 3;
+    // Number of partitions in table
+    uint64 partitions = 4;
+    // Timestamp of table creation
+    google.protobuf.Timestamp creation_time = 5;
+    // Timestamp of last modification
+    google.protobuf.Timestamp modification_time = 6;
+}
+
+message PartitioningPolicy {
+    enum AutoPartitioningPolicy {
+        AUTO_PARTITIONING_POLICY_UNSPECIFIED = 0;
+        DISABLED = 1;
+        AUTO_SPLIT = 2;
+        AUTO_SPLIT_MERGE = 3;
+    }
+
+    string preset_name = 1;
+    AutoPartitioningPolicy auto_partitioning = 2;
+    oneof partitions {
+        // Allows to enable uniform sharding using given shards number.
+        // The first components of primary key must have Uint32/Uint64 type.
+        uint64 uniform_partitions = 3;
+        // Explicitly specify key values which are used as borders for
+        // created partitions.
+        ExplicitPartitions explicit_partitions = 4;
+    }
+}
+
+message ExecutionPolicy {
+    string preset_name = 1;
+}
+
+message ReplicationPolicy {
+    string preset_name = 1;
+    // If value is non-zero then it specifies a number of read-only
+    // replicas to create for a table. Zero value means preset
+    // setting usage.
+    uint32 replicas_count = 2;
+    // If this feature in enabled then requested number of replicas
+    // will be created in each availability zone.
+    Ydb.FeatureFlag.Status create_per_availability_zone = 3;
+    // If this feature in enabled then read-only replicas can be promoted
+    // to leader.
+    Ydb.FeatureFlag.Status allow_promotion = 4;
+}
+
+message CachingPolicy {
+    string preset_name = 1;
+}
+
+message TableProfile {
+    string preset_name = 1;
+    StoragePolicy storage_policy = 2;
+    CompactionPolicy compaction_policy = 3;
+    PartitioningPolicy partitioning_policy = 4;
+    ExecutionPolicy execution_policy = 5;
+    ReplicationPolicy replication_policy = 6;
+    CachingPolicy caching_policy = 7;
+}
+
+message ColumnMeta {
+    // Name of column
+    string name = 1;
+    // Type of column
+    Type type = 2;
+    // Column family name of the column
+    string family = 3;
+}
+
+message DateTypeColumnModeSettings {
+    // The row will be considered as expired at the moment of time, when the value
+    // stored in <column_name> is less than or equal to the current time (in epoch
+    // time format), and <expire_after_seconds> has passed since that moment;
+    // i.e. the expiration threshold is the value of <column_name> plus <expire_after_seconds>.
+
+    // The column type must be a date type
+    string column_name = 1;
+
+    uint32 expire_after_seconds = 2;
+}
+
+message ValueSinceUnixEpochModeSettings {
+    // Same as DateTypeColumnModeSettings (above), but useful when type of the
+    // value stored in <column_name> is not a date type.
+
+    enum Unit {
+        UNIT_UNSPECIFIED = 0;
+        UNIT_SECONDS = 1;
+        UNIT_MILLISECONDS = 2;
+        UNIT_MICROSECONDS = 3;
+        UNIT_NANOSECONDS = 4;
+    }
+
+    // The column type must be one of:
+    // - Uint32
+    // - Uint64
+    // - DyNumber
+    string column_name = 1;
+
+    // Interpretation of the value stored in <column_name>
+    Unit column_unit = 2;
+
+    // This option is always interpreted as seconds regardless of the
+    // <column_unit> value.
+    uint32 expire_after_seconds = 3;
+}
+
+message TtlSettings {
+    oneof mode {
+        DateTypeColumnModeSettings date_type_column = 1;
+        ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2;
+    }
+
+    // There is no guarantee that expired row will be deleted immediately upon
+    // expiration. There may be a delay between the time a row expires and the
+    // time that server deletes the row from the table.
+
+    // Ttl periodically runs background removal operations (BRO) on table's partitions.
+    // By default, there is:
+    // - no more than one BRO on the table;
+    // - BRO is started no more than once an hour on the same partition.
+    // Use options below to change that behavior.
+
+    // How often to run BRO on the same partition.
+    // BRO will not be started more often, but may be started less often.
+    uint32 run_interval_seconds = 3;
+}
+
+message StorageSettings {
+    // This specifies internal channel 0 commit log storage pool
+    // Fastest available storage recommended, negligible amounts of short-lived data
+    StoragePool tablet_commit_log0 = 1;
+
+    // This specifies internal channel 1 commit log storage pool
+    // Fastest available storage recommended, small amounts of short-lived data
+    StoragePool tablet_commit_log1 = 2;
+
+    // This specifies external blobs storage pool
+    StoragePool external = 4;
+
+    // Optionally store large values in "external blobs"
+    // WARNING: DO NOT USE
+    // This feature is experimental and should not be used, restrictions apply:
+    // * Table cannot split/merge when this is enabled
+    // * Table cannot be copied or backed up when this is enabled
+    // * This feature cannot be disabled once enabled for a table
+    Ydb.FeatureFlag.Status store_external_blobs = 5;
+}
+
+message ColumnFamily {
+    enum Compression {
+        COMPRESSION_UNSPECIFIED = 0;
+        COMPRESSION_NONE = 1;
+        COMPRESSION_LZ4 = 2;
+    }
+
+    // Name of the column family, the name "default" must be used for the
+    // primary column family that contains at least primary key columns
+    string name = 1;
+
+    // This specifies data storage settings for column family
+    StoragePool data = 2;
+
+    // Optionally specify how data should be compressed
+    Compression compression = 3;
+
+    // When enabled table data will be kept in memory
+    // WARNING: DO NOT USE
+    Ydb.FeatureFlag.Status keep_in_memory = 4;
+}
+
+message PartitioningSettings {
+    // List of columns (primary key prefix) to partition by
+    reserved 1; // partition_by
+    // Enable auto partitioning on reaching upper or lower partition size bound
+    Ydb.FeatureFlag.Status partitioning_by_size = 2;
+    // Preferred partition size for auto partitioning by size, Mb
+    uint64 partition_size_mb = 3;
+    // Enable auto partitioning based on load on each partition
+    Ydb.FeatureFlag.Status partitioning_by_load = 4;
+    reserved 5; // partitioning_by_load settings
+    // Minimum partitions count auto merge would stop working at
+    uint64 min_partitions_count = 6;
+    // Maximum partitions count auto split would stop working at
+    uint64 max_partitions_count = 7;
+}
+
+message AzReadReplicasSettings {
+    // AZ name
+    string name = 1;
+    // Read replicas count in this AZ
+    uint64 read_replicas_count = 2;
+}
+
+message ClusterReplicasSettings {
+    // List of read replicas settings for each AZ
+    repeated AzReadReplicasSettings az_read_replicas_settings  = 2;
+}
+
+message ReadReplicasSettings {
+    oneof settings {
+        // Set equal read replicas count for every AZ
+        uint64 per_az_read_replicas_count = 1;
+
+        // Set total replicas count between all AZs
+        uint64 any_az_read_replicas_count = 2;
+    }
+
+    // Specify read replicas count for each AZ in cluster
+    reserved 3; // cluster_replicas_settings (part of oneof settings)
+}
+
+message CreateTableRequest {
+    // Session identifier
+    string session_id = 1;
+    // Full path
+    string path = 2;
+    // Columns (name, type)
+    repeated ColumnMeta columns = 3;
+    // List of columns used as primary key
+    repeated string primary_key = 4;
+    // Table profile
+    TableProfile profile = 5;
+    Ydb.Operations.OperationParams operation_params = 6;
+    // List of secondary indexes
+    repeated TableIndex indexes = 7;
+    // Table rows time to live settings
+    TtlSettings ttl_settings = 8;
+    // Storage settings for table
+    StorageSettings storage_settings = 9;
+    // Column families
+    repeated ColumnFamily column_families = 10;
+    // Attributes. Total size is limited to 10 KB.
+    map<string, string> attributes = 11 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
+    // Predefined named set of settings for table compaction ["default", "small_table", "log_table"].
+    string compaction_policy = 12;
+    // Either one of the following partitions options can be specified
+    oneof partitions {
+        // Enable uniform partitioning using given partitions count.
+        // The first components of primary key must have Uint32/Uint64 type.
+        uint64 uniform_partitions = 13;
+        // Explicitly specify key values which are used as borders for created partitions.
+        ExplicitPartitions partition_at_keys = 14;
+    }
+    // Partitioning settings for table
+    PartitioningSettings partitioning_settings = 15;
+    // Bloom filter by key
+    Ydb.FeatureFlag.Status key_bloom_filter = 16;
+    // Read replicas settings for table
+    ReadReplicasSettings read_replicas_settings = 17;
+}
+
+message CreateTableResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Drop table with given path
+message DropTableRequest {
+    // Session identifier
+    string session_id = 1;
+    // Full path
+    string path = 2;
+    reserved 3;
+    Ydb.Operations.OperationParams operation_params = 4;
+}
+
+message DropTableResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Alter table with given path
+message AlterTableRequest {
+    // Session identifier
+    string session_id = 1;
+    // Full path
+    string path = 2;
+    // Columns (name, type) to add
+    repeated ColumnMeta add_columns = 3;
+    // Columns to remove
+    repeated string drop_columns = 4;
+    Ydb.Operations.OperationParams operation_params = 5;
+    // Columns to alter
+    repeated ColumnMeta alter_columns = 6;
+    // Setup or remove time to live settings
+    oneof ttl_action {
+        TtlSettings set_ttl_settings = 7;
+        google.protobuf.Empty drop_ttl_settings = 8;
+    }
+    // Add secondary indexes
+    repeated TableIndex add_indexes = 9;
+    // Remove secondary indexes
+    repeated string drop_indexes = 10;
+    // Change table storage settings
+    StorageSettings alter_storage_settings = 11;
+    // Add/alter column families
+    repeated ColumnFamily add_column_families = 12;
+    repeated ColumnFamily alter_column_families = 13;
+    // Alter attributes. Leave the value blank to drop an attribute.
+    // Cannot be used in combination with other fields (except session_id and path) at the moment.
+    map<string, string> alter_attributes = 14 [(map_key).length.range = {min: 1, max: 100}, (length).le = 4096];
+    // Set predefined named set of settings for table compaction ["default", "small_table", "log_table"].
+    // Set "default" to use default preset.
+    string set_compaction_policy = 15;
+    // Change table partitioning settings
+    PartitioningSettings alter_partitioning_settings = 16;
+    // Enable/disable bloom filter by key
+    Ydb.FeatureFlag.Status set_key_bloom_filter = 17;
+    // Set read replicas settings for table
+    ReadReplicasSettings set_read_replicas_settings = 18;
+}
+
+message AlterTableResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Copy table with given path
+message CopyTableRequest {
+    // Session identifier
+    string session_id = 1;
+    // Copy from path
+    string source_path = 2;
+    // Copy to path
+    string destination_path = 3;
+    Ydb.Operations.OperationParams operation_params = 4;
+}
+
+message CopyTableResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message CopyTableItem {
+    // Copy from path
+    string source_path = 1;
+    // Copy to path
+    string destination_path = 2;
+    // Copy options
+    bool omit_indexes = 3;
+}
+
+// Creates consistent copy of given tables.
+message CopyTablesRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Session identifier
+    string session_id = 2;
+    // Source and destination paths which describe copies
+    repeated CopyTableItem tables = 3;
+}
+
+message CopyTablesResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message RenameTableItem {
+    // Full path
+    string source_path = 1;
+    // Full path
+    string destination_path = 2;
+    // Move options
+    bool replace_destination = 3;
+}
+
+// Moves given tables
+message RenameTablesRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Session identifier
+    string session_id = 2;
+    // Source and destination paths inside RenameTableItem describe rename actions
+    repeated RenameTableItem tables = 3;
+}
+
+message RenameTablesResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Describe table with given path
+message DescribeTableRequest {
+    // Session identifier
+    string session_id = 1;
+    // Full path
+    string path = 2;
+    Ydb.Operations.OperationParams operation_params = 4;
+    // Includes shard key distribution info
+    bool include_shard_key_bounds = 5;
+    // Includes table statistics
+    bool include_table_stats = 6;
+    // Includes partition statistics (required include_table_statistics)
+    bool include_partition_stats = 7;
+}
+
+message DescribeTableResponse {
+    // Holds DescribeTableResult in case of successful call
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeTableResult {
+    // Description of scheme object
+    Ydb.Scheme.Entry self = 1;
+    // List of columns
+    repeated ColumnMeta columns = 2;
+    // List of primary key columns
+    repeated string primary_key = 3;
+    // List of key ranges for shard
+    repeated TypedValue shard_key_bounds = 4;
+    // List of indexes
+    repeated TableIndexDescription indexes = 5;
+    // Statistics of table
+    TableStats table_stats = 6;
+    // TTL params
+    TtlSettings ttl_settings = 7;
+    // Storage settings for table
+    StorageSettings storage_settings = 8;
+    // Column families
+    repeated ColumnFamily column_families = 9;
+    // Attributes
+    map<string, string> attributes = 10;
+    // Predefined named set of settings for table compaction
+    reserved 11; // compaction_policy
+    // Partitioning settings for table
+    PartitioningSettings partitioning_settings = 12;
+    // Bloom filter by key
+    Ydb.FeatureFlag.Status key_bloom_filter = 13;
+    // Read replicas settings for table
+    ReadReplicasSettings read_replicas_settings = 14;
+}
+
+message Query {
+    // Text of query or id prepared query
+    oneof query {
+        // SQL program
+        string yql_text = 1;
+        // Prepared query id
+        string id = 2;
+    }
+}
+
+message SerializableModeSettings {
+}
+
+message OnlineModeSettings {
+    bool allow_inconsistent_reads = 1;
+}
+
+message StaleModeSettings {
+}
+
+message TransactionSettings {
+    oneof tx_mode {
+        SerializableModeSettings serializable_read_write = 1;
+        OnlineModeSettings online_read_only = 2;
+        StaleModeSettings stale_read_only = 3;
+    }
+}
+
+message TransactionControl {
+    oneof tx_selector {
+        string tx_id = 1;
+        TransactionSettings begin_tx = 2;
+    }
+
+    bool commit_tx = 10;
+}
+
+message QueryCachePolicy {
+    bool keep_in_cache = 1;
+}
+
+// Collect and return query execution stats
+message QueryStatsCollection {
+    enum Mode {
+        STATS_COLLECTION_UNSPECIFIED = 0;
+        STATS_COLLECTION_NONE = 1;       // Stats collection is disabled
+        STATS_COLLECTION_BASIC = 2;      // Aggregated stats of reads, updates and deletes per table
+        STATS_COLLECTION_FULL = 3;       // Add execution stats and plan on top of STATS_COLLECTION_BASIC
+    }
+}
+
+message ExecuteDataQueryRequest {
+    // Session identifier
+    string session_id = 1;
+    TransactionControl tx_control = 2;
+    Query query = 3;
+    // Map of query parameters (optional)
+    map<string, TypedValue> parameters = 4;
+    QueryCachePolicy query_cache_policy = 5;
+    Ydb.Operations.OperationParams operation_params = 6;
+    QueryStatsCollection.Mode collect_stats = 7;
+}
+
+message ExecuteDataQueryResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ExecuteSchemeQueryRequest {
+    // Session identifier
+    string session_id = 1;
+    // SQL text
+    string yql_text = 2;
+    Ydb.Operations.OperationParams operation_params = 3;
+}
+
+message ExecuteSchemeQueryResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Holds transaction id
+message TransactionMeta {
+    // Transaction identifier
+    string id = 1;
+}
+
+// Holds query id and type of parameters
+message QueryMeta {
+    // Query identifier
+    string id = 1;
+    // Type of parameters
+    map<string, Type> parameters_types = 2;
+}
+
+// One QueryResult can contain multiple tables
+message ExecuteQueryResult {
+    // Result rets (for each table)
+    repeated Ydb.ResultSet result_sets = 1;
+    // Transaction metadata
+    TransactionMeta tx_meta = 2;
+    // Query metadata
+    QueryMeta query_meta = 3;
+    // Query execution statistics
+    Ydb.TableStats.QueryStats query_stats = 4;
+}
+
+// Explain data query
+message ExplainDataQueryRequest {
+    // Session identifier
+    string session_id = 1;
+    // SQL text to explain
+    string yql_text = 2;
+    Ydb.Operations.OperationParams operation_params = 3;
+}
+
+message ExplainDataQueryResponse {
+    // Holds ExplainQueryResult in case of successful call
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ExplainQueryResult {
+    string query_ast = 1;
+    string query_plan = 2;
+}
+
+// Prepare given program to execute
+message PrepareDataQueryRequest {
+    // Session identifier
+    string session_id = 1;
+    // SQL text
+    string yql_text = 2;
+    Ydb.Operations.OperationParams operation_params = 3;
+}
+
+message PrepareDataQueryResponse {
+    // Holds PrepareQueryResult in case of successful call
+    Ydb.Operations.Operation operation = 1;
+}
+
+message PrepareQueryResult {
+    // Query id, used to perform ExecuteDataQuery
+    string query_id = 1;
+    // Parameters type, used to fill in parameter values
+    map<string, Type> parameters_types = 2;
+}
+
+// Keep session alive
+message KeepAliveRequest {
+    // Session identifier
+    string session_id = 1;
+    Ydb.Operations.OperationParams operation_params = 2;
+}
+
+message KeepAliveResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message KeepAliveResult {
+    enum SessionStatus {
+        SESSION_STATUS_UNSPECIFIED = 0;
+        SESSION_STATUS_READY = 1;
+        SESSION_STATUS_BUSY = 2;
+    }
+
+    SessionStatus session_status = 1;
+}
+
+// Begin transaction on given session with given settings
+message BeginTransactionRequest {
+    // Session identifier
+    string session_id = 1;
+    TransactionSettings tx_settings = 2;
+    Ydb.Operations.OperationParams operation_params = 3;
+}
+
+message BeginTransactionResponse {
+    // Holds BeginTransactionResult in case of successful call
+    Ydb.Operations.Operation operation = 1;
+}
+
+message BeginTransactionResult {
+    TransactionMeta tx_meta = 1;
+}
+
+// Commit transaction with given session and tx id
+message CommitTransactionRequest {
+    // Session identifier
+    string session_id = 1;
+    // Transaction identifier
+    string tx_id = 2;
+    Ydb.Operations.OperationParams operation_params = 3;
+    QueryStatsCollection.Mode collect_stats = 4;
+}
+
+message CommitTransactionResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message CommitTransactionResult {
+    Ydb.TableStats.QueryStats query_stats = 1;
+}
+
+// Rollback transaction with given session and tx id
+message RollbackTransactionRequest {
+    // Session identifier
+    string session_id = 1;
+    // Transaction identifier
+    string tx_id = 2;
+    Ydb.Operations.OperationParams operation_params = 3;
+}
+
+message RollbackTransactionResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message StoragePolicyDescription {
+    string name = 1;
+    map<string, string> labels = 2;
+}
+
+message CompactionPolicyDescription {
+    string name = 1;
+    map<string, string> labels = 2;
+}
+
+message PartitioningPolicyDescription {
+    string name = 1;
+    map<string, string> labels = 2;
+}
+
+message ExecutionPolicyDescription {
+    string name = 1;
+    map<string, string> labels = 2;
+}
+
+message ReplicationPolicyDescription {
+    string name = 1;
+    map<string, string> labels = 2;
+}
+
+message CachingPolicyDescription {
+    string name = 1;
+    map<string, string> labels = 2;
+}
+
+message TableProfileDescription {
+    string name = 1;
+    map<string, string> labels = 2;
+    string default_storage_policy = 3;
+    repeated string allowed_storage_policies = 4;
+    string default_compaction_policy = 5;
+    repeated string allowed_compaction_policies = 6;
+    string default_partitioning_policy = 7;
+    repeated string allowed_partitioning_policies = 8;
+    string default_execution_policy = 9;
+    repeated string allowed_execution_policies = 10;
+    string default_replication_policy = 11;
+    repeated string allowed_replication_policies = 12;
+    string default_caching_policy = 13;
+    repeated string allowed_caching_policies = 14;
+}
+
+message DescribeTableOptionsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message DescribeTableOptionsResponse {
+    // operation.result holds ListTableParametersResult
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeTableOptionsResult {
+    repeated TableProfileDescription table_profile_presets = 1;
+    repeated StoragePolicyDescription storage_policy_presets = 2;
+    repeated CompactionPolicyDescription compaction_policy_presets = 3;
+    repeated PartitioningPolicyDescription partitioning_policy_presets = 4;
+    repeated ExecutionPolicyDescription execution_policy_presets = 5;
+    repeated ReplicationPolicyDescription replication_policy_presets = 6;
+    repeated CachingPolicyDescription caching_policy_presets = 7;
+}
+
+// ReadTable request/response
+
+message KeyRange {
+    // Left border
+    oneof from_bound {
+        // Specify if we don't want to include given key
+        TypedValue greater = 1;
+        // Specify if we want to include given key
+        TypedValue greater_or_equal = 2;
+    }
+
+    // Right border
+    oneof to_bound {
+        // Specify if we don't want to include given key
+        TypedValue less = 3;
+        // Specify if we want to include given key
+        TypedValue less_or_equal = 4;
+    }
+}
+
+// Request to read table (without SQL)
+message ReadTableRequest {
+    // Session identifier
+    string session_id = 1;
+    // Path to table to read
+    string path = 2;
+    // Primary key range to read
+    KeyRange key_range = 3;
+    // Output columns
+    repeated string columns = 4;
+    // Require ordered reading
+    bool ordered = 5;
+    // Limits row count to read
+    uint64 row_limit = 6;
+    // Use a server-side snapshot
+    Ydb.FeatureFlag.Status use_snapshot = 7;
+}
+
+// ReadTable doesn't use Operation, returns result directly
+message ReadTableResponse {
+    // Status of request (same as other statuses)
+    StatusIds.StatusCode status = 1;
+    // Issues
+    repeated Ydb.Issue.IssueMessage issues = 2;
+    // Read table result
+    ReadTableResult result = 3;
+}
+
+// Result of read table request
+message ReadTableResult {
+    // Result set (same as result of sql request)
+    Ydb.ResultSet result_set = 1;
+}
+
+message BulkUpsertRequest {
+    string table = 1;
+    // "rows" parameter must be a list of structs where each stuct represents one row.
+    // It must contain all key columns but not necessarily all non-key columns.
+    // Similar to UPSERT statement only values of specified columns will be updated.
+    TypedValue rows = 2;
+    Ydb.Operations.OperationParams operation_params = 3;
+
+    // You may set data_format + data instead of rows to insert data in serialized formats.
+    oneof data_format {
+        Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 7;
+        Ydb.Formats.CsvSettings csv_settings = 8;
+    }
+
+    // It's last in the definition to help with sidecar patterns
+    bytes data = 1000;
+}
+
+message BulkUpsertResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message BulkUpsertResult {
+}
+
+message ExecuteScanQueryRequest {
+    enum Mode {
+        MODE_UNSPECIFIED = 0;
+        MODE_EXPLAIN = 1;
+        // MODE_PREPARE = 2;
+        MODE_EXEC = 3;
+    }
+
+    reserved 1; // session_id
+    reserved 2; // tx_control
+    Query query = 3;
+    map<string, TypedValue> parameters = 4;
+    reserved 5; // query_cache_policy
+    Mode mode = 6;
+    reserved 7; // report_progress
+    QueryStatsCollection.Mode collect_stats = 8;
+}
+
+message ExecuteScanQueryPartialResponse {
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+    ExecuteScanQueryPartialResult result = 3;
+}
+
+message ExecuteScanQueryPartialResult {
+    Ydb.ResultSet result_set = 1;
+    reserved 2; // tx_meta
+    reserved 3; // query_meta
+    reserved 4; // query_progress
+    reserved 5; // query_plan
+    Ydb.TableStats.QueryStats query_stats = 6;
+}
+

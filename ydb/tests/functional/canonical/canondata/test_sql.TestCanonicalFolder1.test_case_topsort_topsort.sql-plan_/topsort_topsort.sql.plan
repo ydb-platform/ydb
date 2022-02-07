@@ -1,0 +1,26 @@
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_topsort_topsort_sql_plan/Input1",
+            "reads": [
+                {
+                    "type": "FullScan",
+                    "scan_by": [
+                        "Group",
+                        "Name"
+                    ],
+                    "columns": [
+                        "Amount",
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ]
+                }
+            ]
+        }
+    ]
+}

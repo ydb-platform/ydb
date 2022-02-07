@@ -1,0 +1,20 @@
+import "google/protobuf/descriptor.proto";
+
+package NProtobufJsonUt;
+
+extend google.protobuf.FieldOptions {
+  optional bool filter_test = 58255;
+  optional bool export_test = 58256;
+}
+
+message TFilterTest {
+    optional string OptFiltered = 1 [(filter_test) = true, (export_test) = true];
+    optional string NotFiltered = 2 [(export_test) = true];
+    repeated uint64 RepFiltered = 3 [(filter_test) = true];
+
+    message TInner {
+        repeated uint32 Number = 1 [(export_test) = true];
+        optional int32 InnerFiltered = 2 [(filter_test) = true];
+    }
+    optional TInner Inner = 4 [(export_test) = true];
+}

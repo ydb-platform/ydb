@@ -1,0 +1,140 @@
+[
+    {
+        "Amount": 10,
+        "Comment": "NullGroup",
+        "Group": null,
+        "Name": "Name1"
+    },
+    {
+        "Amount": 100,
+        "Comment": "Test1",
+        "Group": 1,
+        "Name": "Name1"
+    },
+    {
+        "Amount": 101,
+        "Comment": "Test1",
+        "Group": 1,
+        "Name": "Name2"
+    },
+    {
+        "Amount": 102,
+        "Comment": "Test1",
+        "Group": 1,
+        "Name": "Name3"
+    },
+    {
+        "Amount": 103,
+        "Comment": "Test1",
+        "Group": 2,
+        "Name": "Name1"
+    },
+    {
+        "Amount": 104,
+        "Comment": "Test1",
+        "Group": 3,
+        "Name": "Name3"
+    },
+    {
+        "Amount": 105,
+        "Comment": "Test1",
+        "Group": 4,
+        "Name": "Name1"
+    },
+    {
+        "Amount": 106,
+        "Comment": "Test1",
+        "Group": 4,
+        "Name": "Name4"
+    },
+    {
+        "Amount": 107,
+        "Comment": "Test1",
+        "Group": 5,
+        "Name": "Name5"
+    },
+    {
+        "Amount": 108,
+        "Comment": "Test1",
+        "Group": 6,
+        "Name": "Name1"
+    },
+    {
+        "Amount": 109,
+        "Comment": "Test1",
+        "Group": 6,
+        "Name": "Name2"
+    },
+    {
+        "Amount": 100,
+        "Comment": "Test3",
+        "Group": 10,
+        "Name": "Name1"
+    },
+    {
+        "Amount": 101,
+        "Comment": "Test3",
+        "Group": 10,
+        "Name": "Name2"
+    },
+    {
+        "Amount": 102,
+        "Comment": "Test3",
+        "Group": 10,
+        "Name": "Name3"
+    },
+    {
+        "Amount": 103,
+        "Comment": "Test3",
+        "Group": 10,
+        "Name": "Name4"
+    },
+    {
+        "Amount": 104,
+        "Comment": "Test3",
+        "Group": 10,
+        "Name": "Name5"
+    },
+    {
+        "Amount": 105,
+        "Comment": "Test3",
+        "Group": 10,
+        "Name": "Name6"
+    },
+    {
+        "Amount": 17,
+        "Comment": null,
+        "Group": 101,
+        "Name": "Name1"
+    },
+    {
+        "Amount": 17,
+        "Comment": null,
+        "Group": 101,
+        "Name": "Name2"
+    },
+    {
+        "Amount": 17,
+        "Comment": null,
+        "Group": 101,
+        "Name": "Name3"
+    },
+    {
+        "Amount": 100,
+        "Comment": "Test2",
+        "Group": 100001,
+        "Name": "Name1"
+    },
+    {
+        "Amount": 102,
+        "Comment": "Test2",
+        "Group": 100002,
+        "Name": "Name2"
+    },
+    {
+        "Amount": 103,
+        "Comment": "Test2",
+        "Group": 100003,
+        "Name": "Name1"
+    }
+]

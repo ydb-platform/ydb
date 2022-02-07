@@ -1,0 +1,190 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NKikimrKeyValue;
+option java_package = "ru.yandex.kikimr.proto";
+option java_outer_classname = "KeyValueProtos";
+option java_multiple_files = true;
+
+
+message Priorities {
+    enum Priority {
+        PRIORITY_UNSPECIFIED = 0;
+
+        // High priority for user-initiated operations.
+        PRIORITY_REALTIME = 1;
+
+        // Low prioroty for background system activity.
+        PRIORITY_BACKGROUND = 2;
+    }
+}
+
+message Statuses {
+    enum ReplyStatus {
+        RSTATUS_UNSPECIFIED = 0;
+        RSTATUS_OK = 1;
+        RSTATUS_ERROR = 2;
+        RSTATUS_TIMEOUT = 3;
+        RSTATUS_INTERNAL_ERROR = 4;
+        RSTATUS_NO_DATA = 5;
+        RSTATUS_OVERRUN = 6;
+    }
+}
+
+message Flags {
+    bool disk_space_cyan = 1;
+    bool disk_space_light_yellow_move = 2;
+    bool disk_space_yellow_stop = 3;
+    bool disk_space_light_orange = 4;
+    bool disk_space_orange = 5;
+    bool disk_space_red = 6;
+    bool disk_space_black = 7;
+}
+
+message Channel {
+    Statuses.ReplyStatus status = 1;
+    uint32 storage_channel = 2;
+    optional Flags status_flags = 3;
+}
+
+message KVRange {
+    oneof from_bound {
+        bytes from_key_inclusive = 1;
+        bytes from_key_exclusive = 2;
+    }
+
+    oneof to_bound {
+        bytes to_key_inclusive = 3;
+        bytes to_key_exclusive = 4;
+    }
+}
+
+message ReadRequest {
+    uint64 tablet_id = 1;
+    uint64 lock_generation = 2;
+    bytes key = 3;
+    uint64 offset = 4;
+    uint64 size = 5;
+    uint64 cookie = 6;
+    Priorities.Priority priority = 7;
+    uint64 deadline_instant_ms = 8;
+    uint64 limit_bytes = 9;
+}
+
+message ReadResult {
+    bytes requested_key = 1;
+    uint64 requested_offset = 2;
+    uint64 requested_size = 3;
+    bytes value = 4;
+    string msg = 5;
+    Statuses.ReplyStatus status = 6;
+    uint64 cookie = 7;
+}
+
+message ReadRangeRequest {
+    uint64 tablet_id = 1;
+    uint64 lock_generation = 2;
+
+    KVRange range = 3;
+
+    bool include_data = 4;
+    uint64 limit_bytes = 5;
+    Priorities.Priority priority = 6;
+    uint64 cookie = 7;
+    uint64 deadline_instant_ms = 8;
+}
+
+message ReadRangeResult {
+    message KeyValuePair {
+        bytes key = 1;
+        bytes value = 2;
+        uint32 value_size = 3;
+
+        // Unix time of the creation of the key-value pair (in ms).
+        uint64 creation_unix_time = 4;
+        uint32 storage_channel = 5; // Returns the _actual_ storage channel
+        Statuses.ReplyStatus status = 6;
+    }
+    Statuses.ReplyStatus status = 1;
+    string msg = 2;
+    repeated KeyValuePair pair = 3;
+    uint64 cookie = 4;
+}
+
+message ExecuteTransactionRequest {
+    message Command {
+        message Rename {
+            bytes old_key = 1;
+            bytes new_key = 2;
+        }
+        message Concat {
+            repeated bytes input_keys = 1;
+            bytes output_key = 2;
+            bool keep_inputs = 3;
+        }
+        message CopyRange {
+            KVRange range = 1;
+            bytes prefix_to_remove = 2;
+            bytes prefix_to_add = 3;
+        }
+        message Write {
+            enum Tactic {
+                TACTIC_UNSPECIFIED = 0;
+                TACTIC_MAX_THROUGHPUT = 1;
+                TACTIC_MIN_LATENCY = 2;
+            }
+            bytes key = 1;
+            bytes value = 2;
+            uint32 storage_channel = 3;
+            Priorities.Priority priority = 4;
+            Tactic tactic = 5;
+        }
+        message DeleteRange {
+            KVRange range = 1;
+        }
+
+        oneof action {
+            DeleteRange delete_range = 1;
+            Rename rename = 2;
+            CopyRange copy_range = 3;
+            Concat concat = 4;
+            Write write = 5;
+        }
+    }
+
+    uint64 tablet_id = 1;
+    uint64 lock_generation = 2;
+    repeated Command commands = 3;
+    uint64 cookie = 4;
+    uint64 deadline_instant_ms = 5;
+}
+
+message ExecuteTransactionResult {
+    repeated Channel channel = 1;
+    Statuses.ReplyStatus status = 2;
+    string msg = 3;
+    uint64 cookie = 4;
+}
+
+message GetStatusRequest {
+    uint64 tablet_id = 1;
+    uint64 lock_generation = 2;
+    repeated uint32 storage_channel = 3;
+    uint64 deadline_instant_ms = 4;
+}
+
+message GetStatusResult {
+    repeated Channel channel = 1;
+    Statuses.ReplyStatus status = 2;
+    string msg = 3;
+}
+
+message ObtainLockRequest {
+    uint64 tablet_id = 1;
+    uint64 cookie = 2;
+}
+
+message ObtainLockResult {
+    uint64 lock_generation = 1;
+    uint64 cookie = 2;
+}

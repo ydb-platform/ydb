@@ -1,0 +1,4 @@
+## Persistent queues
+
+A persistent queue consists of one or more partitions, where each partition is a [FIFO](https://en.wikipedia.org/wiki/FIFO_(computing_and_electronics)) [message queue](https://en.wikipedia.org/wiki/Message_queue) ensuring reliable delivery between two or more components. Data messages are untyped and constitute a data blob. Partitioning is a parallel processing tool that helps ensure high queue bandwidth. Mechanisms are provided to implement at least once and exactly once persistent queue delivery guarantees. A persistent queue in YDB is similar to a topic in [Apache Kafka](https://en.wikipedia.org/wiki/Apache_Kafka).
+

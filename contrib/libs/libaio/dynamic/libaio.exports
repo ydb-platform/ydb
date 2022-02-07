@@ -1,0 +1,9 @@
+C io_queue_init
+C io_queue_release
+C io_queue_run
+C io_setup
+C io_destroy
+C io_submit
+C io_cancel
+C io_getevents
+

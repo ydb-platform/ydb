@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package Ydb.Cms.V1;
+option java_package = "com.yandex.ydb.cms.v1";
+
+import "ydb/public/api/protos/ydb_cms.proto";
+
+// CMS stands for Cluster Management System. CmsService provides some
+// functionality for managing cluster, i.e. managing YDB Database
+// instances for example.
+
+service CmsService {
+    // Create a new database.
+    rpc CreateDatabase(Cms.CreateDatabaseRequest) returns (Cms.CreateDatabaseResponse);
+
+    // Get current database's status.
+    rpc GetDatabaseStatus(Cms.GetDatabaseStatusRequest) returns (Cms.GetDatabaseStatusResponse);
+
+    // Alter database resources.
+    rpc AlterDatabase(Cms.AlterDatabaseRequest) returns (Cms.AlterDatabaseResponse);
+
+    // List all databases.
+    rpc ListDatabases(Cms.ListDatabasesRequest) returns (Cms.ListDatabasesResponse);
+
+    // Remove database.
+    rpc RemoveDatabase(Cms.RemoveDatabaseRequest) returns (Cms.RemoveDatabaseResponse);
+
+    // Describe supported database options.
+    rpc DescribeDatabaseOptions(Cms.DescribeDatabaseOptionsRequest) returns (Cms.DescribeDatabaseOptionsResponse);
+}

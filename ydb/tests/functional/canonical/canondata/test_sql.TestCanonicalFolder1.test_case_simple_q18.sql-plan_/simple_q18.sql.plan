@@ -1,0 +1,46 @@
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_simple_q18_sql_plan/t1",
+            "reads": [
+                {
+                    "type": "FullScan",
+                    "scan_by": [
+                        "rowid"
+                    ],
+                    "columns": [
+                        "a"
+                    ]
+                },
+                {
+                    "type": "FullScan",
+                    "scan_by": [
+                        "rowid"
+                    ],
+                    "columns": [
+                        "a",
+                        "b"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "/local/base_simple_q18_sql_plan/t3",
+            "reads": [
+                {
+                    "type": "FullScan",
+                    "scan_by": [
+                        "rowid"
+                    ],
+                    "columns": [
+                        "a"
+                    ]
+                }
+            ]
+        }
+    ]
+}

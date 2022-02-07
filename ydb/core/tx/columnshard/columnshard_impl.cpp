@@ -1,0 +1,843 @@
+#include "columnshard_impl.h"
+#include "columnshard_schema.h"
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
+
+namespace NKikimr::NColumnShard {
+
+// NOTE: We really want to batch log records by default in columnshards!
+// But in unittests we want to test both scenarios
+bool gAllowLogBatchingDefaultValue = true;
+
+namespace
+{
+
+NTabletPipe::TClientConfig GetPipeClientConfig() {
+    NTabletPipe::TClientConfig config;
+    config.RetryPolicy = {
+        .MinRetryTime = TDuration::MilliSeconds(50),
+        .MaxRetryTime = TDuration::Seconds(2),
+    };
+    return config;
+}
+
+}
+
+TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
+    : TActor(&TThis::StateInit)
+    , TTabletExecutedFlat(info, tablet, nullptr)
+    , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
+    , InsertTable(std::make_unique<NOlap::TInsertTable>())
+{
+    TabletCountersPtr.reset(new TProtobufTabletCounters<
+        ESimpleCounters_descriptor,
+        ECumulativeCounters_descriptor,
+        EPercentileCounters_descriptor,
+        ETxTypes_descriptor
+    >());
+    TabletCounters = TabletCountersPtr.get();
+}
+
+void TColumnShard::OnDetach(const TActorContext& ctx) {
+    Die(ctx);
+}
+
+void TColumnShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ev);
+    Die(ctx);
+}
+
+void TColumnShard::TryRegisterMediatorTimeCast() {
+    if (MediatorTimeCastRegistered) {
+        return; // already registered
+    }
+
+    if (!ProcessingParams) {
+        return; // cannot register without processing params
+    }
+
+    Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvRegisterTablet(TabletID(), *ProcessingParams));
+    MediatorTimeCastRegistered = true;
+}
+
+void TColumnShard::UnregisterMediatorTimeCast() {
+    if (MediatorTimeCastRegistered) {
+        Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvUnregisterTablet(TabletID()));
+        MediatorTimeCastRegistered = false;
+        MediatorTimeCastEntry = nullptr;
+    }
+}
+
+void TColumnShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext&) {
+    const auto* msg = ev->Get();
+    Y_VERIFY(msg->TabletId == TabletID());
+    MediatorTimeCastEntry = msg->Entry;
+    Y_VERIFY(MediatorTimeCastEntry);
+    LOG_S_DEBUG("Registered with mediator time cast at tablet " << TabletID());
+
+    RescheduleWaitingReads();
+}
+
+void TColumnShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext&) {
+    const auto* msg = ev->Get();
+    Y_VERIFY(msg->TabletId == TabletID());
+
+    Y_VERIFY(MediatorTimeCastEntry);
+    ui64 step = MediatorTimeCastEntry->Get(TabletID());
+    LOG_S_DEBUG("Notified by mediator time cast with PlanStep# " << step << " at tablet " << TabletID());
+
+    for (auto it = MediatorTimeCastWaitingSteps.begin(); it != MediatorTimeCastWaitingSteps.end();) {
+        if (step < *it) {
+            break;
+        }
+        it = MediatorTimeCastWaitingSteps.erase(it);
+    }
+
+    RescheduleWaitingReads();
+    EnqueueBackgroundActivities(true);
+}
+
+bool TColumnShard::WaitPlanStep(ui64 step) {
+    if (step <= LastPlannedStep) {
+        return false;
+    }
+    if (MediatorTimeCastEntry) {
+        ui64 mediatorStep = MediatorTimeCastEntry->Get(TabletID());
+        if (step <= mediatorStep) {
+            return false;
+        }
+    }
+    if (MediatorTimeCastRegistered) {
+        if (MediatorTimeCastWaitingSteps.empty() ||
+            step < *MediatorTimeCastWaitingSteps.begin())
+        {
+            MediatorTimeCastWaitingSteps.insert(step);
+            SendWaitPlanStep(step);
+            LOG_S_DEBUG("Waiting for PlanStep# " << step << " from mediator time cast");
+            return true;
+        }
+    }
+    return false;
+}
+
+void TColumnShard::SendWaitPlanStep(ui64 step) {
+    Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
+}
+
+void TColumnShard::RescheduleWaitingReads() {
+    ui64 minWaitingStep = Max<ui64>();
+    TRowVersion maxReadVersion = GetMaxReadVersion();
+    for (auto it = WaitingReads.begin(); it != WaitingReads.end();) {
+        if (maxReadVersion < it->first) {
+            minWaitingStep = Min(minWaitingStep, it->first.Step);
+            break;
+        }
+        TActivationContext::Send(it->second.Release());
+        it = WaitingReads.erase(it);
+    }
+    for (auto it = WaitingScans.begin(); it != WaitingScans.end();) {
+        if (maxReadVersion < it->first) {
+            minWaitingStep = Min(minWaitingStep, it->first.Step);
+            break;
+        }
+        TActivationContext::Send(it->second.Release());
+        it = WaitingScans.erase(it);
+    }
+    if (minWaitingStep != Max<ui64>()) {
+        WaitPlanStep(minWaitingStep);
+    }
+}
+
+TRowVersion TColumnShard::GetMaxReadVersion() const {
+    if (PlanQueue) {
+        // We may only read just before the first transaction in the queue
+        auto it = PlanQueue.begin();
+        return TRowVersion(it->Step, it->TxId).Prev();
+    }
+    ui64 step = LastPlannedStep;
+    if (MediatorTimeCastEntry) {
+        ui64 mediatorStep = MediatorTimeCastEntry->Get(TabletID());
+        step = Max(step, mediatorStep);
+    }
+    return TRowVersion(step, Max<ui64>());
+}
+
+ui64 TColumnShard::GetOutdatedStep() const {
+    ui64 step = LastPlannedStep;
+    if (MediatorTimeCastEntry) {
+        step = Max(step, MediatorTimeCastEntry->Get(TabletID()));
+    }
+    return step;
+}
+
+ui64 TColumnShard::GetAllowedStep() const {
+    return Max(GetOutdatedStep() + 1, TAppData::TimeProvider->Now().MilliSeconds());
+}
+
+ui64 TColumnShard::GetMinReadStep() const {
+    ui64 delayMillisec = MaxReadStaleness.MilliSeconds();
+    ui64 passedStep = GetOutdatedStep();
+    ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
+    return minReadStep;
+}
+
+bool TColumnShard::HaveOutdatedTxs() const {
+    if (!DeadlineQueue) {
+        return false;
+    }
+    ui64 step = GetOutdatedStep();
+    auto it = DeadlineQueue.begin();
+    // Return true if the first transaction has no chance to be planned
+    return it->MaxStep <= step;
+}
+
+TWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId) {
+    auto it = LongTxWritesByUniqueId.find(longTxId.UniqueId);
+    if (it != LongTxWritesByUniqueId.end()) {
+        return (TWriteId)it->second->WriteId;
+    }
+
+    TWriteId writeId = ++LastWriteId;
+    auto& lw = LongTxWrites[writeId];
+    lw.WriteId = (ui64)writeId;
+    lw.LongTxId = longTxId;
+    LongTxWritesByUniqueId[longTxId.UniqueId] = &lw;
+
+    Schema::SaveSpecialValue(db, Schema::EValueIds::LastWriteId, (ui64)writeId);
+    Schema::SaveLongTxWrite(db, writeId, longTxId);
+
+    return writeId;
+}
+
+void TColumnShard::AddLongTxWrite(TWriteId writeId, ui64 txId) {
+    auto& lw = LongTxWrites.at(writeId);
+    lw.PreparedTxId = txId;
+}
+
+void TColumnShard::LoadLongTxWrite(TWriteId writeId, const NLongTxService::TLongTxId& longTxId) {
+    auto& lw = LongTxWrites[writeId];
+    lw.WriteId = (ui64)writeId;
+    lw.LongTxId = longTxId;
+    LongTxWritesByUniqueId[longTxId.UniqueId] = &lw;
+}
+
+void TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId) {
+    if (auto* lw = LongTxWrites.FindPtr(writeId)) {
+        if (!txId || lw->PreparedTxId == txId) {
+            Schema::EraseLongTxWrite(db, writeId);
+            LongTxWritesByUniqueId.erase(lw->LongTxId.UniqueId);
+            LongTxWrites.erase(writeId);
+        }
+    }
+}
+
+bool TColumnShard::RemoveTx(NTable::TDatabase& database, ui64 txId) {
+    auto it = BasicTxInfo.find(txId);
+    if (it == BasicTxInfo.end()) {
+        return false;
+    }
+
+    NIceDb::TNiceDb db(database);
+
+    switch (it->second.TxKind) {
+        case NKikimrTxColumnShard::TX_KIND_SCHEMA: {
+            AltersInFlight.erase(txId);
+            break;
+        }
+        case NKikimrTxColumnShard::TX_KIND_COMMIT: {
+            if (auto* meta = CommitsInFlight.FindPtr(txId)) {
+                if (meta->MetaShard == 0) {
+                    for (TWriteId writeId : meta->WriteIds) {
+                        // TODO: we probably need to have more complex
+                        // logic in the future, when there are multiple
+                        // inflight commits for the same writeId.
+                        RemoveLongTxWrite(db, writeId, txId);
+                    }
+                }
+                TBlobGroupSelector dsGroupSelector(Info());
+                NOlap::TDbWrapper dbTable(database, &dsGroupSelector);
+                InsertTable->Abort(dbTable, meta->MetaShard, meta->WriteIds);
+
+                CommitsInFlight.erase(txId);
+            }
+            break;
+        }
+        default: {
+            Y_FAIL("Unsupported TxKind");
+        }
+    }
+
+    if (it->second.PlanStep != 0) {
+        PlanQueue.erase(TPlanQueueItem(it->second.PlanStep, txId));
+        RescheduleWaitingReads();
+    } else if (it->second.MaxStep != Max<ui64>()) {
+        DeadlineQueue.erase(TDeadlineQueueItem(it->second.MaxStep, txId));
+    }
+
+    BasicTxInfo.erase(it);
+
+    Schema::EraseTxInfo(db, txId);
+    return true;
+}
+
+void TColumnShard::UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {
+    if (LastSchemaSeqNo < seqNo) {
+        LastSchemaSeqNo = seqNo;
+
+        NIceDb::TNiceDb db(txc.DB);
+        Schema::SaveSpecialValue(db, Schema::EValueIds::LastSchemaSeqNoGeneration, LastSchemaSeqNo.Generation);
+        Schema::SaveSpecialValue(db, Schema::EValueIds::LastSchemaSeqNoRound, LastSchemaSeqNo.Round);
+    }
+}
+
+void TColumnShard::ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& seqNoProto, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto seqNo = SeqNoFromProto(seqNoProto);
+    if (LastSchemaSeqNo <= seqNo) {
+        UpdateSchemaSeqNo(++seqNo, txc);
+    }
+}
+
+bool TColumnShard::IsTableWritable(ui64 tableId) const {
+    auto it = Tables.find(tableId);
+    if (it == Tables.end()) {
+        return false;
+    }
+    return !it->second.IsDropped();
+}
+
+ui32 TColumnShard::EnsureSchemaPreset(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto, const TRowVersion& version) {
+    if (!SchemaPresets.contains(presetProto.GetId())) {
+        auto& preset = SchemaPresets[presetProto.GetId()];
+        preset.Id = presetProto.GetId();
+        preset.Name = presetProto.GetName();
+        auto& info = preset.Versions[version];
+        info.SetId(preset.Id);
+        info.SetSinceStep(version.Step);
+        info.SetSinceTxId(version.TxId);
+        *info.MutableSchema() = presetProto.GetSchema();
+
+        Y_VERIFY(preset.Name == "default", "Only schema preset named 'default' is supported");
+
+        Schema::SaveSchemaPresetInfo(db, preset.Id, preset.Name);
+        Schema::SaveSchemaPresetVersionInfo(db, preset.Id, version, info);
+        SetCounter(COUNTER_TABLE_PRESETS, SchemaPresets.size());
+    }
+
+    return presetProto.GetId();
+}
+#if 0
+ui32 TColumnShard::EnsureTtlSettingsPreset(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TColumnTableTtlSettingsPreset& presetProto, const TRowVersion& version) {
+    if (!TtlSettingsPresets.contains(presetProto.GetId())) {
+        auto& preset = TtlSettingsPresets[presetProto.GetId()];
+        preset.Id = presetProto.GetId();
+        preset.Name = presetProto.GetName();
+        auto& info = preset.Versions[version];
+        info.SetId(preset.Id);
+        info.SetSinceStep(version.Step);
+        info.SetSinceTxId(version.TxId);
+        *info.MutableTtlSettings() = presetProto.GetTtlSettings();
+
+        Schema::SaveTtlSettingsPresetInfo(db, preset.Id, preset.Name);
+        Schema::SaveTtlSettingsPresetVersionInfo(db, preset.Id, version, info);
+        SetCounter(COUNTER_TTL_PRESETS, TtlSettingsPresets.size());
+    }
+
+    return presetProto.GetId();
+}
+#endif
+void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc) {
+    switch (body.TxBody_case()) {
+        case NKikimrTxColumnShard::TSchemaTxBody::kInitShard: {
+            // nothing yet, but maybe remember initial PlanStep:TxId for some reason?
+            return;
+        }
+        case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables: {
+            for (const auto& tableProto : body.GetEnsureTables().GetTables()) {
+                RunEnsureTable(tableProto, version, txc);
+            }
+            return;
+        }
+        case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable: {
+            RunAlterTable(body.GetAlterTable(), version, txc);
+            return;
+        }
+        case NKikimrTxColumnShard::TSchemaTxBody::kDropTable: {
+            RunDropTable(body.GetDropTable(), version, txc);
+            return;
+        }
+        case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore: {
+            RunAlterStore(body.GetAlterStore(), version, txc);
+            return;
+        }
+        case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
+            break;
+        }
+    }
+
+    Y_FAIL("Unsupported schema tx type");
+}
+
+void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tableProto, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const ui64 pathId = tableProto.GetPathId();
+    if (!Tables.contains(pathId)) {
+        auto& table = Tables[pathId];
+        table.PathId = pathId;
+        auto& tableVerProto = table.Versions[version];
+        tableVerProto.SetPathId(pathId);
+
+        Y_VERIFY(!tableProto.HasSchema(), "Tables with explicit schema are not supported");
+
+        ui32 schemaPresetId = 0;
+        if (tableProto.HasSchemaPreset()) {
+            schemaPresetId = EnsureSchemaPreset(db, tableProto.GetSchemaPreset(), version);
+            tableVerProto.SetSchemaPresetId(schemaPresetId);
+        }
+
+        if (tableProto.HasTtlSettings()) {
+            *tableVerProto.MutableTtlSettings() = tableProto.GetTtlSettings();
+            Ttl.SetPathTtl(pathId, TTtl::TDescription(tableProto.GetTtlSettings()));
+            SetCounter(COUNTER_TABLE_TTLS, Ttl.PathsCount());
+        }
+#if 0
+        if (tableProto.HasTtlSettingsPreset()) {
+            ui32 ttlPresetId = EnsureTtlSettingsPreset(db, tableProto.GetTtlSettingsPreset(), version);
+            tableVerProto.SetTtlSettingsPresetId(ttlPresetId);
+        }
+#endif
+        if (!PrimaryIndex && schemaPresetId) {
+            auto& schemaPresetVerProto = SchemaPresets[schemaPresetId].Versions[version];
+            TMap<NOlap::TSnapshot, NOlap::TIndexInfo> schemaPreset;
+            schemaPreset.emplace(NOlap::TSnapshot{version.Step, version.TxId},
+                                 ConvertSchema(schemaPresetVerProto.GetSchema()));
+
+            SetPrimaryIndex(std::move(schemaPreset), Ttl.TtlColumns());
+        }
+
+        tableVerProto.SetSchemaPresetVersionAdj(tableProto.GetSchemaPresetVersionAdj());
+        tableVerProto.SetTtlSettingsPresetVersionAdj(tableProto.GetTtlSettingsPresetVersionAdj());
+
+        Schema::SaveTableInfo(db, table.PathId);
+        Schema::SaveTableVersionInfo(db, table.PathId, version, tableVerProto);
+        SetCounter(COUNTER_TABLES, Tables.size());
+    }
+}
+
+void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterProto, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const ui64 pathId = alterProto.GetPathId();
+    auto* tablePtr = Tables.FindPtr(pathId);
+    Y_VERIFY(tablePtr && !tablePtr->IsDropped(), "AlterTable on a dropped or non-existent table");
+    auto& table = *tablePtr;
+
+    Y_VERIFY(!alterProto.HasSchema(), "Tables with explicit schema are not supported");
+
+    auto& info = table.Versions[version];
+
+    if (alterProto.HasSchemaPreset()) {
+        info.SetSchemaPresetId(EnsureSchemaPreset(db, alterProto.GetSchemaPreset(), version));
+    }
+
+    if (alterProto.HasTtlSettings()) {
+        *info.MutableTtlSettings() = alterProto.GetTtlSettings();
+        Ttl.SetPathTtl(pathId, TTtl::TDescription(alterProto.GetTtlSettings()));
+    } else {
+        Ttl.DropPathTtl(pathId);
+    }
+#if 0
+    if (alterProto.HasTtlSettingsPreset()) {
+        ui32 ttlPresetId = EnsureTtlSettingsPreset(db, alterProto.GetTtlSettingsPreset(), version);
+        info.SetTtlSettingsPresetId(ttlPresetId);
+    }
+#endif
+    info.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
+#if 0
+    info.SetTtlSettingsPresetVersionAdj(alterProto.GetTtlSettingsPresetVersionAdj());
+#endif
+
+    Schema::SaveTableVersionInfo(db, table.PathId, version, info);
+}
+
+void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProto, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const ui64 pathId = dropProto.GetPathId();
+    auto* table = Tables.FindPtr(pathId);
+    Y_VERIFY_DEBUG(table && !table->IsDropped());
+    if (table && !table->IsDropped()) {
+        PathsToDrop.insert(pathId);
+        Ttl.DropPathTtl(pathId);
+
+        // TODO: Allow to read old snapshots after DROP
+        TBlobGroupSelector dsGroupSelector(Info());
+        NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+        auto abortedWrites = InsertTable->DropPath(dbTable, pathId);
+        for (auto& writeId : abortedWrites) {
+            RemoveLongTxWrite(db, writeId);
+        }
+
+        table->DropVersion = version;
+        Schema::SaveTableDropVersion(db, pathId, version.Step, version.TxId);
+    }
+}
+
+void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    TMap<NOlap::TSnapshot, NOlap::TIndexInfo> schemaPreset;
+
+    for (ui32 id : proto.GetDroppedSchemaPresets()) {
+        if (!SchemaPresets.contains(id)) {
+            continue;
+        }
+        auto& preset = SchemaPresets.at(id);
+        Y_VERIFY(preset.Name != "default", "Cannot drop the default preset");
+        preset.DropVersion = version;
+        Schema::SaveSchemaPresetDropVersion(db, id, version);
+    }
+#if 0
+    for (ui32 id : proto.GetDroppedTtlSettingsPresets()) {
+        if (!TtlSettingsPresets.contains(id)) {
+            continue;
+        }
+        auto& preset = TtlSettingsPresets.at(id);
+        preset.DropVersion = version;
+        Schema::SaveTtlSettingsPresetDropVersion(db, id, version);
+    }
+#endif
+    for (const auto& presetProto : proto.GetSchemaPresets()) {
+        if (!SchemaPresets.contains(presetProto.GetId())) {
+            continue; // we don't update presets that we don't use
+        }
+
+        auto& preset = SchemaPresets[presetProto.GetId()];
+        auto& info = preset.Versions[version];
+        info.SetId(preset.Id);
+        info.SetSinceStep(version.Step);
+        info.SetSinceTxId(version.TxId);
+        *info.MutableSchema() = presetProto.GetSchema();
+
+        if (preset.Name == "default") {
+            schemaPreset.emplace(NOlap::TSnapshot{version.Step, version.TxId}, ConvertSchema(info.GetSchema()));
+        }
+
+        Schema::SaveSchemaPresetVersionInfo(db, preset.Id, version, info);
+    }
+#if 0
+    for (const auto& presetProto : proto.GetTtlSettingsPresets()) {
+        ui32 presetId = presetProto.GetId();
+        if (!TtlSettingsPresets.contains(presetId)) {
+            continue; // we don't update presets that we don't use
+        }
+
+        auto& preset = TtlSettingsPresets[presetId];
+        auto& info = preset.Versions[version];
+        info.SetId(presetId);
+        info.SetSinceStep(version.Step);
+        info.SetSinceTxId(version.TxId);
+        *info.MutableTtlSettings() = presetProto.GetTtlSettings();
+
+        Schema::SaveTtlSettingsPresetVersionInfo(db, preset.Id, version, info);
+    }
+#endif
+
+    if (!schemaPreset.empty()) {
+        SetPrimaryIndex(std::move(schemaPreset), Ttl.TtlColumns());
+    }
+}
+
+void TColumnShard::SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& schemaVersions,
+                                   const THashSet<TString>& ttlColumns) {
+    for (auto& [snap, indexInfo] : schemaVersions) {
+        for (auto& columnName : ttlColumns) {
+            indexInfo.AddTtlColumn(columnName);
+        }
+
+        if (!PrimaryIndex) {
+            PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(std::move(indexInfo), TabletID());
+            SetCounter(COUNTER_INDEXES, 1);
+        } else {
+            PrimaryIndex->UpdateDefaultSchema(snap, std::move(indexInfo));
+        }
+    }
+}
+
+void TColumnShard::EnqueueBackgroundActivities(bool periodic, bool insertOnly) {
+    if (periodic && LastBackActivation > TInstant::Now() - ActivationPeriod) {
+        return;
+    }
+
+    const TActorContext& ctx = TlsActivationContext->AsActorContext();
+    if (auto event = SetupIndexation()) {
+        ctx.Send(IndexingActor, event.release());
+    }
+
+    if (insertOnly) {
+        return;
+    }
+
+    if (auto event = SetupCompaction()) {
+        ctx.Send(CompactionActor, event.release());
+    }
+
+    if (auto event = SetupCleanup()) {
+        ctx.Send(SelfId(), event.release());
+    }
+
+    if (auto event = SetupTtl()) {
+        ctx.Send(SelfId(), event.release());
+    }
+
+    LastBackActivation = TInstant::Now();
+}
+
+std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
+    if (ActiveIndexing) {
+        LOG_S_DEBUG("Indexing already in progress at tablet " << TabletID());
+        return {};
+    }
+    if (!PrimaryIndex) {
+        LOG_S_NOTICE("Indexing not started: no index at tablet " << TabletID());
+        return {};
+    }
+
+    ui32 blobs = 0;
+    ui32 ignored = 0;
+    ui64 size = 0;
+    ui64 bytesToIndex = 0;
+    TVector<const NOlap::TInsertedData*> dataToIndex;
+    dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
+    for (auto& [pathId, committed] : InsertTable->GetCommitted()) {
+        for (auto& data : committed) {
+            ui32 dataSize = data.BlobSize();
+            Y_VERIFY(dataSize);
+
+            size += dataSize;
+            if (bytesToIndex && (bytesToIndex + dataSize) > (ui64)Limits.MaxInsertBytes) {
+                continue;
+            }
+            if (auto* pMap = PrimaryIndex->GetOverloadedGranules(data.PathId)) {
+                InsertTable->SetOverloaded(data.PathId, true);
+                ++ignored;
+                continue;
+            } else {
+                InsertTable->SetOverloaded(data.PathId, false);
+            }
+            ++blobs;
+            bytesToIndex += dataSize;
+            dataToIndex.push_back(&data);
+        }
+    }
+
+    if (bytesToIndex < (ui64)Limits.MinInsertBytes && blobs < TLimits::MIN_SMALL_BLOBS_TO_INSERT) {
+        LOG_S_DEBUG("Indexing not started: less data (" << bytesToIndex << " bytes in " << blobs << " blobs, ignored "
+            << ignored << ") then MIN_BYTES_TO_INSERT / MIN_SMALL_BLOBS_TO_INSERT at tablet " << TabletID());
+        return {};
+    }
+
+    LOG_S_DEBUG("Prepare indexing " << bytesToIndex << " bytes in " << dataToIndex.size() << " batches of committed "
+        << size << " bytes in " << blobs << " blobs ignored " << ignored
+        << " at tablet " << TabletID());
+
+    TVector<NOlap::TInsertedData> data;
+    data.reserve(dataToIndex.size());
+    for (auto& ptr : dataToIndex) {
+        data.push_back(*ptr);
+    }
+
+    Y_VERIFY(data.size());
+    auto indexChanges = PrimaryIndex->StartInsert(std::move(data));
+    if (!indexChanges) {
+        LOG_S_NOTICE("Cannot prepare indexing at tablet " << TabletID());
+        return {};
+    }
+
+    ActiveIndexing = true;
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges,
+        Settings.CacheDataAfterIndexing);
+    return std::make_unique<TEvPrivate::TEvIndexing>(std::move(ev));
+}
+
+std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
+    if (ActiveCompaction) {
+        LOG_S_DEBUG("Compaction already in progress at tablet " << TabletID());
+        return {};
+    }
+    if (!PrimaryIndex) {
+        LOG_S_NOTICE("Compaction not started: no index at tablet " << TabletID());
+        return {};
+    }
+
+    PrimaryIndex->UpdateCompactionLimits(CompactionLimits.Get());
+    auto compactionInfo = PrimaryIndex->Compact();
+    if (!compactionInfo || compactionInfo->Empty()) {
+        LOG_S_DEBUG("Compaction not started: no portions to compact at tablet " << TabletID());
+        return {};
+    }
+
+    // TODO: Compact granules in parallel
+
+    // Rotate compaction granules: do not choose the same granule all the time.
+    LastCompactedGranule = compactionInfo->ChooseOneGranule(LastCompactedGranule);
+    Y_VERIFY(compactionInfo->Good());
+
+    LOG_S_DEBUG("Prepare " << *compactionInfo << " at tablet " << TabletID());
+
+    ui64 ourdatedStep = GetOutdatedStep();
+    auto indexChanges = PrimaryIndex->StartCompaction(std::move(compactionInfo), {ourdatedStep, 0});
+    if (!indexChanges) {
+        LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
+        return {};
+    }
+
+    ActiveCompaction = true;
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges,
+        Settings.CacheDataAfterCompaction);
+    return std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev));
+}
+
+std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTtlInfo>& pathTtls,
+                                                                  bool force) {
+    if (ActiveTtl) {
+        LOG_S_DEBUG("Ttl already in progress at tablet " << TabletID());
+        return {};
+    }
+    if (!PrimaryIndex) {
+        LOG_S_NOTICE("TTL not started. No index for TTL at tablet " << TabletID());
+        return {};
+    }
+
+    THashMap<ui64, NOlap::TTtlInfo> regularTtls;
+    if (pathTtls.empty()) {
+        regularTtls = Ttl.MakeIndexTtlMap(force);
+    }
+
+    if (pathTtls.empty() && regularTtls.empty()) {
+        LOG_S_TRACE("TTL not started. No tables to activate it on (or delayed) at tablet " << TabletID());
+        return {};
+    }
+
+    LOG_S_DEBUG("Prepare TTL at tablet " << TabletID());
+
+    std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges;
+    if (pathTtls.empty()) {
+        indexChanges = PrimaryIndex->StartTtl(regularTtls);
+    } else {
+        indexChanges = PrimaryIndex->StartTtl(pathTtls);
+    }
+
+    if (!indexChanges) {
+        LOG_S_NOTICE("Cannot prepare TTL at tablet " << TabletID());
+        return {};
+    }
+
+    ActiveTtl = true;
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges, false);
+    ev->PutStatus = NKikimrProto::OK; // No blobs to write, start TTxWriteIndex in event handler
+    return ev;
+}
+
+std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
+    if (ActiveCleanup) {
+        LOG_S_DEBUG("Cleanup already in progress at tablet " << TabletID());
+        return {};
+    }
+    if (!PrimaryIndex) {
+        LOG_S_NOTICE("Cleanup not started. No index for cleanup at tablet " << TabletID());
+        return {};
+    }
+
+    NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0};
+
+    auto changes = PrimaryIndex->StartCleanup(cleanupSnapshot, PathsToDrop);
+    if (!changes) {
+        LOG_S_NOTICE("Cannot prepare cleanup at tablet " << TabletID());
+        return {};
+    }
+
+    Y_VERIFY(!changes->CompactionInfo);
+    Y_VERIFY(changes->DataToIndex.empty());
+    Y_VERIFY(changes->AppendedPortions.empty());
+
+    // TODO: limit PortionsToDrop total size. Delete them in small portions.
+    // Filter PortionsToDrop
+    TVector<NOlap::TPortionInfo> portionsCanBedropped;
+    THashSet<ui64> excludedPortions;
+    for (const auto& portionInfo : changes->PortionsToDrop) {
+        ui64 portionId = portionInfo.Records.front().Portion;
+        // Exclude portions that are used by in-flght reads/scans
+        if (!InFlightReadsTracker.IsPortionUsed(portionId)) {
+            portionsCanBedropped.push_back(portionInfo);
+        } else {
+            excludedPortions.insert(portionId);
+        }
+    }
+    changes->PortionsToDrop.swap(portionsCanBedropped);
+
+    LOG_S_DEBUG("Prepare Cleanup snapshot: " << cleanupSnapshot
+        << " portions to drop: " << changes->PortionsToDrop.size()
+        << " in use by reads: " << excludedPortions.size()
+        << " at tablet " << TabletID());
+
+    if (changes->PortionsToDrop.empty()) {
+        return {};
+    }
+
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), changes , false);
+    ev->PutStatus = NKikimrProto::OK; // No new blobs to write
+
+    ActiveCleanup = true;
+    return ev;
+}
+
+NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
+    Y_VERIFY(schema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
+
+    ui32 indexId = 0;
+    NOlap::TIndexInfo indexInfo("", indexId);
+
+    for (const auto& col : schema.GetColumns()) {
+        const ui32 id = col.GetId();
+        const TString& name = col.GetName();
+
+        indexInfo.Columns[id] = NTable::TColumn(name, id, col.GetTypeId());
+        indexInfo.ColumnNames[name] = id;
+    }
+
+    for (const auto& keyName : schema.GetKeyColumnNames()) {
+        Y_VERIFY(indexInfo.ColumnNames.count(keyName));
+        indexInfo.KeyColumns.push_back(indexInfo.ColumnNames[keyName]);
+    }
+
+    if (schema.HasDefaultCompression()) {
+        auto& compression = schema.GetDefaultCompression();
+        if (compression.HasCompressionCodec()) {
+            arrow::Compression::type codec = arrow::Compression::LZ4_FRAME;
+            switch (compression.GetCompressionCodec()) {
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
+                    codec = arrow::Compression::UNCOMPRESSED;
+                    break;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
+                    codec = arrow::Compression::LZ4_FRAME; // TODO: should ColumnCodecLZ4 be mapped to LZ4 (row variant)?
+                    break;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
+                    codec = arrow::Compression::ZSTD;
+                    break;
+            }
+            indexInfo.SetDefaultCompressionCodec(codec);
+        }
+
+        if (compression.HasCompressionLevel()) {
+            int level = compression.GetCompressionLevel();
+            indexInfo.SetDefaultCompressionLevel(level);
+        } else {
+            indexInfo.SetDefaultCompressionLevel(); // set default
+        }
+    }
+
+    return indexInfo;
+}
+
+}

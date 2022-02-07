@@ -1,0 +1,179 @@
+package NYql.NDqProto;
+option cc_enable_arenas = true;
+
+import "library/cpp/actors/protos/actors.proto";
+import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
+import "ydb/library/yql/dq/proto/dq_state_load_plan.proto";
+import "ydb/library/yql/dq/proto/dq_tasks.proto";
+import "ydb/library/yql/dq/proto/dq_transport.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+
+message TCheckpoint {
+    optional uint64 Id = 1;
+    optional uint64 Generation = 2;
+};
+
+/*
+    Data and control messages will be processed in the following order:
+    1) Data
+    2) Checkpoint
+    3) Finished
+*/
+message TChannelData {
+    optional uint64 ChannelId = 1;
+    optional NYql.NDqProto.TData Data = 2;
+    optional bool Finished = 3;
+    optional TCheckpoint Checkpoint = 4;
+};
+
+message TEvRun {
+    optional TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvChannelsInfo {
+    repeated NYql.NDqProto.TChannel Update = 1;
+};
+
+enum EComputeState {
+    COMPUTE_STATE_UNKNOWN = 0;
+    COMPUTE_STATE_FAILURE = 1;
+    COMPUTE_STATE_EXECUTING = 2;
+    COMPUTE_STATE_FINISHED = 3;
+};
+
+message TComputeActorStats {
+    optional NActorsProto.TActorId ActorId = 1;
+    reserved 2; //optional NKqpProto.TKqpStatsRun LegacyStats = 2;
+};
+
+message TEvComputeActorState {
+    optional uint32 State = 1; // == EComputeState
+    optional TComputeActorStats LegacyStats = 2;
+    optional Ydb.StatusIds.StatusCode Status = 3;
+    repeated Ydb.Issue.IssueMessage Issues = 4;
+    optional uint64 TaskId = 5;
+    optional TDqComputeActorStats Stats = 6;
+};
+
+message TEvComputeStateRequest {
+}
+
+message TEvComputeChannelData {
+    optional TChannelData ChannelData = 1;
+    optional uint64 SendTime = 2;
+    optional uint64 SeqNo = 3;
+    optional bool NoAck = 4;
+};
+
+message TEvComputeChannelDataAck {
+    optional uint64 ChannelId = 1;
+    optional uint64 SeqNo = 2;
+    optional int64 FreeSpace = 3;
+    optional bool Finish = 4;
+};
+
+message TEvAbortExecution {
+    optional Ydb.StatusIds.StatusCode StatusCode = 1;
+    optional string Message = 2;
+}
+
+message TRlPath {
+    optional string CoordinationNode = 1;
+    optional string ResourcePath = 2;
+    optional string Database = 3;
+    optional string Token = 4;
+}
+
+message TComputeRuntimeSettings {
+    optional uint32 TimeoutMs = 1;
+
+    enum EExecType {
+        UNSPECIFIED = 0;
+        SCAN = 1;
+        DATA = 2;
+    }
+    optional EExecType ExecType = 2;
+
+    reserved 3; //optional NKqpProto.EKqpStatsMode LegacyStatsMode = 3;
+    optional EDqStatsMode StatsMode = 8;
+    optional bool UseLLVM = 4;
+    optional bool UseSpilling = 6;
+    optional uint32 TasksOnNodeCount = 5; // approx
+    optional TRlPath RlPath = 7;
+}
+
+message TEvNewCheckpointCoordinator {
+    optional uint64 Generation = 1;
+    optional string GraphId = 2;
+
+    optional TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvNewCheckpointCoordinatorAck {
+    optional TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvInjectCheckpoint {
+    optional TCheckpoint Checkpoint = 1;
+    optional uint64 Generation = 2;
+
+    optional TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvSaveTaskStateResult {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        OK = 1;
+        STORAGE_ERROR = 2;
+        INTERNAL_ERROR = 3;
+        STATE_TOO_BIG = 4;
+    }
+    optional TCheckpoint Checkpoint = 1;
+    optional uint64 TaskId = 2;
+    optional EStatus Status = 3;
+    optional uint64 StateSizeBytes = 4;
+
+    optional TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvCommitState {
+    optional TCheckpoint Checkpoint = 1;
+    optional uint64 Generation = 2;
+
+    optional TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvStateCommitted {
+    optional TCheckpoint Checkpoint = 1;
+    optional uint64 TaskId = 2;
+
+    optional TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvRestoreFromCheckpoint {
+    optional TCheckpoint Checkpoint = 1;
+    optional uint64 Generation = 2;
+    optional NDqStateLoadPlan.TTaskPlan StateLoadPlan = 3;
+
+    optional TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvRestoreFromCheckpointResult {
+    enum ERestoreStatus {
+        UNSPECIFIED = 0;
+        OK = 1;
+        STORAGE_ERROR = 2;
+        INTERNAL_ERROR = 3;
+    }
+    optional TCheckpoint Checkpoint = 1;
+    optional uint64 TaskId = 2;
+    optional ERestoreStatus Status = 3;
+
+    optional TMessageTransportMeta TransportMeta = 100;
+}
+
+message TMessageTransportMeta {
+    optional uint64 SeqNo = 1; // SeqNo of message
+    optional uint64 ConfirmedSeqNo = 2; // All input messages with SeqNo <= ConfirmedSeqNo are received.
+}

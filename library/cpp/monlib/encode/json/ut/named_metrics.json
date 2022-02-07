@@ -1,0 +1,22 @@
+{
+  "labels": {
+    "project": "solomon",
+    "cluster": "prod-sas",
+    "service": "stockpile"
+  },
+  "metrics": [
+    {
+      "type": "DGAUGE",
+      "name": "Memory",
+      "value": 1
+    },
+    {
+      "type": "DGAUGE",
+      "name": "QueueSize",
+      "labels": {
+        "export": "Oxygen"
+      },
+      "value": 10
+    }
+  ]
+}

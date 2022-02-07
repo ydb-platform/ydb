@@ -1,0 +1,15 @@
+path: "/local/Input3"
+columns {
+  name: "Name"
+  type { optional_type { item { type_id: UTF8 } } }
+}
+columns {
+  name: "Type"
+  type { optional_type { item { type_id: UINT32 } } }
+}
+columns {
+  name: "Value"
+  type { optional_type { item { type_id: UTF8 } } }
+}
+primary_key: "Name"
+primary_key: "Type"

@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package Ydb.Auth.V1;
+option java_package = "com.yandex.ydb.auth.v1";
+
+import "ydb/public/api/protos/ydb_auth.proto";
+
+service AuthService {
+    // Perform login using built-in auth system
+    rpc Login(Auth.LoginRequest) returns (Auth.LoginResponse);
+}

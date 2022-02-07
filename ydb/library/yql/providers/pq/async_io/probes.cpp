@@ -1,0 +1,3 @@
+#include "probes.h"
+
+LWTRACE_DEFINE_PROVIDER(DQ_PQ_PROVIDER)

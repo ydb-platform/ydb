@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package Ydb.Scheme.V1;
+option java_package = "com.yandex.ydb.scheme.v1";
+
+import "ydb/public/api/protos/ydb_scheme.proto";
+
+// Every YDB Database Instance has set of objects organized a tree.
+// SchemeService provides some functionality to browse and modify
+// this tree.
+//
+// SchemeService provides a generic tree functionality, to create specific
+// objects like YDB Table or Persistent Queue use corresponding services.
+
+service SchemeService {
+
+    // Make Directory.
+    rpc MakeDirectory(Scheme.MakeDirectoryRequest) returns (Scheme.MakeDirectoryResponse);
+
+    // Remove Directory.
+    rpc RemoveDirectory(Scheme.RemoveDirectoryRequest) returns (Scheme.RemoveDirectoryResponse);
+
+    // Returns information about given directory and objects inside it.
+    rpc ListDirectory(Scheme.ListDirectoryRequest) returns (Scheme.ListDirectoryResponse);
+
+    // Returns information about object with given path.
+    rpc DescribePath(Scheme.DescribePathRequest) returns (Scheme.DescribePathResponse);
+
+    // Modify permissions.
+    rpc ModifyPermissions(Scheme.ModifyPermissionsRequest) returns (Scheme.ModifyPermissionsResponse);
+}

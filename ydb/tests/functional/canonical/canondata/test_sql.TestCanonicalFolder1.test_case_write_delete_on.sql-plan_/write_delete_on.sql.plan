@@ -1,0 +1,46 @@
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_write_delete_on_sql_plan/Input",
+            "reads": [
+                {
+                    "type": "FullScan",
+                    "scan_by": [
+                        "key",
+                        "subkey"
+                    ],
+                    "columns": [
+                        "key",
+                        "subkey",
+                        "value"
+                    ]
+                }
+            ],
+            "writes": [
+                {
+                    "type": "MultiErase",
+                    "key": [
+                        "key (expr)",
+                        "subkey (expr)"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "/local/base_write_delete_on_sql_plan/Input1",
+            "writes": [
+                {
+                    "type": "MultiErase",
+                    "key": [
+                        "Group (expr)",
+                        "Name (expr)"
+                    ]
+                }
+            ]
+        }
+    ]
+}

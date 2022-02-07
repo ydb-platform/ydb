@@ -1,0 +1,28 @@
+# Atocheck blacklist
+# The list of directories excluded from autocheck (with all subdirs)
+browser/frontend
+data-ui/abc
+data-ui/arcanum
+data-ui/idm
+data-ui/sandbox
+data-ui/unity
+direct/frontend/services
+direct/frontend/packages
+drive/pyback
+fintech/frontend
+frontend
+games/frontend
+junk
+kinopoisk/frontend
+kinopoisk/analytics
+maps/front
+mobile
+music/frontend
+serp/hermione
+zen/frontend
+taxi/lavka/frontend
+velocity/error-booster/error-booster-queue
+velocity/error-booster/market
+metrika/frontend
+metrika/analytics
+hrtech/frontend

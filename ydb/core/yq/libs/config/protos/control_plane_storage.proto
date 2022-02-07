@@ -1,0 +1,36 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYq.NConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+import "ydb/core/yq/libs/config/protos/storage.proto";
+
+////////////////////////////////////////////////////////////
+
+message TControlPlaneStorageConfig {
+    bool Enabled = 1;
+    NYq.NConfig.TYdbStorageConfig Storage = 2; // TODO: remove
+    string IdempotencyKeysTtl = 3;
+    uint64 MaxRequestSize = 4;
+    uint64 MaxCountQueries = 5;
+    uint64 MaxCountConnections = 6;
+    uint64 MaxCountBindings = 7;
+    uint64 MaxCountJobs = 8;
+    repeated string SuperUsers = 9;
+    bool EnableDebugMode = 10;
+    bool EnablePermissions = 11;
+    bool DisableCurrentIam = 12;
+    bool UseInMemory = 13;
+    uint64 TasksBatchSize = 14;
+    uint64 NumTasksProportion  = 15;
+    uint64 AnalyticsRetryCounterLimit = 16;
+    uint64 StreamingRetryCounterLimit = 17;
+    string AnalyticsRetryCounterUpdateTime = 18;
+    string StreamingRetryCounterUpdateTime = 19;
+    string AutomaticQueriesTtl = 20;
+    string TaskLeaseTtl = 21;
+    repeated string AvailableConnection = 22;
+    repeated string AvailableBinding = 23;
+    string ResultSetsTtl = 24;
+}

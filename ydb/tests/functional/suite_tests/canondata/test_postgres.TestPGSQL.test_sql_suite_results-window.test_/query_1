@@ -1,0 +1,62 @@
+[
+    {
+        "depname": "develop",
+        "empno": 7,
+        "salary": 4200,
+        "sum": 25100
+    },
+    {
+        "depname": "develop",
+        "empno": 9,
+        "salary": 4500,
+        "sum": 25100
+    },
+    {
+        "depname": "develop",
+        "empno": 10,
+        "salary": 5200,
+        "sum": 25100
+    },
+    {
+        "depname": "develop",
+        "empno": 11,
+        "salary": 5200,
+        "sum": 25100
+    },
+    {
+        "depname": "develop",
+        "empno": 8,
+        "salary": 6000,
+        "sum": 25100
+    },
+    {
+        "depname": "personnel",
+        "empno": 5,
+        "salary": 3500,
+        "sum": 7400
+    },
+    {
+        "depname": "personnel",
+        "empno": 2,
+        "salary": 3900,
+        "sum": 7400
+    },
+    {
+        "depname": "sales",
+        "empno": 3,
+        "salary": 4800,
+        "sum": 14600
+    },
+    {
+        "depname": "sales",
+        "empno": 4,
+        "salary": 4800,
+        "sum": 14600
+    },
+    {
+        "depname": "sales",
+        "empno": 1,
+        "salary": 5000,
+        "sum": 14600
+    }
+]

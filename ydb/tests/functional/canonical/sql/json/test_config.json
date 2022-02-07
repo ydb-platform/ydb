@@ -1,0 +1,25 @@
+{
+    "insert_from_table.sql": {
+        "compare_tables": ["ResultTableJD"]
+    },
+    "insert_literal.sql": {
+        "compare_tables": ["ResultLiteralJD"]
+    },
+    "insert_params.sql": {
+        "compare_tables": ["ResultParamsJD"],
+        "parameters": {
+            "$data": [
+                {"Key": 1, "Value": "{\"name\": \"Jake\", \"age\": 50}"},
+                {"Key": 2, "Value": "{\"name\": \"Jessica\", \"age\": 35}"},
+                {"Key": 3, "Value": "{\"name\": \"Tom\", \"age\": 3}"}
+            ]
+        }
+    },
+    "select_params.sql": {
+        "check_scan_query": true,
+        "parameters": {
+            "$param1": "[1, 2, 3]",
+            "$param2": "{\"name\": \"Tass\"}"
+        }
+    }
+}

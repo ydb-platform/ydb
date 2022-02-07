@@ -1,0 +1,12 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb;
+option java_package = "com.yandex.ydb";
+
+import "google/protobuf/descriptor.proto";
+
+
+extend google.protobuf.FieldOptions {
+    bool sensitive = 87655; // do not print this field
+}

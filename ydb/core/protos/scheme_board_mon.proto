@@ -1,0 +1,169 @@
+import "library/cpp/actors/protos/actors.proto";
+
+package NKikimrSchemeBoardMon;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TEvInfoRequest {
+    optional uint32 LimitRepeatedFields = 1 [default = 1000];
+}
+
+message TEvInfoResponse {
+    optional NActorsProto.TActorId Self = 1;
+    reserved 2; // deprecated ActivityType (enum)
+    optional string ActivityType = 11;
+    optional bool Truncated = 3 [default = false];
+    oneof Response {
+        TReplicaResponse ReplicaResponse = 4;
+        TPopulatorResponse PopulatorResponse = 5;
+        TReplicaPopulatorResponse ReplicaPopulatorResponse = 6;
+        TSubscriberResponse SubscriberResponse = 7;
+        TSubscriberProxyResponse SubscriberProxyResponse = 8;
+        TReplicaSubscriberResponse ReplicaSubscriberResponse = 9;
+        TCacheResponse CacheResponse = 10;
+    }
+}
+
+message TEvDescribeRequest {
+    oneof PathKind {
+        string Path = 1;
+        TPathId PathId = 2;
+    }
+}
+
+message TEvDescribeResponse {
+    optional string Json = 1;
+}
+
+message TPathId {
+    optional uint64 OwnerId = 1;
+    optional uint64 LocalPathId = 2;
+}
+
+message TReplicaResponse {
+    message TPopulatorInfo {
+        optional uint64 Owner = 1;
+        optional uint64 Generation = 2;
+        optional uint64 PendingGeneration = 3;
+        optional NActorsProto.TActorId ActorId = 4;
+    }
+
+    message TDescriptionsInfo {
+        optional uint64 TotalCount = 1;
+        optional uint64 ByPathCount = 2;
+        optional uint64 ByPathIdCount = 3;
+    }
+
+    message TSubscriberInfo {
+        optional NActorsProto.TActorId ActorId = 1;
+        oneof PathKind {
+            string Path = 2;
+            TPathId PathId = 3;
+        }
+    }
+
+    repeated TPopulatorInfo Populators = 1;
+    optional TDescriptionsInfo Descriptions = 2;
+    repeated TSubscriberInfo Subscribers = 3;
+}
+
+message TPopulatorResponse {
+    message TUpdateAckInfo {
+        message TPathAckInfo {
+            optional TPathId PathId = 1;
+            optional uint64 Version = 2;
+            optional uint32 AcksCount = 3;
+        }
+
+        optional uint64 Cookie = 1;
+        optional NActorsProto.TActorId AckTo = 2;
+        repeated TPathAckInfo PathAcks = 3;
+    }
+
+    optional uint64 Owner = 1;
+    optional uint64 Generation = 2;
+    optional uint64 DescriptionsCount = 3;
+    optional TPathId MaxPathId = 4;
+    optional uint64 DelayedUpdatesCount = 5;
+    repeated NActorsProto.TActorId ReplicaPopulators = 6;
+    repeated TUpdateAckInfo UpdateAcks = 7;
+}
+
+message TReplicaPopulatorResponse {
+    message TUpdateInfo {
+        message TVersionInfo {
+            optional uint64 Version = 1;
+            repeated uint64 TxIds = 2;
+        }
+
+        optional TPathId PathId = 1;
+        repeated TVersionInfo Versions = 2;
+    }
+
+    optional NActorsProto.TActorId Parent = 1;
+    optional NActorsProto.TActorId Replica = 2;
+    optional uint64 Owner = 3;
+    optional uint64 Generation = 4;
+    optional TPathId CurPathId = 5;
+    optional TPathId LastAckedPathId = 6;
+    optional uint32 BatchSize = 7;
+    optional uint32 BatchSizeLimit = 8;
+    repeated TUpdateInfo Updates = 9;
+    repeated TUpdateInfo UpdatesRequested = 10;
+    repeated TUpdateInfo UpdatesInFlight = 11;
+}
+
+message TSubscriberResponse {
+    message TStateInfo {
+        optional bool Deleted = 1;
+        optional bool Strong = 2;
+        optional TPathId PathId = 3;
+        optional uint64 Version = 4;
+        optional TPathId DomainId = 5;
+        repeated uint64 AbandonedSchemeShards = 6;
+    }
+
+    message TProxyStateInfo {
+        optional NActorsProto.TActorId Proxy = 1;
+        optional TStateInfo State = 2;
+    }
+
+    optional NActorsProto.TActorId Owner = 1;
+    optional uint64 DomainOwnerId = 2;
+    repeated TProxyStateInfo ProxyStates = 3;
+    optional TStateInfo State = 4;
+    optional uint64 DelayedSyncRequest = 5;
+    optional uint64 CurrentSyncRequest = 6;
+    oneof PathKind {
+        string Path = 7;
+        TPathId PathId = 8;
+    }
+}
+
+message TSubscriberProxyResponse {
+    optional NActorsProto.TActorId Parent = 1;
+    optional NActorsProto.TActorId Replica = 2;
+    optional NActorsProto.TActorId ReplicaSubscriber = 3;
+    optional uint64 DomainOwnerId = 4;
+    optional uint64 CurrentSyncRequest = 5;
+    oneof PathKind {
+        string Path = 6;
+        TPathId PathId = 7;
+    }
+}
+
+message TReplicaSubscriberResponse {
+    optional NActorsProto.TActorId Parent = 1;
+    optional NActorsProto.TActorId Replica = 2;
+    optional uint64 DomainOwnerId = 3;
+    optional uint64 CurrentSyncRequest = 4;
+    oneof PathKind {
+        string Path = 5;
+        TPathId PathId = 6;
+    }
+}
+
+message TCacheResponse {
+    optional uint64 ItemsTotalCount = 1;
+    optional uint64 ItemsByPathCount = 2;
+    optional uint64 ItemsByPathIdCount = 3;
+}

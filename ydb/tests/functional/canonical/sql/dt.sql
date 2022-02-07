@@ -1,0 +1,41 @@
+SELECT CAST('1' as Decimal(22, 9));
+SELECT CAST('1.34' as Decimal(22, 9));
+SELECT CAST('100000000.134' as Decimal(22, 9));
+SELECT CAST('Nan'  as Decimal(22, 9));
+SELECT CAST('Inf'  as Decimal(22, 9));
+SELECT CAST('-Inf'  as Decimal(22, 9));
+SELECT CAST('1000000434.234'  as Decimal(22, 9));
+SELECT CAST('42'  as Decimal(22, 9));
+SELECT CAST('0'  as Decimal(22, 9));
+SELECT CAST('-112323.2323'  as Decimal(22, 9));
+SELECT CAST('0.1'  as Decimal(22, 9));
+SELECT CAST('0.11'  as Decimal(22, 9));
+SELECT CAST('0.111'  as Decimal(22, 9));
+SELECT CAST('0.1111'  as Decimal(22, 9));
+SELECT CAST('0.11111'  as Decimal(22, 9));
+SELECT CAST('0.111111'  as Decimal(22, 9));
+SELECT CAST('0.1111111'  as Decimal(22, 9));
+SELECT CAST('0.11111111'  as Decimal(22, 9));
+SELECT CAST('0.111111111' as Decimal(22, 9));
+
+SELECT Int8("5");
+SELECT Uint8("5");
+SELECT Int16("5");
+SELECT Uint16("5");
+SELECT Int32("-1");
+SELECT Uint32("2");
+SELECT Int64("-3");
+SELECT Uint64("4");
+SELECT Float("-5");
+SELECT Double("6");
+
+SELECT Bool("true");
+SELECT String("foo");
+SELECT Utf8("привет");
+SELECT Yson("<a=1>[3;%false]");
+SELECT Json(@@{"a":1,"b":null}@@);
+SELECT Date("2017-11-27");
+SELECT Datetime("2017-11-27T13:24:00Z");
+SELECT Timestamp("2017-11-27T13:24:00.123456Z");
+SELECT Interval("P1DT2H3M4.567890S");
+

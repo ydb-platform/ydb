@@ -1,0 +1,4 @@
+
+
+1. VDisk sees that barrier commands can come from the past and gather quorum. It means that tablet writes
+barrier command with value 'before' it had already written.

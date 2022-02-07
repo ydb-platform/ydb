@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package Ydb.Export.V1;
+option java_package = "com.yandex.ydb.export.v1";
+
+import "ydb/public/api/protos/ydb_export.proto";
+
+service ExportService {
+
+    // Exports data to YT.
+    // Method starts an asynchronous operation that can be cancelled while it is in progress.
+    rpc ExportToYt(Export.ExportToYtRequest) returns (Export.ExportToYtResponse);
+
+    // Exports data to S3.
+    // Method starts an asynchronous operation that can be cancelled while it is in progress.
+    rpc ExportToS3(Export.ExportToS3Request) returns (Export.ExportToS3Response);
+}

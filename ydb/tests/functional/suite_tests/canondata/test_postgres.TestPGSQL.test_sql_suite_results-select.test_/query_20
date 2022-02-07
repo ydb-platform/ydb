@@ -1,0 +1,20 @@
+[
+    {
+        "unique1": 494,
+        "unique2": 11,
+        "two": 0,
+        "four": 2,
+        "ten": 4,
+        "twenty": 14,
+        "hundred": 4,
+        "thousand": 94,
+        "twothousand": 94,
+        "fivethous": 494,
+        "tenthous": 494,
+        "odd": 8,
+        "even": 9,
+        "stringu1": "ATAAAA",
+        "stringu2": "LAAAAA",
+        "string4": "VVVVxx"
+    }
+]

@@ -1,0 +1,84 @@
+package NSc;
+
+message TMessage {
+    optional double Double = 1;
+    optional float Float = 2;
+    optional int32 Int32 = 3;
+    optional int64 Int64 = 4;
+    optional uint32 UInt32 = 5;
+    optional uint64 UInt64 = 6;
+    optional sint32 SInt32 = 7;
+    optional sint64 SInt64 = 8;
+    optional fixed32 Fixed32 = 9;
+    optional fixed64 Fixed64 = 10;
+    optional sfixed32 SFixed32 = 11;
+    optional sfixed64 SFixed64 = 12;
+    optional bool Bool = 13;
+    optional string String = 14;
+    optional bytes Bytes = 15;
+    optional EEnum Enum = 16;
+    optional TMessage2 Message = 17;
+
+    repeated double Doubles = 18;
+    repeated float Floats = 19;
+    repeated int32 Int32s = 20;
+    repeated int64 Int64s = 21;
+    repeated uint32 UInt32s = 22;
+    repeated uint64 UInt64s = 23;
+    repeated sint32 SInt32s = 24;
+    repeated sint64 SInt64s = 25;
+    repeated fixed32 Fixed32s = 26;
+    repeated fixed64 Fixed64s = 27;
+    repeated sfixed32 SFixed32s = 28;
+    repeated sfixed64 SFixed64s = 29;
+    repeated bool Bools = 30;
+    repeated string Strings = 31;
+    repeated bytes Bytess = 32;
+    repeated EEnum Enums = 33;
+    repeated TMessage2 Messages = 34;
+
+    map<string, double> MapDoubles = 35;
+    map<string, int32> MapInt32s = 36;
+    map<string, string> MapString = 37;
+}
+
+enum EEnum {
+    VALUE1 = 0;
+    VALUE2 = 1;
+}
+
+message TMessage2 {
+    optional double Double = 1;
+    optional float Float = 2;
+    optional int32 Int32 = 3;
+    optional int64 Int64 = 4;
+    optional uint32 UInt32 = 5;
+    optional uint64 UInt64 = 6;
+    optional sint32 SInt32 = 7;
+    optional sint64 SInt64 = 8;
+    optional fixed32 Fixed32 = 9;
+    optional fixed64 Fixed64 = 10;
+    optional sfixed32 SFixed32 = 11;
+    optional sfixed64 SFixed64 = 12;
+    optional bool Bool = 13;
+    optional string String = 14;
+    optional bytes Bytes = 15;
+    optional EEnum Enum = 16;
+
+    repeated double Doubles = 18;
+    repeated float Floats = 19;
+    repeated int32 Int32s = 20;
+    repeated int64 Int64s = 21;
+    repeated uint32 UInt32s = 22;
+    repeated uint64 UInt64s = 23;
+    repeated sint32 SInt32s = 24;
+    repeated sint64 SInt64s = 25;
+    repeated fixed32 Fixed32s = 26;
+    repeated fixed64 Fixed64s = 27;
+    repeated sfixed32 SFixed32s = 28;
+    repeated sfixed64 SFixed64s = 29;
+    repeated bool Bools = 30;
+    repeated string Strings = 31;
+    repeated bytes Bytess = 32;
+    repeated EEnum Enums = 33;
+}

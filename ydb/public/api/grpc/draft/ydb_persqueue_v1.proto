@@ -1,0 +1,111 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.PersQueue.V1;
+
+option java_package = "com.yandex.ydb.persqueue.v1";
+
+import "ydb/public/api/protos/ydb_persqueue_cluster_discovery.proto";
+import "ydb/public/api/protos/ydb_persqueue_v1.proto";
+
+service PersQueueService {
+
+    /**
+     * Creates Write Session
+     * Pipeline:
+     * client                  server
+     *         Init(Topic, SourceId, ...)
+     *        ---------------->
+     *         Init(Partition, MaxSeqNo, ...)
+     *        <----------------
+     *         write(data1, seqNo1)
+     *        ---------------->
+     *         write(data2, seqNo2)
+     *        ---------------->
+     *         ack(seqNo1, offset1, ...)
+     *        <----------------
+     *         write(data3, seqNo3)
+     *        ---------------->
+     *         ack(seqNo2, offset2, ...)
+     *        <----------------
+     *         issue(description, ...)
+     *        <----------------
+     */
+
+    rpc StreamingWrite(stream StreamingWriteClientMessage) returns (stream StreamingWriteServerMessage);
+
+    /**
+     * Creates Read Session
+     * Pipeline:
+     * client                  server
+     *         Init(Topics, ClientId, ...)
+     *        ---------------->
+     *         Init(SessionId)
+     *        <----------------
+     *         read1
+     *        ---------------->
+     *         read2
+     *        ---------------->
+     *         assign(Topic1, Cluster, Partition1, ...) - assigns and releases are optional
+     *        <----------------
+     *         assign(Topic2, Clutster, Partition2, ...)
+     *        <----------------
+     *         start_read(Topic1, Partition1, ...) - client must respond to assign request with this message. Only after this client will start recieving messages from this partition
+     *        ---------------->
+     *         release(Topic1, Partition1, ...)
+     *        <----------------
+     *         released(Topic1, Partition1, ...) - only after released server will give this parittion to other session.
+     *        ---------------->
+     *         start_read(Topic2, Partition2, ...) - client must respond to assign request with this message. Only after this client will start recieving messages from this partition
+     *        ---------------->
+     *         read data(data, ...)
+     *        <----------------
+     *         commit(cookie1)
+     *        ---------------->
+     *         committed(cookie1)
+     *        <----------------
+     *         issue(description, ...)
+     *        <----------------
+     */
+    rpc MigrationStreamingRead(stream MigrationStreamingReadClientMessage) returns (stream MigrationStreamingReadServerMessage);
+
+    // Get information about reading
+    rpc GetReadSessionsInfo(ReadInfoRequest) returns (ReadInfoResponse);
+
+
+    /*
+     * Describe topic command.
+     */
+    rpc DescribeTopic(DescribeTopicRequest) returns (DescribeTopicResponse);
+
+
+    /*
+     * Drop topic command.
+     */
+    rpc DropTopic(DropTopicRequest) returns (DropTopicResponse);
+
+    /*
+     * Create topic command.
+     */
+    rpc CreateTopic(CreateTopicRequest) returns (CreateTopicResponse);
+
+    /*
+     * Alter topic command.
+     */
+    rpc AlterTopic(AlterTopicRequest) returns (AlterTopicResponse);
+
+    /*
+     * Add read rule command.
+     */
+    rpc AddReadRule(AddReadRuleRequest) returns (AddReadRuleResponse);
+
+    /*
+     * Remove read rule command.
+     */
+    rpc RemoveReadRule(RemoveReadRuleRequest) returns (RemoveReadRuleResponse);
+}
+
+service ClusterDiscoveryService {
+    // Get PQ clusters which are eligible for the specified Write or Read Sessions
+    rpc DiscoverClusters(Ydb.PersQueue.ClusterDiscovery.DiscoverClustersRequest) returns (Ydb.PersQueue.ClusterDiscovery.DiscoverClustersResponse);
+}

@@ -1,0 +1,39 @@
+title: Yandex Database
+description:
+  - >-
+    <i>Yandex Database</i> (YDB) — это распределённая отказоустойчивая Distributed SQL СУБД.
+    YDB обеспечивает высокую доступность, горизонтальную масштабируемость, а также строгую консистентность и поддержку ACID-транзакций.
+    Для запросов используется диалект SQL (<a
+    href="yql/reference/overview">YQL</a>).
+nav:
+  title: Yandex Database
+meta:
+  title: Yandex Database
+links:
+  - title: Начало работы
+    description: Создание базы данных, подключение, настройка доступа, простейшие операции
+    href: getting_started/
+  - title: Концепции
+    description: Как устроена YDB, возможности и доступные режимы использования
+    href: concepts/
+  - title: Работа с CLI
+    description: Справочник по YDB Command Line Interface
+    href: reference/ydb-cli/
+  - title: Работа с SDK
+    description: Справочник по YDB Software Development Kits
+    href: reference/ydb-sdk/
+  - title: Пошаговые инструкции
+    description: Инструкции по выполнению стандартных операций
+    href: operations/
+  - title: Рекомендации
+    description: Набор рекомендаций по практическому использованию сервиса
+    href: best_practices/
+  - title: Справочник YQL
+    description: Описание синтаксиса и встроенных функций YQL
+    href: yql/reference/
+  - title: Туториал YQL
+    description: Серия уроков для знакомства с базовыми возможностями YQL
+    href: yql/tutorial/
+  - title: Полезные ссылки
+    description: Ссылки на различные ресурсы, имеющие отношение к YDB
+    href: getting_started/useful_links

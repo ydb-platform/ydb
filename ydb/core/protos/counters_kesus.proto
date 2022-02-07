@@ -1,0 +1,78 @@
+import "ydb/core/protos/counters.proto";
+
+package NKikimr.NKesus;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+option (TabletTypeName) = "Kesus"; // Used as prefix for all counters
+
+enum ESimpleCounters {
+    COUNTER_SIMPLE_IGNORE = 0;
+
+    COUNTER_PROXY_COUNT = 1                               [(CounterOpts) = {Name: "Proxies"}];
+    COUNTER_SESSION_COUNT = 2                             [(CounterOpts) = {Name: "Sessions"}];
+    COUNTER_SESSION_ACTIVE_COUNT = 3                      [(CounterOpts) = {Name: "ActiveSessions"}];
+    COUNTER_SEMAPHORE_COUNT = 4                           [(CounterOpts) = {Name: "Semaphores"}];
+    COUNTER_SEMAPHORE_OWNER_COUNT = 5                     [(CounterOpts) = {Name: "SemaphoreOwners"}];
+    COUNTER_SEMAPHORE_WAITER_COUNT = 6                    [(CounterOpts) = {Name: "SemaphoreWaiters"}];
+    COUNTER_QUOTER_RESOURCE_COUNT = 7                     [(CounterOpts) = {Name: "QuoterResources"}];
+}
+
+enum ECumulativeCounters {
+    COUNTER_CUMULATIVE_IGNORE = 0;
+
+    COUNTER_SCHEDULED_SESSION_TIMEOUT = 1                 [(CounterOpts) = {Name: "Events/ScheduledSessionTimeout"}];
+    COUNTER_SCHEDULED_ACQUIRE_TIMEOUT = 2                 [(CounterOpts) = {Name: "Events/ScheduledAcquireTimeout"}];
+    COUNTER_SESSION_TIMEOUT = 3                           [(CounterOpts) = {Name: "Events/SessionTimeout"}];
+    COUNTER_ACQUIRE_TIMEOUT = 4                           [(CounterOpts) = {Name: "Events/AcquireTimeout"}];
+    COUNTER_PROXY_KICKED = 5                              [(CounterOpts) = {Name: "Events/ProxyKicked"}];
+    COUNTER_SESSION_STOLEN = 6                            [(CounterOpts) = {Name: "Events/SessionStolen"}];
+
+    COUNTER_REQS_PROXY_REGISTER = 7                       [(CounterOpts) = {Name: "Requests/ProxyRegister"}];
+    COUNTER_REQS_PROXY_UNREGISTER = 8                     [(CounterOpts) = {Name: "Requests/ProxyUnregister"}];
+    COUNTER_REQS_SESSION_ATTACH = 9                       [(CounterOpts) = {Name: "Requests/SessionAttach"}];
+    COUNTER_REQS_SESSION_DESTROY = 10                     [(CounterOpts) = {Name: "Requests/SessionDestroy"}];
+    COUNTER_REQS_SESSION_DETACH = 11                      [(CounterOpts) = {Name: "Requests/SessionDetach"}];
+    COUNTER_REQS_SEMAPHORE_ACQUIRE = 12                   [(CounterOpts) = {Name: "Requests/SemaphoreAcquire"}];
+    COUNTER_REQS_SEMAPHORE_CREATE = 13                    [(CounterOpts) = {Name: "Requests/SemaphoreCreate"}];
+    COUNTER_REQS_SEMAPHORE_DELETE = 14                    [(CounterOpts) = {Name: "Requests/SemaphoreDelete"}];
+    COUNTER_REQS_SEMAPHORE_RELEASE = 15                   [(CounterOpts) = {Name: "Requests/SemaphoreRelease"}];
+    COUNTER_REQS_QUOTER_RESOURCE_DESCRIBE = 16            [(CounterOpts) = {Name: "Requests/QuoterResourceDescribe"}];
+    COUNTER_REQS_QUOTER_RESOURCE_ADD = 17                 [(CounterOpts) = {Name: "Requests/QuoterResourceAdd"}];
+    COUNTER_REQS_QUOTER_RESOURCE_UPDATE = 18              [(CounterOpts) = {Name: "Requests/QuoterResourceUpdate"}];
+    COUNTER_REQS_QUOTER_RESOURCE_DELETE = 19              [(CounterOpts) = {Name: "Requests/QuoterResourceDelete"}];
+}
+
+enum EPercentileCounters {
+    option (GlobalCounterOpts) = {
+        Ranges { Value: 0      Name: "0 ms"      }
+        Ranges { Value: 1      Name: "1 ms"      }
+    };
+
+    COUNTER_PERCENTILE_IGNORE = 0;
+}
+
+enum ETxTypes {
+    TXTYPE_INIT_SCHEMA = 0                                [(TxTypeOpts) = {Name: "TxInitSchema"}];
+    TXTYPE_INIT = 1                                       [(TxTypeOpts) = {Name: "TxInit"}];
+    TXTYPE_DUMMY = 2                                      [(TxTypeOpts) = {Name: "TxDummy"}];
+    TXTYPE_CONFIG_GET = 3                                 [(TxTypeOpts) = {Name: "TxConfigGet"}];
+    TXTYPE_CONFIG_SET = 4                                 [(TxTypeOpts) = {Name: "TxConfigSet"}];
+    TXTYPE_SESSION_ATTACH = 5                             [(TxTypeOpts) = {Name: "TxSessionAttach"}];
+    TXTYPE_SESSION_DESTROY = 6                            [(TxTypeOpts) = {Name: "TxSessionDestroy"}];
+    TXTYPE_SESSION_DETACH = 7                             [(TxTypeOpts) = {Name: "TxSessionDetach"}];
+    TXTYPE_SESSION_TIMEOUT = 8                            [(TxTypeOpts) = {Name: "TxSessionTimeout"}];
+    TXTYPE_SESSIONS_DESCRIBE = 9                          [(TxTypeOpts) = {Name: "TxSessionsDescribe"}];
+    TXTYPE_SEMAPHORE_ACQUIRE = 10                         [(TxTypeOpts) = {Name: "TxSemaphoreAcquire"}];
+    TXTYPE_SEMAPHORE_CREATE = 11                          [(TxTypeOpts) = {Name: "TxSemaphoreCreate"}];
+    TXTYPE_SEMAPHORE_DESCRIBE = 12                        [(TxTypeOpts) = {Name: "TxSemaphoreDescribe"}];
+    TXTYPE_SEMAPHORE_DELETE = 13                          [(TxTypeOpts) = {Name: "TxSemaphoreDelete"}];
+    TXTYPE_SEMAPHORE_RELEASE = 14                         [(TxTypeOpts) = {Name: "TxSemaphoreRelease"}];
+    TXTYPE_SEMAPHORE_TIMEOUT = 15                         [(TxTypeOpts) = {Name: "TxSemaphoreTimeout"}];
+    TXTYPE_SEMAPHORE_UPDATE = 16                          [(TxTypeOpts) = {Name: "TxSemaphoreUpdate"}];
+    TXTYPE_SELF_CHECK = 17                                [(TxTypeOpts) = {Name: "TxSelfCheck"}];
+    TXTYPE_QUOTER_RESOURCE_DESCRIBE = 18                  [(TxTypeOpts) = {Name: "TxQouterResourceDescribe"}];
+    TXTYPE_QUOTER_RESOURCE_ADD = 19                       [(TxTypeOpts) = {Name: "TxQouterResourceAdd"}];
+    TXTYPE_QUOTER_RESOURCE_UPDATE = 20                    [(TxTypeOpts) = {Name: "TxQouterResourceUpdate"}];
+    TXTYPE_QUOTER_RESOURCE_DELETE = 21                    [(TxTypeOpts) = {Name: "TxQouterResourceDelete"}];
+}

@@ -1,0 +1,3 @@
+DECLARE $value as Utf8;
+
+SELECT $value as value;

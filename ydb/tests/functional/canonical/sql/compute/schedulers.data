@@ -1,0 +1,6 @@
+[
+  {"id": 1, "name": "SuperDuperScheduler"},
+  {"id": 2, "name": "RoundRobinScheduler"},
+  {"id": 3, "name": "FairScheduler"},
+  {"id": 4, "name": "RaccoonPriority"}
+]

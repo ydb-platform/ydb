@@ -1,0 +1,36 @@
+title: Yandex Database
+description:
+  - >-
+    <i>Yandex Database</i> (YDB) is a fault-tolerant Distributed SQL DBMS. YDB provides high availability, horizontal scalability, strict consistency, and ACID transaction support. Queries are made using an SQL dialect (<a href="yql/reference/overview">YQL</a>).
+nav:
+  title: Yandex Database
+meta:
+  title: Yandex Database
+links:
+  - title: Getting started
+    description: Creating a database, connecting to it, setting up access permissions, and performing basic operations with it
+    href: getting_started/
+  - title: Concepts
+    description: How YDB works, its features and available usage modes
+    href: concepts/
+  - title: Working with the CLI
+    description: YDB CLI reference
+    href: reference/ydb-cli/
+  - title: Working with the SDK
+    description: YDB SDK reference
+    href: reference/ydb-sdk/
+  - title: Step-by-step instructions
+    description: Instructions on how to perform standard operations
+    href: operations/
+  - title: Recommendations
+    description: A set of recommendations for practical service use
+    href: best_practices/
+  - title: YQL reference guide
+    description: Description of YQL syntax and built-in functions
+    href: yql/reference/
+  - title: YQL tutorial
+    description: YQL introductory tutorials
+    href: yql/tutorial/
+  - title: Useful links
+    description: Links to various resources related to YDB
+    href: getting_started/useful_links

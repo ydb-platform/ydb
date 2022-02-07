@@ -1,0 +1,12 @@
+import "ydb/core/protos/counters.proto";
+
+package NKikimr.NTxMediator;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+option (TabletTypeName) = "Mediator"; // Used as prefix for all counters
+
+enum ETxTypes {
+    TXTYPE_INIT = 0                                       [(TxTypeOpts) = {Name: "TxInit"}];
+    TXTYPE_CONFIGURE = 1                                  [(TxTypeOpts) = {Name: "TxConfigure"}];
+}

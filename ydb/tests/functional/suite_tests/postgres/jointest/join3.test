@@ -1,0 +1,93 @@
+--
+--
+--
+
+statement ok
+CREATE TABLE int8_tbl(q1 int64, q2 int64, primary key(q1, q2));
+
+statement ok
+INSERT INTO int8_tbl (q1, q2) VALUES(123, 456);
+
+statement ok
+INSERT INTO int8_tbl (q1, q2) VALUES(123, 4567890123456789);
+
+statement ok
+INSERT INTO int8_tbl (q1, q2) VALUES(4567890123456789, 123);
+
+statement ok
+INSERT INTO int8_tbl (q1, q2) VALUES(4567890123456789, 4567890123456789);
+
+statement ok
+INSERT INTO int8_tbl (q1, q2) VALUES(4567890123456789, -4567890123456789);
+
+
+--
+-- test that quals attached to an outer join have correct semantics,
+-- specifically that they don't re-use expressions computed below the join;
+-- we force a mergejoin so that coalesce(b.q1, 1) appears as a join input
+--
+
+statement query
+select a.q2 as q2, b.q1 as q1
+  from int8_tbl as a left join int8_tbl as b on a.q2 = coalesce(b.q1, 1)
+  where coalesce(b.q1, 1) > 0
+order by q2, q1
+
+
+statement ok
+create table parent (k int, pd int, primary key(k));
+create table child (k int, cd int, primary key(k));
+
+statement ok
+insert into parent (k, pd) values (1, 10), (2, 20), (3, 30);
+
+statement ok
+insert into child (k, cd) values (1, 100), (4, 400);
+
+statement query
+select p.k as k, p.pd as pd from parent as p left join child as c on (p.k = c.k)
+order by k
+
+statement query
+select p.k as k, p.pd as pd, linked from parent as p
+  left join (select c.k as k, true as linked from child as c) as ss
+  on (p.k = ss.k) order by k
+
+statement query
+select p.k as k, p.pd as pd from
+  parent as p left join child as c on (p.k = c.k)
+  where p.k = 1 and p.k = 2;
+
+statement query
+select p.k as k, p.pd as pd from
+  (select p.k as k, p.pd as pd from parent as p left join child as c on (p.k = c.k)) as p join parent as x on p.k = x.k
+  where p.k = 1 and p.k = 2;
+
+
+statement ok
+CREATE TABLE qa (id int, PRIMARY KEY(id));
+CREATE TABLE qb (id int, a_id int, PRIMARY KEY(id));
+
+
+statement ok
+INSERT INTO qa (id) VALUES (0), (1);
+
+statement ok
+INSERT INTO qb (id, a_id) VALUES (0, 0), (1, NULL);
+
+statement query
+SELECT qb.id as id, qb.a_id as a_id, qa.id as aid FROM qb LEFT JOIN qa ON (qb.a_id = qa.id) WHERE (qa.id IS NULL OR qa.id > 0);
+
+statement query
+SELECT qb.id as id, a_id FROM qb LEFT JOIN qa ON (qb.a_id = qa.id) WHERE (qa.id IS NULL OR qa.id > 0);
+
+statement query
+SELECT x, q1, q2, y FROM
+    (SELECT 1 AS x) as ss1
+  LEFT JOIN
+    (SELECT q1, q2, COALESCE(dat1, q1) AS y
+     FROM int8_tbl LEFT JOIN (select 123 as id, 42 as dat1) as innertab ON int8_tbl.q2 = innertab.id) as ss2
+  ON ss1.x = COALESCE(1, ss2.y)
+order by x, q1, q2, y
+
+

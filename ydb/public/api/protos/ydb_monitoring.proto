@@ -1,0 +1,190 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Monitoring;
+option java_package = "com.yandex.ydb.monitoring";
+option java_outer_classname = "MonitoringProtos";
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+message StatusFlag {
+    // Describes the general state of a component.
+    // From GREEN to RED, where GREEN is good, and RED is bad.
+    // GREY means that the corresponding status is unknown.
+    enum Status {
+        UNSPECIFIED = 0;
+        GREY = 1;
+        GREEN = 2;
+        BLUE = 3;
+        YELLOW = 4;
+        ORANGE = 5;
+        RED = 6;
+    }
+}
+
+message SelfCheckRequest {
+    Ydb.Operations.OperationParams operation_params = 1; // basic operation params, including timeout
+    bool return_verbose_status = 2; // return detailed info about components checked with their statuses
+    StatusFlag.Status minimum_status = 3; // minimum status of issues to return
+    uint32 maximum_level = 4; // maximum level of issues to return
+}
+
+message SelfCheckResponse {
+    // After successfull completion must contain SelfCheckResult.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message SelfCheck {
+    // Describes the result of self-check performed.
+    enum Result {
+        UNSPECIFIED = 0;
+        GOOD = 1;
+        DEGRADED = 2;
+        MAINTENANCE_REQUIRED = 3;
+        EMERGENCY = 4;
+    }
+}
+
+message StoragePDiskStatus {
+    string id = 1;
+    StatusFlag.Status overall = 2;
+}
+
+message StorageVDiskStatus {
+    string id = 1;
+    StatusFlag.Status overall = 2;
+    StatusFlag.Status vdisk_status = 3;
+    StoragePDiskStatus pdisk = 4;
+}
+
+message StorageGroupStatus {
+    string id = 1;
+    StatusFlag.Status overall = 2;
+    repeated StorageVDiskStatus vdisks = 3;
+}
+
+message StoragePoolStatus {
+    string id = 1;
+    StatusFlag.Status overall = 2;
+    repeated StorageGroupStatus groups = 3;
+}
+
+message StorageStatus {
+    StatusFlag.Status overall = 1;
+    repeated StoragePoolStatus pools = 2;
+}
+
+// Describes the state of a tablet group.
+message ComputeTabletStatus {
+    StatusFlag.Status overall = 1;
+    string type = 2;
+    string state = 3;
+    uint32 count = 4;
+    repeated string id = 5;
+}
+
+message ThreadPoolStatus {
+    StatusFlag.Status overall = 1;
+    string name = 2;
+    float usage = 3;
+}
+
+message LoadAverageStatus {
+    StatusFlag.Status overall = 1;
+    float load = 2;
+    uint32 cores = 3;
+}
+
+message ComputeNodeStatus {
+    string id = 1;
+    StatusFlag.Status overall = 2;
+    repeated ComputeTabletStatus tablets = 3;
+    repeated ThreadPoolStatus pools = 4;
+    LoadAverageStatus load = 5;
+}
+
+message ComputeStatus {
+    StatusFlag.Status overall = 1;
+    repeated ComputeNodeStatus nodes = 2;
+    repeated ComputeTabletStatus tablets = 3;
+}
+
+message LocationNode {
+    uint32 id = 1;
+    string host = 2;
+    uint32 port = 3;
+}
+
+message LocationStoragePDisk {
+    string id = 1;
+    string path = 2;
+}
+
+message LocationStorageVDisk {
+    string id = 1;
+    LocationStoragePDisk pdisk = 2;
+}
+
+message LocationStorageGroup {
+    string id = 1;
+    LocationStorageVDisk vdisk = 2;
+}
+
+message LocationStoragePool {
+    string name = 1;
+    LocationStorageGroup group = 2;
+}
+
+message LocationStorage {
+    LocationNode node = 1;
+    LocationStoragePool pool = 2;
+}
+
+message LocationComputePool {
+    string name = 1;
+}
+
+message LocationComputeTablet {
+    string type = 1;
+    repeated string id = 2;
+    uint32 count = 3;
+}
+
+message LocationCompute {
+    LocationNode node = 1;
+    LocationComputePool pool = 2;
+    LocationComputeTablet tablet = 3;
+}
+
+message LocationDatabase {
+    string name = 1;
+}
+
+message Location {
+    LocationStorage storage = 1;
+    LocationCompute compute = 2;
+    LocationDatabase database = 3;
+}
+
+message IssueLog {
+    string id = 1;
+    StatusFlag.Status status = 2;
+    string message = 3;
+    Location location = 4;
+    repeated string reason = 5;
+    string type = 6;
+    uint32 level = 7;
+}
+
+message DatabaseStatus {
+    string name = 1;
+    StatusFlag.Status overall = 2;
+    StorageStatus storage = 3;
+    ComputeStatus compute = 4;
+}
+
+message SelfCheckResult {
+    SelfCheck.Result self_check_result = 1;
+    repeated IssueLog issue_log = 2;
+    repeated DatabaseStatus database_status = 3;
+}

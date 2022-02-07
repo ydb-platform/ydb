@@ -1,0 +1,10 @@
+path: "/local/InputDyNumber"
+columns {
+  name: "Key"
+  type { optional_type { item { type_id: DYNUMBER } } }
+}
+columns {
+  name: "Value"
+  type { optional_type { item { type_id: JSON } } }
+}
+primary_key: "Key"

@@ -1,0 +1,24 @@
+--- contrib/python/urllib3/urllib3/connection.py	(index)
++++ contrib/python/urllib3/urllib3/connection.py	(working tree)
+@@ -349,7 +349,8 @@ class HTTPSConnection(HTTPConnection):
+         self.key_password = key_password
+         self.assert_hostname = assert_hostname
+         self.assert_fingerprint = assert_fingerprint
+-        self.ca_certs = ca_certs and os.path.expanduser(ca_certs)
++        self.ca_certs = os.path.expanduser(ca_certs) \
++            if isinstance(ca_certs, six.string_types) else ca_certs
+         self.ca_cert_dir = ca_cert_dir and os.path.expanduser(ca_cert_dir)
+         self.ca_cert_data = ca_cert_data
+ 
+--- contrib/python/urllib3/urllib3/response.py	(index)
++++ contrib/python/urllib3/urllib3/response.py	(working tree)
+@@ -9,7 +9,8 @@ from socket import timeout as SocketTimeout
+ 
+ try:
+     import brotli
+-except ImportError:
++    brotli.error
++except (ImportError, Exception):
+     brotli = None
+ 
+ from ._collections import HTTPHeaderDict

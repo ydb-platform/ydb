@@ -1,0 +1,18 @@
+[
+    {
+        "Five": 1,
+        "Greater_3_or_Null": null
+    },
+    {
+        "Five": 1,
+        "Greater_3_or_Null": null
+    },
+    {
+        "Five": 1,
+        "Greater_3_or_Null": 3
+    },
+    {
+        "Five": 1,
+        "Greater_3_or_Null": 4
+    }
+]

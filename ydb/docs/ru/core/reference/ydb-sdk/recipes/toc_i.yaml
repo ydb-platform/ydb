@@ -1,0 +1,12 @@
+items:
+- name: Обзор
+  href: index.md
+- name: Аутентификация
+  include: { mode: link, path: auth/toc_p.yaml }
+- name: Балансировка
+  include: { mode: link, path: balancing/toc_p.yaml }
+- name: Диагностика проблем
+  include: { mode: link, path: debug/toc_p.yaml }
+- name: Установить размер пула сессий
+  href: session_pool_limit.md
+

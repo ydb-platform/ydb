@@ -1,0 +1,12 @@
+{
+  "sensors":
+    [
+      {
+        "kind":"COUNTER",
+        "labels":
+          {
+            "foo":"bar"
+          }
+      }
+    ]
+}

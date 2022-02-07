@@ -1,0 +1,3 @@
+title: YDB
+items:
+- include: { mode: merge, path: core/toc_m.yaml }

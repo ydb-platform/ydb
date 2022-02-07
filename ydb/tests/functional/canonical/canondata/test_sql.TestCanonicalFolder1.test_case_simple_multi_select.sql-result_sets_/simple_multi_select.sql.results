@@ -1,0 +1,31 @@
+[
+    [
+        {
+            "Amount": 100,
+            "Group": 1,
+            "Name": "Name1"
+        },
+        {
+            "Amount": 101,
+            "Group": 1,
+            "Name": "Name2"
+        },
+        {
+            "Amount": 102,
+            "Group": 1,
+            "Name": "Name3"
+        }
+    ],
+    [
+        {
+            "key": 1,
+            "subkey": 2,
+            "value": "a"
+        },
+        {
+            "key": 3,
+            "subkey": 4,
+            "value": "b"
+        }
+    ]
+]

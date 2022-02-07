@@ -1,0 +1,13 @@
+allowHTML: true
+langs: ['en','ru']
+
+docs-viewer:
+  project-name: ydb
+  logo-title: YDB
+  no-index: true
+  langs: ['en','ru']
+  index-page:
+    title: YDB Open Source
+    description: Горизонтально масштабируемая распределённая отказоустойчивая СУБД
+    hidden: true
+apply-presets: true

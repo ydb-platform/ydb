@@ -1,0 +1,18 @@
+--!syntax_v1
+
+CREATE TABLE Temp (
+    Group Uint64,
+    MinAmount Int64,
+    Value String,
+    PRIMARY KEY (Group)
+);
+
+COMMIT;
+
+UPSERT INTO Temp
+SELECT Group, MIN(Amount) AS MinAmount, "" as Value FROM Input1
+GROUP BY Group;
+
+COMMIT;
+
+SELECT * FROM Temp ORDER BY Group;

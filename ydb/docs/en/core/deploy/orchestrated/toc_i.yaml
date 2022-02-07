@@ -1,0 +1,9 @@
+items:
+- name: Overview
+  href: concepts.md
+- name: Deploying in Yandex Managed Service for Kubernetes
+  href: yc_managed_kubernetes.md
+- name: Deploying in AWS Elastic Kubernetes Service
+  href: aws_eks.md
+- name: Use
+  href: operate.md

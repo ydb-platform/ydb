@@ -1,0 +1,39 @@
+commit d72ada28933f0e04fe2b4481f7886997050ec403
+Author: Lukas Fittl <lukas@fittl.com>
+Date:   Sun Jan 3 15:57:25 2021 -0800
+
+    LimitOption: Correctly order LIMIT_OPTION_DEFAULT enum value first
+    
+    This seems like an oversight in the commit that added support for
+    FETCH FIRST... WITH TIES, and causes the parsetree to always have
+    limitOption = LIMIT_OPTION_COUNT, even when no LIMIT/OFFSET is specified.
+
+diff --git a/src/backend/executor/nodeLimit.c b/src/backend/executor/nodeLimit.c
+index d85cf7d93e..f1fdac3156 100644
+--- a/src/backend/executor/nodeLimit.c
++++ b/src/backend/executor/nodeLimit.c
+@@ -154,7 +154,8 @@ ExecLimit(PlanState *pstate)
+ 				if (!node->noCount &&
+ 					node->position - node->offset >= node->count)
+ 				{
+-					if (node->limitOption == LIMIT_OPTION_COUNT)
++					if (node->limitOption == LIMIT_OPTION_COUNT ||
++						node->limitOption == LIMIT_OPTION_DEFAULT)
+ 					{
+ 						node->lstate = LIMIT_WINDOWEND;
+ 						return NULL;
+diff --git a/src/include/nodes/nodes.h b/src/include/nodes/nodes.h
+index 381d84b4e4..a540fce7eb 100644
+--- a/src/include/nodes/nodes.h
++++ b/src/include/nodes/nodes.h
+@@ -834,9 +834,9 @@ typedef enum OnConflictAction
+  */
+ typedef enum LimitOption
+ {
++	LIMIT_OPTION_DEFAULT,		/* No limit present */
+ 	LIMIT_OPTION_COUNT,			/* FETCH FIRST... ONLY */
+ 	LIMIT_OPTION_WITH_TIES,		/* FETCH FIRST... WITH TIES */
+-	LIMIT_OPTION_DEFAULT,		/* No limit present */
+ } LimitOption;
+ 
+ #endif							/* NODES_H */

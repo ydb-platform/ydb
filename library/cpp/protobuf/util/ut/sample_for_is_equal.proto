@@ -1,0 +1,8 @@
+message TInner {
+    optional string Brbrbr = 3;
+}
+
+message TSampleForIsEqual {
+    optional string Name = 1;
+    optional TInner Inner = 5;
+}

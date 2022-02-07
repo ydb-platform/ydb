@@ -1,0 +1,323 @@
+statement ok
+CREATE TABLE a1(a integer, b integer, primary key(a, b));
+
+statement ok
+CREATE TABLE a2(a integer, b integer, c int32, primary key(a, b, c));
+
+statement skipped
+CREATE TABLE a3(x DEFAULT 1.0, y DEFAULT 'string', z);
+
+statement skipped
+CREATE TABLE a4(c UNIQUE, d);
+
+statement ok
+INSERT             INTO a1 (a, b) VALUES(1, 2)
+
+statement error
+side effect: kqp_message: constraint violation
+side effect: kqp_code: QP-0014
+INSERT             INTO a1 (a, b) VALUES(1, 2)
+
+statement error
+side effect: kqp_message: constraint violation
+side effect: kqp_code: QP-0014
+INSERT OR ABORT INTO a1 (a, b) VALUES(1, 2)
+
+statement error
+side effect: kqp_message: constraint violation
+side effect: kqp_code: QP-0014
+INSERT OR ABORT INTO a1 (a, b) VALUES(1, 2)
+
+statement ok
+REPLACE            INTO a1 (a, b) VALUES(1, 2)
+
+statement ok
+REPLACE            INTO a1 (a, b) VALUES(1, 2)
+
+statement ok
+INSERT             INTO a1 (b, a) VALUES(1, 2)
+
+statement error
+side effect: kqp_message: constraint violation
+side effect: kqp_code: QP-0014
+INSERT             INTO a1 (b, a) VALUES(1, 2)
+
+statement error
+side effect: kqp_message: constraint violation
+side effect: kqp_code: QP-0014
+INSERT OR ABORT INTO a1 (b, a) VALUES(1, 2)
+
+statement error
+side effect: kqp_message: constraint violation
+side effect: kqp_code: QP-0014
+INSERT OR ABORT INTO a1 (b, a) VALUES(1, 2)
+
+statement ok
+REPLACE            INTO a1 (b, a) VALUES(1, 2)
+
+statement ok
+REPLACE            INTO a1 (b, a) VALUES(1, 2)
+
+statement ok
+INSERT             INTO a1  SELECT c as a, b as b FROM a2
+
+statement ok
+INSERT             INTO a1 SELECT c as a, b as b FROM a2
+
+statement ok
+INSERT OR ABORT INTO a1 SELECT c as a, b as b FROM a2
+
+statement ok
+INSERT OR ABORT INTO a1      SELECT c as a, b as b FROM a2
+
+statement ok
+REPLACE            INTO a1      SELECT c as a, b as b FROM a2
+
+statement ok
+REPLACE            INTO a1 SELECT c as a, b FROM a2
+
+statement ok
+INSERT             INTO a1      (b, a) SELECT c as a, b FROM a2
+
+statement ok
+INSERT             INTO a1 (b, a) SELECT c as a, b FROM a2
+
+statement ok
+INSERT OR ABORT INTO a1 (b, a) SELECT c, b FROM a2
+
+statement ok
+INSERT OR ABORT INTO a1      (b, a) SELECT c, b FROM a2
+
+statement ok
+REPLACE            INTO a1      (b, a) SELECT c, b FROM a2
+
+statement ok
+REPLACE            INTO a1 (b, a) SELECT c, b FROM a2
+
+statement error
+side effect: kqp_message: constraint violation
+side effect: kqp_code: QP-0014
+INSERT             INTO a1      (b, a) VALUES(1, 2),(3,4)
+
+statement error
+side effect: kqp_message: constraint violation
+side effect: kqp_code: QP-0014
+INSERT             INTO a1 (b, a) VALUES(1, 2),(3,4)
+
+statement error
+side effect: kqp_message: constraint violation
+side effect: kqp_code: QP-0014
+INSERT OR ABORT INTO a1 (b, a) VALUES(1, 2),(3,4)
+
+statement error
+side effect: kqp_message: constraint violation
+side effect: kqp_code: QP-0014
+INSERT OR ABORT INTO a1      (b, a) VALUES(1, 2),(3,4)
+
+statement ok
+REPLACE            INTO a1      (b, a) VALUES(1, 2),(3,4)
+
+statement ok
+REPLACE            INTO a1 (b, a) VALUES(1, 2),(3,4);
+
+statement query
+SELECT count(*) as cnt FROM a2;
+
+statement ok
+INSERT INTO a2 (a, b, c) VALUES(1, 2, 3)
+
+statement query
+SELECT count(*) as cnt FROM a2;
+
+statement error
+side effect: kqp_code: QP-0003
+side effect: kqp_message: requires specification of table columns
+INSERT INTO a2 VALUES(1,2,3,4)
+
+statement error
+side effect: kqp_code: QP-0003
+side effect: kqp_message: VALUES have 5 columns, INSERT INTO expects: 3
+INSERT INTO a2 (a, b, c) VALUES(1,2,3,4,5)
+
+statement skipped
+INSERT INTO a2 VALUES((SELECT count(*) FROM a2), 99, 101)
+
+statement error
+side effect: kqp_code: QP-0003
+side effect: kqp_message: VALUES have 1 columns, INSERT INTO expects: 3
+INSERT INTO a2(a, b, c) VALUES(1)
+
+statement error
+side effect: kqp_code: QP-0003
+side effect: kqp_message: VALUES have 2 columns, INSERT INTO expects: 3
+INSERT INTO a2(a, b, c) VALUES(1,2)
+
+statement error
+side effect: kqp_code: QP-0003
+side effect: kqp_message: VALUES have 4 columns, INSERT INTO expects: 3
+INSERT INTO a2(a, b, c) VALUES(1,2,3,4)
+
+statement error
+side effect: kqp_code: QP-0003
+side effect: kqp_message: VALUES have 5 columns, INSERT INTO expects: 3
+INSERT INTO a2(a, b, c) VALUES(1,2,3,4,5)
+
+statement error
+side effect: kqp_code: QP-0003
+side effect: kqp_message: VALUES have 1 columns, INSERT INTO expects: 2
+INSERT INTO a2(c, a) VALUES(1)
+
+statement error
+side effect: kqp_code: QP-0003
+side effect: kqp_message: VALUES have 3 columns, INSERT INTO expects: 2
+INSERT INTO a2(c, a) VALUES(1,2,3)
+
+statement error
+side effect: kqp_code: QP-0003
+side effect: kqp_message: VALUES have 4 columns, INSERT INTO expects: 2
+INSERT INTO a2(c, a) VALUES(1,2,3,4)
+
+statement error
+side effect: kqp_code: QP-0003
+side effect: kqp_message: VALUES have 5 columns, INSERT INTO expects: 2
+INSERT INTO a2(c, a) VALUES(1,2,3,4,5)
+
+statement query
+SELECT * FROM a2
+
+INSERT INTO a2(a, b) VALUES('a', 'b')
+
+SELECT * FROM a2
+
+SELECT count(*) FROM a1
+
+SELECT count(*) FROM (SELECT 1, 2)
+
+INSERT INTO a1 SELECT 1, 2
+
+SELECT count(*) FROM a1
+
+SELECT count(*) FROM (SELECT b, a FROM a1)
+
+INSERT INTO a1 SELECT b, a FROM a1
+
+SELECT count(*) FROM a1
+
+SELECT count(*) FROM (SELECT b, a FROM a1)
+
+INSERT INTO a1 SELECT b, a FROM a1
+
+SELECT count(*) FROM a1
+
+SELECT count(*) FROM (SELECT b, a FROM a1)
+
+INSERT INTO a1 SELECT b, a FROM a1
+
+SELECT count(*) FROM a1
+
+SELECT count(*) FROM (SELECT min(b), min(a) FROM a1)
+
+INSERT INTO a1 SELECT min(b), min(a) FROM a1
+
+SELECT count(*) FROM a1
+
+INSERT INTO a3(x, y) SELECT a, b, c FROM a2
+
+INSERT INTO a3(x, y) SELECT * FROM a2
+
+INSERT INTO a3(x, y) SELECT * FROM a2 CROSS JOIN a1
+
+INSERT INTO a3(x, y) SELECT * FROM a2 NATURAL JOIN a1
+
+INSERT INTO a3(x, y) SELECT a2.a FROM a2,a1
+
+INSERT INTO a3(z) SELECT a, b, c FROM a2
+
+INSERT INTO a3(z) SELECT * FROM a2
+
+INSERT INTO a3(z) SELECT * FROM a2 CROSS JOIN a1
+
+INSERT INTO a3(z) SELECT * FROM a2 NATURAL JOIN a1
+
+INSERT INTO a3(z) SELECT a1.* FROM a2,a1
+
+INSERT INTO a1 SELECT a, b, c FROM a2
+
+INSERT INTO a1 SELECT * FROM a2
+
+INSERT INTO a1 SELECT * FROM a2 CROSS JOIN a1
+
+INSERT INTO a1 SELECT * FROM a2 NATURAL JOIN a1
+
+INSERT INTO a1 SELECT a2.a FROM a2,a1
+
+
+
+  INSERT INTO a1 VALUES('x', 'y');
+
+
+
+INSERT INTO a1 SELECT a,b FROM a1 UNION SELECT b,a FROM a1 ORDER BY 1
+
+INSERT INTO a1(b, a) SELECT * FROM a1 LIMIT 1
+
+INSERT INTO a1 SELECT 'a'||a, 'b'||b FROM a1 LIMIT 2 OFFSET 1
+
+INSERT INTO a1 SELECT * FROM a1 ORDER BY b, a
+
+SELECT * FROM a1
+
+
+INSERT INTO a4 VALUES(1, 'a');
+
+INSERT INTO a4 VALUES(2, 'a');
+
+INSERT INTO a4 VALUES(3, 'a');
+
+
+
+INSERT INTO a4 VALUES(2,'b')
+
+SELECT * FROM a4
+
+INSERT OR REPLACE INTO a4 VALUES(2, 'b')
+
+SELECT * FROM a4
+
+INSERT OR IGNORE INTO a4 VALUES(3, 'c')
+
+SELECT * FROM a4
+
+BEGIN
+
+SELECT * FROM a4
+
+INSERT INTO a4 VALUES(1, 'd')
+
+SELECT * FROM a4
+
+INSERT OR ABORT INTO a4 VALUES(1, 'd')
+
+SELECT * FROM a4
+
+INSERT OR ROLLBACK INTO a4 VALUES(1, 'd')
+
+SELECT * FROM a4
+
+INSERT INTO a4 SELECT 4, 'e' UNION ALL SELECT 3, 'e'
+
+SELECT * FROM a4
+
+INSERT OR FAIL INTO a4 SELECT 4, 'e' UNION ALL SELECT 3, 'e'
+
+SELECT * FROM a4
+
+INSERT INTO a4 VALUES(2,'f')
+
+SELECT * FROM a4
+
+REPLACE INTO a4 VALUES(2, 'f')
+
+SELECT * FROM a4
+
+

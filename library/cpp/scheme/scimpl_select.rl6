@@ -1,0 +1,270 @@
+#include <library/cpp/scheme/scimpl.h>
+
+#include <util/string/cast.h>
+#include <util/string/escape.h>
+#include <library/cpp/string_utils/relaxed_escaper/relaxed_escaper.h>
+#include <util/generic/is_in.h>
+#include <util/string/util.h>
+
+namespace NSc {
+
+    template <typename TValue, typename TGetter>
+    struct TSelector {
+        TValue& Root;
+        TValue* Current = nullptr;
+        TValue* Parent = nullptr;
+        TStringBuf CurrentDictKey;
+        size_t CurrentArrayKey = 0;
+        size_t Depth = 0;
+        bool HasArray = false;
+        bool HasError = false;
+
+        TSelector(TValue& root)
+            : Root(root)
+            , Current(&Root)
+        {}
+
+        template <typename T>
+        bool Next(T k) {
+            Depth += 1;
+            Parent = Current;
+            Current = TGetter::Next(Current, k);
+            return Current != nullptr;
+        }
+
+        bool NextDict(TStringBuf k) {
+            return Next(CurrentDictKey = k);
+        }
+
+        bool NextArray(size_t k) {
+            HasArray = true;
+            return Next(CurrentArrayKey = k);
+        }
+
+        bool Error() {
+            Parent = nullptr;
+            Current = nullptr;
+            CurrentArrayKey = 0;
+            CurrentDictKey = TStringBuf();
+            HasError = true;
+            return false;
+        }
+    };
+
+    template <typename TSelector>
+    struct TSelectorCtx {
+        TSelector Selector;
+        TString Buffer;
+
+        const char* p0 = nullptr;
+        const char* p = nullptr;
+        const char* pe = nullptr;
+        const char* eof = nullptr;
+        const char* ts = nullptr;
+        const char* te = nullptr;
+        int cs = 0;
+        int act = 0;
+
+        TSelectorCtx(TSelector sel, TStringBuf data)
+            : Selector(sel)
+            , p0(data.data())
+            , p(data.data())
+            , pe(data.end())
+            , eof(data.end())
+        {}
+
+        bool OnString(TStringBuf s) {
+            return Selector.NextDict(s);
+        }
+
+        bool OnInt(size_t k) {
+            return Selector.NextArray(k);
+        }
+
+        bool OnStrU() {
+            return OnString(TStringBuf(ts, te));
+        }
+
+        bool OnStrQ() {
+            return OnString(TStringBuf(ts + 1, te - 1));
+        }
+
+        bool OnStrE() {
+            Buffer.clear();
+            Buffer.reserve(te - ts);
+            UnescapeC(ts + 1, te - ts - 2, Buffer);
+            return OnString(Buffer);
+        }
+
+        bool OnIntU() {
+            return OnInt(FromString<ui32>(TStringBuf(ts, te)));
+        }
+
+        bool OnIntQ() {
+            return OnInt(FromString<ui32>(TStringBuf(ts + 1, te - 1)));
+        }
+
+        bool OnError() {
+            Selector.Error();
+            return false;
+        }
+
+        bool SelectPath();
+    };
+
+#if 0
+    %%{
+    machine schemeselect;
+
+    alphtype char;
+
+    action OnIntU  { if (Y_UNLIKELY(!OnIntU()))  goto TOKEN_ERROR; }
+    action OnIntQ  { if (Y_UNLIKELY(!OnIntQ()))  goto TOKEN_ERROR; }
+    action OnStrU  { if (Y_UNLIKELY(!OnStrU()))  goto TOKEN_ERROR; }
+    action OnStrQ  { if (Y_UNLIKELY(!OnStrQ()))  goto TOKEN_ERROR; }
+    action OnStrE  { if (Y_UNLIKELY(!OnStrE()))  goto TOKEN_ERROR; }
+    action OnError { goto TOKEN_ERROR; }
+
+    intu = [0-9]+;
+    intq = '[' intu ']';
+
+    uchar0 = [a-zA-Z_@$] | (0x80 .. 0xFF);
+    uchar  = uchar0 | digit | [.\-];
+
+    qchar = [^'\\]; #';
+    dchar = [^"\\]; #";
+    bchar = [^\]\\];
+
+    echar = "\\" any;
+
+    qechar = qchar | echar;
+    dechar = dchar | echar;
+    bechar = bchar | echar;
+
+    strq = "'" qchar* "'";
+    strd = '"' dchar* '"';
+    strb = '[' bchar* ']';
+
+    strqe = "'" qechar* "'";
+    strde = '"' dechar* '"';
+    strbe = '[' bechar* ']';
+
+    strU = uchar0 uchar*;
+    strQ = strq | strd | strb;
+    strE = strqe | strde | strbe;
+
+    main := |*
+        intu => OnIntU;
+        intq => OnIntQ;
+
+        strU => OnStrU;
+        strQ => OnStrQ;
+        strE => OnStrE;
+
+        '/';
+
+        (intu) (any - ('/' | '[' )) => OnError;
+
+        any => OnError;
+             *|;
+    }%%
+#endif
+
+    template <typename TSelector>
+    bool TSelectorCtx<TSelector>::SelectPath() {
+        try {
+            %%{
+                write data noerror nofinal;
+                write init;
+                write exec;
+            }%%
+            ;
+            Y_UNUSED(schemeselect_en_main);
+        } catch (const TFromStringException&) {
+            return OnError();
+        }
+
+        return Selector.Current;
+
+        TOKEN_ERROR:
+        return OnError();
+    }
+
+    template <bool CheckHas>
+    struct TGetNext {
+        template <typename TValue, typename TIdx>
+        static TValue* Next(TValue* val, TIdx idx) {
+            if (val) {
+                if (CheckHas && !val->Has(idx)) {
+                    return nullptr;
+                } else {
+                    return &(*val)[idx];
+                }
+            } else {
+                return nullptr;
+            }
+        }
+    };
+
+    const TValue& TValue::TrySelect(TStringBuf path) const {
+        TSelectorCtx<TSelector<const TValue, TGetNext<true> > > ctx(*this, path);
+
+        if (ctx.SelectPath()) {
+            return *ctx.Selector.Current;
+        }
+
+        return DefaultValue();
+    }
+
+    TValue* TValue::TrySelectOrAdd(TStringBuf path) {
+        TSelectorCtx<TSelector<TValue, TGetNext<false> > > ctx(*this, path);
+
+        if (ctx.SelectPath()) {
+            return ctx.Selector.Current;
+        } else {
+            return nullptr;
+        }
+    }
+
+    TValue TValue::TrySelectAndDelete(TStringBuf path) {
+        TSelectorCtx<TSelector<TValue, TGetNext<true> > > ctx(*this, path);
+
+        if (ctx.SelectPath() && ctx.Selector.Parent) {
+            if (ctx.Selector.Parent->IsArray()) {
+                return ctx.Selector.Parent->Delete(ctx.Selector.CurrentArrayKey);
+            } else if (ctx.Selector.Parent->IsDict()) {
+                return ctx.Selector.Parent->Delete(ctx.Selector.CurrentDictKey);
+            } else {
+                Y_ASSERT(false);
+                return DefaultValue();
+            }
+        } else {
+            return DefaultValue();
+        }
+    }
+
+    bool TValue::PathExists(TStringBuf path) const {
+        return TSelectorCtx<TSelector<const TValue, TGetNext<true>>>(*this, path).SelectPath();
+    }
+
+    bool TValue::PathValid(TStringBuf path) {
+        TSelectorCtx<TSelector<const TValue, TGetNext<false>>> ctx(DefaultValue(), path);
+        return ctx.SelectPath() || !ctx.Selector.HasError;
+    }
+
+    TString TValue::EscapeForPath(TStringBuf rawKey) {
+        static const str_spn danger{"/[]"};
+        if (!rawKey || danger.brk(rawKey.begin(), rawKey.end()) != rawKey.end()) {
+            return NEscJ::EscapeJ<true>(rawKey);
+        }
+
+        TSelectorCtx<TSelector<const TValue, TGetNext<false>>> ctx(DefaultValue(), rawKey);
+        ctx.SelectPath();
+        if (ctx.Selector.HasError || ctx.Selector.Depth > 1 || ctx.Selector.HasArray) {
+            return NEscJ::EscapeJ<true>(rawKey);
+        } else {
+            return ToString(rawKey);
+        }
+    }
+
+}

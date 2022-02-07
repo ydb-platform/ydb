@@ -1,0 +1,52 @@
+[
+    [
+        {
+            "Amount": 100,
+            "Comment": "Test1",
+            "Group": 1,
+            "Name": "Name1"
+        },
+        {
+            "Amount": 101,
+            "Comment": "Test1",
+            "Group": 1,
+            "Name": "Name2"
+        },
+        {
+            "Amount": 102,
+            "Comment": "Test1",
+            "Group": 1,
+            "Name": "Name3"
+        },
+        {
+            "Amount": 104,
+            "Comment": "Test1",
+            "Group": 3,
+            "Name": "Name3"
+        },
+        {
+            "Amount": 105,
+            "Comment": "Test1",
+            "Group": 4,
+            "Name": "Name1"
+        },
+        {
+            "Amount": 106,
+            "Comment": "Test1",
+            "Group": 4,
+            "Name": "Name4"
+        },
+        {
+            "Amount": 108,
+            "Comment": "Test1",
+            "Group": 6,
+            "Name": "Name1"
+        },
+        {
+            "Amount": 109,
+            "Comment": "Test1",
+            "Group": 6,
+            "Name": "Name2"
+        }
+    ]
+]

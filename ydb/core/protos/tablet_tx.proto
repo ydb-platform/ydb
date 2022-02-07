@@ -1,0 +1,59 @@
+import "ydb/core/protos/tx_proxy.proto";
+import "ydb/core/protos/scheme_log.proto";
+import "ydb/library/mkql_proto/protos/minikql.proto";
+
+package NKikimrTabletTxBase;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TEvLocalMKQL {
+    optional NKikimrTxUserProxy.TMiniKQLTransaction Program = 1;
+}
+
+message TEvLocalMKQLResponse {
+    optional uint64 Origin = 1;
+    optional int32 Status = 2;
+
+    optional uint32 EngineStatus = 10;
+    optional uint32 EngineResponseStatus = 11;
+    optional bytes MiniKQLErrors = 12;
+    optional NKikimrMiniKQL.TResult ExecutionEngineEvaluatedResponse = 13;
+    optional NKikimrTxUserProxy.TMiniKQLCompileResults CompileResults = 14;
+}
+
+message TEvLocalSchemeTx {
+    optional NTabletFlatScheme.TSchemeChanges SchemeChanges = 1;
+    optional bool DryRun = 2;
+}
+
+message TEvLocalSchemeTxResponse {
+    optional uint64 Origin = 1;
+    optional int32 Status = 2;
+    optional string ErrorReason = 3;
+
+    optional NTabletFlatScheme.TSchemeChanges FullScheme = 4;
+}
+
+message TEvLocalReadColumns {
+    optional string TableName = 1;
+    repeated string Columns = 2;
+    optional uint64 MaxRows = 3;
+    optional uint64 MaxBytes = 4;
+
+    optional bytes FromKey = 5;
+    optional bool FromKeyInclusive = 6;
+    optional bytes ToKey = 7;
+    optional bool ToKeyInclusive = 8;
+
+    optional string Format = 9;
+}
+
+message TEvLocalReadColumnsResponse {
+    optional uint64 TabletID = 1;
+    optional uint32 Status = 2;             // Ydb::StatusIds
+    optional string ErrorDescription = 3;
+
+    optional bytes Blocks = 4;              // The data
+    optional bytes LastKey = 5;             // For continuation
+    optional bool LastKeyInclusive = 6;
+    optional bool EndOfShard = 7;
+}

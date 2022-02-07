@@ -1,0 +1,81 @@
+import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/protos/subdomains.proto";
+import "ydb/core/protos/tablet.proto";
+
+package NKikimrTenantPool;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TSlotConfig {
+    optional string Id = 1;
+    optional string DomainName = 2;
+    optional string TenantName = 3;
+    optional bool IsDynamic = 4;
+    optional string Type = 5;
+    optional NKikimrTabletBase.TMetrics ResourceLimit = 6;
+}
+
+message TTenantPoolConfig {
+    optional bool IsEnabled = 1 [default = true];
+    /**
+     * Dynamic slots should have unique Id, valid DomainName and type.
+     * Static slots should have valid TenantName.
+     */
+    repeated TSlotConfig Slots = 2;
+    optional string NodeType = 3;
+}
+
+enum EState {
+    STATE_UNKNOWN = 0;
+    TENANT_ASSIGNED = 1;
+    TENANT_OK = 2;
+    TENANT_UNKNOWN = 3;
+}
+
+message TSlotStatus {
+    optional string Id = 1;
+    optional string Type = 2;
+    optional string AssignedTenant = 3;
+    optional NKikimrTabletBase.TMetrics ResourceLimit = 4;
+    optional string Label = 5;
+    repeated NKikimrSchemeOp.TUserAttribute TenantAttributes = 6;
+    optional EState State = 7;
+    optional NKikimrSubDomains.TDomainKey DomainKey = 8;
+}
+
+message TGetStatus {
+    optional bool ListStaticSlots = 1;
+}
+
+message TTenantPoolStatus {
+    repeated TSlotStatus Slots = 1;
+    optional string NodeType = 2;
+}
+
+message TConfigureSlot {
+    optional string SlotId = 1;
+    optional string AssignedTenant = 2;
+    optional string Label = 3;
+}
+
+enum EStatus {
+    UNKNOWN = 0;
+    SUCCESS = 1;
+    UNKNOWN_SLOT = 2;
+    UNKNOWN_TENANT = 3;
+    NOT_OWNER = 4;
+    ERROR = 5;
+}
+
+message TConfigureSlotResult {
+    optional EStatus Status = 1;
+    optional string Error = 2;
+    optional TSlotStatus SlotStatus = 3;
+}
+
+message TTakeOwnership {
+    optional uint64 Generation = 1;
+    optional uint64 SeqNo = 2;
+}
+
+message TLostOwnership {
+}

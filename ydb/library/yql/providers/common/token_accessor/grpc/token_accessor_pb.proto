@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package NYql;
+
+option go_package = "a.yandex-team.ru/ydb/library/yql/providers/common/token_accessor/grpc;token_accessor_pb";
+
+service TokenAccessorService {
+    rpc GetToken(GetTokenRequest) returns (GetTokenResponse) {}
+}
+
+message GetTokenRequest {
+    enum Type {
+        TYPE_UNKNOWN = 0;
+        TYPE_SERVICE_ACCOUNT = 1;
+    }
+
+    Type type = 1;
+    string token_id = 2;
+    string signature = 3;
+}
+
+message GetTokenResponse {
+    bytes token = 3;
+}

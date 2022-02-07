@@ -1,0 +1,13 @@
+/ydb_data/node_1/logfile_*
+{
+    rotate 7
+    daily
+    missingok
+    notifempty
+    create 0640 syslog adm           <==
+    delaycompress
+    compress
+    postrotate
+       /bin/kill -HUP `ps aux | grep kikimr -e grep | awk '{ print $2 }'` 2> /dev/null || true
+    endscript
+}

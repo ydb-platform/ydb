@@ -1,0 +1,72 @@
+import "google/protobuf/descriptor.proto";
+import "library/cpp/protobuf/util/proto/merge.proto";
+
+package NProtobufUtilUt;
+
+extend google.protobuf.FieldOptions {
+  optional bool XXX = 53772;
+}
+
+message TWalkTest {
+    optional uint32 OptInt = 1 [(XXX)=true];
+    repeated uint32 RepInt = 2;
+
+    optional string OptStr = 3;
+    repeated string RepStr = 4 [(XXX)=true];
+
+    optional TWalkTest OptSub = 5 [(XXX)=true];
+    repeated TWalkTest RepSub = 6;
+}
+
+message TWalkTestCyclic {
+   optional TNested OptNested = 1;
+   repeated uint64 OptInt64 = 2;
+   optional TWalkTestCyclic OptSub = 3;
+   optional TEnum OptEnum = 4;
+
+   message TNested {
+      optional uint32 OptInt32 = 1;
+      optional TWalkTestCyclic OptSubNested = 2;
+      repeated string RepStr = 3;
+      optional TNested OptNested = 4;
+   }
+   enum TEnum {
+      A = 0;
+      B = 1;
+      C = 2;
+    }
+}
+
+message TMergeTestNoMerge {
+   option (DontMerge) = true;
+
+   optional uint32 A = 1;
+   repeated uint32 B = 2;
+}
+
+message TMergeTestMerge {
+   optional uint32 A = 1;
+   repeated uint32 B = 2;
+   repeated uint32 C = 3 [(DontMergeField)=true];
+}
+
+message TMergeTest {
+   repeated uint32 MergeInt   = 1;
+   repeated uint32 NoMergeInt = 2 [(DontMergeField)=true];
+
+   optional TMergeTestMerge MergeSub      = 3;
+   repeated TMergeTestMerge NoMergeRepSub = 4 [(DontMergeField)=true];
+   optional TMergeTestNoMerge NoMergeOptSub  = 5;
+}
+
+message TTextTest {
+    optional uint32 Foo = 1;
+}
+
+message TTextEnumTest {
+   enum EnumTest {
+      EET_SLOT_1 = 1;
+      EET_SLOT_2 = 2;
+   }
+   optional EnumTest Slot = 1;
+}

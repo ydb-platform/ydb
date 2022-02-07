@@ -1,0 +1,32 @@
+syntax = "proto3";
+package NLoginProto;
+
+message TPublicKey {
+    uint64 KeyId = 1; // sorted monotonic
+    oneof KeyData {
+        string KeyDataPEM = 2;
+    }
+    uint64 ExpiresAt = 9; // milliseconds
+}
+
+message ESidType {
+    enum SidType {
+        UNKNOWN = 0;
+        USER = 1;
+        GROUP = 2;
+    }
+}
+
+message TSid {
+    string Name = 1;
+    ESidType.SidType Type = 2;
+    string Hash = 3;
+    repeated string Members = 4;
+}
+
+message TSecurityState {
+    repeated TPublicKey PublicKeys = 1;
+    repeated TSid Sids = 2;
+    string Audience = 3;
+}
+

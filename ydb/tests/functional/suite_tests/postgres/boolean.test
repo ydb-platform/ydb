@@ -1,0 +1,480 @@
+statement query
+SELECT 1 AS one;
+
+statement query
+SELECT true AS `true`;
+
+statement query
+SELECT false AS `false`;
+
+statement query
+SELECT Cast('true' as Bool) AS `true`;
+
+statement skipped query
+SELECT bool '   f           ' AS false;
+-------
+ false
+-------
+ False
+
+statement query
+SELECT Cast('false' as Bool) AS `false`;
+
+statement skipped query
+SELECT Cast('test' as Bool) AS error;
+-------
+ error
+-------
+
+
+statement skipped query
+SELECT bool 'foo' AS error;
+ERROR:  invalid input syntax for type boolean: "foo"
+LINE 1: SELECT bool 'foo' AS error;
+                    ^
+SELECT bool 'y' AS true;
+------
+ true
+------
+ True
+
+statement skipped query
+SELECT bool 'yes' AS true;
+------
+ true
+------
+ True
+
+statement skipped query
+SELECT bool 'yeah' AS error;
+ERROR:  invalid input syntax for type boolean: "yeah"
+LINE 1: SELECT bool 'yeah' AS error;
+                    ^
+SELECT bool 'n' AS false;
+-------
+ false
+-------
+ False
+
+statement skipped query
+SELECT bool 'no' AS false;
+-------
+ false
+-------
+ False
+
+statement skipped query
+SELECT bool 'nay' AS error;
+ERROR:  invalid input syntax for type boolean: "nay"
+LINE 1: SELECT bool 'nay' AS error;
+                    ^
+SELECT bool 'on' AS true;
+------
+ true
+------
+ True
+
+statement skipped query
+SELECT bool 'off' AS false;
+-------
+ false
+-------
+ False
+
+statement skipped query
+SELECT bool 'of' AS false;
+-------
+ false
+-------
+ False
+
+statement skipped query
+SELECT bool 'o' AS error;
+ERROR:  invalid input syntax for type boolean: "o"
+LINE 1: SELECT bool 'o' AS error;
+                    ^
+SELECT bool 'on_' AS error;
+ERROR:  invalid input syntax for type boolean: "on_"
+LINE 1: SELECT bool 'on_' AS error;
+                    ^
+SELECT bool 'off_' AS error;
+ERROR:  invalid input syntax for type boolean: "off_"
+LINE 1: SELECT bool 'off_' AS error;
+                    ^
+SELECT bool '1' AS true;
+------
+ true
+------
+ True
+
+statement skipped query
+SELECT bool '11' AS error;
+ERROR:  invalid input syntax for type boolean: "11"
+LINE 1: SELECT bool '11' AS error;
+                    ^
+SELECT bool '0' AS false;
+-------
+ false
+-------
+ False
+
+statement skipped query
+SELECT bool '000' AS error;
+ERROR:  invalid input syntax for type boolean: "000"
+LINE 1: SELECT bool '000' AS error;
+                    ^
+SELECT bool '' AS error;
+ERROR:  invalid input syntax for type boolean: ""
+LINE 1: SELECT bool '' AS error;
+                    ^
+SELECT bool 't' or bool 'f' AS true;
+------
+ true
+------
+ True
+
+statement skipped query
+SELECT bool 't' and bool 'f' AS false;
+-------
+ false
+-------
+ False
+
+statement skipped query
+SELECT not bool 'f' AS true;
+------
+ true
+------
+ True
+
+statement skipped query
+SELECT bool 't' = bool 'f' AS false;
+-------
+ false
+-------
+ False
+
+statement skipped query
+SELECT bool 't' <> bool 'f' AS true;
+------
+ true
+------
+ True
+
+statement skipped query
+SELECT bool 't' > bool 'f' AS true;
+------
+ true
+------
+ True
+
+statement skipped query
+SELECT bool 't' >= bool 'f' AS true;
+------
+ true
+------
+ True
+
+statement skipped query
+SELECT bool 'f' < bool 't' AS true;
+------
+ true
+------
+ True
+
+statement skipped query
+SELECT bool 'f' <= bool 't' AS true;
+------
+ true
+------
+ True
+
+statement skipped query
+SELECT 'TrUe'::text::boolean AS true, 'fAlse'::text::boolean AS false;
+---------------
+ true | false |
+------+-------+
+ True | False |
+
+statement skipped query
+SELECT '    true   '::text::boolean AS true,
+       '     FALSE'::text::boolean AS false;
+---------------
+ true | false |
+------+-------+
+ True | False |
+
+statement skipped query
+SELECT true::boolean::text AS true, false::boolean::text AS false;
+---------------
+ true | false |
+------+-------+
+ true | false |
+
+statement skipped query
+SELECT '  tru e '::text::boolean AS invalid;    -- error
+ERROR:  invalid input syntax for type boolean: "  tru e "
+SELECT ''::text::boolean AS invalid;            -- error
+ERROR:  invalid input syntax for type boolean: ""
+CREATE TABLE BOOLTBL1 (f1 bool);
+INSERT INTO BOOLTBL1 (f1) VALUES (bool 't');
+INSERT INTO BOOLTBL1 (f1) VALUES (bool 'True');
+INSERT INTO BOOLTBL1 (f1) VALUES (bool 'true');
+SELECT '' AS t_3, BOOLTBL1.* FROM BOOLTBL1;
+-------------
+ t_3 | f1   |
+-----+------+
+     | True |
+     | True |
+     | True |
+
+statement skipped query
+SELECT '' AS t_3, BOOLTBL1.*
+   FROM BOOLTBL1
+   WHERE f1 = bool 'true';
+-------------
+ t_3 | f1   |
+-----+------+
+     | True |
+     | True |
+     | True |
+
+statement skipped query
+SELECT '' AS t_3, BOOLTBL1.*
+   FROM BOOLTBL1
+   WHERE f1 <> bool 'false';
+-------------
+ t_3 | f1   |
+-----+------+
+     | True |
+     | True |
+     | True |
+
+statement skipped query
+SELECT '' AS zero, BOOLTBL1.*
+   FROM BOOLTBL1
+   WHERE booleq(bool 'false', f1);
+------------
+ zero | f1 |
+------+----+
+
+INSERT INTO BOOLTBL1 (f1) VALUES (bool 'f');
+statement skipped query
+SELECT '' AS f_1, BOOLTBL1.*
+   FROM BOOLTBL1
+   WHERE f1 = bool 'false';
+--------------
+ f_1 | f1    |
+-----+-------+
+     | False |
+
+CREATE TABLE BOOLTBL2 (f1 bool);
+INSERT INTO BOOLTBL2 (f1) VALUES (bool 'f');
+INSERT INTO BOOLTBL2 (f1) VALUES (bool 'false');
+INSERT INTO BOOLTBL2 (f1) VALUES (bool 'False');
+INSERT INTO BOOLTBL2 (f1) VALUES (bool 'FALSE');
+INSERT INTO BOOLTBL2 (f1)
+   VALUES (bool 'XXX');
+ERROR:  invalid input syntax for type boolean: "XXX"
+LINE 2:    VALUES (bool 'XXX');
+                        ^
+statement skipped query
+SELECT '' AS f_4, BOOLTBL2.* FROM BOOLTBL2;
+--------------
+ f_4 | f1    |
+-----+-------+
+     | False |
+     | False |
+     | False |
+     | False |
+
+statement skipped query
+SELECT '' AS tf_12, BOOLTBL1.*, BOOLTBL2.*
+   FROM BOOLTBL1, BOOLTBL2
+   WHERE BOOLTBL2.f1 <> BOOLTBL1.f1;
+---------------------------
+ tf_12    | f1    | f1    |
+----------+-------+-------+
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+ (12rows) |
+
+statement skipped query
+SELECT '' AS tf_12, BOOLTBL1.*, BOOLTBL2.*
+   FROM BOOLTBL1, BOOLTBL2
+   WHERE boolne(BOOLTBL2.f1,BOOLTBL1.f1);
+---------------------------
+ tf_12    | f1    | f1    |
+----------+-------+-------+
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+          | True  | False |
+ (12rows) |
+
+statement skipped query
+SELECT '' AS ff_4, BOOLTBL1.*, BOOLTBL2.*
+   FROM BOOLTBL1, BOOLTBL2
+   WHERE BOOLTBL2.f1 = BOOLTBL1.f1 and BOOLTBL1.f1 = bool 'false';
+-----------------------
+ ff_4 | f1    | f1    |
+------+-------+-------+
+      | False | False |
+      | False | False |
+      | False | False |
+      | False | False |
+
+statement skipped query
+SELECT '' AS tf_12_ff_4, BOOLTBL1.*, BOOLTBL2.*
+   FROM BOOLTBL1, BOOLTBL2
+   WHERE BOOLTBL2.f1 = BOOLTBL1.f1 or BOOLTBL1.f1 = bool 'true'
+   ORDER BY BOOLTBL1.f1, BOOLTBL2.f1;
+-----------------------------
+ tf_12_ff_4 | f1    | f1    |
+------------+-------+-------+
+            | False | False |
+            | False | False |
+            | False | False |
+            | False | False |
+            | True  | False |
+            | True  | False |
+            | True  | False |
+            | True  | False |
+            | True  | False |
+            | True  | False |
+            | True  | False |
+            | True  | False |
+            | True  | False |
+            | True  | False |
+            | True  | False |
+            | True  | False |
+ (16rows)   |
+
+--
+--
+statement skipped query
+SELECT '' AS "True", f1
+   FROM BOOLTBL1
+   WHERE f1 IS TRUE;
+--------------
+ True | f1   |
+------+------+
+      | True |
+      | True |
+      | True |
+
+statement skipped query
+SELECT '' AS "Not False", f1
+   FROM BOOLTBL1
+   WHERE f1 IS NOT FALSE;
+------------------
+ NotFalse | f1   |
+----------+------+
+          | True |
+          | True |
+          | True |
+
+statement skipped query
+SELECT '' AS "False", f1
+   FROM BOOLTBL1
+   WHERE f1 IS FALSE;
+----------------
+ False | f1    |
+-------+-------+
+       | False |
+
+statement skipped query
+SELECT '' AS "Not True", f1
+   FROM BOOLTBL1
+   WHERE f1 IS NOT TRUE;
+------------------
+ NotTrue | f1    |
+---------+-------+
+         | False |
+
+statement skipped query
+SELECT '' AS "True", f1
+   FROM BOOLTBL2
+   WHERE f1 IS TRUE;
+------------
+ True | f1 |
+------+----+
+
+statement skipped query
+SELECT '' AS "Not False", f1
+   FROM BOOLTBL2
+   WHERE f1 IS NOT FALSE;
+----------------
+ NotFalse | f1 |
+----------+----+
+
+statement skipped query
+SELECT '' AS "False", f1
+   FROM BOOLTBL2
+   WHERE f1 IS FALSE;
+----------------
+ False | f1    |
+-------+-------+
+       | False |
+       | False |
+       | False |
+       | False |
+
+statement skipped query
+SELECT '' AS "Not True", f1
+   FROM BOOLTBL2
+   WHERE f1 IS NOT TRUE;
+------------------
+ NotTrue | f1    |
+---------+-------+
+         | False |
+         | False |
+         | False |
+         | False |
+
+--
+--
+CREATE TABLE BOOLTBL3 (d text, b bool, o int);
+INSERT INTO BOOLTBL3 (d, b, o) VALUES ('true', true, 1);
+INSERT INTO BOOLTBL3 (d, b, o) VALUES ('false', false, 2);
+INSERT INTO BOOLTBL3 (d, b, o) VALUES ('null', null, 3);
+statement skipped query
+SELECT
+    d,
+    b IS TRUE AS istrue,
+    b IS NOT TRUE AS isnottrue,
+    b IS FALSE AS isfalse,
+    b IS NOT FALSE AS isnotfalse,
+    b IS UNKNOWN AS isunknown,
+    b IS NOT UNKNOWN AS isnotunknown
+FROM booltbl3 ORDER BY o;
+-------------------------------------------------------------------------------
+ d     | istrue | isnottrue | isfalse | isnotfalse | isunknown | isnotunknown |
+-------+--------+-----------+---------+------------+-----------+--------------+
+ true  | True   | False     | False   | True       | False     | True         |
+ false | False  | True      | True    | False      | False     | True         |
+ null  | False  | True      | False   | True       | True      | False        |
+
+--
+--
+DROP TABLE  BOOLTBL1;
+DROP TABLE  BOOLTBL2;
+DROP TABLE  BOOLTBL3;

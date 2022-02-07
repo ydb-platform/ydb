@@ -1,0 +1,7 @@
+{
+   google_protobuf_cpp_unclean_shutdown
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*google*protobuf*
+}

@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package Ydb.Operation.V1;
+option java_package = "com.yandex.ydb.operation.v1";
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+// All rpc calls to YDB are allowed to be asynchronous. Response message
+// of an rpc call contains Operation structure and OperationService
+// is used for polling operation completion.
+//
+// Operation has a field 'ready' to notify client if operation has been
+// completed or not. If result is ready a client has to handle 'result' field,
+// otherwise it is expected that client continues polling result via
+// GetOperation rpc of OperationService. Polling is made via unique
+// operation id provided in 'id' field of Operation.
+//
+// Note: Currently some operations have synchronous implementation and their result
+// is available when response is obtained. But a client must not make any
+// assumptions about synchronous or asynchronous nature of any operation and
+// be ready to poll operation status.
+
+service OperationService {
+
+    // Check status for a given operation.
+    rpc GetOperation(Operations.GetOperationRequest) returns (Operations.GetOperationResponse);
+
+    // Starts cancellation of a long-running operation,
+    // Clients can use GetOperation to check whether the cancellation succeeded
+    // or whether the operation completed despite cancellation.
+    rpc CancelOperation(Operations.CancelOperationRequest) returns (Operations.CancelOperationResponse);
+
+    // Forgets long-running operation. It does not cancel the operation and returns
+    // an error if operation was not completed.
+    rpc ForgetOperation(Operations.ForgetOperationRequest) returns (Operations.ForgetOperationResponse);
+
+    // Lists operations that match the specified filter in the request.
+    rpc ListOperations(Operations.ListOperationsRequest) returns (Operations.ListOperationsResponse);
+}

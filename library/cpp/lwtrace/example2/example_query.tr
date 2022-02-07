@@ -1,0 +1,79 @@
+Blocks {
+   ProbeDesc {
+       Name: "StartupProbe"
+       Provider: "LWTRACE_EXAMPLE_PROVIDER"
+   }
+   Action {
+       PrintToStderrAction { }
+   }
+}
+
+Blocks {
+   ProbeDesc { Name: "IterationProbe" Provider: "LWTRACE_EXAMPLE_PROVIDER" }
+   Action {
+       LogAction {
+           LogTimestamp: true
+           MaxRecords: 2
+       }
+   }
+}
+
+Blocks {
+   ProbeDesc { Name: "ByrefDurationProbe" Provider: "LWTRACE_EXAMPLE_PROVIDER" }
+   Action {
+       LogAction {
+           LogTimestamp: true
+           MaxRecords: 1
+       }
+   }
+   Action {
+       PrintToStderrAction { }
+   }
+}
+
+Blocks {
+   ProbeDesc { Name: "DurationProbe" Provider: "LWTRACE_EXAMPLE_PROVIDER" }
+   Action {
+       LogAction {
+           LogTimestamp: true
+           MaxRecords: 1
+       }
+   }
+   Action {
+       PrintToStderrAction { }
+   }
+}
+
+Blocks {
+   ProbeDesc { Name: "ResultProbe" Provider: "LWTRACE_EXAMPLE_PROVIDER" }
+   Action {
+       PrintToStderrAction { }
+   }
+   Action {
+       LogAction { LogTimestamp: true }
+   }
+}
+
+
+Blocks {
+   ProbeDesc { Name: "AfterInputProbe" Provider: "LWTRACE_EXAMPLE_PROVIDER" }
+   Action {
+       StatementAction {
+           Type: ST_MOD
+           Argument { Variable: "nMod2" }
+           Argument { Param: "n" }
+           Argument { Value: "2" }
+       }
+   }
+}
+Blocks {
+   ProbeDesc { Name: "AfterInputProbe" Provider: "LWTRACE_EXAMPLE_PROVIDER" }
+   Predicate {
+       Operators {
+           Type: OT_EQ
+           Argument { Variable: "nMod2" }
+           Argument { Value: "0" }
+       }
+   }
+   Action { LogAction { } }
+}

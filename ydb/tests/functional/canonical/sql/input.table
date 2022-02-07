@@ -1,0 +1,15 @@
+path: "/local/Input"
+columns {
+  name: "key"
+  type { optional_type { item { type_id: UINT64 } } }
+}
+columns {
+  name: "subkey"
+  type { optional_type { item { type_id: UINT32 } } }
+}
+columns {
+  name: "value"
+  type { optional_type { item { type_id: STRING } } }
+}
+primary_key: "key"
+primary_key: "subkey"

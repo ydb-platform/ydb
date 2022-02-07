@@ -1,0 +1,15 @@
+package NKikimrTxMediatorTimecast;
+option java_package = "ru.yandex.kikimr.proto";
+
+// set watch from local timecast stub on mediator (for counted buckets)
+message TEvWatch {
+    repeated uint32 Bucket = 1;
+}
+
+// update for bucket
+message TEvUpdate {
+    optional uint64 Mediator = 1;
+    optional uint32 Bucket = 2;
+    optional fixed64 TimeBarrier = 4;
+    repeated fixed64 Exemption = 5;
+}

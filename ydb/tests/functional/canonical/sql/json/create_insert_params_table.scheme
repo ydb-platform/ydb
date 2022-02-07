@@ -1,0 +1,6 @@
+--!syntax_v1
+CREATE TABLE ResultParamsJD (
+    Key Int32,
+    Value JsonDocument,
+    PRIMARY KEY (Key)
+);

@@ -1,0 +1,41 @@
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_join_join_to_idx_lookup_right_key_range_sql_plan/InputJoin1",
+            "reads": [
+                {
+                    "type": "FullScan",
+                    "scan_by": [
+                        "Key"
+                    ],
+                    "columns": [
+                        "Fk22",
+                        "Value"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "/local/base_join_join_to_idx_lookup_right_key_range_sql_plan/InputJoin2",
+            "reads": [
+                {
+                    "type": "Lookup",
+                    "lookup_by": [
+                        "Key1 (\"101\")"
+                    ],
+                    "scan_by": [
+                        "Key2"
+                    ],
+                    "columns": [
+                        "Key2",
+                        "Value"
+                    ]
+                }
+            ]
+        }
+    ]
+}

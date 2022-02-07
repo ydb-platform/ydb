@@ -1,0 +1,20 @@
+[
+    {
+        "name": "A",
+        "code": "p",
+        "b_cnt": 2,
+        "const": -1
+    },
+    {
+        "name": "B",
+        "code": "q",
+        "b_cnt": 0,
+        "const": -1
+    },
+    {
+        "name": "C",
+        "code": null,
+        "b_cnt": null,
+        "const": null
+    }
+]

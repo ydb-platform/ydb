@@ -1,0 +1,7 @@
+items:
+- name: Чтение и запись данных
+  href: crud.md
+  hidden: true
+- name: Обслуживание дисковой подсистемы кластера
+  href: manual/operation.md
+  when: audience == "tech"

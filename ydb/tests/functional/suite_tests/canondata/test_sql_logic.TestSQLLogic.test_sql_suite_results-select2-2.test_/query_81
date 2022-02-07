@@ -1,0 +1,93 @@
+[
+    {
+        "col1": null,
+        "col2": null,
+        "col3": null,
+        "col4": null,
+        "col5": null
+    },
+    {
+        "col1": null,
+        "col2": 2,
+        "col3": null,
+        "col4": null,
+        "col5": null
+    },
+    {
+        "col1": null,
+        "col2": null,
+        "col3": null,
+        "col4": -1,
+        "col5": null
+    },
+    {
+        "col1": null,
+        "col2": 1,
+        "col3": 369,
+        "col4": null,
+        "col5": 1226
+    },
+    {
+        "col1": 132,
+        "col2": 4,
+        "col3": 391,
+        "col4": 1,
+        "col5": 1325
+    },
+    {
+        "col1": 137,
+        "col2": 2,
+        "col3": 416,
+        "col4": 1,
+        "col5": 1371
+    },
+    {
+        "col1": 142,
+        "col2": 2,
+        "col3": 428,
+        "col4": -4,
+        "col5": 1411
+    },
+    {
+        "col1": 172,
+        "col2": 2,
+        "col3": 514,
+        "col4": -2,
+        "col5": 1714
+    },
+    {
+        "col1": 182,
+        "col2": 3,
+        "col3": 544,
+        "col4": 3,
+        "col5": 1828
+    },
+    {
+        "col1": 187,
+        "col2": 1,
+        "col3": 560,
+        "col4": -4,
+        "col5": 1861
+    },
+    {
+        "col1": 192,
+        "col2": 1,
+        "col3": 579,
+        "col4": -2,
+        "col5": 1918
+    },
+    {
+        "col1": 212,
+        "col2": 3,
+        "col3": 635,
+        "col4": 2,
+        "col5": 2125
+    },
+    {
+        "col1": 222,
+        "col2": 1,
+        "col3": 666,
+        "col4": 1,
+        "col5": 2226
+    }
+]

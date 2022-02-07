@@ -1,0 +1,242 @@
+--- contrib/python/s3transfer/py3/tests/functional/test_copy.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_copy.py	(working tree)
+@@ -15,7 +15,7 @@ from botocore.stub import Stubber
+ 
+ from s3transfer.manager import TransferConfig, TransferManager
+ from s3transfer.utils import MIN_UPLOAD_CHUNKSIZE
+-from tests import BaseGeneralInterfaceTest, FileSizeProvider
++from __tests__ import BaseGeneralInterfaceTest, FileSizeProvider
+ 
+ 
+ class BaseCopyTest(BaseGeneralInterfaceTest):
+--- contrib/python/s3transfer/py3/tests/functional/test_crt.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_crt.py	(working tree)
+@@ -18,7 +18,7 @@ from concurrent.futures import Future
+ from botocore.session import Session
+ 
+ from s3transfer.subscribers import BaseSubscriber
+-from tests import HAS_CRT, FileCreator, mock, requires_crt, unittest
++from __tests__ import HAS_CRT, FileCreator, mock, requires_crt, unittest
+ 
+ if HAS_CRT:
+     import awscrt
+--- contrib/python/s3transfer/py3/tests/functional/test_delete.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_delete.py	(working tree)
+@@ -11,7 +11,7 @@
+ # ANY KIND, either express or implied. See the License for the specific
+ # language governing permissions and limitations under the License.
+ from s3transfer.manager import TransferManager
+-from tests import BaseGeneralInterfaceTest
++from __tests__ import BaseGeneralInterfaceTest
+ 
+ 
+ class TestDeleteObject(BaseGeneralInterfaceTest):
+--- contrib/python/s3transfer/py3/tests/functional/test_download.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_download.py	(working tree)
+@@ -23,7 +23,7 @@ from botocore.exceptions import ClientError
+ from s3transfer.compat import SOCKET_ERROR
+ from s3transfer.exceptions import RetriesExceededError
+ from s3transfer.manager import TransferConfig, TransferManager
+-from tests import (
++from __tests__ import (
+     BaseGeneralInterfaceTest,
+     FileSizeProvider,
+     NonSeekableWriter,
+--- contrib/python/s3transfer/py3/tests/functional/test_manager.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_manager.py	(working tree)
+@@ -17,7 +17,7 @@ from botocore.awsrequest import create_request_object
+ from s3transfer.exceptions import CancelledError, FatalError
+ from s3transfer.futures import BaseExecutor
+ from s3transfer.manager import TransferConfig, TransferManager
+-from tests import StubbedClientTest, mock, skip_if_using_serial_implementation
++from __tests__ import StubbedClientTest, mock, skip_if_using_serial_implementation
+ 
+ 
+ class ArbitraryException(Exception):
+--- contrib/python/s3transfer/py3/tests/functional/test_processpool.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_processpool.py	(working tree)
+@@ -21,7 +21,7 @@ from botocore.stub import Stubber
+ 
+ from s3transfer.exceptions import CancelledError
+ from s3transfer.processpool import ProcessPoolDownloader, ProcessTransferConfig
+-from tests import FileCreator, mock, unittest
++from __tests__ import FileCreator, mock, unittest
+ 
+ 
+ class StubbedClient:
+--- contrib/python/s3transfer/py3/tests/functional/test_upload.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_upload.py	(working tree)
+@@ -23,7 +23,7 @@ from botocore.stub import ANY
+ 
+ from s3transfer.manager import TransferConfig, TransferManager
+ from s3transfer.utils import ChunksizeAdjuster
+-from tests import (
++from __tests__ import (
+     BaseGeneralInterfaceTest,
+     NonSeekableReader,
+     RecordingOSUtils,
+--- contrib/python/s3transfer/py3/tests/functional/test_utils.py	(index)
++++ contrib/python/s3transfer/py3/tests/functional/test_utils.py	(working tree)
+@@ -16,7 +16,7 @@ import socket
+ import tempfile
+ 
+ from s3transfer.utils import OSUtils
+-from tests import skip_if_windows, unittest
++from __tests__ import skip_if_windows, unittest
+ 
+ 
+ @skip_if_windows('Windows does not support UNIX special files')
+--- contrib/python/s3transfer/py3/tests/unit/test_bandwidth.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_bandwidth.py	(working tree)
+@@ -25,7 +25,7 @@ from s3transfer.bandwidth import (
+     TimeUtils,
+ )
+ from s3transfer.futures import TransferCoordinator
+-from tests import mock, unittest
++from __tests__ import mock, unittest
+ 
+ 
+ class FixedIncrementalTickTimeUtils(TimeUtils):
+--- contrib/python/s3transfer/py3/tests/unit/test_compat.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_compat.py	(working tree)
+@@ -17,7 +17,7 @@ import tempfile
+ from io import BytesIO
+ 
+ from s3transfer.compat import BaseManager, readable, seekable
+-from tests import skip_if_windows, unittest
++from __tests__ import skip_if_windows, unittest
+ 
+ 
+ class ErrorRaisingSeekWrapper:
+--- contrib/python/s3transfer/py3/tests/unit/test_copies.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_copies.py	(working tree)
+@@ -11,7 +11,7 @@
+ # ANY KIND, either express or implied. See the License for the specific
+ # language governing permissions and limitations under the License.
+ from s3transfer.copies import CopyObjectTask, CopyPartTask
+-from tests import BaseTaskTest, RecordingSubscriber
++from __tests__ import BaseTaskTest, RecordingSubscriber
+ 
+ 
+ class BaseCopyTaskTest(BaseTaskTest):
+--- contrib/python/s3transfer/py3/tests/unit/test_crt.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_crt.py	(working tree)
+@@ -15,7 +15,7 @@ from botocore.session import Session
+ 
+ from s3transfer.exceptions import TransferNotDoneError
+ from s3transfer.utils import CallArgs
+-from tests import HAS_CRT, FileCreator, mock, requires_crt, unittest
++from __tests__ import HAS_CRT, FileCreator, mock, requires_crt, unittest
+ 
+ if HAS_CRT:
+     import awscrt.s3
+--- contrib/python/s3transfer/py3/tests/unit/test_delete.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_delete.py	(working tree)
+@@ -11,7 +11,7 @@
+ # ANY KIND, either express or implied. See the License for the specific
+ # language governing permissions and limitations under the License.
+ from s3transfer.delete import DeleteObjectTask
+-from tests import BaseTaskTest
++from __tests__ import BaseTaskTest
+ 
+ 
+ class TestDeleteObjectTask(BaseTaskTest):
+--- contrib/python/s3transfer/py3/tests/unit/test_download.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_download.py	(working tree)
+@@ -37,7 +37,7 @@ from s3transfer.download import (
+ from s3transfer.exceptions import RetriesExceededError
+ from s3transfer.futures import IN_MEMORY_DOWNLOAD_TAG, BoundedExecutor
+ from s3transfer.utils import CallArgs, OSUtils
+-from tests import (
++from __tests__ import (
+     BaseSubmissionTaskTest,
+     BaseTaskTest,
+     FileCreator,
+--- contrib/python/s3transfer/py3/tests/unit/test_futures.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_futures.py	(working tree)
+@@ -37,7 +37,7 @@ from s3transfer.utils import (
+     NoResourcesAvailable,
+     TaskSemaphore,
+ )
+-from tests import (
++from __tests__ import (
+     RecordingExecutor,
+     TransferCoordinatorWithInterrupt,
+     mock,
+--- contrib/python/s3transfer/py3/tests/unit/test_manager.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_manager.py	(working tree)
+@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
+ from s3transfer.exceptions import CancelledError, FatalError
+ from s3transfer.futures import TransferCoordinator
+ from s3transfer.manager import TransferConfig, TransferCoordinatorController
+-from tests import TransferCoordinatorWithInterrupt, unittest
++from __tests__ import TransferCoordinatorWithInterrupt, unittest
+ 
+ 
+ class FutureResultException(Exception):
+--- contrib/python/s3transfer/py3/tests/unit/test_processpool.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_processpool.py	(working tree)
+@@ -39,7 +39,7 @@ from s3transfer.processpool import (
+     ignore_ctrl_c,
+ )
+ from s3transfer.utils import CallArgs, OSUtils
+-from tests import (
++from __tests__ import (
+     FileCreator,
+     StreamWithError,
+     StubbedClientTest,
+--- contrib/python/s3transfer/py3/tests/unit/test_s3transfer.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_s3transfer.py	(working tree)
+@@ -33,7 +33,7 @@ from s3transfer import (
+     random_file_extension,
+ )
+ from s3transfer.exceptions import RetriesExceededError, S3UploadFailedError
+-from tests import mock, unittest
++from __tests__ import mock, unittest
+ 
+ 
+ class InMemoryOSLayer(OSUtils):
+--- contrib/python/s3transfer/py3/tests/unit/test_subscribers.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_subscribers.py	(working tree)
+@@ -12,7 +12,7 @@
+ # language governing permissions and limitations under the License.
+ from s3transfer.exceptions import InvalidSubscriberMethodError
+ from s3transfer.subscribers import BaseSubscriber
+-from tests import unittest
++from __tests__ import unittest
+ 
+ 
+ class ExtraMethodsSubscriber(BaseSubscriber):
+--- contrib/python/s3transfer/py3/tests/unit/test_tasks.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_tasks.py	(working tree)
+@@ -23,7 +23,7 @@ from s3transfer.tasks import (
+     Task,
+ )
+ from s3transfer.utils import CallArgs, FunctionContainer, get_callbacks
+-from tests import (
++from __tests__ import (
+     BaseSubmissionTaskTest,
+     BaseTaskTest,
+     RecordingSubscriber,
+--- contrib/python/s3transfer/py3/tests/unit/test_upload.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_upload.py	(working tree)
+@@ -32,7 +32,7 @@ from s3transfer.upload import (
+     UploadSubmissionTask,
+ )
+ from s3transfer.utils import MIN_UPLOAD_CHUNKSIZE, CallArgs, OSUtils
+-from tests import (
++from __tests__ import (
+     BaseSubmissionTaskTest,
+     BaseTaskTest,
+     FileSizeProvider,
+--- contrib/python/s3transfer/py3/tests/unit/test_utils.py	(index)
++++ contrib/python/s3transfer/py3/tests/unit/test_utils.py	(working tree)
+@@ -43,7 +43,7 @@ from s3transfer.utils import (
+     invoke_progress_callbacks,
+     random_file_extension,
+ )
+-from tests import NonSeekableWriter, RecordingSubscriber, mock, unittest
++from __tests__ import NonSeekableWriter, RecordingSubscriber, mock, unittest
+ 
+ 
+ class TestGetCallbacks(unittest.TestCase):

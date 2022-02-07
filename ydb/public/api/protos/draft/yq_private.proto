@@ -1,0 +1,156 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Yq.Private;
+
+import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+
+import "ydb/public/api/protos/yq.proto";
+
+import "google/protobuf/timestamp.proto";
+
+////////////////////////////////////////////////////////////
+
+message GetTaskRequest {
+    string tenant = 1;
+    string owner_id = 2; // guid, should be refreshed on node restart
+    string host = 3;
+    Ydb.Operations.OperationParams operation_params = 4;
+}
+
+message SignedIdentity {
+    string value = 1;
+    string signature = 2;
+}
+
+message TopicConsumer {
+    string database_id = 1;
+    string database = 2;
+    string topic_path = 3;
+    string consumer_name = 4;
+    string cluster_endpoint = 5;
+    bool use_ssl = 6;
+    string token_name = 7;
+    bool add_bearer_to_token = 8;
+}
+
+message GetTaskResult {
+    message Task {
+        // come back later in 10 sec ?
+        SignedIdentity result_id = 1;
+        SignedIdentity query_id = 2;
+        SignedIdentity job_id = 3;
+        uint64 generation = 4;
+
+        bool streaming = 5;
+        repeated bytes dq_graph = 6;
+        // text, connection and binding are empty if dq_graph is not empty
+        string text = 7;
+        repeated YandexQuery.Connection connection = 8;
+        repeated YandexQuery.Binding binding = 9;
+
+        string user_token = 10; // IAM token for debug
+        repeated SignedIdentity service_accounts = 11;
+        string user_id = 12;
+        YandexQuery.QueryContent.QueryType query_type = 13;
+        string scope = 14;
+        YandexQuery.ExecuteMode execute_mode = 15;
+        YandexQuery.StateLoadMode state_load_mode = 16;
+        YandexQuery.QueryMeta.ComputeStatus status = 17;
+        repeated YandexQuery.ResultSetMeta result_set_meta = 18;
+        repeated TopicConsumer created_topic_consumers = 19;
+        int32 dq_graph_index = 20;
+        map<string, string> sensor_labels = 21;
+
+        bool automatic = 22;
+        string query_name = 23;
+        google.protobuf.Timestamp deadline = 24;
+        YandexQuery.StreamingDisposition disposition = 25;
+    }
+    repeated Task tasks = 1;
+}
+
+message GetTaskResponse {
+    Ydb.Operations.Operation operation = 1; // GetTaskResult
+}
+
+message PingTaskRequest {
+    string owner_id = 1;
+    SignedIdentity query_id = 2;
+    SignedIdentity job_id = 3;
+    SignedIdentity result_id = 4;
+    YandexQuery.QueryMeta.ComputeStatus status = 5;
+    repeated Ydb.Issue.IssueMessage issues = 6;
+    repeated Ydb.Issue.IssueMessage transient_issues = 16;
+    uint32 result_set_count = 7;
+    string statistics = 8;
+    repeated YandexQuery.ResultSetMeta result_set_meta = 9;
+    string executer_info = 10;
+    repeated bytes dq_graph = 11;
+    int32 dq_graph_index = 20;
+    string ast = 12;
+    string plan = 13;
+    bool resign_query = 14;
+    repeated TopicConsumer created_topic_consumers = 17;
+    YandexQuery.StateLoadMode state_load_mode = 18;
+    YandexQuery.StreamingDisposition disposition = 19;
+    Ydb.Operations.OperationParams operation_params = 15;
+    string scope = 100; //TODO remove
+    google.protobuf.Timestamp started_at = 101;
+    google.protobuf.Timestamp finished_at = 102;
+    google.protobuf.Timestamp deadline = 103;
+}
+
+message PingTaskResult {
+    YandexQuery.QueryAction action = 1;
+}
+
+message PingTaskResponse {
+    Ydb.Operations.Operation operation = 1; // PingTaskResult
+}
+
+message WriteTaskResultRequest {
+    string owner_id = 1;
+    SignedIdentity result_id = 2;
+    Ydb.ResultSet result_set = 3;
+    uint32 result_set_id = 4;
+    uint64 offset = 5;
+    uint64 request_id = 6;
+    Ydb.Operations.OperationParams operation_params = 7;
+    google.protobuf.Timestamp deadline = 8;
+}
+
+message WriteTaskResultResult {
+    uint64 request_id = 1;
+}
+
+message WriteTaskResultResponse {
+    Ydb.Operations.Operation operation = 1; // WriteRowsResultResult
+}
+
+message NodeInfo {
+    uint32 node_id = 1;
+    string instance_id = 2;
+    string hostname = 3;
+    uint64 active_workers = 4;
+    uint64 memory_limit = 5;
+    uint64 memory_allocated = 6;
+    uint32 interconnect_port = 7;
+    string node_address = 8;
+}
+
+message NodesHealthCheckRequest {
+    string tenant = 1;
+    NodeInfo node = 2;
+    Ydb.Operations.OperationParams operation_params = 6;
+}
+
+message NodesHealthCheckResult {
+    repeated NodeInfo nodes = 1;
+}
+
+message NodesHealthCheckResponse {
+    Ydb.Operations.Operation operation = 1; // NodesHealthCheckResult
+}

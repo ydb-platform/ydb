@@ -1,0 +1,22 @@
+[
+    [
+        {
+            "Amount": 10,
+            "Comment": "NullGroup",
+            "Group": null,
+            "Name": "Name1"
+        },
+        {
+            "Amount": 100,
+            "Comment": "Test1",
+            "Group": 1,
+            "Name": "Name1"
+        },
+        {
+            "Amount": 101,
+            "Comment": "Test1",
+            "Group": 1,
+            "Name": "Name2"
+        }
+    ]
+]

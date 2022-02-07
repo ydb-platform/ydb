@@ -1,0 +1,10 @@
+path: "/local/InputJD"
+columns {
+  name: "Key"
+  type { optional_type { item { type_id: INT32 } } }
+}
+columns {
+  name: "Value"
+  type { optional_type { item { type_id: JSON_DOCUMENT } } }
+}
+primary_key: "Key"

@@ -1,0 +1,75 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Scripting;
+option java_package = "com.yandex.ydb.scripting";
+option java_outer_classname = "ScriptingProtos";
+
+import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_value.proto";
+
+// TODO: Refactor to ydb_query usage.
+import "ydb/public/api/protos/ydb_table.proto";
+import "ydb/public/api/protos/ydb_query_stats.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+
+message ExecuteYqlRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string script = 2;
+    map<string, TypedValue> parameters = 3;
+    Ydb.Table.QueryStatsCollection.Mode collect_stats = 4;
+}
+
+message ExecuteYqlResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ExecuteYqlResult {
+    repeated Ydb.ResultSet result_sets = 1;
+    Ydb.TableStats.QueryStats query_stats = 2;
+}
+
+// Response for StreamExecuteYql is a stream of ExecuteYqlPartialResponse messages.
+// These responses can contain ExecuteYqlPartialResult messages with
+// results (or result parts) for data or scan queries in the script.
+// YqlScript can have multiple results (result sets).
+// Each result set has an index (starting at 0).
+message ExecuteYqlPartialResponse {
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+    ExecuteYqlPartialResult result = 3;
+}
+
+// Contains result set (or a result set part) for one data or scan query in the script.
+// One result set can be split into several responses with same result_index.
+// Only the final response can contain query stats.
+message ExecuteYqlPartialResult {
+    // Index of current result
+    uint32 result_set_index = 1;
+    // Result set (or a result set part) for one data or scan query
+    Ydb.ResultSet result_set = 2;
+    Ydb.TableStats.QueryStats query_stats = 3;
+}
+
+message ExplainYqlRequest {
+    enum Mode {
+        MODE_UNSPECIFIED = 0;
+        // PARSE = 1;
+        VALIDATE = 2;
+        PLAN = 3;
+    }
+
+    Ydb.Operations.OperationParams operation_params = 1;
+    string script = 2;
+    Mode mode = 3;
+}
+
+message ExplainYqlResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ExplainYqlResult {
+    map<string, Type> parameters_types = 1;
+    string plan = 2;
+}

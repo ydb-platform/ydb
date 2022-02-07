@@ -1,0 +1,354 @@
+commit 911e2c633fc9f75ea587f9763470ee6140cea0f1
+Author: Lukas Fittl <lukas@fittl.com>
+Date:   Sun Jan 3 15:56:21 2021 -0800
+
+    pg_query: Support parsing ? character as param reference
+    
+    This is for compatibility with Postgres 9.6 and older, which used ?
+    as the replacement character in pg_stat_statements.
+    
+    Note that this intentionally breaks use of ? as an operator in some
+    uncommon cases.
+    
+    This patch will likely be removed with the next major parser release, and
+    should be considered deprecated.
+
+diff --git a/src/backend/parser/gram.y b/src/backend/parser/gram.y
+index cf2b521c23..ad796b87e1 100644
+--- a/src/backend/parser/gram.y
++++ b/src/backend/parser/gram.y
+@@ -164,6 +164,7 @@ static Node *makeAConst(Value *v, int location);
+ static Node *makeBoolAConst(bool state, int location);
+ static Node *makeParamRef(int number, int location);
+ static Node *makeParamRefCast(int number, int location, TypeName *typename);
++static Node *makeInterval_or_AExprOp(Node *lexpr, Node *rexpr, int location);
+ static RoleSpec *makeRoleSpec(RoleSpecType type, int location);
+ static void check_qualified_name(List *names, core_yyscan_t yyscanner);
+ static List *check_func_name(List *names, core_yyscan_t yyscanner);
+@@ -745,6 +746,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
+ %nonassoc	'<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS
+ %nonassoc	BETWEEN IN_P LIKE ILIKE SIMILAR NOT_LA
+ %nonassoc	ESCAPE			/* ESCAPE must be just above LIKE/ILIKE/SIMILAR */
++%left		'?'
+ %left		POSTFIXOP		/* dummy for postfix Op rules */
+ /*
+  * To support target_el without AS, we must give IDENT an explicit priority
+@@ -1033,6 +1035,11 @@ AlterOptRoleElem:
+ 					$$ = makeDefElem("password",
+ 						(Node *)makeParamRef($2, @2), @1);
+ 				}
++			| PASSWORD '?'
++				{
++					$$ = makeDefElem("password",
++						(Node *)makeParamRef(0, @2), @1);
++				}
+ 			| PASSWORD NULL_P
+ 				{
+ 					$$ = makeDefElem("password", NULL, @1);
+@@ -1057,6 +1064,16 @@ AlterOptRoleElem:
+ 					$$ = makeDefElem("password",
+ 									 (Node *)makeParamRef($3, @3), @1);
+ 				}
++			| ENCRYPTED PASSWORD '?'
++				{
++					/*
++					 * These days, passwords are always stored in encrypted
++					 * form, so there is no difference between PASSWORD and
++					 * ENCRYPTED PASSWORD.
++					 */
++					$$ = makeDefElem("password",
++									 (Node *)makeParamRef(0, @3), @1);
++				}
+ 			| UNENCRYPTED PASSWORD Sconst
+ 				{
+ 					ereport(ERROR,
+@@ -1552,6 +1569,14 @@ set_rest_more:	/* Generic SET syntaxes: */
+ 					n->args = list_make1(makeParamRef($2, @2));
+ 					$$ = n;
+ 				}
++			| SCHEMA '?'
++				{
++					VariableSetStmt *n = makeNode(VariableSetStmt);
++					n->kind = VAR_SET_VALUE;
++					n->name = "search_path";
++					n->args = list_make1(makeParamRef(0, @2));
++					$$ = n;
++				}
+ 			| NAMES opt_encoding
+ 				{
+ 					VariableSetStmt *n = makeNode(VariableSetStmt);
+@@ -1579,6 +1604,14 @@ set_rest_more:	/* Generic SET syntaxes: */
+ 					n->args = list_make1(makeParamRef($2, @2));
+ 					$$ = n;
+ 				}
++			| ROLE '?'
++				{
++					VariableSetStmt *n = makeNode(VariableSetStmt);
++					n->kind = VAR_SET_VALUE;
++					n->name = "role";
++					n->args = list_make1(makeParamRef(0, @2));
++					$$ = n;
++				}
+ 			| SESSION AUTHORIZATION NonReservedWord_or_Sconst
+ 				{
+ 					VariableSetStmt *n = makeNode(VariableSetStmt);
+@@ -1595,6 +1628,14 @@ set_rest_more:	/* Generic SET syntaxes: */
+ 					n->args = list_make1(makeParamRef($3, @3));
+ 					$$ = n;
+ 				}
++			| SESSION AUTHORIZATION '?'
++				{
++					VariableSetStmt *n = makeNode(VariableSetStmt);
++					n->kind = VAR_SET_VALUE;
++					n->name = "session_authorization";
++					n->args = list_make1(makeParamRef(0, @3));
++					$$ = n;
++				}
+ 			| SESSION AUTHORIZATION DEFAULT
+ 				{
+ 					VariableSetStmt *n = makeNode(VariableSetStmt);
+@@ -1636,6 +1677,8 @@ var_value:	opt_boolean_or_string
+ 				{ $$ = makeAConst($1, @1); }
+ 			| PARAM
+ 				{ $$ = makeParamRef($1, @1); }
++			| '?'
++				{ $$ = makeParamRef(0, @1); }
+ 		;
+ 
+ iso_level:	READ UNCOMMITTED						{ $$ = "read uncommitted"; }
+@@ -1673,6 +1716,10 @@ zone_value:
+ 				{
+ 					$$ = makeParamRef($1, @1);
+ 				}
++			| '?'
++				{
++					$$ = makeParamRef(0, @1);
++				}
+ 			| IDENT
+ 				{
+ 					$$ = makeStringConst($1, @1);
+@@ -13276,6 +13323,11 @@ a_expr:		c_expr									{ $$ = $1; }
+ 			| a_expr qual_Op					%prec POSTFIXOP
+ 				{ $$ = (Node *) makeA_Expr(AEXPR_OP, $2, $1, NULL, @2); }
+ 
++			| a_expr '?' a_expr
++				{ $$ = makeInterval_or_AExprOp($1, $3, @2); }
++			| a_expr '?'
++				{ $$ = makeInterval_or_AExprOp($1, NULL, @2); }
++
+ 			| a_expr AND a_expr
+ 				{ $$ = makeAndExpr($1, $3, @2); }
+ 			| a_expr OR a_expr
+@@ -13684,6 +13736,10 @@ b_expr:		c_expr
+ 				{ $$ = (Node *) makeSimpleA_Expr(AEXPR_OP, ">=", $1, $3, @2); }
+ 			| b_expr NOT_EQUALS b_expr
+ 				{ $$ = (Node *) makeSimpleA_Expr(AEXPR_OP, "<>", $1, $3, @2); }
++			| b_expr '?' b_expr
++				{ $$ = makeInterval_or_AExprOp($1, $3, @2); }
++			| b_expr '?'
++				{ $$ = makeInterval_or_AExprOp($1, NULL, @2); }
+ 			| b_expr qual_Op b_expr				%prec Op
+ 				{ $$ = (Node *) makeA_Expr(AEXPR_OP, $2, $1, $3, @2); }
+ 			| qual_Op b_expr					%prec Op
+@@ -13744,6 +13800,21 @@ c_expr:		columnref								{ $$ = $1; }
+ 					else
+ 						$$ = (Node *) p;
+ 				}
++			| '?' opt_indirection
++				{
++					ParamRef *p = makeNode(ParamRef);
++					p->number = 0;
++					p->location = @1;
++					if ($2)
++					{
++						A_Indirection *n = makeNode(A_Indirection);
++						n->arg = (Node *) p;
++						n->indirection = check_indirection($2, yyscanner);
++						$$ = (Node *) n;
++					}
++					else
++						$$ = (Node *) p;
++				}
+ 			| '(' a_expr ')' opt_indirection
+ 				{
+ 					if ($4)
+@@ -14585,6 +14656,7 @@ MathOp:		 '+'									{ $$ = "+"; }
+ 			| LESS_EQUALS							{ $$ = "<="; }
+ 			| GREATER_EQUALS						{ $$ = ">="; }
+ 			| NOT_EQUALS							{ $$ = "<>"; }
++			| '?'									{ $$ = "?"; }
+ 		;
+ 
+ qual_Op:	Op
+@@ -14700,6 +14772,10 @@ extract_list:
+ 				{
+ 					$$ = list_make2(makeParamRef($1, @1), $3);
+ 				}
++			| '?' FROM a_expr
++				{
++					$$ = list_make2(makeParamRef(0, @1), $3);
++				}
+ 			| /*EMPTY*/								{ $$ = NIL; }
+ 		;
+ 
+@@ -15208,7 +15284,7 @@ AexprConst: Iconst
+ 				{
+ 					TypeName *t = $1;
+ 					t->typmods = $3;
+-					$$ = makeParamRefCast($2, @3, t);
++					$$ = makeParamRefCast($2, @2, t);
+ 				}
+ 			| ConstInterval '(' Iconst ')' PARAM
+ 				{
+@@ -15217,6 +15293,14 @@ AexprConst: Iconst
+ 											makeIntConst($3, @3));
+ 					$$ = makeParamRefCast($5, @5, t);
+ 				}
++			/* Version without () is handled in a_expr/b_expr logic due to ? mis-parsing as operator */
++			| ConstInterval '(' Iconst ')' '?'
++				{
++					TypeName *t = $1;
++					t->typmods = list_make2(makeIntConst(INTERVAL_FULL_RANGE, -1),
++											makeIntConst($3, @3));
++					$$ = makeParamRefCast(0, @5, t);
++				}
+ 			| TRUE_P
+ 				{
+ 					$$ = makeBoolAConst(true, @1);
+@@ -16089,6 +16173,33 @@ makeParamRefCast(int number, int location, TypeName *typename)
+ 	return makeTypeCast(p, typename, -1);
+ }
+ 
++/*
++ * Makes INTERVAL-like nodes for "INTERVAL ?" and "INTERVAL ? opt_interval", otherwise treat as A_EXPR
++ */
++static Node *
++makeInterval_or_AExprOp(Node *lexpr, Node *rexpr, int location)
++{
++	if (lexpr && IsA(lexpr, ColumnRef))
++	{
++		ColumnRef *c = (ColumnRef *) lexpr;
++		if (strcmp(strVal(linitial(c->fields)), "interval") == 0 )
++		{
++			TypeName *t = SystemTypeName("interval");
++			t->location = c->location;
++
++			/* Its too difficult to tell the parser to give us the right typemod,
++			 * just use a dummy one if present
++			 */
++			if (rexpr)
++				t->typmods = list_make1(makeIntConst(0, -1));
++
++			return makeParamRefCast(0, location, t);
++		}
++	}
++
++	return (Node *) makeA_Expr(AEXPR_OP, list_make1(makeString("?")), lexpr, rexpr, location);
++}
++
+ /* makeRoleSpec
+  * Create a RoleSpec with the given type
+  */
+diff --git a/src/backend/parser/scan.l b/src/backend/parser/scan.l
+index b1ea0cb538..9ba31f418c 100644
+--- a/src/backend/parser/scan.l
++++ b/src/backend/parser/scan.l
+@@ -277,6 +277,9 @@ xehexesc		[\\]x[0-9A-Fa-f]{1,2}
+ xeunicode		[\\](u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8})
+ xeunicodefail	[\\](u[0-9A-Fa-f]{0,3}|U[0-9A-Fa-f]{0,7})
+ 
++/* Normalized escaped string */
++xe_normalized  [eE]\?
++
+ /* Extended quote
+  * xqdouble implements embedded quote, ''''
+  */
+@@ -343,8 +346,9 @@ xcinside		[^*/]+
+ digit			[0-9]
+ ident_start		[A-Za-z\200-\377_]
+ ident_cont		[A-Za-z\200-\377_0-9\$]
++ident_end     [\?]
+ 
+-identifier		{ident_start}{ident_cont}*
++identifier		{ident_start}{ident_cont}*{ident_end}*
+ 
+ /* Assorted special-case operators and operator-like tokens */
+ typecast		"::"
+@@ -375,7 +379,7 @@ not_equals		"!="
+  * If you change either set, adjust the character lists appearing in the
+  * rule for "operator"!
+  */
+-self			[,()\[\].;\:\+\-\*\/\%\^\<\>\=]
++self			[,()\[\].;\:\+\-\*\/\%\^\<\>\=\?]
+ op_chars		[\~\!\@\#\^\&\|\`\?\+\-\*\/\%\<\>\=]
+ operator		{op_chars}+
+ 
+@@ -811,6 +815,11 @@ other			.
+ 					return IDENT;
+ 				}
+ 
++{xe_normalized} {
++					/* ignore E */
++					return yytext[1];
++				}
++
+ {typecast}		{
+ 					SET_YYLLOC();
+ 					return TYPECAST;
+@@ -917,6 +926,26 @@ other			.
+ 						}
+ 					}
+ 
++					/* We don't accept leading ? in any multi-character operators
++					 * except for those in use by hstore, JSON and geometric operators.
++					 *
++					 * We don't accept contained or trailing ? in any
++					 * multi-character operators, except for those in use by JSON operators.
++					 *
++					 * This is necessary in order to support normalized queries without
++					 * spacing between ? as a substition character and a simple operator (e.g. "?=?")
++					 */
++					if (yytext[0] == '?' &&
++					  strcmp(yytext, "?|") != 0 && strcmp(yytext, "?&") != 0 &&
++					  strcmp(yytext, "?#") != 0 && strcmp(yytext, "?-") != 0 &&
++					  strcmp(yytext, "?-|") != 0 && strcmp(yytext, "?||") != 0)
++						nchars = 1;
++
++					if (yytext[0] != '?' && strchr(yytext, '?') &&
++					  strcmp(yytext, "@?") != 0)
++						/* Lex up to just before the ? character */
++						nchars = strchr(yytext, '?') - yytext;
++
+ 					SET_YYLLOC();
+ 
+ 					if (nchars < yyleng)
+@@ -930,7 +959,7 @@ other			.
+ 						 * that the "self" rule would have.
+ 						 */
+ 						if (nchars == 1 &&
+-							strchr(",()[].;:+-*/%^<>=", yytext[0]))
++							strchr(",()[].;:+-*/%^<>=?", yytext[0]))
+ 							return yytext[0];
+ 						/*
+ 						 * Likewise, if what we have left is two chars, and
+@@ -1012,14 +1041,19 @@ other			.
+ {identifier}	{
+ 					int			kwnum;
+ 					char	   *ident;
++					char *keyword_text = pstrdup(yytext);
+ 
+ 					SET_YYLLOC();
+ 
+ 					/* Is it a keyword? */
+-					kwnum = ScanKeywordLookup(yytext,
++					if (yytext[yyleng - 1] == '?')
++					  keyword_text[yyleng - 1] = '\0';
++					kwnum = ScanKeywordLookup(keyword_text,
+ 											  yyextra->keywordlist);
+ 					if (kwnum >= 0)
+ 					{
++						if (keyword_text[yyleng - 1] == '\0')
++						  yyless(yyleng - 1);
+ 						yylval->keyword = GetScanKeyword(kwnum,
+ 														 yyextra->keywordlist);
+ 						return yyextra->keyword_tokens[kwnum];

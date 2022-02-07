@@ -1,0 +1,73 @@
+import "google/protobuf/descriptor.proto";
+
+package NMonProto;
+
+option java_package = "ru.yandex.monlib.proto";
+option java_outer_classname = "MetricMetaProto";
+
+enum EMetricType {
+    GAUGE = 1;
+    RATE = 2;
+}
+
+enum EMemOnly {
+    DEFAULT = 0;
+    STORE = 1;
+    MEM_ONLY = 2;
+}
+
+message TMetricMeta {
+    optional EMetricType Type = 1;
+    optional bool Path = 2;
+    optional string Keys = 3;
+    optional bool MemOnly = 4;
+    optional bool IgnorePath = 5;
+    optional string CustomPath = 6;
+}
+
+enum THistogramBase {
+    MICROSECOND = 3;
+    MILLISECOND = 6;
+    SECOND      = 9;
+    MINUTE      = 12;
+    HOUR        = 15;
+}
+
+message THistogramEntry {
+    optional uint64 Multiplier = 1;
+    optional double Value = 2;
+}
+
+message THistogram {
+    optional THistogramBase Base = 1;
+    optional string BaseStr = 2;
+    repeated THistogramEntry Entries = 5;
+}
+
+// field of this type is recognized by Solomon
+message TExtraLabelMetrics {
+    optional string labelName = 1;
+
+    message TValue {
+        optional string labelValue = 1;
+        // used only if != 0
+        optional uint64 labelValueUint = 21;
+
+        optional uint64 longValue = 2;
+        optional double doubleValue = 3;
+        optional THistogram histogramValue = 4;
+
+        optional EMetricType type = 7;
+        optional EMemOnly memOnly = 8;
+        optional bool dropHost = 9;
+
+        repeated TExtraLabelMetrics children = 17;
+    }
+
+    repeated TValue values = 2;
+}
+
+extend google.protobuf.FieldOptions {
+    optional TMetricMeta Metric = 1719;
+}
+

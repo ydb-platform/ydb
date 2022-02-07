@@ -1,0 +1,7 @@
+syntax = "proto3";
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TAllocatorConfig {
+    map<string, string> Param = 1;
+};

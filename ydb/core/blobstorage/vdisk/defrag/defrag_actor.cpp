@@ -1,0 +1,425 @@
+#include "defrag_actor.h"
+#include "defrag_quantum.h"
+#include "defrag_search.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
+#include <ydb/core/blobstorage/vdisk/common/circlebufstream.h>
+#include <ydb/core/blobstorage/vdisk/common/sublog.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+#include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
+#include <library/cpp/actors/core/invoke.h>
+
+namespace NKikimr {
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TDefragCtx
+    ////////////////////////////////////////////////////////////////////////////
+    TDefragCtx::TDefragCtx(
+            const TIntrusivePtr<TVDiskContext> &vctx,
+            const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
+            const TPDiskCtxPtr &pdiskCtx,
+            const TActorId &skeletonId,
+            const TActorId &hugeKeeperId,
+            bool runDefrageBySchedule)
+        : VCtx(vctx)
+        , HugeBlobCtx(hugeBlobCtx)
+        , PDiskCtx(pdiskCtx)
+        , SkeletonId(skeletonId)
+        , HugeKeeperId(hugeKeeperId)
+        , DefragMonGroup(VCtx->VDiskCounters, "subsystem", "defrag")
+        , RunDefragBySchedule(runDefrageBySchedule)
+    {}
+
+    TDefragCtx::~TDefragCtx() = default;
+
+    struct TEvDefragStartQuantum : TEventLocal<TEvDefragStartQuantum, TEvBlobStorage::EvDefragStartQuantum> {
+        TChunksToDefrag ChunksToDefrag;
+
+        TEvDefragStartQuantum(TChunksToDefrag chunksToDefrag)
+            : ChunksToDefrag(std::move(chunksToDefrag))
+        {}
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
+    // HugeHeapDefragmentationRequired
+    // We calculate allowd percent of garbage as a percent of chunks
+    // that can be freed to number of chunks used by VDisk
+    ////////////////////////////////////////////////////////////////////////////
+    bool HugeHeapDefragmentationRequired(
+            const TOutOfSpaceState& oos,
+            ui32 hugeCanBeFreedChunks,
+            ui32 hugeTotalChunks) {
+
+        if (hugeCanBeFreedChunks < 10)
+            return false;
+
+        double percentOfGarbage = static_cast<double>(hugeCanBeFreedChunks) / hugeTotalChunks;
+
+        if (oos.GetLocalColor() > TSpaceColor::CYAN) {
+            return percentOfGarbage >= 0.02;
+        } else if (oos.GetLocalColor() > TSpaceColor::GREEN) {
+            return percentOfGarbage >= 0.15;
+        } else {
+            return percentOfGarbage >= 0.30;
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TDefragLocalSheduler
+    // We use statistics about free space share and numbe of used/canBeFreed chunks
+    // from Huge Heap to decide if to run defragmentation.
+    // TODO: think about running compaction in case of inactivity
+    ////////////////////////////////////////////////////////////////////////////
+    class TDefragLocalSheduler : public TActorBootstrapped<TDefragLocalSheduler> {
+        friend class TActorBootstrapped<TDefragLocalSheduler>;
+        std::shared_ptr<TDefragCtx> DCtx;
+        const TActorId DefragActorId;
+        TActorId PlannerId;
+        TDuration PauseMin = TDuration::Minutes(5);
+        TDuration PauseMax = PauseMin + TDuration::Seconds(30);
+
+        enum {
+            EvResume = EventSpaceBegin(TEvents::ES_PRIVATE),
+        };
+
+        class TDefragPlannerActor : public TActorBootstrapped<TDefragPlannerActor> {
+            std::shared_ptr<TDefragCtx> DCtx;
+            TActorId ParentId;
+            std::optional<TDefragCalcStat> CalcStat;
+
+        public:
+            static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+                return NKikimrServices::TActivity::BS_DEFRAG_PLANNER;
+            }
+
+            TDefragPlannerActor(std::shared_ptr<TDefragCtx> dctx)
+                : DCtx(std::move(dctx))
+            {}
+
+            void Bootstrap(const TActorId parentId) {
+                ParentId = parentId;
+                Send(DCtx->SkeletonId, new TEvTakeHullSnapshot(false));
+                Become(&TThis::StateFunc);
+            }
+
+            void Handle(TEvTakeHullSnapshotResult::TPtr ev) {
+                CalcStat.emplace(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx);
+                HandleResume();
+            }
+
+            void HandleResume() {
+                if (CalcStat->Scan(TDuration::MilliSeconds(10))) {
+                    TActivationContext::Send(new IEventHandle(EvResume, 0, SelfId(), {}, nullptr, 0));
+                } else {
+                    const ui32 totalChunks = CalcStat->GetTotalChunks();
+                    const ui32 usefulChunks = CalcStat->GetUsefulChunks();
+                    Y_VERIFY(usefulChunks <= totalChunks);
+                    const ui32 canBeFreedChunks = totalChunks - usefulChunks;
+                    if (HugeHeapDefragmentationRequired(DCtx->VCtx->GetOutOfSpaceState(), canBeFreedChunks, totalChunks)) {
+                        TChunksToDefrag chunksToDefrag = CalcStat->GetChunksToDefrag(DCtx->MaxChunksToDefrag);
+                        Y_VERIFY(chunksToDefrag);
+                        Send(ParentId, new TEvDefragStartQuantum(std::move(chunksToDefrag)));
+                    } else {
+                        Send(ParentId, new TEvDefragStartQuantum(TChunksToDefrag()));
+                    }
+                    PassAway();
+                }
+            }
+
+            STRICT_STFUNC(StateFunc,
+                hFunc(TEvTakeHullSnapshotResult, Handle);
+                cFunc(EvResume, HandleResume);
+                cFunc(TEvents::TSystem::Poison, PassAway);
+            )
+        };
+
+        void RunDefragPlanner(const TActorContext &ctx) {
+            Y_VERIFY(!PlannerId);
+            PlannerId = RunInBatchPool(ctx, new TDefragPlannerActor(DCtx));
+        }
+
+        TDuration GeneratePause() const {
+            const TDuration delta = PauseMax - PauseMin;
+            return PauseMin + TDuration::FromValue(RandomNumber<ui64>(delta.GetValue() + 1));
+        }
+
+        void Handle(TEvDefragStartQuantum::TPtr ev, const TActorContext& ctx) {
+            Y_VERIFY(ev->Sender == PlannerId);
+            PlannerId = {};
+            if (ev->Get()->ChunksToDefrag) {
+                ctx.Send(ev->Forward(DefragActorId));
+            } else {
+                ctx.Schedule(GeneratePause(), new TEvents::TEvWakeup);
+            }
+        }
+
+        void Bootstrap(const TActorContext &ctx) {
+            Become(&TThis::StateFunc, ctx, TDuration::FromValue(RandomNumber<ui64>(PauseMin.GetValue() + 1)), new TEvents::TEvWakeup);
+        }
+
+        void Die(const TActorContext& ctx) override {
+            if (PlannerId) {
+                ctx.Send(new IEventHandle(TEvents::TSystem::Poison, 0, PlannerId, {}, nullptr, 0));
+            }
+            TActorBootstrapped::Die(ctx);
+        }
+
+        STRICT_STFUNC(StateFunc,
+            CFunc(TEvents::TSystem::Poison, Die);
+            CFunc(TEvents::TSystem::Wakeup, RunDefragPlanner);
+            HFunc(TEvDefragStartQuantum, Handle);
+            CFunc(TEvBlobStorage::EvVDefragResult, RunDefragPlanner);
+        )
+
+    public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_DEFRAG_SCHEDULER;
+        }
+
+        TDefragLocalSheduler(const std::shared_ptr<TDefragCtx> &dCtx, const TActorId &defragActorId)
+            : TActorBootstrapped<TDefragLocalSheduler>()
+            , DCtx(dCtx)
+            , DefragActorId(defragActorId)
+        {}
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TDefragActor
+    ////////////////////////////////////////////////////////////////////////////
+    class TDefragActor : public TActorBootstrapped<TDefragActor>
+    {
+        // defrag statistics
+        using TStat = TEvDefragQuantumResult::TStat;
+
+        // Task for database defrag
+        struct TTask {
+            TEvBlobStorage::TEvVDefrag::TPtr Req;
+            TEvDefragStartQuantum::TPtr StartQuantumReq;
+            TStat Stat;
+            bool FirstQuantum = true; // true, if we run a first quantum with this task
+
+            TTask(TEvDefragStartQuantum::TPtr req)
+                : StartQuantumReq(req)
+            {}
+
+            TTask(TEvBlobStorage::TEvVDefrag::TPtr req)
+                : Req(req)
+            {}
+        };
+
+        std::shared_ptr<TDefragCtx> DCtx;
+        TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
+        ui64 TotalDefragRuns = 0;
+        bool InProgress = false;
+        std::deque<TTask> WaitQueue;
+        TActiveActors ActiveActors;
+        TSublog<TCircleBufStringStream<81920>> Sublog = { true };
+
+        friend class TActorBootstrapped<TDefragActor>;
+
+        void RunDefragIfAny(const TActorContext &ctx) {
+            if (InProgress) {
+                return;
+            }
+
+            if (WaitQueue.empty()) {
+                return;
+            }
+
+            auto &task = WaitQueue.front();
+            if (task.FirstQuantum) {
+                task.FirstQuantum = false;
+                Sublog.Log() << "=== Starting Defrag ===\n";
+            }
+
+            Sublog.Log() << "Defrag quantum started\n";
+            ++TotalDefragRuns;
+            InProgress = true;
+            ActiveActors.Insert(RunInBatchPool(ctx, CreateDefragQuantumActor(DCtx,
+                GInfo->GetVDiskId(DCtx->VCtx->ShortSelfVDisk),
+                task.StartQuantumReq ? std::make_optional(std::move(task.StartQuantumReq->Get()->ChunksToDefrag)) : std::nullopt)));
+        }
+
+        void Bootstrap(const TActorContext &ctx) {
+            // create a local scheduler for defrag
+            if (DCtx->RunDefragBySchedule) {
+                auto scheduler = std::make_unique<TDefragLocalSheduler>(DCtx, ctx.SelfID);
+                auto aid = ctx.Register(scheduler.release());
+                ActiveActors.Insert(aid);
+            }
+            Become(&TThis::StateFunc);
+        }
+
+        void Handle(TEvDefragQuantumResult::TPtr &ev, const TActorContext &ctx) {
+            ActiveActors.Erase(ev->Sender);
+            InProgress = false;
+            Sublog.Log() << "Defrag quantum has been finished\n";
+
+            auto *msg = ev->Get();
+            Y_VERIFY(msg->Stat.Eof || msg->Stat.FreedChunks.size() == DCtx->MaxChunksToDefrag);
+
+            auto &task = WaitQueue.front();
+
+            // update stat
+            task.Stat.FoundChunksToDefrag += msg->Stat.FoundChunksToDefrag;
+            task.Stat.RewrittenRecs += msg->Stat.RewrittenRecs;
+            task.Stat.RewrittenBytes += msg->Stat.RewrittenBytes;
+            task.Stat.Eof = msg->Stat.Eof;
+            task.Stat.FreedChunks.insert(task.Stat.FreedChunks.end(), msg->Stat.FreedChunks.begin(), msg->Stat.FreedChunks.end());
+
+            if (msg->Stat.Eof || !task.Req || !task.Req->Get()->Record.GetFull()) {
+                if (task.Req) {
+                    // response to caller
+                    auto vdisk = task.Req->Get()->Record.GetVDiskID();
+                    auto reply = std::make_unique<TEvBlobStorage::TEvVDefragResult>(NKikimrProto::OK, vdisk);
+                    reply->Record.SetFoundChunksToDefrag(task.Stat.FoundChunksToDefrag);
+                    reply->Record.SetRewrittenRecs(task.Stat.RewrittenRecs);
+                    reply->Record.SetRewrittenBytes(task.Stat.RewrittenBytes);
+                    reply->Record.SetEof(task.Stat.Eof);
+                    for (const auto &x : task.Stat.FreedChunks) {
+                        reply->Record.MutableFreedChunks()->Add(x.ChunkId);
+                    }
+                    ctx.Send(task.Req->Sender, reply.release());
+                }
+                // and remove the task from active tasks
+                WaitQueue.pop_front();
+                Sublog.Log() << "=== Defrag Finished ===\n";
+            } // otherwise continue with the same task
+
+            RunDefragIfAny(ctx);
+        }
+
+        void Die(const TActorContext& ctx) override {
+            ActiveActors.KillAndClear(ctx);
+            TActorBootstrapped::Die(ctx);
+        }
+
+        void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
+            Y_UNUSED(ctx);
+            Sublog.Log() << "Generation changed\n";
+            auto *msg = ev->Get();
+            GInfo = msg->NewInfo;
+        }
+
+        void Handle(TEvDefragStartQuantum::TPtr ev, const TActorContext& ctx) {
+            WaitQueue.emplace_back(ev);
+            RunDefragIfAny(ctx);
+        }
+
+        void Handle(TEvBlobStorage::TEvVDefrag::TPtr &ev, const TActorContext &ctx) {
+            Sublog.Log() << "Defrag request\n";
+            WaitQueue.emplace_back(ev);
+            RunDefragIfAny(ctx);
+        }
+
+        void Handle(TEvSublogLine::TPtr &ev, const TActorContext &ctx) {
+            Y_UNUSED(ctx);
+            Sublog.Log() << ev->Get()->GetLine();
+        }
+
+        void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
+            auto subrequest = ev->Get()->SubRequestId;
+            Y_VERIFY(subrequest == TDbMon::Defrag);
+            TStringStream str;
+            RenderHtml(str);
+            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), subrequest));
+        }
+
+        void RenderHtml(IOutputStream &str) const {
+            HTML(str) {
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        str << "Database Defrag";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEBODY() {
+                                TABLER() {
+                                    TABLED() {str << "State";}
+                                    TABLED() {
+                                        if (InProgress) {
+                                            THtmlLightSignalRenderer(NKikimrWhiteboard::EFlag::Yellow, "In progress")
+                                                .Output(str);
+                                        } else {
+                                            THtmlLightSignalRenderer(NKikimrWhiteboard::EFlag::Green, "No defrag")
+                                                .Output(str);
+                                        }
+                                    }
+                                }
+                                TABLER() {
+                                    TABLED() {str << "Wait Queue Size";}
+                                    TABLED() {str << WaitQueue.size(); }
+                                }
+                                TABLER() {
+                                    TABLED() {str << "DCtx->RunDefragBySchedule";}
+                                    TABLED() {str << DCtx->RunDefragBySchedule;}
+                                }
+                                TABLER() {
+                                    TABLED() {str << "TotalDefragRuns";}
+                                    TABLED() {str << TotalDefragRuns;}
+                                }
+                                TABLER() {
+                                    TABLED() {str << "FreeSpaceShare/Threshold";}
+                                    TABLED() {str << DCtx->VCtx->GetOutOfSpaceState().GetFreeSpaceShare();}
+                                }
+                                TABLER() {
+                                    TABLED() {str << "CanBeFreed/Used Huge Heap Chunks";}
+                                    TABLED() {
+                                        auto stat = DCtx->VCtx->GetHugeHeapFragmentation().Get();
+                                        str << stat.CanBeFreedChunks << " / " << stat.CurrentlyUsedChunks;
+                                    }
+                                }
+                                TABLER() {
+                                    TABLED() {str << "VDisk Used Chunks";}
+                                    TABLED() {
+                                        str << DCtx->VCtx->GetOutOfSpaceState().GetLocalUsedChunks();
+                                    }
+                                }
+                            }
+                        }
+
+                        COLLAPSED_BUTTON_CONTENT("defragid", "Log") {
+                            PRE() {str << Sublog.Get();}
+                        }
+
+                        // Full compaction button
+                        str << "<a class=\"btn btn-primary btn-xs navbar-right\""
+                            << " href=\"?type=dbmainpage&dbname=LogoBlobs"
+                            << "&action=defrag\">Run Defrag</a>";
+                    }
+                }
+            }
+        }
+
+        STRICT_STFUNC(StateFunc,
+            CFunc(TEvents::TSystem::Poison, Die)
+            HFunc(TEvVGenerationChange, Handle)
+            HFunc(TEvBlobStorage::TEvVDefrag, Handle)
+            HFunc(NMon::TEvHttpInfo, Handle)
+            HFunc(TEvSublogLine, Handle)
+            HFunc(TEvDefragStartQuantum, Handle)
+            HFunc(TEvDefragQuantumResult, Handle)
+        );
+
+    public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_DEFRAG;
+        }
+
+        TDefragActor(const std::shared_ptr<TDefragCtx> &dCtx, const TIntrusivePtr<TBlobStorageGroupInfo> &info)
+            : TActorBootstrapped<TDefragActor>()
+            , DCtx(dCtx)
+            , GInfo(info)
+        {}
+    };
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    // CreateDefragActor
+    ////////////////////////////////////////////////////////////////////////////
+    IActor* CreateDefragActor(
+            const std::shared_ptr<TDefragCtx> &dCtx,
+            const TIntrusivePtr<TBlobStorageGroupInfo> &info) {
+        return new TDefragActor(dCtx, info);
+    }
+
+} // NKikimr

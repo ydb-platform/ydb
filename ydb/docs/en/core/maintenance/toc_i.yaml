@@ -1,0 +1,19 @@
+items:
+  - name: Backups
+    href: backup_and_recovery.md
+  - name: Introspection tools for self-deployment
+    items:
+    - name: Overview
+      href: embedded_monitoring/overview.md
+    - name: Viewer
+      href: embedded_monitoring/viewer.md
+      when: false
+    - name: YDB Monitoring
+      href: embedded_monitoring/ydb_monitoring.md
+    - name: Connections overview
+      href: embedded_monitoring/interconnect_overview.md
+      # when: false
+    - name: Logs
+      href: embedded_monitoring/logs.md
+    - name: Charts
+      href: embedded_monitoring/charts.md

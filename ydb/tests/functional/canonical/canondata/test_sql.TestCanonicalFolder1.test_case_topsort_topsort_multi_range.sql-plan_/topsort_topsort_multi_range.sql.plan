@@ -1,0 +1,41 @@
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_topsort_topsort_multi_range_sql_plan/Input1",
+            "reads": [
+                {
+                    "type": "Scan",
+                    "scan_by": [
+                        "Group (\"10\", +inf]",
+                        "Name"
+                    ],
+                    "columns": [
+                        "Amount",
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ]
+                },
+                {
+                    "type": "Lookup",
+                    "lookup_by": [
+                        "Group (\"10\")"
+                    ],
+                    "scan_by": [
+                        "Name [\"Name3\", +inf]"
+                    ],
+                    "columns": [
+                        "Amount",
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ]
+                }
+            ]
+        }
+    ]
+}

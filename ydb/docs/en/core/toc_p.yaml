@@ -1,0 +1,5 @@
+title: Yandex Database
+href: index.yaml
+items:
+- include: { mode: link, path: toc_i.yaml }
+

@@ -1,0 +1,6 @@
+[
+{"Key1":false,"Key2":false,"Value":"ff"},
+{"Key1":false,"Key2":true,"Value":"ft"},
+{"Key1":true,"Key2":false,"Value":"tf"},
+{"Key1":true,"Key2":true,"Value":"tt"}
+]

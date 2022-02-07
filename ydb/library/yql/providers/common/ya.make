@@ -1,0 +1,21 @@
+RECURSE(
+    codec
+    config
+    dq
+    gateway
+    http_gateway
+    metrics
+    mkql
+    comp_nodes
+    proto
+    provider
+    schema
+    schema/expr
+    schema/mkql
+    schema/parser
+    schema/skiff
+    structured_token
+    token_accessor
+    transform
+    udf_resolve
+)

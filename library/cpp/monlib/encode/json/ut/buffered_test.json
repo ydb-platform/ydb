@@ -1,0 +1,36 @@
+{
+  "sensors":
+    [
+      {
+        "kind":"COUNTER",
+        "labels":
+          {
+            "foo":"bar"
+          },
+        "timeseries":
+          [
+            {
+              "ts":1,
+              "value":42
+            },
+            {
+              "ts":2,
+              "value":42
+            },
+            {
+              "ts":4,
+              "value":42
+            }
+          ]
+      },
+      {
+        "kind":"COUNTER",
+        "labels":
+          {
+            "foo":"baz"
+          },
+        "ts":3,
+        "value":42
+      }
+    ]
+}

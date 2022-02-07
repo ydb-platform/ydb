@@ -1,0 +1,24 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+import "ydb/library/yql/providers/dq/api/protos/service.proto";
+
+package Yql.DqsProto;
+
+service DqService {
+    rpc ExecuteGraph (ExecuteGraphRequest) returns (ExecuteGraphResponse);
+    rpc SvnRevision (SvnRevisionRequest) returns (SvnRevisionResponse);
+    rpc RegisterNode (RegisterNodeRequest) returns (RegisterNodeResponse);
+    rpc OpenSession (OpenSessionRequest) returns (OpenSessionResponse);
+    rpc CloseSession (CloseSessionRequest) returns (CloseSessionResponse);
+    rpc PingSession (PingSessionRequest) returns (PingSessionResponse);
+    rpc ClusterStatus (ClusterStatusRequest) returns (ClusterStatusResponse);
+    rpc OperationStop (OperationStopRequest) returns (OperationStopResponse);
+    rpc QueryStatus (QueryStatusRequest) returns (QueryStatusResponse);
+    rpc JobStop (JobStopRequest) returns (JobStopResponse);
+    rpc GetMaster (GetMasterRequest) returns (GetMasterResponse);
+    rpc ConfigureFailureInjector (ConfigureFailureInjectorRequest) returns (ConfigureFailureInjectorResponse);
+    rpc IsReady (IsReadyRequest) returns (IsReadyResponse);
+    rpc Routes (RoutesRequest) returns (RoutesResponse);
+    rpc Benchmark (BenchmarkRequest) returns (BenchmarkResponse);
+}

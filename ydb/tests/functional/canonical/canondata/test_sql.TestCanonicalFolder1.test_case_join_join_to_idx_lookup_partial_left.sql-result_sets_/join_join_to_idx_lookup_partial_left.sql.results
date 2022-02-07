@@ -1,0 +1,44 @@
+[
+    [
+        {
+            "Value1": "Value1",
+            "Value2": "Value21",
+            "Value3": 1001
+        },
+        {
+            "Value1": "Value1",
+            "Value2": "Value22",
+            "Value3": 1001
+        },
+        {
+            "Value1": "Value1",
+            "Value2": "Value23",
+            "Value3": null
+        },
+        {
+            "Value1": "Value1",
+            "Value2": "Value24",
+            "Value3": 1002
+        },
+        {
+            "Value1": "Value3",
+            "Value2": "Value27",
+            "Value3": 1002
+        },
+        {
+            "Value1": "Value3",
+            "Value2": "Value28",
+            "Value3": 1004
+        },
+        {
+            "Value1": "Value3",
+            "Value2": "Value29",
+            "Value3": null
+        },
+        {
+            "Value1": "Value4",
+            "Value2": null,
+            "Value3": null
+        }
+    ]
+]

@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package NKikimrIssues;
+option java_package = "ru.yandex.kikimr.proto";
+
+import "ydb/library/yql/public/issue/protos/issue_severity.proto";
+
+message TIssuesIds {
+// reserved range [200000, 399999]
+    enum EIssueCode {
+        DEFAULT_ERROR = 0;
+        UNEXPECTED = 1;
+        INFO = 2;
+        WARNING = 3;
+        SUCCESS = 4;
+
+        ACCESS_DENIED = 200000;
+
+        PATH_NOT_EXIST = 200200;
+        DATABASE_NOT_EXIST = 200202;
+
+        GENERIC_DATASHARD_ERROR = 200300;
+
+        GENERIC_RESOLVE_ERROR = 200400;
+        RESOLVE_LOOKUP_ERROR = 200401;
+
+        GENERIC_TXPROXY_ERROR = 200500;
+        KEY_PARSE_ERROR = 200501;
+        EMPTY_OP_RANGE = 200502;
+        ENGINE_ERROR = 200503;
+        DOMAIN_LOCALITY_ERROR = 200504;
+        SHARD_NOT_AVAILABLE = 200505;
+        TX_STATE_UNKNOWN = 200506;
+        TX_DECLINED_BY_COORDINATOR = 200507;
+        TX_DECLINED_IMPLICIT_COORDINATOR = 200508;
+        SHARD_PROGRAM_SIZE_EXCEEDED = 200509;
+
+        SCOPE_REQPROXY = 200600;
+
+        SCOPE_TXPROXY_INTERPRET = 200700;
+        SCOPE_TXPROXY_RESOLVE = 200701;
+        SCOPE_TXPROXY_PREPARE = 200702;
+        SCOPE_TXPROXY_EXECUTE = 200703;
+
+        YDB_API_VALIDATION_ERROR = 200800;
+        YDB_AUTH_UNAVAILABLE = 200801;
+        YDB_DB_NOT_READY = 200802;
+        YDB_RESOURCE_USAGE_LIMITED = 200803;
+    }
+
+    message TIssueId {
+        EIssueCode code = 2;
+        NYql.TSeverityIds.ESeverityId severity = 1;
+        string format = 3;
+    }
+
+    repeated TIssueId ids = 1;
+}
+
+message TStatusIds {
+    enum EStatusCode {
+        UNKNOWN = 0;
+        SUCCESS = 1;
+        TRANSIENT = 2;
+
+        ERROR = 128;
+        INPROGRESS = 129;
+        TIMEOUT = 130;
+        NOTREADY = 131;
+        INTERNAL_ERROR = 133;
+        REJECTED = 134;
+        NOTSUPPORTED = 135;
+        OVERLOADED = 136;
+        PATH_NOT_EXIST = 137;
+        ACCESS_DENIED = 138;
+
+        BAD_REQUEST = 150;
+        QUERY_ERROR = 151;
+        PROCESS_ERROR = 152;
+        BAD_SESSION = 153;
+
+        LOCKS_INVALIDATED = 170;
+        LOCKS_ACQUIRE_FAILURE = 171;
+        SCHEME_ERROR = 172;
+    }
+}

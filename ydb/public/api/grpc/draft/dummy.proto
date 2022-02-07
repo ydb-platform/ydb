@@ -1,0 +1,30 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+package Draft.Dummy;
+
+message PingRequest {
+    bool copy = 1;
+    bytes payload = 2;
+}
+
+message PingResponse {
+    bytes payload = 1;
+}
+
+message InfiniteRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message InfiniteResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+service DummyService {
+    rpc Ping(PingRequest) returns (PingResponse);
+    rpc Infinite(InfiniteRequest) returns (InfiniteResponse);
+    rpc BiStreamPing(stream PingRequest) returns (stream PingResponse);
+}
+

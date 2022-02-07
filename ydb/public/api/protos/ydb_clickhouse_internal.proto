@@ -1,0 +1,131 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.ClickhouseInternal;
+option java_package = "com.yandex.ydb.clickhouse";
+option java_outer_classname = "ClickhouseInternalProtos";
+
+import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_table.proto";
+
+message ScanRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    string table = 2;
+    repeated string columns = 3;
+
+    bytes from_key = 4;
+    bool from_key_inclusive = 5;
+    bytes to_key = 6;
+    bool to_key_inclusive = 7;
+
+    uint64 max_rows = 8;
+    uint64 max_bytes = 9;
+
+    string snapshot_id = 10;
+}
+
+message ScanResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ScanResult {
+    repeated bytes blocks = 1;
+
+    bool eos = 2; // no more rows
+    bytes last_key = 3;
+    bool last_key_inclusive = 4;
+}
+
+
+message GetShardLocationsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    repeated uint64 tablet_ids = 2;
+}
+
+message GetShardLocationsResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message TabletInfo {
+    uint64 tablet_id = 1;
+    string host = 2;
+    uint32 port = 3;
+}
+
+message GetShardLocationsResult {
+    repeated TabletInfo tablets = 1;
+}
+
+message DescribeTableRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    string path = 2;
+    bool include_partitions_info = 3;
+}
+
+message PartitionInfo {
+    uint64 tablet_id = 1;
+    bytes end_key = 2;
+    bool end_key_inclusive = 3;
+}
+
+message DescribeTableResult {
+    repeated Ydb.Table.ColumnMeta columns = 2;
+    repeated string primary_key = 3;
+    repeated PartitionInfo partitions = 4;
+    bool is_virtual = 5;
+}
+
+message DescribeTableResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message CreateSnapshotRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    repeated string path = 2;
+    bool ignore_system_views = 3;
+}
+
+message CreateSnapshotResult {
+    string snapshot_id = 1;
+    uint64 timeout_ms = 2;
+}
+
+message CreateSnapshotResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message RefreshSnapshotRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    repeated string path = 2;
+    string snapshot_id = 3;
+    bool ignore_system_views = 4;
+}
+
+message RefreshSnapshotResult {
+    string snapshot_id = 1;
+}
+
+message RefreshSnapshotResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DiscardSnapshotRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    repeated string path = 2;
+    string snapshot_id = 3;
+    bool ignore_system_views = 4;
+}
+
+message DiscardSnapshotResult {
+    string snapshot_id = 1;
+}
+
+message DiscardSnapshotResponse {
+    Ydb.Operations.Operation operation = 1;
+}

@@ -1,0 +1,25 @@
+{
+    "insert_from_table.sql": {
+        "compare_tables": ["ResultTableDyNumber"]
+    },
+    "insert_literal.sql": {
+        "compare_tables": ["ResultLiteralDyNumber"]
+    },
+    "insert_params.sql": {
+        "compare_tables": ["ResultParamsDyNumber"],
+        "parameters": {
+            "$data": [
+                {"Key": "1.23", "Value": "{\"name\": \"Jake\", \"age\": 50}"},
+                {"Key": "1.32", "Value": "{\"name\": \"Jessica\", \"age\": 35}"},
+                {"Key": "1.5", "Value": "{\"name\": \"Tom\", \"age\": 3}"}
+            ]
+        }
+    },
+    "select_params.sql": {
+        "check_scan_query": true,
+        "parameters": {
+            "$param1": "-345.678",
+            "$param2": "0.00001"
+        }
+    }
+}

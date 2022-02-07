@@ -1,0 +1,37 @@
+{
+  "sensors":
+    [
+      {
+        "kind":"DSUMMARY",
+        "labels":
+          {
+            "metric":"temperature"
+          },
+        "timeseries":
+          [
+            {
+              "ts":1509843723,
+              "summary":
+                {
+                  "sum":0.8,
+                  "min":-0.5,
+                  "max":1,
+                  "last":1,
+                  "count":3
+                }
+            },
+            {
+              "ts":1509843738,
+              "summary":
+                {
+                  "sum":-0.69,
+                  "min":-1.5,
+                  "max":1,
+                  "last":0.01,
+                  "count":5
+                }
+            }
+          ]
+      }
+    ]
+}

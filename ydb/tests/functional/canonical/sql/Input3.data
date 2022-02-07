@@ -1,0 +1,9 @@
+[
+{"Name":"Anna","Type":1,"Value":"Value_1"},
+{"Name":"Anna","Type":2,"Value":"Value_2"},
+{"Name":"Sergey","Type":1,"Value":"Value_3"},
+{"Name":"Sergey","Type":2,"Value":"Value_4"},
+{"Name":"Dmitry","Type":1,"Value":"Value_5"},
+{"Name":"Dmitry","Type":2,"Value":"Value_6"},
+{"Name":"Dmitry","Type":3,"Value":"Value_7"}
+]

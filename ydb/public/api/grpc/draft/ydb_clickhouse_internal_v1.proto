@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package Ydb.ClickhouseInternal.V1;
+option java_package = "com.yandex.ydb.clickhouse.v1";
+
+import "ydb/public/api/protos/ydb_clickhouse_internal.proto";
+
+service ClickhouseInternalService {
+    rpc Scan(ClickhouseInternal.ScanRequest) returns (ClickhouseInternal.ScanResponse);
+    rpc GetShardLocations(ClickhouseInternal.GetShardLocationsRequest) returns (ClickhouseInternal.GetShardLocationsResponse);
+    rpc DescribeTable(ClickhouseInternal.DescribeTableRequest) returns (ClickhouseInternal.DescribeTableResponse);
+
+    /**
+     * CreateSnapshot creates a temporary consistent snapshot of one or more
+     * tables, which may later be used in requests. Created snapshot will have
+     * an opaque id and a server defined timeout, after which it may become
+     * expired. For prolonged use it must be refreshed before it expires.
+     */
+    rpc CreateSnapshot(ClickhouseInternal.CreateSnapshotRequest) returns (ClickhouseInternal.CreateSnapshotResponse);
+
+    /**
+     * RefreshSnapshot will attempt to refresh a previously created snapshot,
+     * extending expiration time in specified tables.
+     */
+    rpc RefreshSnapshot(ClickhouseInternal.RefreshSnapshotRequest) returns (ClickhouseInternal.RefreshSnapshotResponse);
+
+    /**
+     * DiscardSnapshot will attempt to discard a previously created snapshot,
+     * so resources may be freed earlier than its expiration time.
+     */
+    rpc DiscardSnapshot(ClickhouseInternal.DiscardSnapshotRequest) returns (ClickhouseInternal.DiscardSnapshotResponse);
+}
+

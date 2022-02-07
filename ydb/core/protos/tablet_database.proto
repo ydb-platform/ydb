@@ -1,0 +1,73 @@
+import "ydb/core/protos/base.proto";
+
+package NKikimrTablet;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TExecutorSettings {
+
+    message TLocalityGroupPolicy {
+        optional uint32 LocalityGroupId = 1;
+        optional uint32 MaxChunkSizeBytes = 2;
+        optional uint32 MaxBlobSizeBytes = 3;
+        optional uint32 TabletChannelIndex = 4;
+        optional bool KeepInMemory = 5;
+    }
+
+    message TCompactionPolicy {
+        message TGenerationPolicy {
+            optional uint32 GenerationId = 1;
+            optional uint64 SizeToCompact = 2; //
+            optional uint32 CountToCompact = 3; //
+            optional uint64 TimeFromCompaction = 4; // AND ^^
+            optional uint32 ForceCountToCompact = 10; // OR one of force limits happend
+            optional uint64 ForceSizeToCompact = 11; //
+            optional uint64 ForceTimeFromCompaction = 12; //
+            optional uint32 CompactionQueue = 20; // what broker queue to use for compaction (by default: generationid + 1)
+        }
+
+        optional uint64 InMemSizeToSnapshot = 1; //
+        optional uint32 InMemStepsToSnapshot = 2; // snapshot inmem state when size AND steps from last snapshot passed 
+        optional uint32 InMemForceStepsToSnapshot = 3; // OR steps passed
+        optional uint64 InMemForceSizeToSnapshot = 4; // OR size reached
+        optional uint64 InMemForceTimeToSnapshot = 5; // OR time from last snapshot passed
+        optional uint32 InMemCompactionQueue = 6; // default: 0
+
+        repeated TGenerationPolicy Generation = 10;
+    }
+
+    message TDatabasePolicy {
+        optional uint64 MainCacheSize = 1;
+        optional uint32 ExecutorTxInFly = 2;
+        optional uint32 TabletMetaInfoChannelIndex = 3;
+
+        optional TCompactionPolicy CompactionPolicy = 10;
+        repeated TLocalityGroupPolicy LocalityGroupPolicy = 11;
+
+        reserved 100; //optional bool ExposeCounters = 100;
+    }
+
+    message TRuntimeSettings {
+
+    }
+
+    optional TDatabasePolicy DatabasePolicy = 1;
+    optional TRuntimeSettings RuntimeSettings = 2;
+}
+
+message TCompactionBroker {
+    message TQueueType {
+        optional uint32 QueueID = 1;
+        optional uint32 Quota = 2;
+    }
+
+    repeated TQueueType Queue = 1;
+}
+
+message TEvSetCompactionBrokerConfig {
+    optional TCompactionBroker Config = 1;
+}
+
+message TEvSetCompactionBrokerConfigResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional bytes Reason = 2;
+}

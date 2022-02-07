@@ -1,0 +1,22 @@
+default:
+  tech: false # Include technical info for developers of services supporting YQL (like YDB), not for users of those services. For instance, debug pragmas.
+  backend_name: YDB
+  backend_name_lower: ydb
+  ydb: true
+  example_cluster: ydbtest
+  feature_secondary_index: true 
+  feature_replace: true
+  feature_upsert: true
+  feature_join: true
+  feature_map_tables: true
+  feature_group_by_rollup_cube: true
+  feature_window_functions: true
+  ydb-full-name: Yandex Database
+  ydb-short-name: YDB
+  yandex-cloud: Yandex.Cloud
+  ydb-name: YDB
+  concept_secondary_index: ../../../../concepts/secondary_indexes
+  concept_table: ../../../../concepts/datamodel#table
+
+  ydb-cli: ydb
+  k8s: Kubernetes

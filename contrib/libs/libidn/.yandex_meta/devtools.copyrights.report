@@ -1,0 +1,293 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1175a9252ea55fb1ae1eb5d0bea6ce71
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2004, 2005, 2006, 2007  Simon Josefsson.
+         * Copyright (C) 2003, 2004  Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tld.c [2:3]
+        tld.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b913280da29e7c568d48dd945239a81
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 2008 Free Software Foundation, Inc.
+           Written by Adam Strzelecki <ono@java.pl>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        unix/ac-stdint.h [1:2]
+        unix/idn-int.h [1:2]
+        win/ac-stdint.h [1:2]
+        win/idn-int.h [1:2]
+        win/stdbool.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1cf17f7b19d381a51bb0eb9ac794dd82
+BELONGS ya.make
+    License text:
+           Copyright (C) 2000-2003, 2006 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        c-ctype.h [8:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2c498261011754b3eebbd1fe30bb8e8a
+BELONGS ya.make
+    License text:
+           Copyright (C) 1995-1996, 2001, 2003, 2005 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        c-strcase.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d5bd290b3155e4b38afdf56b74aafa1
+BELONGS ya.make
+    License text:
+         *                allocated by libidn functions.
+         * Copyright (C) 2004, 2005, 2006, 2007 Simon Josefsson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        idn-free.c [2:3]
+        idn-free.h [2:3]
+        pr29.c [2:2]
+        pr29.h [2:2]
+        tld.c [2:3]
+        tld.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4b27267061138d5aeada7f94d59a605c
+BELONGS ya.make
+    License text:
+           Copyright (C) 1998-1999, 2005-2006 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        c-strcasecmp.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 50ee3d8b0ae1c4c410a6778a3db1972b
+BELONGS ya.make
+    License text:
+           Copyright (C) 2001-2004, 2006-2007 Free Software Foundation, Inc.
+           Written by Bruno Haible and Simon Josefsson.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        striconv.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5e6ac4603c9e28ec37b21df4adad9eb6
+BELONGS ya.make
+    License text:
+           Copyright 2000-2003, 2006 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        c-ctype.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 66c8a6d263c4104acb505c6c1da1f493
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2002, 2003, 2004, 2006, 2007  Simon Josefsson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        nfkc.c [2:2]
+        version.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 853a84c3e22271f1a2b4d0411b481938
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008  Simon Josefsson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        idna.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 861a9defc230fbc15b67a8a7e5965636
+BELONGS ya.make
+    License text:
+           Copyright (C) 1995-1998, 2000-2002, 2004-2006 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gettext.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 88c124ea2144e3542f2b755a880f34d3
+BELONGS ya.make
+    License text:
+           Copyright (C) 1997, 2003 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        strverscmp.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8df671f015c29d2bfbb90b56a000bae9
+BELONGS ya.make
+    License text:
+           Copyright (C) 2001-2007 Free Software Foundation, Inc.
+           Written by Bruno Haible and Simon Josefsson.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        striconv.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a15f58d301f8efa36138b3ea6695be3a
+BELONGS ya.make
+    License text:
+           Copyright (C) 1997, 2000, 2002, 2004, 2006 Free Software Foundation, Inc.
+           This file is part of the GNU C Library.
+           Contributed by Jean-François Bignolles <bignolle@ecoledoc.ibp.fr>, 1997.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        strverscmp.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b7987cd51784c17b1cd3ff497fbab624
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007  Simon Josefsson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        idna.h [2:2]
+        profiles.c [2:2]
+        punycode.c [2:2]
+        punycode.h [2:2]
+        stringprep.c [2:2]
+        stringprep.h [2:2]
+        toutf8.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b826d5602983db98bc0c799c94264763
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2004, 2005, 2006, 2007, 2008  Simon Josefsson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        strerror-idna.c [2:2]
+        strerror-pr29.c [2:2]
+        strerror-punycode.c [2:2]
+        strerror-stringprep.c [2:2]
+        strerror-tld.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING.LIB [428:433]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cbb58944c75049cc30f08e94670ba282
+BELONGS ya.make
+    License text:
+         * Copyright (C) The Internet Society (2003).  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        punycode.c [35:35]
+        punycode.h [35:35]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cea1b82351539a871d540971f218116e
+BELONGS ya.make
+    License text:
+         Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+             51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING.LIB [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e2cd1cb8a88ffafc649fe9fe0ce646fa
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 1999, 2000 Tom Tromey
+         *  Copyright 2000 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        nfkc.c [34:35]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ec215c39e1084ca847e8f877edf4cf8e
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 1999, 2000 Tom Tromey
+         *  Copyright 2000 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        nfkc.c [34:35]

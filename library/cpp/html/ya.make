@@ -1,0 +1,32 @@
+RECURSE(
+    dehtml
+    dehtml/ut
+    detect
+    blob
+    entity
+    entity/ut
+    escape
+    escape/ut
+    face
+    face/blob
+    html5
+    html5/tests
+    html5/ut
+    lexer
+    lexer/ut
+    pcdata
+    pcdata/ut
+    pdoc
+    print
+    relalternate
+    relalternate/ut
+    sanitize
+    spec
+    storage
+    storage/ut
+    strip
+    tree
+    url
+    zoneconf
+    zoneconf/ut
+)

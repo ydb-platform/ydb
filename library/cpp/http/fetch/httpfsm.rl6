@@ -1,0 +1,684 @@
+#include <stdio.h>
+#include <time.h>
+
+#include <library/cpp/charset/doccodes.h>
+#include <library/cpp/charset/codepage.h>
+#include <library/cpp/http/misc/httpcodes.h>
+#include <util/datetime/base.h>
+#include <util/generic/ylimits.h>
+#include <algorithm>    // max
+
+#include <library/cpp/http/fetch/httpheader.h>
+#include <library/cpp/http/fetch/httpfsm.h>
+
+#ifdef _MSC_VER
+#pragma warning(disable: 4702)  // unreachable code
+#endif
+
+#define c(i) I = i;
+#define m(i) I = std::max(I, (long)i);
+
+static inline int X(unsigned char c) {
+    return (c >= 'A' ? ((c & 0xdf) - 'A' + 10) : (c - '0'));
+}
+
+template <typename x>
+static inline void guard(x &val) {
+    val = (val >= -1) ? -4 - val : -2; // f(-2) = -2
+}
+
+template <typename x>
+static inline void setguarded(x &val, long cnt) {
+    val = (val == -4 - -1 || cnt == -4 -val) ? cnt : -2;
+}
+
+////////////////////////////////////////////////////////////////////
+/// HTTP PARSER
+////////////////////////////////////////////////////////////////////
+
+%%{
+machine http_header_parser;
+
+include HttpDateTimeParser "../../../../util/datetime/parser.rl6";
+
+alphtype unsigned char;
+
+################# 2.2 Basic Rules #################
+eol             = '\r'? '\n';
+ws              = [ \t];
+lw              = '\r'? '\n'? ws;
+separator       = [()<>@,;:\\"/\[\]?={}];
+token_char      = [!-~] - separator;          # http tokens chars
+url_char        = [!-~] - ["<>\[\]\\^`{}|];   # uric chars
+text_char       = ws | 33..126 | 128..255;
+any_text_char   = any - [\r\n];
+
+lws             = lw*;
+eoh             = lws eol;
+token           = token_char+;
+ex_token        = (token_char | ws)* token_char;
+text            = (text_char | lw)*;
+any_text        = (any_text_char | lw)*;
+def             = lws ':' lws;
+
+action clear_buf   { buflen = 0; }
+action update_buf  { if (buflen < sizeof(buf)) buf[buflen++] = fc; }
+
+###################################################
+############ response status line #################
+action set_minor  { base_hd->http_minor = I; }
+action set_status {
+    if (hd) {
+        hd->http_status = I;
+    }
+    if (request_hd) {
+        return -3;
+    }
+}
+
+status_code          = int3;
+http_major           = int;
+http_minor           = int;
+reason_phrase        = ws+ text_char*;
+http_version         = "http/"i http_major '.' http_minor %set_minor;
+response_status_line = http_version ws+ status_code reason_phrase? eol %set_status;
+
+############ request status line #################
+action set_request_uri {
+    if (request_hd && buflen < FETCHER_URL_MAX) {
+        if (!request_hd->request_uri.empty()) {
+            return -2;
+        }
+        request_hd->request_uri =TStringBuf(buf, buflen);
+    }
+}
+action set_http_method {
+    if (request_hd) {
+        request_hd->http_method = I;
+    }
+    if (hd) {
+        return -3;
+    }
+}
+
+http_extension_method = token;
+http_method           = ("options"i            %{c(0)} @1
+                      | "get"i                %{c(1)} @1
+                      | "head"i               %{c(2)} @1
+                      | "post"i               %{c(3)} @1
+                      | "put"i                %{c(4)} @1
+                      | "delete"i             %{c(5)} @1
+                      | "trace"i              %{c(6)} @1
+                      | "connect"i            %{c(7)} @1
+                      | http_extension_method %{c(8)} $0)
+                        %set_http_method;
+request_uri          = (token_char | separator)+ >clear_buf $update_buf
+                        %set_request_uri;
+request_status_line   = http_method ws+ request_uri ws+ http_version eoh;
+
+################# connection ######################
+action beg_connection { guard(base_hd->connection_closed); I = -1; }
+action set_connection { setguarded(base_hd->connection_closed, I); }
+
+c_token         = "close"i      %{m(1)}
+                | "keep-alive"i %{m(0)};
+c_tokenlist     = c_token (lws ',' lws c_token)?;
+connection      = "connection"i def %beg_connection c_tokenlist eoh %set_connection;
+
+################# content-encoding ################
+action beg_content_encoding { I = HTTP_COMPRESSION_ERROR; }
+action set_content_encoding { base_hd->compression_method =
+                             ((base_hd->compression_method == HTTP_COMPRESSION_UNSET ||
+                               base_hd->compression_method == I) ?
+                                 I : (int)HTTP_COMPRESSION_ERROR); }
+
+ce_tokenlist      = "identity"i   %{c(HTTP_COMPRESSION_IDENTITY)}
+                  | "gzip"i       %{c(HTTP_COMPRESSION_GZIP)}
+                  | "x-gzip"i     %{c(HTTP_COMPRESSION_GZIP)}
+                  | "deflate"i    %{c(HTTP_COMPRESSION_DEFLATE)}
+                  | "compress"i   %{c(HTTP_COMPRESSION_COMPRESS)}
+                  | "x-compress"i %{c(HTTP_COMPRESSION_COMPRESS)};
+content_encoding = "content-encoding"i def %beg_content_encoding ce_tokenlist eoh %set_content_encoding;
+
+################# transfer-encoding ###############
+action beg_encoding { guard(base_hd->transfer_chunked); }
+action set_encoding { setguarded(base_hd->transfer_chunked, I); }
+
+e_tokenlist       = "identity"i %{c(0)}
+                  | "chunked"i  %{c(1)};
+transfer_encoding = "transfer-encoding"i def %beg_encoding e_tokenlist eoh %set_encoding;
+
+################# content-length ##################
+action beg_content_length { guard(base_hd->content_length); }
+action set_content_length { setguarded(base_hd->content_length, I); }
+
+content_length  = "content-length"i def %beg_content_length int eoh %set_content_length;
+
+################# content-range ###################
+action beg_content_range_start { guard(base_hd->content_range_start); I = -1; }
+action set_content_range_start { setguarded(base_hd->content_range_start, I); }
+action beg_content_range_end { guard(base_hd->content_range_end); I = -1; }
+action set_content_range_end { setguarded(base_hd->content_range_end, I); }
+action beg_content_range_el { guard(base_hd->content_range_entity_length); I = -1; }
+action set_content_range_el { setguarded(base_hd->content_range_entity_length, I); }
+
+content_range   = "content-range"i def "bytes"i sp %beg_content_range_start int '-' %set_content_range_start
+                                                   %beg_content_range_end int '/' %set_content_range_end
+                                                   %beg_content_range_el int eoh %set_content_range_el;
+
+################# accept-ranges ###################
+action beg_accept_ranges {
+    if (hd) {
+        guard(hd->accept_ranges);
+        I = -1;
+    }
+}
+action set_accept_ranges { if (hd) setguarded(hd->accept_ranges, I); }
+
+ar_tokenlist    = "bytes"i %{c(1)}
+                | "none"i  %{c(0)};
+accept_ranges   = "accept-ranges"i def %beg_accept_ranges ar_tokenlist eoh %set_accept_ranges;
+
+################# content-type ####################
+action beg_mime { guard(base_hd->mime_type); }
+action set_mime { setguarded(base_hd->mime_type, I); }
+action set_charset {
+    if (buflen < FETCHER_URL_MAX) {
+        buf[buflen++] = 0;
+        base_hd->charset = EncodingHintByName((const char*)buf);
+    }
+}
+
+mime_type       = "text/plain"i                     %{c(MIME_TEXT)}
+                | "text/html"i                      %{c(MIME_HTML)}
+                | "application/pdf"i                %{c(MIME_PDF)}
+                | "application/rtf"i                %{c(MIME_RTF)}
+                | "text/rtf"i                       %{c(MIME_RTF)}
+                | "application/msword"i             %{c(MIME_DOC)}
+                | "audio/mpeg"i                     %{c(MIME_MPEG)}
+                | "text/xml"i                       %{c(MIME_XML)}
+                | "application/xml"i                %{c(MIME_XML)}
+                | "application/rss+xml"i            %{c(MIME_RSS)}
+                | "application/rdf+xml"i            %{c(MIME_RSS)}
+                | "application/atom+xml"i           %{c(MIME_RSS)}
+                | "text/vnd.wap.wml"i               %{c(MIME_WML)}
+                | "application/x-shockwave-flash"i  %{c(MIME_SWF)}
+                | "application/vnd.ms-excel"i       %{c(MIME_XLS)}
+                | "application/vnd.ms-powerpoint"i  %{c(MIME_PPT)}
+                | "image/jpeg"i                     %{c(MIME_IMAGE_JPG)}
+                | "image/jpg"i                      %{c(MIME_IMAGE_JPG)}
+                | "image/pjpeg"i                    %{c(MIME_IMAGE_PJPG)}
+                | "image/png"i                      %{c(MIME_IMAGE_PNG)}
+                | "image/gif"i                      %{c(MIME_IMAGE_GIF)}
+                | "application/xhtml+xml"i          %{c(MIME_XHTMLXML)}
+                | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"i    %{c(MIME_DOCX)}
+                | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"i          %{c(MIME_XLSX)}
+                | "application/vnd.openxmlformats-officedocument.presentationml.presentation"i  %{c(MIME_PPTX)}
+                | "application/vnd.oasis.opendocument.text"i            %{c(MIME_ODT)}
+                | "application/vnd.oasis.opendocument.presentation"i    %{c(MIME_ODP)}
+                | "application/vnd.oasis.opendocument.spreadsheet"i     %{c(MIME_ODS)}
+                | "application/vnd.oasis.opendocument.graphics"i        %{c(MIME_ODG)}
+                | "image/x-ms-bmp"i                 %{c(MIME_IMAGE_BMP)}
+                | "image/bmp"i                      %{c(MIME_IMAGE_BMP)}
+                | "audio/x-wav"i                    %{c(MIME_WAV)}
+                | ( "application/x-tar"i | "application/x-ustar"i | "application/x-gtar"i | "application/zip"i | "application/x-archive"i
+                  | "application/x-bzip2"i | "application/x-rar"i ) %{c(MIME_ARCHIVE)}
+                | "application/x-dosexec"i          %{c(MIME_EXE)}
+                | "application/x-gzip"i             %{c(MIME_GZIP)}
+                | "application/json"i               %{c(MIME_JSON)}
+                | ("application/javascript"i | "text/javascript"i) %{c(MIME_JAVASCRIPT)}
+                | "application/vnd.android.package-archive"i %{c(MIME_APK)}
+                | ("image/x-icon"i | "image/vnd.microsoft.icon"i) %{c(MIME_IMAGE_ICON)}
+                ;
+
+
+charset_name    = token_char+ >clear_buf $update_buf;
+mime_param      = "charset"i ws* '=' ws* '"'? charset_name '"'? %set_charset   @2
+                | token ws* '=' ws* '"'? token '"'?                           @1
+                | text                                                        $0;
+mime_parms      = (lws ';' lws mime_param)*;
+content_type    = "content-type"i def %beg_mime mime_type mime_parms eoh %set_mime;
+
+################# last modified ###################
+action beg_modtime { guard(base_hd->http_time); }
+action set_modtime {
+    setguarded(base_hd->http_time, DateTimeFields.ToTimeT(-1));
+}
+
+last_modified   = "last-modified"i def %beg_modtime http_date eoh %set_modtime;
+
+################# location ########################
+action set_location {
+    while (buflen > 0 && (buf[buflen - 1] == ' ' || buf[buflen - 1] == '\t')) {
+        buflen --;
+    }
+    if (hd && buflen < FETCHER_URL_MAX) {
+        hd->location = TStringBuf(buf, buflen);
+    }
+}
+
+action set_status_303{ if (hd) hd->http_status = 303; }
+
+url             = url_char+ >clear_buf $update_buf;
+loc_url         = any_text_char+ >clear_buf $update_buf;
+location        = "location"i def loc_url eoh %set_location;
+refresh         = "refresh"i def int ';' lws "url="i loc_url eoh %set_location;
+
+################# x-robots-tag ################
+action set_x_robots {
+    if (hd && AcceptingXRobots) {
+        if (I > 0)
+            hd->x_robots_tag |= I;
+
+        int pos = (I > 0 ? I : -I);
+        for (size_t i = 0; i < 5; ++i)
+            if (abs(pos) & (1 << i)) // permissive flags take priority
+                hd->x_robots_state[i] = (I < 0) ? '1' : (hd->x_robots_state[i] != '1') ? '0' : '1';
+    }
+}
+
+action accept_x_robots {
+    AcceptingXRobots = (bool)I;
+}
+
+x_robots_directive = "none"i      %{c(3)} | "all"i     %{c(-3)}
+                   | "noindex"i   %{c(1)} | "index"i   %{c(-1)}
+                   | "nofollow"i  %{c(2)} | "follow"i  %{c(-2)}
+                   | "noarchive"i %{c(4)} | "archive"i %{c(-4)}
+                   | "noyaca"i    %{c(16)}
+                   | "noodp"i     %{c(8)};
+
+any_value = (any_text_char - [, \t])+ (lws (any_text_char - [, \t])+)*;
+any_key = (any_text_char - [:, \t])+ (lws (any_text_char - [:, \t])+)*;
+
+unavailable_after_directive = "unavailable_after"i def any_value;
+
+yandex_robot = "yandex"i | "yandexbot"i;
+other_robot = any_key - "unavailable_after"i - yandex_robot;
+robot_specifier = yandex_robot %{c(1)} | other_robot %{c(0)};
+
+x_robots_value = (robot_specifier def %accept_x_robots)? (unavailable_after_directive | (x_robots_directive %set_x_robots) | any_value? );
+
+x_robots_tag = "x-robots-tag"i def >{ AcceptingXRobots = true; } x_robots_value (lws ',' lws x_robots_value)* eoh;
+
+################# rel_canonical ###############
+action set_canonical {
+    if (hd && buflen < FETCHER_URL_MAX) {
+        hd->rel_canonical = TStringBuf(buf, buflen);
+    }
+}
+
+rel_canonical = "link"i def '<' url ">;"i lws "rel"i lws '=' lws "\"canonical\"" eoh %set_canonical;
+################# hreflang ###############
+action set_hreflang {
+    bool first = (hreflangpos == hd->hreflangs);
+    size_t len2 = (first ? 0 : 1) + langlen + 1 + buflen;
+    if (langlen && len2 < hreflangspace) {
+        if (!first) {
+            *(hreflangpos++) = '\t';
+        }
+        memcpy(hreflangpos, langstart, langlen);
+        hreflangpos += langlen;
+        *(hreflangpos++) = ' ';
+        memcpy(hreflangpos, buf, buflen);
+        hreflangpos += buflen;
+        *(hreflangpos) = 0;
+        hreflangspace -= len2;
+    }
+}
+
+action start_lang {
+    langstart = fpc;
+    langlen = 0;
+}
+action end_lang {
+    langlen = fpc - langstart;
+}
+hreflang_token = (token_char - ['])+;
+quote = ['"]?; #"
+lang = hreflang_token >start_lang %end_lang;
+
+hreflang = "link"i def '<' url '>' lws ";" lws
+    ( ( "rel"i lws '=' lws quote "alternate" quote lws ';' lws "hreflang"i lws '=' lws quote lang quote )
+    | ( "hreflang"i lws '=' lws quote lang quote lws ';' lws "rel"i lws '=' lws quote "alternate" quote ) )
+   eoh %set_hreflang;
+################# squid_error #################
+action set_squid_error {
+    hd->squid_error = 1;
+}
+
+squid_error     = "X-Yandex-Squid-Error"i def any_text eoh %set_squid_error;
+
+################# auth ########################
+action init_auth {
+    if (auth_hd)
+        auth_hd->use_auth=true;
+}
+
+action update_auth_buf
+    { if (auth_hd && buflen < sizeof(buf)) buf[buflen++] = *fpc; }
+
+quoted_str = /"/ (text_char - /"/)* /"/ >2;
+auth_quoted_str = ( /"/ ( ( text_char - /"/ )* >clear_buf $update_auth_buf ) /"/ ) > 2;
+
+#  do not support auth-int, too heavy procedure
+
+qop_auth_option = "auth"i @1 %{if(auth_hd) auth_hd->qop_auth = true; };
+
+qop_option = ( qop_auth_option @1 ) | (( token-"auth"i) $0 );
+
+auth_good_param = ( "nonce"i /=/ auth_quoted_str )
+                    %{if (auth_hd && buflen < FETCHER_URL_MAX-1) {
+                        buf[buflen++] = 0;
+                        auth_hd->nonce = strdup((const char*)buf);
+                     }}
+                | ( "realm"i /=/ auth_quoted_str )
+                    %{if (auth_hd && buflen < FETCHER_URL_MAX-1) {
+                        buf[buflen++] = 0;
+                        auth_hd->realm = strdup((const char*)buf);
+                     }}
+                | ( "opaque"i /=/ auth_quoted_str )
+                     %{if (auth_hd && buflen < FETCHER_URL_MAX-1) {
+                         buf[buflen++] = 0;
+                         auth_hd->opaque = strdup((const char*)buf);
+                      }}
+                | "stale"i /=/ "true"i
+                     %{if (auth_hd) auth_hd->stale = true; }
+                | "algorithm"i /=/ "md5"i /-/ "sess"i
+                   %{if (auth_hd) auth_hd->algorithm = 1; }
+                | ( "qop"i /="/ qop_option (ws* "," ws* qop_option)* /"/);
+
+auth_param = auth_good_param @1 |
+           ( (token - ( "nonce"i | "opaque"i | "realm"i | "qop"i ) )
+              /=/ (token | quoted_str ) ) $0;
+
+auth_params = auth_param ( ws* /,/ ws* auth_param )*;
+
+digest_challenge =  ("digest"i %init_auth ws+ auth_params) |
+                    ((token-"digest"i) text);
+
+auth  = "www-authenticate"i def digest_challenge eoh;
+
+###################### host #######################
+action set_host {
+    if (request_hd && buflen < HOST_MAX) {
+        buf[buflen++] = 0;
+        if (request_hd->host[0] != 0) {
+            return -2;
+        }
+        memcpy(request_hd->host, buf, buflen);
+    }
+}
+
+host = (url_char | [:])* >clear_buf $update_buf;
+host_header  = "host"i def host eoh %set_host;
+
+###################### from #######################
+action set_from {
+    if (request_hd && buflen < MAXWORD_LEN) {
+        buf[buflen++] = 0;
+        if (request_hd->from[0] != 0) {
+            return -2;
+        }
+        memcpy(request_hd->from, buf, buflen);
+    }
+}
+
+mailbox     = (token "@" token) >clear_buf $update_buf;
+from_header = "from"i def mailbox eoh %set_from;
+
+################### user-agent ####################
+action set_user_agent {
+    if (request_hd && buflen < MAXWORD_LEN) {
+        buf[buflen++] = 0;
+        if (request_hd->user_agent[0] != 0) {
+            return -2;
+        }
+        memcpy(request_hd->user_agent, buf, buflen);
+    }
+}
+
+user_agent        = any_text_char* >clear_buf $update_buf;
+user_agent_header = "user-agent"i def user_agent eoh %set_user_agent;
+
+############### x-yandex-langregion ################
+action set_langregion {
+    if (request_hd && buflen < MAX_LANGREGION_LEN) {
+        buf[buflen++] = 0;
+        if (request_hd->x_yandex_langregion[0] != 0) {
+            return -2;
+        }
+        memcpy(request_hd->x_yandex_langregion, buf, buflen);
+    }
+}
+
+langregion = any_text_char* >clear_buf $update_buf;
+langregion_header = "x-yandex-langregion"i def langregion eoh %set_langregion;
+
+############### x-yandex-sourcename ################
+action set_sourcename {
+    if (request_hd && buflen < MAXWORD_LEN) {
+        buf[buflen++] = 0;
+        if (request_hd->x_yandex_sourcename[0] != 0) {
+            return -2;
+        }
+        memcpy(request_hd->x_yandex_sourcename, buf, buflen);
+    }
+}
+
+sourcename        = any_text_char* >clear_buf $update_buf;
+sourcename_header = "x-yandex-sourcename"i def sourcename eoh %set_sourcename;
+
+############### x-yandex-requesttype ###############
+action set_requesttype {
+    if (request_hd && buflen < MAXWORD_LEN) {
+        buf[buflen++] = 0;
+        if (request_hd->x_yandex_requesttype[0] != 0) {
+            return -2;
+        }
+        memcpy(request_hd->x_yandex_requesttype, buf, buflen);
+    }
+}
+
+requesttype        = any_text_char* >clear_buf $update_buf;
+requesttype_header = "x-yandex-requesttype"i def requesttype eoh %set_requesttype;
+
+################ x-yandex-fetchoptions ###############
+action set_fetchoptions {
+    if (request_hd && buflen < MAXWORD_LEN) {
+        buf[buflen++] = 0;
+        if (request_hd->x_yandex_fetchoptions[0] != 0) {
+            return -2;
+        }
+        memcpy(request_hd->x_yandex_fetchoptions, buf, buflen);
+    }
+}
+
+fetchoptions    = any_text_char* >clear_buf $update_buf;
+fetchoptions_header = "x-yandex-fetchoptions"i def fetchoptions eoh %set_fetchoptions;
+
+################ if-modified-since ################
+action set_if_modified_since {
+    if (request_hd) {
+        request_hd->if_modified_since = DateTimeFields.ToTimeT(-1);
+    }
+}
+
+if_modified_since = "if-modified-since"i def http_date eoh
+                    %set_if_modified_since;
+
+################ retry-after ################
+action set_retry_after_withdate {
+    if (hd) {
+        hd->retry_after = DateTimeFields.ToTimeT(-1);
+    }
+}
+
+action set_retry_after_withdelta {
+    if (hd) {
+        hd->retry_after = TInstant::Now().Seconds() + I;
+    }
+}
+
+retry_after_withdate = "retry-after"i def http_date eoh
+                    %set_retry_after_withdate;
+retry_after_withdelta = "retry-after"i def int eoh
+                    %set_retry_after_withdelta;
+
+############## request-cache-control ##############
+action SETMAXAGE { if (request_hd) request_hd->max_age = I; }
+
+delta_seconds           = int;
+cache_extension         = token ("=" (token | quoted_str))?;
+request_cache_directive = "no-cache"i
+                        | "no-store"i
+                        | ("max-age"i "=" delta_seconds %SETMAXAGE)
+                        | ("max-stale"i ("=" delta_seconds)?)
+                        | ("min-fresh"i "=" delta_seconds)
+                        | "non-transform"i
+                        | "only-if-cached"i
+                        | cache_extension;
+request_cache_control   = "cache-control"i def request_cache_directive eoh;
+
+############ x-yandex-response-timeout #############
+
+action set_response_timeout {
+    if (request_hd) {
+        request_hd->x_yandex_response_timeout = I;
+    }
+}
+
+response_timeout = "x-yandex-response-timeout"i def int eoh
+                   %set_response_timeout;
+
+############ x-yandex-request-priority #############
+
+action set_request_priority {
+    if (request_hd) {
+        request_hd->x_yandex_request_priority = I;
+    }
+}
+
+request_priority = "x-yandex-request-priority"i def int eoh
+                   %set_request_priority;
+
+################# message header ##################
+other_header    = ( ex_token - "www-authenticate"i ) def any_text eoh;
+message_header  = other_header          $0
+                | connection            @1
+                | content_encoding      @1
+                | transfer_encoding     @1
+                | content_length        @1
+                | content_type          @1
+                | last_modified         @1
+                | refresh               @1
+                | content_range         @1;
+response_header = message_header        $0
+                | auth                  @1
+                | accept_ranges         @1
+                | location              @1
+                | x_robots_tag          @1
+                | rel_canonical         @1
+                | hreflang              @1
+                | squid_error           @1
+                | retry_after_withdate  @1
+                | retry_after_withdelta @1;
+request_header  = message_header        $0
+                | from_header           @1
+                | host_header           @1
+                | user_agent_header     @1
+                | sourcename_header     @1
+                | requesttype_header    @1
+                | langregion_header     @1
+                | fetchoptions_header   @1
+                | if_modified_since     @1
+                | request_cache_control @1
+                | response_timeout      @1
+                | request_priority      @1;
+
+################# main ############################
+action accepted { lastchar = (char*)fpc; return 2; }
+
+main            := ((response_status_line ('\r'? response_header)*)
+                 | (request_status_line ('\r' ? request_header)*))
+                 eol @accepted;
+
+}%%
+
+%% write data;
+
+int THttpHeaderParser::execute(unsigned char *inBuf, int len) {
+    const unsigned char *p = inBuf;
+    const unsigned char *pe = p + len;
+    %% write exec;
+    if (cs == http_header_parser_error)
+        return -1;
+    else if (cs == http_header_parser_first_final)
+        return 0;
+    else
+        return 1;
+}
+
+void THttpHeaderParser::init() {
+    %% write init;
+}
+
+%%{
+machine http_chunk_parser;
+
+alphtype unsigned char;
+
+action clear_hex   { cnt64 = 0; }
+action update_hex   { cnt64 = 16 * cnt64 + X(fc); if(cnt64 > Max<int>()) return -2; }
+action set_chunk { chunk_length = static_cast<int>(cnt64); }
+action accepted { lastchar = (char*)fpc; return 2; }
+
+eol             = '\r'? '\n';
+ws              = [ \t];
+sp              = ' ';
+lw              = '\r'? '\n'? ws;
+separator       = [()<>@,;:\\"/\[\]?={}];
+token_char      = [!-~] - separator;          # http tokens chars
+url_char        = [!-~] - ["<>\[\]\\^`{}|];   # uric chars
+text_char       = ws | 33..127 | 160..255;
+
+lws             = lw*;
+eoh             = lws eol;
+token           = token_char+;
+text            = (text_char | lw)*;
+def             = lws ':' lws;
+
+hex             = (xdigit+) >clear_hex $update_hex;
+quoted_string   = '"' ((text_char - '"') $0 | '\\"' @1)* '"';
+
+chunk_ext_val   = token | quoted_string;
+chunk_ext_name  = token;
+chunk_extension = ws* (';' chunk_ext_name ws* '=' ws* chunk_ext_val ws*)*;
+
+entity_header   = token def text eoh;
+trailer         = entity_header*;
+
+chunk           = (hex - '0'+) chunk_extension? %set_chunk;
+last_chunk      = '0'+ chunk_extension? eol trailer;
+main           := eol (chunk $0 | last_chunk @1) eol @accepted;
+
+}%%
+
+%% write data;
+
+int THttpChunkParser::execute(unsigned char *inBuf, int len) {
+    const unsigned char *p = inBuf;
+    const unsigned char *pe = p + len;
+    %% write exec;
+    if (cs == http_chunk_parser_error)
+        return -1;
+    else if (cs == http_chunk_parser_first_final)
+        return 0;
+    else
+        return 1;
+}
+
+void THttpChunkParser::init() {
+    chunk_length = 0;
+    %% write init;
+}

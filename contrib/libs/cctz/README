@@ -1,0 +1,8 @@
+A Google timezone library.
+
+This version is based on commit 2e86a776379ec6f2a60f4a6595a3b68cd3961cb4 from https://github.com/google/cctz.git
+
+The following changes were made compared to the vanilla Google code:
+  * the Time Zone Database may optionally be compiled into the library (just add a PEERDIR() to contrib/libs/cctz/tzdata subdirectory in your code);
+  * some minor cleanups to avoid clang warnings;
+  * the tests were modified to work with library/cpp/testing/unittest.

@@ -1,0 +1,52 @@
+{
+    "tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes[flat_bs_controller]": {
+        "schema": {
+            "uri": "file://tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes_flat_bs_controller_/flat_bs_controller.schema"
+        }
+    },
+    "tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes[flat_datashard]": {
+        "schema": {
+            "uri": "file://tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes_flat_datashard_/flat_datashard.schema"
+        }
+    },
+    "tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes[flat_hive]": {
+        "schema": {
+            "uri": "file://tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes_flat_hive_/flat_hive.schema"
+        }
+    },
+    "tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes[flat_schemeshard]": {
+        "schema": {
+            "uri": "file://tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes_flat_schemeshard_/flat_schemeshard.schema"
+        }
+    },
+    "tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes[flat_tx_coordinator]": {
+        "schema": {
+            "uri": "file://tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes_flat_tx_coordinator_/flat_tx_coordinator.schema"
+        }
+    },
+    "tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes[kesus]": {
+        "schema": {
+            "uri": "file://tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes_kesus_/kesus.schema"
+        }
+    },
+    "tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes[keyvalueflat]": {
+        "schema": {
+            "uri": "file://tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes_keyvalueflat_/keyvalueflat.schema"
+        }
+    },
+    "tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes[persqueue]": {
+        "schema": {
+            "uri": "file://tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes_persqueue_/persqueue.schema"
+        }
+    },
+    "tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes[tx_allocator]": {
+        "schema": {
+            "uri": "file://tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes_tx_allocator_/tx_allocator.schema"
+        }
+    },
+    "tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes[tx_mediator]": {
+        "schema": {
+            "uri": "file://tablet_scheme_tests.TestTabletSchemes.test_tablet_schemes_tx_mediator_/tx_mediator.schema"
+        }
+    }
+}

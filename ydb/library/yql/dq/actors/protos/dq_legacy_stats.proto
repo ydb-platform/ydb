@@ -1,0 +1,291 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NKqpProto;
+option java_package = "ru.yandex.kikimr.proto";
+
+enum EKqpStatsMode {
+    STATS_MODE_UNSPECIFIED = 0;
+    STATS_MODE_NONE = 10;
+    STATS_MODE_BASIC = 20;
+    STATS_MODE_PROFILE = 30;
+};
+
+message TKqpStatsMinMax {
+    uint64 Min = 1;
+    uint64 Max = 2;
+}
+
+message TKqpStatsAggr {
+    uint64 Min = 1;
+    uint64 Max = 2;
+    uint64 Sum = 3;
+    uint64 Cnt = 4;
+}
+
+message TKqpStatsTable {
+    string TableId = 1;
+    string TablePath = 2;
+
+    uint64 ReadRows = 3;
+    uint64 ReadBytes = 4;
+    uint64 WriteRows = 5;
+    uint64 WriteBytes = 6;
+    uint64 EraseRows = 7;
+
+    uint64 AffectedPartitions = 8;
+}
+
+message TKqpStatsMemoryUsage {
+    uint32 InputChannelsCount = 1;
+    uint32 InputChannelsSize = 2;
+    uint32 OutputChannelsCount = 3;
+    uint32 OutputChannelsSize = 4;
+    uint32 ScanBuffersCount = 5;
+    uint32 ScanBuffersSize = 6;
+    uint32 MkqlSize = 7;
+}
+
+message TKqpStatsTask {
+    message TScanStats {
+        string TableId = 1;
+        string TablePath = 2;
+        // total read data
+        uint64 Rows = 3;
+        uint64 Bytes = 4;
+        // IScan stats
+        uint64 ScanTotalTime = 5;
+        uint64 ScanWaitTime = 6;   // wait for row inside IScan object
+        uint64 BufferDataTime = 7; // time to store rows taken from IScan to the internal buffer
+        uint64 PageFaults = 8;
+        // ITableReader stats
+        uint64 ReadDataTime = 9;   // TableReader read data time
+        uint64 WaitDataTime = 10;  // TableReader wait data time
+        // Network stats
+        uint64 Messages = 11;
+        uint64 MessagesByPageFault = 12;
+    };
+
+    message TInputChannelStats {
+        uint64 ChannelId = 1;
+        uint64 Chunks = 2;
+        uint64 Bytes = 3;
+        uint64 RowsIn = 4;
+        uint64 RowsOut = 12;
+        uint64 StartTs = 5;
+        uint64 FinishTs = 6;
+        uint64 DeserializationTime = 7;
+        uint64 PollRequests = 8;
+        uint64 WaitTime = 9;
+        uint32 ResentAcks = 10;
+        uint64 MaxMemoryUsage = 11;
+    }
+
+    message TSourceStats {
+        uint64 ChannelId = 1;
+        uint64 Chunks = 2;
+        uint64 Bytes = 3;
+        uint64 RowsIn = 4;
+        uint64 RowsOut = 12;
+        uint64 StartTs = 5;
+        uint64 FinishTs = 6;
+        uint64 InputIndex = 7;
+        uint64 PollRequests = 8;
+        uint64 WaitTime = 9;
+        uint32 ResentAcks = 10;
+        uint64 MaxMemoryUsage = 11;
+        uint32 ErrorsCount = 13;
+    }
+
+    message TOutputChannelStats {
+        uint64 ChannelId = 1;
+        uint64 Chunks = 2;
+        uint64 Bytes = 3;
+        uint64 RowsIn = 4;
+        uint64 RowsOut = 26;
+        uint64 StartTs = 5;
+        uint64 FinishTs = 6;
+        uint64 SerializationTime = 7;
+        uint64 BlockedByCapacity = 10;
+        uint64 NoDstActorId = 11;
+        uint32 Count4KChunks = 14;
+        uint32 Count16KChunks = 15;
+        uint32 Count64KChunks = 16;
+        uint32 Count256KChunks = 17;
+        uint32 Count1MChunks = 18;
+        uint32 CountBigChunks = 19;
+        uint32 ResentMessages = 20;
+        uint64 MaxMemoryUsage = 21;
+        uint32 MaxRowsInMemory = 22;
+        uint64 SpilledBytes = 23;
+        uint64 SpilledRows = 24;
+        uint64 SpilledBlobs = 25;
+    }
+
+    message TSinkStats {
+        uint64 ChannelId = 1;
+        uint64 Chunks = 2;
+        uint64 Bytes = 3;
+        uint64 RowsIn = 4;
+        uint64 RowsOut = 26;
+        uint64 StartTs = 5;
+        uint64 FinishTs = 6;
+        uint32 Count4KChunks = 14;
+        uint32 Count16KChunks = 15;
+        uint32 Count64KChunks = 16;
+        uint32 Count256KChunks = 17;
+        uint32 Count1MChunks = 18;
+        uint32 CountBigChunks = 19;
+        uint64 MaxMemoryUsage = 21;
+        uint32 MaxRowsInMemory = 22;
+        uint64 SpilledBytes = 23;
+        uint64 SpilledRows = 24;
+        uint64 SpilledBlobs = 25;
+        uint32 ErrorsCount = 27;
+    }
+
+    message THistBucket {
+        double Bound = 1;
+        uint64 Value = 2;
+    }
+
+    uint64 TaskId = 1;
+    uint64 StartTs = 2;
+    uint64 FinishTs = 3;
+    uint64 BuildTaskTime = 4;
+    uint64 PrefetchTime = 5;
+    uint64 ComputeTime = 6;
+    uint64 TotalTime = 7; // ComputeTime + waits
+    uint64 WaitTime = 8;
+    uint64 WaitInputTime = 9;
+    uint64 WaitScanTime = 10;
+    uint64 WaitOutputTime = 11;
+    repeated THistBucket ComputeTimeByRun = 33;
+
+    uint64 InputRows = 12;
+    uint64 InputBytes = 13;
+    uint64 OutputRows = 14;
+    uint64 OutputBytes = 15;
+
+    uint64 TotalPageFaults = 16;
+
+    uint64 MkqlMaxMemoryUsage = 17;
+    uint64 ExtraMemoryBytes = 22;
+    uint32 ExtraMemoryRequests = 23;
+    uint32 ExtraMemoryWaitTimeMs = 24;
+
+    int64 MkqlTotalNodes = 25;
+    int64 MkqlCodegenFunctions = 26;
+    int64 CodeGenTotalInstructions = 27;
+    int64 CodeGenTotalFunctions = 28;
+    int64 CodeGenFullTime = 29;
+    int64 CodeGenFinalizeTime = 30;
+    int64 CodeGenModulePassTime = 31;
+
+    repeated TKqpStatsTable Tables = 18;
+    repeated TScanStats Scans = 19;
+    repeated TInputChannelStats InputChannels = 20;
+    repeated TOutputChannelStats OutputChannels = 21;
+    repeated TSourceStats Sources = 32;
+    repeated TSinkStats Sinks = 34;
+}
+
+message TKqpStatsRun {
+    // Basic stats
+    uint64 ExecutionTimeUs = 1;
+    repeated TKqpStatsTable Tables = 2;
+
+    // Profile stats
+    TKqpStatsMemoryUsage MemoryUsage = 100;
+    repeated TKqpStatsTask Tasks = 101;
+}
+
+message TKqpStatsExecution {
+    message TInputChannelStats {
+        uint32 SrcStageId = 1;
+        TKqpStatsAggr Bytes = 2;
+        TKqpStatsAggr Rows = 3;
+        TKqpStatsAggr DeserializationTime = 4;
+        TKqpStatsAggr PollRequests = 5;
+        TKqpStatsAggr WaitTime = 6;
+        TKqpStatsAggr ResentAcks = 7;
+    };
+
+    message TOutputChannelStats {
+        uint32 DstStageId = 1;
+        TKqpStatsAggr Bytes = 2;
+        TKqpStatsAggr Rows = 3;
+        TKqpStatsAggr SerializationTime = 4;
+        TKqpStatsAggr BlockedByCapacity = 5;
+        TKqpStatsAggr NoDstActorId = 6;
+        TKqpStatsAggr ResentMessages = 7;
+    };
+
+    message TScansStats {
+        string TablePath = 1;
+        TKqpStatsAggr Bytes = 2;
+        TKqpStatsAggr Rows = 3;
+        TKqpStatsAggr ScanTotalTime = 4;
+        TKqpStatsAggr ScanWaitTime = 5;
+        TKqpStatsAggr WaitDataTime = 6;
+    };
+
+    message TStageStats {
+        uint32 StageId = 1;
+        string Program = 2;
+        TKqpStatsMinMax StageStartTs = 3;
+        TKqpStatsMinMax StageFinishTs = 4;
+        TKqpStatsAggr TasksTotalTime = 5;
+        TKqpStatsAggr TasksComputeTime = 6;
+        TKqpStatsAggr TasksWaitTime = 7;
+        TKqpStatsAggr TasksWaitScanTime = 8;
+        TKqpStatsAggr TasksWaitInputTime = 9;
+        TKqpStatsAggr TasksWaitOutputTime = 10;
+        TKqpStatsAggr TasksScanTotalTime = 11;
+        TKqpStatsAggr TasksScanWaitTime = 12;
+        TKqpStatsAggr TasksReadBytes = 13;
+        TKqpStatsAggr TasksReadRows = 14;
+
+        uint32 TasksCount = 15;
+
+        repeated TScansStats Scans = 16;
+        repeated TInputChannelStats InputChannels = 17;
+        repeated TOutputChannelStats OutputChannels = 18;
+
+        // raw tasks statistics
+        repeated TKqpStatsTask Tasks = 19;
+
+        uint64 TxId = 20;
+        string StageGuid = 21;
+    };
+
+    message TNodeResourcesUsage {
+        uint32 NodeId = 1;
+        uint32 ComputeActorsCount = 2;
+        TKqpStatsMemoryUsage MemoryUsage = 3;
+        uint64 MaxExecutionTimeUs = 4;
+    };
+
+    message TTimelineStats {
+        uint64 CreateExecutorTs = 1;
+        uint64 StartExecuteTs = 2;
+        uint64 FinishExecuteTs = 3;
+        uint64 FirstResultRowTs = 4;
+    };
+
+    // Basic stats
+    uint32 AffectedShards = 1;
+    uint64 ExecuteTimeUs = 2;
+    repeated TKqpStatsTable Tables = 3;
+    uint64 ResultBytes = 4;
+    uint64 ResultRows = 5;
+    TKqpStatsAggr ComputeCpuTimeUs = 6;
+    TKqpStatsAggr ShardsCpuTimeUs = 7;
+    bool LiteralExecution = 8;
+
+    // Profile stats
+    TTimelineStats Timeline = 100;
+    repeated TStageStats Stages = 101;
+    repeated TNodeResourcesUsage NodeResourcesUsage = 102;
+    repeated string TxPlansWithStats = 103;
+};

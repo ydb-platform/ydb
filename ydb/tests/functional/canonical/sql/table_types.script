@@ -1,0 +1,84 @@
+--!syntax_v1
+
+CREATE TABLE TableTypes (
+    Key String,
+
+    Value01 Bool,
+    Value02 Uint8,
+    Value03 Int32,
+    Value04 Uint32,
+    Value05 Int64,
+    Value06 Uint64,
+    Value07 Float,
+    Value08 Double,
+    Value09 Decimal(22,9),
+    Value10 DyNumber,
+
+    Value21 Utf8,
+    Value22 Json,
+    Value23 JsonDocument,
+    Value24 Yson,
+
+    Value31 Date,
+    Value32 Datetime,
+    Value33 Timestamp,
+    Value34 Interval,
+
+    PRIMARY KEY (Key)
+);
+COMMIT;
+
+REPLACE INTO TableTypes
+(
+    Key,
+
+    Value01,
+    Value02,
+    Value03,
+    Value04,
+    Value05,
+    Value06,
+    Value07,
+    Value08,
+    Value09,
+    Value10,
+
+    Value21,
+    Value22,
+    Value23,
+    Value24,
+
+    Value31,
+    Value32,
+    Value33,
+    Value34
+)
+VALUES
+(
+    /* String        */ "Key",
+
+    /* Bool          */ true,
+    /* Uint8         */ Uint8("1"),
+    /* Int32         */ -1,
+    /* Uint32        */ 2u,
+    /* Int64         */ -2l,
+    /* Uint64        */ 3ul,
+    /* Float         */ 4.5f,
+    /* Double        */ -5.5,
+    /* Decimal(22,9) */ Decimal("3.14", 22, 9),
+    /* DyNumber      */ DyNumber("1.23"),
+
+    /* Utf8          */ Utf8("Привет"),
+    /* Json          */ Json(@@{"name": "George", "age": 23}@@),
+    /* JsonDocument  */ JsonDocument(@@{"name": "Anna", "age": 27}@@),
+    /* Yson          */ Yson(@@{a=1; b=2}@@),
+
+    /* Date          */ DateTime::MakeDate(DateTime::ParseIso8601("2019-04-18")),
+    /* Datetime      */ DateTime::MakeDatetime(DateTime::ParseIso8601("2018-03-17T22:16:44")),
+    /* Timestamp     */ DateTime::MakeTimestamp(DateTime::ParseIso8601("2017-06-21T20:37:55.10")),
+    /* Interval      */ DateTime::IntervalFromSeconds(91)
+);
+COMMIT;
+
+SELECT * FROM TableTypes;
+

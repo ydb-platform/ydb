@@ -1,0 +1,199 @@
+---
+--- statement skipped: IS (NOT) DISTINCT FROM
+--- https://wiki.postgresql.org/wiki/Is_distinct_from
+---
+
+statement ok
+CREATE TABLE onek (
+ unique1 int32,
+ unique2 int32,
+ two int32,
+ four int32,
+ ten int32,
+ twenty int32,
+ hundred int32,
+ thousand int32,
+ twothousand int32,
+ fivethous int32,
+ tenthous int32,
+ odd int32,
+ even int32,
+ stringu1 string,
+ stringu2 string,
+ string4 string,
+ PRIMARY KEY (unique1, unique2)
+);
+
+statement import table data
+insert into onek (unique1, unique2, two, four, ten, twenty, hundred, thousand, twothousand, fivethous, tenthous, odd, even, stringu1, stringu2, string4) values postgres/data/onek.data
+
+statement ok
+CREATE TABLE tenk1 (
+ unique1 int32,
+ unique2 int32,
+ two int32,
+ four int32,
+ ten int32,
+ twenty int32,
+ hundred int32,
+ thousand int32,
+ twothousand int32,
+ fivethous int32,
+ tenthous int32,
+ odd int32,
+ even int32,
+ stringu1 string,
+ stringu2 string,
+ string4 string,
+ PRIMARY KEY (unique1, unique2)
+);
+
+statement import table data
+insert into tenk1 (unique1, unique2, two, four, ten, twenty, hundred, thousand, twothousand, fivethous, tenthous, odd, even, stringu1, stringu2, string4) values postgres/data/tenk.data
+
+
+statement query
+SELECT DISTINCT two FROM onek ORDER BY two;
+
+statement query
+SELECT DISTINCT ten FROM onek ORDER BY ten;
+
+statement query
+SELECT DISTINCT string4 FROM onek ORDER BY string4;
+
+statement query
+SELECT DISTINCT two, string4, ten
+   FROM onek
+   ORDER BY two ASC, string4 ASC, ten ASC;
+
+
+SELECT DISTINCT p.age FROM person* p ORDER BY age using >;
+ age
+-----
+  98
+  88
+  78
+  68
+  60
+  58
+  50
+  48
+  40
+  38
+  34
+  30
+  28
+  25
+  24
+  23
+  20
+  19
+  18
+   8
+
+statement query
+SELECT count(*) as count FROM
+  (SELECT DISTINCT two, four FROM tenk1) as ss;
+
+statement ok
+CREATE TABLE disttable (f1 integer, primary key(f1));
+
+statement ok
+INSERT INTO disttable (f1) VALUES(1);
+
+statement ok
+INSERT INTO disttable (f1) VALUES(2);
+
+statement ok
+INSERT INTO disttable (f1) VALUES(3);
+
+statement ok
+INSERT INTO disttable (f1) VALUES(NULL);
+
+statement skipped
+SELECT f1, f1 IS DISTINCT FROM 2 as "not 2" FROM disttable;
+------------
+ f1 | not 2
+----+-------
+  1 | t
+  2 | f
+  3 | t
+    | t
+
+statement skipped
+SELECT f1, f1 IS DISTINCT FROM NULL as "not null" FROM disttable;
+ f1 | not null
+----+----------
+  1 | t
+  2 | t
+  3 | t
+    | f
+
+statement skipped
+SELECT f1, f1 IS DISTINCT FROM f1 as "false" FROM disttable;
+ f1 | false
+----+-------
+  1 | f
+  2 | f
+  3 | f
+    | f
+
+statement skipped
+SELECT f1, f1 IS DISTINCT FROM f1+1 as "not null" FROM disttable;
+ f1 | not null
+----+----------
+  1 | t
+  2 | t
+  3 | t
+    | f
+(4 rows)
+
+statement skipped
+SELECT 1 IS DISTINCT FROM 2 as "yes";
+ yes
+-----
+ t
+
+statement skipped
+SELECT 2 IS DISTINCT FROM 2 as "no";
+ no
+----
+ f
+
+statement skipped
+SELECT 2 IS DISTINCT FROM null as "yes";
+ yes
+-----
+ t
+
+statement skipped
+SELECT null IS DISTINCT FROM null as "no";
+ no
+----
+ f
+
+statement skipped
+SELECT 1 IS NOT DISTINCT FROM 2 as "no";
+ no
+----
+ f
+
+statement skipped
+SELECT 2 IS NOT DISTINCT FROM 2 as "yes";
+ yes
+-----
+ t
+
+statement skipped
+SELECT 2 IS NOT DISTINCT FROM null as "no";
+ no
+----
+ f
+
+statement skipped
+SELECT null IS NOT DISTINCT FROM null as "yes";
+ yes
+-----
+ t
+
+

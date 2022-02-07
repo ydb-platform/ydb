@@ -1,0 +1,58 @@
+---
+---  Replaced from join.test to separate suite
+---
+---  test NULL behavior of whole-row Vars, per bug in postgres #5025
+---
+
+statement ok
+CREATE TABLE int8_tbl(q1 int64, q2 int64, primary key(q1, q2));
+
+
+statement ok
+INSERT INTO int8_tbl (q1, q2) VALUES(123, 456);
+
+statement ok
+INSERT INTO int8_tbl (q1, q2) VALUES(123, 4567890123456789);
+
+statement ok
+INSERT INTO int8_tbl (q1, q2) VALUES(4567890123456789, 123);
+
+statement ok
+INSERT INTO int8_tbl (q1, q2) VALUES(4567890123456789, 4567890123456789);
+
+statement ok
+INSERT INTO int8_tbl (q1, q2) VALUES(4567890123456789, -4567890123456789);
+
+
+statement query
+select a.x as x, count(b.q) from
+   (select 1 as x, 2 as y
+    union all
+    select 2 as x, 3 as y) as a
+   left join
+   (select 2 as q, 5 as p) as b
+   on b.q = a.y
+group by a.x
+
+statement query
+select t1.q2 as q2, count(t1.q1) as cnt
+from int8_tbl as t1 left join int8_tbl as t2 on (t1.q2 = t2.q1)
+group by t1.q2 order by q2
+
+statement query
+select t1.q2 as q2, count(t2.q1) as cnt
+from int8_tbl as t1 left join int8_tbl as t2 on (t1.q2 = t2.q1)
+group by t1.q2 order by q2
+
+statement query
+select t1.q2 as q2, count(t2.q1) as cnt
+from int8_tbl as t1 left join (select * from int8_tbl LIMIT 10 OFFSET 0) as t2 on (t1.q2 = t2.q1)
+group by t1.q2 order by q2;
+
+statement query
+select t1.q2 as q2, count(t2.q1)
+from int8_tbl as t1 left join
+  (select q1, case when q2=1 then 1 else q2 end as q2 from int8_tbl) as t2
+  on (t1.q2 = t2.q1)
+group by t1.q2 order by q2;
+

@@ -1,0 +1,1 @@
+see http://wiki.yandex-team.ru/JandeksPoisk/KachestvoPoiska/Rearrange/RealizacijaFormata

@@ -1,0 +1,11 @@
+import "google/protobuf/descriptor.proto";
+
+// These meta-options are used for selecting proper merging method, see merge.h
+
+extend google.protobuf.MessageOptions {
+  optional bool DontMerge = 54287;
+}
+
+extend google.protobuf.FieldOptions {
+  optional bool DontMergeField = 54288;
+}

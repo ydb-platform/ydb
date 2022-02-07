@@ -1,0 +1,16 @@
+{
+  "commonLabels": {
+    "project": "solomon",
+    "cluster": "man",
+    "service": "stockpile"
+  },
+  "sensors": [
+    {
+      "kind": "GAUGE",
+      "labels": { "export": "Oxygen", "metric": "QueueSize" },
+      "ts": 1509885296,
+      "value": 3.14159
+    }
+  ],
+  "ts": 1503837296
+}

@@ -1,0 +1,26 @@
+<div id="placeholder" class="chart-placeholder"></div>
+
+<div class="form-group"><label class="col-sm-1 control-label" for="textareaGantt">Config</label>
+    <div class="col-sm-11">
+        <textarea class="form-control" id="textareaGantt" name="gantt" rows="5">
+{
+ "bands": [
+  {
+   "t1": "_thrRTime[0]",
+   "t2": "_thrRTime[-1]",
+   "band": "_thread",
+   "color": "1",
+   "colorScale": "colors1"
+  }
+ ],
+ "scales": {
+  "colors1": "linear().domain([-1,0,1]).range(['red','black','green'])",
+  "colors2": "ordinal().domain(['VALUE1','VALUE2']).range(['blue','yellow'])"
+ }
+}
+        </textarea>
+    </div>
+</div>
+<div class="form-group">
+    <div class="col-sm-offset-1 col-sm-11"><button class="btn btn-default" id="gantt-apply">Apply</button></div>
+</div>

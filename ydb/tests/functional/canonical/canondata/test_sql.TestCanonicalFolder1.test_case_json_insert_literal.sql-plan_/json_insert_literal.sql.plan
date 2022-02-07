@@ -1,0 +1,30 @@
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_json_insert_literal_sql_plan/ResultLiteralJD",
+            "reads": [
+                {
+                    "type": "MultiLookup",
+                    "lookup_by": [
+                        "Key (expr)"
+                    ]
+                }
+            ],
+            "writes": [
+                {
+                    "type": "MultiUpsert",
+                    "key": [
+                        "Key (expr)"
+                    ],
+                    "columns": [
+                        "Value"
+                    ]
+                }
+            ]
+        }
+    ]
+}

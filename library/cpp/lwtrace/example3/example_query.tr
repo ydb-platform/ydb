@@ -1,0 +1,13 @@
+Blocks {
+   ProbeDesc {
+       Name: "IterationProbe"
+       Provider: "LWTRACE_EXAMPLE_PROVIDER"
+    }
+    Action {
+        CustomAction {
+	    Name: "MyAction"
+            Opts: "/dev/stdout"
+	}
+    }
+}
+

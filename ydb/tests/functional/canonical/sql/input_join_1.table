@@ -1,0 +1,18 @@
+path: "/local/InputJoin1"
+columns {
+  name: "Key"
+  type { optional_type { item { type_id: INT32 } } }
+}
+columns {
+  name: "Fk21"
+  type { optional_type { item { type_id: INT32 } } }
+}
+columns {
+  name: "Fk22"
+  type { optional_type { item { type_id: STRING } } }
+}
+columns {
+  name: "Value"
+  type { optional_type { item { type_id: STRING } } }
+}
+primary_key: "Key"

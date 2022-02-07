@@ -1,0 +1,37 @@
+Usage: ydb [global options...] scripting yql [options...]
+
+Description: Execute YQL script
+
+Global options:
+  {-e|--endpoint}, {-d|--database}, {-v|--verbose}, --ca-file, --token-file, --user, --password-file, --profile
+  To get full description of these options run 'ydb --help'.
+
+Options:
+  {-?|-h|--help}           Print usage
+  --help-ex                Print usage with examples
+  --timeout ms             Operation timeout. Operation should be executed on server within this timeout. There could also be a delay up to 200ms to receive timeout error from server.
+  --stats [String]         Collect statistics mode [none, basic, full]
+  {-s|--script} [String]   Text of script to execute
+  {-f|--file} PATH         [Required] Script file
+  --explain                Explain query (default: 0)
+  --show-response-metadata Show response metadata for ydb call (default: 0)
+  {-p|--param} $name=value Query parameter[s].
+                           Several parameter options can be specified.
+                           To change input format use --input-format option.
+                           Escaping depends on operating system.
+  --input-format STRING    Input format. Available options:
+                             json-unicode
+                               Input in json format, binary strings are decoded with unicode characters
+                             json-base64
+                               Input in json format, binary strings are decoded with base64
+  --format STRING          Output format. Available options:
+                             pretty
+                               Human readable output
+                             json-unicode
+                               Output in json format, binary strings are encoded with unicode characters. Every row is a separate json on a separate line.
+                             json-unicode-array
+                               Output in json format, binary strings are encoded with unicode characters. Every resultset is a json array of rows. Every row is a separate json on a separate line.
+                             json-base64
+                               Output in json format, binary strings are encoded with base64. Every row is a separate json on a separate line.
+                             json-base64-array
+                               Output in json format, binary strings are encoded with base64. Every resultset is a json array of rows. Every row is a separate json on a separate line.

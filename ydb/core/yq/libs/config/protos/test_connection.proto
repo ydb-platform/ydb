@@ -1,0 +1,11 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYq.NConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+////////////////////////////////////////////////////////////
+
+message TTestConnectionConfig {
+    bool Enabled = 1;
+}

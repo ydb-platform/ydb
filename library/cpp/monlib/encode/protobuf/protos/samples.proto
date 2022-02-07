@@ -1,0 +1,91 @@
+syntax = 'proto3';
+
+package NMonitoring.NProto;
+
+option java_package = "ru.yandex.solomon.protos";
+option java_multiple_files = true;
+option cc_enable_arenas = true;
+
+message TLabel {
+    string Name = 1;
+    string Value = 2;
+}
+
+enum EMetricType {
+    UNKNOWN = 0;
+    GAUGE = 1;
+    IGAUGE = 2;
+    COUNTER = 3;
+    RATE = 4;
+    HISTOGRAM = 5;
+    HIST_RATE = 6;
+    DSUMMARY = 7;
+    LOGHISTOGRAM = 8;
+}
+
+message THistogram {
+    repeated double Bounds = 1; // upper bounds of each bucket
+    repeated uint64 Values = 2; // values stored in each bucket
+}
+
+message TLogHistogram {
+    double Base = 1;
+    uint64 ZerosCount = 2;
+    int32 StartPower = 3;
+    repeated double Buckets = 4;
+}
+
+message TSummaryDouble {
+    double Sum = 1;
+    double Min = 2;
+    double Max = 3;
+    double Last = 4;
+    uint64 Count = 5;
+}
+
+// see TSingleSample
+message TPoint {
+    uint64 Time = 1;
+    oneof Value {
+        sfixed64 Int64 = 2;
+        fixed64 Uint64 = 3;
+        double Float64 = 4;
+        THistogram Histogram = 5;
+        TSummaryDouble SummaryDouble = 6;
+        TLogHistogram LogHistogram = 7;
+    }
+}
+
+message TSingleSample {
+    repeated TLabel Labels = 1;
+    EMetricType MetricType = 2;
+
+    // inlined TPoint
+    uint64 Time = 3;
+    oneof Value {
+        sfixed64 Int64 = 4;
+        fixed64 Uint64 = 5;
+        double Float64 = 6;
+        THistogram Histogram = 7;
+        TSummaryDouble SummaryDouble = 8;
+        TLogHistogram LogHistogram = 9;
+    }
+}
+
+message TMultiSample {
+    repeated TLabel Labels = 1;
+    EMetricType MetricType = 2;
+    repeated TPoint Points = 3;
+}
+
+message TSingleSamplesList {
+    uint64 CommonTime = 1;
+    repeated TLabel CommonLabels = 2;
+    repeated TSingleSample Samples = 3;
+}
+
+message TMultiSamplesList {
+    uint64 CommonTime = 1;
+    repeated TLabel CommonLabels = 2;
+    repeated TMultiSample Samples = 3;
+}

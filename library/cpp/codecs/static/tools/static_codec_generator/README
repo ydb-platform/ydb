@@ -1,0 +1,4 @@
+This is a utility for reproducible  teaching of a codec. And also for saving it into a file with a unique name for a static compilation as a resource.
+
+Usage:
+static_codec_generator -t -m 'the training data description' -f plain samples.txt

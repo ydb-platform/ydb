@@ -1,0 +1,29 @@
+--!syntax_v1
+
+DECLARE $Name1 AS Utf8;
+DECLARE $Name2 AS Utf8;
+
+CREATE TABLE Temp (
+    Name String,
+    Value Int64,
+    PRIMARY KEY (Name)
+);
+
+COMMIT;
+
+$name = $Name1 || $Name2;
+
+$data = (
+    SELECT
+        $name AS Name,
+        Amount AS Value
+    FROM Input1
+    WHERE Name = $name
+);
+
+UPSERT INTO Temp
+SELECT * FROM $data;
+
+COMMIT;
+
+SELECT * FROM Temp ORDER BY Name;

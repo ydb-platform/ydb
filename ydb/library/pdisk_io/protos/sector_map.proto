@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package NKikimrPDisk;
+
+enum ECompression {
+    NO_COMPRESSION = 0;
+    LZ4 = 1;
+}
+
+message TSectorData {
+    uint64 Offset = 1;
+    ECompression CompressionType = 2;
+    bytes Data = 3;
+}
+
+message TSectorMapSnapshot {
+    repeated TSectorData Sectors = 1;
+}

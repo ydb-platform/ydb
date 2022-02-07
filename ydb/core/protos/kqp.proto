@@ -1,0 +1,570 @@
+package NKikimrKqp;
+option java_package = "ru.yandex.kikimr.proto";
+option cc_enable_arenas = true;
+
+import "library/cpp/actors/protos/actors.proto";
+import "ydb/core/protos/kqp_physical.proto";
+import "ydb/core/protos/kqp_stats.proto";
+import "ydb/core/protos/query_stats.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_table.proto";
+import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/core/protos/kqp_query_settings.proto";
+import "ydb/library/mkql_proto/protos/minikql.proto";
+import "ydb/library/yql/dq/actors/protos/dq_events.proto";
+import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
+import "ydb/library/yql/dq/proto/dq_tasks.proto";
+
+enum ERequestType {
+    REQUEST_TYPE_PROCESS_QUERY = 1;
+    REQUEST_TYPE_CLOSE_SESSION = 2;
+    REQUEST_TYPE_CREATE_SESSION = 3;
+};
+
+enum EQueryType {
+    QUERY_TYPE_UNDEFINED = 0;
+
+    reserved 1, 2, 3;
+
+    QUERY_TYPE_SQL_DML = 4;
+    QUERY_TYPE_SQL_DDL = 5;
+    QUERY_TYPE_PREPARED_DML = 6;
+    QUERY_TYPE_AST_DML = 7;
+    QUERY_TYPE_SQL_SCRIPT = 8;
+    QUERY_TYPE_SQL_SCAN = 9;
+    QUERY_TYPE_AST_SCAN = 10;
+    QUERY_TYPE_SQL_SCRIPT_STREAMING = 11;
+};
+
+enum EQueryAction {
+    QUERY_ACTION_EXECUTE = 1;
+    QUERY_ACTION_EXPLAIN = 2;
+    QUERY_ACTION_VALIDATE = 3;
+    QUERY_ACTION_PREPARE = 4;
+    QUERY_ACTION_EXECUTE_PREPARED = 5;
+    QUERY_ACTION_BEGIN_TX = 6;
+    QUERY_ACTION_COMMIT_TX = 7;
+    QUERY_ACTION_ROLLBACK_TX = 8;
+    QUERY_ACTION_PARSE = 9;
+};
+
+enum EIsolationLevel {
+    ISOLATION_LEVEL_UNDEFINED = 0;
+    ISOLATION_LEVEL_SERIALIZABLE = 1;
+    ISOLATION_LEVEL_READ_COMMITTED = 2;
+    ISOLATION_LEVEL_READ_UNCOMMITTED = 3;
+    ISOLATION_LEVEL_READ_STALE = 4;
+};
+
+enum EQueryReplyFlags {
+    QUERY_REPLY_FLAG_RESULTS = 1;
+    QUERY_REPLY_FLAG_PLAN = 2;
+    QUERY_REPLY_FLAG_AST = 4;
+};
+
+message TKqlSettings {
+    optional bool CommitTx = 1;
+    optional bool RollbackTx = 2;
+    optional bool RawResults = 3;
+    optional EIsolationLevel IsolationLevel = 5;
+    optional bool NewEngine = 6;
+};
+
+message TQueryRequest {
+    optional bytes SessionId = 1;
+    optional string Query = 2;
+    optional EQueryType Type = 3;
+    optional TKqlSettings KqlSettings = 4;
+    optional bool KeepSession = 5;
+    optional bytes Cluster = 6;
+    optional NKikimrMiniKQL.TParams Parameters = 7;
+    reserved 8; // (deprecated) SqlAutoCommit
+    optional EQueryAction Action = 9;
+    optional bool Profile = 10; // DEPRECATED, use StatsMode instead
+    optional bytes PreparedQuery = 11;
+    optional uint32 ReplyFlags = 12 [default = 1];
+    optional Ydb.Table.TransactionControl TxControl = 13;
+    optional string Database = 14;
+    optional Ydb.Table.QueryCachePolicy QueryCachePolicy = 15;
+    optional uint64 CancelAfterMs = 16;
+    optional uint64 TimeoutMs = 17;
+    optional Ydb.YqlInternal.ExecQuerySettings QuerySettings = 18;
+    reserved 19; // (deprecated) StatsMode
+    optional NYql.NDqProto.EDqStatsMode StatsMode = 20;
+}
+
+message TKqpPathIdProto {
+    optional uint32 OwnerId = 1;
+    optional uint32 TableId = 2;
+}
+
+message TIndexDescriptionProto {
+    optional string Name = 1;
+    optional uint32 Type = 2;
+    optional uint32 State = 3;
+    optional uint32 SchemaVersion = 4;
+    optional uint32 LocalPathId = 5;
+    optional uint32 PathOwnerId = 6;
+    repeated string KeyColumns = 7;
+    repeated string DataColumns = 8;
+};
+
+message TKqpColumnMetadataProto {
+    optional string Name = 1;
+    optional uint32 Id = 2;
+    optional string Type = 3;
+    optional uint32 TypeId = 4;
+    repeated string Family = 5;
+    optional bool NotNull = 6 [default = false];
+};
+
+message TKqpTableMetadataProto {
+    message TAttributeProto {
+        optional string Key = 1;
+        optional string Value = 2;
+    }
+
+    optional bool DoesExist = 1;
+    optional string Cluster  = 2;
+    optional string Name = 3;
+    optional string SysView = 4;
+    optional TKqpPathIdProto PathId = 5;
+    optional uint32 SchemaVersion = 6;
+    optional uint32 Kind = 7;
+    repeated TAttributeProto Attributes = 8;
+    repeated TKqpColumnMetadataProto Columns = 9;
+    repeated string KeyColunmNames = 10;
+    repeated TIndexDescriptionProto Indexes = 11;
+    repeated TKqpTableMetadataProto SecondaryGlobalIndexMetadata = 12;
+}
+
+message TRlPath {
+    optional string CoordinationNode = 1;
+    optional string ResourcePath = 2;
+}
+
+message TEvQueryRequest {
+    optional TQueryRequest Request = 1;
+    optional string TraceId = 2;
+    optional string UserToken = 3;
+    optional NActorsProto.TActorId RequestActorId = 4;
+    optional string RequestType = 5;
+    optional TRlPath RlPath = 6;
+}
+
+message TMkqlProfile {
+    optional string Query = 1;
+    optional NKikimrQueryStats.TTxStats TxStats = 2;
+};
+
+message TTransformProfile {
+    optional string Name = 1;
+    optional uint64 TransformDurationUs = 2;
+    optional uint64 WaitDurationUs = 3;
+    optional int32 NewExprNodes = 4;
+    optional int32 NewTypeNodes = 5;
+    optional uint32 Repeats = 6;
+    optional uint32 Restarts = 7;
+
+    repeated TTransformProfile Stages = 100;
+}
+
+
+message TKqlProfile {
+    optional string Query = 1;
+    repeated TMkqlProfile MkqlProfiles = 2;
+    optional EIsolationLevel EffectiveIsolationLevel = 3;
+    optional TTransformProfile TransformStats = 4;
+}
+
+message TQueryProfile {
+    repeated TKqlProfile KqlProfiles = 1;
+    optional TTransformProfile TransformStats = 2;
+};
+
+message TParameterBinding {
+    optional string Name = 1;
+    optional uint32 MkqlIndex = 2;
+    optional uint32 ResultIndex = 3;
+}
+
+message TPreparedMkql {
+    optional string Program = 1;
+    repeated TParameterBinding Bindings = 2;
+    optional string ProgramText = 3;
+    optional bool IsPure = 4;
+};
+
+message TPreparedEffect {
+    optional string NodeAst = 1;
+    repeated TParameterBinding Bindings = 2;
+}
+
+message TPreparedKql {
+    optional TKqlSettings Settings = 1;
+    repeated TPreparedMkql Mkqls = 2;
+    repeated TPreparedEffect Effects = 3;
+    repeated NKqpProto.TKqpTableOp Operations = 4;
+    repeated NKqpProto.TKqpTableInfo TableInfo = 5;
+    optional string Ast = 6;
+    optional string Plan = 7;
+};
+
+message TPreparedResult {
+    optional uint32 KqlIndex = 1;
+    optional uint32 ResultIndex = 2;
+    repeated string ColumnHints = 3;
+    optional uint64 RowsLimit = 4;
+};
+
+message TParameterDescription {
+    optional string Name = 1;
+    optional NKikimrMiniKQL.TType Type = 2;
+}
+
+message TPreparedQuery {
+    enum EVersion {
+        VERSION_UNSPECIFIED = 0;
+        VERSION_V1 = 1;
+        VERSION_PHYSICAL_V1 = 11;
+    };
+
+    optional uint32 Version = 1;
+    repeated TPreparedKql Kqls = 2;
+    repeated TPreparedResult Results = 3;
+    repeated TParameterDescription Parameters = 4;
+    optional string Text = 5;
+    optional NKqpProto.TKqpPhyQuery PhysicalQuery = 6;
+};
+
+message TQueryResponse {
+    optional bytes SessionId = 1;
+    reserved 2; // (deprecated) QueryErrors
+    repeated NKikimrMiniKQL.TResult Results = 3;
+    optional TQueryProfile Profile = 4; // TODO: Deprecate, use QueryStats
+    optional bytes PreparedQuery = 5;
+    optional string QueryAst = 6;
+    reserved 7;
+    repeated Ydb.Issue.IssueMessage QueryIssues = 8;
+    optional bytes QueryPlan = 9;
+    repeated TParameterDescription QueryParameters = 10;
+    optional Ydb.Table.TransactionMeta TxMeta = 11;
+    optional NKqpProto.TKqpStatsQuery QueryStats = 12;
+}
+
+message TEvQueryResponse {
+    reserved 1; // (deprecated) KqpStatus
+    reserved 2; // (deprecated) KqpError
+    optional TQueryResponse Response = 3;
+    optional Ydb.StatusIds.StatusCode YdbStatus = 4;
+    reserved 5; // (deprecated) ForcedNewEngine
+    optional uint64 ConsumedRu = 6;
+    optional bool WorkerIsClosing = 7 [default = false];
+}
+
+message TCloseSessionRequest {
+    optional bytes SessionId = 1;
+}
+
+message TEvCloseSessionRequest {
+    optional TCloseSessionRequest Request = 1;
+    optional string TraceId = 2;
+}
+
+message TCloseSessionResponse {
+    optional bytes SessionId = 1;
+    optional bool Closed = 2;
+}
+
+message TEvCloseSessionResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional TCloseSessionResponse Response = 3;
+}
+
+message TEvProcessResponse {
+    reserved 1; // (deprecated) KqpStatus
+    optional bytes Error = 2;
+    optional Ydb.StatusIds.StatusCode YdbStatus = 3;
+    optional bool WorkerIsClosing = 4 [default = false];
+}
+
+message TKqpSetting {
+    required string Name = 1;
+    required string Value = 2;
+}
+
+message TKqpDefaultSettings {
+    repeated TKqpSetting DefaultSettings = 1;
+}
+
+message TCreateSessionRequest {
+    optional string Database = 1;
+}
+
+message TEvCreateSessionRequest {
+    optional TCreateSessionRequest Request = 1;
+    optional string TraceId = 2;
+    optional uint64 DeadlineUs = 3;
+}
+
+message TCreateSessionResponse {
+    optional bytes SessionId = 1;
+}
+
+message TEvCreateSessionResponse {
+    reserved 1; // (deprecated) KqpStatus
+    optional bytes Error = 2;
+    optional TCreateSessionResponse Response = 3;
+    optional Ydb.StatusIds.StatusCode YdbStatus = 4;
+    optional bool ResourceExhausted = 5 [default = false];
+}
+
+message TPingSessionRequest {
+    optional bytes SessionId = 1;
+    optional uint32 TimeoutMs = 2 [default = 5000];
+}
+
+message TEvPingSessionRequest {
+    optional TPingSessionRequest Request = 1;
+    optional string TraceId = 2;
+}
+
+message TPingSessionResponse {
+    optional Ydb.Table.KeepAliveResult.SessionStatus SessionStatus = 1;
+    optional bool WorkerIsClosing = 2 [default = false];
+}
+
+message TEvPingSessionResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional TPingSessionResponse Response = 3;
+    optional bool WorkerIsClosing = 4 [default = false];
+}
+
+message TEvDataQueryStreamPart {
+    optional NActorsProto.TActorId GatewayActorId = 1;
+    repeated NKikimrMiniKQL.TResult Results = 2;
+};
+
+// Executer
+
+message TExecuterTxRequest {
+    optional uint64 TxId = 1;
+};
+
+message TEvExecuterTxRequest {
+    optional TExecuterTxRequest Request = 1;
+    optional NActorsProto.TActorId Target = 2;
+    optional string TraceId = 3;
+    optional string UserToken = 4;
+};
+
+message TExecuterTxResult {
+    repeated NKikimrMiniKQL.TResult Results = 3;
+    optional NKikimrMiniKQL.TResult Locks = 4;
+    reserved 5; // (deprecated) Stats
+    optional NYql.NDqProto.TDqExecutionStats Stats = 6;
+};
+
+message TExecuterTxResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional TExecuterTxResult Result = 3;
+};
+
+message TEvExecuterTxResponse {
+    optional TExecuterTxResponse Response = 1;
+};
+
+message TEvExecuterStreamData {
+    optional Ydb.ResultSet ResultSet = 1;
+    optional uint64 SeqNo = 2;
+};
+
+message TEvExecuterStreamDataAck {
+    optional uint64 SeqNo = 1;
+    optional int64 FreeSpace = 2;
+    optional bool Enough = 3 [default = false];
+};
+
+message TEvExecuterStreamProfile {
+    reserved 1; // (deprecated) Profile
+    optional NYql.NDqProto.TDqExecutionStats Profile = 2;
+};
+
+message TEvExecuterProgress {
+    optional NActorsProto.TActorId ExecuterActorId = 1;
+};
+
+message TKqpProxyNodeResources {
+    optional uint32 NodeId = 1;
+    optional uint64 DataCenterNumId = 2;
+    optional uint32 ActiveWorkersCount = 3;
+    optional string DataCenterId = 4;
+    optional double CpuUsage = 5;
+    optional uint32 Threads = 6;
+}
+
+message TKqpSnapshot {
+    optional uint64 Step = 1;
+    optional uint64 TxId = 2;
+}
+
+/// Legacy ResourceManager events //////////////////////////////////////////////////////////////////////////////////////
+message TEvStartComputeTasks {
+    optional uint64 TxId = 1;
+    repeated NYql.NDqProto.TDqTask Tasks = 2;
+    reserved 3; // (deprecated) WaitResourcesTimeoutMs
+    optional NYql.NDqProto.TComputeRuntimeSettings RuntimeSettings = 4;
+    optional NActorsProto.TActorId ExecuterActorId = 5; // overwrite for ev->Sender
+
+    optional TKqpSnapshot Snapshot = 8;
+}
+
+message TEvStartComputeTasksFailure {
+    optional uint64 TxId = 1;
+
+    enum EReason {
+        MEMORY_LIMIT_EXCEEDED = 1;         // total memory limit per query and per node
+        NOT_ENOUGH_MEMORY = 2;             // not enough memory at moment
+        COMPUTE_ACTORS_LIMIT_EXCEEDED = 3; // -//-
+        NOT_ENOUGH_COMPUTE_ACTORS = 4;     // -//-
+        REQUEST_ALREADY_EXISTS = 5;
+        NOT_READY = 6;                     // ResourceManager not ready yet
+    }
+    optional EReason Reason = 2;
+    optional string Message = 3;
+}
+
+message TEvStartedComputeTasks {
+    optional uint64 TxId = 1;
+
+    message TStartedTask {
+        optional uint64 TaskId = 1;
+        optional NActorsProto.TActorId ActorId = 2;
+    }
+    repeated TStartedTask StartedTasks = 2;
+}
+
+message TEvCancelComputeTasks {
+    optional uint64 TxId = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// KQP Node Events ////////////////////////////////////////////////////////////////////////////////////////////////////
+message TEvStartKqpTasksRequest {
+    optional uint64 TxId = 1;
+    repeated NYql.NDqProto.TDqTask Tasks = 2;
+    optional NYql.NDqProto.TComputeRuntimeSettings RuntimeSettings = 3;
+    optional NActorsProto.TActorId ExecuterActorId = 4;
+    optional TKqpSnapshot Snapshot = 5;
+    optional bool StartAllOrFail = 6 [default = true];
+}
+
+message TEvStartKqpTasksResponse {
+    message TStartedTask {
+        optional uint64 TaskId = 1;
+        optional NActorsProto.TActorId ActorId = 2;
+    }
+
+    enum ENotStartedTaskReason {
+        // node limits
+        NOT_ENOUGH_MEMORY = 1;
+        NOT_ENOUGH_EXECUTION_UNITS = 2;
+        // query limits
+        QUERY_MEMORY_LIMIT_EXCEEDED = 3;
+        QUERY_EXECUTION_UNITS_LIMIT_EXCEEDED = 4;
+        // any other error
+        INTERNAL_ERROR = 5;
+    }
+
+    message TNotStartedTask {
+        optional uint64 TaskId = 1;
+        optional ENotStartedTaskReason Reason = 2;
+        optional string Message = 3;
+    }
+
+    optional uint64 TxId = 1;
+    repeated TStartedTask StartedTasks = 2;
+    repeated TNotStartedTask NotStartedTasks = 3;
+}
+
+message TEvCancelKqpTasksRequest {
+    optional uint64 TxId = 1;
+    optional string Reason = 2;
+}
+
+message TEvCancelKqpTasksResponse {
+}
+
+message TKqpNodeResources {
+    optional NActorsProto.TActorId ResourceManagerActorId = 2; // legacy
+    optional uint32 AvailableComputeActors = 4; // legacy
+    optional uint64 UsedMemory = 5; // legacy
+    optional uint64 TotalMemory = 7; // legacy
+    message TTxResources {
+        optional uint64 TxId = 1;
+        optional uint32 ComputeActors = 2;
+        optional uint64 Memory = 3;
+        optional uint32 StartTimestamp = 4;
+    }
+    repeated TTxResources Transactions = 6; // legacy
+
+    ////////////////////////////////////////////////////
+
+    optional uint32 NodeId = 1;
+    optional uint32 Timestamp = 3;
+
+    message TMemory {
+        optional uint32 Pool = 1;
+        optional uint64 Available = 2;
+    }
+    repeated TMemory Memory = 8;
+    optional uint32 ExecutionUnits = 9;
+}
+
+/// Scans
+message TEvScanInitActor {
+    optional uint64 ScanId = 1;
+    optional NActorsProto.TActorId ScanActorId = 2;
+    optional uint32 Generation = 3;
+};
+
+message TEvScanError {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional uint32 Generation = 3;
+}
+
+message TEvRemoteScanData {
+    optional uint32 ScanId = 1;
+    optional uint64 CpuTimeUs = 2;
+    optional uint64 WaitTimeMs = 3;
+    optional uint32 PageFaults = 4;
+    optional bool PageFault = 5;
+    optional bool Finished = 6;
+    optional bytes LastKey = 7;
+    optional uint32 Generation = 9;
+
+    message TArrowBatch {
+        optional bytes Schema = 1;
+        optional bytes Batch = 2;
+    }
+
+    // Only one of the fields Rows and ArrowBatch must be filled. However, we can not use oneof feature because Rows
+    // field is repeated. Moving it into oneof is impossible. We may wrap it into a message but this would break
+    // backwards comparability.
+    repeated bytes Rows = 8;
+    optional TArrowBatch ArrowBatch = 10;
+}
+
+message TEvRemoteScanDataAck {
+    optional uint64 FreeSpace = 1;
+    optional uint32 Generation = 2;
+}
+
+message TEvKillScanTablet {
+}

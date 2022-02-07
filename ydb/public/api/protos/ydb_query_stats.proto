@@ -1,0 +1,46 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.TableStats;
+option java_package = "com.yandex.ydb";
+
+// Describes select, update (insert, upsert, replace) and delete operations
+message OperationStats {
+    uint64 rows = 1;
+    uint64 bytes = 2;
+}
+
+// Describes all operations on a table
+message TableAccessStats {
+    string name = 1;
+    reserved 2; // table id
+    OperationStats reads = 3;
+    OperationStats updates = 4;
+    OperationStats deletes = 5;
+    uint64 partitions_count = 6;
+}
+
+message QueryPhaseStats {
+    uint64 duration_us = 1;
+    repeated TableAccessStats table_access = 2;
+    uint64 cpu_time_us = 3;
+    uint64 affected_shards = 4;
+    bool literal_phase = 5;
+}
+
+message CompilationStats {
+    bool from_cache = 1;
+    uint64 duration_us = 2;
+    uint64 cpu_time_us = 3;
+}
+
+message QueryStats {
+    // A query might have one or more execution phases
+    repeated QueryPhaseStats query_phases = 1;
+    CompilationStats compilation = 2;
+    uint64 process_cpu_time_us = 3;
+    string query_plan = 4;
+    string query_ast = 5;
+    uint64 total_duration_us = 6;
+    uint64 total_cpu_time_us = 7;
+}

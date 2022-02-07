@@ -1,0 +1,33 @@
+{
+  "sensors":
+    [
+      {
+        "kind":"HIST",
+        "labels":
+          {
+            "metric":"responseTimeMillis"
+          },
+        "ts":1509843723,
+        "hist":
+          {
+            "bounds":
+              [
+                1,
+                2,
+                4,
+                8,
+                16
+              ],
+            "buckets":
+              [
+                1,
+                1,
+                2,
+                4,
+                8
+              ],
+            "inf":83
+          }
+      }
+    ]
+}

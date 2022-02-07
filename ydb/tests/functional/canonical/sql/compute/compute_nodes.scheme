@@ -1,0 +1,2 @@
+CREATE TABLE compute_nodes (entry_id Uint64, scheduler Uint64, compute_node Uint64, PRIMARY KEY(entry_id));
+

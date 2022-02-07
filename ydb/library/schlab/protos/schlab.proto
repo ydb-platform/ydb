@@ -1,0 +1,19 @@
+package NSchlab;
+
+option java_package = "ru.yandex.schoot.proto";
+
+message TGenCfg {
+    optional string label = 1;
+    optional double startTime = 2;
+    optional double period = 3;
+    optional uint64 periodCount = 4;
+    optional uint64 reqSizeBytes = 5;
+    optional uint64 reqCount = 6;
+    optional double reqInterval = 7;
+    optional string user = 8;
+    optional string desc = 9;
+}
+
+message TGenCfgSet {
+    repeated TGenCfg cfg = 1;
+}

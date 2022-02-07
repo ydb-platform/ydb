@@ -1,0 +1,12 @@
+items:
+  - name: Обзор
+    href: index.md
+  - name: Аутентификация
+    href: auth.md
+  - name: Тестовое приложение
+    include: { mode: link, path: example/toc_p.yaml }
+  - name: Обработка ошибок в API
+    href: error_handling.md
+  - name: Рецепты кода
+    include: { mode: link, path: recipes/toc_p.yaml }
+

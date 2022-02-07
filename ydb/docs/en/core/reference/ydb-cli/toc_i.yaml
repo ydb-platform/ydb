@@ -1,0 +1,41 @@
+items:
+  - name: Overview
+    href: index.md
+  - name: Profile management
+    items:
+      - name: Getting profile information
+        href: profile/list-and-get.md
+      - name: Activating a profile
+        href: profile/activate.md
+      - name: Deleting a profile
+        href: profile/delete.md
+  - name: Commands
+    items:
+      - name: Overview
+        href: commands/index.md
+      - name: Structure and description of YDB CLI commands
+        href: commands/commands.md
+      - name: Global parameters
+        href: commands/global-options.md
+      - name: Listing objects
+        href: commands/scheme-ls.md
+      - name: Getting information about schema objects
+        href: commands/scheme-describe.md
+      - name: Getting a list of DB endpoints
+        href: commands/discovery-list.md
+      - name: Making a DB query
+        href: commands/query.md
+      - name: Streaming table reads
+        href: commands/readtable.md
+      - name: Working with secondary indexes
+        href: commands/operations-index.md
+      - name: Working with directories
+        href: commands/scheme-mkdir.md
+      - name: Scan queries
+        href: commands/scan-query.md
+      - name: Utilities
+        items:
+        # - name: Копирование таблиц
+        #   href: commands/tools/copy.md
+        - name: Renaming tables
+          href: commands/tools/rename.md

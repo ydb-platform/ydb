@@ -1,0 +1,36 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb;
+option java_package = "com.yandex.ydb";
+
+import "google/protobuf/descriptor.proto";
+
+message Limit {
+    message Range {
+        uint32 min = 1;
+        uint32 max = 2;
+    }
+
+    oneof kind {
+        Range range = 1;
+        uint32 lt = 2;
+        uint32 le = 3;
+        uint32 eq = 4;
+        uint32 ge = 5;
+        uint32 gt = 6;
+    }
+}
+
+message MapKey {
+    Limit length = 1;
+    string value = 2;
+}
+
+extend google.protobuf.FieldOptions {
+    bool required = 87650;
+    Limit size = 87651;
+    Limit length = 87652;
+    MapKey map_key = 87653;
+    string value = 87654;
+}

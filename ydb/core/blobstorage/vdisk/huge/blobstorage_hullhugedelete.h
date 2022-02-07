@@ -1,0 +1,232 @@
+#pragma once
+
+#include "defs.h"
+#include "blobstorage_hullhuge.h"
+
+#include <library/cpp/monlib/service/pages/templates.h>
+#include <ydb/core/base/blobstorage.h>
+
+#include <util/generic/queue.h>
+
+// Delayed huge blob deletion mechanism is needed to prevent races between huge blob reads and compactions when compacted
+// items are being read at the moment of deletion. To ensure this we have LevelIndex shared state that holds actual
+// list of taken snapshots stored as a map of LSN (of a snapshot) pointing to counter that covers all snapshots that were
+// taken with this LSN:
+//
+//                             +--------------------------------------------------------------------+
+//                             |                                                                    V
+// compact                   snap1            snap2                 compact           snap3    release_snap1
+//    |                        |                |                      |                |           |
+// -----------------------------------------------------------------------------------------------------------> LSN axis
+//
+// Each snapshot, when taken, contains data with actual index information. This means that we should hold all deletes
+// with "deletion LSN" > "LSN of the snapshot" until this snapshot is released. Also, there is no difference between
+// snapshots with different LSNs taken between the same two compactions, so we use LSN of the last compaction as the key
+// to store snapshots. This key is referred as 'cookie' below. Cookie is increased only when compaction is going to log
+// new index and this index contains at least one of removed huge blobs.
+
+namespace NKikimr {
+
+    struct TEvHullReleaseSnapshot : public TEventLocal<TEvHullReleaseSnapshot, TEvBlobStorage::EvHullReleaseSnapshot> {
+        const ui64 Cookie;
+
+        TEvHullReleaseSnapshot(ui64 cookie)
+            : Cookie(cookie)
+        {}
+    };
+
+    // LevelIndex-wide state of taken snapshots; contains shared data between corresponding actor and LevelIndex; when
+    // snapshot is taken, it is stored here; when it is released, a message is sent to deletion actor and the action is
+    // taken
+    class TDelayedHugeBlobDeleterInfo : public TThrRefBase {
+        // map <LastDeletionLsn> -> <number of snapshots that were taken during the time LastDeletionLsn was equal
+        // to key>; when snapshot counter reaches zero, the key is deleted from map
+        TMap<ui64, ui32> CurrentSnapshots;
+
+        // last deletion LSN is set every time to LSN of log record containing FreeHugeBlobs vector; it is used as key
+        // to CurrentSnapshots map; every shapshot taken when LastDeletionLsn has the specific value must be freed before
+        // further deletions (with their respective DeletionLsn > LastDeletionLsn when snapshot was taken); it is changed
+        // stepwise no prevent unnecessary allocations in CurrentSnaphots
+        ui64 LastDeletionLsn = 0;
+
+        // delayed huge blob deleter actor id
+        TActorId ActorId;
+
+        // a queue of removed huge blobs per compaction
+        struct TRemovedHugeBlobsQueueItem {
+            ui64 RecordLsn;
+            TDiskPartVec RemovedHugeBlobs;
+            TLogSignature Signature;
+
+            TRemovedHugeBlobsQueueItem(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, TLogSignature signature)
+                : RecordLsn(recordLsn)
+                , RemovedHugeBlobs(std::move(removedHugeBlobs))
+                , Signature(signature)
+            {}
+        };
+        TDeque<TRemovedHugeBlobsQueueItem> RemovedHugeBlobsQueue;
+
+    public:
+        void SetActorId(const TActorId& actorId) {
+            Y_VERIFY(!ActorId);
+            ActorId = actorId;
+        }
+
+        const TActorId& GetActorId() const {
+            return ActorId;
+        }
+
+        // this function is called when snapshot is taken; it returns a cookie that needs to be passed in a Release
+        // message to delayed huge blob deleter actor
+        ui64 TakeSnapshot() {
+            ++CurrentSnapshots[LastDeletionLsn];
+            return LastDeletionLsn;
+        }
+
+        // this function is called every time when compaction is about to commit new entrypoint containing at least
+        // one removed huge blob; recordLsn is allocated LSN of this entrypoint
+        void Update(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, const TActorContext& ctx,
+                const TActorId& hugeKeeperId, TLogSignature signature) {
+            Y_VERIFY(recordLsn > LastDeletionLsn);
+            LastDeletionLsn = recordLsn;
+            RemovedHugeBlobsQueue.emplace_back(recordLsn, std::move(removedHugeBlobs), signature);
+            ProcessRemovedHugeBlobsQueue(ctx, hugeKeeperId);
+        }
+
+        void RenderState(IOutputStream &str) {
+            HTML(str) {
+                DIV_CLASS("panel panel-default") {
+                    DIV_CLASS("panel-heading") {
+                        str << "Delayed Huge Blob Deleter";
+                    }
+                    DIV_CLASS("panel-body") {
+                         DIV_CLASS("panel panel-default") {
+                            DIV_CLASS("panel-heading") {
+                                str << "CurrentSnapshots";
+                            }
+                            DIV_CLASS("panel-body") {
+                                TABLE_CLASS("table table-condensed") {
+                                    TABLEHEAD() {
+                                        TABLER() {
+                                            TABLEH() { str << "LSN"; }
+                                            TABLEH() { str << "Counter"; }
+                                        }
+                                    }
+                                    TABLEBODY() {
+                                        for (const auto &pair : CurrentSnapshots) {
+                                            TABLER() {
+                                                TABLED() { str << pair.first; }
+                                                TABLED() { str << pair.second; }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        DIV_CLASS("panel panel-default") {
+                            DIV_CLASS("panel-heading") {
+                                str << "LastDeletionLsn";
+                            }
+                            DIV_CLASS("panel-body") {
+                                STRONG() {
+                                    str << LastDeletionLsn;
+                                }
+                            }
+                        }
+
+                        ui32 index = 1;
+                        for (const auto &record : RemovedHugeBlobsQueue) {
+                            TMap<TChunkIdx, ui32> slots;
+                            for (const TDiskPart &part : record.RemovedHugeBlobs) {
+                                ++slots[part.ChunkIdx];
+                            }
+
+                            DIV_CLASS("panel panel-default") {
+                                DIV_CLASS("panel-heading") {
+                                    str << "RemovedHugeBlobsQueue[" << index << "]";
+                                }
+                                DIV_CLASS("panel-body") {
+                                    DIV() {
+                                        STRONG() {
+                                            str << "Lsn# " << record.RecordLsn;
+                                        }
+                                    }
+
+                                    TABLE_CLASS("table table-condensed") {
+                                        TABLEHEAD() {
+                                            TABLER() {
+                                                TABLEH() { str << "Chunk"; }
+                                                TABLEH() { str << "Number of freed slots"; }
+                                            }
+                                        }
+                                        TABLEBODY() {
+                                            for (const auto &pair : slots) {
+                                                TABLER() {
+                                                    TABLED() { str << pair.first; }
+                                                    TABLED() { str << pair.second; }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            ++index;
+                        }
+                    }
+                }
+            }
+        }
+
+    private:
+        friend class TDelayedHugeBlobDeleterActor;
+
+        void ReleaseSnapshot(ui64 cookie, const TActorContext& ctx, const TActorId& hugeKeeperId) {
+            auto it = CurrentSnapshots.find(cookie);
+            Y_VERIFY(it != CurrentSnapshots.end() && it->second > 0);
+            if (!--it->second) {
+                CurrentSnapshots.erase(it);
+                ProcessRemovedHugeBlobsQueue(ctx, hugeKeeperId);
+            }
+        }
+
+        void ProcessRemovedHugeBlobsQueue(const TActorContext& ctx, const TActorId& hugeKeeperId) {
+            // if we have no snapshots, we can safely process all messages; otherwise we can process only those messages
+            // which do not have snapshots created before the point of compaction
+            while (RemovedHugeBlobsQueue) {
+                TRemovedHugeBlobsQueueItem& item = RemovedHugeBlobsQueue.front();
+                if (CurrentSnapshots.empty() || (item.RecordLsn <= CurrentSnapshots.begin()->first)) {
+                    // matching record -- commit it to huge hull keeper and throw out of the queue
+                    ctx.Send(hugeKeeperId, new TEvHullFreeHugeSlots(std::move(item.RemovedHugeBlobs),
+                        item.RecordLsn, item.Signature));
+                    RemovedHugeBlobsQueue.pop_front();
+                } else {
+                    // we have no matching record
+                    break;
+                }
+            }
+        }
+    };
+
+    struct TDelayedHugeBlobDeleterNotifier : public TThrRefBase {
+        TActorSystem* const ActorSystem;
+        const TIntrusivePtr<TDelayedHugeBlobDeleterInfo> Info;
+        const ui64 Cookie;
+
+        TDelayedHugeBlobDeleterNotifier(TActorSystem *actorSystem, TIntrusivePtr<TDelayedHugeBlobDeleterInfo> info)
+            : ActorSystem(actorSystem)
+            , Info(std::move(info))
+            , Cookie(Info->TakeSnapshot())
+        {}
+
+        // implemented in blobstorage_hull.h
+        ~TDelayedHugeBlobDeleterNotifier() {
+            ActorSystem->Send(new IEventHandle(Info->GetActorId(), TActorId(), new TEvHullReleaseSnapshot(Cookie)));
+        }
+    };
+
+    IActor *CreateDelayedHugeBlobDeleterActor(const TActorId &hugeKeeperId,
+        TIntrusivePtr<TDelayedHugeBlobDeleterInfo> info);
+
+} // NKikimr

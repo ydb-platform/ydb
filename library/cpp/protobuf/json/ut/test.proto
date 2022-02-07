@@ -1,0 +1,203 @@
+package NProtobufJsonTest;
+
+enum EEnum {
+    E_0 = 0;
+    E_1 = 1;
+    E_2 = 2;
+    E_3 = 3;
+};
+
+message TFlatOptional {
+    optional int32 I32 = 1;
+    optional int64 I64 = 2;
+    optional uint32 UI32 = 3;
+    optional uint64 UI64 = 4;
+    optional sint32 SI32 = 5;
+    optional sint64 SI64 = 6;
+    optional fixed32 FI32 = 7;
+    optional fixed64 FI64 = 8;
+    optional sfixed32 SFI32 = 9;
+    optional sfixed64 SFI64 = 10;
+
+    optional bool Bool = 11;
+
+    optional string String = 12;
+    optional bytes Bytes = 13;
+
+    optional EEnum Enum = 14;
+
+    optional float Float = 15;
+    optional double Double = 16;
+
+    optional string OneString = 17;
+    optional string OneTwoString = 18;
+    optional string ABC = 19;
+    optional string UserID = 20;
+};
+
+message TFlatRequired {
+    required int32 I32 = 1;
+    required int64 I64 = 2;
+    required uint32 UI32 = 3;
+    required uint64 UI64 = 4;
+    required sint32 SI32 = 5;
+    required sint64 SI64 = 6;
+    required fixed32 FI32 = 7;
+    required fixed64 FI64 = 8;
+    required sfixed32 SFI32 = 9;
+    required sfixed64 SFI64 = 10;
+
+    required bool Bool = 11;
+
+    required string String = 12;
+    required bytes Bytes = 13;
+
+    required EEnum Enum = 14;
+
+    required float Float = 15;
+    required double Double = 16;
+
+    required string OneString = 17;
+    required string OneTwoString = 18;
+    required string ABC = 19;
+    required string UserID = 20;
+};
+
+message TFlatRepeated {
+    repeated int32 I32 = 1;
+    repeated int64 I64 = 2;
+    repeated uint32 UI32 = 3;
+    repeated uint64 UI64 = 4;
+    repeated sint32 SI32 = 5;
+    repeated sint64 SI64 = 6;
+    repeated fixed32 FI32 = 7;
+    repeated fixed64 FI64 = 8;
+    repeated sfixed32 SFI32 = 9;
+    repeated sfixed64 SFI64 = 10;
+
+    repeated bool Bool = 11;
+
+    repeated string String = 12;
+    repeated bytes Bytes = 13;
+
+    repeated EEnum Enum = 14;
+
+    repeated float Float = 15;
+    repeated double Double = 16;
+
+    repeated string OneString = 17;
+    repeated string OneTwoString = 18;
+    repeated string ABC = 19;
+    repeated string UserID = 20;
+};
+
+message TFlatDefault {
+    optional int32 I32 = 1 [default = 132];
+    optional int64 I64 = 2 [default = 164];
+    optional uint32 UI32 = 3 [default = 232];
+    optional uint64 UI64 = 4 [default = 264];
+    optional sint32 SI32 = 5 [default = 332];
+    optional sint64 SI64 = 6 [default = 364];
+    optional fixed32 FI32 = 7 [default = 432];
+    optional fixed64 FI64 = 8 [default = 464];
+    optional sfixed32 SFI32 = 9 [default = 532];
+    optional sfixed64 SFI64 = 10 [default = 564];
+
+    optional bool Bool = 11 [default = true];
+
+    optional string String = 12 [default = "string"];
+    optional bytes Bytes = 13 [default = "bytes"];
+
+    optional EEnum Enum = 14 [default = E_2];
+
+    optional float Float = 15 [default = 0.123];
+    optional double Double = 16 [default = 0.456];
+
+    optional string OneString = 17 [default = "string"];
+    optional string OneTwoString = 18 [default = "string"];
+    optional string ABC = 19 [default = "abc"];
+    optional string UserID = 20 [default = "some_id"];
+};
+
+message TCompositeOptional {
+    optional TFlatOptional Part = 1;
+};
+
+message TCompositeRequired {
+    required TFlatRequired Part = 1;
+};
+
+message TCompositeRepeated {
+    repeated TFlatOptional Part = 1;
+};
+
+message TMapType {
+    map<string, string> Items = 1;
+};
+
+message TNameGeneratorType {
+    optional int32 Field = 1;
+};
+
+message TEnumValueGeneratorType {
+    enum EEnum {
+        ENUM_42 = 1;
+    };
+
+    optional EEnum Enum = 1;
+};
+
+message TComplexMapType {
+    map<int32, int32> I32 = 1;
+    map<int64, int64> I64 = 2;
+    map<uint32, uint32> UI32 = 3;
+    map<uint64, uint64> UI64 = 4;
+    map<sint32, sint32> SI32 = 5;
+    map<sint64, sint64> SI64 = 6;
+    map<fixed32, fixed32> FI32 = 7;
+    map<fixed64, fixed64> FI64 = 8;
+    map<sfixed32, sfixed32> SFI32 = 9;
+    map<sfixed64, sfixed64> SFI64 = 10;
+
+    map<bool, bool> Bool = 11;
+
+    map<string, string> String = 12;
+
+    map<string, EEnum> Enum = 13;
+
+    map<string, float> Float = 14;
+    map<string, double> Double = 15;
+
+    map<string, TComplexMapType> Nested = 16;
+};
+
+message TWithJsonName {
+    optional int32 my_upper = 1 [json_name = "My-Upper"];
+    optional int32 My_lower = 2 [json_name = "my-lower"];
+    optional int32 Def_upper = 3; // json_name = "DefUpper"
+    optional int32 def_lower = 4; // json_name = "defLower"
+}
+
+message TSingleRequiredString {
+    required string String = 1;
+}
+
+message TSingleDefaultString {
+    optional string String = 1 [default = "value"];
+}
+
+message TSingleRepeatedString {
+    repeated string RepeatedString = 1;
+}
+
+message TSingleRepeatedInt {
+    repeated int32 RepeatedInt = 1;
+}
+
+message TExtensionField {
+	extensions 100 to 199;
+}
+
+extend TExtensionField {
+  optional int32 bar = 123;
+}

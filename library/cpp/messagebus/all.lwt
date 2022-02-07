@@ -1,0 +1,8 @@
+Blocks {
+    ProbeDesc {
+        Group: "MessagebusRare"
+    }
+    Action {
+        PrintToStderrAction {}
+    }
+}

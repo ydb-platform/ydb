@@ -1,0 +1,136 @@
+static_erasure: mirror-3-dc
+host_configs:
+- drive:
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+    type: SSD
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+    type: SSD
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+    type: SSD
+  host_config_id: 1
+hosts:
+- host: ydb-node-zone-a.local
+  host_config_id: 1
+  walle_location:
+    body: 1
+    data_center: 'zone-a'
+    rack: '1'
+- host: ydb-node-zone-b.local
+  host_config_id: 1
+  walle_location:
+    body: 2
+    data_center: 'zone-b'
+    rack: '2'
+- host: ydb-node-zone-c.local
+  host_config_id: 1
+  walle_location:
+    body: 3
+    data_center: 'zone-c'
+    rack: '3'
+domains_config:
+  domain:
+  - name: Root
+    storage_pool_types:
+    - kind: ssd
+      pool_config:
+        box_id: 1
+        erasure_species: mirror-3-dc
+        kind: ssd
+        geometry:
+          realm_level_begin: 10
+          realm_level_end: 20
+          domain_level_begin: 10
+          domain_level_end: 256
+        pdisk_filter:
+        - property:
+          - type: SSD
+        vdisk_kind: Default
+  state_storage:
+  - ring:
+      node: [1, 2, 3]
+      nto_select: 3
+    ssid: 1
+actor_system_config:
+  executor:
+  - name: System
+    spin_threshold: 0
+    threads: 2
+    type: BASIC
+  - name: User
+    spin_threshold: 0
+    threads: 3
+    type: BASIC
+  - name: Batch
+    spin_threshold: 0
+    threads: 2
+    type: BASIC
+  - name: IO
+    threads: 1
+    time_per_mailbox_micro_secs: 100
+    type: IO
+  - name: IC
+    spin_threshold: 10
+    threads: 1
+    time_per_mailbox_micro_secs: 100
+    type: BASIC
+  scheduler:
+    progress_threshold: 10000
+    resolution: 256
+    spin_threshold: 0
+blob_storage_config:
+  service_set:
+    groups:
+    - erasure_species: mirror-3-dc
+      rings:
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: ydb-node-zone-a.local
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: ydb-node-zone-a.local
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+        - vdisk_locations:
+          - node_id: ydb-node-zone-a.local
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: ydb-node-zone-b.local
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: ydb-node-zone-b.local
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+        - vdisk_locations:
+          - node_id: ydb-node-zone-b.local
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: ydb-node-zone-c.local
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: ydb-node-zone-c.local
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+        - vdisk_locations:
+          - node_id: ydb-node-zone-c.local
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+channel_profile_config:
+  profile:
+  - channel:
+    - erasure_species: mirror-3-dc
+      pdisk_category: 0
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 0
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 0
+      storage_pool_kind: ssd
+    profile_id: 0

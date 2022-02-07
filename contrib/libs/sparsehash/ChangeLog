@@ -1,0 +1,279 @@
+Mon Oct 12 21:00:00 2015 Google Inc. <google-sparsehash@googlegroups.com>
+
+	* sparsehash: version 2.0.3
+	* Fix compilation on modern compilers and operating systems
+
+Thu Feb 23 23:47:18 2012 Google Inc. <google-sparsehash@googlegroups.com>
+
+	* sparsehash: version 2.0.2
+	* BUGFIX: Fix backwards compatibility for <google> include folders
+
+Wed Feb 01 02:57:48 2012 Google Inc. <google-sparsehash@googlegroups.com>
+
+	* sparsehash: version 2.0.1
+	* BUGFIX: Fix path to malloc_extension.h in time_hash_map.cc
+
+Tue Jan 31 11:33:04 2012  Google Inc. <google-sparsehash@googlegroups.com>
+
+	* sparsehash: version 2.0
+	* Renamed include directory from google/ to sparsehash/ (csilvers)
+	* Changed the 'official' sparsehash email in setup.py/etc
+	* Renamed google-sparsehash.sln to sparsehash.sln
+	* Changed copyright text to reflect Google's relinquished ownership
+
+Tue Dec 20 21:04:04 2011  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.12 release
+	* Add support for serializing/unserializing dense_hash_map/set to disk
+	* New simpler and more flexible serialization API
+	* Be more consistent about clearing on unserialize() even if it fails
+	* Quiet some compiler warnings about unused variables
+	* Add a timing test for iterating (suggested by google code issue 77)
+	* Add offset_to_pos, the opposite of pos_to_offset, to sparsetable
+	* PORTING: Add some missing #includes, needed on some systems
+	* Die at configure-time when g++ isn't installed
+	* Successfully make rpm's even when dpkg is missing
+	* Improve deleted key test in util/gtl/{dense,sparse}hashtable
+	* Update automake to 1.10.1, and autoconf to 2.62
+
+Thu Jun 23 21:12:58 2011  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.11 release
+	* Improve performance on pointer keys by ignoring always-0 low bits
+	* Fix missing $(top_srcdir) in Makefile.am, which broke some compiles
+	* BUGFIX: Fix a crashing typo-bug in swap()
+	* PORTING: Remove support for old compilers that do not use 'std'
+	* Add some new benchmarks to test for a place dense_hash_* does badly
+	* Some cosmetic changes due to a switch to a new releasing tool
+
+Thu Jan 20 16:07:39 2011  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.10 release
+	* Follow ExtractKey return type, allowing it to return a reference
+	* PORTING: fix MSVC 10 warnings (constifying result_type, placement-new)
+	* Update from autoconf 2.61 to autoconf 2.65
+	
+Fri Sep 24 11:37:50 2010  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.9 release
+	* Add is_enum; make all enums PODs by default (romanp)
+	* Make find_or_insert() usable directly (dawidk)
+	* Use zero-memory trick for allocators to reduce space use (guilin)
+	* Fix some compiler warnings (chandlerc, eraman)
+	* BUGFIX: int -> size_type in one function we missed (csilvers)
+	* Added sparsehash.pc, for pkg-config (csilvers)
+
+Thu Jul 29 15:01:29 2010  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.8.1 release
+	* Remove -Werror from Makefile: gcc 4.3 gives spurious warnings
+
+Thu Jul 29 09:53:26 2010  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.8 release
+	* More support for Allocator, including allocator ctor arg (csilvers)
+	* Repack hasthable vars to reduce container size *more* (giao)
+	* Speed up clear() (csilvers)
+	* Change HT_{OCCUPANCY,SHRINK}_FLT from float to int (csilvers)
+	* Revamp test suite for more complete code & timing coverage (csilvers)
+	* BUGFIX: Enforce max_size for dense/sparse_hashtable (giao, csilvers)
+	* BUGFIX: Raise exception instead of crashing on overflow (csilvers)
+	* BUGFIX: Allow extraneous const in key type (csilvers)
+	* BUGFIX: Allow same functor for both hasher and key_equals (giao)
+	* PORTING: remove is_convertible, which gives AIX cc fits (csilvers)
+	* PORTING: Renamed README.windows to README_windows.txt (csilvers)
+	* Created non-empty NEWS file (csilvers)
+
+Wed Mar 31 12:32:03 2010  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.7 release
+	* Add support for Allocator (guilin)
+	* Add libc_allocator_with_realloc as the new default allocator (guilin)
+	* Repack {sparse,dense}hashtable vars to reduce container size (giao)
+	* BUGFIX: operator== no longer requires same table ordering (csilvers)
+	* BUGFIX: fix dense_hash_*(it,it) by requiring empty-key too (csilvers)
+	* PORTING: fix language bugs that gcc allowed (csilvers, chandlerc)
+	* Update from autoconf 2.61 to autoconf 2.64
+
+Fri Jan  8 14:47:55 2010  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.6 release
+	* New accessor methods for deleted_key, empty_key (sjackman)
+	* Use explicit hash functions in sparsehash tests (csilvers)
+	* BUGFIX: Cast resize to fix SUNWspro bug (csilvers)
+	* Check for sz overflow in min_size (csilvers)
+	* Speed up clear() for dense and sparse hashtables (jeff)
+	* Avoid shrinking in all cases when min-load is 0 (shaunj, csilvers)
+	* Improve densehashtable code for the deleted key (gpike)
+	* BUGFIX: Fix operator= when the 2 empty-keys differ (andreidam)
+	* BUGFIX: Fix ht copying when empty-key isn't set (andreidam)
+	* PORTING: Use TmpFile() instead of /tmp on MinGW (csilvers)
+	* PORTING: Use filenames that work with Stratus VOS.
+
+Tue May 12 14:16:38 2009  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.5.2 release
+	* Fix compile error: not initializing set_key in all constructors
+
+Fri May  8 15:23:44 2009  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.5.1 release
+	* Fix broken equal_range() for all the hash-classes (csilvers)
+
+Wed May  6 11:28:49 2009  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.5 release
+	* Support the tr1 unordered_map (and unordered_set) API (csilvers)
+	* Store only key for delkey; reduces need for 0-arg c-tor (csilvers)
+	* Prefer unordered_map to hash_map for the timing test (csilvers)
+	* PORTING: update the resource use for 64-bit machines (csilvers)
+	* PORTING: fix MIN/MAX collisions by un-#including windows.h (csilvers)
+	* Updated autoconf version to 2.61 and libtool version to 1.5.26
+
+Wed Jan 28 17:11:31 2009  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.4 release
+	* Allow hashtables to be <32 buckets (csilvers)
+	* Fix initial-sizing bug: was sizing tables too small (csilvers)
+	* Add asserts that clients don't abuse deleted/empty key (csilvers)
+	* Improve determination of 32/64 bit for C code (csilvers)
+	* Small fix for doc files in rpm (csilvers)
+
+Thu Nov  6 15:06:09 2008  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.3 release
+	* Add an interface to change the parameters for resizing (myl)
+	* Document another potentially good hash function (csilvers)
+
+Thu Sep 18 13:53:20 2008  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.2 release
+	* Augment documentation to better describe namespace issues (csilvers)
+	* BUG FIX: replace hash<> with SPARSEHASH_HASH, for windows (csilvers)
+	* Add timing test to unittest to test repeated add+delete (csilvers)
+	* Do better picking a new size when resizing (csilvers)
+	* Use ::google instead of google as a namespace (csilvers)
+	* Improve threading test at config time (csilvers)
+
+Mon Feb 11 16:30:11 2008  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.1 release
+	* Fix brown-paper-bag bug in some constructors (rafferty)
+	* Fix problem with variables shadowing member vars, add -Wshadow
+	
+Thu Nov 29 11:44:38 2007  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.0.2 release
+	* Fix a final reference to hash<> to use SPARSEHASH_HASH<> instead.
+	
+Wed Nov 14 08:47:48 2007  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.0.1 release :-(
+	* Remove an unnecessary (harmful) "#define hash" in windows' config.h
+	
+Tue Nov 13 15:15:46 2007  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 1.0 release!  We are now out of beta.
+	* Clean up Makefile awk script to be more readable (csilvers)
+	* Namespace fixes: use fewer #defines, move typedefs into namespace
+	
+Fri Oct 12 12:35:24 2007  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 0.9.1 release
+	* Fix Makefile awk script to work on more architectures (csilvers)
+	* Add test to test code in more 'real life' situations (csilvers)
+
+Tue Oct  9 14:15:21 2007  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 0.9 release
+	* More type-hygiene improvements, especially for 64-bit (csilvers)
+	* Some configure improvements to improve portability, utility (austern)
+	* Small bugfix for operator== for dense_hash_map (jeff)
+
+Tue Jul  3 12:55:04 2007  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 0.8 release
+	* Minor type-hygiene improvements: size_t for int, etc. (csilvers)
+	* Porting improvements: tests pass on OS X, FreeBSD, Solaris (csilvers)
+	* Full windows port!  VS solution provided for all unittests (csilvers)
+
+Mon Jun 11 11:33:41 2007  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 0.7 release
+	* Syntax fixes to better support gcc 4.3 and VC++ 7 (mec, csilvers)
+	* Improved windows/VC++ support (see README.windows) (csilvers)
+	* Config improvements: better tcmalloc support and config.h (csilvers)
+	* More robust with missing hash_map + nix 'trampoline' .h's (csilvers)
+	* Support for STLport's hash_map/hash_fun locations (csilvers)
+	* Add .m4 files to distribution; now all source is there (csilvers)
+	* Tiny modification of shrink-threshhold to allow never-shrinking (amc)
+	* Protect timing tests against aggressive optimizers (csilvers)
+	* Extend time_hash_map to test bigger objects (csilvers)
+	* Extend type-trait support to work with const objects (csilvers)
+	* USER VISIBLE: speed up all code by replacing memmove with memcpy
+	  (csilvers)
+
+Tue Mar 20 17:29:34 2007  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 0.6 release
+	* Some improvement to type-traits (jyasskin)
+	* Better timing results when google-perftools is installed (sanjay)
+	* Updates and fixes to html documentation and README (csilvers)
+	* A bit more careful about #includes (csilvers)
+	* Fix for typo that broken compilation on some systems (csilvers)
+	* USER VISIBLE: New clear_no_resize() method added to dense_hash_map
+          (uszkoreit)
+
+Sat Oct 21 13:47:47 2006  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 0.5 release
+	* Support uint16_t (SunOS) in addition to u_int16_t (BSD) (csilvers)
+	* Get rid of UNDERSTANDS_ITERATOR_TAGS; everyone understands (csilvers)
+	* Test that empty-key and deleted-key differ (rbayardo)
+	* Fix example docs: strcmp needs to test for NULL (csilvers)
+
+Sun Apr 23 22:42:35 2006  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 0.4 release
+	* Remove POD requirement for keys and values! (austern)
+	* Add tr1-compatible type-traits system to speed up POD ops. (austern)
+	* Fixed const-iterator bug where postfix ++ didn't compile. (csilvers)
+	* Fixed iterator comparison bugs where <= was incorrect. (csilvers)
+	* Clean up config.h to keep its #defines from conflicting. (csilvers)
+	* Big documentation sweep and cleanup. (csilvers)
+	* Update documentation to talk more about good hash fns. (csilvers)
+	* Fixes to compile on MSVC (working around some MSVC bugs). (rennie)
+	* Avoid resizing hashtable on operator[] lookups (austern)
+
+Thu Nov  3 20:12:31 2005  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 0.3 release
+	* Quiet compiler warnings on some compilers. (csilvers)
+	* Some documentation fixes: example code for dense_hash_map. (csilvers)
+	* Fix a bug where swap() wasn't swapping delete_key(). (csilvers)
+	* set_deleted_key() and set_empty_key() now take a key only,
+	  allowing hash-map values to be forward-declared. (csilvers)
+	* support for std::insert_iterator (and std::inserter). (csilvers)
+
+Mon May  2 07:04:46 2005  Google Inc. <opensource@google.com>
+
+	* sparsehash: version 0.2 release
+	* Preliminary support for msvc++ compilation. (csilvers)
+	* Documentation fixes -- some example code was incomplete! (csilvers)
+	* Minimize size of config.h to avoid other-package conflicts (csilvers)
+	* Contribute a C-based version of sparsehash that served as the
+	  inspiration for this code.  One day, I hope to clean it up and
+	  support it, but for now it's just in experimental/, for playing
+	  around with. (csilvers)
+	* Change default namespace from std to google. (csilvers)
+
+Fri Jan 14 16:53:32 2005  Google Inc. <opensource@google.com>
+
+	* sparsehash: initial release:
+	  The sparsehash package contains several hash-map implementations,
+	  similar in API to SGI's hash_map class, but with different
+	  performance characteristics.  sparse_hash_map uses very little
+	  space overhead: 1-2 bits per entry.  dense_hash_map is typically
+	  faster than the default SGI STL implementation.  This package
+	  also includes hash-set analogues of these classes.
+

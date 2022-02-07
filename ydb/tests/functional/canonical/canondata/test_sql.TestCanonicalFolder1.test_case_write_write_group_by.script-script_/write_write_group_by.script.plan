@@ -1,0 +1,119 @@
+{
+    "meta": {
+        "version": "0.2",
+        "type": "script"
+    },
+    "queries": [
+        {
+            "tables": [
+                {
+                    "name": "/local/base_write_write_group_by_script_script/Input1",
+                    "reads": [
+                        {
+                            "columns": [
+                                "Amount",
+                                "Group"
+                            ],
+                            "scan_by": [
+                                "Group",
+                                "Name"
+                            ],
+                            "type": "FullScan"
+                        }
+                    ]
+                },
+                {
+                    "name": "/local/base_write_write_group_by_script_script/Temp",
+                    "writes": [
+                        {
+                            "columns": [
+                                "MinAmount",
+                                "Value"
+                            ],
+                            "key": [
+                                "Group (expr)"
+                            ],
+                            "type": "MultiUpsert"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "tables": [
+                {
+                    "name": "/local/base_write_write_group_by_script_script/Temp",
+                    "reads": [
+                        {
+                            "columns": [
+                                "Group",
+                                "MinAmount",
+                                "Value"
+                            ],
+                            "scan_by": [
+                                "Group (-\u221e, +\u221e)"
+                            ],
+                            "type": "FullScan"
+                        }
+                    ]
+                }
+            ],
+            "Plan": {
+                "Plans": [
+                    {
+                        "PlanNodeId": 4,
+                        "Plans": [
+                            {
+                                "PlanNodeId": 3,
+                                "Plans": [
+                                    {
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Tables": [
+                                                    "base_write_write_group_by_script_script/Temp"
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Operators": [
+                                                    {
+                                                        "Name": "Limit",
+                                                        "Limit": "1001"
+                                                    },
+                                                    {
+                                                        "ReadRanges": [
+                                                            "Group (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadColumns": [
+                                                            "Group",
+                                                            "MinAmount",
+                                                            "Value"
+                                                        ],
+                                                        "Name": "TableFullScan",
+                                                        "Table": "base_write_write_group_by_script_script/Temp"
+                                                    }
+                                                ],
+                                                "Node Type": "Limit-TableFullScan"
+                                            }
+                                        ],
+                                        "Node Type": "DqCnMerge",
+                                        "PlanNodeType": "Connection"
+                                    }
+                                ],
+                                "Operators": [
+                                    {
+                                        "Name": "Limit",
+                                        "Limit": "1001"
+                                    }
+                                ],
+                                "Node Type": "Limit"
+                            }
+                        ],
+                        "Node Type": "ResultSet_0_0",
+                        "PlanNodeType": "ResultSet"
+                    }
+                ],
+                "Node Type": "Query"
+            }
+        }
+    ]
+}

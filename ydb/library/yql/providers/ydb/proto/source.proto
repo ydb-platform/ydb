@@ -1,0 +1,15 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYql.NYdb;
+
+message TSource {
+    string Table = 1;
+    string Endpoint = 3;
+    string Token = 4;
+    string Database = 5;
+    bool Secure = 6;
+    repeated string Columns = 7;
+    repeated uint32 KeyColumnTypes = 8;
+    bool AddBearerToToken = 9;
+}

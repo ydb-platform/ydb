@@ -1,0 +1,338 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     CC-PDDC              03f1d5aee47da1e798f42f29c0315e49
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: CC-PDDC
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/licenses/publicdomain/, https://creativecommons.org/licenses/publicdomain/, https://spdx.org/licenses/CC-PDDC
+    Files with this license:
+        evdns.c [32:36]
+
+KEEP     BSD-3-Clause         15998ea282d57c57446ae7296c7e3029
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        buffer.c [5:25]
+        buffer_iocp.c [4:24]
+        bufferevent-internal.h [4:24]
+        bufferevent.c [5:25]
+        bufferevent_async.c [6:26]
+        bufferevent_filter.c [6:26]
+        bufferevent_openssl.c [4:24]
+        bufferevent_pair.c [4:24]
+        bufferevent_ratelim.c [6:26]
+        bufferevent_sock.c [6:26]
+        changelist-internal.h [4:24]
+        defer-internal.h [4:24]
+        devpoll.c [5:25]
+        epoll.c [5:25]
+        epoll_sub.c [5:25]
+        epolltable-internal.h [5:25]
+        evbuffer-internal.h [5:25]
+        evdns.c [4:24]
+        event-internal.h [5:25]
+        event.c [5:25]
+        event_iocp.c [4:24]
+        event_tagging.c [5:25]
+        evmap-internal.h [4:24]
+        evmap.c [4:24]
+        evrpc-internal.h [5:25]
+        evrpc.c [5:25]
+        evsignal-internal.h [5:25]
+        evthread-internal.h [4:24]
+        evthread.c [4:24]
+        evthread_pthread.c [4:24]
+        evthread_win32.c [4:24]
+        evutil.c [4:24]
+        evutil_rand.c [4:24]
+        evutil_time.c [4:24]
+        http.c [5:25]
+        include/evdns.h [5:25]
+        include/event.h [5:25]
+        include/event2/buffer.h [4:24]
+        include/event2/buffer_compat.h [4:24]
+        include/event2/bufferevent.h [5:25]
+        include/event2/bufferevent_compat.h [6:26]
+        include/event2/bufferevent_ssl.h [4:24]
+        include/event2/bufferevent_struct.h [5:25]
+        include/event2/dns.h [5:25]
+        include/event2/dns_compat.h [5:25]
+        include/event2/dns_struct.h [5:25]
+        include/event2/event.h [5:25]
+        include/event2/event_compat.h [5:25]
+        include/event2/event_struct.h [5:25]
+        include/event2/http.h [5:25]
+        include/event2/http_compat.h [5:25]
+        include/event2/http_struct.h [5:25]
+        include/event2/keyvalq_struct.h [5:25]
+        include/event2/listener.h [5:25]
+        include/event2/rpc.h [5:25]
+        include/event2/rpc_compat.h [5:25]
+        include/event2/rpc_struct.h [5:25]
+        include/event2/tag.h [5:25]
+        include/event2/tag_compat.h [5:25]
+        include/event2/thread.h [4:24]
+        include/event2/util.h [4:24]
+        include/event2/visibility.h [5:25]
+        include/evhttp.h [5:25]
+        include/evrpc.h [5:25]
+        include/evutil.h [4:24]
+        iocp-internal.h [4:24]
+        ipv6-internal.h [4:24]
+        kqueue-internal.h [4:24]
+        kqueue.c [7:27]
+        listener.c [4:24]
+        log-internal.h [5:25]
+        minheap-internal.h [6:26]
+        mm-internal.h [4:24]
+        poll.c [7:27]
+        ratelim-internal.h [4:24]
+        select.c [7:27]
+        signal.c [7:27]
+        time-internal.h [5:25]
+        util-internal.h [4:24]
+        win32select.c [6:26]
+
+KEEP     BSD-3-Clause         24aa4f16d31cd3a0b1ce6f69c61fc6d1
+BELONGS ya.make
+    License text:
+        Libevent is available for use under the following license, commonly known
+        as the 3-clause (or "modified") BSD license:
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1:2]
+
+KEEP     BSD-3-Clause         2bd53cb7752dbd0ccaa15008374ad93a
+BELONGS ya.make
+    License text:
+           o Change the BSD license from 4 to 3-clause. (86df3ed Joakim Soderberg)
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ChangeLog [935:935]
+
+KEEP     BSD-3-Clause         2dc5abaaad0d6b67fcf860d7a06a2cf3
+BELONGS ya.make
+    License text:
+        Portions of Libevent are based on works by others, also made available by
+        them under the three-clause BSD license above.  The copyright notices are
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [31:32]
+
+KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [83:99]
+
+KEEP     BSD-3-Clause         6daffccbe81cc81cf1b75435c1342138
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        log.c [15:37]
+
+KEEP     BSD-3-Clause         74e7cfa481aeed78f9e1ce584d7eebd2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        evport.c [7:27]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 8ce01b16f6e2e91b1fa0d9d781708ee0
+BELONGS ya.make
+    License text:
+            BitTorrent's libUTP library.  That code is subject to the following
+            license:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        evutil_time.c [461:462]
+
+KEEP     BSD-3-Clause         9032bc92a1ee349e22cdac7b1bdde2cb
+BELONGS ya.make
+    License text:
+        	/* This code is originally from Tor.  Used with permission. */
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        evutil.c [215:215]
+
+KEEP     BSD-3-Clause         95d34b24745f43bd8af4e1f7b381e433
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [8:28]
+
+KEEP     ISC                  9614ebcaadc8e2307131663313f2052f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE [63:73]
+
+KEEP     BSD-3-Clause AND CC-PDDC 9c80eee62ec4471c5059d4e48622bbb3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 98.41
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        include/event2/dns.h [30:37]
+    Scancode info:
+        Original SPDX id: CC-PDDC
+        Score           : 98.41
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/licenses/publicdomain/, https://creativecommons.org/licenses/publicdomain/, https://spdx.org/licenses/CC-PDDC
+    Files with this license:
+        include/event2/dns.h [30:37]
+
+SKIP     LicenseRef-scancode-unknown-license-reference a9642e514f4e64f7e454b6a3454ec27d
+BELONGS ya.make
+    License text:
+        /* See license at end. */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        ht-internal.h [4:4]
+
+KEEP     MIT                  b4f4a5d5eb47875b1e57b4c13529256d
+BELONGS ya.make
+    License text:
+        The Windows timer code is based on code from libutp, which is
+        distributed under this license, sometimes called the "MIT" license.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [77:78]
+
+KEEP     ISC                  c17826195ae7a32a1d777262c034dea8
+BELONGS ya.make
+    License text:
+        The arc4module is available under the following, sometimes called the
+        "OpenBSD" license:
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE [57:58]
+
+KEEP     MIT                  ded5b9658d5a7e7d35aee36414b05084
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        evutil_time.c [466:483]
+
+KEEP     BSD-3-Clause         e5c1d5c5af73cf6350449d2bb5bca19a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ht-internal.h [457:483]
+
+KEEP     ISC                  e6a382fc7564fdd1a5e46b2d97b3221f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        arc4random.c [14:24]

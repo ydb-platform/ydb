@@ -1,0 +1,20 @@
+package NKikimrTracing;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TTraceID {
+    optional fixed64 CreationTime = 1;
+    optional fixed64 RandomID = 2;
+}
+
+message TSerializedSignal {
+    optional uint32 Type = 1;
+    optional string Signal = 2;
+}
+
+message TTraceSignal {
+    optional uint32 Type = 1;
+    optional TTraceID SelfID = 2;
+    optional TTraceID ParentID = 3;
+    optional TTraceID RootID = 4;
+    repeated TSerializedSignal Signals = 5;
+}

@@ -1,0 +1,109 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+import "google/protobuf/struct.proto";
+import "ydb/library/yql/public/types/yql_types.proto";
+
+package YdbOld;
+option java_package = "ru.yandex.ydb.old";
+option java_outer_classname = "ValueProtos";
+
+message DataType {
+    NYql.NProto.TypeIds id = 1;
+}
+
+message OptionalType {
+    Type item = 1;
+}
+
+message ListType {
+    Type item = 1;
+}
+
+message Variant {
+    Type item = 1;
+}
+
+message TupleType {
+    repeated Type elements = 1;
+}
+
+message Member {
+    string name = 1;
+    Type type = 2;
+}
+
+message StructType {
+    repeated Member members = 1;
+}
+
+message DictType {
+    Type key = 1;
+    Type payload = 2;
+}
+
+message Type {
+    oneof type_type {
+        DataType data_type = 1;
+        OptionalType optional_type = 2;
+        ListType list_type = 3;
+        TupleType tuple_type = 4;
+        StructType struct_type = 5;
+        DictType dict_type = 6;
+        Variant variant_type = 7;
+        google.protobuf.NullValue void_type = 8;
+    }
+}
+
+/**
+ * Holds a pair to represent Dict type
+ */
+
+message ValuePair {
+    Value key = 1;
+    Value payload = 2;
+}
+
+/**
+ * This message represents any of the supported by transport value types.
+ * Note, this is not actually a Ydb types. See NYql.NProto.TypeIds for Ydb types.
+ *
+ * For scalar types, just oneof value used.
+ * For composite types repeated Items or Pairs used. See below.
+ *
+ * The idea is, we do not represent explicitly Optional<T> if value is not null (most common case)
+ * - just represents value of T. Numbers of Optional levels we can get from type.
+ * Variant<T> type always represent explicitly
+ */
+
+message Value {
+    oneof value_value {
+        bool bool_value = 1;
+        sfixed32 int32_value = 2;
+        fixed32 uint32_value = 3;
+        sfixed64 int64_value = 4;
+        fixed64 uint64_value = 5;
+        float float_value = 6;
+        double double_value = 7;
+        bytes bytes_value = 8;
+        string text_value = 9;
+        google.protobuf.NullValue null_flag_value = 10; // Set if current TValue is terminal Null
+        Value nested_value = 11; // Represents nested TValue for Optional<Optional<T>>(Null), or Variant<T> types
+        fixed64 low_128 = 15;
+    }
+    repeated Value items = 12; // Used for List, Tuple, Struct types
+    repeated ValuePair pairs = 13; // Used for Dict type
+    uint32 variant_index = 14; // Used for Variant type
+    fixed64 high_128 = 16;
+}
+
+message ColumnMeta {
+    string name = 1;
+    Type type = 2;
+};
+
+message ResultSet {
+    repeated ColumnMeta column_meta = 1; /*!< Metadata of columns */
+    repeated Value rows = 2; /*!< Rows of table */
+    bool truncated = 3; /*!< Flag indicates the result was truncated */
+};

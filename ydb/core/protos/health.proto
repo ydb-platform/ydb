@@ -1,0 +1,44 @@
+package NKikimrHealth;
+option java_package = "ru.yandex.kikimr.proto";
+
+enum EColor {
+    Red = 0;
+    Green = 1;
+}
+
+message TRaw {
+    optional string Text = 1;
+    optional uint64 Data = 2;
+}
+
+message TPathLeaf {
+    optional string Text = 1;
+    optional uint64 SetAt = 2;
+    optional TPathLeaf PreviousValue = 3;
+    optional EColor Color = 4;
+}
+
+message TPathNode {
+    optional TRaw Raw = 1;
+
+    repeated TPathNode Children = 2;
+    optional TPathLeaf Leaf = 3;
+}
+
+message THealthTree {
+    optional TPathNode Root = 1;
+}
+
+message TNodeGossip {
+    optional uint64 CreationInstantMs = 1;
+    optional uint32 NodeId = 2;
+    optional uint64 StartupInstantMs = 3;
+}
+
+message TEvPushStatus {
+    optional uint64 CreationInstantMs = 1;
+    optional uint32 SenderNodeId = 2;
+    repeated TNodeGossip NodeGossip = 3;
+    optional THealthTree HealthTree = 4;
+}
+

@@ -1,0 +1,129 @@
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+
+using namespace NSchemeShardUT_Private;
+
+Y_UNIT_TEST_SUITE(TReplicationWithRebootsTests) {
+    void SetupLogging(TTestActorRuntimeBase& runtime) {
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NActors::NLog::PRI_TRACE);
+    }
+
+    Y_UNIT_TEST(Create) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                SetupLogging(runtime);
+            }
+
+            TestCreateReplication(runtime, ++t.TxId, "/MyRoot", R"(
+                Name: "Replication"
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            TestLs(runtime, "/MyRoot/Replication", false, NLs::PathExist);
+        });
+    }
+
+    void CreateMultipleReplications(bool withInitialController) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                SetupLogging(runtime);
+
+                if (withInitialController) {
+                    TestCreateReplication(runtime, ++t.TxId, "/MyRoot", R"(
+                        Name: "Replication0"
+                    )");
+
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                    TestLs(runtime, "/MyRoot/Replication0", false, NLs::PathExist);
+                }
+            }
+
+            TVector<TString> names;
+            TVector<ui64> txIds;
+
+            for (int i = 1; i <= 3; ++i) {
+                auto name = Sprintf("Replication%d", i);
+                auto request = CreateReplicationRequest(++t.TxId, "/MyRoot", Sprintf(R"(
+                    Name: "%s"
+                )", name.c_str()));
+
+                t.TestEnv->ReliablePropose(runtime, request, {
+                    NKikimrScheme::StatusAccepted,
+                    NKikimrScheme::StatusAlreadyExists,
+                    NKikimrScheme::StatusMultipleModifications,
+                });
+
+                names.push_back(std::move(name));
+                txIds.push_back(t.TxId);
+            }
+            t.TestEnv->TestWaitNotification(runtime, txIds);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                for (const auto& name : names) {
+                    TestLs(runtime, "/MyRoot/" + name, false, NLs::PathExist);
+                }
+            }
+        });
+    }
+
+    Y_UNIT_TEST(CreateInParallelWithoutInitialController) {
+        CreateMultipleReplications(false);
+    }
+
+    Y_UNIT_TEST(CreateInParallelWithInitialController) {
+        CreateMultipleReplications(true);
+    }
+
+    Y_UNIT_TEST(CreateDropRecreate) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                SetupLogging(runtime);
+            }
+
+            {
+                auto request = CreateReplicationRequest(++t.TxId, "/MyRoot", R"(
+                    Name: "Replication"
+                )");
+                t.TestEnv->ReliablePropose(runtime, request, {
+                    NKikimrScheme::StatusAccepted,
+                    NKikimrScheme::StatusAlreadyExists,
+                    NKikimrScheme::StatusMultipleModifications,
+                });
+            }
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            TestLs(runtime, "/MyRoot/Replication", false, NLs::PathExist);
+
+            {
+                auto request = DropReplicationRequest(++t.TxId, "/MyRoot", "Replication");
+                t.TestEnv->ReliablePropose(runtime, request, {
+                    NKikimrScheme::StatusAccepted,
+                    NKikimrScheme::StatusMultipleModifications,
+                });
+            }
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            TestLs(runtime, "/MyRoot/Replication", false, NLs::PathNotExist);
+
+            {
+                auto request = CreateReplicationRequest(++t.TxId, "/MyRoot", R"(
+                    Name: "Replication"
+                )");
+                t.TestEnv->ReliablePropose(runtime, request, {
+                    NKikimrScheme::StatusAccepted,
+                    NKikimrScheme::StatusAlreadyExists,
+                    NKikimrScheme::StatusMultipleModifications,
+                });
+            }
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            TestLs(runtime, "/MyRoot/Replication", false, NLs::PathExist);
+        });
+    }
+
+} // TReplicationWithRebootsTests

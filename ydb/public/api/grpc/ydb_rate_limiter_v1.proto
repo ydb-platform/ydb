@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package Ydb.RateLimiter.V1;
+
+option java_package = "com.yandex.ydb.rate_limiter.v1";
+option java_outer_classname = "RateLimiterGrpc";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/ydb_rate_limiter.proto";
+
+// Service that implements distributed rate limiting.
+//
+// To use rate limiter functionality you need an existing coordination node.
+
+service RateLimiterService {
+    // Control plane API
+
+    // Create a new resource in existing coordination node.
+    rpc CreateResource(CreateResourceRequest) returns (CreateResourceResponse);
+
+    // Update a resource in coordination node.
+    rpc AlterResource(AlterResourceRequest) returns (AlterResourceResponse);
+
+    // Delete a resource from coordination node.
+    rpc DropResource(DropResourceRequest) returns (DropResourceResponse);
+
+    // List resources in given coordination node.
+    rpc ListResources(ListResourcesRequest) returns (ListResourcesResponse);
+
+    // Describe properties of resource in coordination node.
+    rpc DescribeResource(DescribeResourceRequest) returns (DescribeResourceResponse);
+
+    // Take units for usage of a resource in coordination node.
+    rpc AcquireResource(AcquireResourceRequest) returns (AcquireResourceResponse);
+}

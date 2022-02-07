@@ -1,0 +1,59 @@
+[
+    [
+        {
+            "a.Count": 1,
+            "a.Group": null,
+            "t.Value": null
+        },
+        {
+            "a.Count": 3,
+            "a.Group": 1,
+            "t.Value": "One"
+        },
+        {
+            "a.Count": 1,
+            "a.Group": 2,
+            "t.Value": null
+        },
+        {
+            "a.Count": 1,
+            "a.Group": 3,
+            "t.Value": "Three"
+        },
+        {
+            "a.Count": 2,
+            "a.Group": 4,
+            "t.Value": null
+        },
+        {
+            "a.Count": 1,
+            "a.Group": 5,
+            "t.Value": null
+        },
+        {
+            "a.Count": 2,
+            "a.Group": 6,
+            "t.Value": null
+        },
+        {
+            "a.Count": 6,
+            "a.Group": 10,
+            "t.Value": null
+        },
+        {
+            "a.Count": 1,
+            "a.Group": 100001,
+            "t.Value": null
+        },
+        {
+            "a.Count": 1,
+            "a.Group": 100002,
+            "t.Value": null
+        },
+        {
+            "a.Count": 1,
+            "a.Group": 100003,
+            "t.Value": null
+        }
+    ]
+]

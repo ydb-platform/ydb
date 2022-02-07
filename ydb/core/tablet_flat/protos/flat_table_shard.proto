@@ -1,0 +1,9 @@
+package NKikimr.NTable.NProto;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TShardedStrategyStateInfo {
+    optional uint64 LastSplitKey = 1;
+    repeated uint64 SplitKeys = 2;
+    optional uint64 LastShardId = 3;
+    repeated uint64 Shards = 4;
+}

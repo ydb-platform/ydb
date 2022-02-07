@@ -1,0 +1,15 @@
+package NCalculator;
+
+message TRequestSumRecord {
+    required int32 A = 1;
+    required int32 B = 2;
+}
+
+message TRequestMulRecord {
+    required int32 A = 1;
+    required int32 B = 2;
+}
+
+message TResponseRecord {
+    required int32 Result = 1;
+}

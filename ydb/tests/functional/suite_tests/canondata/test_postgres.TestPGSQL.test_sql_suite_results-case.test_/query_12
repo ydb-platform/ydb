@@ -1,0 +1,22 @@
+[
+    {
+        "Five": 1,
+        "Value": 1,
+        "Category": "one"
+    },
+    {
+        "Five": 1,
+        "Value": 2,
+        "Category": "two"
+    },
+    {
+        "Five": 1,
+        "Value": 3,
+        "Category": "big"
+    },
+    {
+        "Five": 1,
+        "Value": 4,
+        "Category": "big"
+    }
+]

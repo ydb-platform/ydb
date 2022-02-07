@@ -1,0 +1,55 @@
+import "library/cpp/monlib/encode/legacy_protobuf/protos/metric_meta.proto";
+
+package NBus;
+
+option java_package = "ru.yandex.messagebus.monitoring.proto";
+
+message TMessageStatusRecord {
+    enum EMessageStatus {
+        MESSAGE_OK = 0;
+        MESSAGE_CONNECT_FAILED = 1;
+        MESSAGE_TIMEOUT = 2;
+        MESSAGE_SERVICE_UNKNOWN = 3;
+        MESSAGE_BUSY = 4;
+        MESSAGE_UNKNOWN = 5;
+        MESSAGE_DESERIALIZE_ERROR = 6;
+        MESSAGE_HEADER_CORRUPTED = 7;
+        MESSAGE_DECOMPRESS_ERROR = 8;
+        MESSAGE_MESSAGE_TOO_LARGE = 9;
+        MESSAGE_REPLY_FAILED = 10;
+        MESSAGE_DELIVERY_FAILED = 11;
+        MESSAGE_INVALID_VERSION = 12;
+        MESSAGE_SERVICE_TOOMANY = 13;
+        MESSAGE_SHUTDOWN = 14;
+        MESSAGE_DONT_ASK = 15;
+    }
+
+    optional EMessageStatus Status = 1;
+    optional uint32 Count = 2;
+}
+
+message TConnectionStatusMonRecord {
+    optional uint32 SendQueueSize = 1          [ (NMonProto.Metric).Type = GAUGE ];
+    // client only
+    optional uint32 AckMessagesSize = 2        [ (NMonProto.Metric).Type = GAUGE ];
+    optional uint32 ErrorCount = 3             [ (NMonProto.Metric).Type = RATE ];
+
+    optional uint64 WriteBytes = 10            [ (NMonProto.Metric).Type = RATE ];
+    optional uint64 WriteBytesCompressed = 11;
+    optional uint64 WriteMessages = 12         [ (NMonProto.Metric).Type = RATE ];
+    optional uint64 WriteSyscalls = 13;
+    optional uint64 WriteActs = 14;
+    optional uint64 ReadBytes = 20             [ (NMonProto.Metric).Type = RATE ];
+    optional uint64 ReadBytesCompressed = 21;
+    optional uint64 ReadMessages = 22          [ (NMonProto.Metric).Type = RATE ];
+    optional uint64 ReadSyscalls = 23;
+    optional uint64 ReadActs = 24;
+
+    repeated TMessageStatusRecord ErrorCountByStatus = 25;
+}
+
+message TSessionStatusMonRecord {
+    optional uint32 InFlight = 1         [ (NMonProto.Metric).Type = GAUGE ];
+    optional uint32 ConnectionCount = 2  [ (NMonProto.Metric).Type = GAUGE ];
+    optional uint32 ConnectCount = 3     [ (NMonProto.Metric).Type = RATE ];
+}

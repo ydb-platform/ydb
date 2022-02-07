@@ -1,0 +1,29 @@
+import "google/protobuf/descriptor.proto";
+
+package NProtobufJsonUt;
+
+extend google.protobuf.FieldOptions {
+  optional bool inline_test = 58253;
+}
+
+message TInlineTest {
+    optional string OptJson = 1 [(inline_test) = true];
+    optional string NotJson = 2;
+    repeated string RepJson = 3 [(inline_test) = true];
+
+    message TInner {
+        repeated uint32 Number = 1;
+        optional string InnerJson = 2 [(inline_test) = true];
+    }
+    optional TInner Inner = 4;
+}
+
+message TInlineTestDefaultValues {
+    optional string OptJson = 1 [(inline_test) = true, default = "{\"default\":1}"];
+    optional uint32 Number = 2;
+    repeated string RepJson = 3 [(inline_test) = true];
+    message TInner {
+        optional string OptJson = 1 [(inline_test) = true, default = "{\"default\":2}"];
+    }
+    optional TInner Inner = 4;
+}

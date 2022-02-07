@@ -1,0 +1,98 @@
+commit 70279ba982378d70ba19e312bf5acd627109acce
+Author: Lukas Fittl <lukas@fittl.com>
+Date:   Sun Jan 3 15:59:40 2021 -0800
+
+    pg_query: Track yyllocend in lexer
+    
+    This is helpful for tracking the extent of tokens in the scan output,
+    as this is made available by pg_query for uses such as syntax highlighting.
+
+diff --git a/src/backend/parser/scan.l b/src/backend/parser/scan.l
+index 9ba31f418c..5caa03e395 100644
+--- a/src/backend/parser/scan.l
++++ b/src/backend/parser/scan.l
+@@ -517,6 +517,7 @@ other			.
+ 					{
+ 						/* If NCHAR isn't a keyword, just return "n" */
+ 						yylval->str = pstrdup("n");
++						yyextra->yyllocend = yytext - yyextra->scanbuf + yyleng;
+ 						return IDENT;
+ 					}
+ 				}
+@@ -585,9 +586,11 @@ other			.
+ 					{
+ 						case xb:
+ 							yylval->str = litbufdup(yyscanner);
++							yyextra->yyllocend = yytext - yyextra->scanbuf + yyleng;
+ 							return BCONST;
+ 						case xh:
+ 							yylval->str = litbufdup(yyscanner);
++							yyextra->yyllocend = yytext - yyextra->scanbuf + yyleng;
+ 							return XCONST;
+ 						case xq:
+ 						case xe:
+@@ -600,9 +603,11 @@ other			.
+ 											   yyextra->literallen,
+ 											   false);
+ 							yylval->str = litbufdup(yyscanner);
++							yyextra->yyllocend = yytext - yyextra->scanbuf + yyleng;
+ 							return SCONST;
+ 						case xus:
+ 							yylval->str = litbufdup(yyscanner);
++							yyextra->yyllocend = yytext - yyextra->scanbuf + yyleng;
+ 							return USCONST;
+ 						default:
+ 							yyerror("unhandled previous state in xqs");
+@@ -740,6 +745,7 @@ other			.
+ 						yyextra->dolqstart = NULL;
+ 						BEGIN(INITIAL);
+ 						yylval->str = litbufdup(yyscanner);
++						yyextra->yyllocend = yytext - yyextra->scanbuf + yyleng;
+ 						return SCONST;
+ 					}
+ 					else
+@@ -785,6 +791,7 @@ other			.
+ 					if (yyextra->literallen >= NAMEDATALEN)
+ 						truncate_identifier(ident, yyextra->literallen, true);
+ 					yylval->str = ident;
++					yyextra->yyllocend = yytext - yyextra->scanbuf + yyleng;
+ 					return IDENT;
+ 				}
+ <xui>{dquote}	{
+@@ -793,6 +800,7 @@ other			.
+ 						yyerror("zero-length delimited identifier");
+ 					/* can't truncate till after we de-escape the ident */
+ 					yylval->str = litbufdup(yyscanner);
++					yyextra->yyllocend = yytext - yyextra->scanbuf + yyleng;
+ 					return UIDENT;
+ 				}
+ <xd,xui>{xddouble}	{
+@@ -812,6 +820,7 @@ other			.
+ 					/* and treat it as {identifier} */
+ 					ident = downcase_truncate_identifier(yytext, yyleng, true);
+ 					yylval->str = ident;
++					yyextra->yyllocend = yytext - yyextra->scanbuf + yyleng;
+ 					return IDENT;
+ 				}
+ 
+@@ -1065,6 +1074,7 @@ other			.
+ 					 */
+ 					ident = downcase_truncate_identifier(yytext, yyleng, true);
+ 					yylval->str = ident;
++					yyextra->yyllocend = yytext - yyextra->scanbuf + yyleng;
+ 					return IDENT;
+ 				}
+ 
+diff --git a/src/include/parser/scanner.h b/src/include/parser/scanner.h
+index a27352afc1..29852fbd86 100644
+--- a/src/include/parser/scanner.h
++++ b/src/include/parser/scanner.h
+@@ -113,6 +113,8 @@ typedef struct core_yy_extra_type
+ 	/* state variables for literal-lexing warnings */
+ 	bool		warn_on_first_escape;
+ 	bool		saw_non_ascii;
++
++	int yyllocend;
+ } core_yy_extra_type;
+ 
+ /*

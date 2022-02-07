@@ -1,0 +1,10 @@
+[
+    [
+        {
+            "column0": "JsonDocument?",
+            "column1": "[1,2,3,4]",
+            "column2": "JsonDocument?",
+            "column3": "{\"key\":\"value\"}"
+        }
+    ]
+]

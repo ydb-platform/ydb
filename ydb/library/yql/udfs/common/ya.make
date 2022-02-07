@@ -1,0 +1,23 @@
+RECURSE(
+    clickhouse/client
+    datetime
+    datetime2
+    digest
+    histogram
+    hyperloglog
+    hyperscan
+    ip_base
+    json
+    json2
+    math
+    pire
+    re2
+    set
+    stat
+    string
+    top
+    topfreq
+    unicode_base
+    url_base
+    yson2
+)

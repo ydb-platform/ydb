@@ -1,0 +1,15 @@
+items:
+- name: Overview
+  href: index.md
+- name: Schema design
+  href: schema_design.md
+- name: Partitioning tables
+  href: table_sharding.md
+- name: Secondary indexes
+  href: secondary_indexes.md
+- name: Paginated output
+  href: paging.md
+- name: Loading large data volumes
+  href: batch_upload.md
+- name: Using timeouts
+  href: timeouts.md

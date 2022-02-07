@@ -1,0 +1,39 @@
+[
+    [
+        {
+            "Fk3": "Name1",
+            "Key1": 103,
+            "Key2": "One",
+            "Value": "Value25",
+            "ValueInput": "Value2"
+        },
+        {
+            "Fk3": null,
+            "Key1": 104,
+            "Key2": "Two",
+            "Value": null,
+            "ValueInput": "Value2"
+        },
+        {
+            "Fk3": "Name2",
+            "Key1": 105,
+            "Key2": "One",
+            "Value": "Value27",
+            "ValueInput": "Value3"
+        },
+        {
+            "Fk3": null,
+            "Key1": 106,
+            "Key2": "Two",
+            "Value": null,
+            "ValueInput": "Value3"
+        },
+        {
+            "Fk3": null,
+            "Key1": 107,
+            "Key2": "One",
+            "Value": null,
+            "ValueInput": "Value4"
+        }
+    ]
+]

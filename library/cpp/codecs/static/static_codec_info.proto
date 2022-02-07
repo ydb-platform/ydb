@@ -1,0 +1,17 @@
+package NCodecs;
+
+message TStaticCodecInfo {
+    message TDebugInfo {
+        optional string CodecName = 1;           // the exact codec variant name
+        optional uint64 Timestamp = 2;           // when the codec was built
+        optional string RevisionInfo = 3;        // the arcadia revision info
+        optional float SampleSizeMultiplier = 4; // how the default sample size was modified to improve compression
+        optional float Compression = 5;          // the compression on the training set ((raw_size - coded_size) / raw_size)
+        optional string TrainingSetComment = 6;  // a human readable description of the training set
+        optional string TrainingSetResId = 7;    // the training set sandbox resource id
+        optional uint64 StoredCodecHash = 8;     // cityhash64(data)
+    }
+    
+    optional bytes StoredCodec = 1;           // the data of the codec
+    optional TDebugInfo DebugInfo = 2;        // misc debug info which could be useful in finding whereabouts later
+}

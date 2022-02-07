@@ -1,0 +1,51 @@
+#include <library/cpp/uri/encode.h>
+
+#ifdef __clang__
+    #pragma clang diagnostic ignored "-Wunused-variable"
+#endif
+
+namespace NUri {
+namespace NEncode {
+
+%%{
+    machine TEncoder;
+
+    hex = (
+        digit >{ HexDigit(fc); } |
+        [A-F] >{ HexUpper(fc); } |
+        [a-f] >{ HexLower(fc); }
+    );
+
+    escaped = ( "%" hex hex )
+            > { HexReset(); }
+            % { DoHex(); };
+
+    bad_escaped = ( "%" hex )
+                % {
+                      DoSym(*(fpc - 2));
+                      DoSym(*(fpc - 1));
+                  };
+
+    sym = (any - bad_escaped - escaped) %{ DoSym(*(fpc - 1)); };
+
+    main := ( escaped | bad_escaped | sym )**;
+
+    write data;
+}%%
+
+ui64 TEncoder::ReEncode(const TStringBuf &url)
+{
+    const char *p  = url.data();
+    const char *pe = p + url.length();
+    const char *eof = pe;
+    int cs;
+    OutFlags = 0;
+
+    %% write init;
+    %% write exec;
+
+    return OutFlags;
+}
+
+}
+}

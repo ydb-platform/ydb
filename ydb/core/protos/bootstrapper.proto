@@ -1,0 +1,35 @@
+package NKikimrBootstrapper;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TEvWatch {
+    optional uint64 TabletID = 1;
+    optional uint64 SelfSeed = 2;
+    optional uint64 Round = 3;
+}
+
+message TEvWatchResult {
+    enum EState {
+        UNKNOWN = 0;
+        FREE = 1;
+        OWNER = 2;
+        WAITFOR = 3;
+        UNDELIVERED = 4;
+        DISCONNECTED = 5;
+    }
+
+    optional uint64 TabletID = 1;
+    optional EState State = 2;
+    optional uint64 Seed = 3;
+    optional uint64 Round = 4;
+}
+
+message TEvNotify {
+    enum EOp {
+        UNKNOWN = 0;
+        DROP = 1;
+    }
+
+    optional uint64 TabletID = 1;
+    optional EOp Op = 2;
+    optional uint64 Round = 3;
+}

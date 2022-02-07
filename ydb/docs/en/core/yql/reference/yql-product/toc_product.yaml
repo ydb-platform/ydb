@@ -1,0 +1,7 @@
+items:
+- name: Data types
+  include: { mode: link, path: types/toc_i.yaml }
+- name: Syntax
+  include: { mode: link, path: syntax/toc_i.yaml }
+- name: Built-in functions
+  include: { mode: link, path: builtins/toc_i.yaml }

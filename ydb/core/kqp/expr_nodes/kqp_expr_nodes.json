@@ -1,0 +1,431 @@
+{
+    "NodeRootType": "TExprBase",
+    "NodeBuilderBase": "TNodeBuilderBase",
+    "ListBuilderBase": "TListBuilderBase",
+    "FreeArgCallableBase": "TFreeArgCallable",
+    "FreeArgBuilderBase": "TFreeArgCallableBuilderBase",
+    "Nodes": [
+        {
+            "Name": "TKqlKeyTuple",
+            "VarArgBase": "TExprBase",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"}
+        },
+        {
+            "Name": "TKqlKeyInc",
+            "Base": "TKqlKeyTuple",
+            "Match": {"Type": "Callable", "Name": "KqlKeyInc"}
+        },
+        {
+            "Name": "TKqlKeyExc",
+            "Base": "TKqlKeyTuple",
+            "Match": {"Type": "Callable", "Name": "KqlKeyExc"}
+        },
+        {
+            "Name": "TKqlKeyRange",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "From", "Type": "TKqlKeyTuple"},
+                {"Index": 1, "Name": "To", "Type": "TKqlKeyTuple"}
+            ]
+        },
+        {
+            "Name": "TKqpTable",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpTable"},
+            "Children": [
+                {"Index": 0, "Name": "Path", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "PathId", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "SysView", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Version", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqlReadTableBase",
+            "Base": "TCallable",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "Range", "Type": "TKqlKeyRange"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKqlReadTable",
+            "Base": "TKqlReadTableBase",
+            "Match": {"Type": "Callable", "Name": "KqlReadTable"}
+        },
+        {
+            "Name": "TKqlReadTableIndex",
+            "Base": "TKqlReadTableBase",
+            "Match": {"Type": "Callable", "Name": "KqlReadTableIndex"},
+            "Children": [
+                {"Index": 4, "Name": "Index", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpReadTable",
+            "Base": "TKqlReadTableBase",
+            "Match": {"Type": "Callable", "Name": "KqpReadTable"}
+        },
+        {
+            "Name": "TKqpWideReadTable",
+            "Base": "TKqlReadTableBase",
+            "Match": {"Type": "Callable", "Name": "KqpWideReadTable"}
+        },
+        {
+            "Name": "TKqlReadTableRangesBase",
+            "Base": "TCallable",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "Ranges", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+                {"Index": 4, "Name": "ExplainPrompt", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKqlReadTableRanges",
+            "Base": "TKqlReadTableRangesBase",
+            "Match": {"Type": "Callable", "Name": "KqlReadTableRanges"}
+        },
+        {
+            "Name": "TKqpReadTableRanges",
+            "Base": "TKqlReadTableRangesBase",
+            "Match": {"Type": "Callable", "Name": "KqpReadTableRanges"}
+        },
+        {
+            "Name": "TKqpWideReadTableRanges",
+            "Base": "TKqlReadTableRangesBase",
+            "Match": {"Type": "Callable", "Name": "KqpWideReadTableRanges"}
+        },
+        {
+            "Name": "TKqpReadOlapTableRangesBase",
+            "Base": "TKqlReadTableRangesBase",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 5, "Name": "Process", "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TKqpReadOlapTableRanges",
+            "Base": "TKqpReadOlapTableRangesBase",
+            "Match": {"Type": "Callable", "Name": "KqpReadOlapTableRanges"}
+        },
+        {
+            "Name": "TKqpWideReadOlapTableRanges",
+            "Base": "TKqpReadOlapTableRangesBase",
+            "Match": {"Type": "Callable", "Name": "KqpWideReadOlapTableRanges"}
+        },
+        {
+            "Name": "TKqlLookupTableBase",
+            "Base": "TCallable",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "LookupKeys", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TKqlLookupTable",
+            "Base": "TKqlLookupTableBase",
+            "Match": {"Type": "Callable", "Name": "KqlLookupTable"}
+        },
+        {
+            "Name": "TKqlLookupIndex",
+            "Base": "TKqlLookupTableBase",
+            "Match": {"Type": "Callable", "Name": "KqlLookupIndex"},
+            "Children": [
+                {"Index": 3, "Name": "Index", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpLookupTable",
+            "Base": "TKqlLookupTableBase",
+            "Match": {"Type": "Callable", "Name": "KqpLookupTable"}
+        },
+        {
+            "Name": "TKqlTableEffect",
+            "Base": "TExprBase",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"}
+            ]
+        },
+        {
+            "Name": "TKqlUpsertRowsBase",
+            "Base": "TKqlTableEffect",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 1, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TKqlUpsertRows",
+            "Base": "TKqlUpsertRowsBase",
+            "Match": {"Type": "Callable", "Name": "KqlUpsertRows"}
+        },
+        {
+            "Name": "TKqlUpsertRowsIndex",
+            "Base": "TKqlUpsertRowsBase",
+            "Match": {"Type": "Callable", "Name": "KqlUpsertRowsIndex"}
+        },
+        {
+            "Name": "TKqpUpsertRows",
+            "Base": "TKqlUpsertRowsBase",
+            "Match": {"Type": "Callable", "Name": "KqpUpsertRows"},
+            "Children": [
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKqlInsertRowsBase",
+            "Base": "TKqlTableEffect",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 1, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "OnConflict", "Type": "TCoAtom", "Description": "'abort or 'revert"}
+            ]
+        },
+        {
+            "Name": "TKqlUpdateRowsBase",
+            "Base": "TKqlTableEffect",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 1, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TKqlUpdateRows",
+            "Base": "TKqlUpdateRowsBase",
+            "Match": {"Type": "Callable", "Name": "TKqlUpdateRows"}
+        },
+        {
+            "Name": "TKqlUpdateRowsIndex",
+            "Base": "TKqlUpdateRowsBase",
+            "Match": {"Type": "Callable", "Name": "TKqlUpdateRowsIndex"}
+        },
+        {
+            "Name": "TKqlInsertRows",
+            "Base": "TKqlInsertRowsBase",
+            "Match": {"Type": "Callable", "Name": "TKqlInsertRows"}
+        },
+        {
+            "Name": "TKqlInsertRowsIndex",
+            "Base": "TKqlInsertRowsBase",
+            "Match": {"Type": "Callable", "Name": "TKqlInsertRowsIndex"}
+        },
+        {
+            "Name": "TKqpParamBinding",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Binding", "Type": "TCallable", "Optional": true}
+            ]
+        },
+        {
+            "Name": "TKqpParamBindingList",
+            "ListBase": "TKqpParamBinding"
+        },
+        {
+            "Name": "TKqpTxResultBinding",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpTxResultBinding"},
+            "Children": [
+                {"Index": 0, "Name": "Type", "Type": "TExprBase"},
+                {"Index": 1, "Name": "TxIndex", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "ResultIndex", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpTxInternalBinding",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpTxInternalBinding"},
+            "Children": [
+                {"Index": 0, "Name": "Type", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Kind", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpPhysicalTx",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpPhysicalTx"},
+            "Children": [
+                {"Index": 0, "Name": "Stages", "Type": "TDqPhyStageList"},
+                {"Index": 1, "Name": "Results", "Type": "TExprList"},
+                {"Index": 2, "Name": "ParamBindings", "Type": "TKqpParamBindingList"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKqpPhysicalTxList",
+            "ListBase": "TKqpPhysicalTx"
+        },
+        {
+            "Name": "TKqpPhysicalQuery",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpPhysicalQuery"},
+            "Children": [
+                {"Index": 0, "Name": "Transactions", "Type": "TKqpPhysicalTxList"},
+                {"Index": 1, "Name": "Results", "Type": "TExprList"},
+                {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKqlQueryResult",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"},
+                {"Index": 1, "Name": "ColumnHints", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TKqlQueryResultList",
+            "ListBase": "TKqlQueryResult"
+        },
+        {
+            "Name": "TKqlQuery",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Results", "Type": "TKqlQueryResultList"},
+                {"Index": 1, "Name": "Effects", "Type": "TExprList"}
+            ]
+        },
+        {
+            "Name": "TKqpEffects",
+            "VarArgBase": "TExprBase",
+            "Match": {"Type": "Callable", "Name": "KqpEffects"}
+        },
+        {
+            "Name": "TKqpConnection",
+            "Base": "TDqConnection",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
+            "Children": [
+                {"Index": 0, "Name": "Output", "Type": "TDqOutput"}
+            ]
+        },
+        {
+            "Name": "TKqpCnMapShard",
+            "Base": "TKqpConnection",
+            "Match": {"Type": "Callable", "Name": "KqpCnMapShard"}
+        },
+        {
+            "Name": "TKqpCnShuffleShard",
+            "Base": "TDqConnection",
+            "Match": {"Type": "Callable", "Name": "KqpCnShuffleShard"}
+        },
+        {
+            "Name": "TKqpProgram",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpProgram"},
+            "Children": [
+                {"Index": 0, "Name": "Lambda", "Type": "TCoLambda"},
+                {"Index": 1, "Name": "ArgsType", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqlDeleteRowsBase",
+            "Base": "TKqlTableEffect",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 1, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqlDeleteRows",
+            "Base": "TKqlDeleteRowsBase",
+            "Match": {"Type": "Callable", "Name": "KqlDeleteRows"}
+        },
+        {
+            "Name": "TKqlDeleteRowsIndex",
+            "Base": "TKqlDeleteRowsBase",
+            "Match": {"Type": "Callable", "Name": "KqlDeleteRowsIndex"}
+        },
+        {
+            "Name": "TKqpDeleteRows",
+            "Base": "TKqlDeleteRowsBase",
+            "Match": {"Type": "Callable", "Name": "KqpDeleteRows"}
+        },
+        {
+            "Name": "TKqpOlapOperationBase",
+            "Base": "TCallable",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqpOlapFilter",
+            "Base": "TKqpOlapOperationBase",
+            "Match": {"Type": "Callable", "Name": "KqpOlapFilter"},
+            "Children": [
+                {"Index": 1, "Name": "Condition", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqpOlapFilterCompare",
+            "Base": "TKqpOlapOperationBase",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 1, "Name": "Left", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Right", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqpOlapFilterEqual",
+            "Base": "TKqpOlapFilterCompare",
+            "Match": {"Type": "Callable", "Name": "KqpOlapFilterEqual"}
+        },
+        {
+            "Name": "TKqpOlapFilterLess",
+            "Base": "TKqpOlapFilterCompare",
+            "Match": {"Type": "Callable", "Name": "KqpOlapFilterLess"}
+        },
+        {
+            "Name": "TKqpOlapFilterLessOrEqual",
+            "Base": "TKqpOlapFilterCompare",
+            "Match": {"Type": "Callable", "Name": "KqpOlapFilterLessOrEqual"}
+        },
+        {
+            "Name": "TKqpOlapFilterGreater",
+            "Base": "TKqpOlapFilterCompare",
+            "Match": {"Type": "Callable", "Name": "KqpOlapFilterGreater"}
+        },
+        {
+            "Name": "TKqpOlapFilterGreaterOrEqual",
+            "Base": "TKqpOlapFilterCompare",
+            "Match": {"Type": "Callable", "Name": "KqpOlapFilterGreaterOrEqual"}
+        },
+        {
+            "Name": "TKqpOlapFilterExists",
+            "Base": "TKqpOlapOperationBase",
+            "Match": {"Type": "Callable", "Name": "TKqpOlapFilterExists"},
+            "Children": [
+                {"Index": 1, "Name": "Column", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqpEnsure",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpEnsure"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Predicate", "Type": "TExprBase"},
+                {"Index": 2, "Name": "IssueCode", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Message", "Type": "TExprBase"}
+            ]
+        }
+    ]
+}

@@ -1,0 +1,10 @@
+package NYql.NProto;
+option java_package = "ru.yandex.yql.proto";
+
+import "ydb/library/yql/protos/common.proto";
+
+message TClickHouseRunnerConfig {
+    optional uint32 MaxResultRows = 3 [default = 1000];
+    optional uint32 MaxResultBytes = 4 [default = 30000000];
+    optional TTime MaxExecutionTime = 5;
+}

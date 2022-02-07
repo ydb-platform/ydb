@@ -1,0 +1,28 @@
+OWNER(g:yql)
+
+RECURSE(
+    ast
+    core
+    core/common_opt
+    core/expr_nodes
+    core/expr_nodes_gen
+    core/extract_predicate
+    core/facade
+    core/file_storage
+    core/issue
+    core/peephole_opt
+    core/services
+    core/sql_types
+    core/type_ann
+    core/user_data
+    dq
+    minikql
+    mount
+    parser
+    protos
+    providers
+    public
+    sql
+    udfs
+    utils
+)

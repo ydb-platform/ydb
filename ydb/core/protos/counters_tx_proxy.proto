@@ -1,0 +1,29 @@
+import "ydb/core/protos/counters.proto";
+
+package NKikimr.NTxProxy;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+option (TabletTypeName) = "TxProxy"; // Used as prefix for all counters
+
+enum ESimpleCounters {
+    COUNTER_SIMPLE_IGNORE = 0;
+}
+
+enum ECumulativeCounters {
+    COUNTER_CUMULATIVE_IGNORE = 0;
+}
+
+enum EPercentileCounters {
+    option (GlobalCounterOpts) = {
+        Ranges { Value: 0      Name: "0 ms"      }
+        Ranges { Value: 1      Name: "1 ms"      }
+    };
+
+    COUNTER_PERCENTILE_IGNORE = 0;
+}
+
+enum ETxTypes {
+    TXTYPE_INIT = 0                                       [(TxTypeOpts) = {Name: "TxInit"}];
+    TXTYPE_RESERVE_IDS = 1                                [(TxTypeOpts) = {Name: "TxReserveIds"}];
+}

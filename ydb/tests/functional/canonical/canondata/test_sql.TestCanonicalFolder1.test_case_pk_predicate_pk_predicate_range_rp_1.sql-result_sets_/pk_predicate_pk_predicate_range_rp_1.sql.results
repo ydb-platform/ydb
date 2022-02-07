@@ -1,0 +1,16 @@
+[
+    [
+        {
+            "Amount": 100,
+            "Comment": "Test2",
+            "Group": 100001,
+            "Name": "Name1"
+        },
+        {
+            "Amount": 103,
+            "Comment": "Test2",
+            "Group": 100003,
+            "Name": "Name1"
+        }
+    ]
+]

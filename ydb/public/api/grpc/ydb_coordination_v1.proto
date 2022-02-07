@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package Ydb.Coordination.V1;
+
+option java_package = "com.yandex.ydb.coordination.v1";
+option java_outer_classname = "CoordinationGrpc";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/ydb_coordination.proto";
+
+service CoordinationService {
+    /**
+     * Bidirectional stream used to establish a session with a coordination node
+     *
+     * Relevant APIs for managing semaphores, distributed locking, creating or
+     * restoring a previously established session are described using nested
+     * messages in SessionRequest and SessionResponse. Session is established
+     * with a specific coordination node (previously created using CreateNode
+     * below) and semaphores are local to that coordination node.
+     */
+    rpc Session(stream Coordination.SessionRequest) returns (stream Coordination.SessionResponse);
+
+    // Creates a new coordination node
+    rpc CreateNode(Coordination.CreateNodeRequest) returns (Coordination.CreateNodeResponse);
+
+    // Modifies settings of a coordination node
+    rpc AlterNode(Coordination.AlterNodeRequest) returns (Coordination.AlterNodeResponse);
+
+    // Drops a coordination node
+    rpc DropNode(Coordination.DropNodeRequest) returns (Coordination.DropNodeResponse);
+
+    // Describes a coordination node
+    rpc DescribeNode(Coordination.DescribeNodeRequest) returns (Coordination.DescribeNodeResponse);
+}

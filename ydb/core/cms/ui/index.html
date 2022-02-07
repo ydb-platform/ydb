@@ -1,0 +1,87 @@
+<html>
+  <head>
+    <link rel='stylesheet' href='cms/ext/bootstrap.min.css'>
+    <script language='javascript' type='text/javascript' src='https://yastatic.net/jquery/3.3.1/jquery.min.js'></script>
+    <script language='javascript' type='text/javascript' src='cms/ext/bootstrap.bundle.min.js'></script>
+    <link rel='stylesheet' href='./jquery.tablesorter.css'>
+    <script language='javascript' type='text/javascript' src='./jquery.tablesorter.js'></script>
+    <link rel="stylesheet" href="cms/ext/theme.blue.css"></link>
+
+    <link rel="stylesheet" href="cms/common.css"></link>
+    <link rel="stylesheet" href="cms/cms.css"></link>
+    <script language="javascript" type="text/javascript" src="cms/common.js"></script>
+    <script language="javascript" type="text/javascript" src="cms/enums.js"></script>
+    <script language="javascript" type="text/javascript" src="cms/proto_types.js"></script>
+    <script language="javascript" type="text/javascript" src="cms/cms_log.js"></script>
+    <script language="javascript" type="text/javascript" src="cms/configs.js"></script>
+    <script language="javascript" type="text/javascript" src="cms/config_forms.js"></script>
+    <script language="javascript" type="text/javascript" src="cms/validators.js"></script>
+    <script language="javascript" type="text/javascript" src="cms/cms.js"></script>
+
+    <style type="text/css">
+      .table-nonfluid { width: auto; }
+      .narrow-line50 {line-height: 50%}
+      .narrow-line60 {line-height: 60%}
+      .narrow-line70 {line-height: 70%}
+      .narrow-line80 {line-height: 80%}
+      .narrow-line90 {line-height: 90%}
+    </style>
+  </head>
+  <body>
+    <ol class='breadcrumb'>
+      <li class='breadcrumb-item'><a id='host-ref' href='.'>Kikimr Monitoring</a></li>
+      <li class='breadcrumb-item active'>Cluster Management System</li>
+    </ol>
+    <div class="container"><h2>Cluster Management System</h2>
+      <div id="enums-error" class="error"></div>
+      <div id="proto-types-error" class="error"></div>
+      <ul class="nav nav-tabs">
+        <li class="nav-item">
+          <a class="nav-link active" href="#configs" data-toggle="tab">Configs</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#validators" data-toggle="tab">Validators</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#cms-log" data-toggle="tab">CMS Log</a>
+        </li>
+      </ul>
+      <div class="tab-content" style="padding-top: 10px">
+        <div id="configs" class="tab-pane fade in active show">
+          <div id="configs-error" class="error"></div>
+          <div id="configs-success" class="success"></div>
+          <div id="config-items"></div>
+        </div>
+        <div id="validators" class="tab-pane fade">
+          <div id="validators-error" class="error"></div>
+          <div id="update-validator-error" class="error"></div>
+          <table id="validators-table" class="tablesorter">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Checked Configs</th>
+                <th>Enabled</th>
+              </tr>
+            </thead>
+            <tbody id="validators-body">
+            </tbody>
+          </table>
+        </div>
+        <div id="cms-log" class="tab-pane fade">
+          <div id="cms-log-error" class="error"></div>
+          <table id="cms-log-table" class="tablesorter">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody id="cms-log-body">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

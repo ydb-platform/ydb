@@ -1,0 +1,1 @@
+SELECT * FROM Input1 WHERE Name != "Name1" ORDER BY Amount DESC LIMIT 4;

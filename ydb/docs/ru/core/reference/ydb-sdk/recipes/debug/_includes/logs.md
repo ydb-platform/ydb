@@ -1,0 +1,15 @@
+# Включение логирования
+
+{% include [work in progress message](../../_includes/addition.md) %}
+
+Ниже приведены примеры кода включения логгирования в разных `Ydb SDK`
+
+{% list tabs %}
+
+- Go
+
+
+  {% include [go.md](logs/go.md) %}
+
+
+{% endlist %}

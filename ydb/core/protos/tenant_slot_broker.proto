@@ -1,0 +1,85 @@
+import "library/cpp/actors/protos/actors.proto";
+
+package NKikimrTenantSlotBroker;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TConfig {
+    optional uint64 PendingSlotTimeout = 1 [default = 15000000]; // 15 seconds by default
+}
+
+message TSlotAllocation {
+    // Empty string means any node type.
+    optional string Type = 1;
+    // If data center is 0 then any data center may be used.
+    optional uint64 DataCenterNum = 2;
+    optional string DataCenter = 7;
+    optional uint64 Count = 3;
+    // This flag defines behaviour in case there are no free slots
+    // available in required data center. Forced location means slot
+    // should never be allocated in another data center. If flag
+    // is false then slot might be allocated in another data center
+    // (but should go back to preferred data center once opportunity
+    // appears). Flag is ignored if data center is 0.
+    optional bool ForceLocation = 4 [default = true];
+    // In case data center is not forced you can define collocation
+    // group. All slots with the same non-zero collocation group will
+    // be allocated an a single data center.
+    optional uint32 CollocationGroup = 5;
+    // This flag defines what to do if there are not enough free
+    // slots in any data center to place collocation group. If
+    // this flag is true then only single data center will be used
+    // with some slots missing. If this flag is false then multiple
+    // data centers will be used.
+    optional bool ForceCollocation = 6;
+}
+
+message TGetTenantState {
+    optional string TenantName = 1;
+}
+
+message TTenantState {
+    optional string TenantName = 1;
+    repeated TSlotAllocation RequiredSlots = 2;
+    repeated TSlotAllocation PendingSlots = 3;
+    repeated TSlotAllocation MissingSlots = 4;
+    repeated TSlotAllocation MisplacedSlots = 5;
+    repeated TSlotAllocation SplitSlots = 6;
+    repeated TSlotAllocation PinnedSlots = 7;
+    repeated TSlotId AssignedSlots = 8;
+}
+
+message TAlterTenant {
+    optional string TenantName = 1;
+    repeated TSlotAllocation RequiredSlots = 2;
+}
+
+message TRegisterPool {
+    optional NActorsProto.TActorId ClientId = 1;
+    optional uint64 SeqNo = 2;
+}
+
+message TListTenants {
+}
+
+message TTenantsList {
+    repeated TTenantState Tenants = 1;
+}
+
+message TGetSlotStats {
+}
+
+message TSlotCounters {
+    optional string DataCenter = 1;
+    optional string Type = 2;
+    optional uint64 Connected = 3;
+    optional uint64 Free = 4;
+}
+
+message TSlotStats {
+    repeated TSlotCounters SlotCounters = 1;
+}
+
+message TSlotId {
+    optional uint32 NodeId = 1;
+    optional string SlotId = 2;
+}

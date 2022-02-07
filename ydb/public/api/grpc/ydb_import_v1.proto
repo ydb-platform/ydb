@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package Ydb.Import.V1;
+option java_package = "com.yandex.ydb.import_.v1";
+
+import "ydb/public/api/protos/ydb_import.proto";
+
+service ImportService {
+
+    // Imports data from S3.
+    // Method starts an asynchronous operation that can be cancelled while it is in progress.
+    rpc ImportFromS3(Import.ImportFromS3Request) returns (Import.ImportFromS3Response);
+
+    // Writes data to a table.
+    // Method accepts serialized data in the selected format and writes it non-transactionally.
+    rpc ImportData(Import.ImportDataRequest) returns (Import.ImportDataResponse);
+}

@@ -1,0 +1,25 @@
+[
+    [
+        {
+            "Key": "Key",
+            "Value01": true,
+            "Value02": 1,
+            "Value03": -1,
+            "Value04": 2,
+            "Value05": -2,
+            "Value06": 3,
+            "Value07": 4.5,
+            "Value08": -5.5,
+            "Value09": "3.14",
+            "Value10": ".123e1",
+            "Value21": "\u041f\u0440\u0438\u0432\u0435\u0442",
+            "Value22": "{\"name\": \"George\", \"age\": 23}",
+            "Value23": "{\"age\":27,\"name\":\"Anna\"}",
+            "Value24": "{a=1; b=2}",
+            "Value31": 18004,
+            "Value32": 1521325004,
+            "Value33": 1498077475100000,
+            "Value34": 91000000
+        }
+    ]
+]

@@ -1,0 +1,30 @@
+== BEFORE NEXT RELEASE ==
+ * Look for more bad cleanup logic
+
+== SOON ==
+ * migrate structures to d-pointers to
+   - hide low-level details
+   - improve ABI compatibility
+ * try to remove need for free after parser fail?
+ * add more responsibility/ownership/init info to docs
+ * samba filename conversion?
+ * (g/s)etters for single components?
+ * Add example "uritool":
+   * uritool check <uri>
+   * uritool getHost <uri>
+   * uritool setHost <host> <uri>
+   * ...
+ * Filename helpers
+   * samba shares
+   * pipe characters? C:/C|
+ * Test owner code
+ * Implement CleanBase (strips off last component, query and stuff)
+ * Implement Clone
+ * Test Equals
+ * Code TODOs
+ * Make hostText from hostData?
+
+== LATER ==
+ * Enable/disable single components/algorithms?
+ * Pretty/smarter IPv6 stringification
+ * Reduce recursion, replace some by loops

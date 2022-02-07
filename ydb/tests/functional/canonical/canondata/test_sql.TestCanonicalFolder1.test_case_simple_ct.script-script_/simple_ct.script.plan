@@ -1,0 +1,26 @@
+{
+    "meta": {
+        "version": "0.2",
+        "type": "script"
+    },
+    "queries": [
+        {
+            "tables": [
+                {
+                    "name": "/local/base_simple_ct_script_script/Questions",
+                    "writes": [
+                        {
+                            "columns": [
+                                "text"
+                            ],
+                            "key": [
+                                "idx (\"1\")"
+                            ],
+                            "type": "Upsert"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

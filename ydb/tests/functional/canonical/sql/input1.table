@@ -1,0 +1,19 @@
+path: "/local/Input1"
+columns {
+  name: "Group"
+  type { optional_type { item { type_id: UINT64 } } }
+}
+columns {
+  name: "Name"
+  type { optional_type { item { type_id: STRING } } }
+}
+columns {
+  name: "Amount"
+  type { optional_type { item { type_id: INT64 } } }
+}
+columns {
+  name: "Comment"
+  type { optional_type { item { type_id: STRING } } }
+}
+primary_key: "Group"
+primary_key: "Name"

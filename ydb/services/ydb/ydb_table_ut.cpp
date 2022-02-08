@@ -974,44 +974,197 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         }
     }
 
-    Y_UNIT_TEST(SecurityDbAccessPerm) {
+    Y_UNIT_TEST(ConnectDbAclIsStrictlyChecked) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
+        TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
+
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NActors::NLog::PRI_DEBUG);
 
         ui16 grpc = server.GetPort();
+
+        { // no db
+            TString location = TStringBuilder() << "localhost:" << grpc;
+            auto driver = NYdb::TDriver(
+                TDriverConfig()
+                    .SetEndpoint(location));
+
+            NYdb::NTable::TClientSettings settings;
+            settings.AuthToken("root@builtin");
+
+            NYdb::NTable::TTableClient client(driver, settings);
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                Cerr << "Call\n";
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
+
+        }
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto driver = NYdb::TDriver(
             TDriverConfig()
-                .SetAuthToken("root@builtin")
-                .SetEndpoint(location));
+                .SetEndpoint(location)
+                .SetDatabase("/Root"));
 
-        {
+        { // no token
+            NYdb::NTable::TClientSettings settings;
+            NYdb::NTable::TTableClient client(driver, settings);
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                Cerr << "Call\n";
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
+        }
+
+
+        { // empty token
+            NYdb::NTable::TClientSettings settings;
+            settings.AuthToken("");
+            NYdb::NTable::TTableClient client(driver, settings);
+
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                Cerr << "Call\n";
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
+        }
+
+        { // no connect right
+            TString location = TStringBuilder() << "localhost:" << grpc;
+            auto driver = NYdb::TDriver(
+                TDriverConfig()
+                    .SetEndpoint(location)
+                    .SetDatabase("/Root"));
+
             NYdb::NTable::TClientSettings settings;
             settings.AuthToken("test_user@builtin");
             NYdb::NTable::TTableClient client(driver, settings);
-            auto session = client.CreateSession().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(session.GetStatus(), EStatus::UNAUTHORIZED, session.GetIssues().ToString());
+
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::UNAUTHORIZED, status.GetIssues().ToString());
         }
 
-        {
-            auto scheme = NYdb::NScheme::TSchemeClient(driver);
+        { // set connect
+            NYdb::TCommonClientSettings settings;
+            settings.AuthToken("root@builtin");
+            auto scheme = NYdb::NScheme::TSchemeClient(driver, settings);
             auto status = scheme.ModifyPermissions("/Root",
                 NYdb::NScheme::TModifyPermissionsSettings()
                     .AddGrantPermissions(
                         NYdb::NScheme::TPermissions("test_user@builtin", TVector<TString>{"ydb.database.connect"})
                     )
                 ).ExtractValueSync();
-            UNIT_ASSERT_EQUAL(status.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(status.IsTransportError(), false, status.GetIssues().ToString());
         }
 
-        {
+        ui32 attemps = 2; // system is notified asynchronously, so it may see old acl for awhile
+        while (attemps) { // accept connect right
+            --attemps;
+
             NYdb::NTable::TClientSettings settings;
             settings.AuthToken("test_user@builtin");
             NYdb::NTable::TTableClient client(driver, settings);
-            auto session = client.CreateSession().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(session.GetStatus(), EStatus::SUCCESS, session.GetIssues().ToString());
+
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            if (attemps && status.GetStatus() == EStatus::UNAUTHORIZED) {
+                continue;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ConnectDbAclIsOffWhenYdbRequestsWithoutDatabase) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
+        appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(true);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        ui16 grpc = server.GetPort();
+        {
+            TString location = TStringBuilder() << "localhost:" << grpc;
+            auto driver = NYdb::TDriver(
+                TDriverConfig()
+                    .SetEndpoint(location)
+                    .SetDatabase("/Root"));
+
+            // with db
+            NYdb::NTable::TClientSettings settings;
+            settings.AuthToken("test_user@builtin");
+            NYdb::NTable::TTableClient client(driver, settings);
+
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::UNAUTHORIZED, status.GetIssues().ToString());
+        }
+
+        {
+            TString location = TStringBuilder() << "localhost:" << grpc;
+            auto driver = NYdb::TDriver(
+                TDriverConfig()
+                    .SetEndpoint(location));
+
+            // without db
+            NYdb::NTable::TClientSettings settings;
+            settings.AuthToken("test_user@builtin");
+            NYdb::NTable::TTableClient client(driver, settings);
+
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ConnectDbAclIsOffWhenTokenIsOptionalAndNull) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
+        appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto driver = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+
+        { // no token
+            NYdb::NTable::TClientSettings settings;
+            NYdb::NTable::TTableClient client(driver, settings);
+
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
         }
     }
 /*

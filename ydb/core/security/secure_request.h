@@ -32,10 +32,6 @@ private:
         return !SecurityToken.empty() || !GetDefaultUserSIDs().empty();
     }
 
-    bool IsTokenRequired() const {
-        return GetEnforceUserTokenRequirement() || (RequireAdminAccess && !GetAdministrationAllowedSIDs().empty());
-    }
-
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
         if (!result.Error.empty()) {
@@ -133,6 +129,10 @@ public:
     }
 
 public:
+    bool IsTokenRequired() const {
+        return GetEnforceUserTokenRequirement() || (RequireAdminAccess && !GetAdministrationAllowedSIDs().empty());
+    }
+
     void Bootstrap(const TActorContext& ctx) {
         if (IsTokenRequired() && !IsTokenExists()) {
             return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{"Access denied without user token", false}, ctx);

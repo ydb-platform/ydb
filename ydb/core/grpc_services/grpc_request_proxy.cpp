@@ -192,6 +192,9 @@ private:
         TString databaseName;
         const TDatabaseInfo* database = nullptr;
         bool skipResourceCheck = false;
+        // do not check connect rights for the deprecated requests without database
+        // remove this along with AllowYdbRequestsWithoutDatabase flag
+        bool skipCheckConnectRigths = false;
 
         if (state.State == NGrpc::TAuthState::AS_NOT_PERFORMED) {
             const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
@@ -204,6 +207,7 @@ private:
                 } else {
                     databaseName = RootDatabase;
                     skipResourceCheck = true;
+                    skipCheckConnectRigths = true;
                 }
             }
             auto it = Databases.find(databaseName);
@@ -249,7 +253,7 @@ private:
 
             Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
                 database->SchemeBoardResult->DescribeSchemeResult,
-                database->SecurityObject, event.Release(), Counters));
+                database->SecurityObject, event.Release(), Counters, skipCheckConnectRigths));
             return;
         }
 

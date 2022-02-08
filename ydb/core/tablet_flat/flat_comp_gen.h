@@ -158,6 +158,7 @@ namespace NCompGen {
             const TLogoBlobID Label;
             const TEpoch Epoch;
             const TStats Stats;
+            ui64 GarbageBytes = 0;
 
             inline bool operator<(const TPartInfo& other) const {
                 if (other.Epoch != Epoch) {
@@ -191,8 +192,8 @@ namespace NCompGen {
             THashMap<ui64, TStats> StatsPerTablet;
             float OverloadFactor = 0.0;
 
-            void PushFront(TPartView partView) noexcept;
-            void PushBack(TPartView partView) noexcept;
+            TPartInfo& PushFront(TPartView partView) noexcept;
+            TPartInfo& PushBack(TPartView partView) noexcept;
             void PopFront() noexcept;
             void PopBack() noexcept;
         };

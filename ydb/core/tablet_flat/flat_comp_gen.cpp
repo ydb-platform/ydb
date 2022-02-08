@@ -89,7 +89,7 @@ struct TGenCompactionStrategy::TExtraState {
     }
 };
 
-void TGenCompactionStrategy::TGeneration::PushFront(TPartView partView) noexcept {
+TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushFront(TPartView partView) noexcept {
     Y_VERIFY(TakenHeadParts == 0,
         "Attempting to prepend part to generation that has taken head parts");
 
@@ -101,9 +101,10 @@ void TGenCompactionStrategy::TGeneration::PushFront(TPartView partView) noexcept
     auto& front = Parts.emplace_front(std::move(partView));
     Stats += front.Stats;
     StatsPerTablet[front.Label.TabletID()] += front.Stats;
+    return front;
 }
 
-void TGenCompactionStrategy::TGeneration::PushBack(TPartView partView) noexcept {
+TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushBack(TPartView partView) noexcept {
     Y_VERIFY(CompactingTailParts == 0,
         "Attempting to append part to generation that has compacting tail parts");
 
@@ -119,6 +120,7 @@ void TGenCompactionStrategy::TGeneration::PushBack(TPartView partView) noexcept 
     auto& back = Parts.emplace_back(std::move(partView));
     Stats += back.Stats;
     StatsPerTablet[back.Label.TabletID()] += back.Stats;
+    return back;
 }
 
 void TGenCompactionStrategy::TGeneration::PopFront() noexcept {
@@ -199,6 +201,11 @@ void TGenCompactionStrategy::Start(TCompactionState state) {
 
     Policy = scheme->CompactionPolicy;
     Generations.resize(Policy->Generations.size());
+
+    // Reset garbage version to the minimum
+    // It will be recalculated in UpdateStats below anyway
+    CachedGarbageRowVersion = TRowVersion::Min();
+    CachedGarbageBytes = 0;
 
     for (auto& partView : Backend->TableParts(Table)) {
         auto label = partView->Label;
@@ -482,6 +489,7 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
             Y_VERIFY(!FinalParts.empty());
             auto& front = FinalParts.front();
             Y_VERIFY(front.Label == (*partIt)->Label);
+            CachedGarbageBytes -= front.GarbageBytes;
             KnownParts.erase(front.Label);
             FinalParts.pop_front();
             --FinalCompactionTaken;
@@ -505,6 +513,7 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
                 Y_VERIFY(!nextGen.Parts.empty());
                 auto& front = nextGen.Parts.front();
                 Y_VERIFY(front.Label == (*partIt)->Label);
+                CachedGarbageBytes -= front.GarbageBytes;
                 KnownParts.erase(front.Label);
                 nextGen.PopFront();
             }
@@ -555,6 +564,7 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
                 "Failed at gen=%u, sourceIndex=%u, full=%d, headTaken=%lu",
                 generation, sourceIndex, fullCompaction, sourceGen.TakenHeadParts);
             Y_VERIFY(sourceGen.CompactingTailParts > 0);
+            CachedGarbageBytes -= part.GarbageBytes;
             KnownParts.erase(part.Label);
             sourceGen.PopBack();
             sourceParts.pop_back();
@@ -633,7 +643,11 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         if (target == Generations.size()) {
             for (auto it = newParts.rbegin(); it != newParts.rend(); ++it) {
                 auto& partView = *it;
-                FinalParts.emplace_front(std::move(partView));
+                auto& front = FinalParts.emplace_front(std::move(partView));
+                if (CachedGarbageRowVersion && front.PartView->GarbageStats) {
+                    front.GarbageBytes = front.PartView->GarbageStats->GetGarbageBytes(CachedGarbageRowVersion);
+                    CachedGarbageBytes += front.GarbageBytes;
+                }
             }
         } else {
             auto& newGen = Generations[target];
@@ -641,13 +655,21 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
                 Y_VERIFY(!newGen.Parts || result->Epoch <= newGen.Parts.back().Epoch);
                 for (auto it = newParts.begin(); it != newParts.end(); ++it) {
                     auto& partView = *it;
-                    newGen.PushBack(std::move(partView));
+                    auto& back = newGen.PushBack(std::move(partView));
+                    if (CachedGarbageRowVersion && back.PartView->GarbageStats) {
+                        back.GarbageBytes = back.PartView->GarbageStats->GetGarbageBytes(CachedGarbageRowVersion);
+                        CachedGarbageBytes += back.GarbageBytes;
+                    }
                 }
             } else {
                 Y_VERIFY(!newGen.Parts || result->Epoch >= newGen.Parts.front().Epoch);
                 for (auto it = newParts.rbegin(); it != newParts.rend(); ++it) {
                     auto& partView = *it;
-                    newGen.PushFront(std::move(partView));
+                    auto& front = newGen.PushFront(std::move(partView));
+                    if (CachedGarbageRowVersion && front.PartView->GarbageStats) {
+                        front.GarbageBytes = front.PartView->GarbageStats->GetGarbageBytes(CachedGarbageRowVersion);
+                        CachedGarbageBytes += front.GarbageBytes;
+                    }
                 }
             }
 
@@ -765,6 +787,7 @@ void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
             if (it->Label == label) {
                 Stats -= it->Stats;
                 StatsPerTablet[label.TabletID()] -= it->Stats;
+                CachedGarbageBytes -= it->GarbageBytes;
                 KnownParts.erase(it->Label);
                 FinalParts.erase(it);
                 break;
@@ -776,9 +799,13 @@ void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
     }
 
     KnownParts[label] = level;
-    FinalParts.emplace_back(std::move(partView));
-    Stats += FinalParts.back().Stats;
-    StatsPerTablet[FinalParts.back().Label.TabletID()] += FinalParts.back().Stats;
+    auto& back = FinalParts.emplace_back(std::move(partView));
+    Stats += back.Stats;
+    StatsPerTablet[back.Label.TabletID()] += back.Stats;
+    if (CachedGarbageRowVersion && back.PartView->GarbageStats) {
+        back.GarbageBytes = back.PartView->GarbageStats->GetGarbageBytes(CachedGarbageRowVersion);
+        CachedGarbageBytes += back.GarbageBytes;
+    }
 }
 
 void TGenCompactionStrategy::PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) {
@@ -1418,32 +1445,38 @@ void TGenCompactionStrategy::UpdateStats() {
         StatsPerTablet[part.Label.TabletID()] += part.Stats;
     }
 
-    CachedGarbageRowVersion = TRowVersion::Min();
-    CachedGarbageBytes = 0;
-    CachedDroppedBytesPercent = 0;
-
     if (const auto& ranges = Backend->TableRemovedRowVersions(Table)) {
         auto it = ranges.begin();
         if (it->Lower.IsMin()) {
-            // TODO: we may want to cache it more efficiently
-            CachedGarbageRowVersion = it->Upper;
-            auto process = [&](const TPartInfo& part) {
-                if (part.PartView->GarbageStats) {
-                    CachedGarbageBytes += part.PartView->GarbageStats->GetGarbageBytes(CachedGarbageRowVersion);
+            // We keep garbage bytes up to date, but when the version
+            // changes we need to recalculate it for all parts
+            if (CachedGarbageRowVersion != it->Upper) {
+                CachedGarbageRowVersion = it->Upper;
+                CachedGarbageBytes = 0;
+                auto process = [&](TPartInfo& part) {
+                    if (CachedGarbageRowVersion && part.PartView->GarbageStats) {
+                        part.GarbageBytes = part.PartView->GarbageStats->GetGarbageBytes(CachedGarbageRowVersion);
+                        CachedGarbageBytes += part.GarbageBytes;
+                    } else {
+                        part.GarbageBytes = 0;
+                    }
+                };
+                for (auto& gen : Generations) {
+                    for (auto& part : gen.Parts) {
+                        process(part);
+                    }
                 }
-            };
-            for (const auto& gen : Generations) {
-                for (const auto& part : gen.Parts) {
+                for (auto& part : FinalParts) {
                     process(part);
                 }
             }
-            for (const auto& part : FinalParts) {
-                process(part);
-            }
-            if (CachedGarbageBytes > 0 && Stats.BackingSize > 0) {
-                CachedDroppedBytesPercent = CachedGarbageBytes * 100 / Stats.BackingSize;
-            }
         }
+    }
+
+    if (CachedGarbageBytes > 0 && Stats.BackingSize > 0) {
+        CachedDroppedBytesPercent = CachedGarbageBytes * 100 / Stats.BackingSize;
+    } else {
+        CachedDroppedBytesPercent = 0;
     }
 }
 

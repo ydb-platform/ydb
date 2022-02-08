@@ -245,12 +245,19 @@ namespace NTable {
 
             Y_VERIFY_DEBUG(minVersion < maxVersion);
 
+            ui64 overheadBytes = 0;
             for (size_t groupIdx : xrange(Groups.size())) {
                 auto& g = Groups[groupIdx];
                 // N.B. non-main groups have no key
                 TCellsRef groupKey = groupIdx == 0 ? KeyState.Key : TCellsRef{ };
                 g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, minVersion, maxVersion, /* txId */ 0);
                 g.NextIndexSize = g.Index.CalcSize(groupKey);
+
+                overheadBytes += (
+                        g.NextDataSize.DataPageSize +
+                        g.NextDataSize.SmallSize +
+                        g.NextDataSize.LargeSize +
+                        g.NextIndexSize);
             }
 
             if (KeyState.WrittenDeltas == 0 && NeedFlush()) {
@@ -294,6 +301,14 @@ namespace NTable {
             }
 
             FinishMainKey();
+
+            if (maxVersion < TRowVersion::Max()) {
+                // Count overhead bytes if everything up to maxVersion is removed
+                Current.GarbageStatsBuilder.Add(maxVersion, overheadBytes);
+                if (Current.GarbageStatsBuilder.Size() > GarbageStatsMaxBuildSize) {
+                    Current.GarbageStatsBuilder.ShrinkTo(GarbageStatsMaxSize);
+                }
+            }
         }
 
         void FinishMainKey() noexcept

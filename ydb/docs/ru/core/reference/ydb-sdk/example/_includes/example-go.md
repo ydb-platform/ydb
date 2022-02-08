@@ -18,6 +18,8 @@ import (
   "github.com/ydb-platform/ydb-go-sdk/v3"
   "github.com/ydb-platform/ydb-go-sdk/v3/table" // для работы с table-сервисом
   "github.com/ydb-platform/ydb-go-sdk/v3/table/options" // для работы с table-сервисом
+  "github.com/ydb-platform/ydb-go-sdk/v3/table/result" // для работы с table-сервисом
+  "github.com/ydb-platform/ydb-go-sdk/v3/table/result/named" // для работы с table-сервисом
   "github.com/ydb-platform/ydb-go-sdk-auth-environ" // для аутентификации с использованием перменных окружения
   "github.com/ydb-platform/ydb-go-yc" // для работы с YDB в Яндекс Облаке
 )
@@ -54,7 +56,7 @@ defer func() {
 Объект `db` является входной точкой для работы с сервисами `YDB`.
 Для работы сервисом таблиц следует использовать клиента table-сервиса `db.Table()`.
 Клиент table-сервиса предоставляет `API` для выполнения запросов над таблицами.
-Наиболее востребован метод `db.Table().Do(ctx, op)`, который реализует фоновое создание сессий и повторные попытки выполнить пользовательскую операцию `op`, в которую пользовательскому коду отдается подготовленная сессия. 
+Наиболее востребован метод `db.Table().Do(ctx, op)`, который реализует фоновое создание сессий и повторные попытки выполнить пользовательскую операцию `op`, в которую пользовательскому коду отдается подготовленная сессия.
 Сессия имеет исчерпывающее `API`, позволяющее выполнять `DDL`, `DML`, `DQL` и `TCL` запросы.
 
 ## Создание таблиц с помощью CreateTable API {#create-table-api}
@@ -126,8 +128,8 @@ err := db.Table().Do(
       date  *time.Time // указатель - для опциональных результатов
     )
     _, res, err = s.Execute(
-      ctx, 
-      readTx, 
+      ctx,
+      readTx,
       `
         DECLARE $seriesID AS Uint64;
         SELECT
@@ -153,11 +155,15 @@ err := db.Table().Do(
       _ = res.Close() // закрытие result'а обязательно
     }()
     log.Printf("> select_simple_transaction:\n")
-    // Имена колонок в NextResultSet устанавливают порядок чтения колонок в последующем Scan
-    for res.NextResultSet(ctx, "series_id", "title", "release_date") {
+    for res.NextResultSet(ctx) {
       for res.NextRow() {
-        // в Scan передаем адреса (и типы данных), куда следует присвоить результаты запроса
-        err = res.Scan(&id, &title, &date)
+        // в ScanNamed передаем имена колонок из строки сканирования,
+        // адреса (и типы данных), куда следует присвоить результаты запроса
+        err = res.ScanNamed(
+          named.Optional("series_id", &id),
+          named.Optional("title", &title),
+          named.Optional("release_date", &date),
+        )
         if err != nil {
           return err
         }
@@ -215,14 +221,19 @@ err = c.Do(
       date     time.Time
     )
     log.Print("\n> scan_query_select:")
-    // Имена колонок в NextResultSet устанавливают порядок чтения колонок в последующем ScanWithDefaults
-    for res.NextResultSet(ctx, "series_id", "season_id", "title", "first_aired") {
+    for res.NextResultSet(ctx) {
       if err = res.Err(); err != nil {
         return err
       }
       for res.NextRow() {
-        // ScanWithDefaults позволяет "развернуть" опциональные результаты или использовать дефолтное значение типа go
-        err = res.ScanWithDefaults(&seriesID, &seasonID, &title, &date)
+        // named.OptionalOrDefault позволяет "развернуть" опциональные
+        // результаты или использовать дефолтное значение типа go
+        err = res.ScanNamed(
+          named.OptionalOrDefault("series_id", &seriesID),
+          named.OptionalOrDefault("season_id", &seasonID),
+          named.OptionalOrDefault("title", &title),
+          named.OptionalOrDefault("first_aired", &date),
+        )
         if err != nil {
           return err
         }

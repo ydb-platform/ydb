@@ -4,9 +4,9 @@ package main
 import (
 	"context"
 	"os"
-	
+
 	"github.com/ydb-platform/ydb-go-sdk/v3"
-	"github.com/ydb-platform/ydb-go-sdk/v3/balancer"
+	"github.com/ydb-platform/ydb-go-sdk/v3/balancers"
 )
 
 func main() {
@@ -16,14 +16,14 @@ func main() {
 		ctx,
 		...
 		ydb.WithBalancer(
-			balancer.RandomChoice(),
+			balancers.RandomChoice(),
 		),
 	)
 	if err != nil {
 		panic(err)
 	}
-	defer func() { 
-		_ = db.Close(ctx) 
+	defer func() {
+		_ = db.Close(ctx)
 	}()
 }
 ```

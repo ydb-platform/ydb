@@ -99,6 +99,7 @@ SRCS(
     datashard_pipeline.h
     datashard_s3_downloads.cpp
     datashard_s3_uploads.cpp
+    datashard_schema_snapshots.cpp
     datashard_snapshots.cpp
     datashard_unsafe_upload.cpp
     datashard_user_table.cpp

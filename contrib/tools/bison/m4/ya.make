@@ -2,11 +2,18 @@ OWNER(g:contrib)
 
 PROGRAM()
 
+LICENSE(GPL-3.0-or-later)
+
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 NO_RUNTIME()
+
 NO_COMPILER_WARNINGS()
 
 IF (MUSL)
-    CFLAGS(-DO_BINARY=0)
+    CFLAGS(
+        -DO_BINARY=0
+    )
 ENDIF()
 
 SRCS(
@@ -21,7 +28,6 @@ SRCS(
     src/output.c
     src/path.c
     src/symtab.c
-
     src/cpp.cpp
 )
 

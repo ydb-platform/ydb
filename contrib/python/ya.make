@@ -952,8 +952,8 @@ RECURSE(
     retrying
     rfc3986
     rfc3986-validator
-    RPI-ST7789
     RPi.GPIO
+    RPI-ST7789
     rsa
     rstr
     ruamel.std.pathlib

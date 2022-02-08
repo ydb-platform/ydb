@@ -1,4 +1,5 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_async_compute_actor.h>
 
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
@@ -70,10 +71,15 @@ IActor* CreateComputeActor(
             memoryLimits,
             taskRunnerFactory);
     } else {
-        // TODO: XXX
-        Y_UNUSED(taskRunnerActorFactory);
-        Y_VERIFY(false);
-        return nullptr;
+        return NYql::NDq::CreateDqAsyncComputeActor(
+            executerId,
+            operationId,
+            std::move(task),
+            std::move(options.SourceActorFactory),
+            std::move(options.SinkActorFactory),
+            computeRuntimeSettings,
+            memoryLimits,
+            taskRunnerActorFactory);
     }
 }
 

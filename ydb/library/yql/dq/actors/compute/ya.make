@@ -7,6 +7,7 @@ OWNER(
 
 SRCS(
     dq_compute_actor.cpp
+    dq_async_compute_actor.cpp
     dq_compute_actor_channels.cpp
     dq_compute_actor_checkpoints.cpp
     dq_compute_actor_io_actors_factory.cpp

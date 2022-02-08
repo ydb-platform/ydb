@@ -3266,7 +3266,7 @@ Y_UNIT_TEST(TestReadTableWriteConflict) {
     // Send a commit request, it would block on readset exchange
     auto senderCommit = runtime.AllocateEdgeActor();
     SendRequest(runtime, senderCommit, MakeCommitRequest(sessionId, txId,
-        "UPDATE [/Root/table-1] ON (key, value) VALUES (3, 2); "
+        "UPSERT INTO [/Root/table-1] (key, value) VALUES (3, 2); "
         "UPSERT INTO [/Root/table-2] (key, value) VALUES (4, 2)"));
 
     // Wait until we captured all readsets

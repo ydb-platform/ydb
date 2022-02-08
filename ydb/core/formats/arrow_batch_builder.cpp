@@ -87,16 +87,23 @@ bool TArrowBatchBuilder::Start(const TVector<std::pair<TString, NScheme::TTypeId
     return status.ok();
 }
 
+void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) {
+    NumBytes += cell.Size();
+    const ui32 ydbType = YdbSchema[colNum].second;
+    auto status = NKikimr::NArrow::AppendCell(*BatchBuilder, cell, colNum, ydbType);
+    Y_VERIFY(status.ok());
+}
+
 void TArrowBatchBuilder::AddRow(const TDbTupleRef& key, const TDbTupleRef& value) {
     ++NumRows;
 
     auto fnAppendTuple = [&] (const TDbTupleRef& tuple, size_t offsetInRow) {
         for (size_t i = 0; i < tuple.ColumnCount; ++i) {
-            ui32 ydbType = tuple.Types[i];
+            const ui32 ydbType = tuple.Types[i];
+            const ui32 colNum =  offsetInRow + i;
+            Y_VERIFY(ydbType == YdbSchema[colNum].second);
             auto& cell = tuple.Columns[i];
-            auto status = AppendCell(*BatchBuilder, cell, offsetInRow + i, ydbType);
-            Y_VERIFY(status.ok());
-            NumBytes += cell.Size();
+            AppendCell(cell, colNum);
         }
     };
 
@@ -110,15 +117,11 @@ void TArrowBatchBuilder::AddRow(const TConstArrayRef<TCell>& key, const TConstAr
     size_t offset = 0;
     for (size_t i = 0; i < key.size(); ++i, ++offset) {
         auto& cell = key[i];
-        auto status = AppendCell(*BatchBuilder, cell, offset, YdbSchema[offset].second);
-        Y_VERIFY(status.ok());
-        NumBytes += cell.Size();
+        AppendCell(cell, offset);
     }
     for (size_t i = 0; i < value.size(); ++i, ++offset) {
         auto& cell = value[i];
-        auto status = AppendCell(*BatchBuilder, cell, offset, YdbSchema[offset].second);
-        Y_VERIFY(status.ok());
-        NumBytes += cell.Size();
+        AppendCell(cell, offset);
     }
 }
 

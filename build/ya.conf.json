@@ -7137,7 +7137,7 @@
         },
         "horadric": {
             "formula": {
-                "sandbox_id": 1204623165,
+                "sandbox_id": 1208360447,
                 "match": "horadric"
             },
             "executable": {
@@ -7280,7 +7280,7 @@
         },
         "apphost": {
             "formula": {
-                "sandbox_id": 1205658794,
+                "sandbox_id": 1208360113,
                 "match": "app_host_launcher"
             },
             "executable": {
@@ -7908,7 +7908,7 @@
         },
         "bigb_request": {
             "formula": {
-                "sandbox_id": 1205658862,
+                "sandbox_id": 1208360052,
                 "match": "bb_requester"
             },
             "executable": {
@@ -7919,7 +7919,7 @@
         },
         "bigb_hitlog_analyser": {
             "formula": {
-                "sandbox_id": 1204623172,
+                "sandbox_id": 1208360802,
                 "match": "hitlog_analyser"
             },
             "executable": {
@@ -7952,7 +7952,7 @@
         },
         "bigb_yt_profiles_dumper": {
             "formula": {
-                "sandbox_id": 1205657009,
+                "sandbox_id": 1208359267,
                 "match": "yt_profiles_dumper"
             },
             "executable": {
@@ -7963,7 +7963,7 @@
         },
         "bigb_ab": {
             "formula": {
-                "sandbox_id": 1207217219,
+                "sandbox_id": 1208360238,
                 "match": "ab"
             },
             "executable": {
@@ -7987,7 +7987,7 @@
         },
         "caesar_yt_sync": {
             "formula": {
-                "sandbox_id": 1205657532,
+                "sandbox_id": 1208360234,
                 "match": "yt_sync"
             },
             "executable": {
@@ -8020,7 +8020,7 @@
         },
         "caesar_profile_size_analyzer": {
             "formula": {
-                "sandbox_id": 1205656696,
+                "sandbox_id": 1208360876,
                 "match": "profile_size_analyzer"
             },
             "executable": {

@@ -874,11 +874,9 @@ private:
                 columns.emplace_back(column);
             }
             resultId = NActors::TActivationContext::Register(
-                new NDq::TLogWrapReceive(
                     CreateResultWriter(
                         Params.Driver, ExecuterId, dqGraphParams.GetResultType(), Params.PrivateApiConfig,
-                        writerResultId, columns, dqGraphParams.GetSession(), Params.Deadline, Params.ClientCounters)
-                    , dqGraphParams.GetSession()));
+                        writerResultId, columns, dqGraphParams.GetSession(), Params.Deadline, Params.ClientCounters));
         } else {
             LOG_D("ResultWriter was NOT CREATED since ResultType is empty");
             resultId = ExecuterId;

@@ -209,7 +209,7 @@ void Init(
         lwmOptions.MkqlInitialMemoryLimit = mkqlInitialMemoryLimit;
         lwmOptions.MkqlTotalMemoryLimit = mkqlTotalMemoryLimit;
         lwmOptions.MkqlMinAllocSize = mkqlAllocSize;
-        auto resman = new NYql::NDq::TLogWrapReceive(NYql::NDqs::CreateLocalWorkerManager(lwmOptions), "");
+        auto resman = NYql::NDqs::CreateLocalWorkerManager(lwmOptions);
 
         actorRegistrator(NYql::NDqs::MakeWorkerManagerActorID(nodeId), resman);
     }

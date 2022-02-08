@@ -154,6 +154,7 @@ public:
         Send(SelfId(), new NActors::TEvents::TEvWakeup());
 
         LOG_I("STARTED");
+        LogScope.ConstructInPlace(NActors::TActivationContext::ActorSystem(), NKikimrServices::YQL_PROXY, Guid);
     }
 
 private:
@@ -263,7 +264,7 @@ private:
             ClientCounters);
 
         NDq::SetYqlLogLevels(NActors::NLog::PRI_TRACE);
-        Register(new NDq::TLogWrapReceive(CreateRunActor(ServiceCounters, std::move(params)), Guid));
+        Register(CreateRunActor(ServiceCounters, std::move(params)));
     }
 
     STRICT_STFUNC(
@@ -302,6 +303,8 @@ private:
     const TString Guid; //OwnerId
     const NMonitoring::TDynamicCounterPtr ClientCounters;
     TPrivateClient Client;
+
+    TMaybe<NYql::NLog::TScopedBackend<NYql::NDq::TYqlLogScope>> LogScope;
 };
 
 

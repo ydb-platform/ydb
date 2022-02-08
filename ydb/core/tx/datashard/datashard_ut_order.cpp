@@ -1254,8 +1254,8 @@ Y_UNIT_TEST_QUAD(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc, UseNewEngine) 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (3, 3);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (3, 3);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);"));
 
     ui64 shard2 = GetTableShards(server, sender, "/Root/table-2")[0];
 
@@ -1299,9 +1299,10 @@ Y_UNIT_TEST_QUAD(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc, UseNewEngine) 
     // because transactions above are stuck before performing any writes. Make sure it's
     // forced to wait for above transactions by commiting a write that is guaranteed
     // to "happen" after transactions above.
-    ExecSQL(server, sender,
-        "UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4);"
-        "UPSERT INTO `/Root/table-2` (key, value) VALUES (5, 5);");
+    ExecSQL(server, sender, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (5, 5);
+    )"));
 
     // This immediate tx should be delayed due to conflict with upserts.
     SendSQL(server, sender, Q_("SELECT * FROM `/Root/table-2`"));
@@ -1345,7 +1346,7 @@ Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 2);
     //auto shards = GetTableShards(server, sender, "/Root/table-1");
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3000000001), (3000000003, 3)");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3000000001), (3000000003, 3)"));
 
     // Send ReadTable requests and wait until they hang waiting for quota.
     for (int i = 0; i < 2; ++i) {
@@ -1419,8 +1420,8 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderLockLost, UseMvcc, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
@@ -1555,8 +1556,8 @@ Y_UNIT_TEST_NEW_ENGINE(TestMvccReadDoesntBlockWrites) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
@@ -1690,8 +1691,8 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, UseMvcc, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
@@ -1800,8 +1801,8 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, UseMvcc, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
@@ -1921,8 +1922,8 @@ Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
     auto table2shards = GetTableShards(server, sender, "/Root/table-2");
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
@@ -2066,8 +2067,8 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
     auto table2shards = GetTableShards(server, sender, "/Root/table-2");
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
@@ -2207,8 +2208,8 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, Use
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
     auto table2shards = GetTableShards(server, sender, "/Root/table-2");
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
@@ -2353,8 +2354,8 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNe
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
     auto table2shards = GetTableShards(server, sender, "/Root/table-2");
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
@@ -2564,8 +2565,8 @@ Y_UNIT_TEST_QUAD(TestCopyTableNoDeadlock, UseMvcc, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
@@ -2747,8 +2748,8 @@ Y_UNIT_TEST_NEW_ENGINE(TestPlannedCancelSplit) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     auto shards1 = GetTableShards(server, sender, "/Root/table-1");
     UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
@@ -2935,8 +2936,8 @@ Y_UNIT_TEST_QUAD(TestPlannedTimeoutSplit, UseMvcc, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     auto shards1 = GetTableShards(server, sender, "/Root/table-1");
     UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
@@ -3054,8 +3055,8 @@ Y_UNIT_TEST_QUAD(TestPlannedHalfOverloadedSplit, UseMvcc, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     auto shards1 = GetTableShards(server, sender, "/Root/table-1");
     UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
@@ -3202,7 +3203,7 @@ namespace {
 /**
  * Regression test for KIKIMR-7751, designed to crash under asan
  */
-Y_UNIT_TEST(TestReadTableWriteConflict) {
+Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -3221,17 +3222,17 @@ Y_UNIT_TEST(TestReadTableWriteConflict) {
     CreateShardedTable(server, sender, "/Root", "table-1", 2);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (2, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO [/Root/table-2] (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId,
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(
             "SELECT * FROM [/Root/table-1] "
             "UNION ALL "
-            "SELECT * FROM [/Root/table-2]"));
+            "SELECT * FROM [/Root/table-2]")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -3265,9 +3266,9 @@ Y_UNIT_TEST(TestReadTableWriteConflict) {
 
     // Send a commit request, it would block on readset exchange
     auto senderCommit = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderCommit, MakeCommitRequest(sessionId, txId,
+    SendRequest(runtime, senderCommit, MakeCommitRequest(sessionId, txId, Q_(
         "UPSERT INTO [/Root/table-1] (key, value) VALUES (3, 2); "
-        "UPSERT INTO [/Root/table-2] (key, value) VALUES (4, 2)"));
+        "UPSERT INTO [/Root/table-2] (key, value) VALUES (4, 2)")));
 
     // Wait until we captured all readsets
     if (readSets.size() < 4) {
@@ -3299,14 +3300,14 @@ Y_UNIT_TEST(TestReadTableWriteConflict) {
     // Start an immediate write to table-1, it won't be able to start
     // because it arrived after the read table and they block each other
     auto senderWriteImm = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderWriteImm, MakeSimpleRequest(
-        "UPSERT INTO [/Root/table-1] (key, value) VALUES (5, 3)"));
+    SendRequest(runtime, senderWriteImm, MakeSimpleRequest(Q_(
+        "UPSERT INTO [/Root/table-1] (key, value) VALUES (5, 3)")));
 
     // Start a planned write to both tables, wait for its plan step too
     auto senderWriteDist = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderWriteDist, MakeSimpleRequest(
+    SendRequest(runtime, senderWriteDist, MakeSimpleRequest(Q_(
         "UPSERT INTO [/Root/table-1] (key, value) VALUES (7, 4); "
-        "UPSERT INTO [/Root/table-2] (key, value) VALUES (8, 4)"));
+        "UPSERT INTO [/Root/table-2] (key, value) VALUES (8, 4)")));
     if (seenPlanSteps < 2) {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(
@@ -3371,7 +3372,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableImmediateWriteBlock) {
     // NOTE: table-1 has 2 shards so ReadTable is not immediate
     CreateShardedTable(server, sender, "/Root", "table-1", 2);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
 
     // Capture and block all readset messages
     size_t seenPlanSteps = 0;
@@ -3422,7 +3423,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableImmediateWriteBlock) {
     }
 }
 
-Y_UNIT_TEST_WITH_MVCC(TestReadTableSingleShardImmediate) {
+Y_UNIT_TEST_QUAD(TestReadTableSingleShardImmediate, WithMvcc, UseNewEngine) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -3441,7 +3442,7 @@ Y_UNIT_TEST_WITH_MVCC(TestReadTableSingleShardImmediate) {
 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
 
     // Capture and block all readset messages
     size_t seenPlanSteps = 0;
@@ -3490,7 +3491,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestImmediateQueueThenSplit) {
     auto tablets = GetTableShards(server, sender, "/Root/table-1");
 
     // We need shard to have some data (otherwise it would die too quickly)
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0);"));
 
     bool captureSplit = true;
     bool captureSplitChanged = true;
@@ -3779,7 +3780,7 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestSnapshotRead) {
 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0), (1, 1), (2, 2), (3, 3);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0), (1, 1), (2, 2), (3, 3);"));
 
     auto waitFor = [&](const auto& condition, const TString& description) {
         if (!condition()) {
@@ -3906,7 +3907,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestSecondaryClearanceAfterShardRestartRace) {
     CreateShardedTable(server, sender, "/Root", "table-1", 2);
     auto shards = GetTableShards(server, sender, "/Root/table-1");
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);"));
 
     auto waitFor = [&](const auto& condition, const TString& description) {
         if (!condition()) {
@@ -3998,8 +3999,8 @@ Y_UNIT_TEST_QUAD(TestShardRestartNoUndeterminedImmediate, UseMvcc, UseNewEngine)
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
@@ -4117,8 +4118,8 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, UseMvcc, UseNewEngi
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1)");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1)"));
 
     TString sessionId = CreateSession(runtime, sender);
 
@@ -4195,7 +4196,7 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, UseMvcc, UseNewEngi
     }
 }
 
-Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
+Y_UNIT_TEST_NEW_ENGINE(TestShardSnapshotReadNoEarlyReply) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -4212,8 +4213,8 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
     auto table2shards = GetTableShards(server, sender, "/Root/table-2");
     auto isTableShard = [&](ui64 tabletId) -> bool {
@@ -4267,16 +4268,16 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
     auto sender2 = runtime.AllocateEdgeActor();
     TString sessionId2 = CreateSession(runtime, sender2, "/Root");
 
-    SendRequest(runtime, sender1, MakeBeginRequest(sessionId1, R"(
+    SendRequest(runtime, sender1, MakeBeginRequest(sessionId1, Q_(R"(
         SELECT * FROM `/Root/table-1`
         UNION ALL
         SELECT * FROM `/Root/table-2`
-    )", "/Root"));
-    SendRequest(runtime, sender2, MakeBeginRequest(sessionId2, R"(
+    )"), "/Root"));
+    SendRequest(runtime, sender2, MakeBeginRequest(sessionId2, Q_(R"(
         SELECT * FROM `/Root/table-1`
         UNION ALL
         SELECT * FROM `/Root/table-2`
-    )", "/Root"));
+    )"), "/Root"));
 
     waitFor([&]{ return blockedCommits.size() >= 2; }, "at least 2 blocked commits");
 
@@ -4309,16 +4310,16 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
 
     // Start blocking commits again and try performing new writes
     prevObserver = runtime.SetObserverFunc(blockCommits);
-    SendRequest(runtime, sender, MakeSimpleRequest("UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3)", "/Root"));
-    SendRequest(runtime, sender, MakeSimpleRequest("UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 4)", "/Root"));
+    SendRequest(runtime, sender, MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3)"), "/Root"));
+    SendRequest(runtime, sender, MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 4)"), "/Root"));
     waitFor([&]{ return blockedCommits.size() >= 2; }, "at least 2 blocked commits");
 
     // Send an additional read request, it must not be blocked
-    SendRequest(runtime, sender1, MakeContinueRequest(sessionId1, txId1, R"(
+    SendRequest(runtime, sender1, MakeContinueRequest(sessionId1, txId1, Q_(R"(
         SELECT * FROM `/Root/table-1`
         UNION ALL
         SELECT * FROM `/Root/table-2`
-    )", "/Root"));
+    )"), "/Root"));
 
     {
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender1);
@@ -4344,8 +4345,8 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLock, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));
 
     SimulateSleep(server, TDuration::Seconds(1));
 
@@ -4368,7 +4369,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLock, UseNewEngine) {
     SimulateSleep(server, TDuration::Seconds(1));
 
     // Perform immediate write, which would not break the above lock
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3)");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3)"));
 
     // Perform an additional read, it would mark transaction as write-broken
     {
@@ -4416,8 +4417,8 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLockOutOfOrder, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));
 
     SimulateSleep(server, TDuration::Seconds(1));
 
@@ -4493,7 +4494,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLockOutOfOrder, UseNewEngine) {
 
     // Perform immediate write, which would break the above lock
     Cerr << "... performing an upsert" << Endl;
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3)");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3)"));
 
     // Perform an additional read, it would mark transaction as write-broken for the first time
     {
@@ -4546,8 +4547,8 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterStuckRW, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)");
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)");
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));
 
     SimulateSleep(server, TDuration::Seconds(1));
 

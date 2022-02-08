@@ -284,7 +284,7 @@ bool TSnapshotManager::ChangeMvccState(ui64 step, ui64 txId, TTransactionContext
     // mvcc writes before the switch, but they would have happened at the end
     // of the step.
     if (nextVersion) {
-        nextVersion.Step = Max<ui64>();
+        nextVersion.TxId = Max<ui64>();
     }
 
     if (IsMvccEnabled()) {

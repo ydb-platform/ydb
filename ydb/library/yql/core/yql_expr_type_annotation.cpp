@@ -2875,29 +2875,31 @@ bool EnsureEquatableKey(TPositionHandle position, const TTypeAnnotationNode* key
 bool UpdateLambdaAllArgumentsTypes(TExprNode::TPtr& lambda, const std::vector<const TTypeAnnotationNode*>& argumentsAnnotations, TExprContext& ctx) {
     YQL_ENSURE(lambda->Type() == TExprNode::Lambda);
 
-    TNodeOnNodeOwnedMap replaces;
-    replaces.reserve(argumentsAnnotations.size());
-
     const auto& args = lambda->Head();
     auto argsChildren = args.ChildrenList();
     YQL_ENSURE(argsChildren.size() == argumentsAnnotations.size());
 
+    bool updateArgs = false;
     for (size_t i = 0U; i < argumentsAnnotations.size(); ++i) {
         const auto arg = args.Child(i);
-        if (arg->GetTypeAnn()) {
-            YQL_ENSURE(IsSameAnnotation(*arg->GetTypeAnn(), *argumentsAnnotations[i]),
-                    "Rewrite error, lambda argument type should be: " <<
-                    *argumentsAnnotations[i] << ", but it is: " << *arg->GetTypeAnn());
-        } else {
-            auto newArg = ctx.ShallowCopy(*arg);
-            newArg->SetTypeAnn(argumentsAnnotations[i]);
-            YQL_ENSURE(replaces.emplace(arg, newArg).second);
-            argsChildren[i] = std::move(newArg);
+        if (!arg->GetTypeAnn() || !IsSameAnnotation(*arg->GetTypeAnn(), *argumentsAnnotations[i])) {
+            updateArgs = true;
+            break;
         }
     }
-
-    if (args.GetTypeAnn()) {
+    if (!updateArgs && args.GetTypeAnn()) {
         return true;
+    }
+
+    TNodeOnNodeOwnedMap replaces;
+    replaces.reserve(argumentsAnnotations.size());
+
+    for (size_t i = 0U; i < argumentsAnnotations.size(); ++i) {
+        const auto arg = args.Child(i);
+        auto newArg = ctx.ShallowCopy(*arg);
+        newArg->SetTypeAnn(argumentsAnnotations[i]);
+        YQL_ENSURE(replaces.emplace(arg, newArg).second);
+        argsChildren[i] = std::move(newArg);
     }
 
     auto newArgs = ctx.NewArguments(args.Pos(), std::move(argsChildren));

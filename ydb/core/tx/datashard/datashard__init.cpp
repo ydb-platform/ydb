@@ -227,7 +227,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
-    { // Reads user tables persistent stats
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::UserTablesStats::TableId)) {
+        // Reads user tables persistent stats
         auto rowset = db.Table<Schema::UserTablesStats>().GreaterOrEqual(0).Select();
         if (!rowset.IsReady())
             return false;

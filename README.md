@@ -1,6 +1,6 @@
 <img width="64" src="ydb/docs/_assets/logo.svg"/><br/>
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ydbplatform/blob/LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ydb-platform/ydb/blob/main/LICENSE)
 [![PyPI version](https://badge.fury.io/py/ydb.svg)](https://badge.fury.io/py/ydb)
 [![Telegram](https://img.shields.io/badge/chat-on%20Telegram-2ba2d9.svg)](https://t.me/yandexdatabase_ru)
 
@@ -8,32 +8,33 @@
 
 [Website](https://ydb.tech) |
 [Documentation](https://ydb.tech/docs) |
-[Official Repository](https://github.com/ydbplatform/) |
+[Official Repository](https://github.com/ydb-platform/ydb) |
 [YouTube Channel](https://www.youtube.com/channel/UCHrVUvA1cRakxRP3iwA-yyw)
 
-YDB is a fault-tolerant Distributed SQL DBMS that combines high availability and scalability and supports ACID transactions with strict consistency.
+YDB is an open-source Distributed SQL Database that combines high availability and scalability with strict consistency and ACID transactions.
 
 <p align="center">
   <a href=""><img src="ydb/docs/_assets/ydb-promo-video.png" width="70%"/></a>
 </p>
 
-## Main YDB advantages
+## Main YDB Advantages
 
-YDB is not based on any existent database management software that's why YDB development team has less boundaries in implementing DistributedSQL database for modern applications.
+YDB was designed from scratch as a response to growing demand for scalable interactive web services. Scalability, strict consistency and effective cross-row transactions were a must for such OLTP-like workload. YDB was built by people with strong background in databases and distributed systems, who had an experience of developing No-SQL database and the Map-Reduce system for the one of the largest search engine in the world.
+We found that YDB's flexibles design allows us to build more services on top of it including persistent queues and virtual block devices.
 
 Basic YDB features:
 
-  - Fault-tolerant configuration that survive disk, node, rack or even datacenter outage
-  - Horizontal scalability
-  - Automatic disaster recovery with minimum latency disruptions for applications
-  - Standard SQL for data manipulation and scheme definition
-  - ACID transactions across multiple nodes and tables with strict consistency
+  - Fault-tolerant configuration that survive disk, node, rack or even datacenter outage;
+  - Horizontal scalability;
+  - Automatic disaster recovery with minimum latency disruptions for applications;
+  - SQL dialect (YQL) for data manipulation and scheme definition;
+  - ACID transactions across multiple nodes and tables with strict consistency.
 
 ### Fault-tolerant configurations
 
-YDB Platform could be deployed in three different zones. Cluster remains both read and write available during complete outage of a single zone (datacenter).
+YDB could be deployed in three different availability zones. Cluster remains both read and write available during complete outage of a single zone.
 
-Clusters. availability zones and regions are covered in more detail [in documentation](docs/en/core/concepts/databases.md#regions-az).
+Availability zones and regions are covered in more detail [in documentation](docs/en/core/concepts/databases.md#regions-az).
 
 ### Horizontal scalability
 

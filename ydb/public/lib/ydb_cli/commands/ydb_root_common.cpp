@@ -11,6 +11,8 @@
 #include "ydb_tools.h"
 #include "ydb_yql.h"
 
+#include "ydb_workload.h"
+
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
@@ -36,6 +38,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TClientSettings& settin
     AddCommand(std::make_unique<TCommandInit>());
     AddCommand(std::make_unique<TCommandYql>());
     AddCommand(std::make_unique<TCommandStream>());
+    AddCommand(std::make_unique<TCommandWorkload>());
 }
 
 void TClientCommandRootCommon::ValidateSettings() {

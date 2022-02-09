@@ -1,11 +1,20 @@
 #pragma once
 
-#include "workload_query_gen.h"
+#include "workload_query_generator.h"
 
 #include <cctype>
 
+#include <random>
+
+namespace NYdbWorkload {
+
 struct TStockWorkloadParams : public TWorkloadParams {
-    bool PartitionsByLoad;
+    size_t ProductCount = 0;
+    size_t Quantity = 0;
+    size_t OrderCount = 0;
+    unsigned int MinPartitions = 0;
+    unsigned int Limit = 0;
+    bool PartitionsByLoad = true;
 };
 
 class TStockWorkloadGenerator : public IWorkloadQueryGenerator {
@@ -20,28 +29,39 @@ public:
 
     virtual ~TStockWorkloadGenerator() {}
 
-    std::string GetDDLQueries() override {
-        static const char TablesDdl[] = R"(--!syntax_v1
-            CREATE TABLE `%s/stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) %s;
-            CREATE TABLE `%s/orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id));
-            CREATE TABLE `%s/orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product));
-            )";
-        static const char PartitionsDdl[] = R"(WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT	= 3))";
-        char buf[sizeof(TablesDdl) + sizeof(PartitionsDdl) + 8192*3]; // 32*256 for DbPath
+    std::string GetDDLQueries() const override;
 
-        int res = std::sprintf(buf, TablesDdl, DbPath.c_str(), (PartitionsByLoad ? PartitionsDdl : ""), DbPath.c_str(), DbPath.c_str());
-        if (res < 0) {
-            return "";
-        }
-        return buf;
-    }
+    TQueryInfoList GetInitialData() override;
+
+    TQueryInfoList GetWorkload(int type) override;
+
+    enum class EType {
+        InsertRandomOrder,
+        SubmitRandomOrder,
+        SubmitSameOrder,
+        GetRandomCustomerHistory,
+        GetCustomerHistory
+    };
 
 private:
+    static const unsigned int MAX_CUSTOMERS = 10000; // We will have just 10k customers
 
-    TStockWorkloadGenerator(const TStockWorkloadParams* params) {
-        DbPath = params->DbPath;
-        PartitionsByLoad = params->PartitionsByLoad;
-    }
+    TQueryInfoList InsertRandomOrder();
+    TQueryInfoList SubmitRandomOrder();
+    TQueryInfoList SubmitSameOrder();
+    TQueryInfoList GetRandomCustomerHistory();
+    TQueryInfoList GetCustomerHistory();
+    
+    using TProductsQuantity = std::map<std::string, int64_t>;
+    TQueryInfo InsertOrder(const uint64_t orderID, const std::string& customer, const TProductsQuantity& products);
+    TQueryInfo ExecuteOrder(const uint64_t orderID);
+    TQueryInfo SelectCustomerHistory(const std::string& customerId, const unsigned int limit);
+
+    std::string GetCustomerId();
+    unsigned int GetProductCountInOrder();
+    TProductsQuantity GenerateOrder(unsigned int productCountInOrder, int quantity);
+
+    TStockWorkloadGenerator(const TStockWorkloadParams* params);
 
     static bool validateDbPath(const std::string& path) {
         for (size_t i = 0; i < path.size(); ++i) {
@@ -53,6 +73,16 @@ private:
         return true;
     }
 
+    TQueryInfo FillStockData() const;
+
     std::string DbPath;
-    bool PartitionsByLoad;
+    TStockWorkloadParams Params;
+
+    std::random_device Rd;
+    std::mt19937_64 Gen;
+    std::exponential_distribution<> RandExpDistrib;
+    std::uniform_int_distribution<unsigned int> CustomerIdGenerator;
+    std::uniform_int_distribution<unsigned int> ProductIdGenerator;
 };
+
+} // namespace NYdbWorkload

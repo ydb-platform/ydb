@@ -14,6 +14,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/library/workload/workload_factory.h>
+#include <ydb/library/workload/stock_workload.h>
 
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
@@ -64,9 +65,11 @@ class TKqpWriterTestLoadActor : public TActorBootstrapped<TKqpWriterTestLoadActo
     bool SequentialWrite;
     TString StringValue;
     TString WorkingDir;
+    size_t ProductCount;
+    size_t Quantity;
     bool DeleteTableOnFinish;
     std::vector<TString> preparedQuery;
-    std::unique_ptr<IWorkloadQueryGenerator> WorkloadQueryGen;
+    std::shared_ptr<NYdbWorkload::IWorkloadQueryGenerator> WorkloadQueryGen;
 
     TReallyFastRng32 Rng;
 
@@ -109,14 +112,20 @@ public:
         StringValue = TString(StringValueSize, 'a');
         WorkingDir = cmd.GetWorkingDir();
 
-        TWorkloadParams* workloadParams = nullptr;
+        if (cmd.Workload_case() == NKikimrBlobStorage::TEvTestLoadRequest_TKqpLoadStart::WorkloadCase::kStock) {
+            ProductCount = cmd.GetStock().GetProductCount();
+            Quantity = cmd.GetStock().GetQuantity();
+        }
+
+        NYdbWorkload::TWorkloadParams* workloadParams = nullptr;
         if (cmd.GetWorkloadName() == "stock") {
-            TStockWorkloadParams params;
+            NYdbWorkload::TStockWorkloadParams params;
             params.DbPath = WorkingDir;
             params.PartitionsByLoad = true;
             workloadParams = &params;
         }
-        WorkloadQueryGen = TWorkloadFactory::GetWorkloadQueryGenerator(cmd.GetWorkloadName(), workloadParams);
+        NYdbWorkload::TWorkloadFactory factory;
+        WorkloadQueryGen = factory.GetWorkloadQueryGenerator(cmd.GetWorkloadName(), workloadParams);
         Y_ASSERT(WorkloadQueryGen.get() != nullptr);
         Y_ASSERT(DurationSeconds > DelayBeforeMeasurements.Seconds());
 

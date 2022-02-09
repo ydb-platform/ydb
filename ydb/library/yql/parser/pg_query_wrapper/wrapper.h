@@ -1,27 +1,22 @@
 #pragma once
+
 extern "C" {
 struct List;
 }
 
-#include <ydb/library/yql/parser/pg_query_wrapper/contrib/protobuf/pg_query.pb-c.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
-
-extern "C" {
-struct ProtobufCMessage;
-};
 
 namespace NYql {
 
 class IPGParseEvents {
 public:
     virtual ~IPGParseEvents() = default;
-    virtual void OnResult(const PgQuery__ParseResult* result, const List* raw) = 0;
+    virtual void OnResult(const List* raw) = 0;
     virtual void OnError(const TIssue& issue) = 0;
 };
 
+TString PrintPGTree(const List* raw);
+
 void PGParse(const TString& input, IPGParseEvents& events);
 
-void PrintCProto(const ProtobufCMessage *message, IOutputStream& out);
-
 }
-

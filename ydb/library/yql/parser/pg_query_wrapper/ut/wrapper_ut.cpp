@@ -7,11 +7,8 @@ using namespace NYql;
 
 class TEvents : public IPGParseEvents {
 public:
-    void OnResult(const PgQuery__ParseResult* result, const List* raw) override {
-        Y_UNUSED(raw);
-        Result.ConstructInPlace();
-        TStringOutput str(*Result);
-        PrintCProto((const ProtobufCMessage*)result, str);
+    void OnResult(const List* raw) override {
+        Result = PrintPGTree(raw);
     }
 
     void OnError(const TIssue& issue) override {
@@ -28,31 +25,11 @@ Y_UNIT_TEST_SUITE(TWrapperTests) {
         PGParse(TString("SELECT 1"), events);
         UNIT_ASSERT(events.Result);
         UNIT_ASSERT(!events.Issue);
-        const auto expected = R"(version: 130003
-stmts: > #1
-stmt: > #2
-select_stmt: > #3
-target_list: > #4
-res_target: > #5
-val: > #6
-a_const: > #7
-val: > #8
-integer: > #9
-ival: 1
-< #9
-< #8
-location: 7
-< #7
-< #6
-location: 7
-< #5
-< #4
-limit_option: LIMIT_OPTION_DEFAULT
-op: SETOP_NONE
-< #3
-< #2
-< #1
-)";
+        const auto expected = "({RAWSTMT :stmt {SELECT :distinctClause <> :intoClause <> :targetList "
+        "({RESTARGET :name <> :indirection <> :val {A_CONST :val 1 :location 7} :location 7}) :fromClause <> "
+        ":whereClause <> :groupClause <> :havingClause <> :windowClause <> :valuesLists <> :sortClause <> "
+        ":limitOffset <> :limitCount <> :limitOption 0 :lockingClause <> :withClause <> :op 0 :all false :larg <> "
+        ":rarg <>} :stmt_location 0 :stmt_len 0})";
         UNIT_ASSERT_NO_DIFF(*events.Result, expected);
     }
 

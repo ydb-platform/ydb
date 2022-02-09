@@ -134,8 +134,7 @@ public:
         }
     }
 
-    void OnResult(const PgQuery__ParseResult* result, const List* raw) {
-        Y_UNUSED(result);
+    void OnResult(const List* raw) {
         AstParseResult.Pool = std::make_unique<TMemoryPool>(4096);
         AstParseResult.Root = ParseResult(raw);
     }
@@ -1492,22 +1491,6 @@ public:
     void NodeNotImplemented(const Node* nodeptr) {
         TStringBuilder b;
         b << "alternative is not implemented yet : " << NodeTag(nodeptr);
-        AddError(b);
-    }
-
-    template <typename T>
-    void AltNotImplemented(const T* outer, const PgQuery__Node* node) {
-        AltNotImplementedDesc(((const ProtobufCMessage*)outer)->descriptor, node);
-    }
-
-    void AltNotImplementedDesc(const ProtobufCMessageDescriptor* outer, const PgQuery__Node* node) {
-        TStringBuilder b;
-        if (outer) {
-            b << outer->name << ": ";
-        }
-
-        b << "alternative is not implemented yet : " <<
-            protobuf_c_message_descriptor_get_field(node->base.descriptor, node->node_case)->name;
         AddError(b);
     }
 

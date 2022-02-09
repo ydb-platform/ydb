@@ -3,17 +3,12 @@ LIBRARY()
 OWNER(g:yql)
 
 ADDINCL(
-    ydb/library/yql/parser/pg_query_wrapper/contrib
-    GLOBAL ydb/library/yql/parser/pg_query_wrapper/contrib/vendor
     ydb/library/yql/parser/pg_query_wrapper/contrib/src/postgres/include
 )
 
 SRCS(
     wrapper.cpp
-
-    contrib/src/pg_query.c
-    contrib/src/pg_query_outfuncs_protobuf.c
-    contrib/src/pg_query_parse.c
+    outfuncs.c
 
     contrib/src/postgres/guc-file.c
     contrib/src/postgres/src_backend_catalog_namespace.c
@@ -69,11 +64,6 @@ SRCS(
     contrib/src/postgres/src_port_random.c
     contrib/src/postgres/src_port_snprintf.c
     contrib/src/postgres/src_port_strerror.c
-
-    contrib/vendor/xxhash/xxhash.c
-    contrib/vendor/protobuf-c/protobuf-c.c
-
-    contrib/protobuf/pg_query.pb-c.c
 )
 
 IF(NOT OS_WINDOWS)

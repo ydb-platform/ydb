@@ -9,8 +9,6 @@ PEERDIR(
 )
 
 ADDINCL(
-    ydb/library/yql/parser/pg_query_wrapper/contrib
-    GLOBAL ydb/library/yql/parser/pg_query_wrapper/contrib/vendor
     ydb/library/yql/parser/pg_query_wrapper/contrib/src/postgres/include
 )
 

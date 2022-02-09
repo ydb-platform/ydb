@@ -421,6 +421,42 @@ struct TKikimrTableMetadata : public TThrRefBase {
     }
 };
 
+struct TCreateUserSettings {
+    TString UserName;
+    TString Password;
+    bool PasswordEncrypted = false;
+};
+
+struct TAlterUserSettings {
+    TString UserName;
+    TString Password;
+    bool PasswordEncrypted = false;
+};
+
+struct TDropUserSettings {
+    TString UserName;
+    bool Force = false;
+};
+
+struct TCreateGroupSettings {
+    TString GroupName;
+};
+
+struct TAlterGroupSettings {
+    enum class EAction : ui32 {
+        AddRoles = 0,
+        RemoveRoles = 1,
+    };
+
+    TString GroupName;
+    EAction Action;
+    std::vector<TString> Roles;
+};
+
+struct TDropGroupSettings {
+    TString GroupName;
+    bool Force = false;
+};
 
 struct TKikimrListPathItem {
     TKikimrListPathItem(TString name, bool isDirectory) {
@@ -566,6 +602,18 @@ public:
     virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterUser(const TString& cluster, const TAlterUserSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropUser(const TString& cluster, const TDropUserSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterGroup(const TString& cluster, TAlterGroupSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0;
 
     virtual TVector<TString> GetCollectedSchemeData() = 0;
 

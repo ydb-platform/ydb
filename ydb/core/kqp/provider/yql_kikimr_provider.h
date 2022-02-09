@@ -231,10 +231,10 @@ private:
     THashMap<std::pair<TString, TString>, TKikimrTableDescription> Tables;
 };
 
-enum class TKikimrTableOperation : ui32 {
-    Create               = 1 << 0,
-    Drop                 = 1 << 1,
-    Alter                = 1 << 2,
+enum class TYdbOperation : ui32 {
+    CreateTable          = 1 << 0,
+    DropTable            = 1 << 1,
+    AlterTable           = 1 << 2,
     Select               = 1 << 3,
     Upsert               = 1 << 4,
     Replace              = 1 << 5,
@@ -245,10 +245,16 @@ enum class TKikimrTableOperation : ui32 {
     ReservedInsertIgnore = 1 << 10,
     UpdateOn             = 1 << 11,
     DeleteOn             = 1 << 12,
+    CreateUser           = 1 << 13,
+    AlterUser            = 1 << 14,
+    DropUser             = 1 << 15,
+    CreateGroup           = 1 << 16,
+    AlterGroup            = 1 << 17,
+    DropGroup             = 1 << 18
 };
 
-Y_DECLARE_FLAGS(TKikimrTableOperations, TKikimrTableOperation)
-Y_DECLARE_OPERATORS_FOR_FLAGS(TKikimrTableOperations)
+Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation)
+Y_DECLARE_OPERATORS_FOR_FLAGS(TYdbOperations)
 
 class IKikimrTransactionContext : public TThrRefBase {
 public:
@@ -267,7 +273,7 @@ public:
 
 class TKikimrTransactionContextBase : public IKikimrTransactionContext {
 public:
-    THashMap<TString, TKikimrTableOperations> TableOperations;
+    THashMap<TString, TYdbOperations> TableOperations;
     THashMap<TKikimrPathId, TString> TableByIdMap;
     TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
     bool Readonly = false;

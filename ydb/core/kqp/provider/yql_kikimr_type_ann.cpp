@@ -190,6 +190,11 @@ private:
                 node.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(children));
                 return TStatus::Ok;
             }
+
+            case TKikimrKey::Type::Role:
+            {
+                return TStatus::Ok;
+            }
         }
 
         return TStatus::Error;
@@ -366,8 +371,8 @@ private:
         }
 
         auto op = GetTableOp(node);
-        if (op == TKikimrTableOperation::InsertAbort || op == TKikimrTableOperation::InsertRevert ||
-            op == TKikimrTableOperation::Upsert || op == TKikimrTableOperation::Replace) {
+        if (op == TYdbOperation::InsertAbort || op == TYdbOperation::InsertRevert ||
+            op == TYdbOperation::Upsert || op == TYdbOperation::Replace) {
             for (const auto& [name, meta] : table->Metadata->Columns) {
                 if (meta.NotNull && !rowType->FindItem(name)) {
                     ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
@@ -383,7 +388,7 @@ private:
                     return TStatus::Error;
                 }
             }
-        } else if (op == TKikimrTableOperation::UpdateOn) {
+        } else if (op == TYdbOperation::UpdateOn) {
             for (const auto& item : rowType->GetItems()) {
                 auto column = table->Metadata->Columns.FindPtr(TString(item->GetName()));
                 YQL_ENSURE(column);
@@ -1009,6 +1014,112 @@ private:
             {
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                     TStringBuilder() << "Unknown alter table action: " << name));
+                return TStatus::Error;
+            }
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
+        for (const auto& setting : node.Settings()) {
+            auto name = setting.Name().Value();
+            if (name == "password") {
+                if (!EnsureAtom(setting.Value().Ref(), ctx)) {
+                    return TStatus::Error;
+                }
+            } else if (name == "passwordEncrypted") {
+                if (setting.Value()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
+                        TStringBuilder() << "passwordEncrypted node shouldn't have value" << name));
+                }
+            } else if (name == "nullPassword") {
+                if (setting.Value()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
+                        TStringBuilder() << "nullPassword node shouldn't have value" << name));
+                }
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown create user setting: " << name));
+                return TStatus::Error;
+            }
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleAlterUser(TKiAlterUser node, TExprContext& ctx) override {
+        for (const auto& setting : node.Settings()) {
+            auto name = setting.Name().Value();
+            if (name == "password") {
+                if (!EnsureAtom(setting.Value().Ref(), ctx)) {
+                    return TStatus::Error;
+                }
+            } else if (name == "passwordEncrypted") {
+                if (setting.Value()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
+                        TStringBuilder() << "passwordEncrypted node shouldn't have value" << name));
+                }
+            } else if (name == "nullPassword") {
+                if (setting.Value()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
+                        TStringBuilder() << "nullPassword node shouldn't have value" << name));
+                }
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown alter user setting: " << name));
+                return TStatus::Error;
+            }
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleDropUser(TKiDropUser node, TExprContext& ctx) override {
+        for (const auto& setting : node.Settings()) {
+            auto name = setting.Name().Value();
+            if (name == "force") {
+                if (setting.Value()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
+                        TStringBuilder() << "force node shouldn't have value" << name));
+                }
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown drop user setting: " << name));
+                return TStatus::Error;
+            }
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleAlterGroup(TKiAlterGroup node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleDropGroup(TKiDropGroup node, TExprContext& ctx) override {
+        for (const auto& setting : node.Settings()) {
+            auto name = setting.Name().Value();
+            if (name == "force") {
+                if (setting.Value()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
+                        TStringBuilder() << "force node shouldn't have value" << name));
+                }
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown drop group setting: " << name));
                 return TStatus::Error;
             }
         }

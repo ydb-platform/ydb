@@ -963,6 +963,13 @@ void KqpResponseToQueryResult(const NKikimrKqp::TEvQueryResponse& response, IKqp
     queryResult.QueryStats = queryResponse.GetQueryStats();
 }
 
+namespace {
+    struct TSendRoleWrapper : public TThrRefBase {
+        using TMethod = std::function<void(TString&&, NYql::TAlterGroupSettings::EAction, std::vector<TString>&&)>;
+        TMethod SendNextRole;
+    };
+}
+
 class TKikimrIcGateway : public IKqpGateway {
 private:
     struct TUserTokenData {
@@ -1272,6 +1279,315 @@ public:
             using TEvDropTableRequest = TGRpcRequestWrapper<TRpcServices::EvDropTable, Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse, true, TRateLimiterMode::Rps>;
 
             return SendLocalRpcRequestNoResult<TEvDropTableRequest>(std::move(dropTable), Database, GetTokenCompat());
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> CreateUser(const TString& cluster, const NYql::TCreateUserSettings& settings) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            auto createUserPromise = NewPromise<TGenericResult>();
+
+            auto ev = MakeHolder<TRequest>();
+            ev->Record.SetDatabaseName(database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->Serialized);
+            }
+            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+            auto& createUser = *schemeTx.MutableAlterLogin()->MutableCreateUser();
+
+            createUser.SetUser(settings.UserName);
+            if (settings.Password) {
+                createUser.SetPassword(settings.Password);
+            }
+
+            SendSchemeRequest(ev.Release()).Apply(
+                [createUserPromise](const TFuture<TGenericResult>& future) mutable {
+                    createUserPromise.SetValue(future.GetValue());
+                }
+            );
+
+            return createUserPromise.GetFuture();
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> AlterUser(const TString& cluster, const NYql::TAlterUserSettings& settings) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            auto alterUserPromise = NewPromise<TGenericResult>();
+
+            auto ev = MakeHolder<TRequest>();
+            ev->Record.SetDatabaseName(database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->Serialized);
+            }
+            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+            auto& alterUser = *schemeTx.MutableAlterLogin()->MutableModifyUser();
+
+            alterUser.SetUser(settings.UserName);
+            if (settings.Password) {
+                alterUser.SetPassword(settings.Password);
+            }
+
+            SendSchemeRequest(ev.Release()).Apply(
+                [alterUserPromise](const TFuture<TGenericResult>& future) mutable {
+                alterUserPromise.SetValue(future.GetValue());
+            }
+            );
+
+            return alterUserPromise.GetFuture();
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> DropUser(const TString& cluster, const NYql::TDropUserSettings& settings) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            auto dropUserPromise = NewPromise<TGenericResult>();
+
+            auto ev = MakeHolder<TRequest>();
+            ev->Record.SetDatabaseName(database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->Serialized);
+            }
+            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+            auto& dropUser = *schemeTx.MutableAlterLogin()->MutableRemoveUser();
+
+            dropUser.SetUser(settings.UserName);
+
+            SendSchemeRequest(ev.Release()).Apply(
+                [dropUserPromise, &settings](const TFuture<TGenericResult>& future) mutable {
+                    const auto& realResult = future.GetValue();
+                    if (!realResult.Success() && realResult.Status() == TIssuesIds::DEFAULT_ERROR && settings.Force) {
+                        IKqpGateway::TGenericResult fakeResult;
+                        fakeResult.SetSuccess();
+                        dropUserPromise.SetValue(std::move(fakeResult));
+                    } else {
+                        dropUserPromise.SetValue(realResult);
+                    }
+                }
+            );
+
+            return dropUserPromise.GetFuture();
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> CreateGroup(const TString& cluster, const NYql::TCreateGroupSettings& settings) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            auto createGroupPromise = NewPromise<TGenericResult>();
+
+            auto ev = MakeHolder<TRequest>();
+            ev->Record.SetDatabaseName(database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->Serialized);
+            }
+            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+            auto& createGroup = *schemeTx.MutableAlterLogin()->MutableCreateGroup();
+
+            createGroup.SetGroup(settings.GroupName);
+
+            SendSchemeRequest(ev.Release()).Apply(
+                [createGroupPromise](const TFuture<TGenericResult>& future) mutable {
+                    createGroupPromise.SetValue(future.GetValue());
+                }
+            );
+
+            return createGroupPromise.GetFuture();
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> AlterGroup(const TString& cluster, NYql::TAlterGroupSettings& settings) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            if (!settings.Roles.size()) {
+                return MakeFuture(ResultFromError<TGenericResult>("No roles given for AlterGroup request"));
+            }
+
+            TPromise<TGenericResult> alterGroupPromise = NewPromise<TGenericResult>();
+
+            auto sendRoleWrapper = MakeIntrusive<TSendRoleWrapper>();
+
+            sendRoleWrapper->SendNextRole = [alterGroupPromise, sendRoleWrapper, this, database = std::move(database)]
+                (TString&& groupName, NYql::TAlterGroupSettings::EAction action, std::vector<TString>&& rolesToSend)
+                mutable
+            {
+                auto ev = MakeHolder<TRequest>();
+                ev->Record.SetDatabaseName(database);
+                if (UserToken) {
+                    ev->Record.SetUserToken(UserToken->Serialized);
+                }
+                auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+                schemeTx.SetWorkingDir(database);
+                schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+                switch (action) {
+                case NYql::TAlterGroupSettings::EAction::AddRoles:
+                {
+                    auto& alterGroup = *schemeTx.MutableAlterLogin()->MutableAddGroupMembership();
+                    alterGroup.SetGroup(groupName);
+                    alterGroup.SetMember(*rolesToSend.begin());
+                    break;
+                }
+                case NYql::TAlterGroupSettings::EAction::RemoveRoles:
+                {
+                    auto& alterGroup = *schemeTx.MutableAlterLogin()->MutableRemoveGroupMembership();
+                    alterGroup.SetGroup(groupName);
+                    alterGroup.SetMember(*rolesToSend.begin());
+                    break;
+                }
+                default:
+                    break;
+                }
+
+                std::vector<TString> restOfRoles(
+                    std::make_move_iterator(rolesToSend.begin() + 1),
+                    std::make_move_iterator(rolesToSend.end())
+                );
+
+                SendSchemeRequest(ev.Release()).Apply(
+                    [alterGroupPromise, sendRoleWrapper, groupName = std::move(groupName), action, restOfRoles = std::move(restOfRoles)]
+                        (const TFuture<TGenericResult>& future) mutable
+                    {
+                        auto result = future.GetValue();
+                        if (!result.Success()) {
+                            alterGroupPromise.SetValue(result);
+                            return;
+                        }
+                        if (restOfRoles.size()) {
+                            try {
+                                sendRoleWrapper->SendNextRole(std::move(groupName), action, std::move(restOfRoles));
+                            }
+                            catch (yexception& e) {
+                                return alterGroupPromise.SetValue(ResultFromException<TGenericResult>(e));
+                            }
+                        } else {
+                            alterGroupPromise.SetValue(result);
+                        }
+                    }
+                );
+            };
+
+            sendRoleWrapper->SendNextRole(std::move(settings.GroupName), settings.Action, std::move(settings.Roles));
+
+            return alterGroupPromise.GetFuture();
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> DropGroup(const TString& cluster, const NYql::TDropGroupSettings& settings) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            auto dropGroupPromise = NewPromise<TGenericResult>();
+
+            auto ev = MakeHolder<TRequest>();
+            ev->Record.SetDatabaseName(database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->Serialized);
+            }
+            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+            auto& dropGroup = *schemeTx.MutableAlterLogin()->MutableRemoveGroup();
+
+            dropGroup.SetGroup(settings.GroupName);
+
+            SendSchemeRequest(ev.Release()).Apply(
+                [dropGroupPromise, &settings](const TFuture<TGenericResult>& future) mutable {
+                    const auto& realResult = future.GetValue();
+                    if (!realResult.Success() && realResult.Status() == TIssuesIds::DEFAULT_ERROR && settings.Force) {
+                        IKqpGateway::TGenericResult fakeResult;
+                        fakeResult.SetSuccess();
+                        dropGroupPromise.SetValue(std::move(fakeResult));
+                    } else {
+                        dropGroupPromise.SetValue(realResult);
+                    }
+                }
+            );
+
+            return dropGroupPromise.GetFuture();
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
@@ -1820,6 +2136,20 @@ private:
         RegisterActor(requestHandler);
 
         return promise.GetFuture();
+    }
+
+    bool GetDatabaseForLoginOperation(TString& database) {
+        TAppData* appData = AppData(ActorSystem);
+        if (appData && appData->AuthConfig.GetDomainLoginOnly()) {
+            if (appData->DomainsInfo && !appData->DomainsInfo->Domains.empty()) {
+                database = "/" + appData->DomainsInfo->Domains.begin()->second->Name;
+                return true;
+            }
+        } else {
+            database = Database;
+            return true;
+        }
+        return false;
     }
 
 private:

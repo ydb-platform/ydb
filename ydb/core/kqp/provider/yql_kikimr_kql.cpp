@@ -325,7 +325,7 @@ TExprNode::TPtr KiUpsertTableToKql(const TKiWriteTable& node, TExprContext& ctx,
 }
 
 TExprNode::TPtr KiInsertTableToKql(const TKiWriteTable& node, TExprContext& ctx, const TKikimrTableDescription& table,
-    const TKikimrTableOperation& op, TExprNode::TPtr& effect)
+    const TYdbOperation& op, TExprNode::TPtr& effect)
 {
     auto fetchItemArg = Build<TCoArgument>(ctx, node.Pos())
         .Name("fetchItem")
@@ -394,14 +394,14 @@ TExprNode::TPtr KiInsertTableToKql(const TKiWriteTable& node, TExprContext& ctx,
     TExprNode::TPtr insertEffect;
     auto insertKql = KiUpsertTableToKql(node, ctx, table, false, true, insertEffect);
 
-    if (op == TKikimrTableOperation::InsertAbort) {
+    if (op == TYdbOperation::InsertAbort) {
         effect = Build<TKiAbortIf>(ctx, node.Pos())
             .Predicate(predicate)
             .Effect(insertEffect)
             .Constraint().Build("insert_pk")
             .Done()
             .Ptr();
-    } else if (op == TKikimrTableOperation::InsertRevert) {
+    } else if (op == TYdbOperation::InsertRevert) {
         effect = Build<TKiRevertIf>(ctx, node.Pos())
             .Predicate(predicate)
             .Effect(insertEffect)
@@ -790,15 +790,15 @@ TExprNode::TPtr KiWriteTableToKql(TKiWriteTable write, TExprContext& ctx,
     auto& tableDesc = tablesData.ExistingTable(TString(cluster), TString(table));
 
     switch (op) {
-        case TKikimrTableOperation::Upsert:
-        case TKikimrTableOperation::Replace:
-            return KiUpsertTableToKql(write, ctx, tableDesc, op == TKikimrTableOperation::Replace, false, effect);
-        case TKikimrTableOperation::InsertRevert:
-        case TKikimrTableOperation::InsertAbort:
+        case TYdbOperation::Upsert:
+        case TYdbOperation::Replace:
+            return KiUpsertTableToKql(write, ctx, tableDesc, op == TYdbOperation::Replace, false, effect);
+        case TYdbOperation::InsertRevert:
+        case TYdbOperation::InsertAbort:
             return KiInsertTableToKql(write, ctx, tableDesc, op, effect);
-        case TKikimrTableOperation::DeleteOn:
+        case TYdbOperation::DeleteOn:
             return KiDeleteOnTableToKql(write, ctx, tableDesc, effect);
-        case TKikimrTableOperation::UpdateOn:
+        case TYdbOperation::UpdateOn:
             return KiUpdateOnTableToKql(write, ctx, tableDesc, effect);
         default:
             return nullptr;

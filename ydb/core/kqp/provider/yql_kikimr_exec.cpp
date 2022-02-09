@@ -16,26 +16,111 @@ using namespace NNodes;
 using namespace NCommon;
 using namespace NThreading;
 
-bool EnsureNotPrepare(const TString featureName, TPositionHandle pos, const TKikimrQueryContext& queryCtx,
-    TExprContext& ctx)
-{
-    if (queryCtx.PrepareOnly && !queryCtx.SuppressDdlChecks) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-            << "'" << featureName << "' not supported in query prepare mode." ));
-        return false;
+namespace {
+    bool EnsureNotPrepare(const TString featureName, TPositionHandle pos, const TKikimrQueryContext& queryCtx,
+        TExprContext& ctx)
+    {
+        if (queryCtx.PrepareOnly && !queryCtx.SuppressDdlChecks) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "'" << featureName << "' not supported in query prepare mode."));
+            return false;
+        }
+
+        return true;
     }
 
-    return true;
-}
+    void FillExecDataQueryAst(TKiExecDataQuery exec, const TString& ast, TExprContext& ctx) {
+        auto astNode = Build<TCoAtom>(ctx, exec.Pos())
+            .Value(ast)
+            .Done();
 
-void FillExecDataQueryAst(TKiExecDataQuery exec, const TString& ast, TExprContext& ctx) {
-    auto astNode = Build<TCoAtom>(ctx, exec.Pos())
-        .Value(ast)
-        .Done();
+        astNode.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>());
 
-    astNode.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+        exec.Ptr()->ChildRef(TKiExecDataQuery::idx_Ast) = astNode.Ptr();
+    }
 
-    exec.Ptr()->ChildRef(TKiExecDataQuery::idx_Ast) = astNode.Ptr();
+    TCreateUserSettings ParseCreateUserSettings(TKiCreateUser createUser) {
+        TCreateUserSettings createUserSettings;
+        createUserSettings.UserName = TString(createUser.UserName());
+
+        for (auto setting : createUser.Settings()) {
+            auto name = setting.Name().Value();
+            if (name == "password") {
+                createUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
+            } else if (name == "nullPassword") {
+                // Default value
+            } else if (name == "passwordEncrypted") {
+                createUserSettings.PasswordEncrypted = true;
+            }
+        }
+        return createUserSettings;
+    }
+
+    TAlterUserSettings ParseAlterUserSettings(TKiAlterUser alterUser) {
+        TAlterUserSettings alterUserSettings;
+        alterUserSettings.UserName = TString(alterUser.UserName());
+
+        for (auto setting : alterUser.Settings()) {
+            auto name = setting.Name().Value();
+            if (name == "password") {
+                alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
+            } else if (name == "nullPassword") {
+                // Default value
+            } else if (name == "passwordEncrypted") {
+                alterUserSettings.PasswordEncrypted = true;
+            }
+        }
+        return alterUserSettings;
+    }
+
+    TDropUserSettings ParseDropUserSettings(TKiDropUser dropUser) {
+        TDropUserSettings dropUserSettings;
+        dropUserSettings.UserName = TString(dropUser.UserName());
+
+        for (auto setting : dropUser.Settings()) {
+            auto name = setting.Name().Value();
+            if (name == "force") {
+                dropUserSettings.Force = true;
+            }
+        }
+        return dropUserSettings;
+    }
+
+    TCreateGroupSettings ParseCreateGroupSettings(TKiCreateGroup createGroup) {
+        TCreateGroupSettings createGroupSettings;
+        createGroupSettings.GroupName = TString(createGroup.GroupName());
+        return createGroupSettings;
+    }
+
+    TAlterGroupSettings ParseAlterGroupSettings(TKiAlterGroup alterGroup) {
+        TAlterGroupSettings alterGroupSettings;
+        alterGroupSettings.GroupName = TString(alterGroup.GroupName());
+
+        TString action = TString(alterGroup.Action());
+        if (action == "addUsersToGroup") {
+            alterGroupSettings.Action = TAlterGroupSettings::EAction::AddRoles;
+        } else if (action == "dropUsersFromGroup") {
+            alterGroupSettings.Action = TAlterGroupSettings::EAction::RemoveRoles;
+        }
+
+        for (auto role : alterGroup.Roles()) {
+            alterGroupSettings.Roles.push_back(role.Cast<TCoAtom>().StringValue());
+        }
+        return alterGroupSettings;
+    }
+
+    TDropGroupSettings ParseDropGroupSettings(TKiDropGroup dropGroup) {
+        TDropGroupSettings dropGroupSettings;
+        dropGroupSettings.GroupName = TString(dropGroup.GroupName());
+
+        for (auto setting : dropGroup.Settings()) {
+            auto name = setting.Name().Value();
+            if (name == "force") {
+                dropGroupSettings.Force = true;
+            }
+        }
+        return dropGroupSettings;
+    }
 }
 
 class TKiSinkPlanInfoTransformer : public TGraphTransformerBase {
@@ -378,7 +463,7 @@ public:
             auto cluster = TString(maybeCreate.Cast().DataSink().Cluster());
             auto& table = SessionCtx->Tables().GetTable(cluster, TString(maybeCreate.Cast().Table()));
 
-            if (!ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TKikimrTableOperation::Create, ctx)) {
+            if (!ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TYdbOperation::CreateTable, ctx)) {
                 return SyncError();
             }
 
@@ -405,7 +490,7 @@ public:
             auto cluster = TString(maybeDrop.Cast().DataSink().Cluster());
             auto& table = SessionCtx->Tables().GetTable(cluster, TString(maybeDrop.Cast().Table()));
 
-            if (!ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TKikimrTableOperation::Drop, ctx)) {
+            if (!ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TYdbOperation::DropTable, ctx)) {
                 return SyncError();
             }
 
@@ -436,7 +521,7 @@ public:
             auto cluster = TString(maybeAlter.Cast().DataSink().Cluster());
             auto& table = SessionCtx->Tables().GetTable(cluster, TString(maybeAlter.Cast().Table()));
 
-            if (!ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TKikimrTableOperation::Alter, ctx)) {
+            if (!ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TYdbOperation::AlterTable, ctx)) {
                 return SyncError();
             }
 
@@ -744,6 +829,144 @@ public:
 
         }
 
+        if (auto maybeCreateUser = TMaybeNode<TKiCreateUser>(input)) {
+            if (!EnsureNotPrepare("CREATE USER", input->Pos(), SessionCtx->Query(), ctx)) {
+                return SyncError();
+            }
+
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeCreateUser.Cast().DataSink().Cluster());
+            TCreateUserSettings createUserSettings = ParseCreateUserSettings(maybeCreateUser.Cast());
+
+            auto future = Gateway->CreateUser(cluster, createUserSettings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing CREATE USER");
+        }
+
+        if (auto maybeAlterUser = TMaybeNode<TKiAlterUser>(input)) {
+            if (!EnsureNotPrepare("ALTER USER", input->Pos(), SessionCtx->Query(), ctx)) {
+                return SyncError();
+            }
+
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeAlterUser.Cast().DataSink().Cluster());
+            TAlterUserSettings alterUserSettings = ParseAlterUserSettings(maybeAlterUser.Cast());
+
+            auto future = Gateway->AlterUser(cluster, alterUserSettings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing ALTER USER");
+        }
+
+        if (auto maybeDropUser = TMaybeNode<TKiDropUser>(input)) {
+            if (!EnsureNotPrepare("DROP USER", input->Pos(), SessionCtx->Query(), ctx)) {
+                return SyncError();
+            }
+
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeDropUser.Cast().DataSink().Cluster());
+            TDropUserSettings dropUserSettings = ParseDropUserSettings(maybeDropUser.Cast());
+
+            auto future = Gateway->DropUser(cluster, dropUserSettings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing DROP USER");
+        }
+
+        if (auto maybeCreateGroup = TMaybeNode<TKiCreateGroup>(input)) {
+            if (!EnsureNotPrepare("CREATE GROUP", input->Pos(), SessionCtx->Query(), ctx)) {
+                return SyncError();
+            }
+
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeCreateGroup.Cast().DataSink().Cluster());
+            TCreateGroupSettings createGroupSettings = ParseCreateGroupSettings(maybeCreateGroup.Cast());
+
+            auto future = Gateway->CreateGroup(cluster, createGroupSettings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing CREATE GROUP");
+        }
+
+        if (auto maybeAlterGroup = TMaybeNode<TKiAlterGroup>(input)) {
+            if (!EnsureNotPrepare("ALTER GROUP", input->Pos(), SessionCtx->Query(), ctx)) {
+                return SyncError();
+            }
+
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeAlterGroup.Cast().DataSink().Cluster());
+            TAlterGroupSettings alterGroupSettings = ParseAlterGroupSettings(maybeAlterGroup.Cast());
+
+            auto future = Gateway->AlterGroup(cluster, alterGroupSettings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing ALTER GROUP");
+        }
+
+        if (auto maybeDropGroup = TMaybeNode<TKiDropGroup>(input)) {
+            if (!EnsureNotPrepare("DROP GROUP", input->Pos(), SessionCtx->Query(), ctx)) {
+                return SyncError();
+            }
+
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeDropGroup.Cast().DataSink().Cluster());
+            TDropGroupSettings dropGroupSettings = ParseDropGroupSettings(maybeDropGroup.Cast());
+
+            auto future = Gateway->DropGroup(cluster, dropGroupSettings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing DROP GROUP");
+        }
+
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
             << "(Kikimr DataSink) Failed to execute node: " << input->Content()));
         return SyncError();
@@ -893,7 +1116,7 @@ private:
     }
 
     bool ApplyDdlOperation(const TString& cluster, TPositionHandle pos, const TString& table,
-        TKikimrTableOperation op, TExprContext& ctx)
+        TYdbOperation op, TExprContext& ctx)
     {
         YQL_ENSURE(op & KikimrSchemeOps());
 

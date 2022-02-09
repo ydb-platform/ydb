@@ -10,12 +10,20 @@ namespace {
 using namespace NNodes;
 using namespace NCommon;
 
-TKiOperation BuildTableOpNode(const TCoAtom& cluster, const TStringBuf& table, TKikimrTableOperation op, TPositionHandle pos,
+TKiOperation BuildTableOpNode(const TCoAtom& cluster, const TStringBuf& table, TYdbOperation op, TPositionHandle pos,
     TExprContext& ctx)
 {
     return Build<TKiOperation>(ctx, pos)
         .Cluster().Build(cluster)
         .Table().Build(table)
+        .Operation<TCoAtom>().Build(ToString(op))
+        .Done();
+}
+
+TKiOperation BuildYdbOpNode(const TCoAtom& cluster, TYdbOperation op, TPositionHandle pos, TExprContext& ctx) {
+    return Build<TKiOperation>(ctx, pos)
+        .Cluster().Build(cluster)
+        .Table().Build("")
         .Operation<TCoAtom>().Build(ToString(op))
         .Done();
 }
@@ -75,7 +83,7 @@ struct TKiExploreTxResults {
         hasScheme = false;
         hasData = false;
         for (auto& node : TableOperations) {
-            auto op = FromString<TKikimrTableOperation>(TString(node.Operation()));
+            auto op = FromString<TYdbOperation>(TString(node.Operation()));
             hasScheme = hasScheme || (op & KikimrSchemeOps());
             hasData = hasData || (op & KikimrDataOps());
         }
@@ -122,7 +130,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto table = key.GetTablePath();
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(maybeRead.Cast().World(), ctx, dataSink, txRes);
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TKikimrTableOperation::Select, read.Pos(), ctx));
+        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::Select, read.Pos(), ctx));
         return result;
     }
 
@@ -150,7 +158,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto table = update.Table().Value();
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(update.World(), ctx, dataSink, txRes);
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TKikimrTableOperation::Update, update.Pos(), ctx));
+        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::Update, update.Pos(), ctx));
         txRes.Effects.push_back(node);
         return result;
     }
@@ -164,7 +172,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto table = del.Table().Value();
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(del.World(), ctx, dataSink, txRes);
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TKikimrTableOperation::Delete, del.Pos(), ctx));
+        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::Delete, del.Pos(), ctx));
         txRes.Effects.push_back(node);
         return result;
     }
@@ -178,7 +186,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto table = create.Table().Value();
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(create.World(), ctx, dataSink, txRes);
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TKikimrTableOperation::Create, create.Pos(), ctx));
+        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::CreateTable, create.Pos(), ctx));
         return result;
     }
 
@@ -191,7 +199,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto table = drop.Table().Value();
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(drop.World(), ctx, dataSink, txRes);
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TKikimrTableOperation::Drop, drop.Pos(), ctx));
+        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::DropTable, drop.Pos(), ctx));
         return result;
     }
 
@@ -204,7 +212,79 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto table = alter.Table().Value();
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(alter.World(), ctx, dataSink, txRes);
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TKikimrTableOperation::Alter, alter.Pos(), ctx));
+        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::AlterTable, alter.Pos(), ctx));
+        return result;
+    }
+
+    if (auto maybeCreateUser = node.Maybe<TKiCreateUser>()) {
+        auto createUser = maybeCreateUser.Cast();
+        if (!checkDataSink(createUser.DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        auto result = ExploreTx(createUser.World(), ctx, dataSink, txRes);
+        txRes.TableOperations.push_back(BuildYdbOpNode(cluster, TYdbOperation::CreateUser, createUser.Pos(), ctx));
+        return result;
+    }
+
+    if (auto maybeAlterUser = node.Maybe<TKiAlterUser>()) {
+        auto alterUser = maybeAlterUser.Cast();
+        if (!checkDataSink(alterUser.DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        auto result = ExploreTx(alterUser.World(), ctx, dataSink, txRes);
+        txRes.TableOperations.push_back(BuildYdbOpNode(cluster, TYdbOperation::AlterUser, alterUser.Pos(), ctx));
+        return result;
+    }
+
+    if (auto maybeDropUser = node.Maybe<TKiDropUser>()) {
+        auto dropUser = maybeDropUser.Cast();
+        if (!checkDataSink(dropUser.DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        auto result = ExploreTx(dropUser.World(), ctx, dataSink, txRes);
+        txRes.TableOperations.push_back(BuildYdbOpNode(cluster, TYdbOperation::DropUser, dropUser.Pos(), ctx));
+        return result;
+    }
+
+    if (auto maybeCreateGroup = node.Maybe<TKiCreateGroup>()) {
+        auto createGroup = maybeCreateGroup.Cast();
+        if (!checkDataSink(createGroup.DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        auto result = ExploreTx(createGroup.World(), ctx, dataSink, txRes);
+        txRes.TableOperations.push_back(BuildYdbOpNode(cluster, TYdbOperation::CreateGroup, createGroup.Pos(), ctx));
+        return result;
+    }
+
+    if (auto maybeAlterGroup = node.Maybe<TKiAlterGroup>()) {
+        auto alterGroup = maybeAlterGroup.Cast();
+        if (!checkDataSink(alterGroup.DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        auto result = ExploreTx(alterGroup.World(), ctx, dataSink, txRes);
+        txRes.TableOperations.push_back(BuildYdbOpNode(cluster, TYdbOperation::AlterGroup, alterGroup.Pos(), ctx));
+        return result;
+    }
+
+    if (auto maybeDropGroup = node.Maybe<TKiDropGroup>()) {
+        auto dropGroup = maybeDropGroup.Cast();
+        if (!checkDataSink(dropGroup.DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        auto result = ExploreTx(dropGroup.World(), ctx, dataSink, txRes);
+        txRes.TableOperations.push_back(BuildYdbOpNode(cluster, TYdbOperation::DropGroup, dropGroup.Pos(), ctx));
         return result;
     }
 
@@ -545,20 +625,20 @@ TExprNode::TPtr KiBuildResult(TExprBase node,  const TString& cluster, TExprCont
     return ctx.ChangeChild(*ctx.ChangeChild(resFill.Ref(), 0, world.Ptr()), 3, data.Ptr());
 }
 
-TKikimrTableOperation GetTableOp(const TKiWriteTable& write) {
+TYdbOperation GetTableOp(const TKiWriteTable& write) {
     auto mode = write.Mode().Value();
     if (mode == "upsert") {
-        return TKikimrTableOperation::Upsert;
+        return TYdbOperation::Upsert;
     } else if (mode == "replace") {
-        return TKikimrTableOperation::Replace;
+        return TYdbOperation::Replace;
     } else if (mode == "insert_revert") {
-        return TKikimrTableOperation::InsertRevert;
+        return TYdbOperation::InsertRevert;
     } else if (mode == "insert_abort") {
-        return TKikimrTableOperation::InsertAbort;
+        return TYdbOperation::InsertAbort;
     } else if (mode == "delete_on") {
-        return TKikimrTableOperation::DeleteOn;
+        return TYdbOperation::DeleteOn;
     } else if (mode == "update_on") {
-        return TKikimrTableOperation::UpdateOn;
+        return TYdbOperation::UpdateOn;
     }
 
     YQL_ENSURE(false, "Unexpected TKiWriteTable mode: " << mode);

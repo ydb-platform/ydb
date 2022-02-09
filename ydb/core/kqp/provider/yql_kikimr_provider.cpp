@@ -25,11 +25,11 @@ struct TKikimrData {
     THashSet<TStringBuf> CommitModes;
     THashSet<TStringBuf> SupportedEffects;
 
-    TKikimrTableOperations SchemeOps;
-    TKikimrTableOperations DataOps;
-    TKikimrTableOperations ModifyOps;
-    TKikimrTableOperations ReadOps;
-    TKikimrTableOperations RequireUnmodifiedOps;
+    TYdbOperations SchemeOps;
+    TYdbOperations DataOps;
+    TYdbOperations ModifyOps;
+    TYdbOperations ReadOps;
+    TYdbOperations RequireUnmodifiedOps;
 
     TMap<TString, NKikimr::NUdf::EDataSlot> SystemColumns;
 
@@ -45,6 +45,12 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateTable::CallableName());
         DataSinkNames.insert(TKiAlterTable::CallableName());
         DataSinkNames.insert(TKiDropTable::CallableName());
+        DataSinkNames.insert(TKiCreateUser::CallableName());
+        DataSinkNames.insert(TKiAlterUser::CallableName());
+        DataSinkNames.insert(TKiDropUser::CallableName());
+        DataSinkNames.insert(TKiCreateGroup::CallableName());
+        DataSinkNames.insert(TKiAlterGroup::CallableName());
+        DataSinkNames.insert(TKiDropGroup::CallableName());
         DataSinkNames.insert(TKiDataQuery::CallableName());
         DataSinkNames.insert(TKiExecDataQuery::CallableName());
         DataSinkNames.insert(TKiEffects::CallableName());
@@ -71,31 +77,37 @@ struct TKikimrData {
         SupportedEffects.insert(TKiDeleteTable::CallableName());
 
         ModifyOps =
-            TKikimrTableOperation::Upsert |
-            TKikimrTableOperation::Replace |
-            TKikimrTableOperation::Update |
-            TKikimrTableOperation::UpdateOn |
-            TKikimrTableOperation::Delete |
-            TKikimrTableOperation::DeleteOn |
-            TKikimrTableOperation::InsertRevert |
-            TKikimrTableOperation::InsertAbort;
+            TYdbOperation::Upsert |
+            TYdbOperation::Replace |
+            TYdbOperation::Update |
+            TYdbOperation::UpdateOn |
+            TYdbOperation::Delete |
+            TYdbOperation::DeleteOn |
+            TYdbOperation::InsertRevert |
+            TYdbOperation::InsertAbort;
 
         ReadOps =
-            TKikimrTableOperation::Select |
-            TKikimrTableOperation::Update |
-            TKikimrTableOperation::Delete;
+            TYdbOperation::Select |
+            TYdbOperation::Update |
+            TYdbOperation::Delete;
 
         DataOps = ModifyOps | ReadOps;
 
         SchemeOps =
-            TKikimrTableOperation::Create |
-            TKikimrTableOperation::Drop |
-            TKikimrTableOperation::Alter;
+            TYdbOperation::CreateTable |
+            TYdbOperation::DropTable |
+            TYdbOperation::AlterTable |
+            TYdbOperation::CreateUser |
+            TYdbOperation::AlterUser |
+            TYdbOperation::DropUser |
+            TYdbOperation::CreateGroup |
+            TYdbOperation::AlterGroup |
+            TYdbOperation::DropGroup;
 
         RequireUnmodifiedOps =
-            TKikimrTableOperation::InsertRevert |
-            TKikimrTableOperation::InsertAbort |
-            TKikimrTableOperation::UpdateOn; // TODO: KIKIMR-3206
+            TYdbOperation::InsertRevert |
+            TYdbOperation::InsertAbort |
+            TYdbOperation::UpdateOn; // TODO: KIKIMR-3206
 
         SystemColumns = {
             {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}
@@ -328,15 +340,18 @@ bool TKikimrKey::Extract(const TExprNode& key) {
             return false;
         }
 
-        Path = nameNode->Child(0)->Content();
+        Target = nameNode->Child(0)->Content();
     } else if (tagName == "tablescheme") {
         KeyType = Type::TableScheme;
-        Path = key.Child(0)->Child(1)->Child(0)->Content();
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
     } else if (tagName == "tablelist") {
         KeyType = Type::TableList;
-        Path = key.Child(0)->Child(1)->Child(0)->Content();
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
+    } else if (tagName == "role") {
+        KeyType = Type::Role;
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
     } else {
-        Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag: ") + tagName));
+        Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName));
         return false;
     }
 
@@ -361,7 +376,7 @@ bool TKikimrKey::Extract(const TExprNode& key) {
                 View = viewNode->Child(0)->Content();
 
             } else {
-                Ctx.AddError(TIssue(Ctx.GetPosition(tag->Pos()), TStringBuilder() << "Unexpected tag: " << tag->Content()));
+                Ctx.AddError(TIssue(Ctx.GetPosition(tag->Pos()), TStringBuilder() << "Unexpected tag for kikimr key child: " << tag->Content()));
                 return false;
             }
         }
@@ -473,7 +488,7 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TCoNameValueTupleLi
     TVector<NKqpProto::TKqpTableOp> protoOps;
     for (const auto& op : operations) {
         auto table = TString(op.Name());
-        auto tableOp = FromString<TKikimrTableOperation>(TString(op.Value().Cast<TCoAtom>()));
+        auto tableOp = FromString<TYdbOperation>(TString(op.Value().Cast<TCoAtom>()));
         auto pos = ctx.GetPosition(op.Pos());
 
         NKqpProto::TKqpTableOp protoOp;
@@ -492,7 +507,7 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TKiOperationList& o
     TVector<NKqpProto::TKqpTableOp> protoOps;
     for (const auto& op : operations) {
         auto table = TString(op.Table());
-        auto tableOp = FromString<TKikimrTableOperation>(TString(op.Operation()));
+        auto tableOp = FromString<TYdbOperation>(TString(op.Operation()));
         auto pos = ctx.GetPosition(op.Pos());
 
         NKqpProto::TKqpTableOp protoOp;
@@ -550,7 +565,7 @@ bool TKikimrTransactionContextBase::ApplyTableOperations(const TVector<NKqpProto
     for (const auto& op : operations) {
         const auto& table = op.GetTable();
 
-        auto newOp = TKikimrTableOperation(op.GetOperation());
+        auto newOp = TYdbOperation(op.GetOperation());
         TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
 
         const auto info = tableInfoMap.FindPtr(table);
@@ -629,8 +644,8 @@ bool TKikimrTransactionContextBase::ApplyTableOperations(const TVector<NKqpProto
         }
 
         // TODO: KIKIMR-3206
-        bool currentDelete = currentOps & (TKikimrTableOperation::Delete | TKikimrTableOperation::DeleteOn);
-        bool newUpdate = newOp == TKikimrTableOperation::Update;
+        bool currentDelete = currentOps & (TYdbOperation::Delete | TYdbOperation::DeleteOn);
+        bool newUpdate = newOp == TYdbOperation::Update;
         if (currentDelete && newUpdate) {
             TString message = TStringBuilder() << "Operation '" << newOp
                 << "' may lead to unexpected results when applied to table with deleted rows: " << table;
@@ -677,23 +692,23 @@ const TStringBuf& KikimrCommitModeScheme() {
     return CommitModeScheme;
 }
 
-const TKikimrTableOperations& KikimrSchemeOps() {
+const TYdbOperations& KikimrSchemeOps() {
     return Singleton<TKikimrData>()->SchemeOps;
 }
 
-const TKikimrTableOperations& KikimrDataOps() {
+const TYdbOperations& KikimrDataOps() {
     return Singleton<TKikimrData>()->DataOps;
 }
 
-const TKikimrTableOperations& KikimrModifyOps() {
+const TYdbOperations& KikimrModifyOps() {
     return Singleton<TKikimrData>()->ModifyOps;
 }
 
-const TKikimrTableOperations& KikimrReadOps() {
+const TYdbOperations& KikimrReadOps() {
     return Singleton<TKikimrData>()->ReadOps;
 }
 
-const TKikimrTableOperations& KikimrRequireUnmodifiedOps() {
+const TYdbOperations& KikimrRequireUnmodifiedOps() {
     return Singleton<TKikimrData>()->RequireUnmodifiedOps;
 }
 

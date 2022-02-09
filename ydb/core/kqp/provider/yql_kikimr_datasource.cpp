@@ -25,7 +25,7 @@ private:
             return TStatus::Error;
         }
 
-        return HandleTable(cluster, key);
+        return HandleKey(cluster, key);
     }
 
     TStatus HandleRead(TExprBase node, TExprContext& ctx) override {
@@ -35,7 +35,7 @@ private:
             return TStatus::Error;
         }
 
-        return HandleTable(cluster, key);
+        return HandleKey(cluster, key);
     }
 
     TStatus HandleLength(TExprBase node, TExprContext& ctx) override {
@@ -51,7 +51,7 @@ private:
     }
 
 private:
-    TStatus HandleTable(const TStringBuf& cluster, const TKikimrKey& key) {
+    TStatus HandleKey(const TStringBuf& cluster, const TKikimrKey& key) {
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Table:
             case TKikimrKey::Type::TableScheme: {
@@ -65,6 +65,9 @@ private:
             }
 
             case TKikimrKey::Type::TableList:
+                return TStatus::Ok;
+
+            case TKikimrKey::Type::Role:
                 return TStatus::Ok;
         }
 

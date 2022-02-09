@@ -72,6 +72,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "Permission denied to create a query with these parameters. Please receive a permission yq.resources.managePublic"));
     }
+    if (request.disposition().has_from_last_checkpoint()) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Streaming disposition \"from_last_checkpoint\" is not allowed in CreateQuery request"));
+    }
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, queryId)
             << "CreateQueryRequest, validation failed: "
@@ -663,6 +666,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
 
     if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "Permission denied to create a query with these parameters. Please receive a permission yq.resources.managePublic"));
+    }
+    if (request.state_load_mode() == YandexQuery::FROM_LAST_CHECKPOINT) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::UNSUPPORTED, "State load mode \"FROM_LAST_CHECKPOINT\" is not supported"));
     }
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, queryId)

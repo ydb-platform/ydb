@@ -17,6 +17,8 @@ default:
   ydb-name: YDB
   concept_secondary_index: ../../../../concepts/secondary_indexes
   concept_table: ../../../../concepts/datamodel#table
+  ydb_local_docker_image: cr.yandex/yc/yandex-docker-local-ydb
+  ydb_local_docker_image_tag: latest
 
   ydb-cli: ydb
   k8s: Kubernetes

@@ -25,6 +25,15 @@ ydb \
 └─────────┘
 ```
 
+Также можно выполнить запрос к контейнеру через порт без TLS, например:
+
+```bash
+ydb \
+  -e grpc://localhost:2136 \
+  -d /local table query execute -q 'select 1;'
+```
+
+
 Предсобранная версия [YDB CLI](../../../reference/ydb-cli/index.md) также доступа внутри образа:
 
 ```bash

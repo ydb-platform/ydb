@@ -299,7 +299,7 @@ namespace {
 
                 auto disconnectReasonGroup = Counters->GetSubgroup("subsystem", "disconnectReason");
                 for (const char *reason : TDisconnectReason::Reasons) {
-                    DisconnectByReason[reason] = disconnectReasonGroup->GetNamedCounter("reason", reason, true);
+                    DisconnectByReason[reason] = disconnectReasonGroup->GetCounter(reason, true);
                 }
             }
 

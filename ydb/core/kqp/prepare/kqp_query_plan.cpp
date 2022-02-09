@@ -1143,7 +1143,7 @@ private:
 
                 if (keyPartRange.From == keyPartRange.To) {
                     if (keyPartRange.From.Empty()) {
-                        rangeDescr << keyPartRange.ColumnName;
+                        rangeDescr << keyPartRange.ColumnName << " (-∞, +∞)";
                         readInfo.ScanBy.push_back(rangeDescr);
                     } else {
                         rangeDescr << keyPartRange.ColumnName

@@ -12,7 +12,8 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-TPersQueueGroupInfo::TPtr CreatePersQueueGroup(const NKikimrSchemeOp::TPersQueueGroupDescription& op,
+TPersQueueGroupInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
+                                               const NKikimrSchemeOp::TPersQueueGroupDescription& op,
                                                TEvSchemeShard::EStatus& status, TString& errStr)
 {
     TPersQueueGroupInfo::TPtr pqGroupInfo = new TPersQueueGroupInfo;
@@ -145,6 +146,22 @@ TPersQueueGroupInfo::TPtr CreatePersQueueGroup(const NKikimrSchemeOp::TPersQueue
         status = NKikimrScheme::StatusSchemeError;
         return nullptr;
     }
+
+    const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
+    if (dbRootEl->UserAttrs->Attrs.contains("cloud_id")) {
+        auto cloudId = dbRootEl->UserAttrs->Attrs.at("cloud_id");
+        tabletConfig.SetYcCloudId(cloudId);
+    }
+    if (dbRootEl->UserAttrs->Attrs.contains("folder_id")) {
+        auto folderId = dbRootEl->UserAttrs->Attrs.at("folder_id");
+        tabletConfig.SetYcFolderId(folderId);
+    }
+    if (dbRootEl->UserAttrs->Attrs.contains("database_id")) {
+        auto databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
+        tabletConfig.SetYdbDatabaseId(databaseId);
+    }
+    const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
+    tabletConfig.SetYdbDatabasePath(databasePath);
 
     Y_PROTOBUF_SUPPRESS_NODISCARD tabletConfig.SerializeToString(&pqGroupInfo->TabletConfig);
 
@@ -360,7 +377,7 @@ public:
         }
 
         TPersQueueGroupInfo::TPtr pqGroup = CreatePersQueueGroup(
-            createDEscription, status, errStr);
+            context, createDEscription, status, errStr);
 
         if (!pqGroup.Get()) {
             result->SetError(status, errStr);
@@ -373,6 +390,7 @@ public:
         auto tabletConfig = pqGroup->TabletConfig;
         NKikimrPQ::TPQTabletConfig config;
         Y_VERIFY(!tabletConfig.empty());
+
         bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
         Y_VERIFY(parseOk);
 

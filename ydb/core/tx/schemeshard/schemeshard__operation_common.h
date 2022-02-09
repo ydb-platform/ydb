@@ -996,21 +996,6 @@ public:
                 tabletConfig = &pqGroup->AlterData->TabletConfig;
         }
 
-        const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
-        TString cloudId;
-        if (dbRootEl->UserAttrs->Attrs.contains("cloud_id")) {
-            cloudId = dbRootEl->UserAttrs->Attrs.at("cloud_id");
-        }
-        TString folderId;
-        if (dbRootEl->UserAttrs->Attrs.contains("folder_id")) {
-           folderId = dbRootEl->UserAttrs->Attrs.at("folder_id");
-        }
-        TString databaseId;
-        if (dbRootEl->UserAttrs->Attrs.contains("database_id")) {
-            databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
-        }
-
-        TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
         for (auto shard : txState->Shards) {
             TShardIdx idx = shard.Idx;
             TTabletId tabletId = context.SS->ShardInfos.at(idx).TabletID;
@@ -1035,11 +1020,6 @@ public:
                 event->Record.MutableTabletConfig()->SetTopicName(topicName);
                 event->Record.MutableTabletConfig()->SetTopicPath(TPath::Init(txState->TargetPathId, context.SS).PathString());
                 event->Record.MutableTabletConfig()->MutablePartitionConfig()->SetTotalPartitions(pqGroup->AlterData ? pqGroup->AlterData->TotalGroupCount : pqGroup->TotalGroupCount);
-
-                event->Record.MutableTabletConfig()->SetYdbDatabaseId(databaseId);
-                event->Record.MutableTabletConfig()->SetYcCloudId(cloudId);
-                event->Record.MutableTabletConfig()->SetYcFolderId(folderId);
-                event->Record.MutableTabletConfig()->SetYdbDatabasePath(databasePath);
 
                 event->Record.MutableTabletConfig()->SetVersion(pqGroup->AlterVersion + 1);
 

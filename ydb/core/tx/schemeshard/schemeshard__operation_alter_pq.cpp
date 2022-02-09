@@ -75,6 +75,7 @@ public:
     }
 
     TPersQueueGroupInfo::TPtr ParseParams(
+            TOperationContext& context,
             NKikimrPQ::TPQTabletConfig* tabletConfig,
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
             TString& errStr)
@@ -137,6 +138,22 @@ public:
                 errStr = "Cannot change key schema";
                 return nullptr;
             }
+
+            const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
+            if (dbRootEl->UserAttrs->Attrs.contains("cloud_id")) {
+                auto cloudId = dbRootEl->UserAttrs->Attrs.at("cloud_id");
+                tabletConfig->SetYcCloudId(cloudId);
+            }
+            if (dbRootEl->UserAttrs->Attrs.contains("folder_id")) {
+                auto folderId = dbRootEl->UserAttrs->Attrs.at("folder_id");
+                tabletConfig->SetYcFolderId(folderId);
+            }
+            if (dbRootEl->UserAttrs->Attrs.contains("database_id")) {
+                auto databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
+                tabletConfig->SetYdbDatabaseId(databaseId);
+            }
+            const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
+            tabletConfig->SetYdbDatabasePath(databasePath);
 
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
             Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
@@ -436,7 +453,7 @@ public:
         newTabletConfig = tabletConfig;
 
 
-        TPersQueueGroupInfo::TPtr alterData = ParseParams(&newTabletConfig, alter, errStr);
+        TPersQueueGroupInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
         if (!alterData) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;

@@ -55,6 +55,10 @@ public:
     TEngineHostCounters& GetTaskCounters(ui64 taskId) { return TaskCounters[taskId]; }
     TEngineHostCounters& GetDatashardCounters() { return DatashardCounters; }
 
+    void SetTabletNotReady() { TabletNotReady = true; };
+    void ResetTabletNotReady() { TabletNotReady = false; }
+    bool IsTabletNotReady() const { return TabletNotReady; }
+
 public:
     NTable::TDatabase* Database = nullptr;
 
@@ -65,6 +69,7 @@ private:
     TInstant Now;
     ui64 LockTxId = 0;
     bool PersistentChannels = false;
+    bool TabletNotReady = false;
     TRowVersion ReadVersion = TRowVersion::Min();
     THashMap<std::pair<ui64, ui64>, TActorId> OutputChannels;
 };

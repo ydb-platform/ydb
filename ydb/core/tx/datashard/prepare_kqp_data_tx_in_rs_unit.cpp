@@ -57,12 +57,6 @@ EExecutionStatus TPrepareKqpDataTxInRSUnit::Execute(TOperation::TPtr op, TTransa
 
     try {
         KqpPrepareInReadsets(op->InReadSets(), tx->GetDataTx()->GetKqpTransaction(), DataShard.TabletID());
-    } catch (const TNotReadyTabletException&) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Tablet " << DataShard.TabletID() << " is not ready for " << *op
-            << " execution");
-
-        return EExecutionStatus::Restart;
     } catch (const yexception& e) {
         LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "Exception while preparing in-readsets for KQP transaction "
             << *op << " at " << DataShard.TabletID() << ": " << CurrentExceptionMessage());

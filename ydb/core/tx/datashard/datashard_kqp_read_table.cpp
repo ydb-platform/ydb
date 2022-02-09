@@ -306,7 +306,8 @@ protected:
         TaskTableStats.InvisibleRowSkips += invisibleRowSkips;
 
         if (Iterator->Last() == NTable::EReady::Page) {
-            throw TNotReadyTabletException();
+            ComputeCtx.SetTabletNotReady();
+            return EFetchResult::Yield;
         }
 
         return EFetchResult::Finish;

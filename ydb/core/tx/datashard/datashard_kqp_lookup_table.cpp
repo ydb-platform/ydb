@@ -135,7 +135,8 @@ public:
 
                     switch (ready) {
                         case EReady::Page:
-                            throw TNotReadyTabletException();
+                            ComputeCtx.SetTabletNotReady();
+                            return TUnboxedValue::MakeYield();
                         case EReady::Gone:
                             continue;
                         case EReady::Data:
@@ -284,7 +285,8 @@ public:
             }
 
             if (Iterator->Last() == NTable::EReady::Page) {
-                throw TNotReadyTabletException();
+                ComputeCtx.SetTabletNotReady();
+                return TUnboxedValue::MakeYield();
             }
 
             Iterator = nullptr;

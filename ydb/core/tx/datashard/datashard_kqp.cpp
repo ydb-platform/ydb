@@ -417,6 +417,10 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
 {
     auto runStatus = RunKqpTransactionInternal(ctx, txId, inReadSets, tasks, tasksRunner, /* applyEffects */ true);
 
+    if (runStatus == NYql::NDq::ERunStatus::PendingInput && computeCtx.IsTabletNotReady()) {
+        return nullptr;
+    }
+
     MKQL_ENSURE_S(runStatus == NYql::NDq::ERunStatus::Finished);
 
     auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA,

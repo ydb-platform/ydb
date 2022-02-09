@@ -25,6 +25,10 @@ public:
     bool IsReadyToExecute(TOperation::TPtr op) const override;
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
+
+private:
+    EExecutionStatus OnTabletNotReady(TActiveTransaction& tx, TValidatedDataTx& dataTx, TTransactionContext& txc,
+                                      const TActorContext& ctx);
 };
 
 TBuildKqpDataTxOutRSUnit::TBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline)
@@ -89,8 +93,13 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
             << " set memory limit " << (txc.GetMemoryLimit() - dataTx->GetTxSize()));
 
         dataTx->SetReadVersion(DataShard.GetReadWriteVersions(tx).ReadVersion);
+
         if (dataTx->GetKqpComputeCtx().HasPersistentChannels()) {
-            KqpRunTransaction(ctx, op->GetTxId(), dataTx->GetKqpTasks(), tasksRunner);
+            auto result = KqpRunTransaction(ctx, op->GetTxId(), dataTx->GetKqpTasks(), tasksRunner);
+
+            if (result == NYql::NDq::ERunStatus::PendingInput && dataTx->GetKqpComputeCtx().IsTabletNotReady()) {
+                return OnTabletNotReady(*tx, *dataTx, txc, ctx);
+            }
         }
 
         KqpFillOutReadSets(op->OutReadSets(), kqpTx, tasksRunner, DataShard.SysLocksTable(), tabletId);
@@ -107,15 +116,9 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
         tx->ReleaseTxData(txc, ctx);
 
         return EExecutionStatus::Restart;
-    } catch (const TNotReadyTabletException& e) {
-        LOG_T("Tablet " << DataShard.TabletID() << " is not ready for " << *op << " execution");
-
-        DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
-
-        dataTx->GetKqpComputeCtx().PinPages(dataTx->TxInfo().Keys);
-
-        tx->ReleaseTxData(txc, ctx);
-        return EExecutionStatus::Restart;
+    } catch (const TNotReadyTabletException&) {
+        LOG_C("Unexpected TNotReadyTabletException exception at build out rs");
+        return OnTabletNotReady(*tx, *dataTx, txc, ctx);
     } catch (const yexception& e) {
         LOG_C("Exception while preparing out-readsets for KQP transaction " << *op << " at " << DataShard.TabletID()
             << ": " << e.what());
@@ -133,6 +136,21 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
 }
 
 void TBuildKqpDataTxOutRSUnit::Complete(TOperation::TPtr, const TActorContext&) {}
+
+EExecutionStatus TBuildKqpDataTxOutRSUnit::OnTabletNotReady(TActiveTransaction& tx, TValidatedDataTx& dataTx,
+    TTransactionContext& txc, const TActorContext& ctx)
+{
+    LOG_T("Tablet " << DataShard.TabletID() << " is not ready for " << tx << " execution");
+
+    dataTx.GetKqpComputeCtx().ResetTabletNotReady();
+    DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
+
+    ui64 pageFaultCount = tx.IncrementPageFaultCount();
+    dataTx.GetKqpComputeCtx().PinPages(dataTx.TxInfo().Keys, pageFaultCount);
+
+    tx.ReleaseTxData(txc, ctx);
+    return EExecutionStatus::Restart;
+}
 
 THolder<TExecutionUnit> CreateBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TBuildKqpDataTxOutRSUnit(dataShard, pipeline));

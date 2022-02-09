@@ -29,6 +29,8 @@ public:
 
 private:
     void AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx);
+    EExecutionStatus OnTabletNotReady(TActiveTransaction& tx, TValidatedDataTx& dataTx, TTransactionContext& txc,
+                                      const TActorContext& ctx);
 };
 
 TExecuteKqpDataTxUnit::TExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline)
@@ -130,8 +132,15 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         auto& computeCtx = tx->GetDataTx()->GetKqpComputeCtx();
 
-        op->Result() = KqpCompleteTransaction(ctx, tabletId, op->GetTxId(),
+        auto result = KqpCompleteTransaction(ctx, tabletId, op->GetTxId(),
             op->HasKqpAttachedRSFlag() ? nullptr : &op->InReadSets(), dataTx->GetKqpTasks(), tasksRunner, computeCtx);
+
+        if (!result && computeCtx.IsTabletNotReady()) {
+            return OnTabletNotReady(*tx, *dataTx, txc, ctx);
+        }
+
+        Y_VERIFY(result);
+        op->Result().Swap(result);
         op->SetKqpAttachedRSFlag();
 
         KqpEraseLocks(tabletId, tx, DataShard.SysLocksTable());
@@ -173,16 +182,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         tx->ReleaseTxData(txc, ctx);
 
         return EExecutionStatus::Restart;
-    } catch (const TNotReadyTabletException& e) {
-        LOG_T("Tablet " << tabletId << " is not ready for " << *op << " execution");
-
-        DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
-
-        ui64 pageFaultCount = tx->IncrementPageFaultCount();
-        dataTx->GetKqpComputeCtx().PinPages(dataTx->TxInfo().Keys, pageFaultCount);
-
-        tx->ReleaseTxData(txc, ctx);
-        return EExecutionStatus::Restart;
+    } catch (const TNotReadyTabletException&) {
+        return OnTabletNotReady(*tx, *dataTx, txc, ctx);
     } catch (const yexception& e) {
         LOG_C("Exception while executing KQP transaction " << *op << " at " << tabletId << ": " << e.what());
         if (op->IsReadOnly() || op->IsImmediate()) {
@@ -218,6 +219,21 @@ void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorCo
 
         LOG_T("add lock to result: " << op->Result()->Record.GetTxLocks().rbegin()->ShortDebugString());
     }
+}
+
+EExecutionStatus TExecuteKqpDataTxUnit::OnTabletNotReady(TActiveTransaction& tx, TValidatedDataTx& dataTx,
+    TTransactionContext& txc, const TActorContext& ctx)
+{
+    LOG_T("Tablet " << DataShard.TabletID() << " is not ready for " << tx << " execution");
+
+    dataTx.GetKqpComputeCtx().ResetTabletNotReady();
+    DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
+
+    ui64 pageFaultCount = tx.IncrementPageFaultCount();
+    dataTx.GetKqpComputeCtx().PinPages(dataTx.TxInfo().Keys, pageFaultCount);
+
+    tx.ReleaseTxData(txc, ctx);
+    return EExecutionStatus::Restart;
 }
 
 void TExecuteKqpDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {}

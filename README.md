@@ -1,4 +1,4 @@
-<img width="64" src="logo.svg"/><br/>
+<img width="64" src="ydb/docs/_assets/logo.svg"/><br/>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ydbplatform/blob/LICENSE)
 [![PyPI version](https://badge.fury.io/py/ydb.svg)](https://badge.fury.io/py/ydb)
@@ -14,7 +14,7 @@
 YDB is a fault-tolerant Distributed SQL DBMS that combines high availability and scalability and supports ACID transactions with strict consistency.
 
 <p align="center">
-  <a href=""><img src="ydb-promo-video.png" width="70%"/></a>
+  <a href=""><img src="ydb/docs/_assets/ydb-promo-video.png" width="70%"/></a>
 </p>
 
 ## Main YDB advantages
@@ -37,7 +37,7 @@ Clusters. availability zones and regions are covered in more detail [in document
 
 ### Horizontal scalability
 
-Unlike traditional RDMBS YDB [scales horizontally](https://en.wikipedia.org/wiki/Scalability#Horizontal_or_scale_out) providing developers with capability to simply extends cluster with computation or storage resources to handle increasing load.
+Unlike traditional RDMBS YDB [scales out](https://en.wikipedia.org/wiki/Scalability#Horizontal_or_scale_out) providing developers with capability to simply extends cluster with computation or storage resources to handle increasing load.
 
 Current production installations have more than 10,000 nodes, store petabytes of data and handle more than 100,000 distributed transactions per second.
 
@@ -54,15 +54,16 @@ YDB runs on x86 64bit platforms with minimum 8 GB of RAM.
 
 ### Operating systems
 
-We have major experience running production systems on machins working under Ubuntu Linux.
+We have major experience running production systems on 64-bit x86 machines working under Ubuntu Linux.
 
 For development purposes we test that YDB could be built and run under latest versions of MacOS and Microsoft Windows on a regular basis.
 
-## Getting started with YDB in 5 minutes
+## Getting started in 5 minutes
 
-1. Install YDB Platform: using [pre-built executables](ydb/docs/ru/core/getting_started/ydb_local.md), build it from source or [use Docker container](ydb/docs/en/core/getting_started/ydb_docker.md).
-1. Start local cluster or container and run [YQL query](ydb/docs/en/core/yql/reference/index.md) via [YDB CLI](docs/en/core/reference/ydb-cli/index.md).
-1. Access YDB Embedded UI via browser for schema navigation, query execution and other database development related tasks.
+1. Install YDB using [pre-built executables](ydb/docs/ru/core/getting_started/ydb_local.md), build it from source or [use Docker container](ydb/docs/en/core/getting_started/ydb_docker.md).
+1. Install [command line interace](docs/en/core/reference/ydb-cli/index.m) tool to work with scheme and run queries.
+1. Start [local cluster](ydb/docs/ru/core/getting_started/ydb_local.md) or container and run [YQL query](ydb/docs/en/core/yql/reference/index.md) via [YDB CLI](docs/en/core/reference/ydb-cli/index.md).
+1. Access [Embedded UI](ydb/docs/en/core/maintenance/embedded_monitoring/ydb_monitoring.md) via browser for schema navigation, query execution and other database development related tasks.
 1. Run available [example application](ydb/docs/en/core/reference/ydb-sdk/example/example-go.md).
 1. Develop an application using [YDB SDK](ydb/docs/en/core/reference/ydb-sdk)
 
@@ -75,6 +76,7 @@ In order to build ydbd you should have following tools installed on your system:
 
 1. Git command line tool
 1. clang 11 or higher
+1. python
 1. cmake
 1. antlr3
 1. libantlr3c
@@ -89,19 +91,19 @@ Building YDB Embedded UI requires following tools:
 
 #### Build embedded UI
 
-1. curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
-2. nvm install 14
-3. git clone https://github.yandex-team.ru/data-ui/ydb-embedded-ui-opensource
-4. cd ydb-embedded-ui-opensource
-5. npm ci
-6. npm run build:embedded
-7. cp -r build/ target_dir
+1. `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash`
+2. `nvm install 14`
+3. `git clone https://github.yandex-team.ru/data-ui/ydb-embedded-ui-opensource`
+4. `cd ydb-embedded-ui-opensource`
+5. `npm ci`
+6. `npm run build:embedded`
+7. `cd ../`
 
 
 #### Build ydbd
 
 1. `git clone https://github.com/ydb-platform/ydb.git`
-1. cp ydb_embedded_ui NODATA
+1. `cp -r ../ydb-embedded-ui-opensource/build/* ydb/core/viewer/monitoring/`
 1. `cd ydb/apps/ydbd`
 1. `cmake ../ && make`
 

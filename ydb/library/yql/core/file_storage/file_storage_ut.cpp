@@ -1,7 +1,8 @@
 #include "file_storage.h"
-#include <ydb/library/yql/core/file_storage/ut/test_http_server.h>
 
+#include <ydb/library/yql/core/file_storage/ut/test_http_server.h>
 #include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
+#include <ydb/library/yql/core/file_storage/http_download/http_download.h>
 
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/threading/future/async.h>
@@ -19,6 +20,12 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
 
     static TString ReadFileContent(const TString& path) {
         return TIFStream(path).ReadAll();
+    }
+
+    static TFileStoragePtr CreateTestFS(const TFileStorageConfig& params = {}, const std::vector<TString>& extraPatterns = {}) {
+        TFileStoragePtr fs = CreateFileStorage(params);
+        fs->AddDownloader(MakeHttpDownloader(false, params, extraPatterns));
+        return fs;
     }
 
     static std::unique_ptr<TTestHttpServer> CreateTestHttpServer() {
@@ -57,8 +64,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
             return TTestHttpServer::TReply::Ok(currentContent);
         });
 
-        TFileStorageConfig params;
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS();
 
         auto url = server->GetUrl();
         auto link1 = fs->PutUrl(url, {});
@@ -91,8 +97,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
             return TTestHttpServer::TReply::Ok(content);
         });
 
-        TFileStorageConfig params;
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS();
 
         auto url = server->GetUrl();
 
@@ -121,8 +126,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
             return TTestHttpServer::TReply::OkETag(currentContent, currentETag);
         });
 
-        TFileStorageConfig params;
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS();
 
         auto url = server->GetUrl();
 
@@ -165,8 +169,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
             return TTestHttpServer::TReply::OkLastModified(currentContent, currentLastModified);
         });
 
-        TFileStorageConfig params;
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS();
 
         auto url = server->GetUrl();
 
@@ -206,8 +209,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
             return TTestHttpServer::TReply::OkETag(currentContent, currentETag);
         });
 
-        TFileStorageConfig params;
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS();
 
         auto url = server->GetUrl();
 
@@ -250,8 +252,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
             return TTestHttpServer::TReply::OkETag(currentContent, MakeWeakETag(currentETag));
         });
 
-        TFileStorageConfig params;
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS();
 
         auto url = server->GetUrl();
 
@@ -287,8 +288,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
             return TTestHttpServer::TReply::Ok(currentContent);
         });
 
-        TFileStorageConfig params;
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS();
 
         auto url = server->GetUrl();
         auto link1 = fs->PutUrl(url, {});
@@ -318,8 +318,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
             return TTestHttpServer::TReply::OkETag(currentContent, currentETag);
         });
 
-        TFileStorageConfig params;
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS();
 
         auto url = server->GetUrl();
         auto link1 = fs->PutUrl(url, {});
@@ -349,8 +348,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
             return TTestHttpServer::TReply::OkETag(currentContent, currentETag);
         });
 
-        TFileStorageConfig params;
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS();
 
         auto url = server->GetUrl();
         auto link1 = fs->PutUrl(url, {});
@@ -371,8 +369,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
     Y_UNIT_TEST(Md5ForPutFiles) {
         TString currentContent = "ABC";
 
-        TFileStorageConfig params;
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS();
 
         TTempFileHandle h1;
         h1.Write("ABC", 3);
@@ -412,7 +409,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
 
         TFileStorageConfig params;
         params.SetRetryCount(3);
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS(params);
 
         auto url = server->GetUrl();
 
@@ -432,8 +429,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
             return TTestHttpServer::TReply::OkETag(currentContent, currentETag, 0);
         });
 
-        TFileStorageConfig params;
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS();
 
         auto url = server->GetUrl();
 
@@ -462,7 +458,7 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
 
         TFileStorageConfig params;
         params.SetRetryCount(3);
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS(params);
 
         auto url = server->GetUrl();
 
@@ -480,26 +476,36 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
 
         auto url = server->GetUrl();
 
-        // not in whitelist
-        TFileStorageConfig params1;
-        params1.AddAllowedUrlPatterns("^XXXX$");
-        TFileStoragePtr fs1 = CreateFileStorage(params1);
+        {
+            // not in whitelist
+            TFileStorageConfig params;
+            params.AddAllowedUrlPatterns("^XXXX$");
+            TFileStoragePtr fs = CreateTestFS(params);
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS(fs1->PutUrl(url, {}), std::exception, "It is not allowed to download url http://localhost:");
-        fs1->AddAllowedUrlPattern("^http://localhost:");
+            UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl(url, {}), std::exception, "It is not allowed to download url http://localhost:");
+        }
 
-        auto link1 = fs1->PutUrl(url, {});
-        UNIT_ASSERT_VALUES_EQUAL(currentContent, ReadFileContent(link1->GetPath()));
+        {
+            // have in whitelist
+            TFileStorageConfig params;
+            params.SetSocketTimeoutMs(4000);
+            params.AddAllowedUrlPatterns("^http://localhost:");
+            TFileStoragePtr fs = CreateTestFS(params);
 
-        // have in whitelist
-        TFileStorageConfig params2;
-        params2.SetSocketTimeoutMs(4000);
-        params2.AddAllowedUrlPatterns("^http://localhost:");
-        TFileStoragePtr fs2 = CreateFileStorage(params2);
-        fs2->AddAllowedUrlPattern("^XXXX$");
+            auto link = fs->PutUrl(url, {});
+            UNIT_ASSERT_VALUES_EQUAL(currentContent, ReadFileContent(link->GetPath()));
+        }
 
-        auto link2 = fs1->PutUrl(url, {});
-        UNIT_ASSERT_VALUES_EQUAL(currentContent, ReadFileContent(link2->GetPath()));
+        {
+            // have eaxtra url in whitelist
+            TFileStorageConfig params;
+            params.SetSocketTimeoutMs(4000);
+            params.AddAllowedUrlPatterns("^XXXX$");
+            TFileStoragePtr fs = CreateTestFS(params, std::vector{TString{"^http://localhost:"}});
+
+            auto link = fs->PutUrl(url, {});
+            UNIT_ASSERT_VALUES_EQUAL(currentContent, ReadFileContent(link->GetPath()));
+        }
     }
 
     Y_UNIT_TEST(SocketTimeout) {
@@ -512,23 +518,9 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
 
         TFileStorageConfig params;
         params.SetSocketTimeoutMs(1000);
-        TFileStoragePtr fs = CreateFileStorage(params);
+        TFileStoragePtr fs = CreateTestFS(params);
 
         auto url = server->GetUrl();
         UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl(url, {}), std::exception, "can not read from socket input stream");
     }
-
-#ifndef OPENSOURCE
-    Y_UNIT_TEST(ArcFileWithoutRev) {
-        TFileStorageConfig params;
-        TFileStoragePtr fs = CreateFileStorage(params);
-
-        UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl("arc://yql/a.txt", {}), std::exception, "Revision for Arcadia file must be specified");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl("arc://yql/a.txt?rev=", {}), std::exception, "Revision for Arcadia file must be specified");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl("arc://yql/a.txt?rev=0", {}), std::exception, "Revision for Arcadia file must be specified");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl("arc://yql/a.txt?rev=head", {}), std::exception, "Revision for Arcadia file must be specified");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl("arc://yql/a.txt?rev=HEAD", {}), std::exception, "Revision for Arcadia file must be specified");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl("arc://yql/a.txt?op_rev=123", {}), std::exception, "Revision for Arcadia file must be specified");
-    }
-#endif
 }

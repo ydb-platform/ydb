@@ -944,7 +944,7 @@ RECURSE(
     requests-file
     requests-mock
     requests-oauthlib
-    requests_toolbelt
+    requests-toolbelt
     requests-unixsocket
     responses
     respx

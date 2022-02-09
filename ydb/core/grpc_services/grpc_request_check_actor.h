@@ -159,12 +159,9 @@ public:
             // No rate limit config for this request
             return SetTokenAndDie(CheckedDatabaseName_);
         } else {
-            // TODO(xenoxeno): get rid of unnecessary hash map
             THashMap<TString, TString> attributes;
-            for (const auto& entry : TBase::GetEntries()) {
-                for (const auto& [attrName, attrValue] : entry.Attributes) {
-                    attributes[attrName] = attrValue;
-                }
+            for (const auto& [attrName, attrValue] : Attributes_) {
+                attributes[attrName] = attrValue;
             }
             return ProcessRateLimit(attributes, ctx);
         }
@@ -400,11 +397,15 @@ private:
     IRequestProxyCtx* GrpcRequestBaseCtx_;
     NRpcService::TRlConfig* RlConfig = nullptr;
     bool SkipCheckConnectRigths_ = false;
+    std::vector<std::pair<TString, TString>> Attributes_;
 };
 
 // default behavior - attributes in schema
 template <typename TEvent>
 void TGrpcRequestCheckActor<TEvent>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+    for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
+        Attributes_.emplace_back(std::make_pair(attr.GetKey(), attr.GetValue()));
+    }
     InitializeAttributesFromSchema(schemeData);
 }
 

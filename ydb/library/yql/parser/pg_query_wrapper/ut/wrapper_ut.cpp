@@ -7,7 +7,8 @@ using namespace NYql;
 
 class TEvents : public IPGParseEvents {
 public:
-    void OnResult(const PgQuery__ParseResult* result) override {
+    void OnResult(const PgQuery__ParseResult* result, const List* raw) override {
+        Y_UNUSED(raw);
         Result.ConstructInPlace();
         TStringOutput str(*Result);
         PrintCProto((const ProtobufCMessage*)result, str);

@@ -10,7 +10,6 @@ ADDINCL(
 
 SRCS(
     wrapper.cpp
-    enum.cpp
 
     contrib/src/pg_query.c
     contrib/src/pg_query_outfuncs_protobuf.c

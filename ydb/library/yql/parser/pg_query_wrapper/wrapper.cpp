@@ -112,7 +112,7 @@ void PGParse(const TString& input, IPGParseEvents& events) {
             break;
         }
 
-        events.OnResult(&parse_result);
+        events.OnResult(&parse_result, parsetree_and_error.tree);
     }
 }
 

@@ -1055,9 +1055,9 @@ yy_lac (yytype_int16 *yyesa, yytype_int16 **yyes,
    null, do not copy; instead, return the length of what the result
    would have been.  */
 #ifdef __cplusplus
-# define YY_FALLTHROUGH [[fallthrough]]
+# define BISON_FALLTHROUGH [[fallthrough]]
 #else
-# define YY_FALLTHROUGH
+# define BISON_FALLTHROUGH
 #endif
 static YYSIZE_T
 yytnamerr (char *yyres, const char *yystr)
@@ -1077,7 +1077,7 @@ yytnamerr (char *yyres, const char *yystr)
           case '\\':
             if (*++yyp != '\\')
               goto do_not_strip_quotes;
-            YY_FALLTHROUGH;
+            BISON_FALLTHROUGH;
           default:
             if (yyres)
               yyres[yyn] = *yyp;

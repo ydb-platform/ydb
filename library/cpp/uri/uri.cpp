@@ -3,9 +3,7 @@
 
 #include <util/string/cast.h>
 #include <util/string/util.h>
-#include <util/system/maxlen.h>
 #include <util/system/yassert.h>
-#include <util/generic/map.h>
 
 namespace NUri {
     TState::EParsed TUri::CheckHost(const TStringBuf& host) {

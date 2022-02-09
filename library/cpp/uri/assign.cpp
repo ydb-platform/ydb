@@ -7,7 +7,6 @@
 #include <util/charset/wide.h>
 #include <util/memory/tempbuf.h>
 #include <util/string/cast.h>
-#include <util/system/maxlen.h>
 #include <util/system/yassert.h>
 #include <util/system/sys_alloc.h>
 

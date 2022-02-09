@@ -1,6 +1,5 @@
 #include "encode.h"
 
-#include <util/string/cast.h>
 #include <util/generic/singleton.h>
 
 namespace NUri {

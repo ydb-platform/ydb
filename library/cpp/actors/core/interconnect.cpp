@@ -31,18 +31,19 @@ namespace NActors {
             temp.ClearRackNum();
             temp.ClearBodyNum();
 
-            // legacy format must not interfere with new one
             const NProtoBuf::Reflection *reflection = temp.GetReflection();
-            for (int i = 0, count = descriptor->field_count(); i < count; ++i) {
-                Y_VERIFY(!reflection->HasField(temp, descriptor->field(i)));
+            bool fieldsFromNewFormat = false;
+            for (int i = 0, count = descriptor->field_count(); !fieldsFromNewFormat && i < count; ++i) {
+                fieldsFromNewFormat |= reflection->HasField(temp, descriptor->field(i));
             }
-
-            const auto& v = LegacyValue->DataCenter;
-            const char *p = reinterpret_cast<const char*>(&v);
-            temp.SetDataCenter(TString(p, strnlen(p, sizeof(ui32))));
-            temp.SetModule(::ToString(LegacyValue->Room));
-            temp.SetRack(::ToString(LegacyValue->Rack));
-            temp.SetUnit(::ToString(LegacyValue->Body));
+            if (!fieldsFromNewFormat) {
+                const auto& v = LegacyValue->DataCenter;
+                const char *p = reinterpret_cast<const char*>(&v);
+                temp.SetDataCenter(TString(p, strnlen(p, sizeof(ui32))));
+                temp.SetModule(::ToString(LegacyValue->Room));
+                temp.SetRack(::ToString(LegacyValue->Rack));
+                temp.SetUnit(::ToString(LegacyValue->Body));
+            }
         }
 
         auto makeString = [&] {

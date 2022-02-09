@@ -39,6 +39,13 @@ namespace NActors {
             }
 
             friend bool operator ==(const TLegacyValue& x, const TLegacyValue& y) { return x.Compare(y) == 0; }
+
+            void Serialize(NActorsInterconnect::TNodeLocation *pb) const {
+                pb->SetDataCenterNum(DataCenter);
+                pb->SetRoomNum(Room);
+                pb->SetRackNum(Rack);
+                pb->SetBodyNum(Body);
+            }
         };
 
     private:

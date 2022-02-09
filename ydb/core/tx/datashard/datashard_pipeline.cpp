@@ -1320,11 +1320,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             // to be consistent while dependencies calculation
             auto snapshot = dataTx->GetKqpTransaction().GetSnapshot();
             tx->SetMvccSnapshot(TRowVersion(snapshot.GetStep(), snapshot.GetTxId()));
-        } else if (tx->IsReadTable() && dataTx->GetReadTableTransaction().HasSnapshotStep() && dataTx->GetReadTableTransaction().HasSnapshotTxId()) {
-            // to be consistent while dependencies calculation
-            auto step = dataTx->GetReadTableTransaction().GetSnapshotStep();
-            auto txId = dataTx->GetReadTableTransaction().GetSnapshotTxId();
-            tx->SetMvccSnapshot(TRowVersion(step, txId));
         }
     }
 

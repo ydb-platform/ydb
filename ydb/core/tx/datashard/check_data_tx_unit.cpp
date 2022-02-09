@@ -260,6 +260,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                 record.GetSnapshotTxId());
 
             if (!DataShard.GetSnapshotManager().AcquireReference(key)) {
+                // TODO: try upgrading to mvcc snapshot when available
                 BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)->AddError(
                     NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST,
                     TStringBuilder()

@@ -242,8 +242,6 @@ bool TSnapshotManager::AdvanceWatermark(NTable::TDatabase& db, const TRowVersion
 }
 
 void TSnapshotManager::RemoveRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to) {
-    Y_VERIFY(IsMvccEnabled());
-
     for (auto& it : Self->GetUserTables()) {
         auto begin = Snapshots.lower_bound(TSnapshotKey(Self->GetPathOwnerId(), it.first, from.Step, from.TxId));
         auto end = Snapshots.upper_bound(TSnapshotKey(Self->GetPathOwnerId(), it.first, to.Step, to.TxId));

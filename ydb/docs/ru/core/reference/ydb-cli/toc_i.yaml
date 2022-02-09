@@ -1,12 +1,12 @@
 items:
   - name: Установка
     href: install.md
-  - name: Аутентификация
-    href: auth.md
   - name: Структура команд YDB CLI
     href: commands/commands.md
   - name: Сервисные команды
     href: commands/service.md
+  - name: Соединение с БД и аутентификация
+    href: connect.md
   - name: Глобальные параметры
     href: commands/global-options.md
   - name: Работа со схемой БД
@@ -15,8 +15,8 @@ items:
       href: commands/scheme-ls.md
     - name: Получение информации об объекте схемы
       href: commands/scheme-describe.md
-  - name: Получение списка эндпоинтов для базы данных
-    href: commands/discovery-list.md
+    - name: Переименование таблиц
+      href: commands/tools/rename.md
   - name: Работа с данными
     items:
     - name: Выполнение запроса к данным
@@ -29,25 +29,17 @@ items:
       href: commands/scheme-mkdir.md
     - name: Скан запросы
       href: commands/scan-query.md
-  - name: Утилиты
-    items:
+#  - name: Утилиты
+#    items:
     # - name: Копирование таблиц
     #   href: commands/tools/copy.md
-    - name: Переименование таблиц
-      href: commands/tools/rename.md
     # - name: Снятие бэкапа
     #   href: commands/tools/dump.md
     # - name: Восстановление бэкапа
     #   href: commands/tools/restore.md
-  - name: Управление профилем
-    items:
-      - name: Создание профиля
-        href: profile/create.md
-      - name: Получение информации о профиле
-        href: profile/list-and-get.md
-      - name: Активация профиля
-        href: profile/activate.md
-      - name: Удаление профиля
-        href: profile/delete.md
+  - name: Управление профилями
+    include: { mode: link, path: profile/toc_p.yaml }
+  - name: Получение списка эндпоинтов для базы данных
+    href: commands/discovery-list.md
 
 

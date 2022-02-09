@@ -1089,7 +1089,7 @@ RECURSE(
     trollsift
     Twiggy
     twiggy-goodies
-    twisted
+    Twisted
     txaio
     txredisapi
     typecode

@@ -360,14 +360,14 @@ size_t GetMaximumSegmentSize(SOCKET s) {
     return 8192;
 }
 
-size_t GetMaximumTransferUnit(SOCKET /*s*/) { 
-    // for someone who'll dare to write it 
-    // Linux: there rummored to be IP_MTU getsockopt() request 
-    // FreeBSD: request to a socket of type PF_ROUTE 
-    //          with peer address as a destination argument 
-    return 8192; 
-} 
- 
+size_t GetMaximumTransferUnit(SOCKET /*s*/) {
+    // for someone who'll dare to write it
+    // Linux: there rummored to be IP_MTU getsockopt() request
+    // FreeBSD: request to a socket of type PF_ROUTE
+    //          with peer address as a destination argument
+    return 8192;
+}
+
 int GetSocketToS(SOCKET s) {
     TOpaqueAddr addr;
 

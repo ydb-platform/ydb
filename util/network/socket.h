@@ -366,7 +366,7 @@ public:
     inline void ShutDown(int mode) const {
         ::ShutDown(Fd(), mode);
     }
- 
+
     void Close();
 
     ssize_t Send(const void* data, size_t len);

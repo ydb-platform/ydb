@@ -639,7 +639,7 @@ private:
     inline bool IsHttpRequest() const noexcept {
         return IsRequest(FirstLine_);
     }
-
+ 
     inline bool HasResponseBody() const noexcept {
         if (IsHttpResponse()) {
             if (Request_ && Request_->FirstLine().StartsWith(TStringBuf("HEAD")))

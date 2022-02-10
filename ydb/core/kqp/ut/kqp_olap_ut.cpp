@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                                              #Columns { Name: "resource_type" Type: "Utf8" }
                                              Columns { Name: "resource_id" Type: "Utf8" }
                                              Columns { Name: "uid" Type: "Utf8" }
-                                             Columns { Name: "level" Type: "Int32" } 
+                                             Columns { Name: "level" Type: "Int32" }
                                              Columns { Name: "message" Type: "Utf8" }
                                              #Columns { Name: "json_payload" Type: "Json" }
                                              #Columns { Name: "ingested_at" Type: "Timestamp" }
@@ -77,15 +77,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)),
                 arrow::field("resource_id", arrow::utf8()),
                 arrow::field("uid", arrow::utf8()),
-                arrow::field("level", arrow::int32()), 
+                arrow::field("level", arrow::int32()),
                 arrow::field("message", arrow::utf8())
             });
 
         arrow::TimestampBuilder b1(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
         arrow::StringBuilder b2;
         arrow::StringBuilder b3;
-        arrow::Int32Builder b4; 
-        arrow::StringBuilder b5; 
+        arrow::Int32Builder b4;
+        arrow::StringBuilder b5;
 
         for (size_t i = 0; i < rowCount; ++i) {
             std::string uid("uid_" + std::to_string(tsBegin + i));
@@ -93,23 +93,23 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             Y_VERIFY(b1.Append(tsBegin + i).ok());
             Y_VERIFY(b2.Append(std::to_string(pathIdBegin + i)).ok());
             Y_VERIFY(b3.Append(uid).ok());
-            Y_VERIFY(b4.Append(i % 5).ok()); 
-            Y_VERIFY(b5.Append(message).ok()); 
+            Y_VERIFY(b4.Append(i % 5).ok());
+            Y_VERIFY(b5.Append(message).ok());
         }
 
         std::shared_ptr<arrow::TimestampArray> a1;
         std::shared_ptr<arrow::StringArray> a2;
         std::shared_ptr<arrow::StringArray> a3;
-        std::shared_ptr<arrow::Int32Array> a4; 
-        std::shared_ptr<arrow::StringArray> a5; 
+        std::shared_ptr<arrow::Int32Array> a4;
+        std::shared_ptr<arrow::StringArray> a5;
 
         Y_VERIFY(b1.Finish(&a1).ok());
         Y_VERIFY(b2.Finish(&a2).ok());
         Y_VERIFY(b3.Finish(&a3).ok());
         Y_VERIFY(b4.Finish(&a4).ok());
-        Y_VERIFY(b5.Finish(&a5).ok()); 
+        Y_VERIFY(b5.Finish(&a5).ok());
 
-        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5 }); 
+        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5 });
     }
 
     TString TestBlob(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
@@ -266,139 +266,139 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    void CreateTableOfAllTypes(TKikimrRunner& kikimr) { 
-        auto& legacyClient = kikimr.GetTestClient(); 
- 
-        legacyClient.CreateOlapStore("/Root", R"( 
-                                     Name: "olapStore" 
-                                     ColumnShardCount: 1 
-                                     SchemaPresets { 
-                                         Name: "default" 
-                                         Schema { 
-                                             Columns { Name: "key" Type: "Int32" } 
-                                             Columns { Name: "Bool_column" Type: "Bool" } 
-                                             # Int8, Int16, UInt8, UInt16 is not supported by engine 
-                                             Columns { Name: "Int8_column" Type: "Int32" } 
-                                             Columns { Name: "Int16_column" Type: "Int32" } 
-                                             Columns { Name: "Int32_column" Type: "Int32" } 
-                                             Columns { Name: "Int64_column" Type: "Int64" } 
-                                             Columns { Name: "UInt8_column" Type: "Uint32" } 
-                                             Columns { Name: "UInt16_column" Type: "Uint32" } 
-                                             Columns { Name: "UInt32_column" Type: "Uint32" } 
-                                             Columns { Name: "UInt64_column" Type: "Uint64" } 
-                                             Columns { Name: "Double_column" Type: "Double" } 
-                                             Columns { Name: "Float_column" Type: "Float" } 
-                                             Columns { Name: "Decimal_column" Type: "Decimal" } 
-                                             Columns { Name: "String_column" Type: "String" } 
-                                             Columns { Name: "Utf8_column" Type: "Utf8" } 
-                                             Columns { Name: "Json_column" Type: "Json" } 
-                                             Columns { Name: "Yson_column" Type: "Yson" } 
-                                             Columns { Name: "Timestamp_column" Type: "Timestamp" } 
-                                             Columns { Name: "Date_column" Type: "Date" } 
-                                             Columns { Name: "Datetime_column" Type: "Datetime" } 
-                                             Columns { Name: "Interval_column" Type: "Interval" } 
-                                             KeyColumnNames: "key" 
+    void CreateTableOfAllTypes(TKikimrRunner& kikimr) {
+        auto& legacyClient = kikimr.GetTestClient();
+
+        legacyClient.CreateOlapStore("/Root", R"(
+                                     Name: "olapStore"
+                                     ColumnShardCount: 1
+                                     SchemaPresets {
+                                         Name: "default"
+                                         Schema {
+                                             Columns { Name: "key" Type: "Int32" }
+                                             Columns { Name: "Bool_column" Type: "Bool" }
+                                             # Int8, Int16, UInt8, UInt16 is not supported by engine
+                                             Columns { Name: "Int8_column" Type: "Int32" }
+                                             Columns { Name: "Int16_column" Type: "Int32" }
+                                             Columns { Name: "Int32_column" Type: "Int32" }
+                                             Columns { Name: "Int64_column" Type: "Int64" }
+                                             Columns { Name: "UInt8_column" Type: "Uint32" }
+                                             Columns { Name: "UInt16_column" Type: "Uint32" }
+                                             Columns { Name: "UInt32_column" Type: "Uint32" }
+                                             Columns { Name: "UInt64_column" Type: "Uint64" }
+                                             Columns { Name: "Double_column" Type: "Double" }
+                                             Columns { Name: "Float_column" Type: "Float" }
+                                             Columns { Name: "Decimal_column" Type: "Decimal" }
+                                             Columns { Name: "String_column" Type: "String" }
+                                             Columns { Name: "Utf8_column" Type: "Utf8" }
+                                             Columns { Name: "Json_column" Type: "Json" }
+                                             Columns { Name: "Yson_column" Type: "Yson" }
+                                             Columns { Name: "Timestamp_column" Type: "Timestamp" }
+                                             Columns { Name: "Date_column" Type: "Date" }
+                                             Columns { Name: "Datetime_column" Type: "Datetime" }
+                                             Columns { Name: "Interval_column" Type: "Interval" }
+                                             KeyColumnNames: "key"
                                              Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                                         } 
-                                     } 
-        )"); 
- 
-        legacyClient.CreateOlapTable("/Root/olapStore", R"( 
-            Name: "OlapParametersTable" 
-            ColumnShardCount: 1 
-        )"); 
-        legacyClient.Ls("/Root"); 
-        legacyClient.Ls("/Root/olapStore"); 
-        legacyClient.Ls("/Root/olapStore/OlapParametersTable"); 
-    } 
- 
-    std::map<std::string, TParams> CreateParametersOfAllTypes(NYdb::NTable::TTableClient& tableClient) { 
-         return { 
-            { 
-                "Bool", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Bool(false).Build().Build() 
-            }, 
-            { 
-                "Int8", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Int8(0).Build().Build() 
-            }, 
-            { 
-                "Int16", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Int16(0).Build().Build() 
-            }, 
-            { 
-                "Int32", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Int32(0).Build().Build() 
-            }, 
-            { 
-                "Int64", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Int64(0).Build().Build() 
-            }, 
-            { 
-                "UInt8", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Uint8(0).Build().Build() 
-            }, 
-            { 
-                "UInt16", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Uint16(0).Build().Build() 
-            }, 
-            { 
-                "UInt32", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Uint32(0).Build().Build() 
-            }, 
-            { 
-                "UInt64", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Uint64(0).Build().Build() 
-            }, 
-            { 
-                "Float", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Float(0).Build().Build() 
-            }, 
-            { 
-                "Double", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Double(0).Build().Build() 
-            }, 
-            { 
-                "String", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").String("XX").Build().Build() 
-            }, 
-            { 
-                "Utf8", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Utf8("XX").Build().Build() 
-            }, 
-            { 
-                "Timestamp", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Timestamp(TInstant::Now()).Build().Build() 
-            }, 
-            { 
-                "Date", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Date(TInstant::Now()).Build().Build() 
-            }, 
-            { 
-                "Datetime", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Datetime(TInstant::Now()).Build().Build() 
-            }, 
-            { 
-                "Interval", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Interval(1010).Build().Build() 
-            }, 
-            { 
-                "Decimal(12,9)", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Decimal(TDecimalValue("10.123456789", 12, 9)).Build().Build() 
-            }, 
-#if 0 
-            { 
-                "Json", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Json(R"({"XX":"YY"})").Build().Build() 
-            }, 
-            { 
-                "Yson", 
-                tableClient.GetParamsBuilder().AddParam("$in_value").Yson("[[[]]]").Build().Build() 
-            }, 
-#endif 
-        }; 
-    } 
- 
+                                         }
+                                     }
+        )");
+
+        legacyClient.CreateOlapTable("/Root/olapStore", R"(
+            Name: "OlapParametersTable"
+            ColumnShardCount: 1
+        )");
+        legacyClient.Ls("/Root");
+        legacyClient.Ls("/Root/olapStore");
+        legacyClient.Ls("/Root/olapStore/OlapParametersTable");
+    }
+
+    std::map<std::string, TParams> CreateParametersOfAllTypes(NYdb::NTable::TTableClient& tableClient) {
+         return {
+            {
+                "Bool",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Bool(false).Build().Build()
+            },
+            {
+                "Int8",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Int8(0).Build().Build()
+            },
+            {
+                "Int16",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Int16(0).Build().Build()
+            },
+            {
+                "Int32",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Int32(0).Build().Build()
+            },
+            {
+                "Int64",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Int64(0).Build().Build()
+            },
+            {
+                "UInt8",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Uint8(0).Build().Build()
+            },
+            {
+                "UInt16",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Uint16(0).Build().Build()
+            },
+            {
+                "UInt32",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Uint32(0).Build().Build()
+            },
+            {
+                "UInt64",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Uint64(0).Build().Build()
+            },
+            {
+                "Float",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Float(0).Build().Build()
+            },
+            {
+                "Double",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Double(0).Build().Build()
+            },
+            {
+                "String",
+                tableClient.GetParamsBuilder().AddParam("$in_value").String("XX").Build().Build()
+            },
+            {
+                "Utf8",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Utf8("XX").Build().Build()
+            },
+            {
+                "Timestamp",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Timestamp(TInstant::Now()).Build().Build()
+            },
+            {
+                "Date",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Date(TInstant::Now()).Build().Build()
+            },
+            {
+                "Datetime",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Datetime(TInstant::Now()).Build().Build()
+            },
+            {
+                "Interval",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Interval(1010).Build().Build()
+            },
+            {
+                "Decimal(12,9)",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Decimal(TDecimalValue("10.123456789", 12, 9)).Build().Build()
+            },
+#if 0
+            {
+                "Json",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Json(R"({"XX":"YY"})").Build().Build()
+            },
+            {
+                "Yson",
+                tableClient.GetParamsBuilder().AddParam("$in_value").Yson("[[[]]]").Build().Build()
+            },
+#endif
+        };
+    }
+
     Y_UNIT_TEST(SimpleQueryOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
@@ -686,29 +686,29 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(EmptyRange) { 
+    Y_UNIT_TEST(EmptyRange) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
- 
-        CreateTestOlapTable(kikimr); 
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000); 
- 
-        auto tableClient = kikimr.GetTableClient(); 
- 
-        auto it = tableClient.StreamExecuteScanQuery(R"( 
-            --!syntax_v1 
- 
-            SELECT * 
-            FROM `/Root/olapStore/olapTable` 
-            WHERE `timestamp` < CAST(3000001 AS Timestamp) AND `timestamp` > CAST(3000005 AS Timestamp) 
-        )").GetValueSync(); 
- 
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-        CompareYson(StreamResultToYson(it), "[]"); 
-    } 
- 
+
+        CreateTestOlapTable(kikimr);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+
+        auto tableClient = kikimr.GetTableClient();
+
+        auto it = tableClient.StreamExecuteScanQuery(R"(
+            --!syntax_v1
+
+            SELECT *
+            FROM `/Root/olapStore/olapTable`
+            WHERE `timestamp` < CAST(3000001 AS Timestamp) AND `timestamp` > CAST(3000005 AS Timestamp)
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        CompareYson(StreamResultToYson(it), "[]");
+    }
+
     Y_UNIT_TEST(Aggregation) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
@@ -784,35 +784,35 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(PushdownFilter) {
-        static bool enableLog = false; 
- 
-        auto doTest = [](std::optional<bool> viaSettings, std::optional<bool> viaPragma, bool pushdownPresent) { 
+        static bool enableLog = false;
+
+        auto doTest = [](std::optional<bool> viaSettings, std::optional<bool> viaPragma, bool pushdownPresent) {
             auto settings = TKikimrSettings()
                 .SetWithSampleTables(false)
                 .SetEnableOlapSchemaOperations(true);
 
-            if (enableLog) { 
-                Cerr << "Run test:" << Endl; 
-                Cerr << "viaSettings is " << (viaSettings.has_value() ? "" : "not ") << "present."; 
-                if (viaSettings.has_value()) { 
-                    Cerr << " Value: " << viaSettings.value(); 
-                } 
-                Cerr << Endl; 
-                Cerr << "viaPragma is " << (viaPragma.has_value() ? "" : "not ") << "present."; 
-                if (viaPragma.has_value()) { 
-                    Cerr << " Value: " << viaPragma.value(); 
-                } 
-                Cerr << Endl; 
-                Cerr << "Expected result: " << pushdownPresent << Endl; 
-            } 
+            if (enableLog) {
+                Cerr << "Run test:" << Endl;
+                Cerr << "viaSettings is " << (viaSettings.has_value() ? "" : "not ") << "present.";
+                if (viaSettings.has_value()) {
+                    Cerr << " Value: " << viaSettings.value();
+                }
+                Cerr << Endl;
+                Cerr << "viaPragma is " << (viaPragma.has_value() ? "" : "not ") << "present.";
+                if (viaPragma.has_value()) {
+                    Cerr << " Value: " << viaPragma.value();
+                }
+                Cerr << Endl;
+                Cerr << "Expected result: " << pushdownPresent << Endl;
+            }
 
-            if (viaSettings.has_value()) { 
-                auto setting = NKikimrKqp::TKqpSetting(); 
-                setting.SetName("_KqpPushOlapProcess"); 
-                setting.SetValue(viaSettings.value() ? "true" : "false"); 
+            if (viaSettings.has_value()) {
+                auto setting = NKikimrKqp::TKqpSetting();
+                setting.SetName("_KqpPushOlapProcess");
+                setting.SetValue(viaSettings.value() ? "true" : "false");
                 settings.KqpSettings = { setting };
-            } 
- 
+            }
+
             TKikimrRunner kikimr(settings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
@@ -821,152 +821,152 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CreateTestOlapTable(kikimr);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 10);
 
-            TStreamExecScanQuerySettings scanSettings; 
-            scanSettings.Explain(true); 
- 
+            TStreamExecScanQuerySettings scanSettings;
+            scanSettings.Explain(true);
+
             {
-                TString query = TString(R"( 
+                TString query = TString(R"(
                     --!syntax_v1
                     SELECT * FROM `/Root/olapStore/olapTable` WHERE resource_id = "5"u;
-                )"); 
+                )");
 
-                if (viaPragma.has_value()) { 
-                    TString pragma = TString(R"( 
-                        PRAGMA Kikimr.KqpPushOlapProcess = "<ENABLE_PUSH>"; 
-                    )"); 
-                    SubstGlobal(pragma, "<ENABLE_PUSH>", viaPragma.value() ? "true" : "false"); 
-                    query = pragma + query; 
-                } 
- 
-                auto it = client.StreamExecuteScanQuery(query).GetValueSync(); 
- 
+                if (viaPragma.has_value()) {
+                    TString pragma = TString(R"(
+                        PRAGMA Kikimr.KqpPushOlapProcess = "<ENABLE_PUSH>";
+                    )");
+                    SubstGlobal(pragma, "<ENABLE_PUSH>", viaPragma.value() ? "true" : "false");
+                    query = pragma + query;
+                }
+
+                auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
                 TString result = StreamResultToYson(it);
 
                 CompareYson(result, R"([[
-                    [0]; 
+                    [0];
                     ["some prefix xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"];
                     ["5"];
                     [1000005u];
                     ["uid_1000005"]
                     ]])");
- 
-                it = client.StreamExecuteScanQuery(query, scanSettings).GetValueSync(); 
-                auto explainResult = CollectStreamResult(it); 
-                NJson::TJsonValue plan, pushdown; 
-                NJson::ReadJsonTree(*explainResult.PlanJson, &plan, true); 
- 
-                if (pushdownPresent) { 
-                    pushdown = FindPlanNodeByKv(plan, "PredicatePushdown", "true"); 
-                } else { 
-                    pushdown = FindPlanNodeByKv(plan, "PredicatePushdown", "false"); 
-                } 
- 
-                UNIT_ASSERT(pushdown.IsDefined()); 
+
+                it = client.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+                auto explainResult = CollectStreamResult(it);
+                NJson::TJsonValue plan, pushdown;
+                NJson::ReadJsonTree(*explainResult.PlanJson, &plan, true);
+
+                if (pushdownPresent) {
+                    pushdown = FindPlanNodeByKv(plan, "PredicatePushdown", "true");
+                } else {
+                    pushdown = FindPlanNodeByKv(plan, "PredicatePushdown", "false");
+                }
+
+                UNIT_ASSERT(pushdown.IsDefined());
             }
         };
 
-        TVector<std::tuple<std::optional<bool>, std::optional<bool>, bool>> testData = { 
-            {std::nullopt, std::nullopt, false}, 
-            {false, std::nullopt, false}, 
-            {true, std::nullopt, true}, 
-            {std::nullopt, false, false}, 
-            {std::nullopt, true, true}, 
-            {false, false, false}, 
-            {true, false, false}, 
-            {false, true, true}, 
-        }; 
- 
-        for (auto &data: testData) { 
-            doTest(std::get<0>(data), std::get<1>(data), std::get<2>(data)); 
-        } 
+        TVector<std::tuple<std::optional<bool>, std::optional<bool>, bool>> testData = {
+            {std::nullopt, std::nullopt, false},
+            {false, std::nullopt, false},
+            {true, std::nullopt, true},
+            {std::nullopt, false, false},
+            {std::nullopt, true, true},
+            {false, false, false},
+            {true, false, false},
+            {false, true, true},
+        };
+
+        for (auto &data: testData) {
+            doTest(std::get<0>(data), std::get<1>(data), std::get<2>(data));
+        }
     }
- 
-    Y_UNIT_TEST(PKDescScan) { 
+
+    Y_UNIT_TEST(PKDescScan) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
- 
-        TStreamExecScanQuerySettings scanSettings; 
-        scanSettings.Explain(true); 
- 
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
         // EnableDebugLogging(kikimr);
 
-        CreateTestOlapTable(kikimr); 
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 128); 
- 
-        auto tableClient = kikimr.GetTableClient(); 
-        auto selectQueryWithSort = TString(R"( 
-            --!syntax_v1 
-            SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp` DESC LIMIT 4; 
-        )"); 
-        auto selectQuery = TString(R"( 
-            --!syntax_v1 
-            SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp`; 
-        )"); 
- 
-        auto it = tableClient.StreamExecuteScanQuery(selectQuery, scanSettings).GetValueSync(); 
-        auto result = CollectStreamResult(it); 
- 
-        NJson::TJsonValue plan, node, reverse, limit; 
-        NJson::ReadJsonTree(*result.PlanJson, &plan, true); 
- 
-        node = FindPlanNodeByKv(plan, "Node Type", "TableFullScan"); 
-        UNIT_ASSERT(node.IsDefined()); 
-        reverse = FindPlanNodeByKv(node, "Reverse", "false"); 
-        UNIT_ASSERT(!reverse.IsDefined()); 
- 
-        // Check that Reverse flag is set in query plan 
-        it = tableClient.StreamExecuteScanQuery(selectQueryWithSort, scanSettings).GetValueSync(); 
-        result = CollectStreamResult(it); 
- 
-        NJson::ReadJsonTree(*result.PlanJson, &plan, true); 
-        Cerr << *result.PlanJson << Endl; 
- 
+        CreateTestOlapTable(kikimr);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 128);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto selectQueryWithSort = TString(R"(
+            --!syntax_v1
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp` DESC LIMIT 4;
+        )");
+        auto selectQuery = TString(R"(
+            --!syntax_v1
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp`;
+        )");
+
+        auto it = tableClient.StreamExecuteScanQuery(selectQuery, scanSettings).GetValueSync();
+        auto result = CollectStreamResult(it);
+
+        NJson::TJsonValue plan, node, reverse, limit;
+        NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+
+        node = FindPlanNodeByKv(plan, "Node Type", "TableFullScan");
+        UNIT_ASSERT(node.IsDefined());
+        reverse = FindPlanNodeByKv(node, "Reverse", "false");
+        UNIT_ASSERT(!reverse.IsDefined());
+
+        // Check that Reverse flag is set in query plan
+        it = tableClient.StreamExecuteScanQuery(selectQueryWithSort, scanSettings).GetValueSync();
+        result = CollectStreamResult(it);
+
+        NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+        Cerr << *result.PlanJson << Endl;
+
         node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
-        UNIT_ASSERT(node.IsDefined()); 
-        reverse = FindPlanNodeByKv(node, "Reverse", "true"); 
-        UNIT_ASSERT(reverse.IsDefined()); 
-        limit = FindPlanNodeByKv(node, "Limit", "4"); 
-        UNIT_ASSERT(limit.IsDefined()); 
- 
-        // Run actual request in case explain did not execute anything 
-        it = tableClient.StreamExecuteScanQuery(selectQueryWithSort).GetValueSync(); 
- 
-        UNIT_ASSERT(it.IsSuccess()); 
- 
-        auto ysonResult = CollectStreamResult(it).ResultSetYson; 
- 
-        auto expectedYson = TString(R"([ 
-            [[1000127u]]; 
-            [[1000126u]]; 
-            [[1000125u]]; 
-            [[1000124u]] 
-        ])"); 
- 
-        CompareYson(expectedYson, ysonResult); 
-    } 
- 
-    Y_UNIT_TEST(ExtractRanges) { 
+        UNIT_ASSERT(node.IsDefined());
+        reverse = FindPlanNodeByKv(node, "Reverse", "true");
+        UNIT_ASSERT(reverse.IsDefined());
+        limit = FindPlanNodeByKv(node, "Limit", "4");
+        UNIT_ASSERT(limit.IsDefined());
+
+        // Run actual request in case explain did not execute anything
+        it = tableClient.StreamExecuteScanQuery(selectQueryWithSort).GetValueSync();
+
+        UNIT_ASSERT(it.IsSuccess());
+
+        auto ysonResult = CollectStreamResult(it).ResultSetYson;
+
+        auto expectedYson = TString(R"([
+            [[1000127u]];
+            [[1000126u]];
+            [[1000125u]];
+            [[1000124u]]
+        ])");
+
+        CompareYson(expectedYson, ysonResult);
+    }
+
+    Y_UNIT_TEST(ExtractRanges) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
- 
-        CreateTestOlapTable(kikimr); 
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000); 
- 
-        auto tableClient = kikimr.GetTableClient(); 
-        auto selectQuery = TString(R"( 
-            SELECT `timestamp` FROM `/Root/olapStore/olapTable` 
-                WHERE 
-                    (`timestamp` < CAST(1000100 AS Timestamp) AND `timestamp` > CAST(1000095 AS Timestamp)) OR 
-                    (`timestamp` <= CAST(1001000 AS Timestamp) AND `timestamp` >= CAST(1000999 AS Timestamp)) OR 
-                    (`timestamp` > CAST(1002000 AS Timestamp)) 
-                ORDER BY `timestamp`; 
-        )"); 
- 
+
+        CreateTestOlapTable(kikimr);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto selectQuery = TString(R"(
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable`
+                WHERE
+                    (`timestamp` < CAST(1000100 AS Timestamp) AND `timestamp` > CAST(1000095 AS Timestamp)) OR
+                    (`timestamp` <= CAST(1001000 AS Timestamp) AND `timestamp` >= CAST(1000999 AS Timestamp)) OR
+                    (`timestamp` > CAST(1002000 AS Timestamp))
+                ORDER BY `timestamp`;
+        )");
+
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
         TInstant tsPrev = TInstant::MicroSeconds(1000000);
         for (const auto& r : rows) {
@@ -974,8 +974,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_GE_C(ts, tsPrev, "result is not sorted in ASC order");
             tsPrev = ts;
         }
-    } 
- 
+    }
+
     Y_UNIT_TEST(ExtractRangesReverse) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
@@ -1006,129 +1006,129 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(PredicatePushdown) { 
-        constexpr bool logQueries = false; 
+    Y_UNIT_TEST(PredicatePushdown) {
+        constexpr bool logQueries = false;
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
- 
-        TStreamExecScanQuerySettings scanSettings; 
-        scanSettings.Explain(true); 
- 
-        CreateTestOlapTable(kikimr); 
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5); 
- 
-        auto tableClient = kikimr.GetTableClient(); 
- 
-        std::vector<TString> testData = { 
-            R"(`resource_id` = `uid`)", 
-            R"(`resource_id` = "10001")", 
-            R"(`level` = 1)", 
-            R"(`level` = Int8("1"))", 
-            R"(`level` = Int16("1"))", 
-            R"(`level` = Int32("1"))", 
-            R"((`level`, `uid`, `resource_id`) = (Int32("1"), "uid_3000001", "10001"))", 
-            R"(`level` > Int32("3"))", 
-            R"(`level` < Int32("1"))", 
-            R"(`level` >= Int32("4"))", 
-            R"(`level` <= Int32("0"))", 
-            R"(`level` != Int32("0"))", 
-            R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000001", "10001"))", 
-            R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000000", "10001"))", 
-            R"((`level`, `uid`, `resource_id`) < (Int32("1"), "uid_3000002", "10001"))", 
-            R"((`level`, `uid`, `resource_id`) >= (Int32("2"), "uid_3000000", "10001"))", 
-            R"((`level`, `uid`, `resource_id`) != (Int32("1"), "uid_3000001", "10001"))", 
-            R"((`level`, `uid`, `resource_id`) != (Int32("0"), "uid_3000001", "10011"))", 
-            R"(`level` = 0 OR `level` = 2 OR `level` = 1)", 
-            R"(`level` = 0 OR (`level` = 2 AND `uid` = "uid_3000002"))", 
-            R"(`level` = 0 OR `uid` = "uid_3000003")", 
-            R"(`level` = 0 AND `uid` = "uid_3000003")", 
-            R"(`level` = 0 AND `uid` = "uid_3000000")", 
-            // Timestamp will be removed by predicate extraction now. 
-            R"(`timestamp` >= CAST(3000001 AS Timestamp) AND `level` > 3)", 
-            R"((`level`, `uid`) > (Int32("2"), "uid_3000004") OR (`level`, `uid`) < (Int32("1"), "uid_3000002"))", 
-            R"(Int32("3") > `level`)", 
-            R"((Int32("1"), "uid_3000001", "10001") = (`level`, `uid`, `resource_id`))", 
-            R"((Int32("1"), `uid`, "10001") = (`level`, "uid_3000001", `resource_id`))", 
-            R"(`level` = 0 AND "uid_3000000" = `uid`)", 
-            R"(`uid` > `resource_id`)", 
-            R"(`level` IS NULL)", 
-            R"(`level` IS NOT NULL)", 
-            R"((`level`, `uid`) > (Int32("1"), NULL))", 
-            R"((`level`, `uid`) != (Int32("1"), NULL))", 
-            //R"((`timestamp`, `level`) >= (CAST(3000001 AS Timestamp), 3))", 
-        }; 
- 
-        std::vector<TString> testDataNoPush = { 
-            R"(`level` != NULL)", 
-            R"(`level` > NULL)", 
-        }; 
- 
-        auto buildQuery = [](const TString& predicate, bool pushEnabled) { 
-            TStringBuilder qBuilder; 
- 
-            qBuilder << "--!syntax_v1" << Endl; 
- 
-            if (pushEnabled) { 
-                qBuilder << R"(PRAGMA Kikimr.KqpPushOlapProcess = "true";)" << Endl; 
-            } 
- 
-            qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE "; 
-            qBuilder << predicate; 
-            qBuilder << " ORDER BY `timestamp`"; 
- 
-            return TString(qBuilder); 
-        }; 
- 
-        for (const auto& predicate: testData) { 
-            auto normalQuery = buildQuery(predicate, false); 
-            auto pushQuery = buildQuery(predicate, true); 
- 
-            auto it = tableClient.StreamExecuteScanQuery(normalQuery).GetValueSync(); 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-            auto goodResult = CollectStreamResult(it); 
- 
-            it = tableClient.StreamExecuteScanQuery(pushQuery).GetValueSync(); 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-            auto pushResult = CollectStreamResult(it); 
- 
-            if (logQueries) { 
-                Cerr << "Query: " << normalQuery << Endl; 
-                Cerr << "Expected: " << goodResult.ResultSetYson << Endl; 
-                Cerr << "Received: " << pushResult.ResultSetYson << Endl; 
-            } 
- 
-            CompareYson(goodResult.ResultSetYson, pushResult.ResultSetYson); 
- 
-            it = tableClient.StreamExecuteScanQuery(pushQuery, scanSettings).GetValueSync(); 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
- 
-            auto result = CollectStreamResult(it); 
-            auto ast = result.QueryStats->Getquery_ast(); 
- 
-            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, 
-                          TStringBuilder() << "Predicate not pushed down. Query: " << pushQuery); 
-        } 
- 
-        for (const auto& predicate: testDataNoPush) { 
-            auto pushQuery = buildQuery(predicate, true); 
- 
-            if (logQueries) { 
-                Cerr << "Query: " << pushQuery << Endl; 
-            } 
- 
-            auto it = tableClient.StreamExecuteScanQuery(pushQuery, scanSettings).GetValueSync(); 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
- 
-            auto result = CollectStreamResult(it); 
-            auto ast = result.QueryStats->Getquery_ast(); 
- 
-            UNIT_ASSERT_C(ast.find("KqpOlapFilter") == std::string::npos, 
-                          TStringBuilder() << "Predicate pushed down. Query: " << pushQuery); 
-        } 
-    } 
- 
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        CreateTestOlapTable(kikimr);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
+
+        auto tableClient = kikimr.GetTableClient();
+
+        std::vector<TString> testData = {
+            R"(`resource_id` = `uid`)",
+            R"(`resource_id` = "10001")",
+            R"(`level` = 1)",
+            R"(`level` = Int8("1"))",
+            R"(`level` = Int16("1"))",
+            R"(`level` = Int32("1"))",
+            R"((`level`, `uid`, `resource_id`) = (Int32("1"), "uid_3000001", "10001"))",
+            R"(`level` > Int32("3"))",
+            R"(`level` < Int32("1"))",
+            R"(`level` >= Int32("4"))",
+            R"(`level` <= Int32("0"))",
+            R"(`level` != Int32("0"))",
+            R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000001", "10001"))",
+            R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000000", "10001"))",
+            R"((`level`, `uid`, `resource_id`) < (Int32("1"), "uid_3000002", "10001"))",
+            R"((`level`, `uid`, `resource_id`) >= (Int32("2"), "uid_3000000", "10001"))",
+            R"((`level`, `uid`, `resource_id`) != (Int32("1"), "uid_3000001", "10001"))",
+            R"((`level`, `uid`, `resource_id`) != (Int32("0"), "uid_3000001", "10011"))",
+            R"(`level` = 0 OR `level` = 2 OR `level` = 1)",
+            R"(`level` = 0 OR (`level` = 2 AND `uid` = "uid_3000002"))",
+            R"(`level` = 0 OR `uid` = "uid_3000003")",
+            R"(`level` = 0 AND `uid` = "uid_3000003")",
+            R"(`level` = 0 AND `uid` = "uid_3000000")",
+            // Timestamp will be removed by predicate extraction now.
+            R"(`timestamp` >= CAST(3000001 AS Timestamp) AND `level` > 3)",
+            R"((`level`, `uid`) > (Int32("2"), "uid_3000004") OR (`level`, `uid`) < (Int32("1"), "uid_3000002"))",
+            R"(Int32("3") > `level`)",
+            R"((Int32("1"), "uid_3000001", "10001") = (`level`, `uid`, `resource_id`))",
+            R"((Int32("1"), `uid`, "10001") = (`level`, "uid_3000001", `resource_id`))",
+            R"(`level` = 0 AND "uid_3000000" = `uid`)",
+            R"(`uid` > `resource_id`)",
+            R"(`level` IS NULL)",
+            R"(`level` IS NOT NULL)",
+            R"((`level`, `uid`) > (Int32("1"), NULL))",
+            R"((`level`, `uid`) != (Int32("1"), NULL))",
+            //R"((`timestamp`, `level`) >= (CAST(3000001 AS Timestamp), 3))",
+        };
+
+        std::vector<TString> testDataNoPush = {
+            R"(`level` != NULL)",
+            R"(`level` > NULL)",
+        };
+
+        auto buildQuery = [](const TString& predicate, bool pushEnabled) {
+            TStringBuilder qBuilder;
+
+            qBuilder << "--!syntax_v1" << Endl;
+
+            if (pushEnabled) {
+                qBuilder << R"(PRAGMA Kikimr.KqpPushOlapProcess = "true";)" << Endl;
+            }
+
+            qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE ";
+            qBuilder << predicate;
+            qBuilder << " ORDER BY `timestamp`";
+
+            return TString(qBuilder);
+        };
+
+        for (const auto& predicate: testData) {
+            auto normalQuery = buildQuery(predicate, false);
+            auto pushQuery = buildQuery(predicate, true);
+
+            auto it = tableClient.StreamExecuteScanQuery(normalQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto goodResult = CollectStreamResult(it);
+
+            it = tableClient.StreamExecuteScanQuery(pushQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto pushResult = CollectStreamResult(it);
+
+            if (logQueries) {
+                Cerr << "Query: " << normalQuery << Endl;
+                Cerr << "Expected: " << goodResult.ResultSetYson << Endl;
+                Cerr << "Received: " << pushResult.ResultSetYson << Endl;
+            }
+
+            CompareYson(goodResult.ResultSetYson, pushResult.ResultSetYson);
+
+            it = tableClient.StreamExecuteScanQuery(pushQuery, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            auto result = CollectStreamResult(it);
+            auto ast = result.QueryStats->Getquery_ast();
+
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                          TStringBuilder() << "Predicate not pushed down. Query: " << pushQuery);
+        }
+
+        for (const auto& predicate: testDataNoPush) {
+            auto pushQuery = buildQuery(predicate, true);
+
+            if (logQueries) {
+                Cerr << "Query: " << pushQuery << Endl;
+            }
+
+            auto it = tableClient.StreamExecuteScanQuery(pushQuery, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            auto result = CollectStreamResult(it);
+            auto ast = result.QueryStats->Getquery_ast();
+
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") == std::string::npos,
+                          TStringBuilder() << "Predicate pushed down. Query: " << pushQuery);
+        }
+    }
+
     Y_UNIT_TEST(StatsSysView) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
@@ -1221,7 +1221,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT *
                 FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats`
                 WHERE
-                    PathId > UInt64("3") 
+                    PathId > UInt64("3")
                 ORDER BY PathId, Kind, TabletId
             )");
 
@@ -1317,7 +1317,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId == UInt64("3") AND Kind < UInt32("4") 
+                    PathId == UInt64("3") AND Kind < UInt32("4")
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -1357,8 +1357,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId > UInt64("0") AND PathId < UInt32("4") 
-                    OR PathId > UInt64("4") AND PathId <= UInt64("5") 
+                    PathId > UInt64("0") AND PathId < UInt32("4")
+                    OR PathId > UInt64("4") AND PathId <= UInt64("5")
                 ORDER BY
                     PathId DESC, Kind DESC, TabletId DESC
                 ;
@@ -1395,7 +1395,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Bytes > UInt64("0") 
+                WHERE Bytes > UInt64("0")
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -1410,7 +1410,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
                 SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Bytes > UInt64("0") 
+                WHERE Bytes > UInt64("0")
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -1424,7 +1424,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 PRAGMA Kikimr.KqpPushOlapProcess = "true";
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Kind == UInt32("5") 
+                WHERE Kind == UInt32("5")
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -1438,7 +1438,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 PRAGMA Kikimr.KqpPushOlapProcess = "true";
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Kind >= UInt32("3") 
+                WHERE Kind >= UInt32("3")
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -1476,7 +1476,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     SUM(Rows) as rows,
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    Kind != UInt32("4") -- not INACTIVE 
+                    Kind != UInt32("4") -- not INACTIVE
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -1492,7 +1492,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     SUM(Rows) as rows,
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    Kind != UInt32("4") -- not INACTIVE 
+                    Kind != UInt32("4") -- not INACTIVE
                 GROUP BY
                     PathId
                 ORDER BY
@@ -1519,7 +1519,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     SUM(Blobs) as blobs
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    Kind < UInt32("4") 
+                    Kind < UInt32("4")
                 GROUP BY PathId
                 ORDER BY rows DESC
                 LIMIT 10
@@ -1545,7 +1545,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     SUM(Blobs) as blobs
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId == UInt64("3") AND Kind < UInt32("4") 
+                    PathId == UInt64("3") AND Kind < UInt32("4")
                 GROUP BY PathId
                 ORDER BY rows DESC
                 LIMIT 10
@@ -1569,7 +1569,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     SUM(Blobs) as blobs
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId >= UInt64("4") AND Kind < UInt32("4") 
+                    PathId >= UInt64("4") AND Kind < UInt32("4")
                 GROUP BY PathId
                 ORDER BY rows DESC
                 LIMIT 10
@@ -1624,299 +1624,299 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(PredicatePushdownWithParameters) { 
-        constexpr bool logQueries = true; 
+    Y_UNIT_TEST(PredicatePushdownWithParameters) {
+        constexpr bool logQueries = true;
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
- 
-        TStreamExecScanQuerySettings scanSettings; 
-        scanSettings.Explain(true); 
- 
-        CreateTestOlapTable(kikimr); 
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000); 
- 
-        auto tableClient = kikimr.GetTableClient(); 
- 
-        auto buildQuery = [](bool pushEnabled) { 
-            TStringBuilder builder; 
- 
-            builder << "--!syntax_v1" << Endl; 
- 
-            if (pushEnabled) { 
-                builder << "PRAGMA Kikimr.KqpPushOlapProcess = \"true\";" << Endl; 
-                builder << "PRAGMA Kikimr.OptEnablePredicateExtract=\"false\";" << Endl; 
-            } 
- 
-            builder << R"( 
-                DECLARE $in_timestamp AS Timestamp; 
-                DECLARE $in_uid AS Utf8; 
-                DECLARE $in_level AS Int32; 
- 
-                SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE 
-                    `timestamp` > $in_timestamp AND uid > $in_uid AND level > $in_level 
-                ORDER BY `timestamp`; 
-            )" << Endl; 
- 
-            return builder; 
-        }; 
- 
-        auto normalQuery = buildQuery(false); 
-        auto pushQuery = buildQuery(true); 
- 
-        auto params = tableClient.GetParamsBuilder() 
-            .AddParam("$in_timestamp") 
-                .Timestamp(TInstant::MicroSeconds(3000990)) 
-                .Build() 
-            .AddParam("$in_uid") 
-                .Utf8("uid_3000980") 
-                .Build() 
-            .AddParam("$in_level") 
-                .Int32(2) 
-                .Build() 
-            .Build(); 
- 
-        auto it = tableClient.StreamExecuteScanQuery(normalQuery, params).GetValueSync(); 
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-        auto goodResult = CollectStreamResult(it); 
- 
-        it = tableClient.StreamExecuteScanQuery(pushQuery, params).GetValueSync(); 
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-        auto pushResult = CollectStreamResult(it); 
- 
-        if (logQueries) { 
-            Cerr << "Query: " << normalQuery << Endl; 
-            Cerr << "Expected: " << goodResult.ResultSetYson << Endl; 
-            Cerr << "Received: " << pushResult.ResultSetYson << Endl; 
-        } 
- 
-        CompareYson(goodResult.ResultSetYson, pushResult.ResultSetYson); 
- 
-        it = tableClient.StreamExecuteScanQuery(pushQuery, scanSettings).GetValueSync(); 
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
- 
-        auto result = CollectStreamResult(it); 
-        auto ast = result.QueryStats->Getquery_ast(); 
- 
-        UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, 
-                      TStringBuilder() << "Predicate not pushed down. Query: " << pushQuery); 
- 
-        NJson::TJsonValue plan, readRange; 
-        NJson::ReadJsonTree(*result.PlanJson, &plan, true); 
- 
-        readRange = FindPlanNodeByKv(plan, "Name", "TableFullScan"); 
-        UNIT_ASSERT(readRange.IsDefined()); 
-    } 
- 
-    Y_UNIT_TEST(PredicatePushdownParameterTypesValidation) { 
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        CreateTestOlapTable(kikimr);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+
+        auto tableClient = kikimr.GetTableClient();
+
+        auto buildQuery = [](bool pushEnabled) {
+            TStringBuilder builder;
+
+            builder << "--!syntax_v1" << Endl;
+
+            if (pushEnabled) {
+                builder << "PRAGMA Kikimr.KqpPushOlapProcess = \"true\";" << Endl;
+                builder << "PRAGMA Kikimr.OptEnablePredicateExtract=\"false\";" << Endl;
+            }
+
+            builder << R"(
+                DECLARE $in_timestamp AS Timestamp;
+                DECLARE $in_uid AS Utf8;
+                DECLARE $in_level AS Int32;
+
+                SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
+                    `timestamp` > $in_timestamp AND uid > $in_uid AND level > $in_level
+                ORDER BY `timestamp`;
+            )" << Endl;
+
+            return builder;
+        };
+
+        auto normalQuery = buildQuery(false);
+        auto pushQuery = buildQuery(true);
+
+        auto params = tableClient.GetParamsBuilder()
+            .AddParam("$in_timestamp")
+                .Timestamp(TInstant::MicroSeconds(3000990))
+                .Build()
+            .AddParam("$in_uid")
+                .Utf8("uid_3000980")
+                .Build()
+            .AddParam("$in_level")
+                .Int32(2)
+                .Build()
+            .Build();
+
+        auto it = tableClient.StreamExecuteScanQuery(normalQuery, params).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto goodResult = CollectStreamResult(it);
+
+        it = tableClient.StreamExecuteScanQuery(pushQuery, params).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto pushResult = CollectStreamResult(it);
+
+        if (logQueries) {
+            Cerr << "Query: " << normalQuery << Endl;
+            Cerr << "Expected: " << goodResult.ResultSetYson << Endl;
+            Cerr << "Received: " << pushResult.ResultSetYson << Endl;
+        }
+
+        CompareYson(goodResult.ResultSetYson, pushResult.ResultSetYson);
+
+        it = tableClient.StreamExecuteScanQuery(pushQuery, scanSettings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        auto result = CollectStreamResult(it);
+        auto ast = result.QueryStats->Getquery_ast();
+
+        UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                      TStringBuilder() << "Predicate not pushed down. Query: " << pushQuery);
+
+        NJson::TJsonValue plan, readRange;
+        NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+
+        readRange = FindPlanNodeByKv(plan, "Name", "TableFullScan");
+        UNIT_ASSERT(readRange.IsDefined());
+    }
+
+    Y_UNIT_TEST(PredicatePushdownParameterTypesValidation) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
- 
-        TStreamExecScanQuerySettings scanSettings; 
-        scanSettings.Explain(true); 
- 
-        CreateTableOfAllTypes(kikimr); 
- 
-        auto tableClient = kikimr.GetTableClient(); 
- 
-        std::map<std::string, TParams> testData = CreateParametersOfAllTypes(tableClient); 
- 
-        const TString queryTemplate = R"( 
-            --!syntax_v1 
-            PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
-            DECLARE $in_value AS <--TYPE-->; 
- 
-            SELECT `key` FROM `/Root/olapStore/OlapParametersTable` WHERE <--NAME-->_column > $in_value; 
-        )"; 
- 
-        for (auto& [type, parameter]: testData) { 
-            TString query(queryTemplate); 
-            std::string clearType = type; 
- 
-            size_t pos = clearType.find('('); 
- 
-            if (std::string::npos != pos) { 
-                clearType = clearType.substr(0, pos); 
-            } 
- 
-            SubstGlobal(query, "<--TYPE-->", type); 
-            SubstGlobal(query, "<--NAME-->", clearType); 
- 
-            TStringBuilder b; 
- 
-            b << "----------------------------" << Endl; 
-            b << query << Endl; 
-            b << "----------------------------" << Endl; 
- 
-            auto it = tableClient.StreamExecuteScanQuery(query, parameter).GetValueSync(); 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString() << Endl << b); 
-            auto goodResult = CollectStreamResult(it); 
- 
-            it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync(); 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString() << Endl << b); 
- 
-            auto result = CollectStreamResult(it); 
-            auto ast = result.QueryStats->Getquery_ast(); 
- 
-            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, 
-                          TStringBuilder() << "Predicate not pushed down. Query: " << query); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(PredicatePushdownCastErrors) { 
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        CreateTableOfAllTypes(kikimr);
+
+        auto tableClient = kikimr.GetTableClient();
+
+        std::map<std::string, TParams> testData = CreateParametersOfAllTypes(tableClient);
+
+        const TString queryTemplate = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.KqpPushOlapProcess = "true";
+            DECLARE $in_value AS <--TYPE-->;
+
+            SELECT `key` FROM `/Root/olapStore/OlapParametersTable` WHERE <--NAME-->_column > $in_value;
+        )";
+
+        for (auto& [type, parameter]: testData) {
+            TString query(queryTemplate);
+            std::string clearType = type;
+
+            size_t pos = clearType.find('(');
+
+            if (std::string::npos != pos) {
+                clearType = clearType.substr(0, pos);
+            }
+
+            SubstGlobal(query, "<--TYPE-->", type);
+            SubstGlobal(query, "<--NAME-->", clearType);
+
+            TStringBuilder b;
+
+            b << "----------------------------" << Endl;
+            b << query << Endl;
+            b << "----------------------------" << Endl;
+
+            auto it = tableClient.StreamExecuteScanQuery(query, parameter).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString() << Endl << b);
+            auto goodResult = CollectStreamResult(it);
+
+            it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString() << Endl << b);
+
+            auto result = CollectStreamResult(it);
+            auto ast = result.QueryStats->Getquery_ast();
+
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                          TStringBuilder() << "Predicate not pushed down. Query: " << query);
+        }
+    }
+
+    Y_UNIT_TEST(PredicatePushdownCastErrors) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
- 
-        TStreamExecScanQuerySettings scanSettings; 
-        scanSettings.Explain(true); 
- 
-        CreateTableOfAllTypes(kikimr); 
- 
-        auto tableClient = kikimr.GetTableClient(); 
- 
-        std::map<std::string, std::set<std::string>> exceptions = { 
-            {"Int8", {"Int16", "Int32"}}, 
-            {"Int16", {"Int8", "Int32"}}, 
-            {"Int32", {"Int8", "Int16"}}, 
-            {"UInt8", {"UInt16", "UInt32"}}, 
-            {"UInt16", {"UInt8", "UInt32"}}, 
-            {"UInt32", {"UInt8", "UInt16"}}, 
-            {"String", {"Utf8"}}, 
-            {"Utf8", {"String", "Json", "Yson"}}, 
-            {"Json", {"Utf8", "Yson"}}, 
-            {"Yson", {"Utf8", "Json"}}, 
-        }; 
- 
-        std::vector<std::string> allTypes = { 
-            "Bool", 
-            "Int8", 
-            "Int16", 
-            "Int32", 
-            "Int64", 
-            "UInt8", 
-            "UInt16", 
-            "UInt32", 
-            "UInt64", 
-            "Double", 
-            "Float", 
-            "Decimal(12,9)", 
-            "String", 
-            "Utf8", 
-            "Timestamp", 
-            "Date", 
-            "Datetime", 
-            "Interval" 
-        }; 
- 
-        std::map<std::string, TParams> parameters = CreateParametersOfAllTypes(tableClient); 
- 
-        const std::vector<std::string> predicates = { 
-            "<--NAME-->_column > $in_value", 
-            "<--NAME-->_column = $in_value", 
-            "$in_value > <--NAME-->_column", 
-            "$in_value = <--NAME-->_column", 
-        }; 
- 
-        const TString queryBegin = R"( 
-            --!syntax_v1 
-            PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
- 
-            DECLARE $in_value AS <--TYPE-->; 
- 
-            SELECT `key` FROM `/Root/olapStore/OlapParametersTable` WHERE 
-        )"; 
- 
-        std::vector<std::string> falsePositive; 
-        std::vector<std::string> falseNegative; 
- 
-        for (const auto& predicateTemplate: predicates) { 
-            for (const auto& type: allTypes) { 
-                for (const auto& checkType: allTypes) { 
-                    bool error = true; 
- 
-                    auto exc = exceptions.find(checkType); 
- 
-                    if (exc != exceptions.end() && exc->second.contains(type)) { 
-                        error = false; 
-                    } else if (type == checkType) { 
-                        error = false; 
-                    } 
- 
-                    std::string clearType = type; 
- 
-                    size_t pos = clearType.find('('); 
- 
-                    if (std::string::npos != pos) { 
-                        clearType = clearType.substr(0, pos); 
-                    } 
- 
-                    TString query(queryBegin); 
-                    TString predicate(predicateTemplate); 
-                    SubstGlobal(query, "<--TYPE-->", checkType); 
-                    SubstGlobal(predicate, "<--NAME-->", clearType); 
- 
-                    auto parameter = parameters.find(checkType); 
- 
-                    UNIT_ASSERT_C(parameter != parameters.end(), "No type " << checkType << " in parameters"); 
- 
-                    auto it = tableClient.StreamExecuteScanQuery(query + predicate, parameter->second).GetValueSync(); 
-                    // Check for successful execution 
-                    auto streamPart = it.ReadNext().GetValueSync(); 
- 
-                    bool pushdown; 
- 
-                    if (streamPart.IsSuccess()) { 
-                        it = tableClient.StreamExecuteScanQuery( 
-                            query + predicate, parameter->second, scanSettings 
-                        ).GetValueSync(); 
- 
-                        auto result = CollectStreamResult(it); 
-                        auto ast = result.QueryStats->Getquery_ast(); 
- 
-                        pushdown = ast.find("KqpOlapFilter") != std::string::npos; 
-                    } else { 
-                        // Error means that predicate not pushed down 
-                        pushdown = false; 
-                    } 
- 
-                    if (error && pushdown) { 
-                        falsePositive.emplace_back( 
-                            TStringBuilder() << type << " vs " << checkType << " at " << predicate 
-                        ); 
-                        continue; 
-                    } 
- 
-                    if (!error && !pushdown) { 
-                        falseNegative.emplace_back( 
-                            TStringBuilder() << type << " vs " << checkType << " at " << predicate 
-                        ); 
-                    } 
-                } 
-            } 
-        } 
- 
-        TStringBuilder b; 
-        b << "Errors found:" << Endl; 
-        b << "------------------------------------------------" << Endl; 
-        b << "False positive" << Endl; 
- 
-        for (const auto& txt: falsePositive) { 
-            b << txt << Endl; 
-        } 
- 
-        b << "False negative" << Endl; 
-        for (const auto& txt: falseNegative) { 
-            b << txt << Endl; 
-        } 
- 
-        b << "------------------------------------------------" << Endl; 
-        UNIT_ASSERT_C(falsePositive.empty() && falseNegative.empty(), b); 
-    } 
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        CreateTableOfAllTypes(kikimr);
+
+        auto tableClient = kikimr.GetTableClient();
+
+        std::map<std::string, std::set<std::string>> exceptions = {
+            {"Int8", {"Int16", "Int32"}},
+            {"Int16", {"Int8", "Int32"}},
+            {"Int32", {"Int8", "Int16"}},
+            {"UInt8", {"UInt16", "UInt32"}},
+            {"UInt16", {"UInt8", "UInt32"}},
+            {"UInt32", {"UInt8", "UInt16"}},
+            {"String", {"Utf8"}},
+            {"Utf8", {"String", "Json", "Yson"}},
+            {"Json", {"Utf8", "Yson"}},
+            {"Yson", {"Utf8", "Json"}},
+        };
+
+        std::vector<std::string> allTypes = {
+            "Bool",
+            "Int8",
+            "Int16",
+            "Int32",
+            "Int64",
+            "UInt8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "Double",
+            "Float",
+            "Decimal(12,9)",
+            "String",
+            "Utf8",
+            "Timestamp",
+            "Date",
+            "Datetime",
+            "Interval"
+        };
+
+        std::map<std::string, TParams> parameters = CreateParametersOfAllTypes(tableClient);
+
+        const std::vector<std::string> predicates = {
+            "<--NAME-->_column > $in_value",
+            "<--NAME-->_column = $in_value",
+            "$in_value > <--NAME-->_column",
+            "$in_value = <--NAME-->_column",
+        };
+
+        const TString queryBegin = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.KqpPushOlapProcess = "true";
+
+            DECLARE $in_value AS <--TYPE-->;
+
+            SELECT `key` FROM `/Root/olapStore/OlapParametersTable` WHERE
+        )";
+
+        std::vector<std::string> falsePositive;
+        std::vector<std::string> falseNegative;
+
+        for (const auto& predicateTemplate: predicates) {
+            for (const auto& type: allTypes) {
+                for (const auto& checkType: allTypes) {
+                    bool error = true;
+
+                    auto exc = exceptions.find(checkType);
+
+                    if (exc != exceptions.end() && exc->second.contains(type)) {
+                        error = false;
+                    } else if (type == checkType) {
+                        error = false;
+                    }
+
+                    std::string clearType = type;
+
+                    size_t pos = clearType.find('(');
+
+                    if (std::string::npos != pos) {
+                        clearType = clearType.substr(0, pos);
+                    }
+
+                    TString query(queryBegin);
+                    TString predicate(predicateTemplate);
+                    SubstGlobal(query, "<--TYPE-->", checkType);
+                    SubstGlobal(predicate, "<--NAME-->", clearType);
+
+                    auto parameter = parameters.find(checkType);
+
+                    UNIT_ASSERT_C(parameter != parameters.end(), "No type " << checkType << " in parameters");
+
+                    auto it = tableClient.StreamExecuteScanQuery(query + predicate, parameter->second).GetValueSync();
+                    // Check for successful execution
+                    auto streamPart = it.ReadNext().GetValueSync();
+
+                    bool pushdown;
+
+                    if (streamPart.IsSuccess()) {
+                        it = tableClient.StreamExecuteScanQuery(
+                            query + predicate, parameter->second, scanSettings
+                        ).GetValueSync();
+
+                        auto result = CollectStreamResult(it);
+                        auto ast = result.QueryStats->Getquery_ast();
+
+                        pushdown = ast.find("KqpOlapFilter") != std::string::npos;
+                    } else {
+                        // Error means that predicate not pushed down
+                        pushdown = false;
+                    }
+
+                    if (error && pushdown) {
+                        falsePositive.emplace_back(
+                            TStringBuilder() << type << " vs " << checkType << " at " << predicate
+                        );
+                        continue;
+                    }
+
+                    if (!error && !pushdown) {
+                        falseNegative.emplace_back(
+                            TStringBuilder() << type << " vs " << checkType << " at " << predicate
+                        );
+                    }
+                }
+            }
+        }
+
+        TStringBuilder b;
+        b << "Errors found:" << Endl;
+        b << "------------------------------------------------" << Endl;
+        b << "False positive" << Endl;
+
+        for (const auto& txt: falsePositive) {
+            b << txt << Endl;
+        }
+
+        b << "False negative" << Endl;
+        for (const auto& txt: falseNegative) {
+            b << txt << Endl;
+        }
+
+        b << "------------------------------------------------" << Endl;
+        UNIT_ASSERT_C(falsePositive.empty() && falseNegative.empty(), b);
+    }
 }
 
 } // namespace NKqp

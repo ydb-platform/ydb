@@ -106,8 +106,8 @@ namespace NYql::NDqs {
             return OptimizeExprEx(input, output,
                 [](const TExprNode::TPtr& inputExpr, TExprContext& ctx, IOptimizationContext&) {
                     TExprBase node{inputExpr};
-                    PERFORM_RULE(DqPeepholeRewriteCrossJoin, node, ctx); 
-                    PERFORM_RULE(DqPeepholeRewriteJoinDict, node, ctx); 
+                    PERFORM_RULE(DqPeepholeRewriteCrossJoin, node, ctx);
+                    PERFORM_RULE(DqPeepholeRewriteJoinDict, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteMapJoin, node, ctx);
                     PERFORM_RULE(DqPeepholeRewritePureJoin, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteReplicate, node, ctx);

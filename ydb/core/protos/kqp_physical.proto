@@ -126,37 +126,37 @@ message TKqpPhyOpLookup {
     TKqpPhyValue KeysValue = 1;
 }
 
-message TKqpPhyOpReadOlapRanges { 
-    // Parameter come here from computation stage. It has type Tuple(List(Tuple(RangeBegin, RangeEnd)))) 
-    // Where RangeBegin and RangeEnd are Tuple(KeyColumns, Inclusive) 
-    // Where KeyColumns is values of start/end of range for corresponding key column in table 
-    TKqpPhyParamValue KeyRanges = 1; 
-    // Limit value, shard may stop after reading limit rows 
+message TKqpPhyOpReadOlapRanges {
+    // Parameter come here from computation stage. It has type Tuple(List(Tuple(RangeBegin, RangeEnd))))
+    // Where RangeBegin and RangeEnd are Tuple(KeyColumns, Inclusive)
+    // Where KeyColumns is values of start/end of range for corresponding key column in table
+    TKqpPhyParamValue KeyRanges = 1;
+    // Limit value, shard may stop after reading limit rows
     TKqpPhyParamValue ItemsLimit = 2;
-    // Reverse sign, i.e. if user ask ORDER BY ... DESC we need to read table in reverse direction 
+    // Reverse sign, i.e. if user ask ORDER BY ... DESC we need to read table in reverse direction
     bool Reverse = 3;
-    // Program in NKikimrSSA.TProgram format 
-    bytes OlapProgram = 4; 
-    /* 
-     * Serialized parameters names for current program, this used for extract parameters used by 
-     * program only from all parameters. Unfortunately we can not fill schema when compile OLAP program, 
-     * it is done a bit later in executor, so we need separate field for parameter names. 
-     */ 
-    repeated string OlapProgramParameterNames = 5; 
+    // Program in NKikimrSSA.TProgram format
+    bytes OlapProgram = 4;
+    /*
+     * Serialized parameters names for current program, this used for extract parameters used by
+     * program only from all parameters. Unfortunately we can not fill schema when compile OLAP program,
+     * it is done a bit later in executor, so we need separate field for parameter names.
+     */
+    repeated string OlapProgramParameterNames = 5;
 }
 
-message TKqpPhyOpReadRanges { 
-    // Parameter come here from computation stage. It has type Tuple(List(Tuple(RangeBegin, RangeEnd)))) 
-    // Where RangeBegin and RangeEnd are Tuple(KeyColumns, Inclusive) 
-    // Where KeyColumns is values of start/end of range for corresponding key column in table 
-    // Also it has special case - empty name. This means full scan. 
-    TKqpPhyParamValue KeyRanges = 1; 
-    // Limit value, shard may stop after reading limit rows 
-    TKqpPhyParamValue ItemsLimit = 2; 
-    // Reverse sign, i.e. if user ask ORDER BY ... DESC we need to read table in reverse direction 
-    bool Reverse = 3; 
-} 
- 
+message TKqpPhyOpReadRanges {
+    // Parameter come here from computation stage. It has type Tuple(List(Tuple(RangeBegin, RangeEnd))))
+    // Where RangeBegin and RangeEnd are Tuple(KeyColumns, Inclusive)
+    // Where KeyColumns is values of start/end of range for corresponding key column in table
+    // Also it has special case - empty name. This means full scan.
+    TKqpPhyParamValue KeyRanges = 1;
+    // Limit value, shard may stop after reading limit rows
+    TKqpPhyParamValue ItemsLimit = 2;
+    // Reverse sign, i.e. if user ask ORDER BY ... DESC we need to read table in reverse direction
+    bool Reverse = 3;
+}
+
 message TKqpPhyTableOperation {
     TKqpPhyTable Table = 1;
     repeated TKqpPhyColumn Columns = 2;
@@ -166,8 +166,8 @@ message TKqpPhyTableOperation {
         TKqpPhyOpUpsertRows UpsertRows = 4;
         TKqpPhyOpDeleteRows DeleteRows = 5;
         TKqpPhyOpLookup Lookup = 6;
-        TKqpPhyOpReadOlapRanges ReadOlapRange = 7; 
-        TKqpPhyOpReadRanges ReadRanges = 8; 
+        TKqpPhyOpReadOlapRanges ReadOlapRange = 7;
+        TKqpPhyOpReadRanges ReadRanges = 8;
     }
 }
 

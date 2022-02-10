@@ -45,17 +45,17 @@ void CollectJoinColumns(const TExprBase& joinSettings, THashMap<TStringBuf, TVec
     }
 }
 
-TExprBase BuildSkipNullKeys(TExprContext& ctx, TPositionHandle pos, 
-    const TExprBase& input, const TVector<TCoAtom>& keys) 
-{ 
-    return Build<TCoSkipNullMembers>(ctx, pos) 
-        .Input(input) 
-        .Members() 
-            .Add(keys) 
-            .Build() 
-        .Done(); 
-}; 
- 
+TExprBase BuildSkipNullKeys(TExprContext& ctx, TPositionHandle pos,
+    const TExprBase& input, const TVector<TCoAtom>& keys)
+{
+    return Build<TCoSkipNullMembers>(ctx, pos)
+        .Input(input)
+        .Members()
+            .Add(keys)
+            .Build()
+        .Done();
+};
+
 TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     const THashMap<TStringBuf, TJoinInputDesc>& inputs, TExprContext& ctx)
 {
@@ -186,7 +186,7 @@ TStringBuf RotateRightJoinType(TStringBuf joinType) {
 std::pair<TVector<TCoAtom>, TVector<TCoAtom>> GetJoinKeys(const TDqJoin& join, TExprContext& ctx) {
     TVector<TCoAtom> leftJoinKeys;
     TVector<TCoAtom> rightJoinKeys;
- 
+
     auto size = join.JoinKeys().Size();
     leftJoinKeys.reserve(size);
     rightJoinKeys.reserve(size);
@@ -207,43 +207,43 @@ std::pair<TVector<TCoAtom>, TVector<TCoAtom>> GetJoinKeys(const TDqJoin& join, T
                 : FullColumnName(rightLabel, keyTuple.RightColumn().Value()))
             .Done();
 
-        leftJoinKeys.emplace_back(std::move(leftKey)); 
-        rightJoinKeys.emplace_back(std::move(rightKey)); 
+        leftJoinKeys.emplace_back(std::move(leftKey));
+        rightJoinKeys.emplace_back(std::move(rightKey));
     }
 
-    return std::make_pair(std::move(leftJoinKeys), std::move(rightJoinKeys)); 
-} 
- 
-TDqPhyMapJoin DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, const TExprBase& rightInput, 
-    TExprContext& ctx) 
-{ 
+    return std::make_pair(std::move(leftJoinKeys), std::move(rightJoinKeys));
+}
+
+TDqPhyMapJoin DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, const TExprBase& rightInput,
+    TExprContext& ctx)
+{
     static const std::set<std::string_view> supportedTypes = {"Inner"sv, "Left"sv, "LeftOnly"sv, "LeftSemi"sv};
-    auto joinType = join.JoinType().Value(); 
-    bool supportedJoin = supportedTypes.contains(joinType); 
+    auto joinType = join.JoinType().Value();
+    bool supportedJoin = supportedTypes.contains(joinType);
     YQL_ENSURE(supportedJoin, "" << joinType);
- 
-    auto [leftJoinKeys, rightJoinKeys] = GetJoinKeys(join, ctx); 
- 
+
+    auto [leftJoinKeys, rightJoinKeys] = GetJoinKeys(join, ctx);
+
     TVector<TCoAtom> leftFilterKeys;
     TVector<TCoAtom> rightFilterKeys;
 
     if (joinType == "Inner"sv || joinType == "LeftSemi"sv) {
-        for (const auto& key : leftJoinKeys) { 
+        for (const auto& key : leftJoinKeys) {
             leftFilterKeys.push_back(key);
         }
     }
 
-    for (const auto& key : rightJoinKeys) { 
-        rightFilterKeys.push_back(key); 
+    for (const auto& key : rightJoinKeys) {
+        rightFilterKeys.push_back(key);
     }
 
-    auto leftFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), leftInput, leftFilterKeys); 
-    auto rightFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), rightInput, rightFilterKeys); 
- 
+    auto leftFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), leftInput, leftFilterKeys);
+    auto rightFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), rightInput, rightFilterKeys);
+
     return Build<TDqPhyMapJoin>(ctx, join.Pos())
-        .LeftInput(leftFilteredInput) 
+        .LeftInput(leftFilteredInput)
         .LeftLabel(join.LeftLabel())
-        .RightInput(rightFilteredInput) 
+        .RightInput(rightFilteredInput)
         .RightLabel(join.RightLabel())
         .JoinType(join.JoinType())
         .JoinKeys(join.JoinKeys())
@@ -482,8 +482,8 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
     };
 
     auto joinType = join.JoinType().Value();
- 
-    if (!supportedTypes.contains(joinType)) { 
+
+    if (!supportedTypes.contains(joinType)) {
         return join;
     }
 
@@ -664,48 +664,48 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
     return newConnection.Cast();
 }
 
-TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) { 
-    auto joinType = join.JoinType().Value(); 
- 
+TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
+    auto joinType = join.JoinType().Value();
+
     if (joinType != "Full"sv && joinType != "Exclusion"sv) {
-        return join; 
-    } 
- 
+        return join;
+    }
+
     auto buildShuffle = [&ctx, &join](const TExprBase& input, const TVector<TCoAtom>& keys) {
-        auto stage = Build<TDqStage>(ctx, join.Pos()) 
-            .Inputs() 
-                .Add(input) 
-                .Build() 
-            .Program() 
-                .Args({"stream"}) 
-                .Body("stream") 
-                .Build() 
-            .Settings(TDqStageSettings().BuildNode(ctx, join.Pos())) 
-            .Done(); 
- 
+        auto stage = Build<TDqStage>(ctx, join.Pos())
+            .Inputs()
+                .Add(input)
+                .Build()
+            .Program()
+                .Args({"stream"})
+                .Body("stream")
+                .Build()
+            .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))
+            .Done();
+
         return Build<TDqCnHashShuffle>(ctx, join.Pos())
-            .Output() 
-                .Stage(stage) 
-                .Index().Build("0") 
-                .Build() 
-            .KeyColumns() 
-                .Add(keys) 
-                .Build() 
-            .Done(); 
-    }; 
- 
+            .Output()
+                .Stage(stage)
+                .Index().Build("0")
+                .Build()
+            .KeyColumns()
+                .Add(keys)
+                .Build()
+            .Done();
+    };
+
     bool leftIsUnionAll = join.LeftInput().Maybe<TDqCnUnionAll>().IsValid();
     bool rightIsUnionAll = join.RightInput().Maybe<TDqCnUnionAll>().IsValid();
- 
+
     TMaybeNode<TDqStage> joinStage;
- 
+
     // join streams
     if (leftIsUnionAll && rightIsUnionAll) {
         auto leftCn = join.LeftInput().Cast<TDqCnUnionAll>();
         auto rightCn = join.RightInput().Cast<TDqCnUnionAll>();
- 
+
         auto [leftJoinKeys, rightJoinKeys] = GetJoinKeys(join, ctx);
- 
+
         auto rightShuffle = buildShuffle(rightCn, rightJoinKeys);
         auto leftShuffle = buildShuffle(leftCn, leftJoinKeys);
 
@@ -812,6 +812,6 @@ TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
     }
 
     return join;
-} 
+}
 
 } // namespace NYql::NDq

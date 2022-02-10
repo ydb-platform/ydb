@@ -66,7 +66,7 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
 
                 switch (op.GetTypeCase()) {
                     case NKqpProto::TKqpPhyTableOperation::kReadRange:
-                    case NKqpProto::TKqpPhyTableOperation::kReadRanges: 
+                    case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                     case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
                     case NKqpProto::TKqpPhyTableOperation::kLookup:
                         stageInfo.Meta.ShardOperations.insert(TKeyDesc::ERowOperation::Read);
@@ -314,7 +314,7 @@ void TShardKeyRanges::AddRange(TSerializedTableRange&& range) {
 }
 
 void TShardKeyRanges::Add(TSerializedPointOrRange&& pointOrRange) {
-    if (!IsFullRange()) { 
+    if (!IsFullRange()) {
         Ranges.emplace_back(std::move(pointOrRange));
         if (std::holds_alternative<TSerializedTableRange>(Ranges.back())) {
             Y_VERIFY_DEBUG(!std::get<TSerializedTableRange>(Ranges.back()).Point);
@@ -324,15 +324,15 @@ void TShardKeyRanges::Add(TSerializedPointOrRange&& pointOrRange) {
 
 void TShardKeyRanges::CopyFrom(const TVector<TSerializedPointOrRange>& ranges) {
     if (!IsFullRange()) {
-        Ranges = ranges; 
+        Ranges = ranges;
         for (auto& x : Ranges) {
             if (std::holds_alternative<TSerializedTableRange>(x)) {
                 Y_VERIFY_DEBUG(!std::get<TSerializedTableRange>(x).Point);
             }
         }
-    } 
-}; 
- 
+    }
+};
+
 void TShardKeyRanges::MakeFullRange(TSerializedTableRange&& range) {
     Ranges.clear();
     FullRange.emplace(std::move(range));
@@ -353,7 +353,7 @@ void TShardKeyRanges::MakeFull(TSerializedPointOrRange&& pointOrRange) {
 }
 
 
-void TShardKeyRanges::MergeWritePoints(TShardKeyRanges&& other, const TVector<NScheme::TTypeId>& keyTypes) { 
+void TShardKeyRanges::MergeWritePoints(TShardKeyRanges&& other, const TVector<NScheme::TTypeId>& keyTypes) {
 #ifdef DBG_TRACE
     Cerr << (TStringBuilder() << "-- merge " << ToString(keyTypes, *AppData()->TypeRegistry)
         << " with " << other.ToString(keyTypes, *AppData()->TypeRegistry) << Endl);
@@ -396,19 +396,19 @@ void TShardKeyRanges::MergeWritePoints(TShardKeyRanges&& other, const TVector<NS
         YQL_ENSURE(std::holds_alternative<TSerializedCellVec>(x));
         YQL_ENSURE(std::holds_alternative<TSerializedCellVec>(y));
 
-#if 1 
-        // common case for multi-effects transactions 
+#if 1
+        // common case for multi-effects transactions
         cmp = CompareTypedCellVectors(
             std::get<TSerializedCellVec>(x).GetCells().data(),
             std::get<TSerializedCellVec>(y).GetCells().data(),
             keyTypes.data(), keyTypes.size());
-#else 
-        if (x.IsPoint() && y.IsPoint()) { 
+#else
+        if (x.IsPoint() && y.IsPoint()) {
             // common case for multi-effects transactions
             cmp = CompareTypedCellVectors(x.From.GetCells().data(), y.From.GetCells().data(), keyTypes.data(), keyTypes.size());
-        } else if (x.IsPoint()) { 
+        } else if (x.IsPoint()) {
             cmp = ComparePointAndRange(x.From.GetCells(), y.ToTableRange(), keyTypes, keyTypes);
-        } else if (y.IsPoint()) { 
+        } else if (y.IsPoint()) {
             cmp = -ComparePointAndRange(y.From.GetCells(), x.ToTableRange(), keyTypes, keyTypes);
         } else {
             cmp = CompareRanges(x.ToTableRange(), y.ToTableRange(), keyTypes);
@@ -546,7 +546,7 @@ void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpTransaction_TScanTaskM
         FullRange->Serialize(protoRange);
     } else {
         for (auto& range : Ranges) {
-            auto& keyRange = *proto->AddKeyRanges(); 
+            auto& keyRange = *proto->AddKeyRanges();
             if (std::holds_alternative<TSerializedTableRange>(range)) {
                 auto& x = std::get<TSerializedTableRange>(range);
                 Y_VERIFY_DEBUG(!x.Point);
@@ -587,7 +587,7 @@ TString TTaskMeta::ToString(const TVector<NScheme::TTypeId>& keyTypes, const NSc
     }
 
     sb << "], Reads: { ";
- 
+
     if (Reads) {
         for (ui64 i = 0; i < Reads->size(); ++i) {
             auto& read = (*Reads)[i];
@@ -601,19 +601,19 @@ TString TTaskMeta::ToString(const TVector<NScheme::TTypeId>& keyTypes, const NSc
             }
         }
     } else {
-        sb << "none"; 
+        sb << "none";
     }
 
-    sb << " }, Writes: { "; 
- 
+    sb << " }, Writes: { ";
+
     if (Writes) {
-        sb << "ranges: " << Writes->Ranges.ToString(keyTypes, typeRegistry); 
+        sb << "ranges: " << Writes->Ranges.ToString(keyTypes, typeRegistry);
     } else {
-        sb << "none"; 
+        sb << "none";
     }
 
-    sb << " } }"; 
- 
+    sb << " } }";
+
     return sb;
 }
 

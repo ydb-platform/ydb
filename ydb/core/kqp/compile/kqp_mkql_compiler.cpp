@@ -180,20 +180,20 @@ TKqpKeyRange MakeKeyRange(const TKqlReadTableBase& readTable, const TKqlCompileC
     return keyRange;
 }
 
-TKqpKeyRanges MakeComputedKeyRanges(const TKqlReadTableRangesBase& readTable, const TKqlCompileContext& ctx, 
-    TMkqlBuildContext& buildCtx) 
-{ 
-    auto settings = TKqpReadTableSettings::Parse(readTable); 
- 
-    TKqpKeyRanges ranges = { 
-        .Ranges = MkqlBuildExpr(readTable.Ranges().Ref(), buildCtx), 
-        .ItemsLimit = settings.ItemsLimit ? MkqlBuildExpr(*settings.ItemsLimit, buildCtx) : ctx.PgmBuilder().NewNull(), 
-        .Reverse = settings.Reverse, 
-    }; 
- 
-    return ranges; 
-} 
- 
+TKqpKeyRanges MakeComputedKeyRanges(const TKqlReadTableRangesBase& readTable, const TKqlCompileContext& ctx,
+    TMkqlBuildContext& buildCtx)
+{
+    auto settings = TKqpReadTableSettings::Parse(readTable);
+
+    TKqpKeyRanges ranges = {
+        .Ranges = MkqlBuildExpr(readTable.Ranges().Ref(), buildCtx),
+        .ItemsLimit = settings.ItemsLimit ? MkqlBuildExpr(*settings.ItemsLimit, buildCtx) : ctx.PgmBuilder().NewNull(),
+        .Reverse = settings.Reverse,
+    };
+
+    return ranges;
+}
+
 } // namespace
 
 const TKikimrTableMetadata& TKqlCompileContext::GetTableMeta(const TKqpTable& table) const {
@@ -222,31 +222,31 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return result;
         });
 
-    compiler->AddCallable(TKqpWideReadTableRanges::CallableName(), 
+    compiler->AddCallable(TKqpWideReadTableRanges::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            TKqpWideReadTableRanges readTableRanges(&node); 
+            TKqpWideReadTableRanges readTableRanges(&node);
 
-            const auto& tableMeta = ctx.GetTableMeta(readTableRanges.Table()); 
+            const auto& tableMeta = ctx.GetTableMeta(readTableRanges.Table());
             ValidateRangesType(readTableRanges.Ranges().Ref().GetTypeAnn(), tableMeta);
- 
+
             TKqpKeyRanges ranges = MakeComputedKeyRanges(readTableRanges, ctx, buildCtx);
 
-            return ctx.PgmBuilder().KqpWideReadTableRanges( 
-                MakeTableId(readTableRanges.Table()), 
-                ranges, 
-                GetKqpColumns(tableMeta, readTableRanges.Columns(), true), 
-                nullptr 
-            ); 
-        }); 
- 
-    compiler->AddCallable(TKqpWideReadOlapTableRanges::CallableName(), 
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) { 
-            TKqpWideReadOlapTableRanges readTable(&node); 
- 
+            return ctx.PgmBuilder().KqpWideReadTableRanges(
+                MakeTableId(readTableRanges.Table()),
+                ranges,
+                GetKqpColumns(tableMeta, readTableRanges.Columns(), true),
+                nullptr
+            );
+        });
+
+    compiler->AddCallable(TKqpWideReadOlapTableRanges::CallableName(),
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            TKqpWideReadOlapTableRanges readTable(&node);
+
             const auto& tableMeta = ctx.GetTableMeta(readTable.Table());
             ValidateRangesType(readTable.Ranges().Ref().GetTypeAnn(), tableMeta);
 
-            TKqpKeyRanges ranges = MakeComputedKeyRanges(readTable, ctx, buildCtx); 
+            TKqpKeyRanges ranges = MakeComputedKeyRanges(readTable, ctx, buildCtx);
 
             // Return type depends on the process program, so it is built explicitly.
             TStringStream errorStream;
@@ -259,12 +259,12 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             // the process program through callable.
             // We anyway move to explicit sources as external nodes in KQP program, so all the information
             // about read settings will be passed in a side channel, not the program.
-            auto result = ctx.PgmBuilder().KqpWideReadTableRanges( 
-                MakeTableId(readTable.Table()), 
-                ranges, 
-                GetKqpColumns(tableMeta, readTable.Columns(), true), 
-                returnType 
-            ); 
+            auto result = ctx.PgmBuilder().KqpWideReadTableRanges(
+                MakeTableId(readTable.Table()),
+                ranges,
+                GetKqpColumns(tableMeta, readTable.Columns(), true),
+                returnType
+            );
 
             return result;
         });

@@ -46,10 +46,10 @@ bool IsKqpPureLambda(const TCoLambda& lambda) {
             return true;
         }
 
-        if (TMaybeNode<TKqlReadTableRangesBase>(node)) { 
-            return true; 
-        } 
- 
+        if (TMaybeNode<TKqlReadTableRangesBase>(node)) {
+            return true;
+        }
+
         if (TMaybeNode<TKqlLookupTableBase>(node)) {
             return true;
         }

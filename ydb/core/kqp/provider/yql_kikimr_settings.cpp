@@ -4,27 +4,27 @@ namespace NYql {
 
 using namespace NCommon;
 
-namespace { 
- 
-template <typename TType> 
-EOptionalFlag GetOptionalFlagValue(const TMaybe<TType>& flag) { 
-    if (!flag) { 
-        return EOptionalFlag::Auto; 
-    } 
- 
-    if (flag.GetRef()) { 
-        return EOptionalFlag::Enabled; 
-    } 
- 
-    return EOptionalFlag::Disabled; 
-} 
- 
-static inline bool GetFlagValue(const TMaybe<bool>& flag) { 
+namespace {
+
+template <typename TType>
+EOptionalFlag GetOptionalFlagValue(const TMaybe<TType>& flag) {
+    if (!flag) {
+        return EOptionalFlag::Auto;
+    }
+
+    if (flag.GetRef()) {
+        return EOptionalFlag::Enabled;
+    }
+
+    return EOptionalFlag::Disabled;
+}
+
+static inline bool GetFlagValue(const TMaybe<bool>& flag) {
     return flag ? flag.GetRef() : false;
 }
 
-} // anonymous namespace end 
- 
+} // anonymous namespace end
+
 TKikimrConfiguration::TKikimrConfiguration() {
     /* KQP */
     REGISTER_SETTING(*this, _KqpQueryTimeoutSec);
@@ -46,7 +46,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpEnableSpilling);
     REGISTER_SETTING(*this, _KqpDisableLlvmForUdfStages);
     REGISTER_SETTING(*this, _KqpPushOlapProcess);
-    REGISTER_SETTING(*this, KqpPushOlapProcess); 
+    REGISTER_SETTING(*this, KqpPushOlapProcess);
 
     /* Compile time */
     REGISTER_SETTING(*this, _CommitPerShardKeysSizeLimitBytes);
@@ -59,7 +59,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UnwrapReadTableValues);
     REGISTER_SETTING(*this, AllowNullCompareInIndex);
     REGISTER_SETTING(*this, EnableSystemColumns);
-    REGISTER_SETTING(*this, EnableLlvm); 
+    REGISTER_SETTING(*this, EnableLlvm);
 
     REGISTER_SETTING(*this, OptDisableJoinRewrite);
     REGISTER_SETTING(*this, OptDisableJoinTableLookup);
@@ -68,7 +68,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptDisableTopSort);
     REGISTER_SETTING(*this, OptDisableSqlInToJoin);
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
-    REGISTER_SETTING(*this, OptEnablePredicateExtract); 
+    REGISTER_SETTING(*this, OptEnablePredicateExtract);
 
     /* Runtime */
     REGISTER_SETTING(*this, _RestrictModifyPermissions);
@@ -124,21 +124,21 @@ bool TKikimrSettings::DisableLlvmForUdfStages() const {
 }
 
 bool TKikimrSettings::PushOlapProcess() const {
-    auto settingsFlag = GetFlagValue(_KqpPushOlapProcess.Get()); 
-    auto runtimeFlag = GetFlagValue(KqpPushOlapProcess.Get()); 
- 
-    // There are no settings or it set to False, but pragma enable pushdown 
-    if (!settingsFlag && runtimeFlag) { 
-        return true; 
-    } 
- 
-    // Settings are set to True but no pragma present - enable pushdown 
-    if (settingsFlag && !KqpPushOlapProcess.Get()) { 
-        return true; 
-    } 
- 
-    // Other cases handled by AND 
-    return settingsFlag && runtimeFlag; 
+    auto settingsFlag = GetFlagValue(_KqpPushOlapProcess.Get());
+    auto runtimeFlag = GetFlagValue(KqpPushOlapProcess.Get());
+
+    // There are no settings or it set to False, but pragma enable pushdown
+    if (!settingsFlag && runtimeFlag) {
+        return true;
+    }
+
+    // Settings are set to True but no pragma present - enable pushdown
+    if (settingsFlag && !KqpPushOlapProcess.Get()) {
+        return true;
+    }
+
+    // Other cases handled by AND
+    return settingsFlag && runtimeFlag;
 }
 
 bool TKikimrSettings::HasOptDisableJoinRewrite() const {
@@ -169,14 +169,14 @@ bool TKikimrSettings::HasOptEnableInplaceUpdate() const {
     return GetFlagValue(OptEnableInplaceUpdate.Get());
 }
 
-EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const { 
-    return GetOptionalFlagValue(OptEnablePredicateExtract.Get()); 
-} 
- 
-EOptionalFlag TKikimrSettings::GetEnableLlvm() const { 
-    return GetOptionalFlagValue(EnableLlvm.Get()); 
-} 
- 
+EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const {
+    return GetOptionalFlagValue(OptEnablePredicateExtract.Get());
+}
+
+EOptionalFlag TKikimrSettings::GetEnableLlvm() const {
+    return GetOptionalFlagValue(EnableLlvm.Get());
+}
+
 TKikimrSettings::TConstPtr TKikimrConfiguration::Snapshot() const {
     return std::make_shared<const TKikimrSettings>(*this);
 }

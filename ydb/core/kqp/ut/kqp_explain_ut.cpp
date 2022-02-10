@@ -48,11 +48,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(Explain) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
-        TStreamExecScanQuerySettings settings; 
+        auto db = kikimr.GetTableClient();
+        TStreamExecScanQuerySettings settings;
         settings.Explain(true);
 
-        auto it = db.StreamExecuteScanQuery(R"( 
+        auto it = db.StreamExecuteScanQuery(R"(
             SELECT count(*) FROM `/Root/EightShard` AS t JOIN `/Root/KeyValue` AS kv ON t.Data = kv.Key;
         )", settings).GetValueSync();
 
@@ -118,11 +118,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(AggGroupLimit) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
-        TStreamExecScanQuerySettings settings; 
+        auto db = kikimr.GetTableClient();
+        TStreamExecScanQuerySettings settings;
         settings.Explain(true);
 
-        auto it = db.StreamExecuteScanQuery(R"( 
+        auto it = db.StreamExecuteScanQuery(R"(
             SELECT min(Message), max(Message) FROM `/Root/Logs` WHERE Ts > 1 and Ts <= 4 or App="ydb" GROUP BY App;
         )", settings).GetValueSync();
 
@@ -152,11 +152,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
     Y_UNIT_TEST(ComplexJoin) {
         TKikimrRunner kikimr;
         CreateSampleTables(kikimr);
-        auto db = kikimr.GetTableClient(); 
-        TStreamExecScanQuerySettings settings; 
+        auto db = kikimr.GetTableClient();
+        TStreamExecScanQuerySettings settings;
         settings.Explain(true);
 
-        auto it = db.StreamExecuteScanQuery(R"( 
+        auto it = db.StreamExecuteScanQuery(R"(
             $join = (
                 SELECT l.Key as Key, l.Text as Text, l.Data as Data, r.Value1 as Value1, r.Value2 as Value2
                 FROM `/Root/EightShard` AS l JOIN `/Root/FourShard` AS r ON l.Key = r.Key
@@ -176,11 +176,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
-        auto join = FindPlanNodeByKv( 
-            plan, 
-            "Node Type", 
+        auto join = FindPlanNodeByKv(
+            plan,
+            "Node Type",
             "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan"
-        ); 
+        );
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -190,11 +190,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(PrecomputeRange) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
-        TStreamExecScanQuerySettings settings; 
+        auto db = kikimr.GetTableClient();
+        TStreamExecScanQuerySettings settings;
         settings.Explain(true);
 
-        auto it = db.StreamExecuteScanQuery(R"( 
+        auto it = db.StreamExecuteScanQuery(R"(
             SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4;
         )", settings).GetValueSync();
 
@@ -218,12 +218,12 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(CompoundKeyRange) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
-        TStreamExecScanQuerySettings settings; 
+        auto db = kikimr.GetTableClient();
+        TStreamExecScanQuerySettings settings;
         settings.Explain(true);
 
-        auto it = db.StreamExecuteScanQuery(R"( 
-            PRAGMA Kikimr.OptEnablePredicateExtract = "false"; 
+        auto it = db.StreamExecuteScanQuery(R"(
+            PRAGMA Kikimr.OptEnablePredicateExtract = "false";
             SELECT * FROM `/Root/Logs` WHERE App = "new_app_1" AND Host < "xyz" AND Ts = (42+7) Limit 10;
         )", settings).GetValueSync();
 
@@ -246,11 +246,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(SortStage) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
-        TStreamExecScanQuerySettings settings; 
+        auto db = kikimr.GetTableClient();
+        TStreamExecScanQuerySettings settings;
         settings.Explain(true);
 
-        auto it = db.StreamExecuteScanQuery(R"( 
+        auto it = db.StreamExecuteScanQuery(R"(
             SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Text;
         )", settings).GetValueSync();
 
@@ -261,18 +261,18 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
- 
+
         auto scanSort = FindPlanNodeByKv(plan, "Node Type", "Sort-TableRangesScan");
         UNIT_ASSERT(scanSort.IsDefined());
     }
 
     Y_UNIT_TEST(LimitOffset) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
-        TStreamExecScanQuerySettings settings; 
+        auto db = kikimr.GetTableClient();
+        TStreamExecScanQuerySettings settings;
         settings.Explain(true);
 
-        auto it = db.StreamExecuteScanQuery(R"( 
+        auto it = db.StreamExecuteScanQuery(R"(
             SELECT * FROM `/Root/EightShard` ORDER BY Text LIMIT 10 OFFSET 15;
         )", settings).GetValueSync();
 
@@ -292,11 +292,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(SelfJoin3xSameLabels) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
-        TStreamExecScanQuerySettings settings; 
+        auto db = kikimr.GetTableClient();
+        TStreamExecScanQuerySettings settings;
         settings.Explain(true);
 
-        auto it = db.StreamExecuteScanQuery(R"( 
+        auto it = db.StreamExecuteScanQuery(R"(
             $foo = (
                 SELECT t1.Key AS Key
                 FROM `/Root/KeyValue` AS t1
@@ -327,11 +327,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(PureExpr) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
-        TStreamExecScanQuerySettings settings; 
+        auto db = kikimr.GetTableClient();
+        TStreamExecScanQuerySettings settings;
         settings.Explain(true);
 
-        auto it = db.StreamExecuteScanQuery(R"( 
+        auto it = db.StreamExecuteScanQuery(R"(
             SELECT 1,2,3 UNION ALL SELECT 4,5,6;
         )", settings).GetValueSync();
 
@@ -354,11 +354,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         spilling->SetRoot("./spilling/");
         TKikimrRunner kikimr(appCfg);
 
-        auto db = kikimr.GetTableClient(); 
-        TStreamExecScanQuerySettings settings; 
+        auto db = kikimr.GetTableClient();
+        TStreamExecScanQuerySettings settings;
         settings.Explain(true);
 
-        auto it = db.StreamExecuteScanQuery(R"( 
+        auto it = db.StreamExecuteScanQuery(R"(
             select count(*) from `/Root/KeyValue` AS t1 join `/Root/KeyValue` AS t2 on t1.Key = t2.Key;
         )", settings).GetValueSync();
 
@@ -385,19 +385,19 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(SqlIn) {
         TKikimrRunner kikimr;
-        CreateSampleTables(kikimr); 
- 
-        TStreamExecScanQuerySettings settings; 
+        CreateSampleTables(kikimr);
+
+        TStreamExecScanQuerySettings settings;
         settings.Explain(true);
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
 
         auto query = R"(
-                PRAGMA Kikimr.OptEnablePredicateExtract = "false"; 
+                PRAGMA Kikimr.OptEnablePredicateExtract = "false";
                 SELECT Key, Value FROM `/Root/KeyValue` WHERE Key IN (1, 2, 3, 42)
                 ORDER BY Key
             )";
 
-        auto it = db.StreamExecuteScanQuery(query, settings).GetValueSync(); 
+        auto it = db.StreamExecuteScanQuery(query, settings).GetValueSync();
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         UNIT_ASSERT(res.PlanJson);
@@ -527,12 +527,12 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
     Y_UNIT_TEST(FullOuterJoin) {
         TKikimrRunner kikimr;
         CreateSampleTables(kikimr);
- 
-        TStreamExecScanQuerySettings settings; 
-        settings.Explain(true);
-        auto db = kikimr.GetTableClient(); 
 
-        auto it = db.StreamExecuteScanQuery(R"( 
+        TStreamExecScanQuerySettings settings;
+        settings.Explain(true);
+        auto db = kikimr.GetTableClient();
+
+        auto it = db.StreamExecuteScanQuery(R"(
             SELECT l.Key, l.Text, l.Data, r.Value1, r.Value2
             FROM `/Root/EightShard` AS l FULL OUTER JOIN `/Root/FourShard` AS r
             ON l.Key = r.Key
@@ -555,76 +555,76 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(ReadTableRangesFullScan) {
         TKikimrRunner kikimr;
-        TStreamExecScanQuerySettings settings; 
+        TStreamExecScanQuerySettings settings;
         settings.Explain(true);
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto res = session.ExecuteSchemeQuery(R"( 
-            CREATE TABLE `/Root/TwoKeys` ( 
-                Key1 Int32, 
-                Key2 Int32, 
-                Value Int32, 
-                PRIMARY KEY (Key1, Key2) 
-            ); 
-        )").GetValueSync(); 
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString()); 
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TwoKeys` (
+                Key1 Int32,
+                Key2 Int32,
+                Value Int32,
+                PRIMARY KEY (Key1, Key2)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
-        auto result = session.ExecuteDataQuery(R"( 
-            REPLACE INTO `TwoKeys` (Key1, Key2, Value) VALUES 
-                (1, 1, 1), 
-                (2, 1, 2), 
-                (3, 2, 3), 
-                (4, 2, 4), 
-                (1000, 100, 5), 
-                (1001, 101, 6), 
-                (1002, 102, 7), 
-                (1003, 103, 8); 
-        )", TTxControl::BeginTx().CommitTx()).GetValueSync(); 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+        auto result = session.ExecuteDataQuery(R"(
+            REPLACE INTO `TwoKeys` (Key1, Key2, Value) VALUES
+                (1, 1, 1),
+                (2, 1, 2),
+                (3, 2, 3),
+                (4, 2, 4),
+                (1000, 100, 5),
+                (1001, 101, 6),
+                (1002, 102, 7),
+                (1003, 103, 8);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        TVector<std::pair<TString, TString>> testData = { 
-            { 
-                "SELECT * FROM `/Root/TwoKeys`;", 
-                "TableFullScan" 
-            }, 
-            { 
-                "SELECT * FROM `/Root/TwoKeys` WHERE Key2 > 101;", 
+        TVector<std::pair<TString, TString>> testData = {
+            {
+                "SELECT * FROM `/Root/TwoKeys`;",
+                "TableFullScan"
+            },
+            {
+                "SELECT * FROM `/Root/TwoKeys` WHERE Key2 > 101;",
                 "Filter-TableFullScan"
-            } 
-        }; 
+            }
+        };
 
-        for (auto& data: testData) { 
-            auto it = db.StreamExecuteScanQuery(data.first, settings).GetValueSync(); 
- 
-            auto res = CollectStreamResult(it); 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-            UNIT_ASSERT(res.PlanJson); 
- 
-            NJson::TJsonValue plan; 
-            NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
- 
-            auto read = FindPlanNodeByKv(plan, "Node Type", data.second); 
-            UNIT_ASSERT(read.IsDefined()); 
- 
-            auto rangesKeys = FindPlanNodeByKv(plan, "ReadRangesKeys", "[]"); 
-            UNIT_ASSERT(!rangesKeys.IsDefined()); 
- 
-            auto expected = FindPlanNodeByKv(plan, "ReadRangesExpectedSize", ""); 
-            UNIT_ASSERT(!expected.IsDefined()); 
-        } 
+        for (auto& data: testData) {
+            auto it = db.StreamExecuteScanQuery(data.first, settings).GetValueSync();
+
+            auto res = CollectStreamResult(it);
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            UNIT_ASSERT(res.PlanJson);
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+
+            auto read = FindPlanNodeByKv(plan, "Node Type", data.second);
+            UNIT_ASSERT(read.IsDefined());
+
+            auto rangesKeys = FindPlanNodeByKv(plan, "ReadRangesKeys", "[]");
+            UNIT_ASSERT(!rangesKeys.IsDefined());
+
+            auto expected = FindPlanNodeByKv(plan, "ReadRangesExpectedSize", "");
+            UNIT_ASSERT(!expected.IsDefined());
+        }
     }
 
     Y_UNIT_TEST(ReadTableRanges) {
         TKikimrRunner kikimr;
         CreateSampleTables(kikimr);
- 
-        TStreamExecScanQuerySettings settings; 
-        settings.Explain(true);
-        auto db = kikimr.GetTableClient(); 
 
-        auto it = db.StreamExecuteScanQuery(R"( 
+        TStreamExecScanQuerySettings settings;
+        settings.Explain(true);
+        auto db = kikimr.GetTableClient();
+
+        auto it = db.StreamExecuteScanQuery(R"(
             SELECT * FROM `/Root/KeyValue`
             WHERE Key >= 2000 OR Key < 100;
         )", settings).GetValueSync();
@@ -638,10 +638,10 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto read = FindPlanNodeByKv(plan, "Node Type", "TableRangesScan");
         UNIT_ASSERT(read.IsDefined());
-        auto keys = FindPlanNodeByKv(plan, "ReadRangesKeys", "[\"Key\"]"); 
-        UNIT_ASSERT(keys.IsDefined()); 
-        auto count = FindPlanNodeByKv(plan, "ReadRangesExpectedSize", "2"); 
-        UNIT_ASSERT(count.IsDefined()); 
+        auto keys = FindPlanNodeByKv(plan, "ReadRangesKeys", "[\"Key\"]");
+        UNIT_ASSERT(keys.IsDefined());
+        auto count = FindPlanNodeByKv(plan, "ReadRangesExpectedSize", "2");
+        UNIT_ASSERT(count.IsDefined());
     }
 
     Y_UNIT_TEST(Predicates) {

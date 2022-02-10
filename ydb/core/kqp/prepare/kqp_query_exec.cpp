@@ -459,9 +459,9 @@ void TKqlTransformContext::AddMkqlStats(const TString& program, NKikimrQueryStat
     ExtractQueryStats(QueryStats, txStats);
 }
 
-IKqpGateway::TMkqlSettings TKqlTransformContext::GetMkqlSettings(bool hasDataEffects, TInstant now) const { 
+IKqpGateway::TMkqlSettings TKqlTransformContext::GetMkqlSettings(bool hasDataEffects, TInstant now) const {
     IKqpGateway::TMkqlSettings mkqlSettings;
-    mkqlSettings.LlvmRuntime = false; 
+    mkqlSettings.LlvmRuntime = false;
     mkqlSettings.CollectStats = QueryCtx->StatsMode >= EKikimrStatsMode::Basic;
 
     if (hasDataEffects) {

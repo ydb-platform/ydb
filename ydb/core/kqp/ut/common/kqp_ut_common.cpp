@@ -754,7 +754,7 @@ NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString&
         }
     } else if (plan.IsMap()) {
         auto map = plan.GetMap();
-        if (map.contains(key) && map.at(key).GetStringRobust() == value) { 
+        if (map.contains(key) && map.at(key).GetStringRobust() == value) {
             return plan;
         }
         if (map.contains("Plans")) {

@@ -44,10 +44,10 @@ public:
         AddHandler(0, &TCoLMap::Match, HNDL(PushLMapToStage<false>));
         // (Apply (SqlExternalFunction ..) ..) to stage
         AddHandler(0, &TCoApply::Match, HNDL(BuildExtFunctionStage<false>));
-#if 0 
-        AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems)); 
-        AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute)); 
-#endif 
+#if 0
+        AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
+        AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute));
+#endif
 
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
@@ -296,12 +296,12 @@ protected:
 
     TMaybeNode<TExprBase> BuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
         return DqBuildHasItems(node, ctx, optCtx);
-    } 
- 
+    }
+
     TMaybeNode<TExprBase> BuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
         return DqBuildScalarPrecompute(node, ctx, optCtx);
-    } 
- 
+    }
+
 private:
     bool JoinPrerequisitesVerify(TDqJoin join, const TParentsMap* parentsMap, bool isGlobal) const {
         // KqpBuildJoin copy/paste

@@ -33,13 +33,13 @@ struct TKqpKeyRange {
     bool Reverse = false;
 };
 
-struct TKqpKeyRanges { 
-    TRuntimeNode Ranges; 
-    TSmallVec<bool> SkipNullKeys; 
-    TRuntimeNode ItemsLimit; 
-    bool Reverse = false; 
-}; 
- 
+struct TKqpKeyRanges {
+    TRuntimeNode Ranges;
+    TSmallVec<bool> SkipNullKeys;
+    TRuntimeNode ItemsLimit;
+    bool Reverse = false;
+};
+
 class TKqpProgramBuilder: public TProgramBuilder {
 public:
     TKqpProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry);
@@ -50,9 +50,9 @@ public:
     TRuntimeNode KqpWideReadTable(const TTableId& tableId, const TKqpKeyRange& range,
         const TArrayRef<TKqpTableColumn>& columns);
 
-    TRuntimeNode KqpWideReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& range, 
-        const TArrayRef<TKqpTableColumn>& columns, TType* returnType); 
- 
+    TRuntimeNode KqpWideReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& range,
+        const TArrayRef<TKqpTableColumn>& columns, TType* returnType);
+
     TRuntimeNode KqpLookupTable(const TTableId& tableId, const TRuntimeNode& lookupKeys,
         const TArrayRef<TKqpTableColumn>& keyColumns, const TArrayRef<TKqpTableColumn>& columns);
 

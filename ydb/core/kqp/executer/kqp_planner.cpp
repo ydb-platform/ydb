@@ -24,7 +24,7 @@ constexpr ui32 MEMORY_ESTIMATION_OVERFLOW = 2;
 TKqpPlanner::TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::TDqTask>&& tasks,
     THashMap<ui64, TVector<NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TMaybe<TString>& userToken, TInstant deadline, const NYql::NDqProto::EDqStatsMode& statsMode,
-    bool disableLlvmForUdfStages, bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath) 
+    bool disableLlvmForUdfStages, bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath)
     : TxId(txId)
     , ExecuterId(executer)
     , Tasks(std::move(tasks))
@@ -35,7 +35,7 @@ TKqpPlanner::TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::
     , Deadline(deadline)
     , StatsMode(statsMode)
     , DisableLlvmForUdfStages(disableLlvmForUdfStages)
-    , EnableLlvm(enableLlvm) 
+    , EnableLlvm(enableLlvm)
     , WithSpilling(withSpilling)
     , RlPath(rlPath)
 {
@@ -234,7 +234,7 @@ THolder<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::PrepareKqpNodeRequest(
     ev->Record.SetTxId(TxId);
     ActorIdToProto(ExecuterId, ev->Record.MutableExecuterActorId());
 
-    bool withLLVM = EnableLlvm; 
+    bool withLLVM = EnableLlvm;
 
     if (taskIds.empty()) {
         for (auto& taskDesc : Tasks) {
@@ -319,10 +319,10 @@ ui32 TKqpPlanner::CalcSendMessageFlagsForNode(ui32 nodeId) {
 IActor* CreateKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::TDqTask>&& tasks,
     THashMap<ui64, TVector<NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TMaybe<TString>& token, TInstant deadline, const NYql::NDqProto::EDqStatsMode& statsMode,
-    bool disableLlvmForUdfStages, bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath) 
+    bool disableLlvmForUdfStages, bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath)
 {
     return new TKqpPlanner(txId, executer, std::move(tasks), std::move(scanTasks), snapshot,
-        database, token, deadline, statsMode, disableLlvmForUdfStages, enableLlvm, withSpilling, rlPath); 
+        database, token, deadline, statsMode, disableLlvmForUdfStages, enableLlvm, withSpilling, rlPath);
 }
 
 } // namespace NKikimr::NKqp

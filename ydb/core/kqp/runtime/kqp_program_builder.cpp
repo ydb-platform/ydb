@@ -93,11 +93,11 @@ TRuntimeNode BuildKeyRangeNode(TProgramBuilder& builder, const TKqpKeyRange& ran
     return builder.NewTuple(rangeItems);
 }
 
-TRuntimeNode BuildKeyRangesNode(TProgramBuilder& builder, const TKqpKeyRanges& range) { 
-    TVector<TRuntimeNode> rangeItems{range.Ranges}; 
-    return builder.NewTuple(rangeItems); 
-} 
- 
+TRuntimeNode BuildKeyRangesNode(TProgramBuilder& builder, const TKqpKeyRanges& range) {
+    TVector<TRuntimeNode> rangeItems{range.Ranges};
+    return builder.NewTuple(rangeItems);
+}
+
 TRuntimeNode BuildSkipNullKeysNode(TProgramBuilder& builder, const TKqpKeyRange& range) {
     TListLiteralBuilder skipNullKeysBuilder(
         builder.GetTypeEnvironment(),
@@ -142,12 +142,12 @@ TRuntimeNode TKqpProgramBuilder::KqpReadTable(const TTableId& tableId, const TKq
 }
 
 TRuntimeNode TKqpProgramBuilder::KqpWideReadTable(const TTableId& tableId, const TKqpKeyRange& range,
-    const TArrayRef<TKqpTableColumn>& columns) 
+    const TArrayRef<TKqpTableColumn>& columns)
 {
-    auto rowType = GetRowType(*this, columns); 
-    auto structType = AS_TYPE(TStructType, rowType); 
-    auto returnType = MakeWideFlowType(*this, structType); 
- 
+    auto rowType = GetRowType(*this, columns);
+    auto structType = AS_TYPE(TStructType, rowType);
+    auto returnType = MakeWideFlowType(*this, structType);
+
     MKQL_ENSURE_S(returnType);
     MKQL_ENSURE_S(returnType->IsFlow());
     const auto itemType = AS_TYPE(TFlowType, returnType)->GetItemType();
@@ -164,30 +164,30 @@ TRuntimeNode TKqpProgramBuilder::KqpWideReadTable(const TTableId& tableId, const
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TKqpProgramBuilder::KqpWideReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& ranges, 
-    const TArrayRef<TKqpTableColumn>& columns, TType* returnType) 
-{ 
-    if (returnType == nullptr) { 
-        auto rowType = GetRowType(*this, columns); 
-        auto structType = AS_TYPE(TStructType, rowType); 
-        returnType = MakeWideFlowType(*this, structType); 
-    } else { 
-        MKQL_ENSURE_S(returnType); 
-        MKQL_ENSURE_S(returnType->IsFlow()); 
-        const auto itemType = AS_TYPE(TFlowType, returnType)->GetItemType(); 
-        MKQL_ENSURE_S(itemType->IsTuple()); 
-    } 
- 
-    TCallableBuilder builder(Env, __func__, returnType); 
-    builder.Add(BuildTableIdLiteral(tableId, *this)); 
-    builder.Add(BuildKeyRangesNode(*this, ranges)); 
-    builder.Add(BuildColumnTags(*this, columns)); 
-    builder.Add(ranges.ItemsLimit); 
-    builder.Add(NewDataLiteral(ranges.Reverse)); 
- 
-    return TRuntimeNode(builder.Build(), false); 
-} 
- 
+TRuntimeNode TKqpProgramBuilder::KqpWideReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& ranges,
+    const TArrayRef<TKqpTableColumn>& columns, TType* returnType)
+{
+    if (returnType == nullptr) {
+        auto rowType = GetRowType(*this, columns);
+        auto structType = AS_TYPE(TStructType, rowType);
+        returnType = MakeWideFlowType(*this, structType);
+    } else {
+        MKQL_ENSURE_S(returnType);
+        MKQL_ENSURE_S(returnType->IsFlow());
+        const auto itemType = AS_TYPE(TFlowType, returnType)->GetItemType();
+        MKQL_ENSURE_S(itemType->IsTuple());
+    }
+
+    TCallableBuilder builder(Env, __func__, returnType);
+    builder.Add(BuildTableIdLiteral(tableId, *this));
+    builder.Add(BuildKeyRangesNode(*this, ranges));
+    builder.Add(BuildColumnTags(*this, columns));
+    builder.Add(ranges.ItemsLimit);
+    builder.Add(NewDataLiteral(ranges.Reverse));
+
+    return TRuntimeNode(builder.Build(), false);
+}
+
 TRuntimeNode TKqpProgramBuilder::KqpLookupTable(const TTableId& tableId, const TRuntimeNode& lookupKeys,
     const TArrayRef<TKqpTableColumn>& keyColumns, const TArrayRef<TKqpTableColumn>& columns)
 {

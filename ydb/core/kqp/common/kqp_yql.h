@@ -54,7 +54,7 @@ struct TKqpReadTableSettings {
     void SetReverse() { Reverse = true; }
 
     static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableBase& node);
-    static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableRangesBase& node); 
+    static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableRangesBase& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 
@@ -69,25 +69,25 @@ struct TKqpUpsertRowsSettings {
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 
-struct TKqpReadTableExplainPrompt { 
-    static constexpr TStringBuf UsedKeyColumnsName = "UsedKeyColumns"; 
-    static constexpr TStringBuf ExpectedMaxRangesName = "ExpectedMaxRanges"; 
- 
-    TVector<TString> UsedKeyColumns; 
-    TString ExpectedMaxRanges; 
- 
-    void SetUsedKeyColumns(TVector<TString> columns) { 
-        UsedKeyColumns = columns; 
-    } 
- 
-    void SetExpectedMaxRanges(size_t count) { 
-        ExpectedMaxRanges = ToString(count); 
-    } 
- 
-    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const; 
-    static TKqpReadTableExplainPrompt Parse(const NNodes::TKqlReadTableRangesBase& node); 
-}; 
- 
+struct TKqpReadTableExplainPrompt {
+    static constexpr TStringBuf UsedKeyColumnsName = "UsedKeyColumns";
+    static constexpr TStringBuf ExpectedMaxRangesName = "ExpectedMaxRanges";
+
+    TVector<TString> UsedKeyColumns;
+    TString ExpectedMaxRanges;
+
+    void SetUsedKeyColumns(TVector<TString> columns) {
+        UsedKeyColumns = columns;
+    }
+
+    void SetExpectedMaxRanges(size_t count) {
+        ExpectedMaxRanges = ToString(count);
+    }
+
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
+    static TKqpReadTableExplainPrompt Parse(const NNodes::TKqlReadTableRangesBase& node);
+};
+
 TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx);
 TString KqpExprToPrettyString(const NNodes::TExprBase& expr, TExprContext& ctx);
 

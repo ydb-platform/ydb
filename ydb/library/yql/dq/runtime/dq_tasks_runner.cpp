@@ -352,7 +352,7 @@ public:
 
         auto paramNode = ProgramParsed.CompGraph->GetEntryPoint(programInputsCount, /* require */ false);
         if (paramNode) {
-            // TODO: Remove serialized parameters that are used in OLAP program and not used in current program 
+            // TODO: Remove serialized parameters that are used in OLAP program and not used in current program
             const auto& graphHolderFactory = ProgramParsed.CompGraph->GetHolderFactory();
             NUdf::TUnboxedValue* structMembers;
             auto paramsStructValue = graphHolderFactory.CreateDirectArrayHolder(paramsCount, structMembers);
@@ -377,11 +377,11 @@ public:
 
             paramNode->SetValue(ProgramParsed.CompGraph->GetContext(), std::move(paramsStructValue));
         } else {
-            /* 
-             * This situation is ok, when there are OLAP parameters only. There is no parameter node 
-             * because there is no parameters in program. But there are parameters in paramsStruct, they are 
-             * serialized somewhere before in executor. 
-             */ 
+            /*
+             * This situation is ok, when there are OLAP parameters only. There is no parameter node
+             * because there is no parameters in program. But there are parameters in paramsStruct, they are
+             * serialized somewhere before in executor.
+             */
         }
 
         auto buildTime = TInstant::Now() - startTime;

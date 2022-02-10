@@ -127,31 +127,31 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus JoinDictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) { 
-        Y_UNUSED(output); 
- 
+    IGraphTransformer::TStatus JoinDictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+
         if (!EnsureMinMaxArgsCount(*input, 3U, 4U, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
+            return IGraphTransformer::TStatus::Error;
+        }
+
         const auto& left = input->Head();
         const auto& right = *input->Child(1U);
         const auto& kind = *input->Child(2U);
 
         if (!EnsureDictType(left, ctx.Expr) || !EnsureDictType(right, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (!EnsureAtom(kind, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
+            return IGraphTransformer::TStatus::Error;
+        }
+
         bool leftUnique = false, rightUnique = false;
         if (input->ChildrenSize() > 3U) {
             if (!EnsureTupleOfAtoms(input->Tail(), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
- 
+
             bool hasUnknown = false;
             input->Tail().ForEachChild([&](const TExprNode& flag) {
                 if (const auto& content = flag.Content(); content == "LeftUnique")
@@ -166,7 +166,7 @@ namespace NTypeAnnImpl {
             if (hasUnknown)
                 return IGraphTransformer::TStatus::Error;
         }
- 
+
         const auto keyType = left.GetTypeAnn()->Cast<TDictExprType>()->GetKeyType();
         if (const auto rightKeyType = right.GetTypeAnn()->Cast<TDictExprType>()->GetKeyType(); !IsSameAnnotation(*keyType, *rightKeyType)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Mismatch dict key types: " << *keyType << " and " << *rightKeyType));
@@ -209,31 +209,31 @@ namespace NTypeAnnImpl {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(right.Pos()), TStringBuilder() << "Expected multi dict on right side but got " << *right.GetTypeAnn()));
                 return IGraphTransformer::TStatus::Error;
             }
- 
+
             TTypeAnnotationNode::TListType tupleItems = {
                 leftUnique ? leftPayloadType : leftPayloadType->Cast<TListExprType>()->GetItemType(),
                 rightUnique ? rightPayloadType : rightPayloadType->Cast<TListExprType>()->GetItemType()
             };
- 
+
             if (joinKind == "Right" || joinKind == "Full" || joinKind == "Exclusion") {
                 tupleItems.front() = ctx.Expr.MakeType<TOptionalExprType>(tupleItems.front());
             }
             if (joinKind == "Left" || joinKind == "Full" || joinKind == "Exclusion") {
                 tupleItems.back() = ctx.Expr.MakeType<TOptionalExprType>(tupleItems.back());
             }
- 
+
             outputItemType = ctx.Expr.MakeType<TTupleExprType>(tupleItems);
         } else {
             ctx.Expr.AddError(
                 TIssue(ctx.Expr.GetPosition(kind.Pos()), TStringBuilder() << "Unsupported join kind: " << joinKind)
             );
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
+            return IGraphTransformer::TStatus::Error;
+        }
+
         input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(outputItemType));
-        return IGraphTransformer::TStatus::Ok; 
-    } 
- 
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus EquiJoinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureMinArgsCount(*input, 4, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;

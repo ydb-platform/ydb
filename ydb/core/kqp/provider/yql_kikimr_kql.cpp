@@ -1166,7 +1166,7 @@ TKiProgram BuildKiProgram(TKiDataQuery query, const TKikimrTablesData& tablesDat
 }
 
 TExprBase UnwrapKiReadTableValues(TExprBase input, const TKikimrTableDescription& tableDesc,
-    const TCoAtomList columns, TExprContext& ctx) 
+    const TCoAtomList columns, TExprContext& ctx)
 {
     TCoArgument itemArg = Build<TCoArgument>(ctx, input.Pos())
         .Name("item")

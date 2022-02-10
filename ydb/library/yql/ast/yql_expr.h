@@ -2555,7 +2555,7 @@ struct TConvertToAstSettings {
     ui32 AnnotationFlags = 0;
     bool RefAtoms = false;
     std::function<bool(const TExprNode&)> NoInlineFunc;
-    bool PrintArguments = false; 
+    bool PrintArguments = false;
 };
 
 TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings);

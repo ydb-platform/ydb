@@ -178,20 +178,20 @@ TVector<TDqConnection> FindDqConnections(const TExprBase& node) {
 }
 
 bool IsDqPureExpr(const TExprBase& node, bool isPrecomputePure) {
-    auto filter = [](const TExprNode::TPtr& node) { 
-        return !TMaybeNode<TDqPhyPrecompute>(node).IsValid(); 
-    }; 
- 
-    auto predicate = [](const TExprNode::TPtr& node) { 
-        return TMaybeNode<TDqSource>(node).IsValid() || 
-               TMaybeNode<TDqConnection>(node).IsValid(); 
-    }; 
- 
+    auto filter = [](const TExprNode::TPtr& node) {
+        return !TMaybeNode<TDqPhyPrecompute>(node).IsValid();
+    };
+
+    auto predicate = [](const TExprNode::TPtr& node) {
+        return TMaybeNode<TDqSource>(node).IsValid() ||
+               TMaybeNode<TDqConnection>(node).IsValid();
+    };
+
     if (isPrecomputePure) {
-        return !FindNode(node.Ptr(), filter, predicate); 
-    } 
- 
-    return !FindNode(node.Ptr(), predicate); 
+        return !FindNode(node.Ptr(), filter, predicate);
+    }
+
+    return !FindNode(node.Ptr(), predicate);
 }
 
 bool IsDqDependsOnStage(const TExprBase& node, const TDqStageBase& stage) {

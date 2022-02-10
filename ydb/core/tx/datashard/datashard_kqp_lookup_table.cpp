@@ -72,7 +72,7 @@ TParseLookupTableResult ParseLookupTable(TCallable& callable) {
         }
     }
 
-    ParseReadColumns(callable.GetType()->GetReturnType(), tagsNode, result.Columns, result.SystemColumns); 
+    ParseReadColumns(callable.GetType()->GetReturnType(), tagsNode, result.Columns, result.SystemColumns);
 
     return result;
 }

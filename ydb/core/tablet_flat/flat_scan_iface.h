@@ -18,13 +18,13 @@ namespace NTable {
         next position for seeking followed by a series of Feed(..)
         with rows. Thus the next call after Prepare(..) is always Seek(, 0).
 
-        If Seek call succeeded and return EScan::Feed, then Feed called to pass 
-        data to reader. When range supplied by Seek completed then Exhausted method is 
-        called. Default implementation of Exhausted method return EScan::Reset, 
-        thus Seek method is called again with incrementing seq parameter. Also 
-        Feed method may return EScan::Reset indicating that current range is 
-        completed and next one should be set up in Seek method. 
- 
+        If Seek call succeeded and return EScan::Feed, then Feed called to pass
+        data to reader. When range supplied by Seek completed then Exhausted method is
+        called. Default implementation of Exhausted method return EScan::Reset,
+        thus Seek method is called again with incrementing seq parameter. Also
+        Feed method may return EScan::Reset indicating that current range is
+        completed and next one should be set up in Seek method.
+
         IScan may express its desire of futher IDriver env behaviour
         with EScan codes where applicable.
 

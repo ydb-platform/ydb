@@ -304,7 +304,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
-    auto leftData = Build<TDqPrecompute>(ctx, join.Pos()) 
+    auto leftData = Build<TDqPrecompute>(ctx, join.Pos())
         .Input(join.LeftInput())
         .Done();
     auto leftDataDeduplicated = DeduplicateByMembers(leftData, leftJoinKeys, ctx, join.Pos());

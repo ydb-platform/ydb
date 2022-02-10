@@ -119,7 +119,7 @@ public:
         ui64 PerShardKeysSizeLimitBytes = 0;
         NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE;
         bool DisableLlvmForUdfStages = false;
-        bool LlvmEnabled = true; 
+        bool LlvmEnabled = true;
         TKqpSnapshot Snapshot = TKqpSnapshot();
         NKikimrKqp::EIsolationLevel IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;

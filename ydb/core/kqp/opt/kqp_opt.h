@@ -46,7 +46,7 @@ struct TKqpBuildQueryContext : TThrRefBase {
 bool IsKqpEffectsStage(const NYql::NNodes::TDqStageBase& stage);
 
 TMaybe<NYql::NNodes::TKqlQuery> BuildKqlQuery(NYql::NNodes::TKiDataQuery query, const NYql::TKikimrTablesData& tablesData,
-    NYql::TExprContext& ctx, bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx); 
+    NYql::TExprContext& ctx, bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpFinalizingOptTransformer();
 TAutoPtr<NYql::IGraphTransformer> CreateKqpQueryPhasesTransformer();

@@ -780,16 +780,16 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TopSortTableExpr) { 
+    Y_UNIT_TEST_NEW_ENGINE(TopSortTableExpr) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"( 
+        TString query = Q_(R"(
             DECLARE $key AS Uint32;
 
             $fetch = (
-                SELECT Value2 + 1 AS ComputedLimit FROM `/Root/TwoShard` 
+                SELECT Value2 + 1 AS ComputedLimit FROM `/Root/TwoShard`
                 WHERE Key = $key
             );
 
@@ -823,12 +823,12 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TopSortTableExprOffset) { 
+    Y_UNIT_TEST_NEW_ENGINE(TopSortTableExprOffset) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"( 
+        TString query = Q_(R"(
             DECLARE $key AS Uint32;
 
             $fetch = (

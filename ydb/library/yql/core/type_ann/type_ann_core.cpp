@@ -12175,7 +12175,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         YQL_ENSURE(components.front() && components.back());
         if (!IsSameAnnotation(*components.front(), *components.back())) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Range begin/end type mismatch. Begin: " << *components.front() 
+                TStringBuilder() << "Range begin/end type mismatch. Begin: " << *components.front()
                      << " End: " << *components.back()));
             return false;
         }
@@ -12989,7 +12989,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["EmptyListType"] = &TypeWrapper<ETypeAnnotationKind::EmptyList>;
         Functions["EmptyDictType"] = &TypeWrapper<ETypeAnnotationKind::EmptyDict>;
         Functions["Join"] = &JoinWrapper;
-        Functions["JoinDict"] = &JoinDictWrapper; 
+        Functions["JoinDict"] = &JoinDictWrapper;
         Functions["MapJoinCore"] = &MapJoinCoreWrapper;
         Functions["CommonJoinCore"] = &CommonJoinCoreWrapper;
         Functions["CombineCore"] = &CombineCoreWrapper;

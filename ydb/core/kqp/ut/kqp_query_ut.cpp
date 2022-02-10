@@ -1065,9 +1065,9 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 EVALUATE IF true
                     DO $hello()
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString()); 
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) { 
-                return issue.Message.Contains("EVALUATE IF is not supported in YDB queries."); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
+                return issue.Message.Contains("EVALUATE IF is not supported in YDB queries.");
             }));
         }
 
@@ -1077,49 +1077,49 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                     SELECT $i;
                 END DO;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString()); 
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) { 
-                return issue.Message.Contains("EVALUATE is not supported in YDB queries."); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
+                return issue.Message.Contains("EVALUATE is not supported in YDB queries.");
             }));
         }
- 
-        { 
-            auto params = db.GetParamsBuilder() 
-                    .AddParam("$table").String("StringValue").Build() 
-                    .AddParam("$login").String("LoginString").Build() 
-                    .AddParam("$email").String("Email@String").Build() 
-                    .AddParam("$id").Uint64(1).Build() 
-                    .Build(); 
- 
-            auto result = session.ExecuteDataQuery(R"( 
-                --!syntax_v1 
-                DECLARE  $id  AS Uint64; 
-                DECLARE  $login AS String; 
-                DECLARE  $email AS String; 
- 
-                SELECT $id, $login, $email; 
-            )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
- 
-            CompareYson( 
-                    R"([[1u;"LoginString";"Email@String"]])", 
-                    FormatResultSetYson(result.GetResultSet(0)) 
-            ); 
- 
-            result = session.ExecuteDataQuery(R"( 
-                --!syntax_v1 
-                DECLARE  $table AS String; 
-                DECLARE  $id  AS Uint64; 
-                DECLARE  $login AS String; 
-                DECLARE  $email AS String; 
- 
-                INSERT INTO $table ( id, login, email ) VALUES ($id, $login, $email ); 
-            )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
- 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString()); 
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) { 
-                return issue.Message.Contains("ATOM evaluation is not supported in YDB queries."); 
-            })); 
-        } 
+
+        {
+            auto params = db.GetParamsBuilder()
+                    .AddParam("$table").String("StringValue").Build()
+                    .AddParam("$login").String("LoginString").Build()
+                    .AddParam("$email").String("Email@String").Build()
+                    .AddParam("$id").Uint64(1).Build()
+                    .Build();
+
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                DECLARE  $id  AS Uint64;
+                DECLARE  $login AS String;
+                DECLARE  $email AS String;
+
+                SELECT $id, $login, $email;
+            )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+
+            CompareYson(
+                    R"([[1u;"LoginString";"Email@String"]])",
+                    FormatResultSetYson(result.GetResultSet(0))
+            );
+
+            result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                DECLARE  $table AS String;
+                DECLARE  $id  AS Uint64;
+                DECLARE  $login AS String;
+                DECLARE  $email AS String;
+
+                INSERT INTO $table ( id, login, email ) VALUES ($id, $login, $email );
+            )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
+                return issue.Message.Contains("ATOM evaluation is not supported in YDB queries.");
+            }));
+        }
     }
 
     Y_UNIT_TEST_NEW_ENGINE(UdfTerminate) {

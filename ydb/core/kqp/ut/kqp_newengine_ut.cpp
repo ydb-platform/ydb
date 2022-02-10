@@ -2194,7 +2194,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto range = FindPlanNodeByKv(plan, "ReadRange", "[\"Key [$min_key, $max_key]\"]");
         UNIT_ASSERT(range.IsDefined());
     }
- 
+
     Y_UNIT_TEST(Nondeterministic) { // TODO: KIKIMR-4759
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -2221,193 +2221,193 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
     }
 
-    Y_UNIT_TEST(ScalarFunctions) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto result = session.ExecuteSchemeQuery(R"( 
-            --!syntax_v1 
-            CREATE TABLE `/Root/TableOne` ( 
-                Key Uint32, 
-                Value Uint32, 
-                PRIMARY KEY (Key) 
-            ); 
-            CREATE TABLE `/Root/TableTwo` ( 
-                Key Uint32, 
-                Value Uint32, 
-                PRIMARY KEY (Key) 
-            ); 
-            CREATE TABLE `/Root/TableThree` ( 
-                Key Uint32, 
-                Value Uint32, 
-                PRIMARY KEY (Key) 
-            ); 
-            CREATE TABLE `/Root/TableEmpty` ( 
-                Key Uint32, 
-                Value Uint32, 
-                PRIMARY KEY (Key) 
-            ); 
-        )").GetValueSync(); 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
- 
-        result = session.ExecuteDataQuery(R"( 
-            --!syntax_v1 
+    Y_UNIT_TEST(ScalarFunctions) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/TableOne` (
+                Key Uint32,
+                Value Uint32,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `/Root/TableTwo` (
+                Key Uint32,
+                Value Uint32,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `/Root/TableThree` (
+                Key Uint32,
+                Value Uint32,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `/Root/TableEmpty` (
+                Key Uint32,
+                Value Uint32,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
             PRAGMA kikimr.UseNewEngine = "true";
 
-            REPLACE INTO `/Root/TableOne` (Key, Value) VALUES 
-                (1, 1), 
-                (2, 2), 
-                (3, 3), 
-                (4, 4), 
-                (5, 5), 
-                (6, 6); 
-            REPLACE INTO `/Root/TableTwo` (Key, Value) VALUES 
-                (1, 1), 
-                (2, 2), 
-                (3, 3), 
-                (4, 4), 
-                (5, 5), 
-                (6, 6); 
-            REPLACE INTO `/Root/TableThree` (Key, Value) VALUES 
-                (1, 1), 
-                (2, 2), 
-                (3, 3), 
-                (4, 4), 
-                (5, 5), 
-                (6, 6); 
-        )", TTxControl::BeginTx().CommitTx()).GetValueSync(); 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
- 
-        TVector<std::pair<TString,TString>> testData = { 
-            { 
-                R"( 
-                    $lmt1 = (SELECT Value FROM `/Root/TableOne` WHERE Key = 2); 
-                    $lmt2 = (SELECT Value FROM `/Root/TableTwo` WHERE Key = 3); 
- 
-                    SELECT Value FROM `/Root/TableThree` ORDER BY Value 
-                            LIMIT (CAST($lmt1 AS Uint64) ?? 0) * (CAST($lmt2 AS Uint64) ?? 0); 
-                )", 
-                R"([ 
-                    [[1u]];[[2u]];[[3u]];[[4u]];[[5u]];[[6u]] 
-                ])" 
-            }, 
-            { 
-                R"( 
-                    $lmt = (SELECT Value FROM `/Root/TableOne` WHERE Key = 2); 
- 
-                    SELECT Value FROM `/Root/TableTwo` ORDER BY Value LIMIT CAST($lmt AS Uint64) ?? 0; 
-                )", 
-                R"([ 
-                    [[1u]];[[2u]] 
-                ])" 
-            }, 
-            { 
-                R"( 
-                    $lmt = (SELECT Value FROM `/Root/TableOne` WHERE Key = 2); 
- 
-                    SELECT Value FROM `/Root/TableTwo` ORDER BY Value DESC LIMIT COALESCE($lmt, 1u); 
-                )", 
-                R"([ 
-                    [[6u]];[[5u]] 
-                ])" 
-            }, 
-            { 
-                R"( 
-                    $lmt = (SELECT Value FROM `/Root/TableOne` WHERE Key = 2); 
-                    $offt = (SELECT Value FROM `/Root/TableOne` WHERE Key = 3); 
- 
-                    SELECT Value FROM `/Root/TableTwo` ORDER BY Value DESC 
-                        LIMIT COALESCE($lmt, 1u) OFFSET COALESCE($offt, 1u); 
-                )", 
-                R"([ 
-                    [[3u]];[[2u]] 
-                ])" 
-            }, 
-            { 
-                R"( 
-                    $key = (SELECT Value FROM `/Root/TableOne` WHERE Key = 5); 
- 
-                    SELECT Value FROM `/Root/TableTwo` WHERE Key >= $key ORDER BY Value ASC; 
-                )", 
-                R"([ 
-                    [[5u]];[[6u]] 
-                ])" 
-            }, 
-            { 
-                R"( 
-                    $key = (SELECT Value FROM `/Root/TableOne` WHERE Key = 5); 
- 
-                    SELECT Value FROM `/Root/TableTwo` WHERE Key >= $key ORDER BY Value DESC; 
-                )", 
-                R"([ 
-                    [[6u]];[[5u]] 
-                ])" 
-            }, 
-            { 
-                R"( 
-                    $key1 = (SELECT Value FROM `/Root/TableOne` WHERE Key = 2); 
-                    $key2 = (SELECT Value FROM `/Root/TableTwo` WHERE Key = 3); 
- 
-                    SELECT Value FROM `/Root/TableTwo` WHERE Key = $key1 * $key2 ORDER BY Value; 
-                )", 
-                R"([ 
-                    [[6u]] 
-                ])" 
-            }, 
-            { 
-                R"( 
-                    $keys = (SELECT Value FROM `/Root/TableOne` WHERE Key > 2); 
- 
-                    SELECT Value FROM `/Root/TableTwo` WHERE Key IN $keys ORDER BY Value; 
-                )", 
-                R"([ 
-                    [[3u]];[[4u]];[[5u]];[[6u]] 
-                ])" 
-            }, 
-            { 
-                R"( 
-                    $keys = (SELECT Value FROM `/Root/TableOne` WHERE Key > 2); 
- 
-                    SELECT Value FROM `/Root/TableTwo` WHERE Value IN COMPACT $keys ORDER BY Value; 
-                )", 
-                R"([ 
-                    [[3u]];[[4u]];[[5u]];[[6u]] 
-                ])" 
-            }, 
-#if 0 
-            // Count IF is not supported in DqBuildAggregationResultStage, there is no AsStruct and 
-            // optimizer failed. Need to fix later. 
-            { 
-                R"( 
-                    $divisor = (SELECT Value FROM `/Root/TableOne` WHERE Key = 2); 
- 
-                    SELECT COUNT_IF(Value % $divisor == 1) AS odd_count FROM `/Root/TableTwo`; 
-                )", 
-                R"([ 
-                    [3u] 
-                ])" 
-            }, 
-#endif 
-        }; 
- 
-        TString useNewEngine = "PRAGMA kikimr.UseNewEngine = \"true\";"; 
- 
-        for (auto& item: testData) { 
-            auto result = session.ExecuteDataQuery(useNewEngine + item.first, 
-                TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync(); 
-            AssertSuccessResult(result); 
-            auto resultYson = FormatResultSetYson(result.GetResultSet(0)); 
-            CompareYson(item.second, resultYson); 
-        } 
- 
-        for (auto& item: testData) { 
-            auto it = db.StreamExecuteScanQuery(useNewEngine + item.first).GetValueSync(); 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
- 
-            CompareYson(item.second, CollectStreamResult(it).ResultSetYson); 
-        } 
-    } 
+            REPLACE INTO `/Root/TableOne` (Key, Value) VALUES
+                (1, 1),
+                (2, 2),
+                (3, 3),
+                (4, 4),
+                (5, 5),
+                (6, 6);
+            REPLACE INTO `/Root/TableTwo` (Key, Value) VALUES
+                (1, 1),
+                (2, 2),
+                (3, 3),
+                (4, 4),
+                (5, 5),
+                (6, 6);
+            REPLACE INTO `/Root/TableThree` (Key, Value) VALUES
+                (1, 1),
+                (2, 2),
+                (3, 3),
+                (4, 4),
+                (5, 5),
+                (6, 6);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        TVector<std::pair<TString,TString>> testData = {
+            {
+                R"(
+                    $lmt1 = (SELECT Value FROM `/Root/TableOne` WHERE Key = 2);
+                    $lmt2 = (SELECT Value FROM `/Root/TableTwo` WHERE Key = 3);
+
+                    SELECT Value FROM `/Root/TableThree` ORDER BY Value
+                            LIMIT (CAST($lmt1 AS Uint64) ?? 0) * (CAST($lmt2 AS Uint64) ?? 0);
+                )",
+                R"([
+                    [[1u]];[[2u]];[[3u]];[[4u]];[[5u]];[[6u]]
+                ])"
+            },
+            {
+                R"(
+                    $lmt = (SELECT Value FROM `/Root/TableOne` WHERE Key = 2);
+
+                    SELECT Value FROM `/Root/TableTwo` ORDER BY Value LIMIT CAST($lmt AS Uint64) ?? 0;
+                )",
+                R"([
+                    [[1u]];[[2u]]
+                ])"
+            },
+            {
+                R"(
+                    $lmt = (SELECT Value FROM `/Root/TableOne` WHERE Key = 2);
+
+                    SELECT Value FROM `/Root/TableTwo` ORDER BY Value DESC LIMIT COALESCE($lmt, 1u);
+                )",
+                R"([
+                    [[6u]];[[5u]]
+                ])"
+            },
+            {
+                R"(
+                    $lmt = (SELECT Value FROM `/Root/TableOne` WHERE Key = 2);
+                    $offt = (SELECT Value FROM `/Root/TableOne` WHERE Key = 3);
+
+                    SELECT Value FROM `/Root/TableTwo` ORDER BY Value DESC
+                        LIMIT COALESCE($lmt, 1u) OFFSET COALESCE($offt, 1u);
+                )",
+                R"([
+                    [[3u]];[[2u]]
+                ])"
+            },
+            {
+                R"(
+                    $key = (SELECT Value FROM `/Root/TableOne` WHERE Key = 5);
+
+                    SELECT Value FROM `/Root/TableTwo` WHERE Key >= $key ORDER BY Value ASC;
+                )",
+                R"([
+                    [[5u]];[[6u]]
+                ])"
+            },
+            {
+                R"(
+                    $key = (SELECT Value FROM `/Root/TableOne` WHERE Key = 5);
+
+                    SELECT Value FROM `/Root/TableTwo` WHERE Key >= $key ORDER BY Value DESC;
+                )",
+                R"([
+                    [[6u]];[[5u]]
+                ])"
+            },
+            {
+                R"(
+                    $key1 = (SELECT Value FROM `/Root/TableOne` WHERE Key = 2);
+                    $key2 = (SELECT Value FROM `/Root/TableTwo` WHERE Key = 3);
+
+                    SELECT Value FROM `/Root/TableTwo` WHERE Key = $key1 * $key2 ORDER BY Value;
+                )",
+                R"([
+                    [[6u]]
+                ])"
+            },
+            {
+                R"(
+                    $keys = (SELECT Value FROM `/Root/TableOne` WHERE Key > 2);
+
+                    SELECT Value FROM `/Root/TableTwo` WHERE Key IN $keys ORDER BY Value;
+                )",
+                R"([
+                    [[3u]];[[4u]];[[5u]];[[6u]]
+                ])"
+            },
+            {
+                R"(
+                    $keys = (SELECT Value FROM `/Root/TableOne` WHERE Key > 2);
+
+                    SELECT Value FROM `/Root/TableTwo` WHERE Value IN COMPACT $keys ORDER BY Value;
+                )",
+                R"([
+                    [[3u]];[[4u]];[[5u]];[[6u]]
+                ])"
+            },
+#if 0
+            // Count IF is not supported in DqBuildAggregationResultStage, there is no AsStruct and
+            // optimizer failed. Need to fix later.
+            {
+                R"(
+                    $divisor = (SELECT Value FROM `/Root/TableOne` WHERE Key = 2);
+
+                    SELECT COUNT_IF(Value % $divisor == 1) AS odd_count FROM `/Root/TableTwo`;
+                )",
+                R"([
+                    [3u]
+                ])"
+            },
+#endif
+        };
+
+        TString useNewEngine = "PRAGMA kikimr.UseNewEngine = \"true\";";
+
+        for (auto& item: testData) {
+            auto result = session.ExecuteDataQuery(useNewEngine + item.first,
+                TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+            auto resultYson = FormatResultSetYson(result.GetResultSet(0));
+            CompareYson(item.second, resultYson);
+        }
+
+        for (auto& item: testData) {
+            auto it = db.StreamExecuteScanQuery(useNewEngine + item.first).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            CompareYson(item.second, CollectStreamResult(it).ResultSetYson);
+        }
+    }
 
     Y_UNIT_TEST(DeleteWithBuiltin) {
         TKikimrRunner kikimr;
@@ -2482,70 +2482,70 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         CompareYson("[[[1]];[[1]];[[1]];[[2]];[[2]]]", FormatResultSetYson(result.GetResultSet(0)));
     }
- 
-    Y_UNIT_TEST(SqlInFromCompact) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto result = session.ExecuteSchemeQuery(R"( 
-            --!syntax_v1 
- 
-            CREATE TABLE `/Root/table1` ( 
-                key String, 
-                cached String, 
-                PRIMARY KEY (key) 
-            ); 
- 
-            CREATE TABLE `/Root/table2` ( 
-                key String, 
-                in_cache String, 
-                value String, 
-                PRIMARY KEY (key) 
-            ); 
-        )").GetValueSync(); 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
- 
-        result = session.ExecuteDataQuery(R"( 
+
+    Y_UNIT_TEST(SqlInFromCompact) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+
+            CREATE TABLE `/Root/table1` (
+                key String,
+                cached String,
+                PRIMARY KEY (key)
+            );
+
+            CREATE TABLE `/Root/table2` (
+                key String,
+                in_cache String,
+                value String,
+                PRIMARY KEY (key)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(R"(
             PRAGMA kikimr.UseNewEngine = "true";
 
-            REPLACE INTO [/Root/table1] (key, cached) VALUES 
-                ("Key1", "CachedValue1"), 
-                ("Key2", "CachedValue2"); 
-         )", TTxControl::BeginTx().CommitTx()).GetValueSync(); 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
- 
-        result = session.ExecuteDataQuery(R"( 
+            REPLACE INTO [/Root/table1] (key, cached) VALUES
+                ("Key1", "CachedValue1"),
+                ("Key2", "CachedValue2");
+         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(R"(
             PRAGMA kikimr.UseNewEngine = "true";
 
-            REPLACE INTO [/Root/table2] ( 
-                key, in_cache, value 
-            ) VALUES 
-                ("Key1", "CachedValue1", "Value 1"), 
-                ("Key2", "CachedValue2", "Value 2"); 
-         )", TTxControl::BeginTx().CommitTx()).GetValueSync(); 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
- 
-        result = session.ExecuteDataQuery(R"( 
-            --!syntax_v1 
-            PRAGMA Kikimr.UseNewEngine = "true"; 
- 
-            $t1 = SELECT `cached`, `key` FROM `/Root/table1` 
-                    WHERE `key` = "Key1"; 
- 
-            $cache = (SELECT `cached` FROM $t1); 
- 
-            $t2 = SELECT `value`, `in_cache` FROM `table2` 
-                    WHERE `key` = "Key1" AND `in_cache` IN COMPACT $cache; 
- 
-            SELECT `in_cache`, `value` FROM $t1 AS a 
-                INNER JOIN $t2 AS b 
-                    ON a.`cached` == b.`in_cache` 
-                    WHERE a.`cached` = b.`in_cache`; 
-        )", TTxControl::BeginTx().CommitTx()).GetValueSync(); 
- 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
-    } 
+            REPLACE INTO [/Root/table2] (
+                key, in_cache, value
+            ) VALUES
+                ("Key1", "CachedValue1", "Value 1"),
+                ("Key2", "CachedValue2", "Value 2");
+         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA Kikimr.UseNewEngine = "true";
+
+            $t1 = SELECT `cached`, `key` FROM `/Root/table1`
+                    WHERE `key` = "Key1";
+
+            $cache = (SELECT `cached` FROM $t1);
+
+            $t2 = SELECT `value`, `in_cache` FROM `table2`
+                    WHERE `key` = "Key1" AND `in_cache` IN COMPACT $cache;
+
+            SELECT `in_cache`, `value` FROM $t1 AS a
+                INNER JOIN $t2 AS b
+                    ON a.`cached` == b.`in_cache`
+                    WHERE a.`cached` = b.`in_cache`;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
 
     Y_UNIT_TEST(PrecomputeKey) {
         TKikimrRunner kikimr;

@@ -117,231 +117,231 @@ static void CreateSampleTables(TSession session) {
     }
 }
 
-namespace { 
- 
-void CreateTableWithIntKey(TSession session, ui64 partitions, ui32 rangesPerPartition) { 
-    /* 
-     * Generate table with partitioning. 
-     * Every partition will start from 1000 * partitionNumber and have rangesPerPartition subranges 
-     * from 0 to 100 * rangeNumber 
-     */ 
-    TExplicitPartitions explicitPartitions; 
-    static const ui32 itemsPerRange = 5; 
-    auto splitPoint = [](ui32 partitionNo) { 
-        return partitionNo * 100000; 
-    }; 
- 
-    YQL_ENSURE(rangesPerPartition < 100); 
- 
-    for (ui32 i = 0; i < partitions; i++) { 
-        explicitPartitions.AppendSplitPoints( 
-            TValueBuilder().BeginTuple().AddElement().OptionalInt32(splitPoint(i)).EndTuple().Build() 
-            ); 
-    } 
- 
-    auto builder = TTableBuilder() 
-        .AddNullableColumn("Key1", EPrimitiveType::Int32) 
-        .AddNullableColumn("Key2", EPrimitiveType::Int32) 
-        .SetPrimaryKeyColumns({"Key1", "Key2"}) 
-        .SetPartitionAtKeys(explicitPartitions); 
- 
-    UNIT_ASSERT(session.CreateTable("/Root/TableWithIntKey", builder.Build()).GetValueSync().IsSuccess()); 
- 
-    TStringBuilder query; 
- 
-    query << "REPLACE INTO [/Root/TableWithIntKey] (Key1, Key2) VALUES" << Endl; 
- 
-    for (ui32 i = 0; i < partitions; i++) { 
-        ui32 partitionStart = splitPoint(i); 
- 
-        for (ui32 j = 0; j < rangesPerPartition; j++) { 
-            ui32 rangeStart = j * 1000; 
- 
-            for (ui32 k = 0; k < itemsPerRange; k++) { 
-                query << "(" << partitionStart + rangeStart + k << ", "; 
- 
-                if (k % 2) { 
-                    query << "NULL)"; 
-                } else { 
-                    query << k << ")"; 
-                } 
- 
-                query << "," << Endl; 
-            } 
-        } 
-    } 
- 
-    query << "(NULL, NULL);" << Endl; 
- 
-    bool success = session.ExecuteDataQuery( 
-        query, 
-        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx() 
-    ).GetValueSync().IsSuccess(); 
- 
-    UNIT_ASSERT(success); 
-} 
- 
-void ExecuteStreamQueryAndCheck(NExperimental::TStreamQueryClient& db, const TString& query, 
-    const TString& expectedYson) 
-{ 
-    auto settings = NExperimental::TExecuteStreamQuerySettings() 
-        .ProfileMode(NExperimental::EStreamQueryProfileMode::Basic); 
- 
-    auto it = db.ExecuteStreamQuery(query, settings).GetValueSync(); 
-    UNIT_ASSERT(it.IsSuccess()); 
- 
-    TVector<TString> profiles; 
-    auto resultYson = StreamResultToYson(it, &profiles); 
- 
-    Cerr << "---------QUERY----------" << Endl; 
-    Cerr << query << Endl; 
-    Cerr << "---------RESULT---------" << Endl; 
-    Cerr << resultYson << Endl; 
-    Cerr << "------------------------" << Endl; 
- 
-    CompareYson(expectedYson, resultYson); 
- 
+namespace {
+
+void CreateTableWithIntKey(TSession session, ui64 partitions, ui32 rangesPerPartition) {
+    /*
+     * Generate table with partitioning.
+     * Every partition will start from 1000 * partitionNumber and have rangesPerPartition subranges
+     * from 0 to 100 * rangeNumber
+     */
+    TExplicitPartitions explicitPartitions;
+    static const ui32 itemsPerRange = 5;
+    auto splitPoint = [](ui32 partitionNo) {
+        return partitionNo * 100000;
+    };
+
+    YQL_ENSURE(rangesPerPartition < 100);
+
+    for (ui32 i = 0; i < partitions; i++) {
+        explicitPartitions.AppendSplitPoints(
+            TValueBuilder().BeginTuple().AddElement().OptionalInt32(splitPoint(i)).EndTuple().Build()
+            );
+    }
+
+    auto builder = TTableBuilder()
+        .AddNullableColumn("Key1", EPrimitiveType::Int32)
+        .AddNullableColumn("Key2", EPrimitiveType::Int32)
+        .SetPrimaryKeyColumns({"Key1", "Key2"})
+        .SetPartitionAtKeys(explicitPartitions);
+
+    UNIT_ASSERT(session.CreateTable("/Root/TableWithIntKey", builder.Build()).GetValueSync().IsSuccess());
+
+    TStringBuilder query;
+
+    query << "REPLACE INTO [/Root/TableWithIntKey] (Key1, Key2) VALUES" << Endl;
+
+    for (ui32 i = 0; i < partitions; i++) {
+        ui32 partitionStart = splitPoint(i);
+
+        for (ui32 j = 0; j < rangesPerPartition; j++) {
+            ui32 rangeStart = j * 1000;
+
+            for (ui32 k = 0; k < itemsPerRange; k++) {
+                query << "(" << partitionStart + rangeStart + k << ", ";
+
+                if (k % 2) {
+                    query << "NULL)";
+                } else {
+                    query << k << ")";
+                }
+
+                query << "," << Endl;
+            }
+        }
+    }
+
+    query << "(NULL, NULL);" << Endl;
+
+    bool success = session.ExecuteDataQuery(
+        query,
+        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+    ).GetValueSync().IsSuccess();
+
+    UNIT_ASSERT(success);
+}
+
+void ExecuteStreamQueryAndCheck(NExperimental::TStreamQueryClient& db, const TString& query,
+    const TString& expectedYson)
+{
+    auto settings = NExperimental::TExecuteStreamQuerySettings()
+        .ProfileMode(NExperimental::EStreamQueryProfileMode::Basic);
+
+    auto it = db.ExecuteStreamQuery(query, settings).GetValueSync();
+    UNIT_ASSERT(it.IsSuccess());
+
+    TVector<TString> profiles;
+    auto resultYson = StreamResultToYson(it, &profiles);
+
+    Cerr << "---------QUERY----------" << Endl;
+    Cerr << query << Endl;
+    Cerr << "---------RESULT---------" << Endl;
+    Cerr << resultYson << Endl;
+    Cerr << "------------------------" << Endl;
+
+    CompareYson(expectedYson, resultYson);
+
     NYql::NDqProto::TDqExecutionStats stats;
-    // First stage is computation, second scan read. 
-    google::protobuf::TextFormat::ParseFromString(profiles[1], &stats); 
- 
-    ui64 resultRows = stats.GetResultRows(); 
-    ui64 readRows = stats.GetTables(0).GetReadRows(); 
-    UNIT_ASSERT_EQUAL_C(resultRows, readRows, "There are " << resultRows << " in result, but read " << readRows << " !"); 
-} 
- 
-void RunTestOverIntTable(const TString& query, const TString& expectedYson, ui64 partitions, ui32 rangesPerPartition) { 
-    TKikimrSettings kikimrSettings; 
-    TKikimrRunner kikimr(kikimrSettings); 
- 
-    NExperimental::TStreamQueryClient db(kikimr.GetDriver()); 
- 
-    auto client = kikimr.GetTableClient(); 
-    auto session = client.CreateSession().GetValueSync().GetSession(); 
-    CreateTableWithIntKey(session, partitions, rangesPerPartition); 
- 
-    ExecuteStreamQueryAndCheck(db, query, expectedYson); 
-} 
- 
-void RunPredicateTest(const std::vector<TString>& predicates, bool withNulls) { 
-    TKikimrRunner kikimr; 
-    auto db = kikimr.GetTableClient(); 
-    auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-    auto builder = TTableBuilder() 
-        .AddNullableColumn("Key1", EPrimitiveType::Uint32) 
-        .AddNullableColumn("Key2", EPrimitiveType::Uint32) 
-        .AddNullableColumn("Key3", EPrimitiveType::String) 
-        .AddNullableColumn("Key4", EPrimitiveType::String) 
-        .AddNullableColumn("Value", EPrimitiveType::Uint32) 
-        .SetPrimaryKeyColumns({"Key1", "Key2", "Key3", "Key4"}); 
- 
-    UNIT_ASSERT(session.CreateTable( 
-        "/Root/TestPredicates", 
-        builder.Build(), 
-        TCreateTableSettings() 
-            .PartitioningPolicy( 
-                TPartitioningPolicy() 
-                    .UniformPartitions(3) 
-            ) 
-    ).GetValueSync().IsSuccess()); 
- 
-    TString query; 
- 
-    if (withNulls) { 
-        query = TString(R"( 
-            REPLACE INTO [/Root/TestPredicates] (Key1, Key2, Key3, Key4, Value) VALUES 
-                (NULL, NULL, NULL, NULL, 1), 
-                (NULL, NULL, NULL, "uid:10", 2), 
-                (NULL, NULL, "resource_1", "uid:10", 3), 
-                (NULL, 1, "resource_1", "uid:10", 4), 
-                (1000, 1, "resource_1", "uid:10", 5), 
-                (NULL, NULL, "resource_1", NULL, 6), 
-                (NULL, NULL, NULL, "uid:11", 7), 
-                (NULL, NULL, "resource_2", "uid:11", 8), 
-                (NULL, 2, "resource_2", "uid:11", 9), 
-                (2000, 2, "resource_3", "uid:11", 10), 
-                (3000, 3, "resource_3", "uid:11", 11), 
-                (4000, 4, "resource_3", "uid:11", 12), 
-                (5000, 5, "resource_4", "uid:12", 13), 
-                (6000, 5, "resource_4", "uid:12", 14), 
-                (7000, 5, "resource_4", "uid:12", 15), 
-                (8000, 8, "resource_4", "uid:12", 16), 
-                (8000, NULL, "resource_5", "uid:12", 17), 
-                (9000, NULL, "resource_5", NULL, 18), 
-                (9000, 9, NULL, "uid:12", 19), 
-                (9000, 9, NULL, NULL, 20); 
-        )"); 
-    } else { 
-        query = TString(R"( 
-            REPLACE INTO [/Root/TestPredicates] (Key1, Key2, Key3, Key4, Value) VALUES 
-                (1, 0, "resource_0", "uid_0", 1), 
-                (2, 0, "resource_0", "uid:10", 2), 
-                (3, 0, "resource_1", "uid:10", 3), 
-                (4, 1, "resource_1", "uid:10", 4), 
-                (1000, 1, "resource_1", "uid:10", 5), 
-                (1001, 0, "resource_1", "uid:0", 6), 
-                (1002, 0, "resource_0", "uid:11", 7), 
-                (1003, 0, "resource_2", "uid:11", 8), 
-                (1004, 2, "resource_2", "uid:11", 9), 
-                (2000, 2, "resource_3", "uid:11", 10), 
-                (3000, 3, "resource_3", "uid:11", 11), 
-                (4000, 4, "resource_3", "uid:11", 12), 
-                (5000, 5, "resource_4", "uid:12", 13), 
-                (6000, 5, "resource_4", "uid:12", 14), 
-                (7000, 5, "resource_4", "uid:12", 15), 
-                (8000, 8, "resource_4", "uid:12", 16), 
-                (8000, 0, "resource_5", "uid:12", 17), 
-                (9000, 0, "resource_5", "uid:0", 18), 
-                (9000, 9, "resource_0", "uid:12", 19), 
-                (9000, 9, "resource_0", "uid:0", 20); 
-            )"); 
-    } 
- 
-    UNIT_ASSERT( 
-        session.ExecuteDataQuery( 
-            query, 
-            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx() 
-        ).GetValueSync().IsSuccess() 
-    ); 
- 
-    NExperimental::TStreamQueryClient streamDb(kikimr.GetDriver()); 
- 
-    for (auto& item: predicates) { 
-        TString disablePredicateExtractor = R"( 
-            PRAGMA Kikimr.OptEnablePredicateExtract = "false"; 
-        )"; 
-        TString query = R"( 
-            SELECT `Value` FROM `/Root/TestPredicates` WHERE <PREDICATE> ORDER BY `Value`; 
-        )"; 
- 
-        SubstGlobal(query, "<PREDICATE>", item); 
- 
-        Cerr << "Execute query" << Endl << query << Endl; 
- 
-        auto it = streamDb.ExecuteStreamQuery(disablePredicateExtractor + query).GetValueSync(); 
-        UNIT_ASSERT(it.IsSuccess()); 
- 
-        auto expectedYson = StreamResultToYson(it); 
-        it = streamDb.ExecuteStreamQuery(query).GetValueSync(); 
-        UNIT_ASSERT(it.IsSuccess()); 
- 
-        auto resultYson = StreamResultToYson(it); 
- 
-        Cerr << "EXPECTED: " << expectedYson << Endl; 
-        Cerr << "RECEIVED: " << resultYson << Endl; 
- 
-        CompareYson(expectedYson, resultYson); 
-    } 
- 
-    UNIT_ASSERT(session.ExecuteSchemeQuery(R"( 
-        DROP TABLE [/Root/TestPredicates]; 
-    )").GetValueSync().IsSuccess()); 
- 
-} 
- 
-} // anonymous namespace end 
- 
+    // First stage is computation, second scan read.
+    google::protobuf::TextFormat::ParseFromString(profiles[1], &stats);
+
+    ui64 resultRows = stats.GetResultRows();
+    ui64 readRows = stats.GetTables(0).GetReadRows();
+    UNIT_ASSERT_EQUAL_C(resultRows, readRows, "There are " << resultRows << " in result, but read " << readRows << " !");
+}
+
+void RunTestOverIntTable(const TString& query, const TString& expectedYson, ui64 partitions, ui32 rangesPerPartition) {
+    TKikimrSettings kikimrSettings;
+    TKikimrRunner kikimr(kikimrSettings);
+
+    NExperimental::TStreamQueryClient db(kikimr.GetDriver());
+
+    auto client = kikimr.GetTableClient();
+    auto session = client.CreateSession().GetValueSync().GetSession();
+    CreateTableWithIntKey(session, partitions, rangesPerPartition);
+
+    ExecuteStreamQueryAndCheck(db, query, expectedYson);
+}
+
+void RunPredicateTest(const std::vector<TString>& predicates, bool withNulls) {
+    TKikimrRunner kikimr;
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    auto builder = TTableBuilder()
+        .AddNullableColumn("Key1", EPrimitiveType::Uint32)
+        .AddNullableColumn("Key2", EPrimitiveType::Uint32)
+        .AddNullableColumn("Key3", EPrimitiveType::String)
+        .AddNullableColumn("Key4", EPrimitiveType::String)
+        .AddNullableColumn("Value", EPrimitiveType::Uint32)
+        .SetPrimaryKeyColumns({"Key1", "Key2", "Key3", "Key4"});
+
+    UNIT_ASSERT(session.CreateTable(
+        "/Root/TestPredicates",
+        builder.Build(),
+        TCreateTableSettings()
+            .PartitioningPolicy(
+                TPartitioningPolicy()
+                    .UniformPartitions(3)
+            )
+    ).GetValueSync().IsSuccess());
+
+    TString query;
+
+    if (withNulls) {
+        query = TString(R"(
+            REPLACE INTO [/Root/TestPredicates] (Key1, Key2, Key3, Key4, Value) VALUES
+                (NULL, NULL, NULL, NULL, 1),
+                (NULL, NULL, NULL, "uid:10", 2),
+                (NULL, NULL, "resource_1", "uid:10", 3),
+                (NULL, 1, "resource_1", "uid:10", 4),
+                (1000, 1, "resource_1", "uid:10", 5),
+                (NULL, NULL, "resource_1", NULL, 6),
+                (NULL, NULL, NULL, "uid:11", 7),
+                (NULL, NULL, "resource_2", "uid:11", 8),
+                (NULL, 2, "resource_2", "uid:11", 9),
+                (2000, 2, "resource_3", "uid:11", 10),
+                (3000, 3, "resource_3", "uid:11", 11),
+                (4000, 4, "resource_3", "uid:11", 12),
+                (5000, 5, "resource_4", "uid:12", 13),
+                (6000, 5, "resource_4", "uid:12", 14),
+                (7000, 5, "resource_4", "uid:12", 15),
+                (8000, 8, "resource_4", "uid:12", 16),
+                (8000, NULL, "resource_5", "uid:12", 17),
+                (9000, NULL, "resource_5", NULL, 18),
+                (9000, 9, NULL, "uid:12", 19),
+                (9000, 9, NULL, NULL, 20);
+        )");
+    } else {
+        query = TString(R"(
+            REPLACE INTO [/Root/TestPredicates] (Key1, Key2, Key3, Key4, Value) VALUES
+                (1, 0, "resource_0", "uid_0", 1),
+                (2, 0, "resource_0", "uid:10", 2),
+                (3, 0, "resource_1", "uid:10", 3),
+                (4, 1, "resource_1", "uid:10", 4),
+                (1000, 1, "resource_1", "uid:10", 5),
+                (1001, 0, "resource_1", "uid:0", 6),
+                (1002, 0, "resource_0", "uid:11", 7),
+                (1003, 0, "resource_2", "uid:11", 8),
+                (1004, 2, "resource_2", "uid:11", 9),
+                (2000, 2, "resource_3", "uid:11", 10),
+                (3000, 3, "resource_3", "uid:11", 11),
+                (4000, 4, "resource_3", "uid:11", 12),
+                (5000, 5, "resource_4", "uid:12", 13),
+                (6000, 5, "resource_4", "uid:12", 14),
+                (7000, 5, "resource_4", "uid:12", 15),
+                (8000, 8, "resource_4", "uid:12", 16),
+                (8000, 0, "resource_5", "uid:12", 17),
+                (9000, 0, "resource_5", "uid:0", 18),
+                (9000, 9, "resource_0", "uid:12", 19),
+                (9000, 9, "resource_0", "uid:0", 20);
+            )");
+    }
+
+    UNIT_ASSERT(
+        session.ExecuteDataQuery(
+            query,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+        ).GetValueSync().IsSuccess()
+    );
+
+    NExperimental::TStreamQueryClient streamDb(kikimr.GetDriver());
+
+    for (auto& item: predicates) {
+        TString disablePredicateExtractor = R"(
+            PRAGMA Kikimr.OptEnablePredicateExtract = "false";
+        )";
+        TString query = R"(
+            SELECT `Value` FROM `/Root/TestPredicates` WHERE <PREDICATE> ORDER BY `Value`;
+        )";
+
+        SubstGlobal(query, "<PREDICATE>", item);
+
+        Cerr << "Execute query" << Endl << query << Endl;
+
+        auto it = streamDb.ExecuteStreamQuery(disablePredicateExtractor + query).GetValueSync();
+        UNIT_ASSERT(it.IsSuccess());
+
+        auto expectedYson = StreamResultToYson(it);
+        it = streamDb.ExecuteStreamQuery(query).GetValueSync();
+        UNIT_ASSERT(it.IsSuccess());
+
+        auto resultYson = StreamResultToYson(it);
+
+        Cerr << "EXPECTED: " << expectedYson << Endl;
+        Cerr << "RECEIVED: " << resultYson << Endl;
+
+        CompareYson(expectedYson, resultYson);
+    }
+
+    UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+        DROP TABLE [/Root/TestPredicates];
+    )").GetValueSync().IsSuccess());
+
+}
+
+} // anonymous namespace end
+
 Y_UNIT_TEST_SUITE(KqpTablePredicate) {
     Y_UNIT_TEST_NEW_ENGINE(IsNull) {
         TKikimrRunner kikimr;
@@ -1150,247 +1150,247 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
         }
     }
- 
-    Y_UNIT_TEST(NoFullScanAtScanQuery) { 
-        TVector<std::tuple<TString, TString, ui64, ui32>> testData = { 
-            /* 
-             * Predicate : Expected result : shards : ranges per shard 
-             */ 
-            { 
-                "Key1 >= 2000 OR Key1 < 100", 
-                R"([ 
-                    [[0];[0]]; 
-                    [[1];#]; 
-                    [[2];[2]]; 
-                    [[3];#]; 
-                    [[4];[4]]; 
-                    [[2000];[0]]; 
-                    [[2001];#]; 
-                    [[2002];[2]]; 
-                    [[2003];#]; 
-                    [[2004];[4]]; 
-                ])", 
-                1, 3, 
-            }, 
-            { 
-                "(Key1 >= 200003 AND Key1 <= 301003) OR (Key1 > 3 AND Key1 < 1003)", 
-                R"([ 
-                    [[4];[4]]; 
-                    [[1000];[0]]; 
-                    [[1001];#]; 
-                    [[1002];[2]]; 
-                    [[200003];#]; 
-                    [[200004];[4]]; 
-                    [[201000];[0]]; 
-                    [[201001];#]; 
-                    [[201002];[2]]; 
-                    [[201003];#]; 
-                    [[201004];[4]]; 
-                    [[300000];[0]]; 
-                    [[300001];#]; 
-                    [[300002];[2]]; 
-                    [[300003];#]; 
-                    [[300004];[4]]; 
-                    [[301000];[0]]; 
-                    [[301001];#]; 
-                    [[301002];[2]]; 
-                    [[301003];#]; 
-                ])", 
-                4, 2, 
-            }, 
-            { 
-                R"( 
-                    (Key1 > 1 AND Key1 < 3) OR 
-                    (Key1 > 2002 AND Key1 < 2004) OR 
-                    (Key1 >= 4001 AND Key1 <= 4004) 
-                )", 
-                R"([ 
-                    [[2];[2]]; 
-                    [[2003];#]; 
-                    [[4001];#]; 
-                    [[4002];[2]]; 
-                    [[4003];#]; 
-                    [[4004];[4]] 
-                ])", 
-                1, 10, 
-            }, 
-            { 
-                "Key1 IN (1, 2, 100, 101, 102, 200, 201, 201, 1000, 1001, 1002, 2000, 2001, 2002) AND (Key1 > 2000)", 
-                R"([ 
-                    [[2001];#];[[2002];[2]] 
-                ])", 
-                1, 10, 
-            } 
-        }; 
- 
-        for (auto& data: testData) { 
-            auto query = TString(R"( 
-                --!syntax_v1 
-                SELECT * FROM `/Root/TableWithIntKey` 
-                WHERE <PREDICATE> 
-                ORDER BY Key1; 
-            )"); 
- 
-            SubstGlobal(query, "<PREDICATE>", std::get<0>(data)); 
-            RunTestOverIntTable(query, std::get<1>(data), std::get<2>(data), std::get<3>(data)); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(NoFullScanAtDNFPredicate) { 
-        TKikimrRunner kikimr; 
-        NExperimental::TStreamQueryClient streamDb(kikimr.GetDriver()); 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        UNIT_ASSERT(session.ExecuteSchemeQuery(R"( 
-            CREATE TABLE [/Root/TestDNF] ( 
-                Key1 Uint32, 
-                Key2 Uint32, 
-                Value Uint32, 
-                PRIMARY KEY (Key1, Key2) 
-            ); 
-        )").GetValueSync().IsSuccess()); 
- 
-        UNIT_ASSERT(session.ExecuteDataQuery(R"( 
-            REPLACE INTO [/Root/TestDNF] (Key1, Key2, Value) VALUES 
-                (NULL, NULL, 1), 
-                (NULL, 100u, 2), 
-                (NULL, 200u, 3), 
-                (1u,   NULL, 4), 
-                (1u,   100u, 5), 
-                (1u,   200u, 6), 
-                (1u,   200u, 7), 
-                (1u,   200u, 8), 
-                (1u,   300u, 9), 
-                (1u,   400u, 10), 
-                (2u,   100u, 11), 
-                (2u,   200u, 12); 
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess()); 
- 
-        TVector<std::pair<TString, TString>> testData = { 
-            /* 
-             * Predicate : Expected result 
-             */ 
-            { 
-                "Key1 = 1 AND (Key2 = 100 OR Key2 = 300)", 
-                "[[[5u]];[[9u]]]" 
-            }, 
-            { 
-                "Key1 = 1 AND Key2 IN (100, 300, 400)", 
-                "[[[5u]];[[9u]];[[10u]]]" 
-            } 
-        }; 
- 
-        for (auto& data: testData) { 
-            auto query = TString(R"( 
-                --!syntax_v1 
-                SELECT Value FROM `/Root/TestDNF` 
-                WHERE <PREDICATE> 
-                ORDER BY Value; 
-            )"); 
-            SubstGlobal(query, "<PREDICATE>", data.first); 
-            ExecuteStreamQueryAndCheck(streamDb, query, data.second); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(ValidatePredicates) { 
-        /* Table format: 
-         *   Key1 Uint32, 
-         *   Key2 Uint32, 
-         *   Key3 String, 
-         *   Key4 String, 
-         *   Value Int32, 
-         *   PRIMARY KEY (Key1, Key2, Key3, Key4) 
-         */ 
-        std::vector<TString> testData = { 
-            "Key1 < 2000", 
-            "Key1 > 1000", 
-            "Key1 = 1000", 
-            "Key1 >= 1000", 
-            "Key1 < 2000", 
-            "Key1 <= 2000", 
-            "Key1 = 1000 AND Key2 > 0", 
-            "Key1 >= 1000 AND Key2 > 8", 
-            "Key1 >= 1000 AND Key2 = 8", 
-            "Key1 >= 8000 AND Key2 >= 8", 
-            "Key1 < 2000 AND Key2 < 2", 
-            "Key1 <= 2000 AND Key2 < 2", 
-            "Key1 <= 2000 AND Key2 <= 2", 
-            "Key1 > 4000 AND Key2 > 4 AND Key3 > \"resource_3\" AND Key4 > \"uid:11\"", 
-            "Key1 >= 4000 AND Key2 >= 4 AND Key3 >= \"resource_3\" AND Key4 >= \"uid:11\"", 
-            "Key1 < 2000 AND Key2 < 2 AND Key3 < \"resource_3\" AND Key4 < \"uid:11\"", 
-            "Key1 <= 2000 AND Key2 <= 2 AND Key3 <= \"resource_3\" AND Key4 <= \"uid:11\"", 
-            "Key2 > 8", 
-            "Key2 < 9", 
-            "Key2 <= 2 AND Key3 <= \"resource_3\" AND Key4 <= \"uid:11\"", 
-            "Key1 = 2000 AND Key2 = 2 AND Key3 = \"resource_3\" AND Key4 = \"uid:11\"", 
-            "Key1 != 2000 AND Key2 != 2 AND Key3 != \"resource_3\" AND Key4 != \"uid:11\"", 
-            "Key1 IS NULL", 
-            "Key2 IS NULL", 
-            "Key1 IS NOT NULL", 
-            "Key1 > 1000 AND Key2 IS NULL", 
-            "Key1 > 1000 OR Key2 IS NULL", 
-            "Key1 >= 1000 OR Key2 IS NOT NULL", 
-            "Key1 < 9000 OR Key3 IS NOT NULL", 
-            "Key1 < 9000 OR Key3 IS NULL", 
-            "Value = 20", 
-            "(Key1 <= 1000) OR (Key1 > 2000 AND Key1 < 5000) OR (Key1 >= 8000)", 
-            "Key1 < NULL" 
-        }; 
- 
-        RunPredicateTest(testData, /* withNulls */ true); 
-        RunPredicateTest(testData, /* withNulls */ false); 
-    } 
- 
-    Y_UNIT_TEST(MergeRanges) { 
-        TKikimrRunner kikimr; 
-        NExperimental::TStreamQueryClient streamDb(kikimr.GetDriver()); 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
-        TStreamExecScanQuerySettings scanSettings; 
-        scanSettings.Explain(true); 
- 
-        UNIT_ASSERT(session.ExecuteSchemeQuery(R"( 
-            CREATE TABLE [/Root/TestTable] ( 
-                Key1 Uint32, 
-                Key2 Uint32, 
-                Value Uint32, 
-                PRIMARY KEY (Key1, Key2) 
-            ); 
-        )").GetValueSync().IsSuccess()); 
- 
-        auto replaceResult = session.ExecuteDataQuery(R"( 
-            REPLACE INTO [/Root/TestTable] (Key1, Key2, Value) VALUES 
-                (1u, 10u, 1), 
-                (2u, 20u, 2), 
-                (3u, 30u, 3), 
-                (4u, 40u, 4), 
-                (5u, 50u, 5), 
-                (6u, 60u, 6); 
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync(); 
- 
-        UNIT_ASSERT_C(replaceResult.IsSuccess(), replaceResult.GetIssues().ToString()); 
- 
-        auto query = TString(R"( 
-            --!syntax_v1 
-            SELECT Value FROM `/Root/TestTable` WHERE 
-                Key1 = 1 OR Key1 = 2 OR Key1 = 3 
-            ORDER BY Value; 
-        )"); 
- 
-        auto it = db.StreamExecuteScanQuery(query).GetValueSync(); 
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-        CollectStreamResult(it); 
- 
-        it = db.StreamExecuteScanQuery(query, scanSettings).GetValueSync(); 
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
- 
-        auto result = CollectStreamResult(it); 
-        NJson::TJsonValue plan, readRange; 
-        NJson::ReadJsonTree(*result.PlanJson, &plan, true); 
-        // TODO: Need to get real ranges from explain, no anything in JSON 
-    } 
- 
+
+    Y_UNIT_TEST(NoFullScanAtScanQuery) {
+        TVector<std::tuple<TString, TString, ui64, ui32>> testData = {
+            /*
+             * Predicate : Expected result : shards : ranges per shard
+             */
+            {
+                "Key1 >= 2000 OR Key1 < 100",
+                R"([
+                    [[0];[0]];
+                    [[1];#];
+                    [[2];[2]];
+                    [[3];#];
+                    [[4];[4]];
+                    [[2000];[0]];
+                    [[2001];#];
+                    [[2002];[2]];
+                    [[2003];#];
+                    [[2004];[4]];
+                ])",
+                1, 3,
+            },
+            {
+                "(Key1 >= 200003 AND Key1 <= 301003) OR (Key1 > 3 AND Key1 < 1003)",
+                R"([
+                    [[4];[4]];
+                    [[1000];[0]];
+                    [[1001];#];
+                    [[1002];[2]];
+                    [[200003];#];
+                    [[200004];[4]];
+                    [[201000];[0]];
+                    [[201001];#];
+                    [[201002];[2]];
+                    [[201003];#];
+                    [[201004];[4]];
+                    [[300000];[0]];
+                    [[300001];#];
+                    [[300002];[2]];
+                    [[300003];#];
+                    [[300004];[4]];
+                    [[301000];[0]];
+                    [[301001];#];
+                    [[301002];[2]];
+                    [[301003];#];
+                ])",
+                4, 2,
+            },
+            {
+                R"(
+                    (Key1 > 1 AND Key1 < 3) OR
+                    (Key1 > 2002 AND Key1 < 2004) OR
+                    (Key1 >= 4001 AND Key1 <= 4004)
+                )",
+                R"([
+                    [[2];[2]];
+                    [[2003];#];
+                    [[4001];#];
+                    [[4002];[2]];
+                    [[4003];#];
+                    [[4004];[4]]
+                ])",
+                1, 10,
+            },
+            {
+                "Key1 IN (1, 2, 100, 101, 102, 200, 201, 201, 1000, 1001, 1002, 2000, 2001, 2002) AND (Key1 > 2000)",
+                R"([
+                    [[2001];#];[[2002];[2]]
+                ])",
+                1, 10,
+            }
+        };
+
+        for (auto& data: testData) {
+            auto query = TString(R"(
+                --!syntax_v1
+                SELECT * FROM `/Root/TableWithIntKey`
+                WHERE <PREDICATE>
+                ORDER BY Key1;
+            )");
+
+            SubstGlobal(query, "<PREDICATE>", std::get<0>(data));
+            RunTestOverIntTable(query, std::get<1>(data), std::get<2>(data), std::get<3>(data));
+        }
+    }
+
+    Y_UNIT_TEST(NoFullScanAtDNFPredicate) {
+        TKikimrRunner kikimr;
+        NExperimental::TStreamQueryClient streamDb(kikimr.GetDriver());
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE [/Root/TestDNF] (
+                Key1 Uint32,
+                Key2 Uint32,
+                Value Uint32,
+                PRIMARY KEY (Key1, Key2)
+            );
+        )").GetValueSync().IsSuccess());
+
+        UNIT_ASSERT(session.ExecuteDataQuery(R"(
+            REPLACE INTO [/Root/TestDNF] (Key1, Key2, Value) VALUES
+                (NULL, NULL, 1),
+                (NULL, 100u, 2),
+                (NULL, 200u, 3),
+                (1u,   NULL, 4),
+                (1u,   100u, 5),
+                (1u,   200u, 6),
+                (1u,   200u, 7),
+                (1u,   200u, 8),
+                (1u,   300u, 9),
+                (1u,   400u, 10),
+                (2u,   100u, 11),
+                (2u,   200u, 12);
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess());
+
+        TVector<std::pair<TString, TString>> testData = {
+            /*
+             * Predicate : Expected result
+             */
+            {
+                "Key1 = 1 AND (Key2 = 100 OR Key2 = 300)",
+                "[[[5u]];[[9u]]]"
+            },
+            {
+                "Key1 = 1 AND Key2 IN (100, 300, 400)",
+                "[[[5u]];[[9u]];[[10u]]]"
+            }
+        };
+
+        for (auto& data: testData) {
+            auto query = TString(R"(
+                --!syntax_v1
+                SELECT Value FROM `/Root/TestDNF`
+                WHERE <PREDICATE>
+                ORDER BY Value;
+            )");
+            SubstGlobal(query, "<PREDICATE>", data.first);
+            ExecuteStreamQueryAndCheck(streamDb, query, data.second);
+        }
+    }
+
+    Y_UNIT_TEST(ValidatePredicates) {
+        /* Table format:
+         *   Key1 Uint32,
+         *   Key2 Uint32,
+         *   Key3 String,
+         *   Key4 String,
+         *   Value Int32,
+         *   PRIMARY KEY (Key1, Key2, Key3, Key4)
+         */
+        std::vector<TString> testData = {
+            "Key1 < 2000",
+            "Key1 > 1000",
+            "Key1 = 1000",
+            "Key1 >= 1000",
+            "Key1 < 2000",
+            "Key1 <= 2000",
+            "Key1 = 1000 AND Key2 > 0",
+            "Key1 >= 1000 AND Key2 > 8",
+            "Key1 >= 1000 AND Key2 = 8",
+            "Key1 >= 8000 AND Key2 >= 8",
+            "Key1 < 2000 AND Key2 < 2",
+            "Key1 <= 2000 AND Key2 < 2",
+            "Key1 <= 2000 AND Key2 <= 2",
+            "Key1 > 4000 AND Key2 > 4 AND Key3 > \"resource_3\" AND Key4 > \"uid:11\"",
+            "Key1 >= 4000 AND Key2 >= 4 AND Key3 >= \"resource_3\" AND Key4 >= \"uid:11\"",
+            "Key1 < 2000 AND Key2 < 2 AND Key3 < \"resource_3\" AND Key4 < \"uid:11\"",
+            "Key1 <= 2000 AND Key2 <= 2 AND Key3 <= \"resource_3\" AND Key4 <= \"uid:11\"",
+            "Key2 > 8",
+            "Key2 < 9",
+            "Key2 <= 2 AND Key3 <= \"resource_3\" AND Key4 <= \"uid:11\"",
+            "Key1 = 2000 AND Key2 = 2 AND Key3 = \"resource_3\" AND Key4 = \"uid:11\"",
+            "Key1 != 2000 AND Key2 != 2 AND Key3 != \"resource_3\" AND Key4 != \"uid:11\"",
+            "Key1 IS NULL",
+            "Key2 IS NULL",
+            "Key1 IS NOT NULL",
+            "Key1 > 1000 AND Key2 IS NULL",
+            "Key1 > 1000 OR Key2 IS NULL",
+            "Key1 >= 1000 OR Key2 IS NOT NULL",
+            "Key1 < 9000 OR Key3 IS NOT NULL",
+            "Key1 < 9000 OR Key3 IS NULL",
+            "Value = 20",
+            "(Key1 <= 1000) OR (Key1 > 2000 AND Key1 < 5000) OR (Key1 >= 8000)",
+            "Key1 < NULL"
+        };
+
+        RunPredicateTest(testData, /* withNulls */ true);
+        RunPredicateTest(testData, /* withNulls */ false);
+    }
+
+    Y_UNIT_TEST(MergeRanges) {
+        TKikimrRunner kikimr;
+        NExperimental::TStreamQueryClient streamDb(kikimr.GetDriver());
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE [/Root/TestTable] (
+                Key1 Uint32,
+                Key2 Uint32,
+                Value Uint32,
+                PRIMARY KEY (Key1, Key2)
+            );
+        )").GetValueSync().IsSuccess());
+
+        auto replaceResult = session.ExecuteDataQuery(R"(
+            REPLACE INTO [/Root/TestTable] (Key1, Key2, Value) VALUES
+                (1u, 10u, 1),
+                (2u, 20u, 2),
+                (3u, 30u, 3),
+                (4u, 40u, 4),
+                (5u, 50u, 5),
+                (6u, 60u, 6);
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(replaceResult.IsSuccess(), replaceResult.GetIssues().ToString());
+
+        auto query = TString(R"(
+            --!syntax_v1
+            SELECT Value FROM `/Root/TestTable` WHERE
+                Key1 = 1 OR Key1 = 2 OR Key1 = 3
+            ORDER BY Value;
+        )");
+
+        auto it = db.StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        CollectStreamResult(it);
+
+        it = db.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        auto result = CollectStreamResult(it);
+        NJson::TJsonValue plan, readRange;
+        NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+        // TODO: Need to get real ranges from explain, no anything in JSON
+    }
+
     Y_UNIT_TEST(ValidatePredicatesDataQuery) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

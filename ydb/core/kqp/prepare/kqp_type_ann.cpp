@@ -125,22 +125,22 @@ std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode*
     return {std::move(tableName), tableDesc};
 }
 
-const TFlowExprType* GetWideRowsType(TExprContext& ctx, const TStructExprType* rowType) { 
-    YQL_ENSURE(rowType); 
- 
-    const auto& columns = rowType->GetItems(); 
- 
-    TTypeAnnotationNode::TListType items; 
-    items.reserve(columns.size()); 
- 
-    for (const auto& column: columns) { 
-        items.push_back(column->GetItemType()); 
-    } 
- 
-    auto wideRowType = ctx.MakeType<TMultiExprType>(items); 
-    return ctx.MakeType<TFlowExprType>(wideRowType); 
-} 
- 
+const TFlowExprType* GetWideRowsType(TExprContext& ctx, const TStructExprType* rowType) {
+    YQL_ENSURE(rowType);
+
+    const auto& columns = rowType->GetItems();
+
+    TTypeAnnotationNode::TListType items;
+    items.reserve(columns.size());
+
+    for (const auto& column: columns) {
+        items.push_back(column->GetItemType());
+    }
+
+    auto wideRowType = ctx.MakeType<TMultiExprType>(items);
+    return ctx.MakeType<TFlowExprType>(wideRowType);
+}
+
 bool CalcKeyColumnsCount(TExprContext& ctx, const TPositionHandle pos, const TStructExprType& structType,
     const TKikimrTableDescription& tableDesc, const TKikimrTableMetadata& metadata, ui32& keyColumnsCount)
 {
@@ -174,7 +174,7 @@ TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const 
         return TStatus::Error;
     }
 
-    if (!readIndex && !EnsureArgsCount(*node, 4, ctx)) { 
+    if (!readIndex && !EnsureArgsCount(*node, 4, ctx)) {
         return TStatus::Error;
     }
 
@@ -226,7 +226,7 @@ TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const 
     } else if (TKqpReadTable::Match(node.Get())) {
         node->SetTypeAnn(ctx.MakeType<TFlowExprType>(rowType));
     } else if (TKqpWideReadTable::Match(node.Get())) {
-        node->SetTypeAnn(GetWideRowsType(ctx, rowType->Cast<TStructExprType>())); 
+        node->SetTypeAnn(GetWideRowsType(ctx, rowType->Cast<TStructExprType>()));
     } else {
         YQL_ENSURE(false, "Unexpected ReadTable callable: " << node->Content());
     }
@@ -234,89 +234,89 @@ TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const 
     return TStatus::Ok;
 }
 
-TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster, 
-    const TKikimrTablesData& tablesData, bool withSystemColumns) 
-{ 
-    bool olapTable = TKqpReadOlapTableRangesBase::Match(node.Get()); 
- 
-    if ((olapTable && !EnsureArgsCount(*node, 6, ctx)) || (!olapTable && !EnsureArgsCount(*node, 5, ctx))) { 
-        return TStatus::Error; 
-    } 
- 
-    auto table = ResolveTable(node->Child(TKqlReadTableRangesBase::idx_Table), ctx, cluster, tablesData); 
-    if (!table.second) { 
-        return TStatus::Error; 
-    } 
- 
-    const auto& columns = node->ChildPtr(TKqlReadTableRangesBase::idx_Columns); 
-    if (!EnsureTupleOfAtoms(*columns, ctx)) { 
-        return TStatus::Error; 
-    } 
- 
-    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, TCoAtomList(columns), withSystemColumns); 
-    if (!rowType) { 
-        return TStatus::Error; 
-    } 
- 
-    auto ranges = node->Child(TKqlReadTableRangesBase::idx_Ranges); 
-    if (!TCoVoid::Match(ranges) && 
-        !TCoArgument::Match(ranges) && 
-        !TCoParameter::Match(ranges) && 
-        !TCoRangeFinalize::Match(ranges)) 
-    { 
-        ctx.AddError(TIssue( 
-            ctx.GetPosition(ranges->Pos()), 
-            TStringBuilder() 
-                << "Expected Void, Parameter, Argument or RangeFinalize in ranges, but got: " 
-                << ranges->Content() 
-        )); 
-        return TStatus::Error; 
-    } 
- 
-    if (TKqlReadTableRanges::Match(node.Get())) { 
-        node->SetTypeAnn(ctx.MakeType<TListExprType>(rowType)); 
-    } else if (TKqpReadTableRanges::Match(node.Get())) { 
-        node->SetTypeAnn(ctx.MakeType<TFlowExprType>(rowType)); 
-    } else if (TKqpWideReadTableRanges::Match(node.Get())) { 
-        node->SetTypeAnn(GetWideRowsType(ctx, rowType->Cast<TStructExprType>())); 
-    } else if (TKqpReadOlapTableRangesBase::Match(node.Get())) { 
-        if (!EnsureLambda(*node->Child(TKqpReadOlapTableRangesBase::idx_Process), ctx)) { 
-            return TStatus::Error; 
-        } 
- 
-        auto& processLambda = node->ChildRef(TKqpReadOlapTableRangesBase::idx_Process); 
-        if (!UpdateLambdaAllArgumentsTypes(processLambda, {ctx.MakeType<TFlowExprType>(rowType)}, ctx)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        if (!processLambda->GetTypeAnn()) { 
-            return IGraphTransformer::TStatus::Repeat; 
-        } 
- 
-        auto processType = processLambda->GetTypeAnn(); 
-        const TTypeAnnotationNode* processRowType; 
-        if (!EnsureNewSeqType<false, false, true>(node->Pos(), *processType, ctx, &processRowType)) { 
-            return TStatus::Error; 
-        } 
- 
-        if (!EnsureStructType(node->Pos(), *processRowType, ctx)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        if (TKqpReadOlapTableRanges::Match(node.Get())) { 
-            node->SetTypeAnn(ctx.MakeType<TFlowExprType>(processRowType)); 
-        } else if (TKqpWideReadOlapTableRanges::Match(node.Get())) { 
-            node->SetTypeAnn(GetWideRowsType(ctx, processRowType->Cast<TStructExprType>())); 
-        } else { 
-            YQL_ENSURE(false, "Unexpected ReadOlapTable callable." << node->Content()); 
-        } 
-    } else { 
-        YQL_ENSURE(false, "Unexpected ReadTableRanges callable." << node->Content()); 
-    } 
- 
-    return TStatus::Ok; 
-} 
- 
+TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData, bool withSystemColumns)
+{
+    bool olapTable = TKqpReadOlapTableRangesBase::Match(node.Get());
+
+    if ((olapTable && !EnsureArgsCount(*node, 6, ctx)) || (!olapTable && !EnsureArgsCount(*node, 5, ctx))) {
+        return TStatus::Error;
+    }
+
+    auto table = ResolveTable(node->Child(TKqlReadTableRangesBase::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    const auto& columns = node->ChildPtr(TKqlReadTableRangesBase::idx_Columns);
+    if (!EnsureTupleOfAtoms(*columns, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, TCoAtomList(columns), withSystemColumns);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    auto ranges = node->Child(TKqlReadTableRangesBase::idx_Ranges);
+    if (!TCoVoid::Match(ranges) &&
+        !TCoArgument::Match(ranges) &&
+        !TCoParameter::Match(ranges) &&
+        !TCoRangeFinalize::Match(ranges))
+    {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(ranges->Pos()),
+            TStringBuilder()
+                << "Expected Void, Parameter, Argument or RangeFinalize in ranges, but got: "
+                << ranges->Content()
+        ));
+        return TStatus::Error;
+    }
+
+    if (TKqlReadTableRanges::Match(node.Get())) {
+        node->SetTypeAnn(ctx.MakeType<TListExprType>(rowType));
+    } else if (TKqpReadTableRanges::Match(node.Get())) {
+        node->SetTypeAnn(ctx.MakeType<TFlowExprType>(rowType));
+    } else if (TKqpWideReadTableRanges::Match(node.Get())) {
+        node->SetTypeAnn(GetWideRowsType(ctx, rowType->Cast<TStructExprType>()));
+    } else if (TKqpReadOlapTableRangesBase::Match(node.Get())) {
+        if (!EnsureLambda(*node->Child(TKqpReadOlapTableRangesBase::idx_Process), ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& processLambda = node->ChildRef(TKqpReadOlapTableRangesBase::idx_Process);
+        if (!UpdateLambdaAllArgumentsTypes(processLambda, {ctx.MakeType<TFlowExprType>(rowType)}, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!processLambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        auto processType = processLambda->GetTypeAnn();
+        const TTypeAnnotationNode* processRowType;
+        if (!EnsureNewSeqType<false, false, true>(node->Pos(), *processType, ctx, &processRowType)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureStructType(node->Pos(), *processRowType, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (TKqpReadOlapTableRanges::Match(node.Get())) {
+            node->SetTypeAnn(ctx.MakeType<TFlowExprType>(processRowType));
+        } else if (TKqpWideReadOlapTableRanges::Match(node.Get())) {
+            node->SetTypeAnn(GetWideRowsType(ctx, processRowType->Cast<TStructExprType>()));
+        } else {
+            YQL_ENSURE(false, "Unexpected ReadOlapTable callable." << node->Content());
+        }
+    } else {
+        YQL_ENSURE(false, "Unexpected ReadTableRanges callable." << node->Content());
+    }
+
+    return TStatus::Ok;
+}
+
 TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
@@ -696,146 +696,146 @@ TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     return TStatus::Ok;
 }
 
-TStatus AnnotateOlapFilter(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    if (!EnsureArgsCount(*node, 2, ctx)) { 
-        return TStatus::Error; 
-    } 
- 
-    auto* input = node->Child(TKqpOlapFilter::idx_Input); 
- 
-    const TTypeAnnotationNode* itemType; 
-    if (!EnsureNewSeqType<false, false, true>(*input, ctx, &itemType)) { 
-        return TStatus::Error; 
-    } 
- 
-    if (!EnsureStructType(input->Pos(), *itemType, ctx)) { 
-        return TStatus::Error; 
-    } 
- 
-    if (!EnsureSpecificDataType(*node->Child(TKqpOlapFilter::idx_Condition), EDataSlot::Bool, ctx)) { 
-        return TStatus::Error; 
-    } 
- 
-    node->SetTypeAnn(input->GetTypeAnn()); 
-    return TStatus::Ok; 
-} 
- 
-TStatus AnnotateOlapFilterCompare(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    if (!EnsureArgsCount(*node, 3, ctx)) {
+TStatus AnnotateOlapFilter(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
     }
 
-    auto* input = node->Child(TKqpOlapFilterCompare::idx_Input); 
+    auto* input = node->Child(TKqpOlapFilter::idx_Input);
 
     const TTypeAnnotationNode* itemType;
- 
     if (!EnsureNewSeqType<false, false, true>(*input, ctx, &itemType)) {
         return TStatus::Error;
     }
- 
+
     if (!EnsureStructType(input->Pos(), *itemType, ctx)) {
         return TStatus::Error;
     }
 
-    auto validateNode = [itemType, &ctx](TExprNode* node) { 
-        // Column name, validate that it is present in Input node 
-        if (TCoAtom::Match(node)) { 
-            auto rowType = itemType->Cast<TStructExprType>(); 
-
-            if (rowType->FindItem(node->Content())) { 
-                return true; 
-            } 
-
-            ctx.AddError(TIssue( 
-                ctx.GetPosition(node->Pos()), 
-                TStringBuilder() << "Missing column in input type: " << node->Content() 
-            )); 
- 
-            return false; 
-        } 
- 
-        // Null argument for IS NULL/NOT NULL 
-        if (TCoNull::Match(node)) { 
-            return true; 
-        } 
- 
-        // Incoming parameter 
-        if (TCoParameter::Match(node)) { 
-            return true; 
-        } 
- 
-        // Any supported literal 
-        if (TCoDataCtor::Match(node)) { 
-            return true; 
-        } 
- 
-        ctx.AddError(TIssue( 
-            ctx.GetPosition(node->Pos()), 
-            TStringBuilder() 
-                << "Expected literal or column as OLAP filter value, got: " << node->Content() 
-        )); 
- 
-        return false; 
-    }; 
- 
-    auto leftNode = node->Child(TKqpOlapFilterCompare::idx_Left); 
-    auto rightNode = node->Child(TKqpOlapFilterCompare::idx_Right); 
- 
-    if (!validateNode(leftNode)) { 
+    if (!EnsureSpecificDataType(*node->Child(TKqpOlapFilter::idx_Condition), EDataSlot::Bool, ctx)) {
         return TStatus::Error;
     }
 
-    if (!validateNode(rightNode)) { 
-        return TStatus::Error;
-    }
-
-    node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool)); 
- 
+    node->SetTypeAnn(input->GetTypeAnn());
     return TStatus::Ok;
 }
 
-TStatus AnnotateOlapFilterExists(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    if (!EnsureArgsCount(*node, 2, ctx)) { 
-        return TStatus::Error; 
-    } 
- 
-    auto* input = node->Child(TKqpOlapFilterExists::idx_Input); 
- 
-    const TTypeAnnotationNode* itemType; 
- 
-    if (!EnsureNewSeqType<false, false, true>(*input, ctx, &itemType)) { 
-        return TStatus::Error; 
-    } 
- 
-    if (!EnsureStructType(input->Pos(), *itemType, ctx)) { 
-        return TStatus::Error; 
-    } 
- 
-    auto column = node->Child(TKqpOlapFilterExists::idx_Column); 
- 
-    if (!EnsureAtom(*column, ctx)) { 
-        ctx.AddError(TIssue( 
-            ctx.GetPosition(node->Pos()), 
-            TStringBuilder() 
-                << "Expected column in OLAP Exists filter, got: " << column->Content() 
-        )); 
- 
-        return TStatus::Error; 
-    } 
- 
-    auto rowType = itemType->Cast<TStructExprType>(); 
- 
-    if (!rowType->FindItem(column->Content())) { 
-        ctx.AddError(TIssue( 
-            ctx.GetPosition(node->Pos()), 
-            TStringBuilder() << "Missing column in OLAP Exists filter in input type: " << column->Content() 
-        )); 
-    } 
- 
-    node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool)); 
-    return TStatus::Ok; 
-} 
- 
+TStatus AnnotateOlapFilterCompare(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 3, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* input = node->Child(TKqpOlapFilterCompare::idx_Input);
+
+    const TTypeAnnotationNode* itemType;
+
+    if (!EnsureNewSeqType<false, false, true>(*input, ctx, &itemType)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureStructType(input->Pos(), *itemType, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto validateNode = [itemType, &ctx](TExprNode* node) {
+        // Column name, validate that it is present in Input node
+        if (TCoAtom::Match(node)) {
+            auto rowType = itemType->Cast<TStructExprType>();
+
+            if (rowType->FindItem(node->Content())) {
+                return true;
+            }
+
+            ctx.AddError(TIssue(
+                ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Missing column in input type: " << node->Content()
+            ));
+
+            return false;
+        }
+
+        // Null argument for IS NULL/NOT NULL
+        if (TCoNull::Match(node)) {
+            return true;
+        }
+
+        // Incoming parameter
+        if (TCoParameter::Match(node)) {
+            return true;
+        }
+
+        // Any supported literal
+        if (TCoDataCtor::Match(node)) {
+            return true;
+        }
+
+        ctx.AddError(TIssue(
+            ctx.GetPosition(node->Pos()),
+            TStringBuilder()
+                << "Expected literal or column as OLAP filter value, got: " << node->Content()
+        ));
+
+        return false;
+    };
+
+    auto leftNode = node->Child(TKqpOlapFilterCompare::idx_Left);
+    auto rightNode = node->Child(TKqpOlapFilterCompare::idx_Right);
+
+    if (!validateNode(leftNode)) {
+        return TStatus::Error;
+    }
+
+    if (!validateNode(rightNode)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
+
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOlapFilterExists(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* input = node->Child(TKqpOlapFilterExists::idx_Input);
+
+    const TTypeAnnotationNode* itemType;
+
+    if (!EnsureNewSeqType<false, false, true>(*input, ctx, &itemType)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureStructType(input->Pos(), *itemType, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto column = node->Child(TKqpOlapFilterExists::idx_Column);
+
+    if (!EnsureAtom(*column, ctx)) {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(node->Pos()),
+            TStringBuilder()
+                << "Expected column in OLAP Exists filter, got: " << column->Content()
+        ));
+
+        return TStatus::Error;
+    }
+
+    auto rowType = itemType->Cast<TStructExprType>();
+
+    if (!rowType->FindItem(column->Content())) {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(node->Pos()),
+            TStringBuilder() << "Missing column in OLAP Exists filter in input type: " << column->Content()
+        ));
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
+    return TStatus::Ok;
+}
+
 TStatus AnnotateKqpTxInternalBinding(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
@@ -1050,10 +1050,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateReadTable(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
 
-            if (TKqlReadTableRangesBase::Match(input.Get())) { 
-                return AnnotateReadTableRanges(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled()); 
-            } 
- 
+            if (TKqlReadTableRangesBase::Match(input.Get())) {
+                return AnnotateReadTableRanges(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
+            }
+
             if (TKqlLookupTableBase::Match(input.Get())) {
                 return AnnotateLookupTable(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
@@ -1078,18 +1078,18 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateDeleteRows(input, ctx, cluster, *tablesData);
             }
 
-            if (TKqpOlapFilter::Match(input.Get())) { 
-                return AnnotateOlapFilter(input, ctx); 
-            } 
- 
-            if (TKqpOlapFilterCompare::Match(input.Get())) { 
-                return AnnotateOlapFilterCompare(input, ctx); 
+            if (TKqpOlapFilter::Match(input.Get())) {
+                return AnnotateOlapFilter(input, ctx);
             }
 
-            if (TKqpOlapFilterExists::Match(input.Get())) { 
-                return AnnotateOlapFilterExists(input, ctx); 
-            } 
- 
+            if (TKqpOlapFilterCompare::Match(input.Get())) {
+                return AnnotateOlapFilterCompare(input, ctx);
+            }
+
+            if (TKqpOlapFilterExists::Match(input.Get())) {
+                return AnnotateOlapFilterExists(input, ctx);
+            }
+
             if (TKqpCnMapShard::Match(input.Get()) || TKqpCnShuffleShard::Match(input.Get())) {
                 return AnnotateDqConnection(input, ctx);
             }

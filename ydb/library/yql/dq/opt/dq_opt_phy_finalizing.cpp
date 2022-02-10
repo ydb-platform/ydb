@@ -1,4 +1,4 @@
-#include "dq_opt_phy_finalizing.h" 
+#include "dq_opt_phy_finalizing.h"
 
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -331,20 +331,20 @@ TExprNode::TPtr ReplicateDqConnection(TExprNode::TPtr&& input, const TMultiUsedC
     return ctx.ReplaceNode(std::move(result), dqStage.Ref(), newStage.Ptr());
 }
 
-template <typename TExpr> 
-TVector<TExpr> CollectNodes(const TExprNode::TPtr& input) { 
-    TVector<TExpr> result; 
- 
-    VisitExpr(input, [&result](const TExprNode::TPtr& node) { 
-        if (TExpr::Match(node.Get())) { 
-            result.emplace_back(TExpr(node)); 
-        } 
-        return true; 
-    }); 
- 
-    return result; 
-} 
- 
+template <typename TExpr>
+TVector<TExpr> CollectNodes(const TExprNode::TPtr& input) {
+    TVector<TExpr> result;
+
+    VisitExpr(input, [&result](const TExprNode::TPtr& node) {
+        if (TExpr::Match(node.Get())) {
+            result.emplace_back(TExpr(node));
+        }
+        return true;
+    });
+
+    return result;
+}
+
 bool GatherConsumersImpl(const TExprNode& node, TNodeMap<TNodeMultiSet>& consumers, TNodeSet& visited) {
     if (!visited.emplace(&node).second) {
         return true;
@@ -521,60 +521,60 @@ IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TE
     return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
 }
 
-IGraphTransformer::TStatus DqExtractPrecomputeToStageInput(const TExprNode::TPtr& input, TExprNode::TPtr& output, 
+IGraphTransformer::TStatus DqExtractPrecomputeToStageInput(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx)
-{ 
-    auto stages = CollectNodes<TDqStage>(input); 
- 
-    TNodeOnNodeOwnedMap replaces; 
-    for (auto& stage : stages) { 
-        auto dqPrecomputes = CollectNodes<TDqPhyPrecompute>(stage.Program().Ptr()); 
-        if (dqPrecomputes.empty()) { 
-            continue; 
-        } 
- 
+{
+    auto stages = CollectNodes<TDqStage>(input);
+
+    TNodeOnNodeOwnedMap replaces;
+    for (auto& stage : stages) {
+        auto dqPrecomputes = CollectNodes<TDqPhyPrecompute>(stage.Program().Ptr());
+        if (dqPrecomputes.empty()) {
+            continue;
+        }
+
         YQL_CLOG(TRACE, CoreDq) << "DqExtractPrecomputeToStageInput: stage: " << PrintDqStageOnly(stage, ctx)
                 << ", DqPhyPrecompute: " << dqPrecomputes.size();
- 
-        TVector<TExprNode::TPtr> inputs; 
-        TVector<TExprNode::TPtr> args; 
-        inputs.reserve(stage.Inputs().Size() + dqPrecomputes.size()); 
-        args.reserve(stage.Inputs().Size() + dqPrecomputes.size()); 
- 
-        auto exprApplier = Build<TExprApplier>(ctx, stage.Pos()) 
-            .Apply(stage.Program()); 
- 
-        for (ui64 i = 0; i < stage.Inputs().Size(); ++i) { 
-            inputs.emplace_back(stage.Inputs().Item(i).Ptr()); 
-            args.emplace_back(ctx.NewArgument(stage.Pos(), TStringBuilder() << "_kqp_arg_" << i)); 
-            exprApplier.With(i, TCoArgument(args.back())); 
-        } 
- 
-        for (ui64 i = 0; i < dqPrecomputes.size(); ++i) { 
-            inputs.emplace_back(dqPrecomputes[i].Ptr()); 
-            args.emplace_back(ctx.NewArgument(stage.Pos(), TStringBuilder() << "_kqp_pc_arg_" << i)); 
-            exprApplier.With(dqPrecomputes[i], TCoArgument(args.back())); 
-        } 
- 
-        auto newStage = Build<TDqStage>(ctx, stage.Pos()) 
-            .Inputs() 
-                .Add(inputs) 
-                .Build() 
-            .Program() 
-                .Args(args) 
-                .Body(exprApplier.Done()) 
-                .Build() 
-            .Settings().Build() 
-            .Done(); 
- 
-        replaces.emplace(stage.Raw(), newStage.Ptr()); 
-    } 
- 
-    if (replaces.empty()) { 
-        return IGraphTransformer::TStatus::Ok; 
-    } 
- 
-    return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr)); 
-} 
- 
+
+        TVector<TExprNode::TPtr> inputs;
+        TVector<TExprNode::TPtr> args;
+        inputs.reserve(stage.Inputs().Size() + dqPrecomputes.size());
+        args.reserve(stage.Inputs().Size() + dqPrecomputes.size());
+
+        auto exprApplier = Build<TExprApplier>(ctx, stage.Pos())
+            .Apply(stage.Program());
+
+        for (ui64 i = 0; i < stage.Inputs().Size(); ++i) {
+            inputs.emplace_back(stage.Inputs().Item(i).Ptr());
+            args.emplace_back(ctx.NewArgument(stage.Pos(), TStringBuilder() << "_kqp_arg_" << i));
+            exprApplier.With(i, TCoArgument(args.back()));
+        }
+
+        for (ui64 i = 0; i < dqPrecomputes.size(); ++i) {
+            inputs.emplace_back(dqPrecomputes[i].Ptr());
+            args.emplace_back(ctx.NewArgument(stage.Pos(), TStringBuilder() << "_kqp_pc_arg_" << i));
+            exprApplier.With(dqPrecomputes[i], TCoArgument(args.back()));
+        }
+
+        auto newStage = Build<TDqStage>(ctx, stage.Pos())
+            .Inputs()
+                .Add(inputs)
+                .Build()
+            .Program()
+                .Args(args)
+                .Body(exprApplier.Done())
+                .Build()
+            .Settings().Build()
+            .Done();
+
+        replaces.emplace(stage.Raw(), newStage.Ptr());
+    }
+
+    if (replaces.empty()) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
+}
+
 } // NKikimr::NKqp

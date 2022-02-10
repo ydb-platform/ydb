@@ -151,54 +151,54 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
     return spOut;
 }
 
-bool TTxReadBase::ParseProgram(const TActorContext& ctx, NKikimrSchemeOp::EOlapProgramType programType, 
-    TString serializedProgram, TReadDescription& read, const IColumnResolver& columnResolver) 
-{ 
-    if (serializedProgram.empty()) { 
-        return true; 
-    } 
+bool TTxReadBase::ParseProgram(const TActorContext& ctx, NKikimrSchemeOp::EOlapProgramType programType,
+    TString serializedProgram, TReadDescription& read, const IColumnResolver& columnResolver)
+{
+    if (serializedProgram.empty()) {
+        return true;
+    }
 
-    NKikimrSSA::TProgram program; 
-    NKikimrSSA::TOlapProgram olapProgram; 
- 
-    switch (programType) { 
-        case NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS: 
-            if (!olapProgram.ParseFromString(serializedProgram)) { 
-                ErrorDescription = TStringBuilder() << "Can't parse TOlapProgram at " << Self->TabletID(); 
-                return false; 
-            } 
- 
-            if (!program.ParseFromString(olapProgram.GetProgram())) { 
-                ErrorDescription = TStringBuilder() << "Can't parse TProgram at " << Self->TabletID(); 
-                return false; 
-            } 
- 
-            break; 
-        default: 
-            ErrorDescription = TStringBuilder() << "Unsupported olap program version: " << (ui32)programType; 
-            return false; 
-    } 
- 
-    if (ctx.LoggerSettings() && 
-        ctx.LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::TX_COLUMNSHARD)) 
-    { 
-        TString out; 
-        ::google::protobuf::TextFormat::PrintToString(program, &out); 
-        LOG_S_DEBUG("Process program: " << Endl << out); 
-    } 
- 
-    if (olapProgram.HasParameters()) { 
-        Y_VERIFY(olapProgram.HasParametersSchema(), "Parameters are present, but there is no schema."); 
- 
-        auto schema = NArrow::DeserializeSchema(olapProgram.GetParametersSchema()); 
-        read.ProgramParameters = NArrow::DeserializeBatch(olapProgram.GetParameters(), schema); 
-    } 
- 
-    read.AddProgram(columnResolver, program); 
- 
-    return true; 
-} 
- 
+    NKikimrSSA::TProgram program;
+    NKikimrSSA::TOlapProgram olapProgram;
+
+    switch (programType) {
+        case NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS:
+            if (!olapProgram.ParseFromString(serializedProgram)) {
+                ErrorDescription = TStringBuilder() << "Can't parse TOlapProgram at " << Self->TabletID();
+                return false;
+            }
+
+            if (!program.ParseFromString(olapProgram.GetProgram())) {
+                ErrorDescription = TStringBuilder() << "Can't parse TProgram at " << Self->TabletID();
+                return false;
+            }
+
+            break;
+        default:
+            ErrorDescription = TStringBuilder() << "Unsupported olap program version: " << (ui32)programType;
+            return false;
+    }
+
+    if (ctx.LoggerSettings() &&
+        ctx.LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::TX_COLUMNSHARD))
+    {
+        TString out;
+        ::google::protobuf::TextFormat::PrintToString(program, &out);
+        LOG_S_DEBUG("Process program: " << Endl << out);
+    }
+
+    if (olapProgram.HasParameters()) {
+        Y_VERIFY(olapProgram.HasParametersSchema(), "Parameters are present, but there is no schema.");
+
+        auto schema = NArrow::DeserializeSchema(olapProgram.GetParametersSchema());
+        read.ProgramParameters = NArrow::DeserializeBatch(olapProgram.GetParameters(), schema);
+    }
+
+    read.AddProgram(columnResolver, program);
+
+    return true;
+}
+
 bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_VERIFY(Ev);
     Y_VERIFY(Self->PrimaryIndex);
@@ -237,14 +237,14 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
             NArrow::EOperation::Less, proto.GetRow(), schema, proto.GetInclusive());
     }
 
-    bool parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read, 
-        TIndexColumnResolver(Self->PrimaryIndex->GetIndexInfo())); 
+    bool parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read,
+        TIndexColumnResolver(Self->PrimaryIndex->GetIndexInfo()));
 
-    if (parseResult) { 
-        ReadMetadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->PrimaryIndex, ErrorDescription); 
+    if (parseResult) {
+        ReadMetadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->PrimaryIndex, ErrorDescription);
     }
 
-    ui32 status = NKikimrTxColumnShard::EResultStatus::ERROR; 
+    ui32 status = NKikimrTxColumnShard::EResultStatus::ERROR;
 
     if (ReadMetadata) {
         status = NKikimrTxColumnShard::EResultStatus::SUCCESS;

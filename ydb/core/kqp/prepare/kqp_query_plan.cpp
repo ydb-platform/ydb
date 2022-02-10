@@ -51,13 +51,13 @@ struct TTableInfo {
 
 struct TSerializerCtx {
     TSerializerCtx(TExprContext& exprCtx, const TString& cluster,
-        const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, 
+        const TIntrusivePtr<NYql::TKikimrTablesData> tablesData,
         const TKikimrConfiguration::TPtr config,
         THashMap<ui32, TVector<NKikimrMiniKQL::TResult>> pureTxResults)
         : ExprCtx(exprCtx)
         , Cluster(cluster)
         , TablesData(tablesData)
-        , Config(config) 
+        , Config(config)
         , PureTxResults(std::move(pureTxResults))
     {}
 
@@ -72,7 +72,7 @@ struct TSerializerCtx {
     const TExprContext& ExprCtx;
     const TString& Cluster;
     const TIntrusivePtr<NYql::TKikimrTablesData> TablesData;
-    const TKikimrConfiguration::TPtr Config; 
+    const TKikimrConfiguration::TPtr Config;
     THashMap<ui32, TVector<NKikimrMiniKQL::TResult>> PureTxResults;
 };
 
@@ -985,7 +985,7 @@ private:
         planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
 
         auto rangesDesc = PrettyExprStr(read.Ranges());
-        if (rangesDesc == "Void" || explainPrompt.UsedKeyColumns.empty()) { 
+        if (rangesDesc == "Void" || explainPrompt.UsedKeyColumns.empty()) {
             readInfo.Type = ETableReadType::FullScan;
 
             auto& ranges = op.Properties["ReadRanges"];
@@ -1030,17 +1030,17 @@ private:
             Y_ENSURE(false, rangesDesc);
         }
 
-        if (!explainPrompt.UsedKeyColumns.empty()) { 
+        if (!explainPrompt.UsedKeyColumns.empty()) {
             auto& usedColumns = op.Properties["ReadRangesKeys"];
-            for (const auto& col : explainPrompt.UsedKeyColumns) { 
+            for (const auto& col : explainPrompt.UsedKeyColumns) {
                 usedColumns.AppendValue(col);
-            } 
-        } 
- 
+            }
+        }
+
         if (explainPrompt.ExpectedMaxRanges) {
             op.Properties["ReadRangesExpectedSize"] = explainPrompt.ExpectedMaxRanges;
         }
- 
+
         auto& columns = op.Properties["ReadColumns"];
         for (const auto& col : read.Columns()) {
             readInfo.Columns.emplace_back(TString(col.Value()));

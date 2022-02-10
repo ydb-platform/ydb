@@ -125,24 +125,24 @@ NNodes::TCoNameValueTupleList TKqpPhyTxSettings::BuildNode(TExprContext& ctx, TP
         .Done();
 }
 
-namespace { 
- 
-template <typename TKqlReadOperation> 
-TKqpReadTableSettings ParseInternal(const TKqlReadOperation& node) { 
+namespace {
+
+template <typename TKqlReadOperation>
+TKqpReadTableSettings ParseInternal(const TKqlReadOperation& node) {
     TKqpReadTableSettings settings;
 
     for (const auto& tuple : node.Settings()) {
         TStringBuf name = tuple.Name().Value();
- 
-        if (name == TKqpReadTableSettings::SkipNullKeysSettingName) { 
-            YQL_ENSURE(tuple.Value().template Maybe<TCoAtomList>()); 
-            for (const auto& key : tuple.Value().template Cast<TCoAtomList>()) { 
+
+        if (name == TKqpReadTableSettings::SkipNullKeysSettingName) {
+            YQL_ENSURE(tuple.Value().template Maybe<TCoAtomList>());
+            for (const auto& key : tuple.Value().template Cast<TCoAtomList>()) {
                 settings.SkipNullKeys.emplace_back(TString(key.Value()));
             }
-        } else if (name == TKqpReadTableSettings::ItemsLimitSettingName) { 
+        } else if (name == TKqpReadTableSettings::ItemsLimitSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
             settings.ItemsLimit = tuple.Value().Cast().Ptr();
-        } else if (name == TKqpReadTableSettings::ReverseSettingName) { 
+        } else if (name == TKqpReadTableSettings::ReverseSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.Reverse = true;
         } else {
@@ -153,16 +153,16 @@ TKqpReadTableSettings ParseInternal(const TKqlReadOperation& node) {
     return settings;
 }
 
-} // anonymous namespace end 
- 
-TKqpReadTableSettings TKqpReadTableSettings::Parse(const TKqlReadTableBase& node) { 
-    return ParseInternal(node); 
-} 
- 
-TKqpReadTableSettings TKqpReadTableSettings::Parse(const TKqlReadTableRangesBase& node) { 
-    return ParseInternal(node); 
-} 
- 
+} // anonymous namespace end
+
+TKqpReadTableSettings TKqpReadTableSettings::Parse(const TKqlReadTableBase& node) {
+    return ParseInternal(node);
+}
+
+TKqpReadTableSettings TKqpReadTableSettings::Parse(const TKqlReadTableRangesBase& node) {
+    return ParseInternal(node);
+}
+
 NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
     TVector<TCoNameValueTuple> settings;
     settings.reserve(3);
@@ -248,103 +248,103 @@ NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ct
         .Done();
 }
 
-TCoNameValueTupleList TKqpReadTableExplainPrompt::BuildNode(TExprContext& ctx, TPositionHandle pos) const { 
-    TVector<TCoNameValueTuple> prompt; 
-    prompt.reserve(2); 
- 
-    TVector<TExprNodePtr> keys; 
-    keys.reserve(UsedKeyColumns.size()); 
- 
-    for (auto& key: UsedKeyColumns) { 
-        keys.emplace_back(ctx.NewAtom(pos, key)); 
-    } 
- 
-    prompt.emplace_back( 
-        Build<TCoNameValueTuple>(ctx, pos) 
-            .Name() 
-                .Build(UsedKeyColumnsName) 
-            .Value<TCoAtomList>() 
-                .Add(keys) 
-                .Build() 
-            .Done() 
-    ); 
- 
-    if (!ExpectedMaxRanges.empty()) { 
-        prompt.emplace_back( 
-            Build<TCoNameValueTuple>(ctx, pos) 
-                .Name() 
-                    .Build(ExpectedMaxRangesName) 
-                .Value<TCoAtom>() 
-                    .Build(ExpectedMaxRanges) 
-                .Done() 
-        ); 
-    } 
- 
-    return Build<TCoNameValueTupleList>(ctx, pos) 
-        .Add(prompt) 
-        .Done(); 
-} 
- 
-TKqpReadTableExplainPrompt TKqpReadTableExplainPrompt::Parse(const NNodes::TKqlReadTableRangesBase& node) { 
-    TKqpReadTableExplainPrompt prompt; 
- 
-    for (const auto& tuple : node.ExplainPrompt()) { 
-        TStringBuf name = tuple.Name().Value(); 
- 
-        if (name == TKqpReadTableExplainPrompt::UsedKeyColumnsName) { 
-            for (const auto& key : tuple.Value().template Cast<TCoAtomList>()) { 
-                prompt.UsedKeyColumns.emplace_back(TString(key.Value())); 
-            } 
- 
-            continue; 
-        } 
- 
-        if (name == TKqpReadTableExplainPrompt::ExpectedMaxRangesName) { 
-            prompt.ExpectedMaxRanges = TString(tuple.Value().template Cast<TCoAtom>()); 
-             continue; 
-        } 
- 
-        YQL_ENSURE(false, "Unknown KqpReadTableRanges explain prompt name '" << name << "'"); 
-    } 
- 
-    return prompt; 
-} 
- 
+TCoNameValueTupleList TKqpReadTableExplainPrompt::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> prompt;
+    prompt.reserve(2);
+
+    TVector<TExprNodePtr> keys;
+    keys.reserve(UsedKeyColumns.size());
+
+    for (auto& key: UsedKeyColumns) {
+        keys.emplace_back(ctx.NewAtom(pos, key));
+    }
+
+    prompt.emplace_back(
+        Build<TCoNameValueTuple>(ctx, pos)
+            .Name()
+                .Build(UsedKeyColumnsName)
+            .Value<TCoAtomList>()
+                .Add(keys)
+                .Build()
+            .Done()
+    );
+
+    if (!ExpectedMaxRanges.empty()) {
+        prompt.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(ExpectedMaxRangesName)
+                .Value<TCoAtom>()
+                    .Build(ExpectedMaxRanges)
+                .Done()
+        );
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(prompt)
+        .Done();
+}
+
+TKqpReadTableExplainPrompt TKqpReadTableExplainPrompt::Parse(const NNodes::TKqlReadTableRangesBase& node) {
+    TKqpReadTableExplainPrompt prompt;
+
+    for (const auto& tuple : node.ExplainPrompt()) {
+        TStringBuf name = tuple.Name().Value();
+
+        if (name == TKqpReadTableExplainPrompt::UsedKeyColumnsName) {
+            for (const auto& key : tuple.Value().template Cast<TCoAtomList>()) {
+                prompt.UsedKeyColumns.emplace_back(TString(key.Value()));
+            }
+
+            continue;
+        }
+
+        if (name == TKqpReadTableExplainPrompt::ExpectedMaxRangesName) {
+            prompt.ExpectedMaxRanges = TString(tuple.Value().template Cast<TCoAtom>());
+             continue;
+        }
+
+        YQL_ENSURE(false, "Unknown KqpReadTableRanges explain prompt name '" << name << "'");
+    }
+
+    return prompt;
+}
+
 TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx) {
-    try { 
-        TConvertToAstSettings settings; 
-        settings.NoInlineFunc = [] (const TExprNode& exprNode) { 
-            TExprBase node(&exprNode); 
+    try {
+        TConvertToAstSettings settings;
+        settings.NoInlineFunc = [] (const TExprNode& exprNode) {
+            TExprBase node(&exprNode);
 
-            if (node.Maybe<TDqStageBase>()) { 
-                return true; 
-            } 
+            if (node.Maybe<TDqStageBase>()) {
+                return true;
+            }
 
-            if (node.Maybe<TDqConnection>()) { 
-                return true; 
-            } 
+            if (node.Maybe<TDqConnection>()) {
+                return true;
+            }
 
-            if (node.Maybe<TKqlReadTableBase>()) { 
-                return true; 
-            } 
+            if (node.Maybe<TKqlReadTableBase>()) {
+                return true;
+            }
 
-            if (node.Maybe<TKqlReadTableRangesBase>()) { 
-                return true; 
-            } 
- 
-            return false; 
-        }; 
+            if (node.Maybe<TKqlReadTableRangesBase>()) {
+                return true;
+            }
 
-        auto ast = ConvertToAst(expr, ctx, settings); 
-        TStringStream exprStream; 
-        YQL_ENSURE(ast.Root); 
-        ast.Root->PrettyPrintTo(exprStream, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote); 
-        TString exprText = exprStream.Str(); 
+            return false;
+        };
 
-        return exprText; 
+        auto ast = ConvertToAst(expr, ctx, settings);
+        TStringStream exprStream;
+        YQL_ENSURE(ast.Root);
+        ast.Root->PrettyPrintTo(exprStream, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
+        TString exprText = exprStream.Str();
+
+        return exprText;
     } catch (const std::exception& e) {
         return TStringBuilder() << "Failed to render expression to pretty string: " << e.what();
-    } 
+    }
 }
 
 TString KqpExprToPrettyString(const TExprBase& expr, TExprContext& ctx) {

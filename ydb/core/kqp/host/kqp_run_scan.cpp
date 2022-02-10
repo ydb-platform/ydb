@@ -34,7 +34,7 @@ protected:
         request.MaxComputeActors = TransformCtx->Config->_KqpMaxComputeActors.Get().GetRef();
         request.StatsMode = GetStatsMode(TransformCtx->QueryCtx->StatsMode);
         request.DisableLlvmForUdfStages = TransformCtx->Config->DisableLlvmForUdfStages();
-        request.LlvmEnabled = TransformCtx->Config->GetEnableLlvm() != EOptionalFlag::Disabled; 
+        request.LlvmEnabled = TransformCtx->Config->GetEnableLlvm() != EOptionalFlag::Disabled;
         request.Snapshot = TxState->Tx().GetSnapshot();
 
         switch (tx->GetType()) {

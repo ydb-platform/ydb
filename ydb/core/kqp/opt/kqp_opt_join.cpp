@@ -101,12 +101,12 @@ TExprBase KqpBuildJoin(const TExprBase& node, TExprContext& ctx, const TKqpOptim
         return node;
     }
 
-    auto joinType = join.JoinType().Value(); 
- 
+    auto joinType = join.JoinType().Value();
+
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {
-        return DqBuildJoinDict(join, ctx); 
-    } 
- 
+        return DqBuildJoinDict(join, ctx);
+    }
+
     // NOTE: We don't want to broadcast table data via readsets for data queries, so we need to create a
     // separate stage to receive data from both sides of join.
     // TODO: We can push MapJoin to existing stage for data query, if it doesn't have table reads. This

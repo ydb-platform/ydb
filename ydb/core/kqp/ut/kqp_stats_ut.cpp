@@ -69,7 +69,7 @@ Y_UNIT_TEST(JoinStatsBasic) {
     UNIT_ASSERT_VALUES_EQUAL(res.ResultSetYson, "[[16u]]");
 
     UNIT_ASSERT(res.QueryStats);
-    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 2); 
+    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 2);
     if (res.QueryStats->query_phases(0).table_access(0).name() == "/Root/KeyValue") {
         UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).name(), "/Root/KeyValue");
         UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).partitions_count(), 1);
@@ -97,10 +97,10 @@ Y_UNIT_TEST(MultiTxStatsFull) {
 
     auto res = CollectStreamResult(it);
     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-    UNIT_ASSERT_VALUES_EQUAL( 
-        res.ResultSetYson, 
-        R"([[[1];[202u];["Value2"]];[[2];[201u];["Value1"]];[[3];[203u];["Value3"]]])" 
-    ); 
+    UNIT_ASSERT_VALUES_EQUAL(
+        res.ResultSetYson,
+        R"([[[1];[202u];["Value2"]];[[2];[201u];["Value1"]];[[3];[203u];["Value3"]]])"
+    );
 
     UNIT_ASSERT(res.QueryStats);
     UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 2);

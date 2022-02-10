@@ -1,5 +1,5 @@
 #include "datashard_impl.h"
-#include "range_ops.h" 
+#include "range_ops.h"
 #include <util/string/vector.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -36,7 +36,7 @@ public:
 public:
     TKqpScan(const TActorId& computeActorId, const TActorId& datashardActorId, ui32 scanId,
         NDataShard::TUserTable::TCPtr tableInfo, const TSmallVec<TSerializedTableRange>&& tableRanges,
-        const TSmallVec<NTable::TTag>&& columnTags, const TSmallVec<bool>&& skipNullKeys, 
+        const TSmallVec<NTable::TTag>&& columnTags, const TSmallVec<bool>&& skipNullKeys,
         const NYql::NDqProto::EDqStatsMode& statsMode, ui64 timeoutMs, ui32 generation,
         NKikimrTxDataShard::EScanDataFormat dataFormat)
         : TActor(&TKqpScan::StateScan)
@@ -45,10 +45,10 @@ public:
         , ScanId(scanId)
         , TableInfo(tableInfo)
         , TablePath(TableInfo->Path)
-        , TableRanges(std::move(tableRanges)) 
-        , CurrentRange(0) 
-        , Tags(std::move(columnTags)) 
-        , SkipNullKeys(std::move(skipNullKeys)) 
+        , TableRanges(std::move(tableRanges))
+        , CurrentRange(0)
+        , Tags(std::move(columnTags))
+        , SkipNullKeys(std::move(skipNullKeys))
         , StatsMode(statsMode)
         , Deadline(TInstant::Now() + (timeoutMs ? TDuration::MilliSeconds(timeoutMs) + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT))
         , Generation(generation)
@@ -214,9 +214,9 @@ private:
     }
 
     EScan Seek(TLead& lead, ui64 seq) noexcept final {
-        YQL_ENSURE(seq == CurrentRange); 
- 
-        if (CurrentRange == TableRanges.size()) { 
+        YQL_ENSURE(seq == CurrentRange);
+
+        if (CurrentRange == TableRanges.size()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                 "TableRanges is over"
                 << ", at: " << ScanActorId << ", scanId: " << ScanId
@@ -224,33 +224,33 @@ private:
             return EScan::Final;
         }
 
-        auto& range = TableRanges[CurrentRange]; 
- 
+        auto& range = TableRanges[CurrentRange];
+
         int cmpFrom;
         int cmpTo;
         cmpFrom = CompareBorders<false, false>(
-            range.From.GetCells(), 
+            range.From.GetCells(),
             TableInfo->Range.From.GetCells(),
-            range.FromInclusive, 
+            range.FromInclusive,
             TableInfo->Range.FromInclusive,
             TableInfo->KeyColumnTypes);
 
         cmpTo = CompareBorders<true, true>(
-            range.To.GetCells(), 
+            range.To.GetCells(),
             TableInfo->Range.To.GetCells(),
-            range.ToInclusive, 
+            range.ToInclusive,
             TableInfo->Range.ToInclusive,
             TableInfo->KeyColumnTypes);
 
         if (cmpFrom > 0) {
-            auto seek = range.FromInclusive ? NTable::ESeek::Lower : NTable::ESeek::Upper; 
-            lead.To(Tags, range.From.GetCells(), seek); 
+            auto seek = range.FromInclusive ? NTable::ESeek::Lower : NTable::ESeek::Upper;
+            lead.To(Tags, range.From.GetCells(), seek);
         } else {
             lead.To(Tags, {}, NTable::ESeek::Lower);
         }
 
-        if (cmpTo < 0) { 
-            lead.Until(range.To.GetCells(), range.ToInclusive); 
+        if (cmpTo < 0) {
+            lead.Until(range.To.GetCells(), range.ToInclusive);
         }
 
         return EScan::Feed;
@@ -282,35 +282,35 @@ private:
 
         auto sent = SendResult(/* pageFault */ false);
 
-        if (!sent) { 
-            // There is free space in memory and results are not sent to caller 
-            return EScan::Feed; 
-        } 
+        if (!sent) {
+            // There is free space in memory and results are not sent to caller
+            return EScan::Feed;
+        }
 
-        if (PeerFreeSpace <= 0) { 
+        if (PeerFreeSpace <= 0) {
             Sleep = true;
             return EScan::Sleep;
         }
 
-        return EScan::Feed; // sent by rows limit, can send one more batch 
+        return EScan::Feed; // sent by rows limit, can send one more batch
     }
 
     EScan Exhausted() noexcept override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, 
-            "Range " << CurrentRange << " of " << TableRanges.size() << " exhausted: try next one." 
-            << " table: " << TablePath 
-            << " range: " << DebugPrintRange( 
-                TableInfo->KeyColumnTypes, TableRanges[CurrentRange].ToTableRange(), *AppData()->TypeRegistry 
-                ) 
-            << " next range: " << ((CurrentRange + 1) >= TableRanges.size() ? "<none>" : DebugPrintRange( 
-                TableInfo->KeyColumnTypes, TableRanges[CurrentRange + 1].ToTableRange(), *AppData()->TypeRegistry 
-                )) 
-        ); 
- 
-        ++CurrentRange; 
-        return EScan::Reset; 
-    } 
- 
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+            "Range " << CurrentRange << " of " << TableRanges.size() << " exhausted: try next one."
+            << " table: " << TablePath
+            << " range: " << DebugPrintRange(
+                TableInfo->KeyColumnTypes, TableRanges[CurrentRange].ToTableRange(), *AppData()->TypeRegistry
+                )
+            << " next range: " << ((CurrentRange + 1) >= TableRanges.size() ? "<none>" : DebugPrintRange(
+                TableInfo->KeyColumnTypes, TableRanges[CurrentRange + 1].ToTableRange(), *AppData()->TypeRegistry
+                ))
+        );
+
+        ++CurrentRange;
+        return EScan::Reset;
+    }
+
     EScan PageFault() noexcept override final {
         ++PageFaults;
         if (Result && !Result->Rows.empty()) {
@@ -505,8 +505,8 @@ private:
     const ui32 ScanId;
     const NDataShard::TUserTable::TCPtr TableInfo;
     const TString TablePath;
-    const TSmallVec<TSerializedTableRange> TableRanges; 
-    ui32 CurrentRange; 
+    const TSmallVec<TSerializedTableRange> TableRanges;
+    ui32 CurrentRange;
     const TSmallVec<NTable::TTag> Tags;
     TSmallVec<NScheme::TTypeId> Types;
     const TSmallVec<bool> SkipNullKeys;
@@ -614,21 +614,21 @@ void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&
 
     Pipeline.StartStreamingTx(snapshot.GetTxId(), 1);
 
-    TSmallVec<TSerializedTableRange> ranges; 
-    ranges.reserve(request.RangesSize()); 
- 
-    for (auto range: request.GetRanges()) { 
-        ranges.emplace_back(std::move(TSerializedTableRange(range))); 
-    } 
- 
+    TSmallVec<TSerializedTableRange> ranges;
+    ranges.reserve(request.RangesSize());
+
+    for (auto range: request.GetRanges()) {
+        ranges.emplace_back(std::move(TSerializedTableRange(range)));
+    }
+
     auto* tableScan = new TKqpScan(
         scanComputeActor,
         SelfId(),
         request.GetScanId(),
         tableInfo,
-        std::move(ranges), 
-        std::move(TSmallVec<NTable::TTag>(request.GetColumnTags().begin(), request.GetColumnTags().end())), 
-        std::move(TSmallVec<bool>(request.GetSkipNullKeys().begin(), request.GetSkipNullKeys().end())), 
+        std::move(ranges),
+        std::move(TSmallVec<NTable::TTag>(request.GetColumnTags().begin(), request.GetColumnTags().end())),
+        std::move(TSmallVec<bool>(request.GetSkipNullKeys().begin(), request.GetSkipNullKeys().end())),
         request.GetStatsMode(),
         request.GetTimeoutMs(),
         generation,

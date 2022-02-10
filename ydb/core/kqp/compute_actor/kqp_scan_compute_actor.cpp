@@ -33,20 +33,20 @@ bool IsDebugLogEnabled(const TActorSystem* actorSystem, NActors::NLog::EComponen
     return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, component);
 }
 
-TString DebugPrintRanges(TConstArrayRef<NScheme::TTypeId> types, 
-  const TSmallVec<TSerializedTableRange>& ranges) 
-{ 
-    auto typeRegistry = AppData()->TypeRegistry; 
-    auto out = TStringBuilder(); 
- 
-    for (auto& range: ranges) { 
-      out << DebugPrintRange(types, range.ToTableRange(), *typeRegistry); 
-      out << " "; 
-    } 
- 
-    return out; 
-} 
- 
+TString DebugPrintRanges(TConstArrayRef<NScheme::TTypeId> types,
+  const TSmallVec<TSerializedTableRange>& ranges)
+{
+    auto typeRegistry = AppData()->TypeRegistry;
+    auto out = TStringBuilder();
+
+    for (auto& range: ranges) {
+      out << DebugPrintRange(types, range.ToTableRange(), *typeRegistry);
+      out << " ";
+    }
+
+    return out;
+}
+
 static constexpr TDuration MIN_RETRY_DELAY = TDuration::MilliSeconds(250);
 static constexpr TDuration MAX_RETRY_DELAY = TDuration::Seconds(2);
 static constexpr ui64 MAX_SHARD_RETRIES = 5; // retry after: 0, 250, 500, 1000, 2000
@@ -790,8 +790,8 @@ private:
         state.ActorId = {};
 
         CA_LOG_D("StartTableScan: '" << ScanData->TablePath << "', shardId: " << state.TabletId << ", gen: " << state.Generation
-            << ", ranges: " << DebugPrintRanges(KeyColumnTypes, GetScanRanges(state))); 
- 
+            << ", ranges: " << DebugPrintRanges(KeyColumnTypes, GetScanRanges(state)));
+
         SendStartScanRequest(state, state.Generation);
     }
 
@@ -815,15 +815,15 @@ private:
         }
         ev->Record.MutableSkipNullKeys()->CopyFrom(Meta.GetSkipNullKeys());
 
-        auto ranges = GetScanRanges(state); 
-        auto protoRanges = ev->Record.MutableRanges(); 
-        protoRanges->Reserve(ranges.size()); 
+        auto ranges = GetScanRanges(state);
+        auto protoRanges = ev->Record.MutableRanges();
+        protoRanges->Reserve(ranges.size());
 
-        for (auto& range: ranges) { 
-            auto newRange = protoRanges->Add(); 
-            range.Serialize(*newRange); 
-        } 
- 
+        for (auto& range: ranges) {
+            auto newRange = protoRanges->Add();
+            range.Serialize(*newRange);
+        }
+
         ev->Record.MutableSnapshot()->CopyFrom(Snapshot);
         if (RuntimeSettings.Timeout) {
             ev->Record.SetTimeoutMs(RuntimeSettings.Timeout.Get()->MilliSeconds());
@@ -836,63 +836,63 @@ private:
 
         ev->Record.SetGeneration(gen);
 
-        ev->Record.SetReverse(Meta.GetReverse()); 
-        ev->Record.SetItemsLimit(Meta.GetItemsLimit()); 
+        ev->Record.SetReverse(Meta.GetReverse());
+        ev->Record.SetItemsLimit(Meta.GetItemsLimit());
 
-        if (Meta.HasOlapProgram()) { 
-            TString programBytes; 
-            TStringOutput stream(programBytes); 
-            Meta.GetOlapProgram().SerializeToArcadiaStream(&stream); 
-            ev->Record.SetOlapProgram(programBytes); 
-            ev->Record.SetOlapProgramType( 
-                NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS 
-            ); 
-        } 
- 
+        if (Meta.HasOlapProgram()) {
+            TString programBytes;
+            TStringOutput stream(programBytes);
+            Meta.GetOlapProgram().SerializeToArcadiaStream(&stream);
+            ev->Record.SetOlapProgram(programBytes);
+            ev->Record.SetOlapProgramType(
+                NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS
+            );
+        }
+
         ev->Record.SetDataFormat(Meta.GetDataFormat());
 
         bool subscribed = std::exchange(state.SubscribedOnTablet, true);
 
         CA_LOG_D("Send EvKqpScan to shardId: " << state.TabletId << ", tablePath: " << ScanData->TablePath
             << ", gen: " << gen << ", subscribe: " << (!subscribed)
-            << ", range: " << DebugPrintRanges(KeyColumnTypes, GetScanRanges(state))); 
- 
+            << ", range: " << DebugPrintRanges(KeyColumnTypes, GetScanRanges(state)));
+
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), state.TabletId, !subscribed),
             IEventHandle::FlagTrackDelivery);
     }
 
-    const TSmallVec<TSerializedTableRange> GetScanRanges(const TShardState& state) const { 
-        // No any data read previously, return all ranges 
-        if (!LastKey.DataSize()) { 
-            return state.Ranges; 
+    const TSmallVec<TSerializedTableRange> GetScanRanges(const TShardState& state) const {
+        // No any data read previously, return all ranges
+        if (!LastKey.DataSize()) {
+            return state.Ranges;
         }
 
-        // Form new vector. Skip ranges already read. 
-        TVector<TSerializedTableRange> ranges; 
-        ranges.reserve(state.Ranges.size()); 
- 
-        YQL_ENSURE(KeyColumnTypes.size() == LastKey.size(), "Key columns size != last key"); 
- 
-        for (auto rangeIt = state.Ranges.begin(); rangeIt != state.Ranges.end(); ++rangeIt) { 
-            int cmp = ComparePointAndRange(LastKey, rangeIt->ToTableRange(), KeyColumnTypes, KeyColumnTypes); 
- 
-            YQL_ENSURE(cmp >= 0, "Missed intersection of LastKey and range."); 
- 
-            if (cmp > 0) { 
-                continue; 
-            } 
- 
-            // It is range, where read was interrupted. Restart operation from last read key. 
-            ranges.emplace_back(std::move(TSerializedTableRange( 
-                TSerializedCellVec::Serialize(LastKey), rangeIt->To.GetBuffer(), false, rangeIt->ToInclusive 
-                ))); 
- 
-            // And push all others 
-            ranges.insert(ranges.end(), ++rangeIt, state.Ranges.end()); 
-            break; 
-        } 
- 
-        return ranges; 
+        // Form new vector. Skip ranges already read.
+        TVector<TSerializedTableRange> ranges;
+        ranges.reserve(state.Ranges.size());
+
+        YQL_ENSURE(KeyColumnTypes.size() == LastKey.size(), "Key columns size != last key");
+
+        for (auto rangeIt = state.Ranges.begin(); rangeIt != state.Ranges.end(); ++rangeIt) {
+            int cmp = ComparePointAndRange(LastKey, rangeIt->ToTableRange(), KeyColumnTypes, KeyColumnTypes);
+
+            YQL_ENSURE(cmp >= 0, "Missed intersection of LastKey and range.");
+
+            if (cmp > 0) {
+                continue;
+            }
+
+            // It is range, where read was interrupted. Restart operation from last read key.
+            ranges.emplace_back(std::move(TSerializedTableRange(
+                TSerializedCellVec::Serialize(LastKey), rangeIt->To.GetBuffer(), false, rangeIt->ToInclusive
+                )));
+
+            // And push all others
+            ranges.insert(ranges.end(), ++rangeIt, state.Ranges.end());
+            break;
+        }
+
+        return ranges;
     }
 
     TString PrintLastKey() const {
@@ -1117,7 +1117,7 @@ private:
                     sb << ", ";
                 }
             }
-            sb << "], " 
+            sb << "], "
                << ", RetryAttempt: " << RetryAttempt << ", TotalRetries: " << TotalRetries
                << ", ResolveAttempt: " << ResolveAttempt << ", ActorId: " << ActorId << " }";
             return sb;

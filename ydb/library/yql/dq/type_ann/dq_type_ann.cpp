@@ -372,30 +372,30 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         rightTableLabel, join.JoinType(), join.JoinKeys(), ctx);
 }
 
-TStatus AnnotateDqPrecompute(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    if (!EnsureArgsCount(*node, 1, ctx)) { 
-        return TStatus::Error; 
-    } 
- 
-    node->SetTypeAnn(node->Child(TDqPrecompute::idx_Input)->GetTypeAnn()); 
-    return TStatus::Ok; 
-} 
- 
-TStatus AnnotateDqPhyPrecompute(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    if (!EnsureArgsCount(*node, 1, ctx)) { 
-        return TStatus::Error; 
-    } 
- 
+TStatus AnnotateDqPrecompute(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(node->Child(TDqPrecompute::idx_Input)->GetTypeAnn());
+    return TStatus::Ok;
+}
+
+TStatus AnnotateDqPhyPrecompute(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)) {
+        return TStatus::Error;
+    }
+
     auto* cn = node->Child(TDqPhyPrecompute::idx_Connection);
     if (!TDqConnection::Match(cn)) {
         ctx.AddError(TIssue(ctx.GetPosition(cn->Pos()), TStringBuilder() << "Expected DqConnection, got " << cn->Content()));
-        return TStatus::Error; 
-    } 
- 
+        return TStatus::Error;
+    }
+
     node->SetTypeAnn(cn->GetTypeAnn());
-    return TStatus::Ok; 
-} 
- 
+    return TStatus::Ok;
+}
+
 } // unnamed
 
 TStatus AnnotateDqStage(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -683,7 +683,7 @@ TStatus AnnotateDqJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateDqMapOrDictJoin(const TExprNode::TPtr& input, TExprContext& ctx) { 
+TStatus AnnotateDqMapOrDictJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto resultRowType = GetDqJoinResultType<true>(input, true, ctx);
     if (!resultRowType) {
         return TStatus::Error;
@@ -829,13 +829,13 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
             }
 
             if (TDqPhyMapJoin::Match(input.Get())) {
-                return AnnotateDqMapOrDictJoin(input, ctx); 
+                return AnnotateDqMapOrDictJoin(input, ctx);
             }
 
-            if (TDqPhyJoinDict::Match(input.Get())) { 
-                return AnnotateDqMapOrDictJoin(input, ctx); 
-            } 
- 
+            if (TDqPhyJoinDict::Match(input.Get())) {
+                return AnnotateDqMapOrDictJoin(input, ctx);
+            }
+
             if (TDqPhyCrossJoin::Match(input.Get())) {
                 return AnnotateDqCrossJoin(input, ctx);
             }
@@ -852,14 +852,14 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return AnnotateDqQuery(input, ctx);
             }
 
-            if (TDqPrecompute::Match(input.Get())) { 
-                return AnnotateDqPrecompute(input, ctx); 
-            } 
- 
-            if (TDqPhyPrecompute::Match(input.Get())) { 
-                return AnnotateDqPhyPrecompute(input, ctx); 
-            } 
- 
+            if (TDqPrecompute::Match(input.Get())) {
+                return AnnotateDqPrecompute(input, ctx);
+            }
+
+            if (TDqPhyPrecompute::Match(input.Get())) {
+                return AnnotateDqPhyPrecompute(input, ctx);
+            }
+
             return coreTransformer->Transform(input, output, ctx);
         });
 }

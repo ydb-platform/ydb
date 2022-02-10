@@ -208,11 +208,11 @@ message TKqpTransaction {
          repeated uint32 KeyColumnTypes = 3; // for debug logs only
          repeated bool SkipNullKeys = 4;
          repeated TReadOpMeta Reads = 5;
-         optional uint64 ItemsLimit = 6; 
-         optional bool Reverse = 7; 
-         reserved 8; // optional bytes ProcessProgram = 8; 
+         optional uint64 ItemsLimit = 6;
+         optional bool Reverse = 7;
+         reserved 8; // optional bytes ProcessProgram = 8;
          optional EScanDataFormat DataFormat = 9;
-         optional NKikimrSSA.TOlapProgram OlapProgram = 10; // Currently only for OLAP tables 
+         optional NKikimrSSA.TOlapProgram OlapProgram = 10; // Currently only for OLAP tables
     }
 
     optional EKqpTransactionType Type = 1;
@@ -1383,19 +1383,19 @@ message TEvKqpScan {
     repeated uint32 ColumnTags = 6;
     repeated uint32 ColumnTypes = 7;
     repeated bool SkipNullKeys = 8;
-    repeated NKikimrTx.TKeyRange Ranges = 9; 
+    repeated NKikimrTx.TKeyRange Ranges = 9;
     optional NKikimrKqp.TKqpSnapshot Snapshot = 10;
     reserved 11; // optional NKqpProto.EKqpStatsMode StatsMode = 11;
     optional uint64 TimeoutMs = 12;
     optional uint32 Generation = 13;
-    // Seralized OlapProgram in old format without parameters 
-    reserved 14; 
-    optional uint64 ItemsLimit = 15; 
-    optional bool Reverse = 16; 
+    // Seralized OlapProgram in old format without parameters
+    reserved 14;
+    optional uint64 ItemsLimit = 15;
+    optional bool Reverse = 16;
     optional EScanDataFormat DataFormat = 17;
-    optional NYql.NDqProto.EDqStatsMode StatsMode = 18; 
-    optional bytes OlapProgram = 19; 
-    optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 20; 
+    optional NYql.NDqProto.EDqStatsMode StatsMode = 18;
+    optional bytes OlapProgram = 19;
+    optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 20;
 }
 
 message TEvCompactTable {

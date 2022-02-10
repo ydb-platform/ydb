@@ -94,61 +94,61 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
 
-        TString enablePredicateExtractor = R"( 
-            PRAGMA Kikimr.OptEnablePredicateExtract = "true"; 
-        )"; 
- 
-        TString query = R"( 
+        TString enablePredicateExtractor = R"(
+            PRAGMA Kikimr.OptEnablePredicateExtract = "true";
+        )";
+
+        TString query = R"(
             SELECT OwnerId, PathId, PartIdx, Path
             FROM `/Root/.sys/partition_stats`
             WHERE OwnerId = 72057594046644480ul AND PathId > 5u AND PathId <= 9u
             ORDER BY PathId, PartIdx;
-        )"; 
+        )";
 
-        TString expectedYson = R"([ 
+        TString expectedYson = R"([
             [[72057594046644480u];[6u];[0u];["/Root/KeyValue"]];
             [[72057594046644480u];[7u];[0u];["/Root/KeyValue2"]];
             [[72057594046644480u];[8u];[0u];["/Root/Test"]];
             [[72057594046644480u];[9u];[0u];["/Root/Join1"]];
             [[72057594046644480u];[9u];[1u];["/Root/Join1"]]
-        ])"; 
- 
-        auto it = client.StreamExecuteScanQuery(query).GetValueSync(); 
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-        CompareYson(expectedYson, StreamResultToYson(it)); 
- 
-        it = client.StreamExecuteScanQuery(enablePredicateExtractor + query).GetValueSync(); 
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-        CompareYson(expectedYson, StreamResultToYson(it)); 
+        ])";
+
+        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        CompareYson(expectedYson, StreamResultToYson(it));
+
+        it = client.StreamExecuteScanQuery(enablePredicateExtractor + query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        CompareYson(expectedYson, StreamResultToYson(it));
     }
 
     Y_UNIT_TEST(PartitionStatsRange2) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
-        TString enablePredicateExtractor = R"( 
-            PRAGMA Kikimr.OptEnablePredicateExtract = "true"; 
-        )"; 
+        TString enablePredicateExtractor = R"(
+            PRAGMA Kikimr.OptEnablePredicateExtract = "true";
+        )";
 
-        TString query = R"( 
+        TString query = R"(
             SELECT OwnerId, PathId, PartIdx, Path
             FROM `/Root/.sys/partition_stats`
             WHERE OwnerId = 72057594046644480ul AND PathId >= 6u AND PathId < 9u
             ORDER BY PathId, PartIdx;
-        )"; 
+        )";
 
-        TString expectedYson = R"([ 
+        TString expectedYson = R"([
             [[72057594046644480u];[6u];[0u];["/Root/KeyValue"]];
             [[72057594046644480u];[7u];[0u];["/Root/KeyValue2"]];
             [[72057594046644480u];[8u];[0u];["/Root/Test"]]
-        ])"; 
- 
-        auto it = client.StreamExecuteScanQuery(query).GetValueSync(); 
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-        CompareYson(expectedYson, StreamResultToYson(it)); 
- 
-        it = client.StreamExecuteScanQuery(enablePredicateExtractor + query).GetValueSync(); 
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-        CompareYson(expectedYson, StreamResultToYson(it)); 
+        ])";
+
+        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        CompareYson(expectedYson, StreamResultToYson(it));
+
+        it = client.StreamExecuteScanQuery(enablePredicateExtractor + query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        CompareYson(expectedYson, StreamResultToYson(it));
     }
 
     Y_UNIT_TEST(PartitionStatsRange3) {

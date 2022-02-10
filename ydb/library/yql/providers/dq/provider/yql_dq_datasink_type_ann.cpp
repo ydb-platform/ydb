@@ -28,9 +28,9 @@ public:
         AddHandler({TDqCnMerge::CallableName()}, Hndl(&NDq::AnnotateDqCnMerge));
         AddHandler({TDqReplicate::CallableName()}, Hndl(&NDq::AnnotateDqReplicate));
         AddHandler({TDqJoin::CallableName()}, Hndl(&NDq::AnnotateDqJoin));
-        AddHandler({TDqPhyMapJoin::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin)); 
+        AddHandler({TDqPhyMapJoin::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));
         AddHandler({TDqPhyCrossJoin::CallableName()}, Hndl(&NDq::AnnotateDqCrossJoin));
-        AddHandler({TDqPhyJoinDict::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin)); 
+        AddHandler({TDqPhyJoinDict::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));
         AddHandler({TDqSink::CallableName()}, Hndl(&NDq::AnnotateDqSink));
         AddHandler({TDqWrite::CallableName()}, Hndl(&TDqsDataSinkTypeAnnotationTransformer::AnnotateDqWrite));
         AddHandler({TDqQuery::CallableName()}, Hndl(&NDq::AnnotateDqQuery));

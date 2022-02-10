@@ -15,7 +15,7 @@ namespace NSc {
     // todo: try to remove some rarely used methods
     class TValue {
     public:
-        enum class EType { 
+        enum class EType {
             Null = 0 /* "Null" */,
             Bool /* "Bool" */,
             IntNumber /* "Int" */,
@@ -396,9 +396,9 @@ namespace NSc {
         static const TArray& DefaultArray();
         static const TDict& DefaultDict();
         static const TValue& DefaultValue();
-        static const TValue& Null() { 
-            return DefaultValue(); 
-        } 
+        static const TValue& Null() {
+            return DefaultValue();
+        }
 
         void DoWriteJsonImpl(IOutputStream&, const TJsonOpts&, NImpl::TKeySortContext&, NImpl::TSelfLoopContext&) const;
 

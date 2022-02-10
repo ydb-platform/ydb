@@ -599,14 +599,14 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
         GetMapPointer(outer, "x", &map);
         UNIT_ASSERT_VALUES_EQUAL((*map).at("b"), 2);
     }
- 
+
     Y_UNIT_TEST(GetIntegerRobustBignumStringTest) {
         TString value = "1626862681464633683";
-        TJsonValue json(value); 
-        UNIT_ASSERT_VALUES_EQUAL(json.GetUIntegerRobust(), FromString<ui64>(value)); 
-        UNIT_ASSERT_VALUES_EQUAL(json.GetIntegerRobust(), FromString<i64>(value)); 
-    } 
- 
+        TJsonValue json(value);
+        UNIT_ASSERT_VALUES_EQUAL(json.GetUIntegerRobust(), FromString<ui64>(value));
+        UNIT_ASSERT_VALUES_EQUAL(json.GetIntegerRobust(), FromString<i64>(value));
+    }
+
     Y_UNIT_TEST(MoveSubpartToSelf) {
         TJsonValue json;
         json[0] = "testing 0";

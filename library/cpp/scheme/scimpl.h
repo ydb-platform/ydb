@@ -12,7 +12,7 @@ namespace NSc {
         TStringBuf String;
         TDict Dict;
         TArray Array;
-        TValue::EType ValueType = TValue::EType::Null; 
+        TValue::EType ValueType = TValue::EType::Null;
 
         TScCore(TPoolPtr& p)
             : Pool(p)
@@ -22,31 +22,31 @@ namespace NSc {
         }
 
         bool IsNull() const {
-            return TValue::EType::Null == ValueType; 
+            return TValue::EType::Null == ValueType;
         }
 
         bool IsBool() const {
-            return TValue::EType::Bool == ValueType; 
+            return TValue::EType::Bool == ValueType;
         }
 
         bool IsIntNumber() const {
-            return TValue::EType::IntNumber == ValueType || IsBool(); 
+            return TValue::EType::IntNumber == ValueType || IsBool();
         }
 
         bool IsNumber() const {
-            return TValue::EType::FloatNumber == ValueType || IsIntNumber(); 
+            return TValue::EType::FloatNumber == ValueType || IsIntNumber();
         }
 
         bool IsString() const {
-            return TValue::EType::String == ValueType; 
+            return TValue::EType::String == ValueType;
         }
 
         bool IsArray() const {
-            return TValue::EType::Array == ValueType; 
+            return TValue::EType::Array == ValueType;
         }
 
         bool IsDict() const {
-            return TValue::EType::Dict == ValueType; 
+            return TValue::EType::Dict == ValueType;
         }
 
         bool HasChildren() const {
@@ -54,7 +54,7 @@ namespace NSc {
         }
 
         void SetNull() {
-            ValueType = TValue::EType::Null; 
+            ValueType = TValue::EType::Null;
         }
 
         void SetArray() {
@@ -62,7 +62,7 @@ namespace NSc {
                 return;
             }
 
-            ValueType = TValue::EType::Array; 
+            ValueType = TValue::EType::Array;
             Array.clear();
         }
 
@@ -71,22 +71,22 @@ namespace NSc {
                 return;
             }
 
-            ValueType = TValue::EType::Dict; 
+            ValueType = TValue::EType::Dict;
             Dict.clear();
         }
 
         void SetNumber(double n) {
-            ValueType = TValue::EType::FloatNumber; 
+            ValueType = TValue::EType::FloatNumber;
             FloatNumber = n;
         }
 
         void SetIntNumber(i64 n) {
-            ValueType = TValue::EType::IntNumber; 
+            ValueType = TValue::EType::IntNumber;
             IntNumber = n;
         }
 
         void SetBool(bool b) {
-            ValueType = TValue::EType::Bool; 
+            ValueType = TValue::EType::Bool;
             IntNumber = b;
         }
 
@@ -95,7 +95,7 @@ namespace NSc {
         }
 
         void SetOwnedString(TStringBuf s) {
-            ValueType = TValue::EType::String; 
+            ValueType = TValue::EType::String;
             String = s;
         }
 

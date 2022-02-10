@@ -79,15 +79,15 @@ static TNode CreateEmptyNodeByType(::NYson::EYsonType type)
         default:
             break;
     }
-    return result; 
-} 
+    return result;
+}
 
 TNode NodeFromYsonString(const TStringBuf input, ::NYson::EYsonType type)
-{ 
+{
     TMemoryInput stream(input);
     return NodeFromYsonStream(&stream, type);
 }
- 
+
 TString NodeToYsonString(const TNode& node, NYson::EYsonFormat format)
 {
     TStringStream stream;
@@ -104,8 +104,8 @@ TString NodeToCanonicalYsonString(const TNode& node, NYson::EYsonFormat format)
 
 TNode NodeFromYsonStream(IInputStream* input, ::NYson::EYsonType type)
 {
-    TNode result = CreateEmptyNodeByType(type); 
- 
+    TNode result = CreateEmptyNodeByType(type);
+
     TNodeBuilder builder(&result);
     ::NYson::TYsonParser parser(&builder, input, type);
     parser.Parse();
@@ -129,17 +129,17 @@ void NodeToCanonicalYsonStream(const TNode& node, IOutputStream* output, NYson::
 TNode NodeFromJsonString(const TStringBuf input)
 {
     TMemoryInput stream(input);
- 
+
     TNode result;
- 
-    TNodeBuilder builder(&result); 
-    TYson2JsonCallbacksAdapter callbacks(&builder, /*throwException*/ true); 
+
+    TNodeBuilder builder(&result);
+    TYson2JsonCallbacksAdapter callbacks(&builder, /*throwException*/ true);
     NJson::TJsonReaderConfig config;
     config.DontValidateUtf8 = true;
     NJson::ReadJson(&stream, &config, &callbacks);
-    return result; 
-} 
- 
+    return result;
+}
+
 TNode NodeFromJsonValue(const NJson::TJsonValue& input)
 {
     TNode result;

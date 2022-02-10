@@ -448,7 +448,7 @@ struct _yhashtable_traits {
 
 extern const void* const _yhashtable_empty_data[];
 
-template <class Value, class Key, class HashFcn, class ExtractKey, class EqualKey, class Alloc> 
+template <class Value, class Key, class HashFcn, class ExtractKey, class EqualKey, class Alloc>
 class THashTable: private _yhashtable_traits<Value, Key, HashFcn, ExtractKey, EqualKey, Alloc>::base_type {
     using traits_type = _yhashtable_traits<Value, Key, HashFcn, ExtractKey, EqualKey, Alloc>;
     using base_type = typename traits_type::base_type;
@@ -1421,7 +1421,7 @@ namespace NPrivate {
     [[noreturn]] void ThrowKeyNotFoundInHashTableException(const TStringBuf keyRepresentation);
 }
 
-template <class Key, class T, class HashFcn, class EqualKey, class Alloc> 
+template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
 class THashMap: public TMapOps<THashMap<Key, T, HashFcn, EqualKey, Alloc>> {
 private:
     using ht = THashTable<std::pair<const Key, T>, Key, HashFcn, TSelect1st, EqualKey, Alloc>;

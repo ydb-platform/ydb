@@ -31,7 +31,7 @@ public:
 
         out << "[\"" << prefix + value;
         if (counter->ForDerivative()) {
-            out << "_dmmm"; 
+            out << "_dmmm";
         } else {
             out << "_ahhh";
         }

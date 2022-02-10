@@ -9,7 +9,7 @@
 #include <memory>
 #include <set>
 
-template <class K, class L, class A> 
+template <class K, class L, class A>
 class TSet: public std::set<K, L, TReboundAllocator<A, K>> {
 public:
     using TBase = std::set<K, L, TReboundAllocator<A, K>>;

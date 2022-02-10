@@ -20,7 +20,7 @@ namespace NKikimr {
             TVDiskID vdisk21 = TVDiskID(0, 1, 0, 2, 1);
             TVDiskID vdisk30 = TVDiskID(0, 1, 0, 3, 0);
 
-            TLogoBlobID lb1(0, 0, 0, 0, 0, 0); 
+            TLogoBlobID lb1(0, 0, 0, 0, 0, 0);
 
             // correspondings parts
             TIngress i1 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk10, TLogoBlobID(lb1, 1));
@@ -101,7 +101,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(IngressLocalParts) {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
-            TLogoBlobID lb1(0, 1, 0, 0, 0, 0); 
+            TLogoBlobID lb1(0, 1, 0, 0, 0, 0);
             TBlobStorageGroupInfo::TVDiskIds vDisks;
             TBlobStorageGroupInfo::TServiceIds serviceIds;
             groupInfo.PickSubgroup(lb1.Hash(), &vDisks, &serviceIds);
@@ -195,7 +195,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(IngressGetMainReplica) {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
-            TLogoBlobID lb1(0, 1, 0, 0, 0, 0); 
+            TLogoBlobID lb1(0, 1, 0, 0, 0, 0);
             TBlobStorageGroupInfo::TVDiskIds vDisks;
             TBlobStorageGroupInfo::TServiceIds serviceIds;
             groupInfo.PickSubgroup(lb1.Hash(), &vDisks, &serviceIds);
@@ -216,7 +216,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(IngressHandoffPartsDelete) {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
-            TLogoBlobID lb1(0, 1, 0, 0, 0, 0); 
+            TLogoBlobID lb1(0, 1, 0, 0, 0, 0);
             TBlobStorageGroupInfo::TVDiskIds vDisks;
             TBlobStorageGroupInfo::TServiceIds serviceIds;
             groupInfo.PickSubgroup(lb1.Hash(), &vDisks, &serviceIds);

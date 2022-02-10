@@ -690,17 +690,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", R"( 
-                            StoragePools { 
-                                Name: "/dc-1/users/tenant-1:hdd" 
-                                Kind: "hdd" 
-                                } 
-                            PlanResolution: 50 
-                            Coordinators: 1 
-                            Mediators: 1 
-                            TimeCastBucketsPerMediator: 2 
-                            Name: "USER_0" 
-                        )"); 
+        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                            StoragePools {
+                                Name: "/dc-1/users/tenant-1:hdd"
+                                Kind: "hdd"
+                                }
+                            PlanResolution: 50
+                            Coordinators: 1
+                            Mediators: 1
+                            TimeCastBucketsPerMediator: 2
+                            Name: "USER_0"
+                        )");
 
         TestCreateSubDomain(runtime, ++txId,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -715,35 +715,35 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                         "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                         "KeyColumnNames: [\"RowId\"]");
 
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"( 
-            Name: "ex_blobs" 
-            Columns { Name: "key" Type: "Uint64" } 
-            Columns { Name: "value" Type: "String" } 
-            KeyColumnNames: ["key"] 
-            PartitionConfig { 
-                ColumnFamilies { 
-                    Id: 0 
-                    StorageConfig { 
-                        SysLog { 
-                            PreferredPoolKind: "hdd" 
-                        } 
-                        Log { 
-                            PreferredPoolKind: "hdd" 
-                        } 
-                        Data { 
-                            PreferredPoolKind: "hdd" 
-                        } 
-                        External { 
-                            PreferredPoolKind: "hdd" 
-                        } 
-                        ExternalThreshold: 524288 
-                    } 
-                } 
-            } 
-        )"); 
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
+            Name: "ex_blobs"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+                ColumnFamilies {
+                    Id: 0
+                    StorageConfig {
+                        SysLog {
+                            PreferredPoolKind: "hdd"
+                        }
+                        Log {
+                            PreferredPoolKind: "hdd"
+                        }
+                        Data {
+                            PreferredPoolKind: "hdd"
+                        }
+                        External {
+                            PreferredPoolKind: "hdd"
+                        }
+                        ExternalThreshold: 524288
+                    }
+                }
+            }
+        )");
 
-        env.TestWaitNotification(runtime, {100, 101, 102, 103, 104}); 
- 
+        env.TestWaitNotification(runtime, {100, 101, 102, 103, 104});
+
         TestCopyTable(runtime, ++txId, "/MyRoot/USER_1", "dst", "/MyRoot/USER_0/src", NKikimrScheme::StatusInvalidParameter);
         TestCopyTable(runtime, ++txId, "/MyRoot", "dst", "/MyRoot/USER_0/src", NKikimrScheme::StatusInvalidParameter);
         TestCopyTable(runtime, ++txId, "/MyRoot/USER_0", "ex_blobs_copy", "/MyRoot/USER_0/ex_blobs", NKikimrScheme::StatusPreconditionFailed);

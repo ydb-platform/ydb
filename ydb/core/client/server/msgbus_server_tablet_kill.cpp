@@ -7,7 +7,7 @@ namespace NMsgBusProxy {
 class TMessageBusTabletKillRequest : public TMessageBusSimpleTabletRequest<TMessageBusTabletKillRequest, TEvTablet::TEvTabletDead, NKikimrServices::TActivity::FRONT_POISON_TABLET> {
 public:
     TMessageBusTabletKillRequest(TBusMessageContext &msg)
-        : TMessageBusSimpleTabletRequest(msg, static_cast<TBusTabletKillRequest*>(msg.GetMessage())->Record.GetTabletID(), false, TDuration::Seconds(60), false) 
+        : TMessageBusSimpleTabletRequest(msg, static_cast<TBusTabletKillRequest*>(msg.GetMessage())->Record.GetTabletID(), false, TDuration::Seconds(60), false)
     {}
 
     TEvents::TEvPoisonPill* MakeReq(const TActorContext &ctx) {

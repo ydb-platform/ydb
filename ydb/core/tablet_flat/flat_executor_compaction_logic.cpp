@@ -6,17 +6,17 @@
 #include <ydb/core/base/appdata.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <util/generic/cast.h> 
- 
+#include <util/generic/cast.h>
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-TCompactionLogicState::TSnapRequest::~TSnapRequest() 
-{} 
- 
-TCompactionLogicState::TTableInfo::~TTableInfo() 
-{} 
- 
+TCompactionLogicState::TSnapRequest::~TSnapRequest()
+{}
+
+TCompactionLogicState::TTableInfo::~TTableInfo()
+{}
+
 TCompactionLogic::TCompactionLogic(NUtil::ILogger *logger,
                                    NTable::IResourceBroker *broker,
                                    NTable::ICompactionBackend *backend,
@@ -28,11 +28,11 @@ TCompactionLogic::TCompactionLogic(NUtil::ILogger *logger,
     , Time(TAppData::TimeProvider.Get())
     , State(state)
     , TaskNameSuffix(taskNameSuffix)
-{} 
- 
-TCompactionLogic::~TCompactionLogic() 
-{} 
- 
+{}
+
+TCompactionLogic::~TCompactionLogic()
+{}
+
 void TCompactionLogic::Start() {
     auto result = ReflectSchemeChanges();
     Y_VERIFY(!result.StrategyChanges);
@@ -42,7 +42,7 @@ void TCompactionLogic::Start() {
 void TCompactionLogic::Stop() {
     for (auto &kv : State->Tables) {
         StopTable(kv.second);
-    } 
+    }
     State->Tables.clear();
 }
 
@@ -105,25 +105,25 @@ TVector<TTableCompactionChanges> TCompactionLogic::ApplyChanges()
 }
 
 void TCompactionLogic::PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, TTableSnapshotContext *snapContext) {
-    TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(table); 
-    Y_VERIFY_DEBUG(tableInfo); 
-    TCompactionLogicState::TInMem &inMem = tableInfo->InMem; 
- 
+    TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(table);
+    Y_VERIFY_DEBUG(tableInfo);
+    TCompactionLogicState::TInMem &inMem = tableInfo->InMem;
+
     Y_VERIFY(edge.TxStamp != Max<ui64>(), "TxStamp of snapshot is undefined");
- 
+
     tableInfo->SnapRequests.emplace_back(TCompactionLogicState::TSnapRequest(edge, snapContext));
 
-    switch (inMem.State) { 
+    switch (inMem.State) {
     case ECompactionState::Free:
         SubmitCompactionTask(table, 0,
                              tableInfo->Policy->SnapshotResourceBrokerTask,
                              tableInfo->Policy->DefaultTaskPriority,
                              inMem.CompactionTask);
         inMem.State = ECompactionState::SnapshotPending;
-        break; 
+        break;
     case ECompactionState::Pending:
         inMem.State = ECompactionState::SnapshotPending;
-        break; 
+        break;
     case ECompactionState::PendingBackground:
         // Replace background compaction with regular snapshot task.
         UpdateCompactionTask(tableInfo->Policy->SnapshotResourceBrokerTask,
@@ -131,11 +131,11 @@ void TCompactionLogic::PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, 
                              inMem.CompactionTask);
         inMem.State = ECompactionState::SnapshotPending;
         break;
-    default: 
-        break; 
-    } 
-} 
- 
+    default:
+        break;
+    }
+}
+
 bool TCompactionLogic::PrepareForceCompaction() {
     bool ok = true;
     for (auto &it : State->Tables) {
@@ -460,11 +460,11 @@ void TCompactionLogic::UpdateLogUsage(const NRedo::TUsage &usage)
 
 bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
 {
-    TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(tableId); 
+    TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(tableId);
     Y_VERIFY(tableInfo,
         "Unexpected BeginMemTableCompaction(%" PRIu64 ", %" PRIu32 ") for a dropped table",
         taskId, tableId);
- 
+
     TCompactionLogicState::TInMem &inMem = tableInfo->InMem;
     Y_VERIFY(taskId == inMem.CompactionTask.TaskId);
 
@@ -477,7 +477,7 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
         inMem.State = ECompactionState::Compaction;
         edge.Head = NTable::TEpoch::Max();
         break;
- 
+
     case ECompactionState::SnapshotPending:
         inMem.CompactingSteps = inMem.Steps;
         inMem.State = ECompactionState::SnapshotCompaction;
@@ -522,22 +522,22 @@ TCompactionLogic::HandleCompaction(
     const ui32 tableId = params->Table;
     const auto edge = params->Edge;
 
-    TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(tableId); 
+    TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(tableId);
     Y_VERIFY(tableInfo, "Unexpected CompleteCompaction for a dropped table");
- 
+
     if (compactionId == tableInfo->InMem.CompactionTask.CompactionId) {
         TCompactionLogicState::TInMem &inMem = tableInfo->InMem;
         Y_VERIFY(params->TaskId == inMem.CompactionTask.TaskId);
 
-        switch (inMem.State) { 
+        switch (inMem.State) {
         case ECompactionState::Compaction:
             inMem.Steps -= std::exchange(inMem.CompactingSteps, 0);
             inMem.State = ECompactionState::Free;
             inMem.CompactionTask.TaskId = 0;
             inMem.CompactionTask.CompactionId = 0;
-            break; 
+            break;
         case ECompactionState::SnapshotCompaction:
-            Y_VERIFY(tableInfo->SnapRequests); 
+            Y_VERIFY(tableInfo->SnapRequests);
             Y_VERIFY(edge == tableInfo->SnapRequests.front().Edge);
             if (ret) {
                 ret->CompleteSnapshots.push_back(tableInfo->SnapRequests.front().Context);
@@ -547,11 +547,11 @@ TCompactionLogic::HandleCompaction(
             inMem.State = ECompactionState::Free;
             inMem.CompactionTask.TaskId = 0;
             inMem.CompactionTask.CompactionId = 0;
-            break; 
-        default: 
+            break;
+        default:
             Y_FAIL("must not happens, state=%d", (int)inMem.State);
-        } 
- 
+        }
+
         if (tableInfo->ForcedCompactionState == EForcedCompactionState::CompactingMem) {
             tableInfo->ForcedCompactionState = EForcedCompactionState::None;
         }
@@ -569,7 +569,7 @@ TCompactionLogic::HandleCompaction(
                                  tableInfo->Policy->DefaultTaskPriority,
                                  inMem.CompactionTask);
             inMem.State = ECompactionState::Pending;
-        } 
+        }
 
         if (ret) {
             // Signal we need UpdateInMemStats call
@@ -578,7 +578,7 @@ TCompactionLogic::HandleCompaction(
             // Maybe schedule another compaction
             CheckInMemStats(tableId);
         }
-    } 
+    }
 
     if (tableInfo->ForcedCompactionState == EForcedCompactionState::None) {
         if (tableInfo->ForcedCompactionQueued) {
@@ -617,9 +617,9 @@ TCompactionLogic::CancelledCompaction(
 
 void TCompactionLogic::BorrowedPart(ui32 tableId, NTable::TPartView partView) {
     auto *tableInfo = State->Tables.FindPtr(tableId);
-    Y_VERIFY(tableInfo); 
+    Y_VERIFY(tableInfo);
     tableInfo->Strategy->PartMerged(std::move(partView), 255);
-} 
+}
 
 void TCompactionLogic::BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part) {
     auto *tableInfo = State->Tables.FindPtr(tableId);
@@ -629,8 +629,8 @@ void TCompactionLogic::BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TCo
 
 ui32 TCompactionLogic::BorrowedPartLevel() {
     return 255;
-} 
- 
+}
+
 TTableCompactionChanges TCompactionLogic::RemovedParts(ui32 tableId, TArrayRef<const TLogoBlobID> parts) {
     auto *tableInfo = State->Tables.FindPtr(tableId);
     Y_VERIFY(tableInfo);
@@ -738,12 +738,12 @@ ui64 TCompactionLogic::GetBackingSize(ui64 ownerTabletId) const {
 
 void TCompactionLogic::OutputHtml(IOutputStream &out, const NTable::TScheme &scheme, const TCgiParameters& cgi) {
     HTML(out) {
-        for (const auto &xtable : State->Tables) { 
+        for (const auto &xtable : State->Tables) {
             H4() {out << scheme.GetTableInfo(xtable.first)->Name;}
- 
+
             DIV_CLASS("row") { out
-                << "InMem Size: " << xtable.second.InMem.EstimatedSize 
-                << ", Changes: " << xtable.second.InMem.Steps 
+                << "InMem Size: " << xtable.second.InMem.EstimatedSize
+                << ", Changes: " << xtable.second.InMem.Steps
                 << ", Compaction state: " << xtable.second.InMem.State
                 << ", Backing size: " << xtable.second.Strategy->GetBackingSize()
                 << ", Log overhead size: " << xtable.second.InMem.LogOverheadSize
@@ -761,10 +761,10 @@ void TCompactionLogic::OutputHtml(IOutputStream &out, const NTable::TScheme &sch
                         << ") submitted " << xtable.second.InMem.CompactionTask.SubmissionTimestamp.ToStringLocal();
                 }
             }
- 
+
             xtable.second.Strategy->OutputHtml(out);
-        } 
+        }
     }
-} 
- 
+}
+
 }}

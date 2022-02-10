@@ -362,8 +362,8 @@ public:
             case TSessionPoolStatCollector::EStatCollectorType::SETTLERPOOL:
                 return TSessionPoolStatCollector(nullptr, SettlerSessions_.Get(), nullptr);
         }
- 
-        return TSessionPoolStatCollector(); 
+
+        return TSessionPoolStatCollector();
     }
 
     TClientStatCollector GetClientStatCollector() {

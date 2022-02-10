@@ -34,7 +34,7 @@ namespace NTabletPipe {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvTabletPipe::TEvPush, Handle);
                 HFunc(TEvTabletPipe::TEvMessage, Handle);
-                FFunc(TEvTabletPipe::EvSend, HandleSend); // only for direct (one-node) sends, for generic send see EvPush 
+                FFunc(TEvTabletPipe::EvSend, HandleSend); // only for direct (one-node) sends, for generic send see EvPush
                 HFunc(TEvTabletPipe::TEvPeerClosed, Handle);
                 HFunc(TEvTabletPipe::TEvShutdown, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
@@ -268,7 +268,7 @@ namespace NTabletPipe {
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
             IActor* server = CreateServer(TabletId, clientId, ev->InterconnectSession, ev->Get()->Record.GetFeatures(), ev->Cookie);
             TActorId serverId = TActivationContext::Register(server);
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]" 
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Accept Connect Originator# " << ev->Sender);
             ServerIds.insert(serverId);
             ActivateServer(TabletId, serverId, owner, recipientId, leader);
@@ -278,7 +278,7 @@ namespace NTabletPipe {
         void Reject(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, NKikimrProto::EReplyStatus status, bool leader) override {
             Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]" 
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Reject Connect Originator# " << ev->Sender);
             owner.Send(clientId, new TEvTabletPipe::TEvConnectResult(status, TabletId, clientId, TActorId(), leader));
         }
@@ -292,23 +292,23 @@ namespace NTabletPipe {
             Stopped = true;
         }
 
-        void Detach(TActorIdentity owner) override { 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]" << " Detach"); 
+        void Detach(TActorIdentity owner) override {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]" << " Detach");
             for (const auto& serverId : ServerIds) {
-                CloseServer(owner, serverId); 
+                CloseServer(owner, serverId);
             }
             Active = false;
             ServerIds.clear();
-            ActivatePending.clear(); 
+            ActivatePending.clear();
         }
 
         TActorId Enqueue(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner) override {
-            Y_UNUSED(owner); 
+            Y_UNUSED(owner);
             Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
             IActor* server = CreateServer(TabletId, clientId, ev->InterconnectSession, ev->Get()->Record.GetFeatures(), ev->Cookie);
             TActorId serverId = TActivationContext::Register(server);
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]" 
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Enqueue Connect Originator# " << ev->Sender);
             ServerIds.insert(serverId);
             ActivatePending.insert(serverId);
@@ -316,7 +316,7 @@ namespace NTabletPipe {
         }
 
         void Activate(TActorIdentity owner, TActorId recipientId, bool leader) override {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]" << " Activate"); 
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]" << " Activate");
             for (const auto& serverId : ActivatePending) {
                 ActivateServer(TabletId, serverId, owner, recipientId, leader);
             }
@@ -361,7 +361,7 @@ namespace NTabletPipe {
     }
 
     void CloseServer(TActorIdentity owner, TActorId serverId) {
-        owner.Send(serverId, new TEvents::TEvPoisonPill); 
+        owner.Send(serverId, new TEvents::TEvPoisonPill);
     }
 }
 

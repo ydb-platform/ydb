@@ -161,7 +161,7 @@ dird get_dird(char* path) {
     WCHAR* ret = _wfullpath(0, buf, 0);
 
     free(buf);
-    return ret; 
+    return ret;
 }
 
 #endif // ndef _win_

@@ -1,11 +1,11 @@
 #include "main.h"
 #include "driver.h"
- 
+
 // add support for base utils
 #include <ydb/core/driver_lib/base_utils/format_info.h>
 #include <ydb/core/driver_lib/base_utils/format_util.h>
 #include <ydb/core/driver_lib/base_utils/node_by_host.h>
- 
+
 // add support for CLI utils
 #include <ydb/core/driver_lib/cli_utils/cli.h>
 
@@ -21,7 +21,7 @@
 #include <sys/mman.h>
 #endif
 
-namespace NKikimr { 
+namespace NKikimr {
 
 int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories) {
 #ifdef _win32_
@@ -57,11 +57,11 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 #endif
         using namespace NLastGetopt;
         using TDriverModeParser = TCliCommands<EDriverMode>;
- 
+
         NKikimrConfig::TAppConfig appConfig;
         TCommandConfig cmdConf;
         TKikimrRunConfig runConfig(appConfig);
- 
+
         TRunCommandConfigParser configParser(runConfig);
 
         TOpts opts = TOpts::Default();
@@ -103,7 +103,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         configParser.ParseGlobalOpts(res);
 
         switch (mode) {
-        case EDM_RUN: 
+        case EDM_RUN:
         {
             configParser.ParseRunOpts(argc, argv);
             configParser.ApplyParsedOptions();
@@ -117,7 +117,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         case EDM_BLOBSTORAGE:
         case EDM_SERVER:
         case EDM_CMS:
-        case EDM_DISCOVERY: 
+        case EDM_DISCOVERY:
         case EDM_WHOAMI:
             return NDriverClient::NewClient(argc + freeArgsPos, argv - freeArgsPos, factories);
         case EDM_FORMAT_INFO:
@@ -126,8 +126,8 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
             return MainFormatUtil(cmdConf, argc, argv);
         case EDM_NODE_BY_HOST:
             return MainNodeByHost(cmdConf, argc, argv);
-        case EDM_SCHEME_INITROOT: 
-            return NDriverClient::SchemeInitRoot(cmdConf, argc, argv); 
+        case EDM_SCHEME_INITROOT:
+            return NDriverClient::SchemeInitRoot(cmdConf, argc, argv);
         case EDM_COMPILE_AND_EXEC_MINIKQL:
             return NDriverClient::CompileAndExecMiniKQL(cmdConf, argc, argv);
         case EDM_TRACE:
@@ -142,14 +142,14 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
             return NDriverClient::PersQueueDiscoverClustersRequest(cmdConf, argc, argv);
         case EDM_LOAD_REQUEST:
             return NDriverClient::LoadRequest(cmdConf, argc, argv);
-        case EDM_ACTORSYS_PERFTEST: 
-            return NDriverClient::ActorsysPerfTest(cmdConf, argc, argv); 
-        default: 
+        case EDM_ACTORSYS_PERFTEST:
+            return NDriverClient::ActorsysPerfTest(cmdConf, argc, argv);
+        default:
             Y_FAIL("Not Happens");
-        } 
-    } 
+        }
+    }
 } // NKikimr
- 
+
 namespace {
 std::terminate_handler defaultTerminateHandler;
 }
@@ -172,7 +172,7 @@ void SetupTerminateHandler() {
 }
 
 int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFactories> factories) {
-    try { 
+    try {
         return NKikimr::Main(argc, argv, std::move(factories));
     }
     catch (const NYdb::NConsoleClient::TMissUseException& e) {
@@ -181,8 +181,8 @@ int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFac
         return 1;
     }
     catch (const yexception& e) {
-        Cerr << "Caught exception: " << e.what() << Endl; 
-        return 1; 
-    } 
-} 
+        Cerr << "Caught exception: " << e.what() << Endl;
+        return 1;
+    }
+}
 

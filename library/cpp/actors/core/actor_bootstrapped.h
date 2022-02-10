@@ -1,19 +1,19 @@
-#pragma once 
- 
-#include "actor.h" 
-#include "events.h" 
- 
-namespace NActors { 
+#pragma once
+
+#include "actor.h"
+#include "events.h"
+
+namespace NActors {
     template<typename T> struct dependent_false : std::false_type {};
 
     template<typename TDerived>
     class TActorBootstrapped : public TActor<TDerived> {
-    protected: 
+    protected:
         TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
             return new IEventHandle(TEvents::TSystem::Bootstrap, 0, self, parentId, {}, 0);
-        } 
- 
-        STFUNC(StateBootstrap) { 
+        }
+
+        STFUNC(StateBootstrap) {
             Y_VERIFY(ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap, "Unexpected bootstrap message");
             using T = decltype(&TDerived::Bootstrap);
             TDerived& self = static_cast<TDerived&>(*this);
@@ -27,11 +27,11 @@ namespace NActors {
                 self.Bootstrap(ev->Sender);
             } else {
                 static_assert(dependent_false<TDerived>::value, "No correct Bootstrap() signature");
-            } 
+            }
         }
 
-        TActorBootstrapped() 
-            : TActor<TDerived>(&TDerived::StateBootstrap) 
+        TActorBootstrapped()
+            : TActor<TDerived>(&TDerived::StateBootstrap)
         {}
-    }; 
+    };
 }

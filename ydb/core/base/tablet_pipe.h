@@ -29,7 +29,7 @@ namespace NKikimr {
             EvActivate,
             EvShutdown,
             EvClientRetry,
-            EvClientCheckDelay, 
+            EvClientCheckDelay,
             EvClientShuttingDown,
             EvMessage, // replacement for EvSend
 
@@ -120,7 +120,7 @@ namespace NKikimr {
                 , ClientId(clientId)
                 , ServerId(serverId)
                 , Leader(leader)
-                , Dead(dead) 
+                , Dead(dead)
             {}
 
             const ui64 TabletId;
@@ -128,7 +128,7 @@ namespace NKikimr {
             const TActorId ClientId;
             const TActorId ServerId;
             const bool Leader;
-            const bool Dead; 
+            const bool Dead;
         };
 
         struct TEvServerConnected : public TEventLocal<TEvServerConnected, EvServerConnected> {
@@ -214,10 +214,10 @@ namespace NKikimr {
         struct TEvClientRetry : public TEventLocal<TEvClientRetry, EvClientRetry> {
             TEvClientRetry() {}
         };
- 
-        struct TEvClientCheckDelay : public TEventLocal<TEvClientCheckDelay, EvClientCheckDelay> { 
-            TEvClientCheckDelay() {} 
-        }; 
+
+        struct TEvClientCheckDelay : public TEventLocal<TEvClientCheckDelay, EvClientCheckDelay> {
+            TEvClientCheckDelay() {}
+        };
 
         class TEvMessage : public TEventLocal<TEvMessage, EvMessage> {
         public:
@@ -291,7 +291,7 @@ namespace NKikimr {
             virtual void Stop(TActorIdentity owner) = 0;
 
             // Destroys all servers, created by Accept or Enqueue.
-            virtual void Detach(TActorIdentity owner) = 0; 
+            virtual void Detach(TActorIdentity owner) = 0;
 
             // Creates an inactive server, returns server Id.
             // Owner of context is not captured at this time.
@@ -336,19 +336,19 @@ namespace NKikimr {
 
         struct TClientRetryState {
             bool IsAllowedToRetry(TDuration& wait, const TClientRetryPolicy& policy);
-            TDuration MakeCheckDelay(); 
+            TDuration MakeCheckDelay();
         protected:
             ui64 RetryNumber = 0;
             TDuration RetryDuration;
         };
 
         struct TClientConfig {
-            bool ConnectToUserTablet = false; 
+            bool ConnectToUserTablet = false;
             bool AllowFollower = false;
             bool ForceFollower = false;
-            bool ForceLocal = false; 
-            bool PreferLocal = false; 
-            bool CheckAliveness = false; 
+            bool ForceLocal = false;
+            bool PreferLocal = false;
+            bool CheckAliveness = false;
             bool ExpectShutdown = false;
             TClientRetryPolicy RetryPolicy;
 

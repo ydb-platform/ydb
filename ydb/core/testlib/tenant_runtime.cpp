@@ -822,7 +822,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         poolTypes["hdd-2"] = hddPool;
         poolTypes["hdd-3"] = hddPool;
         auto domainPtr = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(domain.Name, i, domain.SchemeShardId,
-                                                                i, i, TVector<ui32>{i}, 
+                                                                i, i, TVector<ui32>{i},
                                                                 i, TVector<ui32>{i},
                                                                 planResolution,
                                                                 TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(i, 1)},

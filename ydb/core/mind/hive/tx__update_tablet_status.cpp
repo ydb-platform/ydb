@@ -196,7 +196,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateUpdateTabletStatus( 
+ITransaction* THive::CreateUpdateTabletStatus(
         TTabletId tabletId,
         const TActorId &local,
         ui32 generation,

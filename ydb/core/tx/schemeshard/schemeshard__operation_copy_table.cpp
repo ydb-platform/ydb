@@ -452,19 +452,19 @@ public:
         Y_VERIFY(context.SS->Tables.contains(srcPath.Base()->PathId));
         TTableInfo::TPtr srcTableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
 
-        // do not allow copy from table with enabled external blobs 
-        { 
+        // do not allow copy from table with enabled external blobs
+        {
             const NKikimrSchemeOp::TPartitionConfig &srcPartitionConfig = srcTableInfo->PartitionConfig();
-            if (PartitionConfigHasExternalBlobsEnabled(srcPartitionConfig)) { 
+            if (PartitionConfigHasExternalBlobsEnabled(srcPartitionConfig)) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "source table contains external blobs, copy operation is not safe so prohibited");
-                return result; 
-            } 
+                return result;
+            }
             if (srcPartitionConfig.GetShadowData()) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot copy tables with enabled ShadowData");
                 return result;
             }
-        } 
- 
+        }
+
         auto schema = Transaction.GetCreateTable();
         const bool omitFollowers = schema.GetOmitFollowers();
         const bool isBackup = schema.GetIsBackup();

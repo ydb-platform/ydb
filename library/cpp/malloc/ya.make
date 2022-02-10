@@ -6,7 +6,7 @@ RECURSE(
     galloc
     jemalloc
     lockless
-    nalf 
+    nalf
     sample-client
     system
     mimalloc

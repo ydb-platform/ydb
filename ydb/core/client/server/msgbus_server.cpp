@@ -1,14 +1,14 @@
 #include <library/cpp/monlib/messagebus/mon_messagebus.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include "msgbus_server.h" 
+#include "msgbus_server.h"
 #include "msgbus_server_tracer.h"
 #include "msgbus_http_server.h"
 #include "grpc_server.h"
- 
-namespace NKikimr { 
-namespace NMsgBusProxy { 
- 
+
+namespace NKikimr {
+namespace NMsgBusProxy {
+
 class TBusMessageContext::TImpl : public TThrRefBase {
 public:
     virtual ~TImpl() = default;
@@ -441,95 +441,95 @@ TMessageBusServer::TMessageBusServer(
     ui32 bindPort,
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
 )
-    : SessionConfig(sessionConfig) 
-    , BusQueue(busQueue) 
+    : SessionConfig(sessionConfig)
+    , BusQueue(busQueue)
     , PQReadSessionsInfoWorkerFactory(pqReadSessionsInfoWorkerFactory)
-    , Protocol(bindPort) 
-{} 
- 
-TMessageBusServer::~TMessageBusServer() { 
- 
-} 
- 
+    , Protocol(bindPort)
+{}
+
+TMessageBusServer::~TMessageBusServer() {
+
+}
+
 void TMessageBusServer::InitSession(TActorSystem *actorSystem, const TActorId &proxy) {
-    ActorSystem = actorSystem; 
-    Proxy = proxy; 
-    Session = NBus::TBusServerSession::Create(&Protocol, this, SessionConfig, BusQueue); 
+    ActorSystem = actorSystem;
+    Proxy = proxy;
+    Session = NBus::TBusServerSession::Create(&Protocol, this, SessionConfig, BusQueue);
     HttpServer.Reset(CreateMessageBusHttpServer(actorSystem, this, Protocol, SessionConfig));
     Monitor = ActorSystem->Register(new TMessageBusMonitorActor(Session, SessionConfig), TMailboxType::HTSwap,
         actorSystem->AppData<TAppData>()->UserPoolId);
-} 
- 
-void TMessageBusServer::ShutdownSession() { 
+}
+
+void TMessageBusServer::ShutdownSession() {
     HttpServer.Reset();
-    if (Session) { 
-        Session->Shutdown(); 
-    } 
-} 
- 
-void TMessageBusServer::RegisterMonPage(NMonitoring::TBusNgMonPage *busMonPage) { 
-    busMonPage->BusWww->RegisterServerSession(Session); 
-} 
- 
-void TMessageBusServer::OnMessage(NBus::TOnMessageContext &msg) { 
+    if (Session) {
+        Session->Shutdown();
+    }
+}
+
+void TMessageBusServer::RegisterMonPage(NMonitoring::TBusNgMonPage *busMonPage) {
+    busMonPage->BusWww->RegisterServerSession(Session);
+}
+
+void TMessageBusServer::OnMessage(NBus::TOnMessageContext &msg) {
     TBusMessageContext messageContext(msg);
     OnMessage(messageContext);
 }
 
 void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
-    const ui32 msgType = msg.GetMessage()->GetHeader()->Type; 
+    const ui32 msgType = msg.GetMessage()->GetHeader()->Type;
 
-    switch (msgType) { 
-    case MTYPE_CLIENT_REQUEST: 
-        return ClientProxyRequest<TEvBusProxy::TEvRequest>(msg); 
-    case MTYPE_CLIENT_SCHEME_INITROOT: 
+    switch (msgType) {
+    case MTYPE_CLIENT_REQUEST:
+        return ClientProxyRequest<TEvBusProxy::TEvRequest>(msg);
+    case MTYPE_CLIENT_SCHEME_INITROOT:
         return ClientProxyRequest<TEvBusProxy::TEvInitRoot>(msg);
-    case MTYPE_CLIENT_BSADM: 
-        return ClientActorRequest(CreateMessageBusBSAdm, msg); 
-    case MTYPE_CLIENT_SCHEME_NAVIGATE: 
-        return ClientProxyRequest<TEvBusProxy::TEvNavigate>(msg); 
+    case MTYPE_CLIENT_BSADM:
+        return ClientActorRequest(CreateMessageBusBSAdm, msg);
+    case MTYPE_CLIENT_SCHEME_NAVIGATE:
+        return ClientProxyRequest<TEvBusProxy::TEvNavigate>(msg);
     case MTYPE_CLIENT_TYPES_REQUEST:
         return GetTypes(msg);
     case MTYPE_CLIENT_HIVE_CREATE_TABLET:
     case MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET:
-        return ClientActorRequest(CreateMessageBusHiveCreateTablet, msg); 
+        return ClientActorRequest(CreateMessageBusHiveCreateTablet, msg);
     case MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS:
     case MTYPE_CLIENT_OLD_LOCAL_ENUMERATE_TABLETS:
-        return ClientActorRequest(CreateMessageBusLocalEnumerateTablets, msg); 
+        return ClientActorRequest(CreateMessageBusLocalEnumerateTablets, msg);
     case MTYPE_CLIENT_KEYVALUE:
     case MTYPE_CLIENT_OLD_KEYVALUE:
-        return ClientActorRequest(CreateMessageBusKeyValue, msg); 
+        return ClientActorRequest(CreateMessageBusKeyValue, msg);
     case MTYPE_CLIENT_PERSQUEUE:
-        return ClientProxyRequest<TEvBusProxy::TEvPersQueue>(msg); 
+        return ClientProxyRequest<TEvBusProxy::TEvPersQueue>(msg);
     case MTYPE_CLIENT_CHOOSE_PROXY:
         return ClientActorRequest(CreateMessageBusChooseProxy, msg);
     case MTYPE_CLIENT_TABLET_STATE_REQUEST:
-        return ClientActorRequest(CreateMessageBusTabletStateRequest, msg); 
+        return ClientActorRequest(CreateMessageBusTabletStateRequest, msg);
     case MTYPE_CLIENT_TABLET_COUNTERS_REQUEST:
         return ClientActorRequest(CreateMessageBusTabletCountersRequest, msg);
-    case MTYPE_CLIENT_LOCAL_MINIKQL: 
-        return ClientActorRequest(CreateMessageBusLocalMKQL, msg); 
+    case MTYPE_CLIENT_LOCAL_MINIKQL:
+        return ClientActorRequest(CreateMessageBusLocalMKQL, msg);
     case MTYPE_CLIENT_LOCAL_SCHEME_TX:
-        return ClientActorRequest(CreateMessageBusLocalSchemeTx, msg); 
+        return ClientActorRequest(CreateMessageBusLocalSchemeTx, msg);
     case MTYPE_CLIENT_TABLET_KILL_REQUEST:
-        return ClientActorRequest(CreateMessageBusTabletKillRequest, msg); 
+        return ClientActorRequest(CreateMessageBusTabletKillRequest, msg);
     case MTYPE_CLIENT_FLAT_TX_REQUEST:
-        return ClientProxyRequest<TEvBusProxy::TEvFlatTxRequest>(msg); 
+        return ClientProxyRequest<TEvBusProxy::TEvFlatTxRequest>(msg);
     case MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST:
         return ClientActorRequest(CreateMessageBusSchemeOperationStatus, msg);
     case MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST:
     case MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST:
-        return ClientProxyRequest<TEvBusProxy::TEvFlatDescribeRequest>(msg); 
+        return ClientProxyRequest<TEvBusProxy::TEvFlatDescribeRequest>(msg);
     case MTYPE_CLIENT_LOAD_REQUEST:
         return ClientActorRequest(CreateMessageBusBlobStorageLoadRequest, msg);
     case MTYPE_CLIENT_GET_REQUEST:
         return ClientActorRequest(CreateMessageBusBlobStorageGetRequest, msg);
     case MTYPE_CLIENT_DB_SCHEMA:
-        return ClientProxyRequest<TEvBusProxy::TEvDbSchema>(msg); 
+        return ClientProxyRequest<TEvBusProxy::TEvDbSchema>(msg);
     case MTYPE_CLIENT_DB_OPERATION:
-        return ClientProxyRequest<TEvBusProxy::TEvDbOperation>(msg); 
+        return ClientProxyRequest<TEvBusProxy::TEvDbOperation>(msg);
     case MTYPE_CLIENT_DB_BATCH:
-        return ClientProxyRequest<TEvBusProxy::TEvDbBatch>(msg); 
+        return ClientProxyRequest<TEvBusProxy::TEvDbBatch>(msg);
     case MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST:
         return ClientActorRequest(CreateMessageBusBlobStorageConfig, msg);
     case MTYPE_CLIENT_DRAIN_NODE:
@@ -552,12 +552,12 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusConsoleRequest, msg);
     case MTYPE_CLIENT_TEST_SHARD_CONTROL:
         return ClientActorRequest(CreateMessageBusTestShardControl, msg);
-    default: 
-        return UnknownMessage(msg); 
-    } 
-} 
- 
-void TMessageBusServer::OnError(TAutoPtr<NBus::TBusMessage> msg, NBus::EMessageStatus status) { 
+    default:
+        return UnknownMessage(msg);
+    }
+}
+
+void TMessageBusServer::OnError(TAutoPtr<NBus::TBusMessage> msg, NBus::EMessageStatus status) {
     if (ActorSystem) {
         if (status == NBus::MESSAGE_SHUTDOWN) {
             LOG_DEBUG_S(*ActorSystem, NKikimrServices::MSGBUS_REQUEST, "Msgbus client disconnected before reply was sent"
@@ -567,18 +567,18 @@ void TMessageBusServer::OnError(TAutoPtr<NBus::TBusMessage> msg, NBus::EMessageS
                     << " msg# " << msg->Describe());
         }
     }
-} 
- 
-template<typename TEv> 
-void TMessageBusServer::ClientProxyRequest(TBusMessageContext &msg) { 
-    if (Proxy) 
-        ActorSystem->Send(Proxy, new TEv(msg)); 
-    else 
+}
+
+template<typename TEv>
+void TMessageBusServer::ClientProxyRequest(TBusMessageContext &msg) {
+    if (Proxy)
+        ActorSystem->Send(Proxy, new TEv(msg));
+    else
         msg.SendReplyMove(new TBusResponseStatus(MSTATUS_ERROR, "MessageBus proxy is not available"));
 }
 
-void TMessageBusServer::ClientActorRequest(ActorCreationFunc func, TBusMessageContext &msg) { 
-    if (IActor *x = func(msg)) 
+void TMessageBusServer::ClientActorRequest(ActorCreationFunc func, TBusMessageContext &msg) {
+    if (IActor *x = func(msg))
         ActorSystem->Register(x, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
     else
         msg.SendReplyMove(new TBusResponseStatus(MSTATUS_ERROR));
@@ -596,12 +596,12 @@ void TMessageBusServer::GetTypes(TBusMessageContext &msg) {
 
 void TMessageBusServer::UnknownMessage(TBusMessageContext &msg) {
     msg.SendReplyMove(new TBusResponseStatus(MSTATUS_UNKNOWN, "undocumented error 9"));
-} 
- 
+}
+
 IActor* TMessageBusServer::CreateProxy() {
     return CreateMessageBusServerProxy(this, PQReadSessionsInfoWorkerFactory);
-} 
- 
+}
+
 IActor* TMessageBusServer::CreateMessageBusTraceService() {
     return nullptr;
 }
@@ -613,7 +613,7 @@ IMessageBusServer* CreateMsgBusServer(
     ui32 bindPort
 ) {
     return new TMessageBusServer(config, queue, bindPort, pqReadSessionsInfoWorkerFactory);
-} 
- 
-} 
-} 
+}
+
+}
+}

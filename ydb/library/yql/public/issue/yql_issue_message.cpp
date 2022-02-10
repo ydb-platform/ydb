@@ -46,14 +46,14 @@ TIssue IssueFromMessage(const TIssueMessage& issueMessage) {
 
 template<typename TIssueMessage>
 void IssuesFromMessage(const ::google::protobuf::RepeatedPtrField<TIssueMessage> &message, TIssues &issues) {
-    issues.Clear(); 
-    if (message.size()) { 
-        issues.Reserve(message.size()); 
-        for (auto &x : message) 
-            issues.AddIssue(IssueFromMessage(x)); 
-    } 
-} 
- 
+    issues.Clear();
+    if (message.size()) {
+        issues.Reserve(message.size());
+        for (auto &x : message)
+            issues.AddIssue(IssueFromMessage(x));
+    }
+}
+
 template<typename TIssueMessage>
 void IssueToMessage(const TIssue& topIssue, TIssueMessage* issueMessage) {
     TDeque<std::pair<const TIssue*, TIssueMessage*>> queue;
@@ -86,15 +86,15 @@ void IssueToMessage(const TIssue& topIssue, TIssueMessage* issueMessage) {
 
 template<typename TIssueMessage>
 void IssuesToMessage(const TIssues& issues, ::google::protobuf::RepeatedPtrField<TIssueMessage> *message) {
-    message->Clear(); 
-    if (!issues) 
-        return; 
-    message->Reserve(issues.Size()); 
-    for (const auto &issue : issues) { 
+    message->Clear();
+    if (!issues)
+        return;
+    message->Reserve(issues.Size());
+    for (const auto &issue : issues) {
         IssueToMessage(issue, message->Add());
-    } 
+    }
 }
- 
+
 template
 TIssue IssueFromMessage<Ydb::Issue::IssueMessage>(const Ydb::Issue::IssueMessage& issueMessage);
 template
@@ -119,7 +119,7 @@ NIssue::NProto::IssueMessage IssueToMessage(const TIssue& topIssue) {
     NIssue::NProto::IssueMessage issueMessage;
     IssueToMessage(topIssue, &issueMessage);
     return issueMessage;
-} 
+}
 
 TString IssueToBinaryMessage(const TIssue& issue) {
     TString result;

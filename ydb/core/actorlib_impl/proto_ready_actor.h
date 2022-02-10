@@ -70,7 +70,7 @@ public:
 
     template <typename T>
     void Become(T stateFunc, const char* hint = "undef") noexcept {
-        Y_UNUSED(hint); 
+        Y_UNUSED(hint);
         DerivedActorFunc = static_cast<IActor::TReceiveFunc>(stateFunc);
     }
 

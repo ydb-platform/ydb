@@ -99,7 +99,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateInitScheme() { 
+ITransaction* THive::CreateInitScheme() {
     return new TTxInitScheme(this);
 }
 

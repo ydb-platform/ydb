@@ -44,8 +44,8 @@ namespace Tests {
 #endif
     const TDuration ITERATION_DURATION = TDuration::MilliSeconds(50);
 
-    constexpr const char* TestDomainName = "dc-1"; 
-    const ui32 TestDomain = 1; 
+    constexpr const char* TestDomainName = "dc-1";
+    const ui32 TestDomain = 1;
     const ui64 DummyTablet1 = 0x840100;
     const ui64 DummyTablet2 = 0x840101;
     const ui64 Coordinator = 0x800001;

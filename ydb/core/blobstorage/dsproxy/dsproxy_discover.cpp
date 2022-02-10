@@ -448,20 +448,20 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         vDiskData.IsMoreRequested = false;
         if (vDiskData.Blobs.size() > 0) {
             TLogoBlobID &lastBlobId = vDiskData.Blobs.back().Id;
- 
+
             ui64 tablet = lastBlobId.TabletID();
-            ui32 channel = lastBlobId.Channel(); 
-            ui32 gen = lastBlobId.Generation(); 
-            ui32 step = lastBlobId.Step(); 
-            ui32 cookie = lastBlobId.Cookie(); 
- 
-            if (cookie > 0) 
-                vDiskData.nextLogoBlobId = TLogoBlobID(tablet, gen, step, channel, TLogoBlobID::MaxBlobSize, cookie - 1); 
-            else if (step > 0) 
-                vDiskData.nextLogoBlobId = TLogoBlobID(tablet, gen, step - 1, channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie); 
-            else if (gen > 0) 
-                vDiskData.nextLogoBlobId = TLogoBlobID(tablet, gen - 1, Max<ui32>(), channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie); 
-            else 
+            ui32 channel = lastBlobId.Channel();
+            ui32 gen = lastBlobId.Generation();
+            ui32 step = lastBlobId.Step();
+            ui32 cookie = lastBlobId.Cookie();
+
+            if (cookie > 0)
+                vDiskData.nextLogoBlobId = TLogoBlobID(tablet, gen, step, channel, TLogoBlobID::MaxBlobSize, cookie - 1);
+            else if (step > 0)
+                vDiskData.nextLogoBlobId = TLogoBlobID(tablet, gen, step - 1, channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
+            else if (gen > 0)
+                vDiskData.nextLogoBlobId = TLogoBlobID(tablet, gen - 1, Max<ui32>(), channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
+            else
                 vDiskData.IsAllRead = true;
         }
 

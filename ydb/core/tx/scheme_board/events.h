@@ -59,13 +59,13 @@ struct TSchemeBoardEvents {
 
         explicit TEvRequestDescribe(const TPathId pathId, const TActorId& replica)
             : PathId(pathId)
-            , Replica(replica) 
+            , Replica(replica)
         {
         }
     };
 
     struct TEvDescribeResult: public TEventLocal<TEvDescribeResult, EvDescribeResult> {
-        const bool Commit = false; 
+        const bool Commit = false;
         const TLocalPathId DeletedPathBegin = 0; // The points are inclusive
         const TLocalPathId DeletedPathEnd = 0; // [DeletedPathBegin; DeletedPathEnd]
         const TLocalPathId MigratedPathId = InvalidLocalPathId;
@@ -78,19 +78,19 @@ struct TSchemeBoardEvents {
         {
         }
 
-        explicit TEvDescribeResult(TLocalPathId deletedPathBegin, TLocalPathId deletedPathEnd) 
+        explicit TEvDescribeResult(TLocalPathId deletedPathBegin, TLocalPathId deletedPathEnd)
             : Commit(false)
-            , DeletedPathBegin(deletedPathBegin) 
-            , DeletedPathEnd(deletedPathEnd) 
+            , DeletedPathBegin(deletedPathBegin)
+            , DeletedPathEnd(deletedPathEnd)
         {
         }
 
         explicit TEvDescribeResult(
-                TLocalPathId deletedPathBegin, TLocalPathId deletedPathEnd, 
+                TLocalPathId deletedPathBegin, TLocalPathId deletedPathEnd,
                 const NSchemeBoard::TTwoPartDescription& description)
             : Commit(false)
-            , DeletedPathBegin(deletedPathBegin) 
-            , DeletedPathEnd(deletedPathEnd) 
+            , DeletedPathBegin(deletedPathBegin)
+            , DeletedPathEnd(deletedPathEnd)
             , Description(description)
         {
         }
@@ -106,7 +106,7 @@ struct TSchemeBoardEvents {
         }
 
         bool HasDeletedLocalPathIds() const {
-            return DeletedPathBegin != 0; 
+            return DeletedPathBegin != 0;
         }
 
         bool HasMigratedPath() const {

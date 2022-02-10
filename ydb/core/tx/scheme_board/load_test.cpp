@@ -190,20 +190,20 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
     }
 
     void Populate() {
-        const ui32 ssId = StateStorageGroupFromTabletID(Owner); 
- 
+        const ui32 ssId = StateStorageGroupFromTabletID(Owner);
+
         Descriptions = GenerateDescriptions(Owner, Config, NextPathId);
         Populator = Register(CreateSchemeBoardPopulator(
-            Owner, Max<ui64>(), ssId, Descriptions, NextPathId 
+            Owner, Max<ui64>(), ssId, Descriptions, NextPathId
         ));
 
         TPathId pathId(Owner, NextPathId - 1);
         Y_VERIFY(Descriptions.contains(pathId));
         const TString& topPath = Descriptions.at(pathId).Record.GetPath();
- 
+
         // subscriber will help us to know when sync is completed
         Subscriber = Register(CreateSchemeBoardSubscriber(
-            SelfId(), topPath, ssId, 
+            SelfId(), topPath, ssId,
             ESchemeBoardSubscriberDeletionPolicy::Majority
         ));
 
@@ -324,10 +324,10 @@ private:
 
 class TLoadConsumer: public TActorBootstrapped<TLoadConsumer> {
     void Subscribe(const TPathId& pathId) {
-        const ui32 ssId = StateStorageGroupFromTabletID(Owner); 
+        const ui32 ssId = StateStorageGroupFromTabletID(Owner);
         for (ui32 i = 0; i < Config.SubscriberMulti; ++i) {
             const TActorId subscriber = Register(CreateSchemeBoardSubscriber(
-                SelfId(), pathId, ssId, 
+                SelfId(), pathId, ssId,
                 ESchemeBoardSubscriberDeletionPolicy::Majority
             ));
 

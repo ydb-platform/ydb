@@ -86,8 +86,8 @@ SRCS(
     datashard_active_transaction.cpp
     datashard_active_transaction.h
     datashard_common_upload.cpp
-    datashard_direct_transaction.cpp 
-    datashard_direct_transaction.h 
+    datashard_direct_transaction.cpp
+    datashard_direct_transaction.h
     datashard_direct_erase.cpp
     datashard_direct_upload.cpp
     datashard_distributed_erase.cpp

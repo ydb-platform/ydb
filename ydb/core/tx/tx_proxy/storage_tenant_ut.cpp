@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         TIntrusivePtr<TTabletStorageInfo> info = TabletStorageInfoFromProto(storageInfo.GetInfo());
 
         TActorId edge = runtime->AllocateEdgeActor(nodeIdx);
-        IActor* x = CreateTabletReqBlockBlobStorage(edge, info.Get(), Max<ui32>(), false); 
+        IActor* x = CreateTabletReqBlockBlobStorage(edge, info.Get(), Max<ui32>(), false);
         runtime->Register(x, nodeIdx);
 
 //        TAutoPtr<IEventHandle> handle;

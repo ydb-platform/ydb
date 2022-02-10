@@ -1,15 +1,15 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
- 
+
 #include <util/generic/hash.h>
 
 #include <google/protobuf/text_format.h>
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
 union TBasicKikimrServicesMask {
     struct {
         bool EnableBasicServices:1;
@@ -18,7 +18,7 @@ union TBasicKikimrServicesMask {
         bool EnableBSNodeWarden:1;
         bool EnableStateStorageService:1;
         bool EnableLocalService:1;
-        bool EnableSharedCache:1; 
+        bool EnableSharedCache:1;
         bool EnableBlobCache:1;
         bool EnableLogger:1;
         bool EnableSchedulerActor:1;
@@ -52,7 +52,7 @@ union TBasicKikimrServicesMask {
         bool EnableConfigsDispatcher:1;
         bool EnableSecurityServices:1;
         bool EnableTabletInfo:1;
-        bool EnableQuoterService:1; 
+        bool EnableQuoterService:1;
         bool EnablePersQueueClusterDiscovery:1;
         bool EnableNetClassifier:1;
         bool EnablePersQueueClusterTracker:1;
@@ -88,11 +88,11 @@ struct TKikimrRunConfig {
     NKikimrConfig::TAppConfig& AppConfig;
     ui32                       NodeId;
     TKikimrScopeId             ScopeId;
- 
+
     TString                    PathToConfigCacheFile;
 
     TKikimrRunConfig(NKikimrConfig::TAppConfig& appConfig,
                      ui32 nodeId = 0, const TKikimrScopeId& scopeId = {});
 };
- 
-} 
+
+}

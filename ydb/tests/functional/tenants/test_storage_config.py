@@ -109,8 +109,8 @@ def case_0():
         creation_options.ColumnStorage1Ext1,
         creation_options.ColumnCacheNone
     )
-    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible 
- 
+    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible
+
     has_external = True
     scheme = lambda table_name: has_item(
         has_properties(
@@ -143,8 +143,8 @@ def case_11():
         creation_options.ColumnStorageTest_1_2_1k,
         creation_options.ColumnCacheNone
     )
-    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible 
- 
+    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible
+
     has_external = True
     scheme = lambda table_name: has_item(
         has_properties(
@@ -209,8 +209,8 @@ def case_12():
         creation_options.ColumnStorage2,
         creation_options.ColumnCacheNone
     )
-    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible 
- 
+    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible
+
     has_external = True
     scheme = lambda table_name: has_item(
         has_properties(
@@ -305,8 +305,8 @@ def case_4():
     storage_config.appoint_log('NotExist', True)
     storage_config.appoint_data('NotExist', True)
     storage_config.appoint_external('NotExist', True)
-    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible 
- 
+    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible
+
     has_external = True
     scheme = lambda table_name: has_item(
         has_properties(
@@ -339,8 +339,8 @@ def case_5():
     storage_config.appoint_log('hdd1')
     storage_config.appoint_data('hdd')
     storage_config.appoint_external('hdd2')
-    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible 
- 
+    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible
+
     has_external = True
     scheme = lambda table_name: has_item(
         has_properties(
@@ -373,7 +373,7 @@ def case_6():
     storage_config.appoint_log('hdd1')
     storage_config.appoint_data('hdd2')
     storage_config.appoint_external('hdd2')
-    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible 
+    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible
 
     has_external = True
     scheme = lambda table_name: has_item(
@@ -407,7 +407,7 @@ def case_7():
     storage_config.appoint_log('hdd1')
     storage_config.appoint_data('hdd2', threshold=12200)
     storage_config.appoint_external('hdd2', threshold=524200)
-    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible 
+    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible
 
     has_external = True
     scheme = lambda table_name: has_item(
@@ -474,8 +474,8 @@ def case_9():
     storage_config.appoint_log('hdd')
     storage_config.appoint_data('hdd', threshold=12288)
     storage_config.appoint_external('hdd', threshold=524288)
-    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible 
- 
+    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible
+
     has_external = True
     scheme = lambda table_name: has_item(
         has_properties(
@@ -508,7 +508,7 @@ def case_10():
     storage_config.appoint_log('hdd')
     storage_config.appoint_data('hdd', threshold=12288)
     storage_config.appoint_external('hdd', threshold=2*1024*1024+1)
-    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible 
+    creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible
 
     has_external = False
     scheme = lambda table_name: has_item(

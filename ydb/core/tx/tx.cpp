@@ -4,7 +4,7 @@
 
 namespace NKikimr {
 
-TEvTxProxy::TEvProposeTransaction::TEvProposeTransaction(ui64 coordinator, ui64 txId, ui8 execLevel, ui64 minStep, ui64 maxStep) { 
+TEvTxProxy::TEvProposeTransaction::TEvProposeTransaction(ui64 coordinator, ui64 txId, ui8 execLevel, ui64 minStep, ui64 maxStep) {
     Record.SetCoordinatorID(coordinator);
     NKikimrTx::TProxyTransaction *x = Record.MutableTransaction();
     x->SetTxId(txId);

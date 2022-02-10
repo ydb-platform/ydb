@@ -568,13 +568,13 @@ public:
             readQueries[queryIdx].Set(readItem.LogoBlobId, readItem.BlobOffset, readItem.BlobSize);
             ++queryIdx;
 
-            const ui32 group = TabletInfo->GroupFor(readItem.LogoBlobId.Channel(), readItem.LogoBlobId.Generation()); 
+            const ui32 group = TabletInfo->GroupFor(readItem.LogoBlobId.Channel(), readItem.LogoBlobId.Generation());
             Y_VERIFY(group != Max<ui32>(), "Get Blob# %s is mapped to an invalid group (-1)!",
                     readItem.LogoBlobId.ToString().c_str());
-            if (prevGroup != Max<ui32>()) { 
+            if (prevGroup != Max<ui32>()) {
                 Y_VERIFY(prevGroup == group);
             } else {
-                prevGroup = group; 
+                prevGroup = group;
             }
         }
 
@@ -587,7 +587,7 @@ public:
 
         Y_VERIFY(queryIdx == readQueryCount);
         SendToBSProxy(
-            ctx, prevGroup, 
+            ctx, prevGroup,
             new TEvBlobStorage::TEvGet(readQueries, readQueryCount, IntermediateResults->Deadline,
                 handleClass, false),
             cookie);

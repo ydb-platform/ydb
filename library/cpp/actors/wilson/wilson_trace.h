@@ -16,8 +16,8 @@ namespace NWilson {
         TTraceId(ui64 traceId, ui64 spanId)
             : TraceId(traceId)
             , SpanId(spanId)
-        { 
-        } 
+        {
+        }
 
         static ui64 GenerateTraceId() {
             ui64 traceId = 0;
@@ -38,8 +38,8 @@ namespace NWilson {
         TTraceId()
             : TraceId(0)
             , SpanId(0)
-        { 
-        } 
+        {
+        }
 
         explicit TTraceId(ui64 traceId)
             : TraceId(traceId)
@@ -48,10 +48,10 @@ namespace NWilson {
         }
 
         TTraceId(const TSerializedTraceId& in)
-            : TraceId(reinterpret_cast<const ui64*>(in)[0]) 
-            , SpanId(reinterpret_cast<const ui64*>(in)[1]) 
-        { 
-        } 
+            : TraceId(reinterpret_cast<const ui64*>(in)[0])
+            , SpanId(reinterpret_cast<const ui64*>(in)[1])
+        {
+        }
 
         // allow move semantic
         TTraceId(TTraceId&& other)
@@ -62,7 +62,7 @@ namespace NWilson {
             other.SpanId = 1; // explicitly mark invalid
         }
 
-        TTraceId& operator=(TTraceId&& other) { 
+        TTraceId& operator=(TTraceId&& other) {
             TraceId = other.TraceId;
             SpanId = other.SpanId;
             other.TraceId = 0;
@@ -72,7 +72,7 @@ namespace NWilson {
 
         // do not allow implicit copy of trace id
         TTraceId(const TTraceId& other) = delete;
-        TTraceId& operator=(const TTraceId& other) = delete; 
+        TTraceId& operator=(const TTraceId& other) = delete;
 
         static TTraceId NewTraceId() {
             return TTraceId(GenerateTraceId(), 0);
@@ -117,7 +117,7 @@ namespace NWilson {
 
             const size_t base64size = Base64EncodeBufSize(sizeof(x));
             char base64[base64size];
-            char* end = Base64Encode(base64, buffer, sizeof(x)); 
+            char* end = Base64Encode(base64, buffer, sizeof(x));
             s << TStringBuf(base64, end);
         }
 
@@ -125,7 +125,7 @@ namespace NWilson {
         void OutputSpanId(IOutputStream& s) const {
             const size_t base64size = Base64EncodeBufSize(sizeof(SpanId));
             char base64[base64size];
-            char* end = Base64Encode(base64, reinterpret_cast<const ui8*>(&SpanId), sizeof(SpanId)); 
+            char* end = Base64Encode(base64, reinterpret_cast<const ui8*>(&SpanId), sizeof(SpanId));
 
             // cut trailing padding character
             Y_VERIFY(end > base64 && end[-1] == '=');
@@ -139,7 +139,7 @@ namespace NWilson {
             Y_VERIFY_DEBUG(*this || !SpanId);
         }
 
-        friend bool operator==(const TTraceId& x, const TTraceId& y) { 
+        friend bool operator==(const TTraceId& x, const TTraceId& y) {
             return x.TraceId == y.TraceId && x.SpanId == y.SpanId;
         }
 
@@ -151,8 +151,8 @@ namespace NWilson {
             return TraceId == other.TraceId;
         }
 
-        void Serialize(TSerializedTraceId* out) { 
-            ui64* p = reinterpret_cast<ui64*>(*out); 
+        void Serialize(TSerializedTraceId* out) {
+            ui64* p = reinterpret_cast<ui64*>(*out);
             p[0] = TraceId;
             p[1] = SpanId;
         }

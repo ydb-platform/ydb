@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 #include <bitset>
 
 #include <util/generic/queue.h>
@@ -22,7 +22,7 @@
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet/tablet_impl.h>
- 
+
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 
 #include <library/cpp/actors/core/interconnect.h>
@@ -30,9 +30,9 @@
 
 #include <ydb/core/tablet/tablet_metrics.h>
 
-namespace NKikimr { 
+namespace NKikimr {
 namespace NHive {
- 
+
 using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::TTransactionContext;
 using NTabletFlatExecutor::TExecutorCounters;
@@ -52,7 +52,7 @@ using TResourceNormalizedValues = std::tuple<double, double, double, double>;
 using TOwnerIdxType = NScheme::TPairUi64Ui64;
 
 static constexpr std::size_t MAX_TABLET_CHANNELS = 256;
- 
+
 enum class ETabletState : ui64 {
     Unknown = 0,
     GroupAssignment = 50,

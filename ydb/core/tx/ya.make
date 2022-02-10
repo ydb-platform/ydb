@@ -1,20 +1,20 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     ddoarn
     g:kikimr
 )
- 
-SRCS( 
-    defs.h 
+
+SRCS(
+    defs.h
     message_seqno.h
-    tx.h 
+    tx.h
     tx.cpp
-    tx_processing.h 
+    tx_processing.h
     tx_proxy_schemereq.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/actors/core
     ydb/core/base
     ydb/core/persqueue/config
@@ -23,9 +23,9 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/util
     ydb/library/aclib
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE(
     balance_coverage

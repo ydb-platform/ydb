@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h" 
+#include "defs.h"
 
 #include "rpc_deferrable.h"
 

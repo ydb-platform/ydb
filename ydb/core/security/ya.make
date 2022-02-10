@@ -1,19 +1,19 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     xenoxeno
     g:kikimr
 )
 
-SRCS( 
+SRCS(
     login_page.cpp
     login_page.h
     secure_request.h
     ticket_parser.cpp
     ticket_parser.h
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/http
     library/cpp/monlib/service/pages
@@ -24,9 +24,9 @@ PEERDIR(
     ydb/library/aclib/protos
     ydb/library/login
     ydb/library/security
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

@@ -15,7 +15,7 @@ private:
 
     UNIT_TEST(Test_MakeVector);
     UNIT_TEST_SUITE_END();
- 
+
 public:
     void Test_MakeTag();
     void Test_Make2Tags();
@@ -58,7 +58,7 @@ void TAtomTagsTest::Test_MakeVector() {
         "vector tag 0",
         "vector tag 1",
         "vector tag 3",
-        "vector tag 4"}; 
+        "vector tag 4"};
     ui32 baseTag = MakeTags(strs);
     UNIT_ASSERT(baseTag != 0);
     for (ui32 i = 0; i < strs.size(); ++i) {

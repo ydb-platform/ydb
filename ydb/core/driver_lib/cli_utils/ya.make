@@ -3,9 +3,9 @@ LIBRARY(cli_utils)
 OWNER(g:kikimr)
 
 SRCS(
-    cli.cpp 
+    cli.cpp
     cli.h
-    cli_actorsystem_perftest.cpp 
+    cli_actorsystem_perftest.cpp
     cli_cmd_config.h
     cli_cmd_config.cpp
     cli_cmds.h

@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h" 
+#include "defs.h"
 #include "grpc_mon.h"
 
 #include <ydb/core/control/immediate_control_board_impl.h>

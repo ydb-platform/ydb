@@ -4,88 +4,88 @@
 #ifdef USE_ACTOR_CALLSTACK
 
 namespace NActors {
-    namespace { 
+    namespace {
         void (*PreviousFormatBackTrace)(IOutputStream*) = 0;
-        ui32 ActorBackTraceEnableCounter = 0; 
+        ui32 ActorBackTraceEnableCounter = 0;
     }
 
     void ActorFormatBackTrace(IOutputStream* out) {
-        TStringStream str; 
-        PreviousFormatBackTrace(&str); 
-        str << Endl; 
-        TCallstack::DumpCallstack(str); 
-        *out << str.Str(); 
-    } 
-
-    void EnableActorCallstack() { 
-        if (ActorBackTraceEnableCounter == 0) { 
-            Y_VERIFY(PreviousFormatBackTrace == 0); 
-            PreviousFormatBackTrace = SetFormatBackTraceFn(ActorFormatBackTrace); 
-        } 
-
-        ++ActorBackTraceEnableCounter; 
+        TStringStream str;
+        PreviousFormatBackTrace(&str);
+        str << Endl;
+        TCallstack::DumpCallstack(str);
+        *out << str.Str();
     }
 
-    void DisableActorCallstack() { 
-        --ActorBackTraceEnableCounter; 
+    void EnableActorCallstack() {
+        if (ActorBackTraceEnableCounter == 0) {
+            Y_VERIFY(PreviousFormatBackTrace == 0);
+            PreviousFormatBackTrace = SetFormatBackTraceFn(ActorFormatBackTrace);
+        }
 
-        if (ActorBackTraceEnableCounter == 0) { 
-            Y_VERIFY(PreviousFormatBackTrace); 
-            SetFormatBackTraceFn(PreviousFormatBackTrace); 
-            PreviousFormatBackTrace = 0; 
-        } 
-    } 
-
-    TCallstack::TCallstack() 
-        : BeginIdx(0) 
-        , Size(0) 
-        , LinesToSkip(0) 
-    { 
+        ++ActorBackTraceEnableCounter;
     }
 
-    void TCallstack::SetLinesToSkip() { 
-        TTrace record; 
-        LinesToSkip = BackTrace(record.Data, TTrace::CAPACITY); 
-    } 
+    void DisableActorCallstack() {
+        --ActorBackTraceEnableCounter;
 
-    void TCallstack::Trace() { 
-        size_t currentIdx = (BeginIdx + Size) % RECORDS; 
-        if (Size == RECORDS) { 
-            ++BeginIdx; 
-        } else { 
-            ++Size; 
-        } 
-        TTrace& record = Record[currentIdx]; 
-        record.Size = BackTrace(record.Data, TTrace::CAPACITY); 
-        record.LinesToSkip = LinesToSkip; 
-    } 
-
-    void TCallstack::TraceIfEmpty() { 
-        if (Size == 0) { 
-            LinesToSkip = 0; 
-            Trace(); 
-        } 
+        if (ActorBackTraceEnableCounter == 0) {
+            Y_VERIFY(PreviousFormatBackTrace);
+            SetFormatBackTraceFn(PreviousFormatBackTrace);
+            PreviousFormatBackTrace = 0;
+        }
     }
 
-    TCallstack& TCallstack::GetTlsCallstack() { 
-        return *FastTlsSingleton<TCallstack>(); 
+    TCallstack::TCallstack()
+        : BeginIdx(0)
+        , Size(0)
+        , LinesToSkip(0)
+    {
     }
 
-    void TCallstack::DumpCallstack(TStringStream& str) { 
-        TCallstack& callstack = GetTlsCallstack(); 
-        for (int i = callstack.Size - 1; i >= 0; --i) { 
-            TTrace& record = callstack.Record[(callstack.BeginIdx + i) % RECORDS]; 
-            str << Endl << "Trace entry " << i << Endl << Endl; 
-            size_t size = record.Size; 
-            if (size > record.LinesToSkip && size < TTrace::CAPACITY) { 
-                size -= record.LinesToSkip; 
-            } 
-            if (size > RECORDS_TO_SKIP) { 
-                FormatBackTrace(&str, &record.Data[RECORDS_TO_SKIP], size - RECORDS_TO_SKIP); 
-            } else { 
-                FormatBackTrace(&str, record.Data, size); 
-            } 
-            str << Endl; 
+    void TCallstack::SetLinesToSkip() {
+        TTrace record;
+        LinesToSkip = BackTrace(record.Data, TTrace::CAPACITY);
+    }
+
+    void TCallstack::Trace() {
+        size_t currentIdx = (BeginIdx + Size) % RECORDS;
+        if (Size == RECORDS) {
+            ++BeginIdx;
+        } else {
+            ++Size;
+        }
+        TTrace& record = Record[currentIdx];
+        record.Size = BackTrace(record.Data, TTrace::CAPACITY);
+        record.LinesToSkip = LinesToSkip;
+    }
+
+    void TCallstack::TraceIfEmpty() {
+        if (Size == 0) {
+            LinesToSkip = 0;
+            Trace();
+        }
+    }
+
+    TCallstack& TCallstack::GetTlsCallstack() {
+        return *FastTlsSingleton<TCallstack>();
+    }
+
+    void TCallstack::DumpCallstack(TStringStream& str) {
+        TCallstack& callstack = GetTlsCallstack();
+        for (int i = callstack.Size - 1; i >= 0; --i) {
+            TTrace& record = callstack.Record[(callstack.BeginIdx + i) % RECORDS];
+            str << Endl << "Trace entry " << i << Endl << Endl;
+            size_t size = record.Size;
+            if (size > record.LinesToSkip && size < TTrace::CAPACITY) {
+                size -= record.LinesToSkip;
+            }
+            if (size > RECORDS_TO_SKIP) {
+                FormatBackTrace(&str, &record.Data[RECORDS_TO_SKIP], size - RECORDS_TO_SKIP);
+            } else {
+                FormatBackTrace(&str, record.Data, size);
+            }
+            str << Endl;
         }
     }
 }

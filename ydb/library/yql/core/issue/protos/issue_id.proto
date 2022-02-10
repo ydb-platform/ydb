@@ -133,7 +133,7 @@ message TIssuesIds {
         YQL_DEPRECATED_LIST_FLATMAP_OPTIONAL = 4531;
         YQL_PROJECTION_ALIAS_IS_REFERENCED_IN_GROUP_BY = 4532;
         YQL_TABLE_BINDING_DUPLICATE = 4533;
- 
+
 // yql parser errors
         YQL_NOT_ALLOWED_IN_DISCOVERY = 4600;
 
@@ -171,8 +171,8 @@ message TIssuesIds {
         DQ_GATEWAY_ERROR = 6000;
         DQ_GATEWAY_NEED_FALLBACK_ERROR = 6001;
 
-// range [200000, 399999) reserved for KiKiMR issue codes, do not use! 
- 
+// range [200000, 399999) reserved for KiKiMR issue codes, do not use!
+
     }
 
     message TIssueId {

@@ -14,7 +14,7 @@ namespace NKikimr {
 // bool E(const T&) - equals function (returns true iff *this == T)
 //
 
-template <class T, T* T::*N, ui64 (*H)(const T&), bool (*E)(const T&, const T&)> 
+template <class T, T* T::*N, ui64 (*H)(const T&), bool (*E)(const T&, const T&)>
 class TIntrusiveFixedHashSet {
     TVector<T*> Table;
 public:

@@ -73,14 +73,14 @@ public:
     void KillTablet(Tests::TServer &server, ui64 tabletId) {
         TTestActorRuntime* runtime = server.GetRuntime();
         TActorId sender = runtime->AllocateEdgeActor();
- 
+
         runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())));
-        runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvForward(tabletId, nullptr))); 
- 
-        TAutoPtr<IEventHandle> handle; 
-        auto forwardResult = runtime->GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(handle); 
-        UNIT_ASSERT(forwardResult && forwardResult->Tablet); 
-        runtime->Send(new IEventHandle(forwardResult->Tablet, sender, new TEvents::TEvPoisonPill())); 
+        runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvForward(tabletId, nullptr)));
+
+        TAutoPtr<IEventHandle> handle;
+        auto forwardResult = runtime->GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(handle);
+        UNIT_ASSERT(forwardResult && forwardResult->Tablet);
+        runtime->Send(new IEventHandle(forwardResult->Tablet, sender, new TEvents::TEvPoisonPill()));
         runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())));
     }
 

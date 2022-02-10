@@ -1,18 +1,18 @@
-#pragma once 
- 
-// unique tag to fix pragma once gcc glueing: ./library/actorlib/core/defs.h 
- 
+#pragma once
+
+// unique tag to fix pragma once gcc glueing: ./library/actorlib/core/defs.h
+
 #include <library/cpp/actors/util/defs.h>
 #include <util/generic/hash.h>
 #include <util/string/printf.h>
- 
+
 // Enables collection of
 //    event send/receive counts
 //    activation time histograms
 //    event processing time histograms
 #define ACTORSLIB_COLLECT_EXEC_STATS
 
-namespace NActors { 
+namespace NActors {
     using TPoolId = ui8;
     using TPoolsMask = ui64;
     static constexpr TPoolId PoolBits = 6;
@@ -37,19 +37,19 @@ namespace NActors {
     using TThreadId = ui64;
     static constexpr TThreadId UnknownThreadId = ui64(-1);
 
-    struct TMailboxType { 
-        enum EType { 
+    struct TMailboxType {
+        enum EType {
             Inherited = -1, // inherit mailbox from parent
-            Simple = 0, // simplest queue under producer lock. fastest in no-contention case 
-            Revolving = 1, // somewhat outdated, tries to be wait-free. replaced by ReadAsFilled 
-            HTSwap = 2, // other simple lf queue, suggested for low-contention case 
-            ReadAsFilled = 3, // wait-free queue, suggested for high-contention or latency critical 
-            TinyReadAsFilled = 4, // same as 3 but with lower overhead 
-            //Inplace; 
-            //Direct; 
-            //Virtual 
-        }; 
-    }; 
+            Simple = 0, // simplest queue under producer lock. fastest in no-contention case
+            Revolving = 1, // somewhat outdated, tries to be wait-free. replaced by ReadAsFilled
+            HTSwap = 2, // other simple lf queue, suggested for low-contention case
+            ReadAsFilled = 3, // wait-free queue, suggested for high-contention or latency critical
+            TinyReadAsFilled = 4, // same as 3 but with lower overhead
+            //Inplace;
+            //Direct;
+            //Virtual
+        };
+    };
 
     struct TScopeId : std::pair<ui64, ui64> {
         using TBase = std::pair<ui64, ui64>;
@@ -61,9 +61,9 @@ namespace NActors {
         return Sprintf("<%" PRIu64 ":%" PRIu64 ">", scopeId.first, scopeId.second);
     }
 
-} 
- 
+}
+
 template<>
 struct hash<NActors::TScopeId> : hash<std::pair<ui64, ui64>> {};
 
-class TAffinity; 
+class TAffinity;

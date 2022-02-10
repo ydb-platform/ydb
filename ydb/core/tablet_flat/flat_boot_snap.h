@@ -283,8 +283,8 @@ namespace NBoot {
                     } else {
                         NPageCollection::TGroupBlobsByCookie chop(entry.References);
 
-                        while (auto span = chop.Do()) 
-                            SortLogoSpan(stamp, span); 
+                        while (auto span = chop.Do())
+                            SortLogoSpan(stamp, span);
                     }
 
                     ProcessGcLogEntry(entry, false);
@@ -295,8 +295,8 @@ namespace NBoot {
         void ProcessGcLogEntry(TDependency::TEntry &entry, bool snap)
         {
             if (Back->Follower) // do nothing for followers
-                return; 
- 
+                return;
+
             if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
                 logl
                     << NFmt::Do(*Back) << " process " << (snap ? "snap" : "log")

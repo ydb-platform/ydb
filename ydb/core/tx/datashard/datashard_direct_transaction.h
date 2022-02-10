@@ -1,42 +1,42 @@
-#pragma once 
- 
-#include "datashard_impl.h" 
-#include "datashard_locks.h" 
-#include "operation.h" 
- 
+#pragma once
+
+#include "datashard_impl.h"
+#include "datashard_locks.h"
+#include "operation.h"
+
 #include <ydb/core/engine/minikql/change_collector_iface.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NDataShard {
- 
+
 class IDirectTx {
-public: 
+public:
     virtual ~IDirectTx() = default;
     virtual bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion) = 0;
     virtual void SendResult(TDataShard* self, const TActorContext& ctx) = 0;
     virtual TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const = 0;
 };
- 
+
 class TDirectTransaction : public TOperation {
-public: 
+public:
     TDirectTransaction(ui64 txId, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
     TDirectTransaction(ui64 txId, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
- 
-    void BuildExecutionPlan(bool) override; 
- 
-private: 
+
+    void BuildExecutionPlan(bool) override;
+
+private:
     bool Execute(TDataShard* self, TTransactionContext& txc);
     void SendResult(TDataShard* self, const TActorContext& ctx);
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const;
- 
+
     friend class TDirectOpUnit;
- 
+
 private:
     THolder<IDirectTx> Impl;
     static constexpr ui32 Flags = NTxDataShard::TTxFlags::Immediate | NTxDataShard::TTxFlags::GlobalWriter;
-}; 
- 
+};
+
 } // NDataShard
 } // NKikimr

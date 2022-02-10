@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "flat_table_column.h"
 #include "flat_page_iface.h"
@@ -7,29 +7,29 @@
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/protos/scheme_log.pb.h>
 
-#include <util/generic/map.h> 
+#include <util/generic/map.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/list.h>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NTable {
- 
+
 using namespace NTabletFlatScheme;
 
 using NKikimrSchemeOp::ECompactionStrategy;
 
 using TCompactionPolicy = NLocalDb::TCompactionPolicy;
 
-class TScheme { 
-public: 
+class TScheme {
+public:
     using TTypeId = ui32;
     using ECache = NPage::ECache;
 
     enum EDefault {
         DefaultRoom = 0,
         DefaultChannel = 1,
-    }; 
- 
+    };
+
     struct TRoom /* Storage unit settings (page collection) */ {
         TRoom() = default;
 
@@ -50,8 +50,8 @@ public:
         ui8 Main = DefaultChannel;      /* Primary channel for page collection  */
         ui8 Blobs = DefaultChannel;     /* Channel for external blobs   */
         ui8 Outer = DefaultChannel;     /* Channel for outer values pack*/
-    }; 
- 
+    };
+
     struct TFamily /* group of columns configuration */ {
         using ECodec = NPage::ECodec;
 
@@ -73,7 +73,7 @@ public:
     };
 
     using TColumn = NTable::TColumn;
- 
+
     struct TTableSchema {
         using TColumns = THashMap<ui32, TColumn>;
         using TColumnNames = THashMap<TString, ui32>;
@@ -105,7 +105,7 @@ public:
         ui32 EraseCacheMinRows = 0; // 0 means use default
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
     };
- 
+
     struct TRedo {
         /* Do not put cell values below this byte limit to external blobs
             on writing redo log update entries (annex to log). By default
@@ -120,18 +120,18 @@ public:
          */
 
         ui32 Annex = 512;   /* some reasonably low default value */
-    }; 
- 
-    struct TExecutorInfo { 
+    };
+
+    struct TExecutorInfo {
         ui64 CacheSize = 384 * 1024;
         bool AllowLogBatching = false;
-        bool LogFastTactic = true; 
+        bool LogFastTactic = true;
         TDuration LogFlushPeriod = TDuration::MicroSeconds(500);
         ui32 LimitInFlyTx = 0;
         TString ResourceProfile = "default";
         ECompactionStrategy DefaultCompactionStrategy = NKikimrSchemeOp::CompactionStrategyGenerational;
-    }; 
- 
+    };
+
     const TTableInfo* GetTableInfo(ui32 id) const { return const_cast<TScheme*>(this)->GetTableInfo(id); }
     const TColumn* GetColumnInfo(ui32 table, ui32 id) const { return const_cast<TScheme*>(this)->GetColumnInfo(const_cast<TScheme*>(this)->GetTableInfo(table), id); }
 
@@ -144,7 +144,7 @@ public:
     inline TColumn* GetColumnInfo(TTableInfo* ptable, ui32 id) {
         return ptable ? ptable->Columns.FindPtr(id) : nullptr;
     }
- 
+
     inline const TColumn* GetColumnInfo(const TTableInfo* ptable, ui32 id) const {
         return ptable ? ptable->Columns.FindPtr(id) : nullptr;
     }
@@ -198,8 +198,8 @@ public:
     THashMap<TString, ui32> TableNames;
     TExecutorInfo Executor;
     TRedo Redo;
-}; 
- 
+};
+
 // scheme delta
 class TAlter {
 public:
@@ -210,7 +210,7 @@ public:
     {
         return Log;
     }
- 
+
     TAlter& Merge(const TSchemeChanges &delta);
     TAlter& AddTable(const TString& name, ui32 id);
     TAlter& DropTable(ui32 id);
@@ -224,7 +224,7 @@ public:
     TAlter& SetRoom(ui32 table, ui32 room, ui32 main, ui32 blobs, ui32 outer);
     TAlter& SetRedo(ui32 annex);
     TAlter& SetExecutorCacheSize(ui64 cacheSize);
-    TAlter& SetExecutorFastLogPolicy(bool allow); 
+    TAlter& SetExecutorFastLogPolicy(bool allow);
     TAlter& SetExecutorAllowLogBatching(bool allow);
     TAlter& SetExecutorLogFlushPeriod(TDuration flushPeriod);
     TAlter& SetExecutorLimitInFlyTx(ui32 limitTxInFly);
@@ -239,4 +239,4 @@ protected:
     TSchemeChanges Log;
 };
 
-}} 
+}}

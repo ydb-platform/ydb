@@ -3996,14 +3996,14 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
 
-    default: 
+    default:
         if (!HandleDefaultEvents(ev, ctx)) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "StateWork:"
                            << " unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
         }
-        break; 
+        break;
     }
 }
 
@@ -5742,11 +5742,11 @@ bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 key
         // Check that first key column has integer type
         switch(firstKeyColType) {
         case NScheme::NTypeIds::Uint32:
-            maxVal = Max<ui32>(); 
+            maxVal = Max<ui32>();
             valSz = 4;
             break;
         case NScheme::NTypeIds::Uint64:
-            maxVal = Max<ui64>(); 
+            maxVal = Max<ui64>();
             valSz = 8;
             break;
         default:

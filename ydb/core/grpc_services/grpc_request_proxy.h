@@ -47,33 +47,33 @@ public:
     };
 
 protected:
-    void Handle(TEvAlterTableRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvCreateTableRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvDropTableRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvCopyTableRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvAlterTableRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvCreateTableRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDropTableRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvCopyTableRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCopyTablesRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvRenameTablesRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDescribeTableRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvGetOperationRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDescribeTableRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvGetOperationRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCancelOperationRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvForgetOperationRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvListOperationsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvCreateSessionRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvKeepAliveRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvDeleteSessionRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvReadTableRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvExplainDataQueryRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvPrepareDataQueryRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvExecuteDataQueryRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvExecuteSchemeQueryRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvCreateTenantRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvAlterTenantRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvGetTenantStatusRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvListTenantsRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvRemoveTenantRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvBeginTransactionRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvCommitTransactionRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvRollbackTransactionRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvCreateSessionRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKeepAliveRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDeleteSessionRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvReadTableRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvExplainDataQueryRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrepareDataQueryRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvExecuteDataQueryRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvExecuteSchemeQueryRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvCreateTenantRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvAlterTenantRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvGetTenantStatusRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvListTenantsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvRemoveTenantRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBeginTransactionRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvCommitTransactionRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvRollbackTransactionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvListEndpointsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeTenantOptionsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeTableOptionsRequest::TPtr& ev, const TActorContext& ctx);
@@ -151,7 +151,7 @@ protected:
     void Handle(TEvDataStreamsSplitShardRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataStreamsStartStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataStreamsStopStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx);
- 
+
     TActorId DiscoveryCacheActorID;
 };
 

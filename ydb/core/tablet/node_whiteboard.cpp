@@ -8,7 +8,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/process_stats.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include "tablet_counters.h" 
+#include "tablet_counters.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/tuples.h>
 

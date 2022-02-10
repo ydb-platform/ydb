@@ -5,17 +5,17 @@
 #include <util/system/type_name.h>
 
 namespace NActors {
-    static constexpr size_t StackOverflowGap = 4096; 
-    static char GoodStack[StackOverflowGap]; 
+    static constexpr size_t StackOverflowGap = 4096;
+    static char GoodStack[StackOverflowGap];
 
-    static struct TInitGoodStack { 
-        TInitGoodStack() { 
-            // fill stack with some pseudo-random pattern 
-            for (size_t k = 0; k < StackOverflowGap; ++k) { 
-                GoodStack[k] = k + k * 91; 
-            } 
+    static struct TInitGoodStack {
+        TInitGoodStack() {
+            // fill stack with some pseudo-random pattern
+            for (size_t k = 0; k < StackOverflowGap; ++k) {
+                GoodStack[k] = k + k * 91;
+            }
         }
-    } initGoodStack; 
+    } initGoodStack;
 
     TActorCoroImpl::TActorCoroImpl(size_t stackSize, bool allowUnhandledPoisonPill, bool allowUnhandledDtor)
         : Stack(stackSize)
@@ -25,15 +25,15 @@ namespace NActors {
         , FiberContext(FiberClosure)
     {
 #ifndef NDEBUG
-        char* p; 
+        char* p;
 #if STACK_GROW_DOWN
-        p = Stack.Begin(); 
+        p = Stack.Begin();
 #else
-        p = Stack.End() - StackOverflowGap; 
+        p = Stack.End() - StackOverflowGap;
 #endif
-        memcpy(p, GoodStack, StackOverflowGap); 
+        memcpy(p, GoodStack, StackOverflowGap);
 #endif
-    } 
+    }
 
     TActorCoroImpl::~TActorCoroImpl() {
         if (!Finished && !NSan::TSanIsOn()) { // only resume when we have bootstrapped and Run() was entered and not yet finished; in other case simply terminate
@@ -53,11 +53,11 @@ namespace NActors {
                 0, cookie));
         }
 
-        // ensure we have no unprocessed event and return back to actor system to receive one 
-        Y_VERIFY(!PendingEvent); 
-        ReturnToActorSystem(); 
+        // ensure we have no unprocessed event and return back to actor system to receive one
+        Y_VERIFY(!PendingEvent);
+        ReturnToActorSystem();
 
-        // obtain pending event and ensure we've got one 
+        // obtain pending event and ensure we've got one
         while (THolder<IEventHandle> event = std::exchange(PendingEvent, {})) {
             if (event->GetTypeRewrite() != TEvents::TSystem::CoroTimeout) {
                 // special handling for poison pill -- we throw exception
@@ -72,17 +72,17 @@ namespace NActors {
             } else {
                 ReturnToActorSystem(); // drop this event and wait for the next one
             }
-        } 
+        }
         Y_FAIL("no pending event");
     }
 
     const TActorContext& TActorCoroImpl::GetActorContext() const {
         Y_VERIFY(ActorContext);
         return *ActorContext;
-    } 
+    }
 
     bool TActorCoroImpl::ProcessEvent(THolder<IEventHandle> ev) {
-        Y_VERIFY(!PendingEvent); 
+        Y_VERIFY(!PendingEvent);
         if (!SelfActorId) { // process bootstrap message, extract actor ids
             Y_VERIFY(ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap);
             SelfActorId = ev->Recipient;
@@ -104,40 +104,40 @@ namespace NActors {
         ActorContext = nullptr;
 
         return Finished;
-    } 
+    }
 
     void TActorCoroImpl::Resume() {
-        // save caller context for a later return 
-        Y_VERIFY(!ActorSystemContext); 
+        // save caller context for a later return
+        Y_VERIFY(!ActorSystemContext);
         TExceptionSafeContext actorSystemContext;
-        ActorSystemContext = &actorSystemContext; 
+        ActorSystemContext = &actorSystemContext;
 
-        // go to actor coroutine 
+        // go to actor coroutine
         BeforeResume();
         ActorSystemContext->SwitchTo(&FiberContext);
 
         // check for stack overflow
 #ifndef NDEBUG
-        const char* p; 
+        const char* p;
 #if STACK_GROW_DOWN
-        p = Stack.Begin(); 
+        p = Stack.Begin();
 #else
-        p = Stack.End() - StackOverflowGap; 
+        p = Stack.End() - StackOverflowGap;
 #endif
-        Y_VERIFY_DEBUG(memcmp(p, GoodStack, StackOverflowGap) == 0); 
+        Y_VERIFY_DEBUG(memcmp(p, GoodStack, StackOverflowGap) == 0);
 #endif
     }
 
     void TActorCoroImpl::DoRun() {
-        try { 
+        try {
             if (ActorContext) { // ActorContext may be nullptr here if the destructor was invoked before bootstrapping
                 Y_VERIFY(!PendingEvent);
                 Run();
             }
-        } catch (const TPoisonPillException& /*ex*/) { 
-            if (!AllowUnhandledPoisonPill) { 
-                Y_FAIL("unhandled TPoisonPillException"); 
-            } 
+        } catch (const TPoisonPillException& /*ex*/) {
+            if (!AllowUnhandledPoisonPill) {
+                Y_FAIL("unhandled TPoisonPillException");
+            }
         } catch (const TDtorException& /*ex*/) {
             if (!AllowUnhandledDtor) {
                 Y_FAIL("unhandled TDtorException");
@@ -147,19 +147,19 @@ namespace NActors {
         } catch (...) {
             Y_FAIL("unhandled exception of type not derived from std::exception");
         }
-        Finished = true; 
-        ReturnToActorSystem(); 
+        Finished = true;
+        ReturnToActorSystem();
     }
 
     void TActorCoroImpl::ReturnToActorSystem() {
         TExceptionSafeContext* returnContext = std::exchange(ActorSystemContext, nullptr);
-        Y_VERIFY(returnContext); 
-        FiberContext.SwitchTo(returnContext); 
+        Y_VERIFY(returnContext);
+        FiberContext.SwitchTo(returnContext);
         if (!PendingEvent) {
             // we have returned from the actor system and it kindly asks us to terminate the coroutine as it is being
             // stopped
             throw TDtorException();
         }
-    } 
+    }
 
 }

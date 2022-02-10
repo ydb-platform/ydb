@@ -11,25 +11,25 @@ namespace NActors {
         inline const char* PriorityToString(EPrio priority) {
             switch (priority) {
                 case EPrio::Emerg:
-                    return "EMERG"; 
+                    return "EMERG";
                 case EPrio::Alert:
-                    return "ALERT"; 
+                    return "ALERT";
                 case EPrio::Crit:
-                    return "CRIT"; 
+                    return "CRIT";
                 case EPrio::Error:
-                    return "ERROR"; 
+                    return "ERROR";
                 case EPrio::Warn:
-                    return "WARN"; 
+                    return "WARN";
                 case EPrio::Notice:
-                    return "NOTICE"; 
+                    return "NOTICE";
                 case EPrio::Info:
-                    return "INFO"; 
+                    return "INFO";
                 case EPrio::Debug:
-                    return "DEBUG"; 
+                    return "DEBUG";
                 case EPrio::Trace:
-                    return "TRACE"; 
-                default: 
-                    return "UNKNOWN"; 
+                    return "TRACE";
+                default:
+                    return "UNKNOWN";
             }
         }
 
@@ -67,7 +67,7 @@ namespace NActors {
             }
         };
 
-        struct TSettings: public TThrRefBase { 
+        struct TSettings: public TThrRefBase {
         public:
             TActorId LoggerActorId;
             EComponent LoggerComponent;
@@ -99,7 +99,7 @@ namespace NActors {
             // automatically generates YOURTYPE_MIN, YOURTYPE_MAX and
             // YOURTYPE_Name for you.
             TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
-                      EComponent minVal, EComponent maxVal, EComponentToStringFunc func, 
+                      EComponent minVal, EComponent maxVal, EComponentToStringFunc func,
                       EPriority defPriority, EPriority defSamplingPriority = PRI_DEBUG,
                       ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000);
 
@@ -149,14 +149,14 @@ namespace NActors {
                 return TComponentSettings(AtomicGet(ComponentInfo[component & Mask]));
             }
 
-            const char* ComponentName(EComponent component) const { 
+            const char* ComponentName(EComponent component) const {
                 Y_VERIFY_DEBUG((component & Mask) == component);
                 return ComponentNames[component & Mask].data();
             }
 
-            int SetLevel(EPriority priority, EComponent component, TString& explanation); 
-            int SetSamplingLevel(EPriority priority, EComponent component, TString& explanation); 
-            int SetSamplingRate(ui32 sampling, EComponent component, TString& explanation); 
+            int SetLevel(EPriority priority, EComponent component, TString& explanation);
+            int SetSamplingLevel(EPriority priority, EComponent component, TString& explanation);
+            int SetSamplingRate(ui32 sampling, EComponent component, TString& explanation);
             EComponent FindComponent(const TStringBuf& componentName) const;
             static int PowerOf2Mask(int val);
             static bool IsValidPriority(EPriority priority);
@@ -168,7 +168,7 @@ namespace NActors {
         private:
             int SetLevelImpl(
                 const TString& name, bool isSampling,
-                EPriority priority, EComponent component, TString& explanation); 
+                EPriority priority, EComponent component, TString& explanation);
         };
 
     }

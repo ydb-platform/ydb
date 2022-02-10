@@ -104,7 +104,7 @@ enum class EOperationKind : ui32 {
     CommitWrites = NKikimrTxDataShard::ETransactionKind::TX_KIND_COMMIT_WRITES,
 
     // Values [100, inf) are used for internal kinds.
-    DirectTx = 101, 
+    DirectTx = 101,
 };
 
 class TBasicOpInfo {

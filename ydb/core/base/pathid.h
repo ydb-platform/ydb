@@ -36,7 +36,7 @@ struct TPathId {
     bool operator>=(const TPathId& x) const;
     bool operator==(const TPathId& x) const;
     bool operator!=(const TPathId& x) const;
-    explicit operator bool() const; 
+    explicit operator bool() const;
 
     TPathId NextId() const;
     TPathId PrevId() const;

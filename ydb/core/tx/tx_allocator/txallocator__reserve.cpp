@@ -64,7 +64,7 @@ struct TTxAllocator::TTxReserve: public TTransactionBase<TTxAllocator> {
     }
 };
 
-ITransaction* TTxAllocator::CreateTxReserve(TEvTxAllocator::TEvAllocate::TPtr &ev) { 
+ITransaction* TTxAllocator::CreateTxReserve(TEvTxAllocator::TEvAllocate::TPtr &ev) {
     return new TTxReserve(this, ev);
 }
 

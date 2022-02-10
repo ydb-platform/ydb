@@ -27,7 +27,7 @@ using NClient::TValue;
 
 namespace Tests {
     using namespace NMiniKQL;
-//    const ui32 TestDomain = 1; 
+//    const ui32 TestDomain = 1;
 
 static const TString TablePlacement = "/dc-1/Berkanavt/tables";
 
@@ -101,7 +101,7 @@ struct TTestTables {
 
     TTestTables(TClient& client, EVariant var, ui32 numFollowers = 0)
         : Client(client)
-    { 
+    {
         TOpts opts(var, numFollowers);
         NKikimrSchemeOp::TTableDescription tableSimple;
         {
@@ -115,24 +115,24 @@ struct TTestTables {
             auto *c3 = tableSimple.AddColumns();
             c3->SetName("bytes");
             c3->SetType("String");
- 
+
             if (opts.Sharded)
                 tableSimple.SetUniformPartitionsCount(10);
- 
+
             if (opts.FollowerCount)
                 tableSimple.MutablePartitionConfig()->SetFollowerCount(opts.FollowerCount);
- 
+
             if (opts.OutOfOrder) {
                 tableSimple.MutablePartitionConfig()->MutablePipelineConfig()->SetNumActiveTx(8);
                 tableSimple.MutablePartitionConfig()->MutablePipelineConfig()->SetEnableOutOfOrder(true);
             }
- 
+
             if (opts.SoftUpdates)
                 tableSimple.MutablePartitionConfig()->MutablePipelineConfig()->SetEnableSoftUpdates(true);
- 
+
             *tableSimple.AddKeyColumnNames() = "key";
         }
- 
+
         NKikimrSchemeOp::TTableDescription tableByBytes;
         {
             tableByBytes.SetName("ByBytes");
@@ -179,14 +179,14 @@ struct TTestTables {
         UNIT_ASSERT_EQUAL(client.CreateTable(TablePlacement, tableSimple), NMsgBusProxy::MSTATUS_OK);
         UNIT_ASSERT_EQUAL(client.CreateTable(TablePlacement, tableByBytes), NMsgBusProxy::MSTATUS_OK);
         UNIT_ASSERT_EQUAL(client.CreateTable(TablePlacement, tableComp), NMsgBusProxy::MSTATUS_OK);
-    } 
- 
+    }
+
     ~TTestTables() {
         UNIT_ASSERT_EQUAL(Client.DeleteTable(TablePlacement, "Simple"), NMsgBusProxy::MSTATUS_OK);
         UNIT_ASSERT_EQUAL(Client.DeleteTable(TablePlacement, "ByBytes"), NMsgBusProxy::MSTATUS_OK);
         UNIT_ASSERT_EQUAL(Client.DeleteTable(TablePlacement, "Comp"), NMsgBusProxy::MSTATUS_OK);
     }
- 
+
 private:
     TClient& Client;
 };
@@ -337,21 +337,21 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TServer server(settings);
         TClient client(settings);
 
-        NKikimrMiniKQL::TResult res; 
+        NKikimrMiniKQL::TResult res;
         UNIT_ASSERT(client.LocalQuery(TxAllocator, "("
-            "(let row '('('dummyKey (Bool 'true))))" 
-            "(let select '('reservedIds))" 
+            "(let row '('('dummyKey (Bool 'true))))"
+            "(let select '('reservedIds))"
             "(return (AsList (SetResult 'reservedIds (SelectRow 'config row select))))"
-        ")", res)); 
+        ")", res));
 
         {
             TValue value = TValue::Create(res.GetValue(), res.GetType());
             UNIT_ASSERT(value["reservedIds"].Size() <= 1);
         }
-    } 
+    }
 
     Y_UNIT_TEST(NoAffectedProgram) {
-        using namespace NScheme; 
+        using namespace NScheme;
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -359,10 +359,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TServer server(settings);
         TClient client(settings);
 
-        NKikimrMiniKQL::TResult res; 
-        UNIT_ASSERT(client.FlatQuery("(" 
-            "(return (AsList (SetResult 'res1 (Int32 '42))))" 
-        ")", res)); 
+        NKikimrMiniKQL::TResult res;
+        UNIT_ASSERT(client.FlatQuery("("
+            "(return (AsList (SetResult 'res1 (Int32 '42))))"
+        ")", res));
 
         {
             TValue value = TValue::Create(res.GetValue(), res.GetType());
@@ -370,7 +370,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             UNIT_ASSERT(resOpt.HaveValue());
             UNIT_ASSERT_EQUAL(i32(resOpt), 42);
         }
-    } 
+    }
 
     Y_UNIT_TEST(ReadWriteMiniKQL) {
         TPortManager tp;
@@ -412,42 +412,42 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     void ReadWriteViaMiniKQLBody(TClient &client, bool useHead, bool useFollower) {
-        NKikimrMiniKQL::TResult writeRes; 
+        NKikimrMiniKQL::TResult writeRes;
         const TString writeQuery = R"___(
-            ( 
-                (let row1 '('('key (Uint64 '2)))) 
-                (let row2 '('('key (Uint64 '2305843009213693951)))) 
-                (let update '( '('uint (Uint64 '10)))) 
-                (let result1 (UpdateRow '/dc-1/Berkanavt/tables/Simple row1 update)) 
-                (let result2 (UpdateRow '/dc-1/Berkanavt/tables/Simple row2 update)) 
- 
-                (return (AsList result1 result2)) 
-            ) 
-            )___"; 
+            (
+                (let row1 '('('key (Uint64 '2))))
+                (let row2 '('('key (Uint64 '2305843009213693951))))
+                (let update '( '('uint (Uint64 '10))))
+                (let result1 (UpdateRow '/dc-1/Berkanavt/tables/Simple row1 update))
+                (let result2 (UpdateRow '/dc-1/Berkanavt/tables/Simple row2 update))
 
-        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes)); 
+                (return (AsList result1 result2))
+            )
+            )___";
 
-        NKikimrMiniKQL::TResult readRes; 
+        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
+
+        NKikimrMiniKQL::TResult readRes;
         const TString readQueryTemplate = R"___(
-            ( 
-                (let row1 '('('key (Uint64 '2)))) 
-                (let nonExistRow1 '('('key (Uint64 '3)))) 
-                (let row2 '('('key (Uint64 '2305843009213693951)))) 
-                (let nonExistRow2 '('('key (Uint64 '2305843009213693952)))) 
-                (let select '('uint)) 
+            (
+                (let row1 '('('key (Uint64 '2))))
+                (let nonExistRow1 '('('key (Uint64 '3))))
+                (let row2 '('('key (Uint64 '2305843009213693951))))
+                (let nonExistRow2 '('('key (Uint64 '2305843009213693952))))
+                (let select '('uint))
                 (let result1 (SelectRow '/dc-1/Berkanavt/tables/Simple row1 select __HEAD__))
                 (let result2 (SelectRow '/dc-1/Berkanavt/tables/Simple row2 select __HEAD__))
-                (let entry1 (Coalesce (FlatMap result1 (lambda '(x) (Member x 'uint))) (Uint64 '0))) 
-                (let entry2 (Coalesce (FlatMap result2 (lambda '(x) (Member x 'uint))) (Uint64 '0))) 
+                (let entry1 (Coalesce (FlatMap result1 (lambda '(x) (Member x 'uint))) (Uint64 '0)))
+                (let entry2 (Coalesce (FlatMap result2 (lambda '(x) (Member x 'uint))) (Uint64 '0)))
                 (let non1 (SelectRow '/dc-1/Berkanavt/tables/Simple nonExistRow1 select __HEAD__))
                 (let non2 (SelectRow '/dc-1/Berkanavt/tables/Simple nonExistRow2 select __HEAD__))
-                (return (AsList (SetResult 'uint1 entry1) (SetResult 'uint2 entry2) (SetResult 'empty1 (Exists non1)) (SetResult 'empty2 (Exists non2)) )) 
-            ) 
-        )___"; 
+                (return (AsList (SetResult 'uint1 entry1) (SetResult 'uint2 entry2) (SetResult 'empty1 (Exists non1)) (SetResult 'empty2 (Exists non2)) ))
+            )
+        )___";
 
         TString readQuery = readQueryTemplate;
         SubstGlobal(readQuery, "__HEAD__", !useHead ? (useFollower ? "'follower" : "'online") : "'head");
-        UNIT_ASSERT(client.FlatQuery(readQuery, readRes)); 
+        UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
         {
             TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
@@ -520,7 +520,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::Sharded_NoOpts);
             ReadWriteViaMiniKQLBody(client, false, false);
         }
-    } 
+    }
 
     Y_UNIT_TEST(ReadWrite_MiniKQL_AfterAlter) {
         TPortManager tp;
@@ -607,74 +607,74 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     Y_UNIT_TEST(ReadWriteViaMiniKQLRecreateDifferentTable) {
-        TPortManager tp; 
-        ui16 port = tp.GetPort(2134); 
- 
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
- 
+
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
             ReadWriteViaMiniKQLBody(client, false, false);
         }
- 
-        { 
+
+        {
             NKikimrSchemeOp::TTableDescription tableSimple;
-            tableSimple.SetName("Simple"); 
-            auto *c1 = tableSimple.AddColumns(); 
-            c1->SetName("key"); 
-            c1->SetType("Uint32"); 
-            auto *c2 = tableSimple.AddColumns(); 
-            c2->SetName("uint"); 
-            c2->SetType("Uint64"); 
-            auto *c3 = tableSimple.AddColumns(); 
-            c3->SetName("bytes"); 
+            tableSimple.SetName("Simple");
+            auto *c1 = tableSimple.AddColumns();
+            c1->SetName("key");
+            c1->SetType("Uint32");
+            auto *c2 = tableSimple.AddColumns();
+            c2->SetName("uint");
+            c2->SetType("Uint64");
+            auto *c3 = tableSimple.AddColumns();
+            c3->SetName("bytes");
             c3->SetType("String");
- 
-            *tableSimple.AddKeyColumnNames() = "key"; 
-            client.CreateTable(TablePlacement, tableSimple); 
-        } 
- 
+
+            *tableSimple.AddKeyColumnNames() = "key";
+            client.CreateTable(TablePlacement, tableSimple);
+        }
+
         const TString writeQuery = R"___(
-            ( 
-                (let row1 '('('key (Uint32 '2)))) 
-                (let row2 '('('key (Uint32 '3)))) 
-                (let update '( '('uint (Uint64 '10)))) 
-                (let result1 (UpdateRow '/dc-1/Berkanavt/tables/Simple row1 update)) 
-                (let result2 (UpdateRow '/dc-1/Berkanavt/tables/Simple row2 update)) 
- 
-                (return (AsList result1 result2)) 
-            ) 
-        )___"; 
- 
-        NKikimrMiniKQL::TResult writeRes; 
-        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes)); 
-    } 
- 
+            (
+                (let row1 '('('key (Uint32 '2))))
+                (let row2 '('('key (Uint32 '3))))
+                (let update '( '('uint (Uint64 '10))))
+                (let result1 (UpdateRow '/dc-1/Berkanavt/tables/Simple row1 update))
+                (let result2 (UpdateRow '/dc-1/Berkanavt/tables/Simple row2 update))
+
+                (return (AsList result1 result2))
+            )
+        )___";
+
+        NKikimrMiniKQL::TResult writeRes;
+        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
+    }
+
     Y_UNIT_TEST(ReadWriteViaMiniKQLRecreateSameTable) {
-        TPortManager tp; 
-        ui16 port = tp.GetPort(2134); 
- 
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
- 
+
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
             ReadWriteViaMiniKQLBody(client, false, false);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::Sharded_NoOpts);
             ReadWriteViaMiniKQLBody(client, false, false);
         }
-    } 
- 
+    }
+
     Y_UNIT_TEST(ReadWriteViaMiniKQLShardedHead) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -802,42 +802,42 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         GetStepTxIdBody(client, true);
     }
 
-    void CASViaMiniKQLBody(TClient &client) { 
-        NKikimrMiniKQL::TResult writeRes; 
+    void CASViaMiniKQLBody(TClient &client) {
+        NKikimrMiniKQL::TResult writeRes;
         const TString writeQuery = R"___(
-            ( 
-                (let table '/dc-1/Berkanavt/tables/Simple) 
-                (let row1 '('('key (Uint64 '2)))) 
-                (let row2 '('('key (Uint64 '2305843009213693951)))) 
-                (return (AsList 
-                    (UpdateRow table row1 '( '('uint (Uint64 '10)))) 
-                    (UpdateRow table row2 '( '('uint (Uint64 '20))))) 
-                ) 
-            ) 
-            )___"; 
+            (
+                (let table '/dc-1/Berkanavt/tables/Simple)
+                (let row1 '('('key (Uint64 '2))))
+                (let row2 '('('key (Uint64 '2305843009213693951))))
+                (return (AsList
+                    (UpdateRow table row1 '( '('uint (Uint64 '10))))
+                    (UpdateRow table row2 '( '('uint (Uint64 '20)))))
+                )
+            )
+            )___";
 
-        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes)); 
+        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
 
-        NKikimrMiniKQL::TResult updateRes; 
+        NKikimrMiniKQL::TResult updateRes;
         const TString updateQuery = R"___(
-            ( 
-                (let table '/dc-1/Berkanavt/tables/Simple) 
-                (let row1 '('('key (Uint64 '2)))) 
-                (let row2 '('('key (Uint64 '2305843009213693951)))) 
-                (let select '('uint)) 
-                (let read1 (SelectRow table row1 select)) 
-                (let read2 (SelectRow table row2 select)) 
+            (
+                (let table '/dc-1/Berkanavt/tables/Simple)
+                (let row1 '('('key (Uint64 '2))))
+                (let row2 '('('key (Uint64 '2305843009213693951))))
+                (let select '('uint))
+                (let read1 (SelectRow table row1 select))
+                (let read2 (SelectRow table row2 select))
                 (let cmp1 (IfPresent read1 (lambda '(x) (Coalesce (Equal (Member x 'uint) (Uint64 '10)) (Bool 'false))) (Bool 'false)))
                 (let cmp2 (IfPresent read2 (lambda '(x) (Coalesce (Equal (Member x 'uint) (Uint64 '10)) (Bool 'false))) (Bool 'false)))
-                (return (Extend (Extend 
-                    (AsList (SetResult 'cmp1 cmp1) (SetResult 'cmp2 cmp2)) 
-                    (ListIf cmp2 (UpdateRow table row1 '('('uint (Uint64 '50)))))) 
-                    (ListIf cmp1 (UpdateRow table row2 '('('uint (Uint64 '50))))) 
-                )) 
-            ) 
-        )___"; 
+                (return (Extend (Extend
+                    (AsList (SetResult 'cmp1 cmp1) (SetResult 'cmp2 cmp2))
+                    (ListIf cmp2 (UpdateRow table row1 '('('uint (Uint64 '50))))))
+                    (ListIf cmp1 (UpdateRow table row2 '('('uint (Uint64 '50)))))
+                ))
+            )
+        )___";
 
-        UNIT_ASSERT(client.FlatQuery(updateQuery, updateRes)); 
+        UNIT_ASSERT(client.FlatQuery(updateQuery, updateRes));
 
         {
             TValue value = TValue::Create(updateRes.GetValue(), updateRes.GetType());
@@ -848,24 +848,24 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             UNIT_ASSERT(cmp2Opt.HaveValue() && bool(cmp2Opt) == false);
         }
 
-        NKikimrMiniKQL::TResult readRes; 
+        NKikimrMiniKQL::TResult readRes;
         const TString readQuery = R"___(
-            ( 
-                (let table '/dc-1/Berkanavt/tables/Simple) 
-                (let row1 '('('key (Uint64 '2)))) 
-                (let row2 '('('key (Uint64 '2305843009213693951)))) 
-                (let select '('uint)) 
-                (let read1 (SelectRow table row1 select)) 
-                (let read2 (SelectRow table row2 select)) 
-                (let emptyList (List (ListType(VoidType)))) 
-                (return (Extend 
-                    (IfPresent read1 (lambda '(x) (IfPresent (Member x 'uint) (lambda '(z) (AsList (SetResult 'row1 z))) emptyList )) emptyList) 
-                    (IfPresent read2 (lambda '(x) (IfPresent (Member x 'uint) (lambda '(z) (AsList (SetResult 'row2 z))) emptyList )) emptyList) 
-                )) 
-            ) 
-        )___"; 
+            (
+                (let table '/dc-1/Berkanavt/tables/Simple)
+                (let row1 '('('key (Uint64 '2))))
+                (let row2 '('('key (Uint64 '2305843009213693951))))
+                (let select '('uint))
+                (let read1 (SelectRow table row1 select))
+                (let read2 (SelectRow table row2 select))
+                (let emptyList (List (ListType(VoidType))))
+                (return (Extend
+                    (IfPresent read1 (lambda '(x) (IfPresent (Member x 'uint) (lambda '(z) (AsList (SetResult 'row1 z))) emptyList )) emptyList)
+                    (IfPresent read2 (lambda '(x) (IfPresent (Member x 'uint) (lambda '(z) (AsList (SetResult 'row2 z))) emptyList )) emptyList)
+                ))
+            )
+        )___";
 
-        UNIT_ASSERT(client.FlatQuery(readQuery, readRes)); 
+        UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
         {
             TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
@@ -926,60 +926,60 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates);
             CASViaMiniKQLBody(client);
         }
-    } 
- 
-    void RowEraseViaMiniKQLBody(TClient &client) { 
-        NKikimrMiniKQL::TResult writeRes; 
+    }
+
+    void RowEraseViaMiniKQLBody(TClient &client) {
+        NKikimrMiniKQL::TResult writeRes;
         const TString writeQuery = R"___(
-            ( 
-                (let table '/dc-1/Berkanavt/tables/Simple) 
-                (let row1 '('('key (Uint64 '2)))) 
-                (let row2 '('('key (Uint64 '2305843009213693951)))) 
-                (return (AsList 
-                    (UpdateRow table row1 '( '('uint (Uint64 '10)))) 
-                    (UpdateRow table row2 '( '('uint (Uint64 '20))))) 
-                ) 
-            ) 
-            )___"; 
+            (
+                (let table '/dc-1/Berkanavt/tables/Simple)
+                (let row1 '('('key (Uint64 '2))))
+                (let row2 '('('key (Uint64 '2305843009213693951))))
+                (return (AsList
+                    (UpdateRow table row1 '( '('uint (Uint64 '10))))
+                    (UpdateRow table row2 '( '('uint (Uint64 '20)))))
+                )
+            )
+            )___";
 
-        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes)); 
+        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
 
-        NKikimrMiniKQL::TResult updateRes; 
+        NKikimrMiniKQL::TResult updateRes;
         const TString updateQuery = R"___(
-            ( 
-                (let table '/dc-1/Berkanavt/tables/Simple) 
-                (let row1 '('('key (Uint64 '2)))) 
-                (let row2 '('('key (Uint64 '2305843009213693951)))) 
-                (return (AsList (EraseRow table row2))) 
-            ) 
-        )___"; 
+            (
+                (let table '/dc-1/Berkanavt/tables/Simple)
+                (let row1 '('('key (Uint64 '2))))
+                (let row2 '('('key (Uint64 '2305843009213693951))))
+                (return (AsList (EraseRow table row2)))
+            )
+        )___";
 
-        UNIT_ASSERT(client.FlatQuery(updateQuery, updateRes)); 
- 
-        NKikimrMiniKQL::TResult readRes; 
+        UNIT_ASSERT(client.FlatQuery(updateQuery, updateRes));
+
+        NKikimrMiniKQL::TResult readRes;
         const TString readQuery = R"___(
-            ( 
-                (let table '/dc-1/Berkanavt/tables/Simple) 
-                (let row1 '('('key (Uint64 '2)))) 
-                (let row2 '('('key (Uint64 '2305843009213693951)))) 
-                (let select '('uint)) 
-                (let read1 (SelectRow table row1 select)) 
-                (let read2 (SelectRow table row2 select)) 
-                (let emptyList (List (ListType(VoidType)))) 
-                (return (Extend 
-                    (IfPresent read1 (lambda '(x) (IfPresent (Member x 'uint) (lambda '(z) (AsList (SetResult 'row1 z))) emptyList )) emptyList) 
-                    (IfPresent read2 (lambda '(x) (IfPresent (Member x 'uint) (lambda '(z) (AsList (SetResult 'row2 z))) emptyList )) emptyList) 
-                )) 
-            ) 
-        )___"; 
- 
-        UNIT_ASSERT(client.FlatQuery(readQuery, readRes)); 
- 
+            (
+                (let table '/dc-1/Berkanavt/tables/Simple)
+                (let row1 '('('key (Uint64 '2))))
+                (let row2 '('('key (Uint64 '2305843009213693951))))
+                (let select '('uint))
+                (let read1 (SelectRow table row1 select))
+                (let read2 (SelectRow table row2 select))
+                (let emptyList (List (ListType(VoidType))))
+                (return (Extend
+                    (IfPresent read1 (lambda '(x) (IfPresent (Member x 'uint) (lambda '(z) (AsList (SetResult 'row1 z))) emptyList )) emptyList)
+                    (IfPresent read2 (lambda '(x) (IfPresent (Member x 'uint) (lambda '(z) (AsList (SetResult 'row2 z))) emptyList )) emptyList)
+                ))
+            )
+        )___";
+
+        UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
+
         {
             TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
             TValue row1Opt = value["row1"];
             TValue row2Opt = value["row2"];
- 
+
             UNIT_ASSERT(row1Opt.HaveValue() && ui64(row1Opt) == 10);
             UNIT_ASSERT(!row2Opt.HaveValue());
         }
@@ -988,23 +988,23 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     Y_UNIT_TEST(RowEraseViaMiniKQL) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
- 
+
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
- 
+
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
             RowEraseViaMiniKQLBody(client);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder);
             RowEraseViaMiniKQLBody(client);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
             RowEraseViaMiniKQLBody(client);
@@ -1014,7 +1014,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
             RowEraseViaMiniKQLBody(client);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::Sharded_NoOpts);
             RowEraseViaMiniKQLBody(client);
@@ -1034,73 +1034,73 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates);
             RowEraseViaMiniKQLBody(client);
         }
-    } 
- 
-    void ReadRangeViaMiniKQLBody(TClient &client) { 
-        NKikimrMiniKQL::TResult writeRes; 
+    }
+
+    void ReadRangeViaMiniKQLBody(TClient &client) {
+        NKikimrMiniKQL::TResult writeRes;
         const TString writeQuery = R"___(
-            ( 
-                (let table '/dc-1/Berkanavt/tables/Simple) 
-                (let row1 '('('key (Uint64 '2)))) 
-                (let row2 '('('key (Uint64 '2305843009213693951)))) 
-                (return (AsList 
-                    (UpdateRow table row1 '( '('uint (Uint64 '10)))) 
-                    (UpdateRow table row2 '( '('uint (Uint64 '20))))) 
-                ) 
-            ) 
-            )___"; 
- 
-        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes)); 
- 
-        NKikimrMiniKQL::TResult readRes; 
+            (
+                (let table '/dc-1/Berkanavt/tables/Simple)
+                (let row1 '('('key (Uint64 '2))))
+                (let row2 '('('key (Uint64 '2305843009213693951))))
+                (return (AsList
+                    (UpdateRow table row1 '( '('uint (Uint64 '10))))
+                    (UpdateRow table row2 '( '('uint (Uint64 '20)))))
+                )
+            )
+            )___";
+
+        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
+
+        NKikimrMiniKQL::TResult readRes;
         const TString readQuery = R"___(
-            ( 
-                (let table '/dc-1/Berkanavt/tables/Simple) 
-                (let range '('IncFrom '('key (Uint64 '0) (Void)))) 
-                (let select '('uint 'key)) 
-                (let options '()) 
-                (let res (SelectRange table range select options)) 
-                (let reslist (Member res 'List)) 
-                (return (AsList 
-                    (SetResult 'list reslist) 
-                )) 
-            ) 
-        )___"; 
- 
+            (
+                (let table '/dc-1/Berkanavt/tables/Simple)
+                (let range '('IncFrom '('key (Uint64 '0) (Void))))
+                (let select '('uint 'key))
+                (let options '())
+                (let res (SelectRange table range select options))
+                (let reslist (Member res 'List))
+                (return (AsList
+                    (SetResult 'list reslist)
+                ))
+            )
+        )___";
+
         UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
- 
+
         {
             TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
             TValue list = value["list"];
- 
+
             UNIT_ASSERT_VALUES_EQUAL(list.Size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 10);
             UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 2);
             UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["uint"]), 20);
             UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["key"]), 2305843009213693951);
         }
-    } 
- 
+    }
+
     Y_UNIT_TEST(ReadRangeViaMiniKQL) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
- 
+
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
- 
+
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
             ReadRangeViaMiniKQLBody(client);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder);
             ReadRangeViaMiniKQLBody(client);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
             ReadRangeViaMiniKQLBody(client);
@@ -1110,7 +1110,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
             ReadRangeViaMiniKQLBody(client);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::Sharded_NoOpts);
             ReadRangeViaMiniKQLBody(client);
@@ -1130,56 +1130,56 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates);
             ReadRangeViaMiniKQLBody(client);
         }
-    } 
- 
-    void SelectRangeOptionsBody(TClient &client) { 
-        NKikimrMiniKQL::TResult writeRes; 
+    }
+
+    void SelectRangeOptionsBody(TClient &client) {
+        NKikimrMiniKQL::TResult writeRes;
         const TString writeQuery = R"___(
-            ( 
-                (let table '/dc-1/Berkanavt/tables/Simple) 
-                (let row1 '('('key (Uint64 '2)))) 
-                (let row2 '('('key (Uint64 '3)))) 
-                (let row3 '('('key (Uint64 '2305843009213693951)))) 
-                (let row4 '('('key (Uint64 '2305843009213693952)))) 
-                (return (AsList 
-                    (UpdateRow table row1 '( '('uint (Uint64 '10)))) 
-                    (UpdateRow table row2 '( '('uint (Uint64 '20)))) 
-                    (UpdateRow table row3 '( '('uint (Uint64 '30)))) 
-                    (UpdateRow table row4 '( '('uint (Uint64 '40)))) 
-                )) 
-            ) 
-            )___"; 
+            (
+                (let table '/dc-1/Berkanavt/tables/Simple)
+                (let row1 '('('key (Uint64 '2))))
+                (let row2 '('('key (Uint64 '3))))
+                (let row3 '('('key (Uint64 '2305843009213693951))))
+                (let row4 '('('key (Uint64 '2305843009213693952))))
+                (return (AsList
+                    (UpdateRow table row1 '( '('uint (Uint64 '10))))
+                    (UpdateRow table row2 '( '('uint (Uint64 '20))))
+                    (UpdateRow table row3 '( '('uint (Uint64 '30))))
+                    (UpdateRow table row4 '( '('uint (Uint64 '40))))
+                ))
+            )
+            )___";
 
-        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes)); 
+        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
 
-        { 
-            NKikimrMiniKQL::TResult readRes; 
+        {
+            NKikimrMiniKQL::TResult readRes;
             const TString readQuery = R"___(
-                ( 
+                (
                     (let from (Parameter 'FROM (DataType 'Uint64)))
                     (let to (Parameter 'TO (DataType 'Uint64)))
-                    (let table '/dc-1/Berkanavt/tables/Simple) 
-                    (let range '('IncFrom 'IncTo '('key from to))) 
-                    (let select '('uint 'key)) 
-                    (let options '()) 
-                    (let res (SelectRange table range select options)) 
-                    (let reslist (Member res 'List)) 
-                    (return (AsList 
-                        (SetResult 'list reslist) 
-                    )) 
-                ) 
-            )___"; 
+                    (let table '/dc-1/Berkanavt/tables/Simple)
+                    (let range '('IncFrom 'IncTo '('key from to)))
+                    (let select '('uint 'key))
+                    (let options '())
+                    (let res (SelectRange table range select options))
+                    (let reslist (Member res 'List))
+                    (return (AsList
+                        (SetResult 'list reslist)
+                    ))
+                )
+            )___";
 
             const TString readParams = R"___(
-                ( 
-                    (let params (Parameters)) 
-                    (let params (AddParameter params 'FROM (Uint64 '2))) 
-                    (let params (AddParameter params 'TO (Uint64 '2305843009213693952))) 
-                    (return params) 
-                ) 
-            )___"; 
+                (
+                    (let params (Parameters))
+                    (let params (AddParameter params 'FROM (Uint64 '2)))
+                    (let params (AddParameter params 'TO (Uint64 '2305843009213693952)))
+                    (return params)
+                )
+            )___";
 
-            UNIT_ASSERT(client.FlatQueryParams(readQuery, readParams, false, readRes)); 
+            UNIT_ASSERT(client.FlatQueryParams(readQuery, readParams, false, readRes));
 
             {
                 TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
@@ -1195,40 +1195,40 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[3]["uint"]), 40);
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[3]["key"]), 2305843009213693952);
             }
-        } 
+        }
 
-        { 
+        {
             TString binQuery;
-            NKikimrMiniKQL::TResult readRes; 
+            NKikimrMiniKQL::TResult readRes;
 
             const TString readQuery = R"___(
-                ( 
+                (
                     (let from (Parameter 'FROM (DataType 'Uint64)))
                     (let to (Parameter 'TO (DataType 'Uint64)))
-                    (let table '/dc-1/Berkanavt/tables/Simple) 
-                    (let range '('ExcFrom 'IncTo '('key from to))) 
-                    (let select '('uint 'key)) 
-                    (let options '()) 
-                    (let res (SelectRange table range select options)) 
-                    (let reslist (Member res 'List)) 
-                    (return (AsList 
-                        (SetResult 'list reslist) 
-                    )) 
-                ) 
-            )___"; 
+                    (let table '/dc-1/Berkanavt/tables/Simple)
+                    (let range '('ExcFrom 'IncTo '('key from to)))
+                    (let select '('uint 'key))
+                    (let options '())
+                    (let res (SelectRange table range select options))
+                    (let reslist (Member res 'List))
+                    (return (AsList
+                        (SetResult 'list reslist)
+                    ))
+                )
+            )___";
 
-            UNIT_ASSERT(client.Compile(readQuery, binQuery)); 
+            UNIT_ASSERT(client.Compile(readQuery, binQuery));
 
             const TString readParams = R"___(
-                ( 
-                    (let params (Parameters)) 
-                    (let params (AddParameter params 'FROM (Uint64 '2))) 
-                    (let params (AddParameter params 'TO (Uint64 '2305843009213693952))) 
-                    (return params) 
-                ) 
-            )___"; 
+                (
+                    (let params (Parameters))
+                    (let params (AddParameter params 'FROM (Uint64 '2)))
+                    (let params (AddParameter params 'TO (Uint64 '2305843009213693952)))
+                    (return params)
+                )
+            )___";
 
-            UNIT_ASSERT(client.FlatQueryParams(binQuery, readParams, true, readRes)); 
+            UNIT_ASSERT(client.FlatQueryParams(binQuery, readParams, true, readRes));
 
             {
                 TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
@@ -1242,23 +1242,23 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[2]["uint"]), 40);
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[2]["key"]), 2305843009213693952);
             }
-        } 
+        }
 
-        { 
-            NKikimrMiniKQL::TResult readRes; 
+        {
+            NKikimrMiniKQL::TResult readRes;
             const TString readQuery = R"___(
-                ( 
-                    (let table '/dc-1/Berkanavt/tables/Simple) 
-                    (let range '('IncFrom 'ExcTo '('key (Uint64 '4) (Uint64 '2305843009213693952)))) 
-                    (let select '('uint 'key)) 
-                    (let options '()) 
-                    (let res (SelectRange table range select options)) 
-                    (let reslist (Member res 'List)) 
-                    (return (AsList 
-                        (SetResult 'list reslist) 
-                    )) 
-                ) 
-            )___"; 
+                (
+                    (let table '/dc-1/Berkanavt/tables/Simple)
+                    (let range '('IncFrom 'ExcTo '('key (Uint64 '4) (Uint64 '2305843009213693952))))
+                    (let select '('uint 'key))
+                    (let options '())
+                    (let res (SelectRange table range select options))
+                    (let reslist (Member res 'List))
+                    (return (AsList
+                        (SetResult 'list reslist)
+                    ))
+                )
+            )___";
 
             UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
@@ -1270,23 +1270,23 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 30);
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 2305843009213693951);
             }
-        } 
+        }
 
-        { 
-            NKikimrMiniKQL::TResult readRes; 
+        {
+            NKikimrMiniKQL::TResult readRes;
             const TString readQuery = R"___(
-                ( 
-                    (let table '/dc-1/Berkanavt/tables/Simple) 
-                    (let range '('ExcFrom 'IncTo '('key (Uint64 '3) (Uint64 '2305843009213693950)))) 
-                    (let select '('uint 'key)) 
-                    (let options '()) 
-                    (let res (SelectRange table range select options)) 
-                    (let reslist (Member res 'List)) 
-                    (return (AsList 
-                        (SetResult 'list reslist) 
-                    )) 
-                ) 
-            )___"; 
+                (
+                    (let table '/dc-1/Berkanavt/tables/Simple)
+                    (let range '('ExcFrom 'IncTo '('key (Uint64 '3) (Uint64 '2305843009213693950))))
+                    (let select '('uint 'key))
+                    (let options '())
+                    (let res (SelectRange table range select options))
+                    (let reslist (Member res 'List))
+                    (return (AsList
+                        (SetResult 'list reslist)
+                    ))
+                )
+            )___";
 
             UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
@@ -1295,7 +1295,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 TValue list = value["list"];
                 UNIT_ASSERT_VALUES_EQUAL(list.Size(), 0);
             }
-        } 
+        }
     }
 
     Y_UNIT_TEST(SelectRangeOptions) {
@@ -1542,89 +1542,89 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     Y_UNIT_TEST(FollowerCacheRefresh) {
-        TPortManager tp; 
-        ui16 port = tp.GetPort(2134); 
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
 
         auto settings = TServerSettings(port);
         settings.SetNodeCount(2);
         TServer server(settings);
         TClient client(settings);
 
-        server.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG); 
- 
-        client.MarkNodeInHive(server.GetRuntime(), 1, false); 
- 
-        PrepareTestData(client, true); 
- 
-        client.MarkNodeInHive(server.GetRuntime(), 1, true); 
- 
-        const ui64 tabletId = 72075186224037888ull; 
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        client.MarkNodeInHive(server.GetRuntime(), 1, false);
+
+        PrepareTestData(client, true);
+
+        client.MarkNodeInHive(server.GetRuntime(), 1, true);
+
+        const ui64 tabletId = 72075186224037888ull;
         WaitForLeaderStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
         WaitForFollowerStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
- 
-        // force some rounds of compaction 
-        for (ui32 i : xrange(50, 3000)) { 
-            NKikimrMiniKQL::TResult writeRes; 
+
+        // force some rounds of compaction
+        for (ui32 i : xrange(50, 3000)) {
+            NKikimrMiniKQL::TResult writeRes;
             const TString writeQuery = "((let table '/dc-1/Berkanavt/tables/Simple)"
-                "(let row1 '('('key (Uint64 '" + ToString(i) + "))))" 
-                "(return (AsList" 
-                    "(UpdateRow table row1 '( '('uint (Uint64 '" + ToString(i) + "))))" 
-                ")))"; 
- 
-            UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes)); 
-        } 
- 
+                "(let row1 '('('key (Uint64 '" + ToString(i) + "))))"
+                "(return (AsList"
+                    "(UpdateRow table row1 '( '('uint (Uint64 '" + ToString(i) + "))))"
+                ")))";
+
+            UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
+        }
+
         Cout << "Read from leader" << Endl;
-        CheckRead(client, false); 
+        CheckRead(client, false);
         Cout << "Read from leader again" << Endl;
-        CheckRead(client, false); 
+        CheckRead(client, false);
         Cout << "Read from follower" << Endl;
-        CheckRead(client, true); 
-    } 
- 
+        CheckRead(client, true);
+    }
+
     Y_UNIT_TEST(FollowerDrop) {
-        TPortManager tp; 
-        ui16 port = tp.GetPort(2134); 
- 
-        auto settings = TServerSettings(port); 
-        settings.SetNodeCount(1); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        server.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG); 
- 
-        PrepareTestData(client, false); 
- 
-        const ui64 tabletId = 72075186224037888ull; 
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+
+        auto settings = TServerSettings(port);
+        settings.SetNodeCount(1);
+        TServer server(settings);
+        TClient client(settings);
+
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        PrepareTestData(client, false);
+
+        const ui64 tabletId = 72075186224037888ull;
         WaitForLeaderStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
         WaitForFollowerStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
- 
-        NTabletPipe::TClientConfig pipeClientConfig; 
+
+        NTabletPipe::TClientConfig pipeClientConfig;
         pipeClientConfig.ForceFollower = true;
         server.GetRuntime()->SendToPipe(tabletId, TActorId(), new TEvents::TEvPoisonPill(), 0, pipeClientConfig);
- 
-        client.AlterTable(TablePlacement, Sprintf( 
-                            R"___( 
-                                Name: "Simple" 
-                                Columns { Name: "key"        Type: "Uint64"} 
-                                Columns { Name: "uint"       Type: "Uint64"} 
-                                KeyColumnNames: ["key"] 
+
+        client.AlterTable(TablePlacement, Sprintf(
+                            R"___(
+                                Name: "Simple"
+                                Columns { Name: "key"        Type: "Uint64"}
+                                Columns { Name: "uint"       Type: "Uint64"}
+                                KeyColumnNames: ["key"]
                                 PartitionConfig { FollowerCount: 0 }
-                            )___")); 
- 
-        // force some rounds of compaction 
-        for (ui32 i : xrange(50, 3000)) { 
-            NKikimrMiniKQL::TResult writeRes; 
-            const TString writeQuery = "((let table '/dc-1/Berkanavt/tables/Simple)" 
-                "(let row1 '('('key (Uint64 '" + ToString(i) + "))))" 
-                "(return (AsList" 
-                "(UpdateRow table row1 '( '('uint (Uint64 '" + ToString(i) + "))))" 
-                ")))"; 
- 
-            UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes)); 
-        } 
-    } 
- 
+                            )___"));
+
+        // force some rounds of compaction
+        for (ui32 i : xrange(50, 3000)) {
+            NKikimrMiniKQL::TResult writeRes;
+            const TString writeQuery = "((let table '/dc-1/Berkanavt/tables/Simple)"
+                "(let row1 '('('key (Uint64 '" + ToString(i) + "))))"
+                "(return (AsList"
+                "(UpdateRow table row1 '( '('uint (Uint64 '" + ToString(i) + "))))"
+                ")))";
+
+            UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
+        }
+    }
+
     Y_UNIT_TEST(PromoteFollower) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -1852,42 +1852,42 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         Cout << schemaDiff << Endl;
         UNIT_ASSERT_C(!schemaDiff.empty(), "Schema not changed after update");
     }
- 
+
     Y_UNIT_TEST(LocalSchemeDropTable) {
-        TPortManager tp; 
-        ui16 port = tp.GetPort(2134); 
- 
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
-        server.StartDummyTablets(); 
+        server.StartDummyTablets();
         WaitForLeaderStart(client, server.GetRuntime(), ChangeStateStorage(Tests::DummyTablet1, TestDomain), TDuration::Seconds(1));
- 
-        NTabletFlatScheme::TSchemeChanges schemeInitial; 
+
+        NTabletFlatScheme::TSchemeChanges schemeInitial;
         TString err;
-        bool success = false; 
- 
-        success = client.LocalSchemeTx(Tests::DummyTablet1, "", true, schemeInitial, err); 
-        UNIT_ASSERT(success); 
+        bool success = false;
+
+        success = client.LocalSchemeTx(Tests::DummyTablet1, "", true, schemeInitial, err);
+        UNIT_ASSERT(success);
         const TString oldScheme = ToString(schemeInitial);
- 
+
         TString change =  R"___(
-                Delta { 
-                    DeltaType: DropTable 
-                    TableId: 32 
-                } 
-                )___"; 
- 
-        // Update 
-        NTabletFlatScheme::TSchemeChanges schemeChanged; 
-        success = client.LocalSchemeTx(Tests::DummyTablet1, change, false, schemeChanged, err); 
-        UNIT_ASSERT(success); 
+                Delta {
+                    DeltaType: DropTable
+                    TableId: 32
+                }
+                )___";
+
+        // Update
+        NTabletFlatScheme::TSchemeChanges schemeChanged;
+        success = client.LocalSchemeTx(Tests::DummyTablet1, change, false, schemeChanged, err);
+        UNIT_ASSERT(success);
         const TString newScheme = ToString(schemeChanged);
- 
+
         TString schemaDiff = DiffStrings(oldScheme, newScheme);
-        UNIT_ASSERT_C(!schemaDiff.empty(), "Schema not changed after update"); 
-    } 
+        UNIT_ASSERT_C(!schemaDiff.empty(), "Schema not changed after update");
+    }
 
     Y_UNIT_TEST(TestOldTypes) {
         TPortManager tp;
@@ -2051,104 +2051,104 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         // TODO: check resluts
     }
- 
+
     void OfflineFollowerContinueWork() {
-        TPortManager tp; 
-        ui16 port = tp.GetPort(2134); 
- 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
         SetupLogging(server);
- 
+
         TTestActorRuntime &runtime = *server.GetRuntime();
 
-        const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain); 
+        const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
         TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
         TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
- 
+
         const TActorId edge = runtime.AllocateEdgeActor();
- 
+
         const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr));
         const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
- 
+
         const TActorId followerTablet = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr));
         const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
         Y_UNUSED(followerTablet);
- 
-        const char *writeQuery = R"__(( 
-                (let row_ '('('key (Uint64 '42)))) 
-                (let update_ '('('v_ui64 (Uint64 '%lu)))) 
-                (let result_ (UpdateRow 't_by_ui64 row_ update_)) 
-                (return (AsList result_)) 
-            ))__"; 
- 
-        const char *readQuery = R"__(( 
-                (let row_ '('('key (Uint64 '42)))) 
-                (let select_ '('v_ui64)) 
-                (let pgmReturn (AsList 
-                    (SetResult 'res (SelectRow 't_by_ui64 row_ select_)) 
-                )) 
-                (return pgmReturn) 
-            ))__"; 
- 
-        { 
+
+        const char *writeQuery = R"__((
+                (let row_ '('('key (Uint64 '42))))
+                (let update_ '('('v_ui64 (Uint64 '%lu))))
+                (let result_ (UpdateRow 't_by_ui64 row_ update_))
+                (return (AsList result_))
+            ))__";
+
+        const char *readQuery = R"__((
+                (let row_ '('('key (Uint64 '42))))
+                (let select_ '('v_ui64))
+                (let pgmReturn (AsList
+                    (SetResult 'res (SelectRow 't_by_ui64 row_ select_))
+                ))
+                (return pgmReturn)
+            ))__";
+
+        {
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
-            reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(10))); 
+            reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(10)));
             runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
- 
-            auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge); 
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0); 
-        } 
- 
-        { 
+
+            auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
+        }
+
+        {
             runtime.Send(new IEventHandle(leaderTablet, edge, new TEvents::TEvPoisonPill()));
-            auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge); 
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId); 
-        } 
- 
-        { 
+            auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
+        }
+
+        {
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
-            reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery); 
+            reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
             runtime.Send(new IEventHandle(followerId, edge, reqRead.Release()));
- 
-            auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge); 
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0); 
-        } 
- 
-        { 
-            NTabletPipe::TClientConfig pipeClientConfig; 
+
+            auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
+        }
+
+        {
+            NTabletPipe::TClientConfig pipeClientConfig;
             pipeClientConfig.AllowFollower = true;
             pipeClientConfig.ForceFollower = true;
-            runtime.Register(NTabletPipe::CreateClient(edge, tabletId, pipeClientConfig)); 
- 
-            auto reply = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(edge); 
- 
+            runtime.Register(NTabletPipe::CreateClient(edge, tabletId, pipeClientConfig));
+
+            auto reply = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(edge);
+
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::OK);
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST(OfflineFollowerContinueWork) {
         OfflineFollowerContinueWork();
     }
 
     void FollowerOfflineBoot() {
-        TPortManager tp; 
-        ui16 port = tp.GetPort(2134); 
- 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
         SetupLogging(server);
- 
+
         TTestActorRuntime &runtime = *server.GetRuntime();
 
-        const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain); 
+        const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
         TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
         TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
- 
+
         const TActorId edge = runtime.AllocateEdgeActor();
- 
+
         {
             const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr));
             const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
@@ -2161,23 +2161,23 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         const TActorId followerTablet = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr));
         Y_UNUSED(followerTablet);
- 
+
         const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
         Y_UNUSED(followerId);
 
-        { 
-            NTabletPipe::TClientConfig pipeClientConfig; 
+        {
+            NTabletPipe::TClientConfig pipeClientConfig;
             pipeClientConfig.AllowFollower = true;
             pipeClientConfig.ForceFollower = true;
             pipeClientConfig.RetryPolicy = {.RetryLimitCount = 2};
-            runtime.Register(NTabletPipe::CreateClient(edge, tabletId, pipeClientConfig)); 
- 
-            auto reply = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(edge); 
- 
+            runtime.Register(NTabletPipe::CreateClient(edge, tabletId, pipeClientConfig));
+
+            auto reply = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(edge);
+
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::OK);
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST(FollowerOfflineBoot) {
         FollowerOfflineBoot();
     }

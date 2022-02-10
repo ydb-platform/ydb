@@ -10,7 +10,7 @@
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
- 
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -276,14 +276,14 @@ private:
         for (auto& [database, queue] : DeferredEvents) {
             for (TEventReqHolder& req : queue) {
                 req.Ctx->ReplyUnavaliable();
-            } 
-        } 
+            }
+        }
         for (const auto& [database, actor] : Subscribers) {
             Send(actor, new TEvents::TEvPoisonPill());
-        } 
+        }
         TBase::PassAway();
-    } 
- 
+    }
+
     std::unordered_map<TString, TDatabaseInfo> Databases;
     std::unordered_map<TString, std::deque<TEventReqHolder>> DeferredEvents; // Events deferred to handle after getting database info
     std::unordered_map<TString, TActorId> Subscribers;

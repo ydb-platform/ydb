@@ -9,7 +9,7 @@ TAppData::TAppData(
         const NScheme::TTypeRegistry* typeRegistry,
         const NMiniKQL::IFunctionRegistry* functionRegistry,
         const TFormatFactory* formatFactory,
-        TProgramShouldContinue *kikimrShouldContinue) 
+        TProgramShouldContinue *kikimrShouldContinue)
     : Magic(MagicTag)
     , SystemPoolId(sysPoolId)
     , UserPoolId(userPoolId)
@@ -19,12 +19,12 @@ TAppData::TAppData(
     , TypeRegistry(typeRegistry)
     , FunctionRegistry(functionRegistry)
     , FormatFactory(formatFactory)
-    , ProxySchemeCacheNodes(Max<ui64>() / 4) 
-    , ProxySchemeCacheDistrNodes(Max<ui64>() / 4) 
-    , CompilerSchemeCachePaths(Max<ui64>() / 4) 
-    , CompilerSchemeCacheTables(Max<ui64>() / 4) 
+    , ProxySchemeCacheNodes(Max<ui64>() / 4)
+    , ProxySchemeCacheDistrNodes(Max<ui64>() / 4)
+    , CompilerSchemeCachePaths(Max<ui64>() / 4)
+    , CompilerSchemeCacheTables(Max<ui64>() / 4)
     , Mon(nullptr)
-    , BusMonPage(nullptr) 
+    , BusMonPage(nullptr)
     , Icb(new TControlBoard())
     , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry(Icb))
     , StaticBlobStorageConfig(new NKikimrBlobStorage::TNodeWardenServiceSet)

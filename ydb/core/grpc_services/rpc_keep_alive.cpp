@@ -28,7 +28,7 @@ public:
         Become(&TKeepAliveRPC::StateWork);
     }
 private:
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
+    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvPingSessionResponse, Handle);

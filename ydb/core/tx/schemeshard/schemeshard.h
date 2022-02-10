@@ -17,9 +17,9 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-static constexpr ui64 RootSchemeShardId = 0; 
-static constexpr ui64 RootPathId = 1; 
- 
+static constexpr ui64 RootSchemeShardId = 0;
+static constexpr ui64 RootPathId = 1;
+
 struct TSchemeLimits;
 
 struct TEvSchemeShard {
@@ -226,18 +226,18 @@ struct TEvSchemeShard {
         {
             Record.SetPath(path);
         }
- 
+
         TEvDescribeScheme(ui64 tabletId, ui64 pathId)
         {
             Record.SetSchemeshardId(tabletId);
             Record.SetPathId(pathId);
         }
 
-        TEvDescribeScheme(TTableId tableId) 
-        { 
+        TEvDescribeScheme(TTableId tableId)
+        {
             Record.SetSchemeshardId(tableId.PathId.OwnerId);
             Record.SetPathId(tableId.PathId.LocalPathId);
-        } 
+        }
 
         TEvDescribeScheme(NKikimr::TPathId pathId)
         {
@@ -254,7 +254,7 @@ struct TEvSchemeShard {
         TEvDescribeSchemeResult(const TString& path, ui64 pathOwner, TPathId pathId)
         {
             Record.SetPath(path);
-            Record.SetPathOwner(pathOwner); 
+            Record.SetPathOwner(pathOwner);
             Record.SetPathId(pathId.LocalPathId);
             Record.SetPathOwnerId(pathId.OwnerId);
         }

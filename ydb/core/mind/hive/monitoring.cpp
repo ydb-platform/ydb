@@ -9,44 +9,44 @@
 #include "hive_schema.h"
 #include "hive_log.h"
 
-namespace NKikimr { 
+namespace NKikimr {
 namespace NHive {
- 
+
 class TTxMonEvent_DbState : public TTransactionBase<THive> {
-public: 
-    struct TTabletInfo { 
-        ui32 KnownGeneration; 
-        ui32 TabletType; 
+public:
+    struct TTabletInfo {
+        ui32 KnownGeneration;
+        ui32 TabletType;
         ui32 LeaderNode;
         ETabletState TabletState;
-    }; 
- 
-    struct TNodeInfo { 
+    };
+
+    struct TNodeInfo {
         TActorId Local;
-        ui64 TabletsOn; 
- 
-        TNodeInfo() 
-            : TabletsOn(0) 
-        {} 
-    }; 
- 
+        ui64 TabletsOn;
+
+        TNodeInfo()
+            : TabletsOn(0)
+        {}
+    };
+
     const TActorId Source;
- 
+
     TMap<ui64, TTabletInfo> TabletInfo;
     TMap<ui32, TNodeInfo> NodeInfo;
- 
+
     TTxMonEvent_DbState(const TActorId &source, TSelf *hive)
-        : TBase(hive) 
-        , Source(source) 
-    {} 
- 
+        : TBase(hive)
+        , Source(source)
+    {}
+
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_DB_STATE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
-        TabletInfo.clear(); 
-        NodeInfo.clear(); 
+        TabletInfo.clear();
+        NodeInfo.clear();
         NIceDb::TNiceDb db(txc.DB);
- 
+
         { // read tablets from DB
             auto rowset = db.Table<Schema::Tablet>().Range().Select();
             if (!rowset.IsReady())
@@ -57,40 +57,40 @@ public:
                 const ui32 type = rowset.GetValue<Schema::Tablet::TabletType>();
                 const ui32 leaderNode = rowset.GetValue<Schema::Tablet::LeaderNode>();
                 const ETabletState tabletState = rowset.GetValue<Schema::Tablet::State>();
- 
+
                 TabletInfo[tabletId] = {knownGen, type, leaderNode, tabletState};
                 ++NodeInfo[leaderNode].TabletsOn; // leaderNode could be zero, then - counter of tablets w/o leader node
                 if (!rowset.Next())
                     return false;
-            } 
-        } 
- 
-        // read nodes 
-        { 
+            }
+        }
+
+        // read nodes
+        {
             auto rowset = db.Table<Schema::Node>().Range().Select();
             if (!rowset.IsReady())
                 return false;
             while (rowset.IsValid()) {
                 const ui32 nodeId = rowset.GetValue<Schema::Node::ID>();
                 const TActorId local = rowset.GetValue<Schema::Node::Local>();
- 
-                NodeInfo[nodeId].Local = local; 
+
+                NodeInfo[nodeId].Local = local;
                 if (!rowset.Next())
                     return false;
-            } 
-        } 
- 
-        // todo: send result back 
-        TStringStream str; 
-        RenderHTMLPage(str); 
-        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str())); 
-        return true; 
-    } 
- 
+            }
+        }
+
+        // todo: send result back
+        TStringStream str;
+        RenderHTMLPage(str);
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+        return true;
+    }
+
     void Complete(const TActorContext& ctx) override {
         Y_UNUSED(ctx);
-    } 
- 
+    }
+
     void RenderHTMLPage(IOutputStream &out) {
         HTML(out) {
              UL_CLASS("nav nav-tabs") {
@@ -362,9 +362,9 @@ public:
         }
         out << "</tbody>";
         out << "</table>";
-    } 
-}; 
- 
+    }
+};
+
 class TTxMonEvent_MemStateDomains : public TTransactionBase<THive> {
 public:
     const TActorId Source;
@@ -1102,14 +1102,14 @@ public:
     void RenderHTMLPage(IOutputStream &out) {
         ui64 nodes = 0;
         ui64 tablets = 0;
-        ui64 runningTablets = 0; 
-        ui64 aliveNodes = 0; 
+        ui64 runningTablets = 0;
+        ui64 aliveNodes = 0;
         THashMap<ui32, TMap<TString, ui32>> tabletsByNodeByType;
         THashMap<TTabletTypes::EType, ui32> tabletTypesToChannels;
 
         for (const auto& pr : Self->Tablets) {
             if (pr.second.IsRunning()) {
-                ++runningTablets; 
+                ++runningTablets;
                 ++tabletsByNodeByType[pr.second.NodeId][GetTabletType(pr.second.Type)];
             }
             for (const auto& sl : pr.second.Followers) {
@@ -1130,7 +1130,7 @@ public:
         }
         for (const auto& pr : Self->Nodes) {
             if (pr.second.IsAlive()) {
-                ++aliveNodes; 
+                ++aliveNodes;
             }
             if (!pr.second.IsUnknown()) {
                 ++nodes;
@@ -2874,10 +2874,10 @@ class TTxMonEvent_ResetTablet : public TTransactionBase<THive> {
         const ui32 KnownGeneration;
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::HIVE_MON_REQUEST; 
-        } 
- 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::HIVE_MON_REQUEST;
+        }
+
         TResetter(TIntrusivePtr<TTabletStorageInfo> info, TActorId source, ui32 knownGeneration)
             : Info(std::move(info))
             , Source(source)
@@ -3444,7 +3444,7 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
         return Execute(new TTxMonEvent_Storage(ev->Sender, ev, this), ctx);
     }
     return Execute(new TTxMonEvent_Landing(ev->Sender, ev, this), ctx);
-} 
- 
+}
+
 } // NHive
 } // NKikimr

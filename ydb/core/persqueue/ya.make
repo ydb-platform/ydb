@@ -24,7 +24,7 @@ SRCS(
     read_balancer.cpp
     read_speed_limiter.cpp
     subscriber.cpp
-    type_codecs_defs.cpp 
+    type_codecs_defs.cpp
     user_info.cpp
     write_meta.cpp
     actor_persqueue_client_iface.h

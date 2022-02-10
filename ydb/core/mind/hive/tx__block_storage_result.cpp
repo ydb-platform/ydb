@@ -66,7 +66,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateBlockStorageResult(TEvTabletBase::TEvBlockBlobStorageResult::TPtr& ev) { 
+ITransaction* THive::CreateBlockStorageResult(TEvTabletBase::TEvBlockBlobStorageResult::TPtr& ev) {
     return new TTxBlockStorageResult(ev, this);
 }
 

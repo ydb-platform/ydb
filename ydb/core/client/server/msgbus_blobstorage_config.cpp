@@ -12,7 +12,7 @@ namespace {
 class TMessageBusBlobStorageConfig
     : public TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<
         TMessageBusBlobStorageConfig,
-        TEvBlobStorage::TEvControllerConfigResponse, 
+        TEvBlobStorage::TEvControllerConfigResponse,
         NKikimrServices::TActivity::FRONT_BSADM_CONFIG
       >>
 {

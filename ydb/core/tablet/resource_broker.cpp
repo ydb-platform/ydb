@@ -74,7 +74,7 @@ void TTask::OutputState(IOutputStream &os, const TString &prefix) const
        << prefix << "  ID: " << TaskId << Endl
        << prefix << "  Client: " << Client.ToString() << Endl
        << prefix << "  Type: " << ToString(Type) << Endl
-       << prefix << "  Required resources: {" << JoinSeq(", ", RequiredResources) << "}" << Endl 
+       << prefix << "  Required resources: {" << JoinSeq(", ", RequiredResources) << "}" << Endl
        << prefix << "  Priority: " << Priority << Endl
        << prefix << "  InFly: " << InFly << Endl
        << prefix << "  Queue: " << Queue->Name << Endl

@@ -1,12 +1,12 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     a-romanov
     ddoarn
     g:kikimr
 )
 
-SRCS( 
+SRCS(
     actor_tracker.cpp
     actor_tracker.h
     async_destroyer.h
@@ -17,11 +17,11 @@ SRCS(
     http_request_protocol.h
     load_network.cpp
     load_network.h
-    long_timer.cpp 
-    long_timer.h 
+    long_timer.cpp
+    long_timer.h
     mad_squirrel.cpp
-    mad_squirrel.h 
-    melancholic_gopher.cpp 
+    mad_squirrel.h
+    melancholic_gopher.cpp
     name_service_client_protocol.cpp
     name_service_client_protocol.h
     node_identifier.cpp
@@ -31,12 +31,12 @@ SRCS(
     read_data_protocol.h
     read_http_reply_protocol.cpp
     read_http_reply_protocol.h
-    router_rr.h 
+    router_rr.h
     send_data_protocol.cpp
     send_data_protocol.h
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/dnscachelib
     library/cpp/actors/protos
@@ -55,11 +55,11 @@ PEERDIR(
     ydb/core/node_whiteboard
     ydb/core/protos
     ydb/core/util
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
-END() 
+END()
 
 RECURSE_FOR_TESTS(
     ut

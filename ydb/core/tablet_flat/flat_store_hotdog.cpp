@@ -30,19 +30,19 @@ void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, 
 
 void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, const TPartComponents &pc, ui32 table, ui32 level)
 {
-    snap->SetTable(table); 
-    snap->SetCompactionLevel(level); 
- 
+    snap->SetTable(table);
+    snap->SetCompactionLevel(level);
+
     TPageCollectionProtoHelper(false, false).Do(snap->AddBundles(), pc);
-} 
- 
+}
+
 void TPageCollectionProtoHelper::Do(TBundle *bundle, const TPartComponents &pc)
 {
     bundle->MutablePageCollections()->Reserve(pc.PageCollectionComponents.size());
- 
+
     for (auto &one : pc.PageCollectionComponents)
         Bundle(bundle->AddPageCollections(), one.LargeGlobId, one.Packet.Get(), one.Sticky);
- 
+
     if (auto &legacy = pc.Legacy)
         bundle->SetLegacy(legacy);
 
@@ -50,8 +50,8 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const TPartComponents &pc)
         bundle->SetOpaque(opaque);
 
     bundle->SetEpoch(pc.GetEpoch().ToProto());
-} 
- 
+}
+
 void TPageCollectionProtoHelper::Do(TBundle *bundle, const NTable::TPartView &partView)
 {
     Y_VERIFY(partView, "Cannot make bundle dump from empty NTable::TPartView");
@@ -119,7 +119,7 @@ void TPageCollectionProtoHelper::Bundle(NKikimrExecutorFlat::TPageCollection *pa
                 pages.emplace_back(pageId, *body);
             } else {
                 Y_FAIL("index and page collection pages must be kept inmemory");
-            } 
+            }
         }
     }
 

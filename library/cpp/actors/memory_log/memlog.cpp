@@ -15,11 +15,11 @@ static int (*FastGetCpu)(unsigned* cpu, unsigned* node, void* unused);
 #endif
 
 #if defined(_unix_)
-#include <sched.h> 
+#include <sched.h>
 #elif defined(_win_)
-#include <WinBase.h> 
+#include <WinBase.h>
 #else
-#error NO IMPLEMENTATION FOR THE PLATFORM 
+#error NO IMPLEMENTATION FOR THE PLATFORM
 #endif
 
 const char TMemoryLog::DEFAULT_LAST_MARK[16] = {
@@ -62,34 +62,34 @@ const char TMemoryLog::CLEAR_MARK[16] = {
 
 unsigned TMemoryLog::GetSelfCpu() noexcept {
 #if defined(_unix_)
-#if HAVE_VDSO_GETCPU 
+#if HAVE_VDSO_GETCPU
     unsigned cpu;
     if (Y_LIKELY(FastGetCpu != nullptr)) {
         auto result = FastGetCpu(&cpu, nullptr, nullptr);
         Y_VERIFY(result == 0);
-        return cpu; 
+        return cpu;
     } else {
         return 0;
     }
 
-#elif defined(_x86_64_) || defined(_i386_) 
+#elif defined(_x86_64_) || defined(_i386_)
 
-#define CPUID(func, eax, ebx, ecx, edx)              \ 
-    __asm__ __volatile__(                            \ 
-        "cpuid"                                      \ 
-        : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) \ 
-        : "a"(func)); 
+#define CPUID(func, eax, ebx, ecx, edx)              \
+    __asm__ __volatile__(                            \
+        "cpuid"                                      \
+        : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) \
+        : "a"(func));
 
     int a = 0, b = 0, c = 0, d = 0;
     CPUID(0x1, a, b, c, d);
     int acpiID = (b >> 24);
     return acpiID;
 
-#elif defined(__CNUC__) 
+#elif defined(__CNUC__)
     return sched_getcpu();
-#else 
+#else
     return 0;
-#endif 
+#endif
 
 #elif defined(_win_)
     return GetCurrentProcessorNumber();
@@ -99,16 +99,16 @@ unsigned TMemoryLog::GetSelfCpu() noexcept {
 }
 
 TMemoryLog* TMemoryLog::MemLogBuffer = nullptr;
-Y_POD_THREAD(TThread::TId) 
-TMemoryLog::LogThreadId; 
+Y_POD_THREAD(TThread::TId)
+TMemoryLog::LogThreadId;
 char* TMemoryLog::LastMarkIsHere = nullptr;
 
 std::atomic<bool> TMemoryLog::PrintLastMark(true);
 
 TMemoryLog::TMemoryLog(size_t totalSize, size_t grainSize)
-    : GrainSize(grainSize) 
-    , FreeGrains(DEFAULT_TOTAL_SIZE / DEFAULT_GRAIN_SIZE * 2) 
-    , Buf(totalSize) 
+    : GrainSize(grainSize)
+    , FreeGrains(DEFAULT_TOTAL_SIZE / DEFAULT_GRAIN_SIZE * 2)
+    , Buf(totalSize)
 {
     Y_VERIFY(DEFAULT_TOTAL_SIZE % DEFAULT_GRAIN_SIZE == 0);
     NumberOfGrains = DEFAULT_TOTAL_SIZE / DEFAULT_GRAIN_SIZE;
@@ -266,7 +266,7 @@ bool MemLogWrite(const char* begin, size_t msgSize, bool addLF) noexcept {
     // alignment required by NoCacheMemcpy
     // check for format for snprintf
     constexpr size_t prologSize = 48;
-    alignas(TMemoryLog::MemcpyAlignment) char prolog[prologSize + 1]; 
+    alignas(TMemoryLog::MemcpyAlignment) char prolog[prologSize + 1];
     Y_VERIFY(AlignDown(&prolog, TMemoryLog::MemcpyAlignment) == &prolog);
 
     int snprintfResult = snprintf(prolog, prologSize + 1,
@@ -291,7 +291,7 @@ bool MemLogWrite(const char* begin, size_t msgSize, bool addLF) noexcept {
     // warning: copy prolog first to avoid corruption of the message
     // by prolog tail
     NoCacheMemcpy(buffer, prolog, prologSize);
-    if (AlignDown(begin + prologSize, TMemoryLog::MemcpyAlignment) == begin + prologSize) { 
+    if (AlignDown(begin + prologSize, TMemoryLog::MemcpyAlignment) == begin + prologSize) {
         NoCacheMemcpy(buffer + prologSize, begin, msgSize);
     } else {
         NoWCacheMemcpy(buffer + prologSize, begin, msgSize);
@@ -335,14 +335,14 @@ bool MemLogVPrintF(const char* format, va_list params) noexcept {
     auto threadId = TMemoryLog::GetTheadId();
 
     // alignment required by NoCacheMemcpy
-    alignas(TMemoryLog::MemcpyAlignment) char buf[TMemoryLog::MAX_MESSAGE_SIZE]; 
+    alignas(TMemoryLog::MemcpyAlignment) char buf[TMemoryLog::MAX_MESSAGE_SIZE];
     Y_VERIFY(AlignDown(&buf, TMemoryLog::MemcpyAlignment) == &buf);
 
     int prologSize = snprintf(buf,
-                              TMemoryLog::MAX_MESSAGE_SIZE - 2, 
-                              "TS %020" PRIu64 " TI %020" PRIu64 " ", 
+                              TMemoryLog::MAX_MESSAGE_SIZE - 2,
+                              "TS %020" PRIu64 " TI %020" PRIu64 " ",
                               GetCycleCountFast(),
-                              threadId); 
+                              threadId);
 
     if (Y_UNLIKELY(prologSize < 0)) {
         return false;

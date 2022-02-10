@@ -1,5 +1,5 @@
-#pragma once 
-#include "config.h" 
+#pragma once
+#include "config.h"
 #include "factories.h"
 #include "service_initializer.h"
 
@@ -22,11 +22,11 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NKikimr { 
- 
+namespace NKikimr {
+
 class TKikimrRunner : public virtual TThrRefBase {
 protected:
-    static TProgramShouldContinue KikimrShouldContinue; 
+    static TProgramShouldContinue KikimrShouldContinue;
     static void OnTerminate(int);
 
     std::shared_ptr<TModuleFactories> ModuleFactories;
@@ -116,5 +116,5 @@ public:
 };
 
 int MainRun(const TKikimrRunConfig &runConfig, std::shared_ptr<TModuleFactories> factories);
- 
-} 
+
+}

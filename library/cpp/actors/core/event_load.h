@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <util/stream/walk.h>
 #include <util/system/types.h>
 #include <util/generic/string.h>
@@ -7,17 +7,17 @@
 #include <library/cpp/actors/wilson/wilson_trace.h>
 
 namespace NActors {
-    class IEventHandle; 
+    class IEventHandle;
 
-    struct TConstIoVec { 
-        const void* Data; 
-        size_t Size; 
-    }; 
+    struct TConstIoVec {
+        const void* Data;
+        size_t Size;
+    };
 
-    struct TIoVec { 
-        void* Data; 
-        size_t Size; 
-    }; 
+    struct TIoVec {
+        void* Data;
+        size_t Size;
+    };
 
     class TEventSerializedData
        : public TThrRefBase
@@ -80,14 +80,14 @@ namespace NActors {
 
         void Append(TRope&& from) {
             Rope.Insert(Rope.End(), std::move(from));
-        } 
+        }
 
         void Append(TString buffer) {
             if (buffer) {
                 Rope.Insert(Rope.End(), TRope(std::move(buffer)));
             }
-        } 
-    }; 
+        }
+    };
 }
 
 class TChainBufWalk : public IWalkInput {

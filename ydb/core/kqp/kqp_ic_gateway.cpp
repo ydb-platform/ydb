@@ -800,7 +800,7 @@ public:
         result.SetSuccess();
 
         Promise.SetValue(std::move(result));
-        NTabletPipe::CloseClient(ctx, ShemePipeActorId); 
+        NTabletPipe::CloseClient(ctx, ShemePipeActorId);
         this->Die(ctx);
     }
 

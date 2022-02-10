@@ -45,7 +45,7 @@ message TStat {
 
 message TRoot { // NTable::TPart page collection metablob
     optional int64 Epoch = 2;
-    optional uint64 Bytes = 3;  // Actual raw data pages size in part 
+    optional uint64 Bytes = 3;  // Actual raw data pages size in part
     optional uint64 Coded = 4;  // Observable (encoded) data pages size
     optional TEvol Evol = 6;
     optional TStat Stat = 7;   // Some stats collected on compaction

@@ -9,43 +9,43 @@ namespace NActors {
             Iter += *size;
         } else if (Iter.Valid()) {
             Iter.AdvanceToNextContiguousBlock();
-        } 
+        }
         TotalByteCount += *size;
         return *size != 0;
-    } 
+    }
 
     void TRopeStream::BackUp(int count) {
         Y_VERIFY(count <= TotalByteCount);
         Iter -= count;
         TotalByteCount -= count;
-    } 
+    }
 
     bool TRopeStream::Skip(int count) {
         if (static_cast<size_t>(TotalByteCount + count) > Size) {
             count = Size - TotalByteCount;
-        } 
+        }
         Iter += count;
         TotalByteCount += count;
         return static_cast<size_t>(TotalByteCount) != Size;
     }
 
-    TCoroutineChunkSerializer::TCoroutineChunkSerializer() 
-        : TotalSerializedDataSize(0) 
+    TCoroutineChunkSerializer::TCoroutineChunkSerializer()
+        : TotalSerializedDataSize(0)
         , Stack(64 * 1024)
         , SelfClosure{this, TArrayRef(Stack.Begin(), Stack.End())}
-        , InnerContext(SelfClosure) 
+        , InnerContext(SelfClosure)
     {}
 
-    TCoroutineChunkSerializer::~TCoroutineChunkSerializer() { 
-        CancelFlag = true; 
+    TCoroutineChunkSerializer::~TCoroutineChunkSerializer() {
+        CancelFlag = true;
         Resume();
         Y_VERIFY(Finished);
     }
- 
-    bool TCoroutineChunkSerializer::AllowsAliasing() const { 
-        return true; 
-    } 
- 
+
+    bool TCoroutineChunkSerializer::AllowsAliasing() const {
+        return true;
+    }
+
     bool TCoroutineChunkSerializer::Produce(const void *data, size_t size) {
         Y_VERIFY(size <= SizeRemain);
         SizeRemain -= size;
@@ -71,11 +71,11 @@ namespace NActors {
         return true;
     }
 
-    bool TCoroutineChunkSerializer::WriteAliasedRaw(const void* data, int size) { 
-        Y_VERIFY(size >= 0); 
+    bool TCoroutineChunkSerializer::WriteAliasedRaw(const void* data, int size) {
+        Y_VERIFY(size >= 0);
         while (size) {
             if (CancelFlag || AbortFlag) {
-                return false; 
+                return false;
             } else if (const size_t bytesToAppend = Min<size_t>(size, SizeRemain)) {
                 if (!Produce(data, bytesToAppend)) {
                     return false;
@@ -86,29 +86,29 @@ namespace NActors {
                 InnerContext.SwitchTo(BufFeedContext);
             }
         }
-        return true; 
+        return true;
     }
 
-    bool TCoroutineChunkSerializer::Next(void** data, int* size) { 
+    bool TCoroutineChunkSerializer::Next(void** data, int* size) {
         if (CancelFlag || AbortFlag) {
-            return false; 
+            return false;
         }
         if (!SizeRemain) {
-            InnerContext.SwitchTo(BufFeedContext); 
+            InnerContext.SwitchTo(BufFeedContext);
             if (CancelFlag || AbortFlag) {
-                return false; 
+                return false;
             }
-        } 
+        }
         Y_VERIFY(SizeRemain);
         *data = BufferPtr;
         *size = SizeRemain;
         BufferPtr += SizeRemain;
         return Produce(*data, *size);
-    } 
- 
-    void TCoroutineChunkSerializer::BackUp(int count) { 
+    }
+
+    void TCoroutineChunkSerializer::BackUp(int count) {
         if (!count) {
-            return; 
+            return;
         }
         Y_VERIFY(count > 0);
         Y_VERIFY(NumChunks);
@@ -121,13 +121,13 @@ namespace NActors {
         }
         BufferPtr -= count;
         SizeRemain += count;
-        TotalSerializedDataSize -= count; 
+        TotalSerializedDataSize -= count;
     }
 
-    void TCoroutineChunkSerializer::Resume() { 
-        TContMachineContext feedContext; 
-        BufFeedContext = &feedContext; 
-        feedContext.SwitchTo(&InnerContext); 
+    void TCoroutineChunkSerializer::Resume() {
+        TContMachineContext feedContext;
+        BufFeedContext = &feedContext;
+        feedContext.SwitchTo(&InnerContext);
         BufFeedContext = nullptr;
     }
 
@@ -155,14 +155,14 @@ namespace NActors {
         Resume();
 
         return {Chunks, Chunks + NumChunks};
-    } 
+    }
 
     void TCoroutineChunkSerializer::SetSerializingEvent(const IEventBase *event) {
         Y_VERIFY(Event == nullptr);
         Event = event;
-        TotalSerializedDataSize = 0; 
+        TotalSerializedDataSize = 0;
         AbortFlag = false;
-    } 
+    }
 
     void TCoroutineChunkSerializer::Abort() {
         Y_VERIFY(Event);
@@ -170,7 +170,7 @@ namespace NActors {
         Resume();
     }
 
-    void TCoroutineChunkSerializer::DoRun() { 
+    void TCoroutineChunkSerializer::DoRun() {
         while (!CancelFlag) {
             Y_VERIFY(Event);
             SerializationSuccess = Event->SerializeToArcadiaStream(this);
@@ -178,12 +178,12 @@ namespace NActors {
             if (!CancelFlag) { // cancel flag may have been received during serialization
                 InnerContext.SwitchTo(BufFeedContext);
             }
-        } 
+        }
         Finished = true;
         InnerContext.SwitchTo(BufFeedContext);
     }
 
-    bool TAllocChunkSerializer::Next(void** pdata, int* psize) { 
+    bool TAllocChunkSerializer::Next(void** pdata, int* psize) {
         if (Backup) {
             // we have some data in backup rope -- move the first chunk from the backup rope to the buffer and return
             // pointer to the buffer; it is safe to remove 'const' here as we uniquely own this buffer
@@ -199,17 +199,17 @@ namespace NActors {
             *psize = item->GetCapacity();
             Buffers->Append(TRope(std::move(item)));
         }
-        return true; 
+        return true;
     }
 
-    void TAllocChunkSerializer::BackUp(int count) { 
+    void TAllocChunkSerializer::BackUp(int count) {
         Backup.Insert(Backup.Begin(), Buffers->EraseBack(count));
-    } 
+    }
 
-    bool TAllocChunkSerializer::WriteAliasedRaw(const void*, int) { 
-        Y_VERIFY(false); 
-        return false; 
-    } 
+    bool TAllocChunkSerializer::WriteAliasedRaw(const void*, int) {
+        Y_VERIFY(false);
+        return false;
+    }
 
     bool TAllocChunkSerializer::WriteRope(const TRope *rope) {
         Buffers->Append(TRope(*rope));

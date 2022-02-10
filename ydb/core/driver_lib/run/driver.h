@@ -23,7 +23,7 @@ namespace NKikimr {
     XX(EDM_BS, "bs", "admin running kikimr") \
     XX(EDM_BLOBSTORAGE, "blobstorage", "admin running kikimr") \
     XX(EDM_CMS, "cms", "admin running kikimr") \
-    XX(EDM_DISCOVERY, "discovery", "discover endpoints") \ 
+    XX(EDM_DISCOVERY, "discovery", "discover endpoints") \
     XX(EDM_WHOAMI, "whoami", "admin running kikimr") \
     XX(EDM_FORMAT_INFO, "format-info", "read pdisk format info") \
     XX(EDM_FORMAT_UTIL, "format-util", "query blob storage format configuration file") \
@@ -35,8 +35,8 @@ namespace NKikimr {
     XX(EDM_PERSQUEUE_REQUEST, "persqueue-request", "send protobuf request to a persqueue tablet") \
     XX(EDM_PERSQUEUE_STRESS, "persqueue-stress", "stress read or write to a persqueue tablet") \
     XX(EDM_PERSQUEUE_DISCOVER_CLUSTERS, "persqueue-discover-clusters", "persqueue session clusters discovery") \
-    XX(EDM_LOAD_REQUEST, "bs-load-test", "send protobuf request to blobstorage test load actor (https://wiki.yandex-team.ru/kikimr/developers/BSLoadTest/)") \ 
-    XX(EDM_ACTORSYS_PERFTEST, "actorsys-perf-test", "make actorsystem performance test") \ 
+    XX(EDM_LOAD_REQUEST, "bs-load-test", "send protobuf request to blobstorage test load actor (https://wiki.yandex-team.ru/kikimr/developers/BSLoadTest/)") \
+    XX(EDM_ACTORSYS_PERFTEST, "actorsys-perf-test", "make actorsystem performance test") \
 
 
 CLI_MODES_IMPL(EDriverMode, EDM_NO, MODE_MAP);

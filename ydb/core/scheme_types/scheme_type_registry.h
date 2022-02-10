@@ -25,7 +25,7 @@ public:
     //
     template <typename T>
     void RegisterType() {
-        RegisterType(Singleton<T>()); 
+        RegisterType(Singleton<T>());
     }
 
     void RegisterType(const IType *type) {
@@ -36,8 +36,8 @@ public:
         Y_VERIFY(TypeByNameMap.insert({ type->GetName(), type }).second);
 
         TypeMetadataRegistry.Register(type);
-    } 
- 
+    }
+
     //
     ITypeSP GetType(TTypeId typeId) const {
         if (typeId) {

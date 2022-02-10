@@ -330,12 +330,12 @@ public:
         Y_VERIFY(it != InfoRequests.end());
         THttpInfoRequest& info = it->second;
 
-#define PROFILE(NAME) \ 
-                        str << "<option value=\"" << ui32(NKikimrBlobStorage::TEvTestLoadRequest::NAME) << "\">" << #NAME << "</option>"; 
- 
-#define PUT_HANDLE_CLASS(NAME) \ 
-                        str << "<option value=\"" << ui32(NKikimrBlobStorage::NAME) << "\">" << #NAME << "</option>"; 
- 
+#define PROFILE(NAME) \
+                        str << "<option value=\"" << ui32(NKikimrBlobStorage::TEvTestLoadRequest::NAME) << "\">" << #NAME << "</option>";
+
+#define PUT_HANDLE_CLASS(NAME) \
+                        str << "<option value=\"" << ui32(NKikimrBlobStorage::NAME) << "\">" << #NAME << "</option>";
+
         TStringStream str;
         HTML(str) {
             if (info.ErrorMessage) {

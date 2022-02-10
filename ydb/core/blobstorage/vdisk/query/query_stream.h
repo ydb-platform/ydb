@@ -260,10 +260,10 @@ namespace NKikimr {
         TDumpProcessor Processor;
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_MONSTREAM_ACTOR; 
-        } 
- 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_MONSTREAM_ACTOR;
+        }
+
         TLevelIndexStreamActor(THullDsSnap&& fullSnap, TEvBlobStorage::TEvMonStreamQuery::TPtr& ev)
             : FullSnap(std::move(fullSnap))
             , StreamId(std::move(ev->Get()->StreamId))

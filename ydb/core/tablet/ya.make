@@ -1,13 +1,13 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     ddoarn
     vvvv
     g:kikimr
 )
 
-SRCS( 
-    defs.h 
+SRCS(
+    defs.h
     node_tablet_monitor.cpp
     node_tablet_monitor.h
     node_whiteboard.cpp
@@ -16,15 +16,15 @@ SRCS(
     resource_broker.cpp
     resource_broker.h
     resource_broker_impl.h
-    tablet_counters.cpp 
-    tablet_counters.h 
+    tablet_counters.cpp
+    tablet_counters.h
     tablet_counters_aggregator.cpp
     tablet_counters_aggregator.h
     tablet_counters_app.cpp
     tablet_counters_app.h
     tablet_counters_protobuf.h
     tablet_exception.h
-    tablet_impl.h 
+    tablet_impl.h
     tablet_tracing_signals.cpp
     tablet_tracing_signals.h
     tablet_list_renderer.cpp
@@ -33,27 +33,27 @@ SRCS(
     tablet_metrics.cpp
     tablet_monitoring_proxy.cpp
     tablet_monitoring_proxy.h
-    tablet_pipecache.cpp 
+    tablet_pipecache.cpp
     tablet_pipe_client.cpp
     tablet_pipe_client_cache.cpp
     tablet_pipe_client_cache.h
     tablet_pipe_server.cpp
-    tablet_req_blockbs.cpp 
+    tablet_req_blockbs.cpp
     tablet_req_delete.cpp
-    tablet_req_findlatest.cpp 
-    tablet_req_rebuildhistory.cpp 
+    tablet_req_findlatest.cpp
+    tablet_req_rebuildhistory.cpp
     tablet_req_reset.cpp
-    tablet_req_writelog.cpp 
-    tablet_resolver.cpp 
-    tablet_responsiveness_pinger.cpp 
-    tablet_responsiveness_pinger.h 
-    tablet_setup.h 
-    tablet_sys.h 
-    tablet_sys.cpp 
+    tablet_req_writelog.cpp
+    tablet_resolver.cpp
+    tablet_responsiveness_pinger.cpp
+    tablet_responsiveness_pinger.h
+    tablet_setup.h
+    tablet_sys.h
+    tablet_sys.cpp
     bootstrapper.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/helpers
     library/cpp/actors/protos
@@ -71,9 +71,9 @@ PEERDIR(
     ydb/core/tracing
     ydb/core/util
     ydb/library/persqueue/topic_parser
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

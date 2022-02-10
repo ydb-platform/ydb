@@ -56,7 +56,7 @@ void TBlockIO::Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
 
 void TBlockIO::Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch> origin) noexcept
 {
-    Origin = origin; 
+    Origin = origin;
     Priority = priority;
 
     Y_VERIFY(Origin->Pages, "Got TFetch request without pages list");

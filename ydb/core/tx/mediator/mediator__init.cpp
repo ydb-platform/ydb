@@ -93,7 +93,7 @@ struct TTxMediator::TTxInit : public TTransactionBase<TTxMediator> {
     }
 };
 
-ITransaction* TTxMediator::CreateTxInit() { 
+ITransaction* TTxMediator::CreateTxInit() {
     return new TTxMediator::TTxInit(this);
 }
 

@@ -482,10 +482,10 @@ message TEvProposeTransaction {
     optional TMvccSnapshot MvccSnapshot = 10;
 }
 
-message TEvCancelTransactionProposal { 
-    optional uint64 TxId = 1; 
-} 
- 
+message TEvCancelTransactionProposal {
+    optional uint64 TxId = 1;
+}
+
 message TError {
     enum EKind {
         OK = 0;

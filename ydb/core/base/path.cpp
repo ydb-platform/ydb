@@ -50,26 +50,26 @@ TString JoinPath(const TVector<TString>& path) {
 TString CanonizePath(const TString &path)
 {
     if (!path)
-        return TString(); 
+        return TString();
 
-    const auto parts = SplitPath(path); 
-    return CanonizePath(parts); 
+    const auto parts = SplitPath(path);
+    return CanonizePath(parts);
 }
 
-TString CanonizePath(const TVector<TString>& path) { 
-    if (path.empty()) 
-        return TString(); 
- 
-    return TString("/") + JoinPath(path); 
-} 
- 
-ui32 CanonizedPathLen(const TVector<TString>& path) { 
-    ui32 ret = path.size(); 
-    for (auto &x : path) 
-        ret += x.size(); 
-    return ret; 
-} 
- 
+TString CanonizePath(const TVector<TString>& path) {
+    if (path.empty())
+        return TString();
+
+    return TString("/") + JoinPath(path);
+}
+
+ui32 CanonizedPathLen(const TVector<TString>& path) {
+    ui32 ret = path.size();
+    for (auto &x : path)
+        ret += x.size();
+    return ret;
+}
+
 TStringBuf ExtractDomain(const TString& path) noexcept {
     auto domain = TStringBuf(path);
 

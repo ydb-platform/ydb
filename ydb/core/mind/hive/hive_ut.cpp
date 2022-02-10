@@ -2001,29 +2001,29 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     Y_UNIT_TEST(PipeAlivenessOfDeadTablet) {
         TTestBasicRuntime runtime(1, false);
-        Setup(runtime, true); 
+        Setup(runtime, true);
         TActorId sender = runtime.AllocateEdgeActor();
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = 1; 
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = 1;
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
+        MakeSureTabletIsUp(runtime, tabletId, 0);
         if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) {
             WaitEvDeleteTabletResult(runtime);
         }
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
- 
-        NTabletPipe::TClientConfig clientConfig; 
-        clientConfig.CheckAliveness = true; 
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
+        NTabletPipe::TClientConfig clientConfig;
+        clientConfig.CheckAliveness = true;
         clientConfig.RetryPolicy = {.RetryLimitCount = 3};
-        runtime.Register(NTabletPipe::CreateClient(sender, tabletId, clientConfig)); 
-        TAutoPtr<IEventHandle> handle; 
-        auto connectResult = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(handle); 
-        UNIT_ASSERT(connectResult); 
-        UNIT_ASSERT(connectResult->Dead == true); 
-    } 
- 
+        runtime.Register(NTabletPipe::CreateClient(sender, tabletId, clientConfig));
+        TAutoPtr<IEventHandle> handle;
+        auto connectResult = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(handle);
+        UNIT_ASSERT(connectResult);
+        UNIT_ASSERT(connectResult->Dead == true);
+    }
+
     Y_UNIT_TEST(TestCreateTabletBeforeLocal) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, false);

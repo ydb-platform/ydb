@@ -636,14 +636,14 @@ struct Schema {
     struct AutoPrecharge {};
 
     template <TTableId _TableId> struct Table {
-        constexpr static TTableId TableId = _TableId; 
+        constexpr static TTableId TableId = _TableId;
 
         using Precharge = AutoPrecharge;
 
         template <TColumnId _ColumnId, NScheme::TTypeId _ColumnType, bool _IsNotNull = false>
         struct Column {
-            constexpr static TColumnId ColumnId = _ColumnId; 
-            constexpr static NScheme::TTypeId ColumnType = _ColumnType; 
+            constexpr static TColumnId ColumnId = _ColumnId;
+            constexpr static NScheme::TTypeId ColumnType = _ColumnType;
             constexpr static bool IsNotNull = _IsNotNull;
             using Type = typename NSchemeTypeMapper<_ColumnType>::Type;
 
@@ -1831,13 +1831,13 @@ struct Schema {
         }
     };
 
-    template <ui32 LimitTxInFly = 0> 
-    struct ExecutorLimitInFlyTx { 
-        static void Materialize(TToughDb& database) { 
+    template <ui32 LimitTxInFly = 0>
+    struct ExecutorLimitInFlyTx {
+        static void Materialize(TToughDb& database) {
             database.Alter().SetExecutorLimitInFlyTx(LimitTxInFly);
-        } 
-    }; 
- 
+        }
+    };
+
     template <ui64 CacheSize>
     struct ExecutorCacheSize {
         static void Materialize(TToughDb& database) {

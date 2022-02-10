@@ -1,11 +1,11 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     xenoxeno
     g:kikimr
 )
 
-SRCS( 
+SRCS(
     balancer.cpp
     balancer.h
     boot_queue.cpp
@@ -76,9 +76,9 @@ SRCS(
     tx__update_tablet_groups.cpp
     tx__update_tablet_metrics.cpp
     tx__update_tablet_status.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/interconnect
     library/cpp/json
@@ -93,9 +93,9 @@ PEERDIR(
     ydb/core/sys_view/common
     ydb/core/tablet
     ydb/core/tablet_flat
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

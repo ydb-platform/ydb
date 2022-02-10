@@ -12,7 +12,7 @@ LWTRACE_USING(DNSCACHELIB_PROVIDER);
 
 static_assert(sizeof(ares_channel) == sizeof(void*), "expect sizeof(ares_channel) == sizeof(void *)");
 
-TDnsCache::TDnsCache(bool allowIpv4, bool allowIpv6, time_t lifetime, time_t neg, ui32 timeout) 
+TDnsCache::TDnsCache(bool allowIpv4, bool allowIpv6, time_t lifetime, time_t neg, ui32 timeout)
     : EntryLifetime(lifetime)
     , NegativeLifetime(neg)
     , Timeout(TDuration::MicroSeconds(timeout))
@@ -24,12 +24,12 @@ TDnsCache::TDnsCache(bool allowIpv4, bool allowIpv6, time_t lifetime, time_t neg
     , PtrCacheMisses(0)
 {
 #ifdef _win_
-    if (ares_library_init(ARES_LIB_INIT_WIN32) != ARES_SUCCESS) { 
-        LWPROBE(AresInitFailed); 
-        ythrow yexception() << "ares_init() failed"; 
-    } 
+    if (ares_library_init(ARES_LIB_INIT_WIN32) != ARES_SUCCESS) {
+        LWPROBE(AresInitFailed);
+        ythrow yexception() << "ares_init() failed";
+    }
 #endif
- 
+
     ares_channel chan;
 
     if (ares_init(&chan) != ARES_SUCCESS) {
@@ -46,9 +46,9 @@ TDnsCache::~TDnsCache(void) {
     ares_cancel(chan);
     ares_destroy(chan);
     LWPROBE(Destroyed);
- 
+
 #ifdef _win_
-    ares_library_cleanup(); 
+    ares_library_cleanup();
 #endif
 }
 

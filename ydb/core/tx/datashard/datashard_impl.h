@@ -567,7 +567,7 @@ class TDataShard
             using TColumns = TableColumns<SrcTabletId>;
         };
 
-        // Additional tx artifacts which can be reused on tx restart. 
+        // Additional tx artifacts which can be reused on tx restart.
         struct TxArtifacts : Table<12> {
             struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {};
             // Specify which tx artifacts have been stored to local DB and can be
@@ -1016,7 +1016,7 @@ class TDataShard
     void OnStopGuardComplete(const TActorContext &ctx);
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
     void OnActivateExecutor(const TActorContext &ctx) override;
- 
+
     void Cleanup(const TActorContext &ctx);
     void SwitchToWork(const TActorContext &ctx);
     void SyncConfig();
@@ -1044,15 +1044,15 @@ class TDataShard
 
     bool CheckMediatorAuthorisation(ui64 mediatorId);
 
-    NTabletFlatExecutor::ITransaction* CreateTxInit(); 
-    NTabletFlatExecutor::ITransaction* CreateTxInitSchema(); 
+    NTabletFlatExecutor::ITransaction* CreateTxInit();
+    NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchemaDefaults();
-    NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev); 
-    NTabletFlatExecutor::ITransaction* CreateTxStartSplit(); 
-    NTabletFlatExecutor::ITransaction* CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext); 
-    NTabletFlatExecutor::ITransaction* CreateTxInitiateBorrowedPartsReturn(); 
-    NTabletFlatExecutor::ITransaction* CreateTxCheckInReadSets(); 
-    NTabletFlatExecutor::ITransaction* CreateTxRemoveOldInReadSets(); 
+    NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxStartSplit();
+    NTabletFlatExecutor::ITransaction* CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext);
+    NTabletFlatExecutor::ITransaction* CreateTxInitiateBorrowedPartsReturn();
+    NTabletFlatExecutor::ITransaction* CreateTxCheckInReadSets();
+    NTabletFlatExecutor::ITransaction* CreateTxRemoveOldInReadSets();
     NTabletFlatExecutor::ITransaction* CreateTxExecuteMvccStateChange();
 
     TReadWriteVersions GetLocalReadWriteVersions() const;
@@ -1252,11 +1252,11 @@ public:
 
     void SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext, const TActorContext &ctx) override;
     void CompactionComplete(ui32 tableId, const TActorContext &ctx) override;
-    void CompletedLoansChanged(const TActorContext &ctx) override; 
+    void CompletedLoansChanged(const TActorContext &ctx) override;
 
     void ReplyCompactionWaiters(ui32 tableId, ui64 edge, const TActorContext &ctx);
 
-    TUserTable::TSpecialUpdate SpecialUpdates(const NTable::TDatabase& db, const TTableId& tableId) const; 
+    TUserTable::TSpecialUpdate SpecialUpdates(const NTable::TDatabase& db, const TTableId& tableId) const;
 
     void SetTableAccessTime(const TTableId& tableId, TInstant ts);
     void SetTableUpdateTime(const TTableId& tableId, TInstant ts);
@@ -1397,7 +1397,7 @@ public:
     static void PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation& op);
     void NotifySchemeshard(const TActorContext& ctx, ui64 txId = 0);
 
-    TThrRefBase* GetDataShardSysTables() { return DataShardSysTables.Get(); } 
+    TThrRefBase* GetDataShardSysTables() { return DataShardSysTables.Get(); }
 
     TSnapshotManager& GetSnapshotManager() { return SnapshotManager; }
     const TSnapshotManager& GetSnapshotManager() const { return SnapshotManager; }
@@ -1994,7 +1994,7 @@ private:
 
     // Set of InRS keys to remove from local DB.
     THashSet<TReadSetKey> InRSToRemove;
-    TIntrusivePtr<TThrRefBase> DataShardSysTables; 
+    TIntrusivePtr<TThrRefBase> DataShardSysTables;
 
     // Simple volatile counter
     ui64 NextTieBreakerIndex = 1;
@@ -2118,10 +2118,10 @@ protected:
             HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
-            if (!HandleDefaultEvents(ev, ctx)) { 
+            if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
-            } 
+            }
             break;
         }
     }
@@ -2228,11 +2228,11 @@ protected:
             fFunc(TEvDataShard::EvReplicationSourceOffsetsAck, HandleByReplicationSourceOffsetsServer);
             fFunc(TEvDataShard::EvReplicationSourceOffsetsCancel, HandleByReplicationSourceOffsetsServer);
         default:
-            if (!HandleDefaultEvents(ev, ctx)) { 
+            if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
                            "TDataShard::StateWork unhandled event type: "<< ev->GetTypeRewrite()
                            << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
-            } 
+            }
             break;
         }
     }
@@ -2273,11 +2273,11 @@ protected:
     }
 
     void Die(const TActorContext &ctx) override {
-        NTabletPipe::CloseAndForgetClient(SelfId(), SchemeShardPipe); 
-        NTabletPipe::CloseAndForgetClient(SelfId(), StateReportPipe); 
-        NTabletPipe::CloseAndForgetClient(SelfId(), DbStatsReportPipe); 
-        NTabletPipe::CloseAndForgetClient(SelfId(), TableResolvePipe); 
- 
+        NTabletPipe::CloseAndForgetClient(SelfId(), SchemeShardPipe);
+        NTabletPipe::CloseAndForgetClient(SelfId(), StateReportPipe);
+        NTabletPipe::CloseAndForgetClient(SelfId(), DbStatsReportPipe);
+        NTabletPipe::CloseAndForgetClient(SelfId(), TableResolvePipe);
+
         if (ReplicationSourceOffsetsServer) {
             InvokeOtherActor(*ReplicationSourceOffsetsServer, &TReplicationSourceOffsetsServer::PassAway);
         }

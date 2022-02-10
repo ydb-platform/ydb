@@ -151,7 +151,7 @@ namespace {
     const ui32 DefaultTimeout = 90000;
 }
 
-template <typename TDerived> 
+template <typename TDerived>
 class TMessageBusTraceSimpleActor : public NMsgBusProxy::TMessageBusLocalServiceRequest<TDerived, NKikimrServices::TActivity::MSGBUS_TRACER_ACTOR> {
 public:
     TMessageBusTraceSimpleActor(NMsgBusProxy::TBusMessageContext &msg)

@@ -270,10 +270,10 @@ public:
         return Issues_.empty();
     }
 
-    explicit operator bool() const noexcept { 
-        return !Issues_.empty(); 
-    } 
- 
+    explicit operator bool() const noexcept {
+        return !Issues_.empty();
+    }
+
     inline size_t Size() const {
         return Issues_.size();
     }
@@ -298,10 +298,10 @@ public:
         Issues_.clear();
     }
 
-    void Reserve(size_t capacity) { 
-        Issues_.reserve(capacity); 
-    } 
- 
+    void Reserve(size_t capacity) {
+        Issues_.reserve(capacity);
+    }
+
 private:
     TVector<TIssue> Issues_;
 };

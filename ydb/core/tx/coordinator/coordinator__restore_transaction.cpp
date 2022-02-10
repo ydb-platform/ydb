@@ -2,26 +2,26 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tablet/tablet_exception.h>
- 
+
 #include <util/stream/file.h>
 
-namespace NKikimr { 
+namespace NKikimr {
 namespace NFlatTxCoordinator {
- 
+
 struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoordinator> {
     TTxRestoreTransactions(TSelf *coordinator)
-        : TBase(coordinator) 
-    {} 
- 
+        : TBase(coordinator)
+    {}
+
     bool Restore(TTransactions &transactions, TTransactionContext &txc, const TActorContext &ctx) {
         Y_UNUSED(ctx);
         NIceDb::TNiceDb db(txc.DB);
 
-        { 
+        {
             auto rowset = db.Table<Schema::Transaction>().Range().Select();
             if (!rowset.IsReady())
                 return false;
- 
+
             while (!rowset.EndOfSet()) {
                 TTxId txId = rowset.GetValue<Schema::Transaction::ID>();
                 TTransaction& transaction = transactions[txId];
@@ -34,30 +34,30 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
                     return false; // data not ready
             }
         }
- 
+
         {
             int errors = 0;
             auto rowset = db.Table<Schema::AffectedSet>().Range().Select();
             if (!rowset.IsReady())
                 return false;
- 
+
             while (!rowset.EndOfSet()) {
-                const TTxId txId = rowset.GetValue<Schema::AffectedSet::TransactionID>(); 
+                const TTxId txId = rowset.GetValue<Schema::AffectedSet::TransactionID>();
                 const TTabletId medId = rowset.GetValue<Schema::AffectedSet::MediatorID>();
-                const ui64 affectedShardId = rowset.GetValue<Schema::AffectedSet::DataShardID>(); 
- 
+                const ui64 affectedShardId = rowset.GetValue<Schema::AffectedSet::DataShardID>();
+
                 auto itTransaction = transactions.find(txId);
                 if (itTransaction != transactions.end()) {
-                    itTransaction->second.UnconfirmedAffectedSet[medId].insert(affectedShardId); 
+                    itTransaction->second.UnconfirmedAffectedSet[medId].insert(affectedShardId);
                 } else {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_COORDINATOR, "Transaction not found: MedId = " << medId << " TxId = " << txId << " DataShardId = " << affectedShardId); 
+                    LOG_ERROR_S(ctx, NKikimrServices::TX_COORDINATOR, "Transaction not found: MedId = " << medId << " TxId = " << txId << " DataShardId = " << affectedShardId);
                     ++errors;
                 }
- 
+
                 if (!rowset.Next())
                     return false;
             }
- 
+
             if (errors > 0) {
                 // DB is corrupt. Make a dump and stop
                 const NScheme::TTypeRegistry& tr = *AppData(ctx)->TypeRegistry;
@@ -70,10 +70,10 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
                 Y_FAIL("Transaction(s) not found!");
             }
         }
- 
+
         return true;
-    } 
- 
+    }
+
     TTxType GetTxType() const override { return TXTYPE_INIT; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
@@ -86,25 +86,25 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         *Self->MonCounters.TxInFly += txCounter;
         Self->MonCounters.CurrentTxInFly = txCounter;
         return true;
-    } 
- 
-    void Complete(const TActorContext &ctx) override { 
-        // start mediator queues 
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        // start mediator queues
         for (ui64 mediatorId: Self->Config.Mediators->List()) {
-            TMediator &mediator = Self->Mediator(mediatorId, ctx); 
+            TMediator &mediator = Self->Mediator(mediatorId, ctx);
             Y_UNUSED(mediator);
-        } 
- 
-        // start plan process. 
-        Self->Become(&TSelf::StateWork); 
+        }
+
+        // start plan process.
+        Self->Become(&TSelf::StateWork);
         Self->SignalTabletActive(ctx);
-        Self->SchedulePlanTick(ctx); 
-    } 
-}; 
- 
-ITransaction* TTxCoordinator::CreateTxRestoreTransactions() { 
+        Self->SchedulePlanTick(ctx);
+    }
+};
+
+ITransaction* TTxCoordinator::CreateTxRestoreTransactions() {
     return new TTxRestoreTransactions(this);
-} 
- 
-} 
-} 
+}
+
+}
+}

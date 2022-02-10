@@ -208,7 +208,7 @@ public:
     }
 
     NUdf::TUnboxedValue SelectRow(const TArrayRef<const TCell>& row, TStructLiteral* columnIds,
-        TOptionalType* returnType, const TReadTarget& readTarget, const THolderFactory& holderFactory) const 
+        TOptionalType* returnType, const TReadTarget& readTarget, const THolderFactory& holderFactory) const
     {
         Y_UNUSED(readTarget);
 
@@ -224,15 +224,15 @@ public:
         return result.CreateResult(lock.MakeRow(false), holderFactory);
     }
 
-    void UpdateRow(const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) const 
-    { 
+    void UpdateRow(const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) const
+    {
         Y_UNUSED(row);
         Y_UNUSED(commands);
 
         Y_ASSERT("Not supported");
     }
 
-    void EraseRow(const TArrayRef<const TCell>& row) const { 
+    void EraseRow(const TArrayRef<const TCell>& row) const {
         Self->SysLocksTable().EraseLock(row);
     }
 
@@ -252,31 +252,31 @@ private:
     TVector<ui32> KeyTypes;
 };
 
- 
-class TDataShardSysTables : public TThrRefBase { 
-    TDataShardSysTable Locks; 
-    TDataShardSysTable Locks2; 
-public: 
+
+class TDataShardSysTables : public TThrRefBase {
+    TDataShardSysTable Locks;
+    TDataShardSysTable Locks2;
+public:
     TDataShardSysTables(TDataShard *self)
-        : Locks(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks), self) 
-        , Locks2(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks2), self) 
-    {} 
- 
+        : Locks(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks), self)
+        , Locks2(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks2), self)
+    {}
+
     const TDataShardSysTable& Get(const TTableId& tableId) const {
         if (tableId.PathId.LocalPathId == TSysTables::SysTableLocks2)
-            return Locks2; 
- 
+            return Locks2;
+
         if (tableId.PathId.LocalPathId == TSysTables::SysTableLocks)
-            return Locks; 
- 
-        Y_FAIL("unexpected sys table id"); 
-    } 
-}; 
- 
+            return Locks;
+
+        Y_FAIL("unexpected sys table id");
+    }
+};
+
 TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self) {
-    return new TDataShardSysTables(self); 
-} 
- 
+    return new TDataShardSysTables(self);
+}
+
 ///
 class TDataShardEngineHost : public TEngineHost {
 public:
@@ -348,7 +348,7 @@ public:
 
     bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override {
         if (TSysTables::IsSystemTable(key.TableId))
-            return DataShardSysTable(key.TableId).IsValidKey(key); 
+            return DataShardSysTable(key.TableId).IsValidKey(key);
 
         // prevent updates/erases with LockTxId set
         if (LockTxId && key.RowOperation != TKeyDesc::ERowOperation::Read) {
@@ -363,7 +363,7 @@ public:
         const THolderFactory& holderFactory) override
     {
         if (TSysTables::IsSystemTable(tableId)) {
-            return DataShardSysTable(tableId).SelectRow(row, columnIds, returnType, readTarget, holderFactory); 
+            return DataShardSysTable(tableId).SelectRow(row, columnIds, returnType, readTarget, holderFactory);
         }
 
         Self->SysLocksTable().SetLock(tableId, row, LockTxId);
@@ -388,59 +388,59 @@ public:
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) override {
         if (TSysTables::IsSystemTable(tableId)) {
-            DataShardSysTable(tableId).UpdateRow(row, commands); 
+            DataShardSysTable(tableId).UpdateRow(row, commands);
             return;
         }
 
         Self->SysLocksTable().BreakLock(tableId, row);
         Self->SetTableUpdateTime(tableId, Now);
 
-        // apply special columns if declared 
-        TUserTable::TSpecialUpdate specUpdates = Self->SpecialUpdates(DB, tableId); 
-        if (specUpdates.HasUpdates) { 
-            TStackVec<TUpdateCommand> extendedCmds; 
-            extendedCmds.reserve(commands.size() + 3); 
-            for (const TUpdateCommand& cmd : commands) { 
-                if (cmd.Column == specUpdates.ColIdTablet) 
-                    specUpdates.ColIdTablet = Max<ui32>(); 
-                else if (cmd.Column == specUpdates.ColIdEpoch) 
-                    specUpdates.ColIdEpoch = Max<ui32>(); 
-                else if (cmd.Column == specUpdates.ColIdUpdateNo) 
-                    specUpdates.ColIdUpdateNo = Max<ui32>(); 
+        // apply special columns if declared
+        TUserTable::TSpecialUpdate specUpdates = Self->SpecialUpdates(DB, tableId);
+        if (specUpdates.HasUpdates) {
+            TStackVec<TUpdateCommand> extendedCmds;
+            extendedCmds.reserve(commands.size() + 3);
+            for (const TUpdateCommand& cmd : commands) {
+                if (cmd.Column == specUpdates.ColIdTablet)
+                    specUpdates.ColIdTablet = Max<ui32>();
+                else if (cmd.Column == specUpdates.ColIdEpoch)
+                    specUpdates.ColIdEpoch = Max<ui32>();
+                else if (cmd.Column == specUpdates.ColIdUpdateNo)
+                    specUpdates.ColIdUpdateNo = Max<ui32>();
 
-                extendedCmds.push_back(cmd); 
-            } 
-
-            if (specUpdates.ColIdTablet != Max<ui32>()) { 
-                extendedCmds.emplace_back(TUpdateCommand{ 
-                    specUpdates.ColIdTablet, TKeyDesc::EColumnOperation::Set, EInplaceUpdateMode::Unknown, 
-                    TCell::Make<ui64>(specUpdates.Tablet) 
-                }); 
+                extendedCmds.push_back(cmd);
             }
- 
-            if (specUpdates.ColIdEpoch != Max<ui32>()) { 
-                extendedCmds.emplace_back(TUpdateCommand{ 
-                    specUpdates.ColIdEpoch, TKeyDesc::EColumnOperation::Set, EInplaceUpdateMode::Unknown, 
-                    TCell::Make<ui64>(specUpdates.Epoch) 
-                }); 
-            } 
- 
-            if (specUpdates.ColIdUpdateNo != Max<ui32>()) { 
-                extendedCmds.emplace_back(TUpdateCommand{ 
-                    specUpdates.ColIdUpdateNo, TKeyDesc::EColumnOperation::Set, EInplaceUpdateMode::Unknown, 
-                    TCell::Make<ui64>(specUpdates.UpdateNo) 
-                }); 
-            } 
- 
-            TEngineHost::UpdateRow(tableId, row, {extendedCmds.data(), extendedCmds.size()}); 
-        } else { 
-            TEngineHost::UpdateRow(tableId, row, commands); 
+
+            if (specUpdates.ColIdTablet != Max<ui32>()) {
+                extendedCmds.emplace_back(TUpdateCommand{
+                    specUpdates.ColIdTablet, TKeyDesc::EColumnOperation::Set, EInplaceUpdateMode::Unknown,
+                    TCell::Make<ui64>(specUpdates.Tablet)
+                });
+            }
+
+            if (specUpdates.ColIdEpoch != Max<ui32>()) {
+                extendedCmds.emplace_back(TUpdateCommand{
+                    specUpdates.ColIdEpoch, TKeyDesc::EColumnOperation::Set, EInplaceUpdateMode::Unknown,
+                    TCell::Make<ui64>(specUpdates.Epoch)
+                });
+            }
+
+            if (specUpdates.ColIdUpdateNo != Max<ui32>()) {
+                extendedCmds.emplace_back(TUpdateCommand{
+                    specUpdates.ColIdUpdateNo, TKeyDesc::EColumnOperation::Set, EInplaceUpdateMode::Unknown,
+                    TCell::Make<ui64>(specUpdates.UpdateNo)
+                });
+            }
+
+            TEngineHost::UpdateRow(tableId, row, {extendedCmds.data(), extendedCmds.size()});
+        } else {
+            TEngineHost::UpdateRow(tableId, row, commands);
         }
     }
 
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
         if (TSysTables::IsSystemTable(tableId)) {
-            DataShardSysTable(tableId).EraseRow(row); 
+            DataShardSysTable(tableId).EraseRow(row);
             return;
         }
 
@@ -453,7 +453,7 @@ public:
     // Returns whether row belong this shard.
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override {
         if (TSysTables::IsSystemTable(tableId))
-            return DataShardSysTable(tableId).IsMyKey(row); 
+            return DataShardSysTable(tableId).IsMyKey(row);
 
         auto iter = Self->TableInfos.find(tableId.PathId.LocalPathId);
         if (iter == Self->TableInfos.end()) {
@@ -493,9 +493,9 @@ public:
 
 private:
     const TDataShardSysTable& DataShardSysTable(const TTableId& tableId) const {
-        return static_cast<const TDataShardSysTables *>(Self->GetDataShardSysTables())->Get(tableId); 
-    } 
- 
+        return static_cast<const TDataShardSysTables *>(Self->GetDataShardSysTables())->Get(tableId);
+    }
+
     TDataShard* Self;
     NTable::TDatabase& DB;
     const ui64& LockTxId;

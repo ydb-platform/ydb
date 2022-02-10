@@ -1,16 +1,16 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <util/generic/set.h> 
-#include <util/generic/hash.h> 
+#include <util/generic/set.h>
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <library/cpp/actors/core/hfunc.h>
- 
-namespace NKikimr { 
- 
-class TPipePeNodeCache : public TActor<TPipePeNodeCache> { 
-    TIntrusiveConstPtr<TPipePeNodeCacheConfig> Config; 
+
+namespace NKikimr {
+
+class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
+    TIntrusiveConstPtr<TPipePeNodeCacheConfig> Config;
     NTabletPipe::TClientConfig PipeConfig;
- 
+
     struct TCounters {
         NMonitoring::TDynamicCounters::TCounterPtr Tablets;
         NMonitoring::TDynamicCounters::TCounterPtr Subscribers;
@@ -66,30 +66,30 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         ui32 NodeId = 0;
         bool Connected = false;
     };
- 
+
     struct TTabletState {
         THashMap<TActorId, TClientState> ByClient;
         THashMap<TActorId, TClientState*> ByPeer;
 
         TActorId LastClient;
-        TInstant LastCreated; 
- 
+        TInstant LastCreated;
+
         TClientState* FindClient(const TActorId& clientId) {
             auto it = ByClient.find(clientId);
             if (it == ByClient.end()) {
                 return nullptr;
             }
             return &it->second;
-        } 
-    }; 
- 
+        }
+    };
+
     struct TPeerState {
         THashSet<ui64> ConnectedToTablet;
-    }; 
- 
+    };
+
     using TByTablet = THashMap<ui64, TTabletState>;
     using TByPeer = THashMap<TActorId, TPeerState>;
- 
+
     TByTablet ByTablet;
     TByPeer ByPeer;
 
@@ -122,7 +122,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         auto *tabletState = FindTablet(tablet);
         if (Y_UNLIKELY(!tabletState))
             return;
- 
+
         auto byPeerIt = tabletState->ByPeer.find(peer);
         if (byPeerIt == tabletState->ByPeer.end())
             return;
@@ -144,40 +144,40 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             }
             NTabletPipe::CloseClient(SelfId(), clientId);
             tabletState->ByClient.erase(clientId);
-        } 
+        }
 
         // Avoid keeping dead tablets forever
         if (tabletState->ByClient.empty() && !tabletState->LastClient) {
             ForgetTablet(tablet);
         }
-    } 
- 
+    }
+
     void DropClient(ui64 tablet, TActorId client, bool notDelivered) {
         auto *tabletState = FindTablet(tablet);
         if (Y_UNLIKELY(!tabletState))
-            return; 
- 
+            return;
+
         auto *clientState = tabletState->FindClient(client);
         if (!clientState)
             return;
- 
+
         for (auto &kv : clientState->Peers) {
             const auto &peer = kv.first;
             const ui64 seqNo = kv.second;
             const bool msgNotDelivered = notDelivered || seqNo > clientState->MaxForwardedSeqNo;
             Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, msgNotDelivered));
- 
+
             tabletState->ByPeer.erase(peer);
 
-            auto byPeerIt = ByPeer.find(peer); 
-            Y_VERIFY(byPeerIt != ByPeer.end()); 
-            byPeerIt->second.ConnectedToTablet.erase(tablet); 
+            auto byPeerIt = ByPeer.find(peer);
+            Y_VERIFY(byPeerIt != ByPeer.end());
+            byPeerIt->second.ConnectedToTablet.erase(tablet);
             if (byPeerIt->second.ConnectedToTablet.empty()) {
                 ForgetPeer(byPeerIt);
             }
-        } 
+        }
         clientState->Peers.clear();
- 
+
         for (auto &req : clientState->NodeRequests) {
             Send(req.Sender, new TEvPipeCache::TEvGetTabletNodeResult(tablet, 0), 0, req.Cookie);
         }
@@ -198,13 +198,13 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         if (tabletState->LastClient == client) {
             tabletState->LastClient = TActorId();
         }
- 
+
         // Avoid keeping dead tablets forever
         if (tabletState->ByClient.empty() && !tabletState->LastClient) {
             ForgetTablet(tablet);
-        } 
-    } 
- 
+        }
+    }
+
     TClientState* EnsureClient(TTabletState *tabletState, ui64 tabletId) {
         TClientState *clientState = nullptr;
         if (!tabletState->LastClient || Config->PipeRefreshTime && tabletState->ByClient.size() < 2 && Config->PipeRefreshTime < (TActivationContext::Now() - tabletState->LastCreated)) {
@@ -236,10 +236,10 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         } else {
             clientState = tabletState->FindClient(tabletState->LastClient);
             Y_VERIFY(clientState, "Missing expected client state for active client");
-        } 
+        }
         return clientState;
     }
- 
+
     void Handle(TEvPipeCache::TEvGetTabletNode::TPtr &ev) {
         const ui64 tablet = ev->Get()->TabletId;
 
@@ -312,48 +312,48 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             NTabletPipe::SendDataWithSeqNo(peer, tabletState->LastClient, msg->Ev.Release(), seqNo, cookie);
         } else {
             NTabletPipe::SendData(peer, tabletState->LastClient, msg->Ev.Release(), cookie);
-        } 
-    } 
- 
-    void Handle(TEvPipeCache::TEvUnlink::TPtr &ev) { 
-        TEvPipeCache::TEvUnlink *msg = ev->Get(); 
-        const ui64 tablet = msg->TabletId; 
+        }
+    }
+
+    void Handle(TEvPipeCache::TEvUnlink::TPtr &ev) {
+        TEvPipeCache::TEvUnlink *msg = ev->Get();
+        const ui64 tablet = msg->TabletId;
         const TActorId peer = ev->Sender;
- 
-        auto byPeerIt = ByPeer.find(peer); 
-        if (byPeerIt == ByPeer.end()) 
-            return; 
- 
-        auto &connectedTo = byPeerIt->second.ConnectedToTablet; 
-        if (tablet == 0) { // unlink everything 
-            for (ui64 x : connectedTo) 
-                UnlinkOne(peer, x); 
+
+        auto byPeerIt = ByPeer.find(peer);
+        if (byPeerIt == ByPeer.end())
+            return;
+
+        auto &connectedTo = byPeerIt->second.ConnectedToTablet;
+        if (tablet == 0) { // unlink everything
+            for (ui64 x : connectedTo)
+                UnlinkOne(peer, x);
             ForgetPeer(byPeerIt);
-            return; 
-        } else { 
-            UnlinkOne(peer, tablet); 
-            connectedTo.erase(tablet); 
+            return;
+        } else {
+            UnlinkOne(peer, tablet);
+            connectedTo.erase(tablet);
             if (connectedTo.empty()) {
                 ForgetPeer(byPeerIt);
             }
-            return; 
-        } 
-    } 
- 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) { 
-        const TEvTabletPipe::TEvClientConnected *msg = ev->Get(); 
- 
+            return;
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) {
+        const TEvTabletPipe::TEvClientConnected *msg = ev->Get();
+
         if (msg->Status != NKikimrProto::OK) {
             if (Counters) {
                 Counters.EventConnectFailure->Inc();
             }
-            return DropClient(msg->TabletId, msg->ClientId, true); 
+            return DropClient(msg->TabletId, msg->ClientId, true);
         } else {
             if (Counters) {
                 Counters.EventConnectOk->Inc();
             }
         }
- 
+
         auto *tabletState = FindTablet(msg->TabletId);
         if (tabletState) {
             auto *clientState = tabletState->FindClient(msg->ClientId);
@@ -374,12 +374,12 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
                 }
                 return;
             }
-        } 
- 
+        }
+
         // Unknown client (dropped before it connected)
-        NTabletPipe::CloseClient(SelfId(), msg->ClientId); 
-    } 
- 
+        NTabletPipe::CloseClient(SelfId(), msg->ClientId);
+    }
+
     void Handle(TEvTabletPipe::TEvClientShuttingDown::TPtr &ev) {
         const auto *msg = ev->Get();
 
@@ -420,51 +420,51 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         }
     }
 
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev) { 
-        const TEvTabletPipe::TEvClientDestroyed *msg = ev->Get(); 
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev) {
+        const TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
 
         if (Counters) {
             Counters.EventDisconnect->Inc();
         }
 
-        DropClient(msg->TabletId, msg->ClientId, false); 
-    } 
+        DropClient(msg->TabletId, msg->ClientId, false);
+    }
 
-public: 
+public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_PIPE_SERVER;
     }
 
-    TPipePeNodeCache(const TIntrusivePtr<TPipePeNodeCacheConfig> &config) 
-        : TActor(&TThis::StateWork) 
-        , Config(config) 
+    TPipePeNodeCache(const TIntrusivePtr<TPipePeNodeCacheConfig> &config)
+        : TActor(&TThis::StateWork)
+        , Config(config)
         , PipeConfig(Config->PipeConfig)
         , Counters(Config->Counters)
     {
         PipeConfig.ExpectShutdown = true;
     }
- 
-    STFUNC(StateWork) { 
-        Y_UNUSED(ctx); 
-        switch (ev->GetTypeRewrite()) { 
+
+    STFUNC(StateWork) {
+        Y_UNUSED(ctx);
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvGetTabletNode, Handle);
-            hFunc(TEvPipeCache::TEvForward, Handle); 
-            hFunc(TEvPipeCache::TEvUnlink, Handle); 
-            hFunc(TEvTabletPipe::TEvClientConnected, Handle); 
+            hFunc(TEvPipeCache::TEvForward, Handle);
+            hFunc(TEvPipeCache::TEvUnlink, Handle);
+            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientShuttingDown, Handle);
-            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle); 
-        } 
-    } 
-}; 
- 
-IActor* CreatePipePeNodeCache(const TIntrusivePtr<TPipePeNodeCacheConfig> &config) { 
-    return new TPipePeNodeCache(config); 
-} 
- 
+            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+        }
+    }
+};
+
+IActor* CreatePipePeNodeCache(const TIntrusivePtr<TPipePeNodeCacheConfig> &config) {
+    return new TPipePeNodeCache(config);
+}
+
 TActorId MakePipePeNodeCacheID(bool allowFollower) {
-    char x[12] = "PipeCache"; 
+    char x[12] = "PipeCache";
     x[9] = allowFollower ? 'F' : 'A';
     return TActorId(0, TStringBuf(x, 12));
-} 
- 
-} 
+}
+
+}

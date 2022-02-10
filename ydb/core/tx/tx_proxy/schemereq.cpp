@@ -9,13 +9,13 @@
 #include <ydb/core/base/path.h>
 
 #include <ydb/library/aclib/aclib.h>
- 
+
 #include <library/cpp/actors/core/hfunc.h>
 #include <util/string/cast.h>
 
-namespace NKikimr { 
-namespace NTxProxy { 
- 
+namespace NKikimr {
+namespace NTxProxy {
+
 static constexpr TStringBuf DocApiRequestType = "_document_api_request";
 static constexpr TStringBuf DocApiTableVersionAttribute = "__document_api_version";
 
@@ -26,44 +26,44 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     using TEvSchemeShardPropose = NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction;
 
     const TTxProxyServices Services;
-    const ui64 TxId; 
+    const ui64 TxId;
     THolder<TEvTxProxyReq::TEvSchemeRequest> SchemeRequest;
-    TIntrusivePtr<TTxProxyMon> TxProxyMon; 
- 
+    TIntrusivePtr<TTxProxyMon> TxProxyMon;
+
     TInstant WallClockStarted;
 
     TActorId Source;
     TActorId PipeClient;
- 
+
     struct TPathToResolve {
         NKikimrSchemeOp::EOperationType OperationRelated;
- 
+
         TVector<TString> Path;
         bool RequiredRedirect = true;
         ui32 RequiredAccess = NACLib::EAccessRights::NoAccess;
 
         std::optional<NKikimrSchemeOp::TModifyACL> RequiredGrandAccess;
- 
+
         TPathToResolve(NKikimrSchemeOp::EOperationType opType)
             : OperationRelated(opType)
         {
-        } 
+        }
     };
- 
+
     TVector<TPathToResolve> ResolveForACL;
- 
+
     std::optional<NACLib::TUserToken> UserToken;
 
     TBaseSchemeReq(const TTxProxyServices &services, ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon> &txProxyMon)
         : Services(services)
-        , TxId(txid) 
+        , TxId(txid)
         , SchemeRequest(request)
-        , TxProxyMon(txProxyMon) 
+        , TxProxyMon(txProxyMon)
         , Source(SchemeRequest->Ev->Sender)
-    { 
-        ++*TxProxyMon->SchemeReqInFly; 
-    } 
- 
+    {
+        ++*TxProxyMon->SchemeReqInFly;
+    }
+
     auto& GetRequestEv() { return *SchemeRequest->Ev->Get(); }
 
     auto& GetRequestProto() { return GetRequestEv().Record; }
@@ -107,9 +107,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     void ExtractUserToken() {
         if (!GetRequestProto().GetUserToken().empty()) {
             UserToken = NACLib::TUserToken(GetRequestProto().GetUserToken());
-        } 
-    } 
- 
+        }
+    }
+
     static TVector<TString> Merge(const TVector<TString>& l, TVector<TString>&& r) {
         TVector<TString> result = l;
         std::move(r.begin(), r.end(), std::back_inserter(result));
@@ -153,7 +153,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpModifyACL:
             return *modifyScheme.MutableModifyACL()->MutableName();
- 
+
         case NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions:
             Y_FAIL("no implementation for ESchemeOpSplitMergeTablePartitions");
 
@@ -174,14 +174,14 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume:
             return *modifyScheme.MutableAlterBlockStoreVolume()->MutableName();
- 
+
         case NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume:
             return *modifyScheme.MutableAssignBlockStoreVolume()->MutableName();
- 
+
         case NKikimrSchemeOp::ESchemeOpCreateKesus:
         case NKikimrSchemeOp::ESchemeOpAlterKesus:
             return *modifyScheme.MutableKesus()->MutableName();
- 
+
         case NKikimrSchemeOp::ESchemeOpCreateSolomonVolume:
             return *modifyScheme.MutableCreateSolomonVolume()->MutableName();
 
@@ -608,7 +608,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 toResolve.RequiredAccess = NACLib::EAccessRights::SelectRow;
                 ResolveForACL.push_back(toResolve);
             }
-            break; 
+            break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateIndexedTable:
         case NKikimrSchemeOp::ESchemeOpCreateColumnStore:
@@ -825,7 +825,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NSchemeCache::TSchemeCacheNavigate::KindSubdomain:
         case NSchemeCache::TSchemeCacheNavigate::KindExtSubdomain:
             return true;
-        default: 
+        default:
             return false;
         }
     }
@@ -1235,7 +1235,7 @@ void TSchemeTransactionalReq::Bootstrap(const TActorContext &ctx) {
     WallClockStarted = ctx.Now();
 
     TBase::Bootstrap(ctx);
- 
+
     for(auto& scheme: GetModifications()) {
         if (!ExamineTables(scheme, ctx)) {
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::NotImplemented, ctx);
@@ -1256,22 +1256,22 @@ void TSchemeTransactionalReq::Bootstrap(const TActorContext &ctx) {
     if (!resolveRequest) {
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
         TxProxyMon->ResolveKeySetWrongRequest->Inc();
-        return Die(ctx); 
-    } 
- 
+        return Die(ctx);
+    }
+
     LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId << " TEvNavigateKeySet requested from SchemeCache");
     ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(resolveRequest));
     Become(&TThis::StateWaitResolve);
     return;
-} 
- 
+}
+
 IActor* CreateTxProxyFlatSchemeReq(const TTxProxyServices &services, const ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<NKikimr::NTxProxy::TTxProxyMon>& mon) {
     if (request->Ev->Get()->HasModifyScheme()) {
         return new TFlatSchemeReq(services, txid, request, mon);
     } else {
         return new TSchemeTransactionalReq(services, txid, request, mon);
     }
-} 
- 
-} 
-} 
+}
+
+}
+}

@@ -227,14 +227,14 @@ Y_UNIT_TEST_SUITE(TActorTest) {
     }
 
     Y_UNIT_TEST(TestSendAfterDelay) {
-        TMutex syncMutex; 
- 
+        TMutex syncMutex;
+
         class TMyActor : public TActor<TMyActor> {
         public:
-            TMyActor(TMutex *syncMutex) 
+            TMyActor(TMutex *syncMutex)
                 : TActor(&TMyActor::StateFunc)
                 , CurrentTime(TInstant::MicroSeconds(0))
-                , SyncMutex(syncMutex) 
+                , SyncMutex(syncMutex)
             {
             }
 
@@ -244,34 +244,34 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(StateFunc)
             {
-                Y_VERIFY(SyncMutex); 
- 
+                Y_VERIFY(SyncMutex);
+
                 auto sender = ev->Sender;
                 auto selfID = ctx.SelfID;
                 auto actorSystem = ctx.ExecutorThread.ActorSystem;
-                TMutex *syncMutex = SyncMutex; 
- 
+                TMutex *syncMutex = SyncMutex;
+
                 SystemThreadFactory()->Run([=](){
-                    with_lock(*syncMutex) { 
-                        Sleep(TDuration::MilliSeconds(100)); 
-                        CurrentTime = actorSystem->Timestamp(); 
-                        actorSystem->Send(new IEventHandle(sender, selfID, new TEvents::TEvPong())); 
-                    } 
+                    with_lock(*syncMutex) {
+                        Sleep(TDuration::MilliSeconds(100));
+                        CurrentTime = actorSystem->Timestamp();
+                        actorSystem->Send(new IEventHandle(sender, selfID, new TEvents::TEvPong()));
+                    }
                 });
- 
-                SyncMutex = nullptr; 
+
+                SyncMutex = nullptr;
             }
 
         private:
             TInstant CurrentTime;
-            TMutex *SyncMutex; 
+            TMutex *SyncMutex;
         };
 
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
         try {
             TActorId sender = runtime.AllocateEdgeActor();
-            auto myActor = new TMyActor(&syncMutex); 
+            auto myActor = new TMyActor(&syncMutex);
             TActorId actorId = runtime.Register(myActor);
             runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
             runtime.DispatchEvents();
@@ -287,8 +287,8 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             Sleep(TDuration::MilliSeconds(1000));
             throw;
         }
- 
-        with_lock(syncMutex) {} 
+
+        with_lock(syncMutex) {}
     }
 
     Y_UNIT_TEST(TestGetCtxTime) {

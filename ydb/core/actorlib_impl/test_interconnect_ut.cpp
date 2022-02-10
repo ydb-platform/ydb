@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
         void OnStart(const NActors::TActorContext &ctx) noexcept {
             Become(&TThis::WaitFunc);
-            ctx.Send(TActivationContext::InterconnectProxy(Peer.NodeId()), new TEvInterconnect::TEvConnectNode, true); 
+            ctx.Send(TActivationContext::InterconnectProxy(Peer.NodeId()), new TEvInterconnect::TEvConnectNode, true);
         }
 
         void OnConnect(const NActors::TActorContext &ctx) noexcept {

@@ -1,10 +1,10 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     ddoarn
     g:kikimr
 )
- 
+
 NO_WSHADOW()
 
 IF (PROFILE_MEMORY_ALLOCATIONS)
@@ -18,16 +18,16 @@ IF (ALLOCATOR == "B" OR ALLOCATOR == "BS" OR ALLOCATOR == "C")
     )
 ENDIF()
 
-SRCS( 
-    actor_bootstrapped.h 
+SRCS(
+    actor_bootstrapped.h
     actor_coroutine.cpp
     actor_coroutine.h
     actor.cpp
     actor.h
     actorid.cpp
-    actorid.h 
+    actorid.h
     actorsystem.cpp
-    actorsystem.h 
+    actorsystem.h
     ask.cpp
     ask.h
     balancer.h
@@ -40,29 +40,29 @@ SRCS(
     cpu_manager.cpp
     cpu_manager.h
     cpu_state.h
-    defs.h 
+    defs.h
     event.cpp
-    event.h 
+    event.h
     event_load.h
     event_local.h
     event_pb.cpp
-    event_pb.h 
-    events.h 
-    events_undelivered.cpp 
+    event_pb.h
+    events.h
+    events_undelivered.cpp
     executelater.h
-    executor_pool_base.cpp 
-    executor_pool_base.h 
-    executor_pool_basic.cpp 
-    executor_pool_basic.h 
-    executor_pool_io.cpp 
-    executor_pool_io.h 
+    executor_pool_base.cpp
+    executor_pool_base.h
+    executor_pool_basic.cpp
+    executor_pool_basic.h
+    executor_pool_io.cpp
+    executor_pool_io.h
     executor_pool_united.cpp
     executor_pool_united.h
-    executor_thread.cpp 
-    executor_thread.h 
-    hfunc.h 
+    executor_thread.cpp
+    executor_thread.h
+    hfunc.h
     interconnect.cpp
-    interconnect.h 
+    interconnect.h
     invoke.h
     io_dispatcher.cpp
     io_dispatcher.h
@@ -72,9 +72,9 @@ SRCS(
     log_settings.cpp
     log_settings.h
     mailbox.cpp
-    mailbox.h 
-    mailbox_queue_revolving.h 
-    mailbox_queue_simple.h 
+    mailbox.h
+    mailbox_queue_revolving.h
+    mailbox_queue_simple.h
     memory_track.cpp
     memory_track.h
     memory_tracker.cpp
@@ -91,18 +91,18 @@ SRCS(
     process_stats.h
     scheduler_actor.cpp
     scheduler_actor.h
-    scheduler_basic.cpp 
-    scheduler_basic.h 
-    scheduler_cookie.cpp 
-    scheduler_cookie.h 
-    scheduler_queue.h 
-    servicemap.h 
-) 
- 
+    scheduler_basic.cpp
+    scheduler_basic.h
+    scheduler_cookie.cpp
+    scheduler_cookie.h
+    scheduler_queue.h
+    servicemap.h
+)
+
 GENERATE_ENUM_SERIALIZATION(defs.h)
 GENERATE_ENUM_SERIALIZATION(actor.h)
 
-PEERDIR( 
+PEERDIR(
     library/cpp/actors/memory_log
     library/cpp/actors/prof
     library/cpp/actors/protos
@@ -114,9 +114,9 @@ PEERDIR(
     library/cpp/monlib/dynamic_counters
     library/cpp/svnversion
     library/cpp/threading/future
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

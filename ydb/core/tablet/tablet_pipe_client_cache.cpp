@@ -164,7 +164,7 @@ namespace NTabletPipe {
 
             TActorId client = currentClient->Client;
             if (!PoolContainer) {
-                CloseClient(ctx, client); 
+                CloseClient(ctx, client);
                 Container->Erase(tabletId);
             } else {
                 if (currentClient->Flags & TClientCacheEntry::Opened) {

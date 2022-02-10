@@ -14,7 +14,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-class TFlatLocalSchemeTx : public NTabletFlatExecutor::ITransaction { 
+class TFlatLocalSchemeTx : public NTabletFlatExecutor::ITransaction {
 public:
     TFlatLocalSchemeTx(TActorId sender, TEvTablet::TEvLocalSchemeTx::TPtr &ev)
         : Sender(sender)

@@ -11,7 +11,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-OWNER(g:kikimr) 
+OWNER(g:kikimr)
 
 SRCS(
     datetime_ut.cpp

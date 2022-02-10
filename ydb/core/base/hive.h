@@ -1,22 +1,22 @@
-#pragma once 
-#include "defs.h" 
+#pragma once
+#include "defs.h"
 #include "blobstorage.h"
-#include "events.h" 
+#include "events.h"
 #include "storage_pools.h"
 #include "subdomain.h"
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/base/tablet.h>
 #include <util/stream/str.h>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
     struct TEvHive {
-        enum EEv { 
-            // requests 
+        enum EEv {
+            // requests
             EvBootTablet = EventSpaceBegin(TKikimrEvents::ES_HIVE),
-            EvCreateTablet, 
-            EvForgetTablet, 
-            EvReconfigureTablet, 
-            EvLookupChannelInfo, 
+            EvCreateTablet,
+            EvForgetTablet,
+            EvReconfigureTablet,
+            EvLookupChannelInfo,
             EvStopTablet,
 
             EvTabletMetrics = EvStopTablet + 7, // review 194375
@@ -44,13 +44,13 @@ namespace NKikimr {
             EvConfigureHive,
             EvInitMigration,
             EvQueryMigration,
- 
-            // replies 
-            EvBootTabletReply = EvBootTablet + 512, 
-            EvCreateTabletReply, 
-            EvForgetTabletReply, 
-            EvReconfigureTabletReply, 
-            EvChannelInfo, 
+
+            // replies
+            EvBootTabletReply = EvBootTablet + 512,
+            EvCreateTabletReply,
+            EvForgetTabletReply,
+            EvReconfigureTabletReply,
+            EvChannelInfo,
             EvStopTabletResult,
             EvDeleteTabletReply,
             EvTabletCreationResult,
@@ -74,20 +74,20 @@ namespace NKikimr {
             EvInitMigrationReply,
             EvQueryMigrationReply,
 
-            EvEnd 
-        }; 
- 
+            EvEnd
+        };
+
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_HIVE),
             "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_HIVE)");
- 
+
         struct TEvBootTablet : public TEventPB<TEvBootTablet, NKikimrHive::TEvBootTablet, EvBootTablet> {
-            TEvBootTablet() 
-            {} 
- 
-            TEvBootTablet(ui64 tabletId) 
-            { 
-                Record.SetTabletID(tabletId); 
-            } 
+            TEvBootTablet()
+            {}
+
+            TEvBootTablet(ui64 tabletId)
+            {
+                Record.SetTabletID(tabletId);
+            }
 
             TString ToString() const {
                 TStringStream str;
@@ -95,18 +95,18 @@ namespace NKikimr {
                 str << "}";
                 return str.Str();
             }
-        }; 
- 
+        };
+
         struct TEvBootTabletReply
                 : public TEventPB<TEvBootTabletReply, NKikimrHive::TEvBootTabletReply, EvBootTabletReply> {
-            TEvBootTabletReply() 
-            {} 
- 
+            TEvBootTabletReply()
+            {}
+
             TEvBootTabletReply(NKikimrProto::EReplyStatus status, const TString& msg = {})
-            { 
-                Record.SetStatus(status); 
+            {
+                Record.SetStatus(status);
                 Record.SetStatusMsg(msg);
-            } 
+            }
 
             TString ToString() const {
                 TStringStream str;
@@ -115,18 +115,18 @@ namespace NKikimr {
                 str << "}";
                 return str.Str();
             }
-        }; 
- 
+        };
+
         struct TEvCreateTablet : public TEventPB<TEvCreateTablet, NKikimrHive::TEvCreateTablet, EvCreateTablet> {
-            TEvCreateTablet() 
-            {} 
- 
+            TEvCreateTablet()
+            {}
+
             TEvCreateTablet(ui64 ownerId, ui64 ownerIdx,
                             TTabletTypes::EType tabletType,
                             const TChannelsBindings& bindedChannels) {
-                Record.SetOwner(ownerId); 
-                Record.SetOwnerIdx(ownerIdx); 
-                Record.SetTabletType(tabletType); 
+                Record.SetOwner(ownerId);
+                Record.SetOwnerIdx(ownerIdx);
+                Record.SetTabletType(tabletType);
                 for (auto& channel : bindedChannels) {
                     *Record.AddBindedChannels() = channel;
                 }
@@ -155,7 +155,7 @@ namespace NKikimr {
                 for (auto& channel : bindedChannels) {
                     *Record.AddBindedChannels() = channel;
                 }
-            } 
+            }
 
             TString ToString() const {
                 TStringStream str;
@@ -184,29 +184,29 @@ namespace NKikimr {
                 str << "}";
                 return str.Str();
             }
-        }; 
- 
+        };
+
         struct TEvCreateTabletReply : TEventPB<TEvCreateTabletReply, NKikimrHive::TEvCreateTabletReply, EvCreateTabletReply> {
             TEvCreateTabletReply() = default;
- 
+
             TEvCreateTabletReply(NKikimrProto::EReplyStatus status, ui64 ownerId, ui64 ownerIdx) {
-                Record.SetStatus(status); 
-                Record.SetOwner(ownerId); 
-                Record.SetOwnerIdx(ownerIdx); 
+                Record.SetStatus(status);
+                Record.SetOwner(ownerId);
+                Record.SetOwnerIdx(ownerIdx);
             }
 
             TEvCreateTabletReply(NKikimrProto::EReplyStatus status, ui64 ownerId, ui64 ownerIdx, ui64 tabletId)
                 : TEvCreateTabletReply(status, ownerId, ownerIdx)
             {
-                if (tabletId != 0) 
-                    Record.SetTabletID(tabletId); 
+                if (tabletId != 0)
+                    Record.SetTabletID(tabletId);
             }
 
             TEvCreateTabletReply(NKikimrProto::EReplyStatus status, ui64 ownerId, ui64 ownerIdx, ui64 tabletId, ui64 origin)
                 : TEvCreateTabletReply(status, ownerId, ownerIdx, tabletId)
             {
                 Record.SetOrigin(origin);
-            } 
+            }
 
             TEvCreateTabletReply(
                     NKikimrProto::EReplyStatus status,
@@ -236,8 +236,8 @@ namespace NKikimr {
                 str << "}";
                 return str.Str();
             }
-        }; 
- 
+        };
+
         struct TEvTabletCreationResult : public TEventPB<
                 TEvTabletCreationResult, NKikimrHive::TEvTabletCreationResult, EvTabletCreationResult> {
             TEvTabletCreationResult()
@@ -369,12 +369,12 @@ namespace NKikimr {
 
         struct TEvReconfigureTablet
                 : public TEventPB<TEvReconfigureTablet, NKikimrHive::TEvReconfigureTablet, EvReconfigureTablet> {
-            TEvReconfigureTablet() 
-            {} 
- 
-            TEvReconfigureTablet(ui64 tabletId) { 
-                Record.SetTabletID(tabletId); 
-            } 
+            TEvReconfigureTablet()
+            {}
+
+            TEvReconfigureTablet(ui64 tabletId) {
+                Record.SetTabletID(tabletId);
+            }
 
             TString ToString() const {
                 TStringStream str;
@@ -382,17 +382,17 @@ namespace NKikimr {
                 str << "}";
                 return str.Str();
             }
-        }; 
- 
+        };
+
         struct TEvReconfigureTabletReply : public TEventPB<TEvReconfigureTabletReply,
                 NKikimrHive::TEvReconfigureTabletReply, EvReconfigureTabletReply> {
-            TEvReconfigureTabletReply() 
-            {} 
- 
+            TEvReconfigureTabletReply()
+            {}
+
             TEvReconfigureTabletReply(NKikimrProto::EReplyStatus status, ui64 tabletId) {
-                Record.SetStatus(status); 
-                Record.SetTabletID(tabletId); 
-            } 
+                Record.SetStatus(status);
+                Record.SetTabletID(tabletId);
+            }
 
             TString ToString() const {
                 TStringStream str;
@@ -401,8 +401,8 @@ namespace NKikimr {
                 str << "}";
                 return str.Str();
             }
-        }; 
- 
+        };
+
         struct TEvDeleteTablet : public TEventPB<TEvDeleteTablet, NKikimrHive::TEvDeleteTablet, EvDeleteTablet> {
             TEvDeleteTablet()
             {}
@@ -463,10 +463,10 @@ namespace NKikimr {
 
         struct TEvLookupChannelInfo : TEventPB<TEvLookupChannelInfo, NKikimrHive::TEvLookupChannelInfo, EvLookupChannelInfo> {
             TEvLookupChannelInfo() = default;
- 
+
             TEvLookupChannelInfo(ui64 tabletId) {
-                Record.SetTabletID(tabletId); 
-            } 
+                Record.SetTabletID(tabletId);
+            }
 
             TString ToString() const {
                 TStringStream str;
@@ -474,15 +474,15 @@ namespace NKikimr {
                 str << "}";
                 return str.Str();
             }
-        }; 
- 
+        };
+
         struct TEvChannelInfo : TEventPB<TEvChannelInfo, NKikimrHive::TEvChannelInfo, EvChannelInfo> {
             TEvChannelInfo() = default;
- 
+
             TEvChannelInfo(NKikimrProto::EReplyStatus status, ui64 tabletId) {
-                Record.SetStatus(status); 
-                Record.SetTabletID(tabletId); 
-            } 
+                Record.SetStatus(status);
+                Record.SetTabletID(tabletId);
+            }
 
             TString ToString() const {
                 TStringStream str;
@@ -491,8 +491,8 @@ namespace NKikimr {
                 str << "}";
                 return str.Str();
             }
-        }; 
- 
+        };
+
         struct TEvTabletMetrics : public TEventPB<TEvTabletMetrics, NKikimrHive::TEvTabletMetrics, EvTabletMetrics> {
 
         };
@@ -547,9 +547,9 @@ namespace NKikimr {
                 Record.SetReturnFollowers(returnFollowers);
             }
             TEvRequestHiveInfo(ui64 tabletId, bool returnFollowers) {
-                Record.SetTabletID(tabletId); 
+                Record.SetTabletID(tabletId);
                 Record.SetReturnFollowers(returnFollowers);
-            } 
+            }
         };
 
         struct TEvResponseHiveInfo : TEventPB<TEvResponseHiveInfo, NKikimrHive::TEvResponseHiveInfo, EvResponseHiveInfo> {};
@@ -804,7 +804,7 @@ namespace NKikimr {
                 Record.SetMigrationProgress(progress);
             }
         };
-    }; 
- 
+    };
+
     IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info);
-} 
+}

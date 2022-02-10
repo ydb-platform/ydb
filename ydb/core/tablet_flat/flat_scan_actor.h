@@ -628,13 +628,13 @@ namespace NOps {
             if (auto logl = Logger->Log(lvl))
                 logl << NFmt::Do(*this) << " " << NFmt::Do(msg);
 
-            if (msg.Status != NKikimrProto::OK) { 
-                if (msg.Status == NKikimrProto::NODATA) { 
-                    GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_nodata", true)->Inc(); 
-                } 
- 
+            if (msg.Status != NKikimrProto::OK) {
+                if (msg.Status == NKikimrProto::NODATA) {
+                    GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_nodata", true)->Inc();
+                }
+
                 return Terminate(EAbort::Host);
-            } 
+            }
 
             // TODO: would want to postpone pinning until usage
             TVector<NPageCollection::TLoadedPage> pinned(Reserve(msg.Loaded.size()));

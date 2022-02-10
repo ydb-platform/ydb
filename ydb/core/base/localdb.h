@@ -1,16 +1,16 @@
-#pragma once 
-#include "defs.h" 
-#include <util/generic/map.h> 
+#pragma once
+#include "defs.h"
+#include <util/generic/map.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/list.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/util/yverify_stream.h>
 #include <google/protobuf/util/message_differencer.h>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NLocalDb {
- 
-struct TCompactionPolicy : public TThrRefBase { 
+
+struct TCompactionPolicy : public TThrRefBase {
     struct TBackgroundPolicy {
         ui32 Threshold;
         ui32 PriorityBase;
@@ -31,14 +31,14 @@ struct TCompactionPolicy : public TThrRefBase {
         }
     };
 
-    struct TGenerationPolicy { 
-        ui64 SizeToCompact; 
-        ui32 CountToCompact; 
-        ui32 ForceCountToCompact; 
-        ui64 ForceSizeToCompact; 
+    struct TGenerationPolicy {
+        ui64 SizeToCompact;
+        ui32 CountToCompact;
+        ui32 ForceCountToCompact;
+        ui64 ForceSizeToCompact;
         ui32 CompactionBrokerQueue; // TODO: remove deprecated field
         TString ResourceBrokerTask;
-        bool KeepInCache; 
+        bool KeepInCache;
         TBackgroundPolicy BackgroundCompactionPolicy;
         ui32 ExtraCompactionPercent;
         ui32 ExtraCompactionExpPercent;
@@ -69,12 +69,12 @@ struct TCompactionPolicy : public TThrRefBase {
                     && ExtraCompactionExpMaxSize == p.ExtraCompactionExpMaxSize
                     && UpliftPartSize == p.UpliftPartSize;
         }
-    }; 
- 
-    ui64 InMemSizeToSnapshot; 
-    ui32 InMemStepsToSnapshot; 
-    ui32 InMemForceStepsToSnapshot; 
-    ui64 InMemForceSizeToSnapshot; 
+    };
+
+    ui64 InMemSizeToSnapshot;
+    ui32 InMemStepsToSnapshot;
+    ui32 InMemForceStepsToSnapshot;
+    ui64 InMemForceSizeToSnapshot;
     ui32 InMemCompactionBrokerQueue; // TODO: remove deprecated field
     TString InMemResourceBrokerTask;
     ui64 ReadAheadHiThreshold;
@@ -92,10 +92,10 @@ struct TCompactionPolicy : public TThrRefBase {
     NKikimrSchemeOp::ECompactionStrategy CompactionStrategy;
     NKikimrSchemeOp::TCompactionPolicy::TShardPolicy ShardPolicy;
     bool KeepEraseMarkers;
- 
+
     TVector<TGenerationPolicy> Generations;
- 
-    TCompactionPolicy(); 
+
+    TCompactionPolicy();
     explicit TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& policyPb);
 
     void Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) const;
@@ -110,7 +110,7 @@ struct TCompactionPolicy : public TThrRefBase {
                 && ReadAheadHiThreshold == p.ReadAheadHiThreshold
                 && ReadAheadLoThreshold == p.ReadAheadLoThreshold
                 && MinDataPageSize == p.MinDataPageSize
-                && Generations == p.Generations 
+                && Generations == p.Generations
                 && SnapshotCompactionBrokerQueue == p.SnapshotCompactionBrokerQueue
                 && SnapshotResourceBrokerTask == p.SnapshotResourceBrokerTask
                 && BackupCompactionBrokerQueue == p.BackupCompactionBrokerQueue
@@ -124,13 +124,13 @@ struct TCompactionPolicy : public TThrRefBase {
                 && KeepEraseMarkers == p.KeepEraseMarkers
                 && ::google::protobuf::util::MessageDifferencer::Equals(ShardPolicy, p.ShardPolicy);
     }
-}; 
- 
+};
+
 typedef TIntrusivePtr<TCompactionPolicy> TCompactionPolicyPtr;
 
 TCompactionPolicyPtr CreateDefaultTablePolicy();
 TCompactionPolicyPtr CreateDefaultUserTablePolicy();
- 
+
 bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TCompactionPolicy& newPolicy, TString& err);
 
 // Get Resource Broker task type name by Compaction Broker queue ID.
@@ -148,4 +148,4 @@ extern const TString KqpResourceManagerTaskName;
 extern const TString KqpResourceManagerQueue;
 extern const TString LegacyQueueIdTaskNamePrefix;
 
-}} 
+}}

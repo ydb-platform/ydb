@@ -1,6 +1,6 @@
-#pragma once 
-#include "defs.h" 
- 
+#pragma once
+#include "defs.h"
+
 #include "flat_scan_iface.h"
 
 #include <ydb/core/base/tablet.h>
@@ -9,37 +9,37 @@
 #include <util/generic/maybe.h>
 #include <util/system/type_name.h>
 #include <util/generic/variant.h>
- 
-//////////////////////////////////////////// 
-namespace NKikimr { 
-class TTabletCountersBase; 
- 
+
+////////////////////////////////////////////
+namespace NKikimr {
+class TTabletCountersBase;
+
 namespace NTable {
     class TDatabase;
     class TScheme;
 }
 
-namespace NTabletFlatExecutor { 
- 
-class TTransactionContext; 
-class TExecutor; 
+namespace NTabletFlatExecutor {
+
+class TTransactionContext;
+class TExecutor;
 struct TPageCollectionTxEnv;
 
-class TTableSnapshotContext : public TThrRefBase, TNonCopyable { 
-    friend class TExecutor; 
+class TTableSnapshotContext : public TThrRefBase, TNonCopyable {
+    friend class TExecutor;
     friend struct TPageCollectionTxEnv;
- 
-    class TImpl; 
-    THolder<TImpl> Impl; 
-public: 
-    TTableSnapshotContext(); 
-    virtual ~TTableSnapshotContext(); 
-    virtual TConstArrayRef<ui32> TablesToSnapshot() const = 0; 
+
+    class TImpl;
+    THolder<TImpl> Impl;
+public:
+    TTableSnapshotContext();
+    virtual ~TTableSnapshotContext();
+    virtual TConstArrayRef<ui32> TablesToSnapshot() const = 0;
 
 public:
     NTable::TSnapEdge Edge(ui32 table) const;
-}; 
- 
+};
+
 class TMemoryGCToken : public TThrRefBase {
 public:
     TMemoryGCToken(ui64 size, ui64 taskId)
@@ -103,14 +103,14 @@ struct IExecuting {
 };
 
 class TTxMemoryProviderBase : TNonCopyable {
-public: 
+public:
     TTxMemoryProviderBase(ui64 memoryLimit, ui64 taskId)
         : MemoryLimit(memoryLimit)
         , TaskId(taskId)
         , RequestedMemory(0)
         , NotEnoughMemoryCount(0)
-    {} 
- 
+    {}
+
     ~TTxMemoryProviderBase() {}
 
     ui64 GetMemoryLimit() const
@@ -180,8 +180,8 @@ private:
     ui32 NotEnoughMemoryCount;
     TIntrusivePtr<TMemoryGCToken> MemoryGCToken;
     TAutoPtr<TMemoryToken> MemoryToken;
-}; 
- 
+};
+
 class TTxMemoryProvider : public TTxMemoryProviderBase {
 public:
     TTxMemoryProvider(ui64 memoryLimit, ui64 taskId)
@@ -226,17 +226,17 @@ private:
     TVector<std::function<void()>> OnCommitted_;
 };
 
-struct TCompactedPartLoans { 
-    TLogoBlobID MetaInfoId; 
-    ui64 Lender; 
- 
-    TCompactedPartLoans() = default; 
-    TCompactedPartLoans(const TLogoBlobID &metaId, ui64 lender) 
-        : MetaInfoId(metaId) 
-        , Lender(lender) 
-    {} 
-}; 
- 
+struct TCompactedPartLoans {
+    TLogoBlobID MetaInfoId;
+    ui64 Lender;
+
+    TCompactedPartLoans() = default;
+    TCompactedPartLoans(const TLogoBlobID &metaId, ui64 lender)
+        : MetaInfoId(metaId)
+        , Lender(lender)
+    {}
+};
+
 struct TFinishedCompactionInfo {
     ui64 Edge = 0;
     TInstant FullCompactionTs;
@@ -256,7 +256,7 @@ enum class ETerminationReason {
 
 
 class ITransaction : TNonCopyable {
-public: 
+public:
     using TTransactionContext = NTabletFlatExecutor::TTransactionContext;
 
     ITransaction() = default;
@@ -268,7 +268,7 @@ public:
     virtual ~ITransaction() = default;
     /// @return true if execution complete and transaction is ready for commit
     virtual bool Execute(TTransactionContext &txc, const TActorContext &ctx) = 0;
-    virtual void Complete(const TActorContext &ctx) = 0; 
+    virtual void Complete(const TActorContext &ctx) = 0;
     virtual void Terminate(ETerminationReason reason, const TActorContext &/*ctx*/) {
         Y_FAIL("Unexpected transaction termination (reason %" PRIu32 ")", (ui32)reason);
     }
@@ -282,8 +282,8 @@ public:
 
 public:
     NLWTrace::TOrbit Orbit;
-}; 
- 
+};
+
 template<typename T>
 class TTransactionBase : public ITransaction {
 protected:
@@ -302,16 +302,16 @@ public:
     { }
 };
 
-struct TExecutorStats { 
-    bool IsActive = false; 
+struct TExecutorStats {
+    bool IsActive = false;
     bool IsFollower = false;
     bool IsAnyChannelYellowMove = false;
     bool IsAnyChannelYellowStop = false;
-    ui64 TxInFly = 0; 
-    ui64 TxPending = 0; 
+    ui64 TxInFly = 0;
+    ui64 TxPending = 0;
     const THashMap<TLogoBlobID, TCompactedPartLoans>* CompactedPartLoans = nullptr;
-    const bool* HasSharedBlobs = nullptr; 
- 
+    const bool* HasSharedBlobs = nullptr;
+
     TVector<ui32> YellowMoveChannels;
     TVector<ui32> YellowStopChannels;
 
@@ -325,10 +325,10 @@ struct TExecutorStats {
         return it != YellowStopChannels.end() && *it == channel;
     }
 
-protected: 
-    virtual ~TExecutorStats() {} 
-}; 
- 
+protected:
+    virtual ~TExecutorStats() {}
+};
+
 struct TScanOptions {
     enum class EReadPrio {
         Default,
@@ -425,24 +425,24 @@ struct TScanOptions {
     }
 };
 
-namespace NFlatExecutorSetup { 
-    struct ITablet : TNonCopyable { 
-        virtual ~ITablet() {} 
- 
-        virtual void ActivateExecutor(const TActorContext &ctx) = 0; 
-        virtual void Detach(const TActorContext &ctx) = 0; 
- 
-        TTabletStorageInfo* Info() const { return TabletInfo.Get(); } 
-        ui64 TabletID() const { return TabletInfo->TabletID; } 
+namespace NFlatExecutorSetup {
+    struct ITablet : TNonCopyable {
+        virtual ~ITablet() {}
+
+        virtual void ActivateExecutor(const TActorContext &ctx) = 0;
+        virtual void Detach(const TActorContext &ctx) = 0;
+
+        TTabletStorageInfo* Info() const { return TabletInfo.Get(); }
+        ui64 TabletID() const { return TabletInfo->TabletID; }
         TTabletTypes::EType TabletType() const { return TabletInfo->TabletType; }
         const TActorId& Tablet() const { return TabletActorID; }
         const TActorId& ExecutorID() const { return ExecutorActorID; }
         const TActorId& LauncherID() const { return LauncherActorID; }
- 
-        virtual void SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext &ctx); // would be FAIL in default implementation 
-        virtual void CompletedLoansChanged(const TActorContext &ctx); // would be no-op in default implementation 
-        virtual void CompactionComplete(ui32 tableId, const TActorContext &ctx); // would be no-op in default implementation 
- 
+
+        virtual void SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext &ctx); // would be FAIL in default implementation
+        virtual void CompletedLoansChanged(const TActorContext &ctx); // would be no-op in default implementation
+        virtual void CompactionComplete(ui32 tableId, const TActorContext &ctx); // would be no-op in default implementation
+
         virtual void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
 
         virtual bool ReassignChannelsEnabled() const;
@@ -452,37 +452,37 @@ namespace NFlatExecutorSetup {
 
         virtual void OnLeaderUserAuxUpdate(TString) { /* default */ }
 
-        // create transaction? 
-    protected: 
+        // create transaction?
+    protected:
         ITablet(TTabletStorageInfo *info, const TActorId &tablet)
-            : TabletActorID(tablet) 
-            , TabletInfo(info) 
-        { 
+            : TabletActorID(tablet)
+            , TabletInfo(info)
+        {
             Y_VERIFY(TTabletTypes::TYPE_INVALID != TabletInfo->TabletType);
-        } 
- 
+        }
+
         TActorId ExecutorActorID;
         TActorId TabletActorID;
         TActorId LauncherActorID;
- 
-        void UpdateTabletInfo(TIntrusivePtr<TTabletStorageInfo> info, const TActorId& launcherID = {});
-    private: 
-        TIntrusivePtr<TTabletStorageInfo> TabletInfo; 
-    }; 
- 
 
-    //////////////////////////////////////////// 
-    // tablet -> executor 
-    struct IExecutor : TNonCopyable { 
-        virtual ~IExecutor() {} 
- 
+        void UpdateTabletInfo(TIntrusivePtr<TTabletStorageInfo> info, const TActorId& launcherID = {});
+    private:
+        TIntrusivePtr<TTabletStorageInfo> TabletInfo;
+    };
+
+
+    ////////////////////////////////////////////
+    // tablet -> executor
+    struct IExecutor : TNonCopyable {
+        virtual ~IExecutor() {}
+
         // tablet assigned as leader, could begin loading
-        virtual void Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) = 0; 
+        virtual void Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) = 0;
         // tablet generation restoration complete, tablet could act as leader
-        virtual void Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) = 0; 
-        // die! 
-        virtual void DetachTablet(const TActorContext &ctx) = 0; 
- 
+        virtual void Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) = 0;
+        // die!
+        virtual void DetachTablet(const TActorContext &ctx) = 0;
+
         // tablet assigned as follower (or follower connection refreshed), must begin loading
         virtual void FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) = 0;
         // next follower incremental update
@@ -493,9 +493,9 @@ namespace NFlatExecutorSetup {
         virtual void FollowerSyncComplete() = 0;
         // all followers had completed log with requested gc-barrier
         virtual void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) = 0;
- 
+
         virtual void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0;
- 
+
         /* Make blob with data required for table bootstapping. Note:
             1. Once non-trivial blob obtained and commited in tx all of its
                 borrowed bundles have to be eventually released (see db).
@@ -525,7 +525,7 @@ namespace NFlatExecutorSetup {
         virtual void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) const = 0;
         virtual void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) = 0;
         virtual void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr&) = 0;
- 
+
         virtual void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr&) = 0;
 
         virtual void SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) = 0;
@@ -536,9 +536,9 @@ namespace NFlatExecutorSetup {
         // This method lets executor know about new yellow channels
         virtual void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) = 0;
 
-        virtual const TExecutorStats& GetStats() const = 0; 
+        virtual const TExecutorStats& GetStats() const = 0;
         virtual NMetrics::TResourceMetrics* GetResourceMetrics() const = 0;
- 
+
         /* This stange looking functionallity probably should be dropped */
 
         virtual float GetRejectProbability() const = 0;
@@ -546,21 +546,21 @@ namespace NFlatExecutorSetup {
         // Returns current database scheme (executor must be active)
         virtual const NTable::TScheme& Scheme() const noexcept = 0;
 
-        ui32 Generation() const { return Generation0; } 
-        ui32 Step() const { return Step0; } 
- 
-    protected: 
-        // 
-        IExecutor() 
-            : Generation0(0) 
-            , Step0(0) 
-        {} 
- 
-        ui32 Generation0; 
-        ui32 Step0; 
-    }; 
- 
+        ui32 Generation() const { return Generation0; }
+        ui32 Step() const { return Step0; }
+
+    protected:
+        //
+        IExecutor()
+            : Generation0(0)
+            , Step0(0)
+        {}
+
+        ui32 Generation0;
+        ui32 Step0;
+    };
+
     IActor* CreateExecutor(ITablet *owner, const TActorId& ownerActorId);
-}; 
- 
-}} // end of the NKikimr namespace 
+};
+
+}} // end of the NKikimr namespace

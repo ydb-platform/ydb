@@ -26,7 +26,7 @@
 #define SB_LOG_N(service, stream) LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::service, stream)
 #define SB_LOG_W(service, stream) LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::service, stream)
 #define SB_LOG_E(service, stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::service, stream)
-#define SB_LOG_CRIT(service, stream) LOG_CRIT_S((TlsActivationContext->AsActorContext()), NKikimrServices::service, stream) 
+#define SB_LOG_CRIT(service, stream) LOG_CRIT_S((TlsActivationContext->AsActorContext()), NKikimrServices::service, stream)
 
 namespace NKikimr {
 namespace NSchemeBoard {

@@ -96,8 +96,8 @@ inline TActorId MakeTenantPoolID(ui32 node = 0, ui32 domain = 0) {
 }
 
 inline TActorId MakeTenantPoolRootID() {
-    char x[12] = { 't', 'e', 'n', 'a', 'n', 't', 'p', 'o', 'o', 'l', 'r', 't' }; 
+    char x[12] = { 't', 'e', 'n', 'a', 'n', 't', 'p', 'o', 'o', 'l', 'r', 't' };
     return TActorId(0, TStringBuf(x, 12));
-} 
+}
 
 } // namespace NKikimr

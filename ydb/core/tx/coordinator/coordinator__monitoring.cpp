@@ -33,7 +33,7 @@ struct TTxCoordinator::TTxMonitoring : public TTxCoordinator::TTxConsistencyChec
     }
 };
 
-ITransaction* TTxCoordinator::CreateTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev) { 
+ITransaction* TTxCoordinator::CreateTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev) {
     return new TTxMonitoring(this, ev->Sender);
 }
 

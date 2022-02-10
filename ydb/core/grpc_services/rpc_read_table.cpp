@@ -95,7 +95,7 @@ static void ConvertKeyRange(const Ydb::Table::KeyRange& keyRange, const TGetOutp
     }
 }
 
-class TReadTableRPC : public TActorBootstrapped<TReadTableRPC> { 
+class TReadTableRPC : public TActorBootstrapped<TReadTableRPC> {
     enum EWakeupTag : ui64 {
         TimeoutTimer = 0,
         RlSendAllowed = 1,

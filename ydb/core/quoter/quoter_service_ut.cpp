@@ -1,58 +1,58 @@
-#include "quoter_service.h" 
- 
+#include "quoter_service.h"
+
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/system/compiler.h>
 #include <util/system/valgrind.h>
 
-namespace NKikimr { 
-using namespace Tests; 
- 
-Y_UNIT_TEST_SUITE(TQuoterServiceTest) { 
-    Y_UNIT_TEST(StaticRateLimiter) { 
-        TServerSettings serverSettings(0); 
-        TServer server = TServer(serverSettings, true); 
-        TTestActorRuntime *runtime = server.GetRuntime(); 
- 
+namespace NKikimr {
+using namespace Tests;
+
+Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
+    Y_UNIT_TEST(StaticRateLimiter) {
+        TServerSettings serverSettings(0);
+        TServer server = TServer(serverSettings, true);
+        TTestActorRuntime *runtime = server.GetRuntime();
+
         const TActorId serviceId = MakeQuoterServiceID();
         const TActorId serviceActorId = runtime->Register(CreateQuoterService());
-        runtime->RegisterService(serviceId, serviceActorId); 
- 
+        runtime->RegisterService(serviceId, serviceActorId);
+
         TActorId sender = runtime->AllocateEdgeActor();
-        { 
-            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender, 
-                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { 
-                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceForbid, 1) 
-                    }, TDuration::Max()))); 
- 
-            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>(); 
-            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Deadline); 
-        } 
-        { 
-            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender, 
-                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { 
-                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1) 
-                    }, TDuration::Max()))); 
- 
-            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>(); 
-            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success); 
-        } 
- 
-        { 
-            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender, 
-                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { 
-                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 1000), 1) 
-                    }, TDuration::Max()))); 
- 
-            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>(); 
-            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success); 
-        } 
+        {
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
+                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceForbid, 1)
+                    }, TDuration::Max())));
+
+            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Deadline);
+        }
+        {
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
+                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1)
+                    }, TDuration::Max())));
+
+            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
+        }
+
+        {
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
+                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 1000), 1)
+                    }, TDuration::Max())));
+
+            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
+        }
 
         {
             // test static quter queues processing
@@ -107,8 +107,8 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
             reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
         }
-    } 
- 
+    }
+
 #if defined(OPTIMIZED)
 #error "Macro conflict."
 #endif
@@ -256,86 +256,86 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
     }
 #endif
 
-    Y_UNIT_TEST(StaticMultipleAndResources) { 
-        TServerSettings serverSettings(0); 
-        TServer server = TServer(serverSettings, true); 
-        TTestActorRuntime *runtime = server.GetRuntime(); 
- 
+    Y_UNIT_TEST(StaticMultipleAndResources) {
+        TServerSettings serverSettings(0);
+        TServer server = TServer(serverSettings, true);
+        TTestActorRuntime *runtime = server.GetRuntime();
+
         const TActorId serviceId = MakeQuoterServiceID();
         const TActorId serviceActorId = runtime->Register(CreateQuoterService());
-        runtime->RegisterService(serviceId, serviceActorId); 
- 
+        runtime->RegisterService(serviceId, serviceActorId);
+
         TActorId sender = runtime->AllocateEdgeActor();
-        { 
-            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender, 
-                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { 
-                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceForbid, 1), 
-                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1), 
-                    }, TDuration::Max()))); 
- 
-            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>(); 
-            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Deadline); 
-        } 
-        { 
-            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender, 
-                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { 
-                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1), 
-                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1), 
-                    }, TDuration::Max()))); 
- 
-            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>(); 
-            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success); 
-        } 
- 
-        { 
-            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender, 
-                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { 
-                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 1000), 1), 
-                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1), 
-                    }, TDuration::Max()))); 
- 
-            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>(); 
-            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(StaticDeadlines) { 
-        TServerSettings serverSettings(0); 
-        TServer server = TServer(serverSettings, true); 
-        TTestActorRuntime *runtime = server.GetRuntime(); 
- 
+        {
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
+                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceForbid, 1),
+                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1),
+                    }, TDuration::Max())));
+
+            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Deadline);
+        }
+        {
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
+                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1),
+                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1),
+                    }, TDuration::Max())));
+
+            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
+        }
+
+        {
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
+                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 1000), 1),
+                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1),
+                    }, TDuration::Max())));
+
+            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
+        }
+    }
+
+    Y_UNIT_TEST(StaticDeadlines) {
+        TServerSettings serverSettings(0);
+        TServer server = TServer(serverSettings, true);
+        TTestActorRuntime *runtime = server.GetRuntime();
+
         const TActorId serviceId = MakeQuoterServiceID();
         const TActorId serviceActorId = runtime->Register(CreateQuoterService());
-        runtime->RegisterService(serviceId, serviceActorId); 
- 
+        runtime->RegisterService(serviceId, serviceActorId);
+
         TActorId sender = runtime->AllocateEdgeActor();
-        { 
-            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender, 
-                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { 
-                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 10), 20) 
-                    }, TDuration::Seconds(3)))); 
- 
-            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender, 
-                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { 
-                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 10), 20) 
-                    }, TDuration::Seconds(3)))); 
- 
-            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender, 
-                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { 
-                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 10), 20) 
-                    }, TDuration::Seconds(3)))); 
- 
-            THolder<TEvQuota::TEvClearance> reply1 = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>(); 
+        {
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
+                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 10), 20)
+                    }, TDuration::Seconds(3))));
+
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
+                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 10), 20)
+                    }, TDuration::Seconds(3))));
+
+            runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+                new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
+                    TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 10), 20)
+                    }, TDuration::Seconds(3))));
+
+            THolder<TEvQuota::TEvClearance> reply1 = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT_C(reply1->Result == TEvQuota::TEvClearance::EResult::Success, "Result: " << static_cast<int>(reply1->Result));
- 
-            THolder<TEvQuota::TEvClearance> reply2 = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>(); 
+
+            THolder<TEvQuota::TEvClearance> reply2 = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT_C(reply2->Result == TEvQuota::TEvClearance::EResult::Success, "Result: " << static_cast<int>(reply2->Result));
- 
-            THolder<TEvQuota::TEvClearance> reply3 = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>(); 
+
+            THolder<TEvQuota::TEvClearance> reply3 = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT_C(reply3->Result == TEvQuota::TEvClearance::EResult::Deadline, "Result: " << static_cast<int>(reply3->Result));
-        } 
-    } 
- 
-} 
- 
-} 
+        }
+    }
+
+}
+
+}

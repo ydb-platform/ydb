@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "defs.h"
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
@@ -18,8 +18,8 @@ namespace NActors {
     class TNodeLocation;
 } // NActors
 
-namespace NKikimr { 
- 
+namespace NKikimr {
+
 struct TDsProxyNodeMon;
 class TSubgroupPartLayout;
 
@@ -55,7 +55,7 @@ struct TEncryptionKey {
     }
 };
 
-// current state of storage group 
+// current state of storage group
 class TBlobStorageGroupInfo : public TThrRefBase {
 public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -161,19 +161,19 @@ public:
         ui32 FailDomainOrderNumber = 0;
     };
 
-    struct TFailDomain { 
+    struct TFailDomain {
         // VDisks composing this fail domain
         TVector<TVDiskInfo> VDisks;
 
         // fail domain order number; domains are numbered continuously through all fail realms
         ui32 FailDomainOrderNumber = 0;
-    }; 
- 
+    };
+
     struct TFailRealm {
         // fail domains contained in this fail realm
         TVector<TFailDomain> FailDomains;
-    }; 
- 
+    };
+
     struct TTopology {
         // group type (i.e. erasure)
         const TBlobStorageGroupType GType;
@@ -315,7 +315,7 @@ public:
 
     static TIntrusivePtr<TBlobStorageGroupInfo> Parse(const NKikimrBlobStorage::TGroupInfo& group,
         const TEncryptionKey *key, IOutputStream *err);
- 
+
     static bool DecryptGroupKey(TBlobStorageGroupInfo::EEncryptionMode encryptionMode, const TString& mainKeyId,
         const TString& encryptedGroupKey, ui64 groupKeyNonce, const TCypherKey& tenantKey, TCypherKey *outGroupKey,
         ui32 groupId);
@@ -429,8 +429,8 @@ private:
     TMaybe<TKikimrScopeId> AcceptedScope;
     TString StoragePoolName;
     TPDiskCategory::EDeviceType DeviceType = TPDiskCategory::DEVICE_TYPE_UNKNOWN;
-}; 
- 
+};
+
 // physical fail domain description
 struct TFailDomain {
     struct TLevelIds {

@@ -1,6 +1,6 @@
 #include "scheme_type_registry.h"
 #include "scheme_types.h"
-#include "scheme_types_defs.h" 
+#include "scheme_types_defs.h"
 
 #include <util/digest/murmur.h>
 #include <util/generic/algorithm.h>
@@ -13,13 +13,13 @@ namespace NScheme {
 
 TTypeRegistry::TTypeRegistry()
 {
-    // move to 'init defaults?' 
+    // move to 'init defaults?'
     RegisterType<TInt32>();
     RegisterType<TUint32>();
     RegisterType<TInt64>();
     RegisterType<TUint64>();
-    RegisterType<TDouble>(); 
-    RegisterType<TFloat>(); 
+    RegisterType<TDouble>();
+    RegisterType<TFloat>();
     RegisterType<TUint8>();
     RegisterType<TBool>();
     RegisterType<TPairUi64Ui64>();

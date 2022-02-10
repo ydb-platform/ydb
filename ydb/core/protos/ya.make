@@ -37,7 +37,7 @@ SRCS(
     console_config.proto
     console_tenant.proto
     counters_tx_allocator.proto
-    counters_bs_controller.proto 
+    counters_bs_controller.proto
     counters_coordinator.proto
     counters_columnshard.proto
     counters_datashard.proto
@@ -64,7 +64,7 @@ SRCS(
     http_config.proto
     import.proto
     index_builder.proto
-    issue_id.proto 
+    issue_id.proto
     kesus.proto
     kqp_query_settings.proto
     kqp_physical.proto
@@ -133,7 +133,7 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)
 
-PEERDIR( 
+PEERDIR(
     library/cpp/actors/protos
     ydb/core/yq/libs/config/protos
     ydb/library/login/protos
@@ -144,8 +144,8 @@ PEERDIR(
     ydb/library/yql/dq/proto
     ydb/library/yql/public/issue/protos
     ydb/library/yql/public/types
-) 
- 
+)
+
 EXCLUDE_TAGS(GO_PROTO)
 
 END()

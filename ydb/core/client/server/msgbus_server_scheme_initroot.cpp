@@ -7,10 +7,10 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/ticket_parser.h>
- 
-namespace NKikimr { 
-namespace NMsgBusProxy { 
- 
+
+namespace NKikimr {
+namespace NMsgBusProxy {
+
 using namespace NSchemeShard;
 
 class TMessageBusSchemeInitRoot : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusSchemeInitRoot>> {
@@ -28,17 +28,17 @@ class TMessageBusSchemeInitRoot : public TMessageBusSecureRequest<TMessageBusSer
     }
 
     void Handle(TEvSchemeShard::TEvInitRootShardResult::TPtr& ev, const TActorContext& ctx) {
-        const NKikimrTxScheme::TEvInitRootShardResult &record = ev->Get()->Record; 
+        const NKikimrTxScheme::TEvInitRootShardResult &record = ev->Get()->Record;
         const auto status = (TEvSchemeShard::TEvInitRootShardResult::EStatus)record.GetStatus();
-        switch (status) { 
+        switch (status) {
         case TEvSchemeShard::TEvInitRootShardResult::StatusSuccess:
         case TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized:
             return ReplyWithResult(MSTATUS_OK, status, ctx);
-        default: 
+        default:
             return ReplyWithResult(MSTATUS_ERROR, status, ctx);
-        } 
-    } 
- 
+        }
+    }
+
     void Die(const TActorContext &ctx) override {
         if (PipeClient) {
             NTabletPipe::CloseClient(ctx, PipeClient);
@@ -88,12 +88,12 @@ public:
             ReplyWithResult(MSTATUS_ERROR, TEvSchemeShard::TEvInitRootShardResult::StatusBadArgument, ctx);
         }
     }
-}; 
- 
+};
+
 void TMessageBusServerProxy::Handle(TEvBusProxy::TEvInitRoot::TPtr& ev, const TActorContext& ctx) {
     TEvBusProxy::TEvInitRoot *msg = ev->Get();
     ctx.Register(new TMessageBusSchemeInitRoot(msg));
-} 
- 
-} 
-} 
+}
+
+}
+}

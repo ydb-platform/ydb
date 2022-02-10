@@ -1,5 +1,5 @@
-#pragma once 
-#include "defs.h" 
+#pragma once
+#include "defs.h"
 #include <ydb/core/protos/local.pb.h>
 #include <ydb/core/tablet/tablet_setup.h>
 #include <ydb/core/base/events.h>
@@ -7,10 +7,10 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage.h>
-#include <util/generic/map.h> 
+#include <util/generic/map.h>
 #include <ydb/core/tablet/tablet_metrics.h>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 
 struct TRegistrationInfo {
     TString DomainName;
@@ -68,23 +68,23 @@ struct TDrainProgress : public TThrRefBase {
     }
 };
 
-struct TEvLocal { 
-    enum EEv { 
-        EvRegisterNode = EventSpaceBegin(TKikimrEvents::ES_LOCAL), 
-        EvPing, 
-        EvBootTablet, 
-        EvStopTablet, // must be here 
-        EvDeadTabletAck, 
+struct TEvLocal {
+    enum EEv {
+        EvRegisterNode = EventSpaceBegin(TKikimrEvents::ES_LOCAL),
+        EvPing,
+        EvBootTablet,
+        EvStopTablet, // must be here
+        EvDeadTabletAck,
         EvEnumerateTablets,
         EvSyncTablets,
         EvTabletMetrics,
         EvReconnect,
- 
-        EvStatus = EvRegisterNode + 512, 
-        EvTabletStatus, 
+
+        EvStatus = EvRegisterNode + 512,
+        EvTabletStatus,
         EvEnumerateTabletsResult,
         EvTabletMetricsAck,
- 
+
         EvAddTenant = EvRegisterNode + 1024,
         EvRemoveTenant,
         EvAlterTenant,
@@ -92,33 +92,33 @@ struct TEvLocal {
 
         EvLocalDrainNode,
 
-        EvEnd 
-    }; 
- 
+        EvEnd
+    };
+
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_LOCAL),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_LOCAL)");
- 
+
     struct TEvRegisterNode : public TEventPB<TEvRegisterNode, NKikimrLocal::TEvRegisterNode, EvRegisterNode> {
-        TEvRegisterNode() 
-        {} 
- 
+        TEvRegisterNode()
+        {}
+
         TEvRegisterNode(ui64 hiveId) {
             Record.SetHiveId(hiveId);
-        } 
-    }; 
- 
+        }
+    };
+
     struct TEvPing : public TEventPB<TEvPing, NKikimrLocal::TEvPing, EvPing> {
-        TEvPing() 
-        {} 
- 
+        TEvPing()
+        {}
+
         TEvPing(ui64 hiveId, ui32 hiveGeneration, bool purge, const NKikimrLocal::TLocalConfig &config) {
             Record.SetHiveId(hiveId);
             Record.SetHiveGeneration(hiveGeneration);
-            Record.SetPurge(purge); 
+            Record.SetPurge(purge);
             Record.MutableConfig()->CopyFrom(config);
-        } 
-    }; 
- 
+        }
+    };
+
     struct TEvReconnect : TEventPB<TEvReconnect, NKikimrLocal::TEvReconnect, EvReconnect> {
         TEvReconnect() = default;
 
@@ -129,19 +129,19 @@ struct TEvLocal {
     };
 
     struct TEvStatus : public TEventPB<TEvStatus, NKikimrLocal::TEvStatus, EvStatus> {
-        enum EStatus { 
-            StatusOk, 
-            StatusOutdated, 
-            StatusDead, 
-        }; 
- 
+        enum EStatus {
+            StatusOk,
+            StatusOutdated,
+            StatusDead,
+        };
+
         TEvStatus() {
-            Record.SetStatus(StatusOk); 
-        } 
- 
+            Record.SetStatus(StatusOk);
+        }
+
         TEvStatus(EStatus status) {
-            Record.SetStatus(status); 
-        } 
+            Record.SetStatus(status);
+        }
 
         TEvStatus(EStatus status, ui64 inbootTablets, ui64 onlineTablets, ui64 deadTablets) {
             Record.SetStatus(status);
@@ -149,64 +149,64 @@ struct TEvLocal {
             Record.SetOnlineTablets(onlineTablets);
             Record.SetDeadTablets(deadTablets);
         }
-    }; 
- 
+    };
+
     struct TEvBootTablet : public TEventPB<TEvBootTablet, NKikimrLocal::TEvBootTablet, EvBootTablet> {
-        TEvBootTablet() 
-        {} 
- 
+        TEvBootTablet()
+        {}
+
         TEvBootTablet(const TTabletStorageInfo &info, ui32 followerId, ui32 suggestedGeneration) {
-            TabletStorageInfoToProto(info, Record.MutableInfo()); 
-            Record.SetSuggestedGeneration(suggestedGeneration); 
+            TabletStorageInfoToProto(info, Record.MutableInfo());
+            Record.SetSuggestedGeneration(suggestedGeneration);
             Record.SetBootMode(NKikimrLocal::BOOT_MODE_LEADER);
             Record.SetFollowerId(followerId);
-        } 
+        }
 
         TEvBootTablet(const TTabletStorageInfo &info, ui32 followerId) {
             TabletStorageInfoToProto(info, Record.MutableInfo());
             Record.SetBootMode(NKikimrLocal::BOOT_MODE_FOLLOWER);
             Record.SetFollowerId(followerId);
         }
-    }; 
- 
-    struct TEvStopTablet : public TEventPB<TEvStopTablet, NKikimrLocal::TEvStopTablet, EvStopTablet> { 
-        TEvStopTablet() 
-        {} 
- 
+    };
+
+    struct TEvStopTablet : public TEventPB<TEvStopTablet, NKikimrLocal::TEvStopTablet, EvStopTablet> {
+        TEvStopTablet()
+        {}
+
         TEvStopTablet(std::pair<ui64, ui32> tabletId)
-        { 
+        {
             Record.SetTabletId(tabletId.first);
             Record.SetFollowerId(tabletId.second);
-        } 
-    }; 
- 
-    struct TEvDeadTabletAck : public TEventPB<TEvDeadTabletAck, NKikimrLocal::TEvDeadTabletAck, EvDeadTabletAck> { 
-        TEvDeadTabletAck() 
-        {} 
- 
+        }
+    };
+
+    struct TEvDeadTabletAck : public TEventPB<TEvDeadTabletAck, NKikimrLocal::TEvDeadTabletAck, EvDeadTabletAck> {
+        TEvDeadTabletAck()
+        {}
+
         TEvDeadTabletAck(std::pair<ui64, ui32> tabletId, ui32 generation)
-        { 
+        {
             Record.SetTabletId(tabletId.first);
             Record.SetFollowerId(tabletId.second);
-            Record.SetGeneration(generation); 
-        } 
-    }; 
- 
+            Record.SetGeneration(generation);
+        }
+    };
+
     struct TEvTabletStatus : public TEventPB<TEvTabletStatus, NKikimrLocal::TEvTabletStatus, EvTabletStatus> {
-        enum EStatus { 
-            StatusOk, 
-            StatusBootFailed, 
-            StatusTypeUnknown, 
-            StatusBSBootError, 
-            StatusBSWriteError, 
-            StatusFailed, 
-            StatusBootQueueUnknown, 
+        enum EStatus {
+            StatusOk,
+            StatusBootFailed,
+            StatusTypeUnknown,
+            StatusBSBootError,
+            StatusBSWriteError,
+            StatusFailed,
+            StatusBootQueueUnknown,
             StatusSupersededByLeader,
-        }; 
- 
-        TEvTabletStatus() 
-        {} 
- 
+        };
+
+        TEvTabletStatus()
+        {}
+
         TEvTabletStatus(EStatus status, TEvTablet::TEvTabletDead::EReason reason, std::pair<ui64, ui32> tabletId, ui32 generation) {
             Record.SetStatus(status);
             Record.SetReason(reason);
@@ -216,12 +216,12 @@ struct TEvLocal {
         }
 
         TEvTabletStatus(EStatus status, std::pair<ui64, ui32> tabletId, ui32 generation) {
-            Record.SetStatus(status); 
+            Record.SetStatus(status);
             Record.SetTabletID(tabletId.first);
             Record.SetFollowerId(tabletId.second);
-            Record.SetGeneration(generation); 
-        } 
-    }; 
+            Record.SetGeneration(generation);
+        }
+    };
 
 
     struct TEvEnumerateTablets : public TEventPB<TEvEnumerateTablets, NKikimrLocal::TEvEnumerateTablets, EvEnumerateTablets> {
@@ -261,23 +261,23 @@ struct TEvLocal {
 
     struct TEvTabletMetricsAck : public TEventPB<TEvTabletMetricsAck, NKikimrLocal::TEvTabletMetricsAck, EvTabletMetricsAck> {
     };
- 
+
     struct TEvAddTenant : public TEventLocal<TEvAddTenant, EvAddTenant> {
         TRegistrationInfo TenantInfo;
- 
+
         TEvAddTenant(const TString &domainName)
             : TenantInfo(domainName)
         {}
- 
+
         TEvAddTenant(const TString &domainName, NKikimrTabletBase::TMetrics resourceLimit)
             : TenantInfo(domainName, resourceLimit)
-        {} 
- 
+        {}
+
         TEvAddTenant(const TRegistrationInfo &info)
             : TenantInfo(info)
-        {} 
-    }; 
- 
+        {}
+    };
+
     struct TEvRemoveTenant : public TEventLocal<TEvRemoveTenant, EvRemoveTenant> {
         TString TenantName;
 
@@ -365,10 +365,10 @@ struct TLocalConfig : public TThrRefBase {
     };
 
     TMap<TTabletTypes::EType, TTabletClassInfo> TabletClassInfo;
-}; 
- 
-IActor* CreateLocal(TLocalConfig *config); 
- 
+};
+
+IActor* CreateLocal(TLocalConfig *config);
+
 inline TActorId MakeLocalID(ui32 node) {
     char x[12] = { 'l', 'o', 'c', 'l'};
     x[4] = (char)(node & 0xFF);
@@ -380,8 +380,8 @@ inline TActorId MakeLocalID(ui32 node) {
     x[10] = 0;
     x[11] = 0;
     return TActorId(node, TStringBuf(x, 12));
-} 
- 
+}
+
 inline TActorId MakeLocalRegistrarID(ui32 node, ui64 hiveId) {
     char x[12] = { 'l', 'o', 'c', 'l'};
     x[4] = (char)(node & 0xFF);
@@ -393,6 +393,6 @@ inline TActorId MakeLocalRegistrarID(ui32 node, ui64 hiveId) {
     x[10] = (char)(((hiveId >> 16) & 0xFF) ^ ((hiveId >> 48) & 0xFF));
     x[11] = (char)(((hiveId >> 24) & 0xFF) ^ ((hiveId >> 56) & 0xFF));
     return TActorId(node, TStringBuf(x, 12));
-} 
+}
 
 }

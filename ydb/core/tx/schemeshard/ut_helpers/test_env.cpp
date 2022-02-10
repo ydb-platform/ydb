@@ -624,7 +624,7 @@ void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAp
     ui32 planResolution = 50;
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
                 "MyRoot", domainUid, schemeRoot,
-                ssId, ssId, TVector<ui32>{ssId}, 
+                ssId, ssId, TVector<ui32>{ssId},
                 domainUid, TVector<ui32>{domainUid},
                 planResolution,
                 TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainUid, 1)},

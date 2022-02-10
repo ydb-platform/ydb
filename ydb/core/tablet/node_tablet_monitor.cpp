@@ -454,7 +454,7 @@ private:
             } else if (actionParam == "kill_tablet") {
                 if (cgi.Has("tablet_id")) {
                     ui64 tabletId = FromStringWithDefault<ui64>(cgi.Get("tablet_id"));
-                    ctx.Register(CreateTabletKiller(tabletId)); 
+                    ctx.Register(CreateTabletKiller(tabletId));
                     if (cgi.Has("filter_node_id"))
                         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("<meta http-equiv=\"refresh\" content=\"0; nodetabmon?action=browse_tablets&node_id=" + cgi.Get("filter_node_id") + "\" />"));
                     else

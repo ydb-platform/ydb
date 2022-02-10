@@ -493,8 +493,8 @@ public:
 
 private:
     struct TPopulatorInfo {
-        ui64 Generation = 0; 
-        ui64 PendingGeneration = 0; 
+        ui64 Generation = 0;
+        ui64 PendingGeneration = 0;
         TActorId PopulatorActor;
 
         bool IsCommited() const {
@@ -776,8 +776,8 @@ private:
             << ", generation# " << generation);
 
         info.PendingGeneration = generation;
-        info.PopulatorActor = ev->Sender; 
- 
+        info.PopulatorActor = ev->Sender;
+
         Send(ev->Sender, new TSchemeBoardEvents::TEvHandshakeResponse(owner, info.Generation), 0, ev->Cookie);
     }
 
@@ -1284,19 +1284,19 @@ private:
         Send(MakeInterconnectProxyId(nodeId), new TEvents::TEvUnsubscribe());
     }
 
-    void PassAway() override { 
-        for (auto &xpair : Populators) { 
+    void PassAway() override {
+        for (auto &xpair : Populators) {
             if (const TActorId populator = xpair.second.PopulatorActor) {
-                Send(populator, new TEvStateStorage::TEvReplicaShutdown()); 
-            } 
-        } 
- 
-        for (auto &xpair : Subscribers) { 
-            Send(xpair.first, new TEvStateStorage::TEvReplicaShutdown()); 
-        } 
- 
+                Send(populator, new TEvStateStorage::TEvReplicaShutdown());
+            }
+        }
+
+        for (auto &xpair : Subscribers) {
+            Send(xpair.first, new TEvStateStorage::TEvReplicaShutdown());
+        }
+
         TMonitorableActor::PassAway();
-    } 
+    }
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1308,7 +1308,7 @@ public:
         Become(&TThis::StateWork);
     }
 
-    STATEFN(StateWork) { 
+    STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TSchemeBoardEvents::TEvHandshakeRequest, Handle);
             hFunc(TSchemeBoardEvents::TEvUpdate, Handle);
@@ -1322,7 +1322,7 @@ public:
             hFunc(TSchemeBoardMonEvents::TEvDescribeRequest, Handle);
 
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
-            cFunc(TEvents::TEvPoison::EventType, PassAway); 
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
         }
     }
 

@@ -193,7 +193,7 @@ namespace NTls {
 
             T* Construct(void* ptr) const override {
                 //memset(ptr, 0, sizeof(T));
-                return ::new (ptr) T(); 
+                return ::new (ptr) T();
             }
         };
 
@@ -208,7 +208,7 @@ namespace NTls {
             ~TCopyConstructor() override = default;
 
             T* Construct(void* ptr) const override {
-                return ::new (ptr) T(Value); 
+                return ::new (ptr) T(Value);
             }
 
         private:

@@ -24,9 +24,9 @@ TCompactionPolicy::TBackgroundPolicy::TBackgroundPolicy(ui32 threshold,
 {}
 
 TCompactionPolicy::TBackgroundPolicy::TBackgroundPolicy(const NKikimrSchemeOp::TCompactionPolicy::TBackgroundPolicy &policyPb)
-    : Threshold(policyPb.HasThreshold() ? policyPb.GetThreshold() : 101) 
-    , PriorityBase(policyPb.HasPriorityBase() ? policyPb.GetPriorityBase() : 100) 
-    , TimeFactor(policyPb.HasTimeFactor() ? policyPb.GetTimeFactor() : 1.0) 
+    : Threshold(policyPb.HasThreshold() ? policyPb.GetThreshold() : 101)
+    , PriorityBase(policyPb.HasPriorityBase() ? policyPb.GetPriorityBase() : 100)
+    , TimeFactor(policyPb.HasTimeFactor() ? policyPb.GetTimeFactor() : 1.0)
     , ResourceBrokerTask(policyPb.HasResourceBrokerTask() ? policyPb.GetResourceBrokerTask() : BackgroundCompactionTaskName)
 {}
 
@@ -61,14 +61,14 @@ TCompactionPolicy::TGenerationPolicy::TGenerationPolicy(ui64 sizeToCompact,
 {}
 
 TCompactionPolicy::TGenerationPolicy::TGenerationPolicy(const NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy &policyPb)
-    : SizeToCompact(policyPb.HasSizeToCompact() ? policyPb.GetSizeToCompact() : 0) 
-    , CountToCompact(policyPb.HasCountToCompact() ? policyPb.GetCountToCompact() : 5) 
-    , ForceCountToCompact(policyPb.HasForceCountToCompact() ? policyPb.GetForceCountToCompact() : 8) 
-    , ForceSizeToCompact(policyPb.HasForceSizeToCompact() ? policyPb.GetForceSizeToCompact() : 0) 
-    , CompactionBrokerQueue(policyPb.HasCompactionBrokerQueue() ? policyPb.GetCompactionBrokerQueue() : 1) 
-    , ResourceBrokerTask(policyPb.HasResourceBrokerTask() ? policyPb.GetResourceBrokerTask() : TString()) 
-    , KeepInCache(policyPb.HasKeepInCache() ? policyPb.GetKeepInCache() : false) 
-    , BackgroundCompactionPolicy(policyPb.HasBackgroundCompactionPolicy() ? policyPb.GetBackgroundCompactionPolicy() : TBackgroundPolicy()) 
+    : SizeToCompact(policyPb.HasSizeToCompact() ? policyPb.GetSizeToCompact() : 0)
+    , CountToCompact(policyPb.HasCountToCompact() ? policyPb.GetCountToCompact() : 5)
+    , ForceCountToCompact(policyPb.HasForceCountToCompact() ? policyPb.GetForceCountToCompact() : 8)
+    , ForceSizeToCompact(policyPb.HasForceSizeToCompact() ? policyPb.GetForceSizeToCompact() : 0)
+    , CompactionBrokerQueue(policyPb.HasCompactionBrokerQueue() ? policyPb.GetCompactionBrokerQueue() : 1)
+    , ResourceBrokerTask(policyPb.HasResourceBrokerTask() ? policyPb.GetResourceBrokerTask() : TString())
+    , KeepInCache(policyPb.HasKeepInCache() ? policyPb.GetKeepInCache() : false)
+    , BackgroundCompactionPolicy(policyPb.HasBackgroundCompactionPolicy() ? policyPb.GetBackgroundCompactionPolicy() : TBackgroundPolicy())
     , ExtraCompactionPercent(policyPb.HasExtraCompactionPercent() ? policyPb.GetExtraCompactionPercent() : 10)
     , ExtraCompactionExpPercent(policyPb.HasExtraCompactionExpPercent() ? policyPb.GetExtraCompactionExpPercent() : 110)
     , ExtraCompactionMinSize(policyPb.HasExtraCompactionMinSize() ? policyPb.GetExtraCompactionMinSize() : 16384)
@@ -96,10 +96,10 @@ void TCompactionPolicy::TGenerationPolicy::Serialize(NKikimrSchemeOp::TCompactio
     policyPb.SetUpliftPartSize(UpliftPartSize);
 }
 
-TCompactionPolicy::TCompactionPolicy() 
+TCompactionPolicy::TCompactionPolicy()
     : InMemSizeToSnapshot(4 * 1024 * 1024)
-    , InMemStepsToSnapshot(300) 
-    , InMemForceStepsToSnapshot(500) 
+    , InMemStepsToSnapshot(300)
+    , InMemForceStepsToSnapshot(500)
     , InMemForceSizeToSnapshot(16 * 1024 * 1024)
     , InMemCompactionBrokerQueue(0)
     , InMemResourceBrokerTask(LegacyQueueIdToTaskName(0))
@@ -120,27 +120,27 @@ TCompactionPolicy::TCompactionPolicy()
 {}
 
 TCompactionPolicy::TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& policyPb)
-    : InMemSizeToSnapshot(policyPb.HasInMemSizeToSnapshot() ? policyPb.GetInMemSizeToSnapshot() : 4 * 1024 * 1024) 
-    , InMemStepsToSnapshot(policyPb.HasInMemStepsToSnapshot() ? policyPb.GetInMemStepsToSnapshot() : 300) 
-    , InMemForceStepsToSnapshot(policyPb.HasInMemForceStepsToSnapshot() ? policyPb.GetInMemForceStepsToSnapshot() : 500) 
-    , InMemForceSizeToSnapshot(policyPb.HasInMemForceSizeToSnapshot() ? policyPb.GetInMemForceSizeToSnapshot() : 16 * 1024 * 1024) 
-    , InMemCompactionBrokerQueue(policyPb.HasInMemCompactionBrokerQueue() ? policyPb.GetInMemCompactionBrokerQueue() : 0) 
-    , InMemResourceBrokerTask(policyPb.HasInMemResourceBrokerTask() ? policyPb.GetInMemResourceBrokerTask() : LegacyQueueIdToTaskName(0)) 
-    , ReadAheadHiThreshold(policyPb.HasReadAheadHiThreshold() ? policyPb.GetReadAheadHiThreshold() : 64 * 1024 * 1024) 
-    , ReadAheadLoThreshold(policyPb.HasReadAheadLoThreshold() ? policyPb.GetReadAheadLoThreshold() : 16 * 1024 * 1024) 
-    , MinDataPageSize(policyPb.HasMinDataPageSize() ? policyPb.GetMinDataPageSize() : 7 * 1024) 
-    , SnapshotCompactionBrokerQueue(policyPb.HasSnapBrokerQueue() ? policyPb.GetSnapBrokerQueue() : 0) 
-    , SnapshotResourceBrokerTask(policyPb.HasSnapshotResourceBrokerTask() ? policyPb.GetSnapshotResourceBrokerTask() : LegacyQueueIdToTaskName(0)) 
-    , BackupCompactionBrokerQueue(policyPb.HasBackupBrokerQueue() ? policyPb.GetBackupBrokerQueue() : 1) 
+    : InMemSizeToSnapshot(policyPb.HasInMemSizeToSnapshot() ? policyPb.GetInMemSizeToSnapshot() : 4 * 1024 * 1024)
+    , InMemStepsToSnapshot(policyPb.HasInMemStepsToSnapshot() ? policyPb.GetInMemStepsToSnapshot() : 300)
+    , InMemForceStepsToSnapshot(policyPb.HasInMemForceStepsToSnapshot() ? policyPb.GetInMemForceStepsToSnapshot() : 500)
+    , InMemForceSizeToSnapshot(policyPb.HasInMemForceSizeToSnapshot() ? policyPb.GetInMemForceSizeToSnapshot() : 16 * 1024 * 1024)
+    , InMemCompactionBrokerQueue(policyPb.HasInMemCompactionBrokerQueue() ? policyPb.GetInMemCompactionBrokerQueue() : 0)
+    , InMemResourceBrokerTask(policyPb.HasInMemResourceBrokerTask() ? policyPb.GetInMemResourceBrokerTask() : LegacyQueueIdToTaskName(0))
+    , ReadAheadHiThreshold(policyPb.HasReadAheadHiThreshold() ? policyPb.GetReadAheadHiThreshold() : 64 * 1024 * 1024)
+    , ReadAheadLoThreshold(policyPb.HasReadAheadLoThreshold() ? policyPb.GetReadAheadLoThreshold() : 16 * 1024 * 1024)
+    , MinDataPageSize(policyPb.HasMinDataPageSize() ? policyPb.GetMinDataPageSize() : 7 * 1024)
+    , SnapshotCompactionBrokerQueue(policyPb.HasSnapBrokerQueue() ? policyPb.GetSnapBrokerQueue() : 0)
+    , SnapshotResourceBrokerTask(policyPb.HasSnapshotResourceBrokerTask() ? policyPb.GetSnapshotResourceBrokerTask() : LegacyQueueIdToTaskName(0))
+    , BackupCompactionBrokerQueue(policyPb.HasBackupBrokerQueue() ? policyPb.GetBackupBrokerQueue() : 1)
     , BackupResourceBrokerTask(policyPb.HasBackupResourceBrokerTask() ? policyPb.GetBackupResourceBrokerTask() : ScanTaskName)
-    , DefaultTaskPriority(policyPb.HasDefaultTaskPriority() ? policyPb.GetDefaultTaskPriority() : 5) 
-    , BackgroundSnapshotPolicy(policyPb.HasBackgroundSnapshotPolicy() ? policyPb.GetBackgroundSnapshotPolicy() : TBackgroundPolicy()) 
+    , DefaultTaskPriority(policyPb.HasDefaultTaskPriority() ? policyPb.GetDefaultTaskPriority() : 5)
+    , BackgroundSnapshotPolicy(policyPb.HasBackgroundSnapshotPolicy() ? policyPb.GetBackgroundSnapshotPolicy() : TBackgroundPolicy())
     , LogOverheadSizeToSnapshot(policyPb.HasLogOverheadSizeToSnapshot() ? policyPb.GetLogOverheadSizeToSnapshot() : 16 * 1024 * 1024)
     , LogOverheadCountToSnapshot(policyPb.HasLogOverheadCountToSnapshot() ? policyPb.GetLogOverheadCountToSnapshot() : 500)
     , DroppedRowsPercentToCompact(policyPb.HasDroppedRowsPercentToCompact() ? policyPb.GetDroppedRowsPercentToCompact() : 50)
     , CompactionStrategy(policyPb.GetCompactionStrategy())
     , KeepEraseMarkers(policyPb.HasKeepEraseMarkers() ? policyPb.GetKeepEraseMarkers() : false)
-{ 
+{
     if (!InMemResourceBrokerTask)
         InMemResourceBrokerTask = LegacyQueueIdToTaskName(InMemCompactionBrokerQueue);
     if (!SnapshotResourceBrokerTask)
@@ -156,8 +156,8 @@ TCompactionPolicy::TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& p
     if (policyPb.HasShardPolicy()) {
         ShardPolicy.CopyFrom(policyPb.GetShardPolicy());
     }
-} 
- 
+}
+
 void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) const {
     policyPb.SetInMemSizeToSnapshot(InMemSizeToSnapshot);
     policyPb.SetInMemStepsToSnapshot(InMemStepsToSnapshot);
@@ -186,7 +186,7 @@ void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) 
     if (ShardPolicy.ByteSizeLong() > 0) {
         policyPb.MutableShardPolicy()->CopyFrom(ShardPolicy);
     }
- 
+
     for (ui32 i = 0; i < Generations.size(); ++i) {
         auto &g = *policyPb.AddGeneration();
         g.SetGenerationId(i);

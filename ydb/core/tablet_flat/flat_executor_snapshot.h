@@ -53,7 +53,7 @@ namespace NTabletFlatExecutor {
         {
             Get(table, EReady::Done);
             Holds.Step = Min(Holds.Step, step);
-            Holds.Bundles[bundle].insert(loaner); 
+            Holds.Bundles[bundle].insert(loaner);
         }
 
         void Moved(ui32 src, ui32 dst)

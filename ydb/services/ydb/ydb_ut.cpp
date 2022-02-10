@@ -3323,7 +3323,7 @@ void InitConfigs(TKikimrWithGrpcAndRootSchema &server) {
         STORAGE_CONFIG1.MutableLog()->SetPreferredPoolKind("hdd");
         STORAGE_CONFIG1.MutableData()->SetPreferredPoolKind("hdd");
         STORAGE_CONFIG1.MutableExternal()->SetPreferredPoolKind("hdd");
-        STORAGE_CONFIG1.SetExternalThreshold(Max<ui32>()); 
+        STORAGE_CONFIG1.SetExternalThreshold(Max<ui32>());
     }
 
     {
@@ -4616,7 +4616,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
                                {TString("log"), TString("hdd")},
                                {TString("data"), TString("hdd")},
                                {TString("external"), TString("hdd")},
-                               {TString("external_threshold"), ToString(Max<ui32>())}, 
+                               {TString("external_threshold"), ToString(Max<ui32>())},
                                {TString("codec"), TString("lz4")},
                                {TString("in_memory"), TString("false")} }});
             } else {

@@ -118,7 +118,7 @@ protected:
             return;
         }
 
-        // storage entry must be kept by other index, we clean only one 
+        // storage entry must be kept by other index, we clean only one
         Y_VERIFY(AnotherIndexIterator(pIt) != sIndex.end());
 
         IndexIterator(pIt) = pIndex.end();

@@ -13,7 +13,7 @@ namespace NKikimr {
 namespace NSchemeBoard {
 
 TActorId MakeInterconnectProxyId(const ui32 nodeId) {
-    return TActivationContext::InterconnectProxy(nodeId); 
+    return TActivationContext::InterconnectProxy(nodeId);
 }
 
 ui64 GetPathVersion(const NKikimrScheme::TEvDescribeSchemeResult& record) {

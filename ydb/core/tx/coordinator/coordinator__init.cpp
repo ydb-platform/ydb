@@ -135,7 +135,7 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
     }
 };
 
-ITransaction* TTxCoordinator::CreateTxInit() { 
+ITransaction* TTxCoordinator::CreateTxInit() {
     return new TTxCoordinator::TTxInit(this);
 }
 

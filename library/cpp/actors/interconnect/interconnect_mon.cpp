@@ -20,10 +20,10 @@ namespace NInterconnect {
             ui32 PendingReplies = 0;
 
         public:
-            static constexpr IActor::EActorActivity ActorActivityType() { 
-                return INTERCONNECT_MONACTOR; 
-            } 
- 
+            static constexpr IActor::EActorActivity ActorActivityType() {
+                return INTERCONNECT_MONACTOR;
+            }
+
             TQueryProcessor(const TActorId& sender, bool json)
                 : Sender(sender)
                 , Json(json)
@@ -186,10 +186,10 @@ namespace NInterconnect {
         TIntrusivePtr<TInterconnectProxyCommon> Common;
 
     public:
-        static constexpr IActor::EActorActivity ActorActivityType() { 
-            return INTERCONNECT_MONACTOR; 
-        } 
- 
+        static constexpr IActor::EActorActivity ActorActivityType() {
+            return INTERCONNECT_MONACTOR;
+        }
+
         TInterconnectMonActor(TIntrusivePtr<TInterconnectProxyCommon> common)
             : TActor(&TThis::StateFunc)
             , Common(std::move(common))

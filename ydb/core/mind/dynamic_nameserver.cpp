@@ -9,7 +9,7 @@ namespace NNodeBroker {
 
 static void ResetInterconnectProxyConfig(ui32 nodeId, const TActorContext &ctx)
 {
-    auto aid = TActivationContext::InterconnectProxy(nodeId); 
+    auto aid = TActivationContext::InterconnectProxy(nodeId);
     if (!aid)
         return;
     ctx.Send(aid, new TEvInterconnect::TEvDisconnect);
@@ -30,9 +30,9 @@ void TDynamicNodeResolverBase::Bootstrap(const TActorContext &ctx)
         .MinRetryTime = TDuration::MilliSeconds(50),
         .MaxRetryTime = TDuration::Seconds(2)
     };
- 
+
     ui32 group = dinfo->GetDefaultStateStorageGroup(domain);
-    auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(group), NTabletPipe::TClientConfig(retryPolicy)); 
+    auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(group), NTabletPipe::TClientConfig(retryPolicy));
     NodeBrokerPipe = ctx.RegisterWithSameMailbox(pipe);
 
     TAutoPtr<TEvNodeBroker::TEvResolveNode> request = new TEvNodeBroker::TEvResolveNode;

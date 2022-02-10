@@ -506,8 +506,8 @@ public:
                 {
                     tablet.TabletStorageInfo.Reset(new TTabletStorageInfo(tabletId, tablet.Type));
                     tablet.TabletStorageInfo->Version = tabletRowset.GetValueOrDefault<Schema::Tablet::TabletStorageVersion>();
-                    tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant(); 
- 
+                    tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant();
+
                     auto tabletChannelRowset = db.Table<Schema::TabletChannel>().Range(tabletId).Select();
                     if (!tabletChannelRowset.IsReady())
                         return false;
@@ -643,7 +643,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateLoadEverything() { 
+ITransaction* THive::CreateLoadEverything() {
     return new TTxLoadEverything(this);
 }
 

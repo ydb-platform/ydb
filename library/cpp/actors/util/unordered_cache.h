@@ -1,22 +1,22 @@
-#pragma once 
- 
-#include "defs.h" 
+#pragma once
+
+#include "defs.h"
 #include "queue_chunk.h"
- 
+
 template <typename T, ui32 Size = 512, ui32 ConcurrencyFactor = 1, typename TChunk = TQueueChunk<T, Size>>
-class TUnorderedCache : TNonCopyable { 
+class TUnorderedCache : TNonCopyable {
     static_assert(std::is_integral<T>::value || std::is_pointer<T>::value, "expect std::is_integral<T>::value || std::is_pointer<T>::value");
- 
-public: 
+
+public:
     static constexpr ui32 Concurrency = ConcurrencyFactor * 4;
- 
-private: 
+
+private:
     struct TReadSlot {
         TChunk* volatile ReadFrom;
         volatile ui32 ReadPosition;
         char Padding[64 - sizeof(TChunk*) - sizeof(ui32)]; // 1 slot per cache line
     };
- 
+
     struct TWriteSlot {
         TChunk* volatile WriteTo;
         volatile ui32 WritePosition;
@@ -31,7 +31,7 @@ private:
     TWriteSlot WriteSlots[Concurrency];
 
     static_assert(sizeof(TChunk*) == sizeof(TAtomic), "expect sizeof(TChunk*) == sizeof(TAtomic)");
- 
+
 private:
     struct TLockedWriter {
         TWriteSlot* Slot;
@@ -82,53 +82,53 @@ private:
 private:
     TLockedWriter LockWriter(ui64 writerRotation) {
         ui32 cycle = 0;
-        for (;;) { 
+        for (;;) {
             TWriteSlot* slot = &WriteSlots[writerRotation % Concurrency];
             if (AtomicLoad(&slot->WriteTo) != nullptr) {
                 if (TChunk* writeTo = AtomicSwap(&slot->WriteTo, nullptr)) {
                     return TLockedWriter(slot, writeTo);
-                } 
-            } 
+                }
+            }
             ++writerRotation;
- 
+
             // Do a spinlock pause after a full cycle
             if (++cycle == Concurrency) {
                 SpinLockPause();
                 cycle = 0;
             }
         }
-    } 
- 
+    }
+
     void WriteOne(TLockedWriter& lock, T x) {
         Y_VERIFY_DEBUG(x != 0);
- 
+
         const ui32 pos = AtomicLoad(&lock.Slot->WritePosition);
-        if (pos != TChunk::EntriesCount) { 
+        if (pos != TChunk::EntriesCount) {
             AtomicStore(&lock.Slot->WritePosition, pos + 1);
             AtomicStore(&lock.WriteTo->Entries[pos], x);
-        } else { 
+        } else {
             TChunk* next = new TChunk();
-            AtomicStore(&next->Entries[0], x); 
+            AtomicStore(&next->Entries[0], x);
             AtomicStore(&lock.Slot->WritePosition, 1u);
             AtomicStore(&lock.WriteTo->Next, next);
             lock.WriteTo = next;
-        } 
-    } 
- 
-public: 
+        }
+    }
+
+public:
     TUnorderedCache() {
         for (ui32 i = 0; i < Concurrency; ++i) {
             ReadSlots[i].ReadFrom = new TChunk();
             ReadSlots[i].ReadPosition = 0;
- 
+
             WriteSlots[i].WriteTo = ReadSlots[i].ReadFrom;
             WriteSlots[i].WritePosition = 0;
-        } 
-    } 
- 
+        }
+    }
+
     ~TUnorderedCache() {
         Y_VERIFY(!Pop(0));
- 
+
         for (ui64 i = 0; i < Concurrency; ++i) {
             if (ReadSlots[i].ReadFrom) {
                 delete ReadSlots[i].ReadFrom;
@@ -139,63 +139,63 @@ public:
     }
 
     T Pop(ui64 readerRotation) noexcept {
-        ui64 readerIndex = readerRotation; 
-        const ui64 endIndex = readerIndex + Concurrency; 
-        for (; readerIndex != endIndex; ++readerIndex) { 
+        ui64 readerIndex = readerRotation;
+        const ui64 endIndex = readerIndex + Concurrency;
+        for (; readerIndex != endIndex; ++readerIndex) {
             TReadSlot* slot = &ReadSlots[readerIndex % Concurrency];
             if (AtomicLoad(&slot->ReadFrom) != nullptr) {
                 if (TChunk* readFrom = AtomicSwap(&slot->ReadFrom, nullptr)) {
                     const ui32 pos = AtomicLoad(&slot->ReadPosition);
-                    if (pos != TChunk::EntriesCount) { 
-                        if (T ret = AtomicLoad(&readFrom->Entries[pos])) { 
+                    if (pos != TChunk::EntriesCount) {
+                        if (T ret = AtomicLoad(&readFrom->Entries[pos])) {
                             AtomicStore(&slot->ReadPosition, pos + 1);
                             AtomicStore(&slot->ReadFrom, readFrom); // release lock with same chunk
                             return ret;                             // found, return
-                        } else { 
+                        } else {
                             AtomicStore(&slot->ReadFrom, readFrom); // release lock with same chunk
-                        } 
-                    } else if (TChunk* next = AtomicLoad(&readFrom->Next)) { 
-                        if (T ret = AtomicLoad(&next->Entries[0])) { 
+                        }
+                    } else if (TChunk* next = AtomicLoad(&readFrom->Next)) {
+                        if (T ret = AtomicLoad(&next->Entries[0])) {
                             AtomicStore(&slot->ReadPosition, 1u);
                             AtomicStore(&slot->ReadFrom, next); // release lock with next chunk
-                            delete readFrom; 
-                            return ret; 
-                        } else { 
+                            delete readFrom;
+                            return ret;
+                        } else {
                             AtomicStore(&slot->ReadPosition, 0u);
                             AtomicStore(&slot->ReadFrom, next); // release lock with new chunk
-                            delete readFrom; 
-                        } 
-                    } else { 
+                            delete readFrom;
+                        }
+                    } else {
                         // nothing in old chunk and no next chunk, just release lock with old chunk
                         AtomicStore(&slot->ReadFrom, readFrom);
-                    } 
-                } 
-            } 
-        } 
- 
-        return 0; // got nothing after full cycle, return 
-    } 
- 
-    void Push(T x, ui64 writerRotation) { 
+                    }
+                }
+            }
+        }
+
+        return 0; // got nothing after full cycle, return
+    }
+
+    void Push(T x, ui64 writerRotation) {
         TLockedWriter lock = LockWriter(writerRotation);
         WriteOne(lock, x);
-    } 
- 
-    void PushBulk(T* x, ui32 xcount, ui64 writerRotation) { 
+    }
+
+    void PushBulk(T* x, ui32 xcount, ui64 writerRotation) {
         for (;;) {
             // Fill no more then one queue chunk per round
-            const ui32 xround = Min(xcount, (ui32)TChunk::EntriesCount); 
- 
+            const ui32 xround = Min(xcount, (ui32)TChunk::EntriesCount);
+
             {
                 TLockedWriter lock = LockWriter(writerRotation++);
                 for (T* end = x + xround; x != end; ++x)
                     WriteOne(lock, *x);
             }
- 
-            if (xcount <= TChunk::EntriesCount) 
-                break; 
- 
-            xcount -= TChunk::EntriesCount; 
-        } 
-    } 
-}; 
+
+            if (xcount <= TChunk::EntriesCount)
+                break;
+
+            xcount -= TChunk::EntriesCount;
+        }
+    }
+};

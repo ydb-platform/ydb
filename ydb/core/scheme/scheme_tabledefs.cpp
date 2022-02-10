@@ -1,15 +1,15 @@
-#include "scheme_tabledefs.h" 
- 
-namespace NKikimr { 
- 
+#include "scheme_tabledefs.h"
+
+namespace NKikimr {
+
 bool TTableRange::IsEmptyRange(TConstArrayRef<const NScheme::TTypeId> cellTypeIds) const {
-    if (Point) 
-        return false; 
- 
+    if (Point)
+        return false;
+
     const int compares = CompareBorders<true, false>(To, From, InclusiveTo, InclusiveFrom, cellTypeIds);
-    return (compares < 0); 
-} 
- 
+    return (compares < 0);
+}
+
 bool TSerializedTableRange::IsEmpty(TConstArrayRef<NScheme::TTypeId> type) const
 {
     auto cmp = CompareBorders<true, false>(To.GetCells(), From.GetCells(), ToInclusive, FromInclusive, type);
@@ -17,19 +17,19 @@ bool TSerializedTableRange::IsEmpty(TConstArrayRef<NScheme::TTypeId> type) const
 }
 
 void TKeyDesc::Out(IOutputStream& o, TKeyDesc::EStatus x) {
-#define KEYDESCRIPTION_STATUS_TO_STRING_IMPL(name, ...) \ 
-    case EStatus::name: \ 
-        o << #name; \ 
-        return; 
- 
-    switch (x) { 
-        SCHEME_KEY_DESCRIPTION_STATUS_MAP(KEYDESCRIPTION_STATUS_TO_STRING_IMPL) 
-    default: 
-        o << static_cast<int>(x); 
-        return; 
-    } 
-} 
- 
+#define KEYDESCRIPTION_STATUS_TO_STRING_IMPL(name, ...) \
+    case EStatus::name: \
+        o << #name; \
+        return;
+
+    switch (x) {
+        SCHEME_KEY_DESCRIPTION_STATUS_MAP(KEYDESCRIPTION_STATUS_TO_STRING_IMPL)
+    default:
+        o << static_cast<int>(x);
+        return;
+    }
+}
+
 struct TSystemColumnsData {
     const TString PartitionColumnName = "_yql_partition_id";
 
@@ -45,7 +45,7 @@ bool IsSystemColumn(ui32 columnId) {
     default:
         return false;
     }
-} 
+}
 
 bool IsSystemColumn(const TStringBuf columnName) {
     return GetSystemColumns().FindPtr(columnName);

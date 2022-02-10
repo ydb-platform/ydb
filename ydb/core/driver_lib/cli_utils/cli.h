@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "cli_cmd_config.h"
 
@@ -7,7 +7,7 @@
 
 #include <library/cpp/actors/interconnect/poller_tcp.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
- 
+
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 #include <util/stream/file.h>
 #include <util/stream/format.h>
@@ -20,15 +20,15 @@
 #include <google/protobuf/text_format.h>
 
 namespace NKikimr {
- 
+
 namespace NDriverClient {
 
     void DumpProxyErrorCodes(IOutputStream &o, const NKikimrClient::TResponse &response);
     void DumpSchemeErrorCode(IOutputStream &o, const NKikimrClient::TResponse &response);
- 
-    int SchemeInitRoot(TCommandConfig &cmdConf, int argc, char** argv); 
-    int BSAdmCreateVSlots(TCommandConfig &cmdConf, int argc, char **argv); 
-    int BSAdmCreateGroup(TCommandConfig &cmdConf, int argc, char **argv); 
+
+    int SchemeInitRoot(TCommandConfig &cmdConf, int argc, char** argv);
+    int BSAdmCreateVSlots(TCommandConfig &cmdConf, int argc, char **argv);
+    int BSAdmCreateGroup(TCommandConfig &cmdConf, int argc, char **argv);
     int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv);
     int MessageBusTrace(TCommandConfig &cmdConf, int argc, char** argv);
     int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv);
@@ -36,10 +36,10 @@ namespace NDriverClient {
     int PersQueueStress(TCommandConfig &cmdConf, int argc, char **argv);
     int PersQueueDiscoverClustersRequest(TCommandConfig &cmdConf, int argc, char **argv);
     int LoadRequest(TCommandConfig &cmdConf, int argc, char **argv);
-    int ActorsysPerfTest(TCommandConfig &cmdConf, int argc, char **argv); 
+    int ActorsysPerfTest(TCommandConfig &cmdConf, int argc, char **argv);
     void HideOptions(NLastGetopt::TOpts& opts, const TString& prefix);
     void HideOptions(NLastGetopt::TOpts& opts);
     int NewClient(int argc, char** argv, std::shared_ptr<TModuleFactories> factories);
     TString NewClientCommandsDescription(std::shared_ptr<TModuleFactories> factories);
-} 
-} 
+}
+}

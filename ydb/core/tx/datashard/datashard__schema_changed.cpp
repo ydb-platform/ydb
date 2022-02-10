@@ -27,7 +27,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        NTabletPipe::CloseAndForgetClient(Self->SelfId(), Self->SchemeShardPipe); 
+        NTabletPipe::CloseAndForgetClient(Self->SelfId(), Self->SchemeShardPipe);
         Self->CheckStateChange(ctx);
     }
 

@@ -1,28 +1,28 @@
-#pragma once 
- 
-#include "defs.h" 
+#pragma once
+
+#include "defs.h"
 
 #include "actor.h"
 #include "balancer.h"
 #include "config.h"
-#include "event.h" 
+#include "event.h"
 #include "log_settings.h"
-#include "scheduler_cookie.h" 
+#include "scheduler_cookie.h"
 #include "mon_stats.h"
 
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/actors/util/ticket_lock.h>
 
-#include <util/generic/vector.h> 
-#include <util/datetime/base.h> 
+#include <util/generic/vector.h>
+#include <util/datetime/base.h>
 #include <util/system/mutex.h>
- 
-namespace NActors { 
-    class TActorSystem; 
+
+namespace NActors {
+    class TActorSystem;
     class TCpuManager;
-    class IExecutorPool; 
+    class IExecutorPool;
     struct TWorkerContext;
- 
+
     inline TActorId MakeInterconnectProxyId(ui32 destNodeId) {
         char data[12];
         memcpy(data, "ICProxy@", 8);
@@ -40,32 +40,32 @@ namespace NActors {
         return nodeId;
     }
 
-    namespace NSchedulerQueue { 
-        class TReader; 
+    namespace NSchedulerQueue {
+        class TReader;
         struct TQueueType;
-    } 
- 
-    class IExecutorPool : TNonCopyable { 
-    public: 
-        const ui32 PoolId; 
- 
-        TAtomic ActorRegistrations; 
-        TAtomic DestroyedActors; 
- 
-        IExecutorPool(ui32 poolId) 
-            : PoolId(poolId) 
-            , ActorRegistrations(0) 
-            , DestroyedActors(0) 
-        { 
-        } 
+    }
 
-        virtual ~IExecutorPool() { 
-        } 
- 
+    class IExecutorPool : TNonCopyable {
+    public:
+        const ui32 PoolId;
+
+        TAtomic ActorRegistrations;
+        TAtomic DestroyedActors;
+
+        IExecutorPool(ui32 poolId)
+            : PoolId(poolId)
+            , ActorRegistrations(0)
+            , DestroyedActors(0)
+        {
+        }
+
+        virtual ~IExecutorPool() {
+        }
+
         // for workers
         virtual ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) = 0;
         virtual void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) = 0;
- 
+
         /**
          * Schedule one-shot event that will be send at given time point in the future.
          *
@@ -96,103 +96,103 @@ namespace NActors {
          */
         virtual void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
 
-        // for actorsystem 
-        virtual bool Send(TAutoPtr<IEventHandle>& ev) = 0; 
-        virtual void ScheduleActivation(ui32 activation) = 0; 
-        virtual void ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) = 0; 
+        // for actorsystem
+        virtual bool Send(TAutoPtr<IEventHandle>& ev) = 0;
+        virtual void ScheduleActivation(ui32 activation) = 0;
+        virtual void ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) = 0;
         virtual TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingCounter, const TActorId& parentId) = 0;
         virtual TActorId Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) = 0;
- 
-        // lifecycle stuff 
-        virtual void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) = 0;
-        virtual void Start() = 0; 
-        virtual void PrepareStop() = 0; 
-        virtual void Shutdown() = 0; 
-        virtual bool Cleanup() = 0; 
- 
-        virtual void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
-            // TODO: make pure virtual and override everywhere 
-            Y_UNUSED(poolStats); 
-            Y_UNUSED(statsCopy); 
-        } 
 
-        virtual TString GetName() const { 
-            return TString(); 
-        } 
- 
+        // lifecycle stuff
+        virtual void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) = 0;
+        virtual void Start() = 0;
+        virtual void PrepareStop() = 0;
+        virtual void Shutdown() = 0;
+        virtual bool Cleanup() = 0;
+
+        virtual void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
+            // TODO: make pure virtual and override everywhere
+            Y_UNUSED(poolStats);
+            Y_UNUSED(statsCopy);
+        }
+
+        virtual TString GetName() const {
+            return TString();
+        }
+
         virtual ui32 GetThreads() const {
             return 1;
         }
 
-        // generic 
-        virtual TAffinity* Affinity() const = 0; 
- 
-        virtual void SetRealTimeMode() const {}
-    }; 
+        // generic
+        virtual TAffinity* Affinity() const = 0;
 
-    // could be proxy to in-pool schedulers (for NUMA-aware executors) 
-    class ISchedulerThread : TNonCopyable { 
-    public: 
-        virtual ~ISchedulerThread() { 
-        } 
+        virtual void SetRealTimeMode() const {}
+    };
+
+    // could be proxy to in-pool schedulers (for NUMA-aware executors)
+    class ISchedulerThread : TNonCopyable {
+    public:
+        virtual ~ISchedulerThread() {
+        }
 
         virtual void Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) = 0;
         virtual void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) = 0;
         virtual void PrepareStart() { /* empty */ }
-        virtual void Start() = 0; 
-        virtual void PrepareStop() = 0; 
-        virtual void Stop() = 0; 
-    }; 
- 
-    struct TActorSetupCmd { 
-        TMailboxType::EType MailboxType; 
-        ui32 PoolId; 
-        IActor* Actor; 
- 
-        TActorSetupCmd() 
-            : MailboxType(TMailboxType::HTSwap) 
-            , PoolId(0) 
-            , Actor(nullptr) 
-        { 
-        } 
- 
-        TActorSetupCmd(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) 
-            : MailboxType(mailboxType) 
-            , PoolId(poolId) 
-            , Actor(actor) 
-        { 
-        } 
- 
-        void Set(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) { 
-            MailboxType = mailboxType; 
-            PoolId = poolId; 
-            Actor = actor; 
-        } 
-    }; 
- 
+        virtual void Start() = 0;
+        virtual void PrepareStop() = 0;
+        virtual void Stop() = 0;
+    };
+
+    struct TActorSetupCmd {
+        TMailboxType::EType MailboxType;
+        ui32 PoolId;
+        IActor* Actor;
+
+        TActorSetupCmd()
+            : MailboxType(TMailboxType::HTSwap)
+            , PoolId(0)
+            , Actor(nullptr)
+        {
+        }
+
+        TActorSetupCmd(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId)
+            : MailboxType(mailboxType)
+            , PoolId(poolId)
+            , Actor(actor)
+        {
+        }
+
+        void Set(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) {
+            MailboxType = mailboxType;
+            PoolId = poolId;
+            Actor = actor;
+        }
+    };
+
     using TProxyWrapperFactory = std::function<TActorId(TActorSystem*, ui32)>;
 
-    struct TInterconnectSetup { 
+    struct TInterconnectSetup {
         TVector<TActorSetupCmd> ProxyActors;
         TProxyWrapperFactory ProxyWrapperFactory;
-    }; 
- 
-    struct TActorSystemSetup { 
-        ui32 NodeId = 0; 
- 
+    };
+
+    struct TActorSystemSetup {
+        ui32 NodeId = 0;
+
         // Either Executors or CpuManager must be initialized
-        ui32 ExecutorsCount = 0; 
-        TArrayHolder<TAutoPtr<IExecutorPool>> Executors; 
+        ui32 ExecutorsCount = 0;
+        TArrayHolder<TAutoPtr<IExecutorPool>> Executors;
 
         TAutoPtr<IBalancer> Balancer; // main implementation will be implicitly created if not set
 
         TCpuManagerConfig CpuManager;
 
-        TAutoPtr<ISchedulerThread> Scheduler; 
-        ui32 MaxActivityType = 5; // for default entries 
- 
-        TInterconnectSetup Interconnect; 
- 
+        TAutoPtr<ISchedulerThread> Scheduler;
+        ui32 MaxActivityType = 5; // for default entries
+
+        TInterconnectSetup Interconnect;
+
         using TLocalServices = TVector<std::pair<TActorId, TActorSetupCmd>>;
         TLocalServices LocalServices;
 
@@ -207,60 +207,60 @@ namespace NActors {
         ui32 GetThreads(ui32 poolId) const {
             return Executors ? Executors[poolId]->GetThreads() : CpuManager.GetThreads(poolId);
         }
-    }; 
- 
-    class TActorSystem : TNonCopyable { 
-        struct TServiceMap; 
- 
-    public: 
-        const ui32 NodeId; 
+    };
 
-    private: 
+    class TActorSystem : TNonCopyable {
+        struct TServiceMap;
+
+    public:
+        const ui32 NodeId;
+
+    private:
         THolder<TCpuManager> CpuManager;
-        const ui32 ExecutorPoolCount; 
- 
-        TAutoPtr<ISchedulerThread> Scheduler; 
-        THolder<TServiceMap> ServiceMap; 
- 
-        const ui32 InterconnectCount; 
-        TArrayHolder<TActorId> Interconnect;
- 
-        volatile ui64 CurrentTimestamp; 
-        volatile ui64 CurrentMonotonic;
-        volatile ui64 CurrentIDCounter; 
- 
-        THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
-        mutable TTicketLock ScheduleLock; 
- 
-        friend class TExecutorThread; 
+        const ui32 ExecutorPoolCount;
 
-        THolder<TActorSystemSetup> SystemSetup; 
+        TAutoPtr<ISchedulerThread> Scheduler;
+        THolder<TServiceMap> ServiceMap;
+
+        const ui32 InterconnectCount;
+        TArrayHolder<TActorId> Interconnect;
+
+        volatile ui64 CurrentTimestamp;
+        volatile ui64 CurrentMonotonic;
+        volatile ui64 CurrentIDCounter;
+
+        THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
+        mutable TTicketLock ScheduleLock;
+
+        friend class TExecutorThread;
+
+        THolder<TActorSystemSetup> SystemSetup;
         TActorId DefSelfID;
-        void* AppData0; 
-        TIntrusivePtr<NLog::TSettings> LoggerSettings0; 
+        void* AppData0;
+        TIntrusivePtr<NLog::TSettings> LoggerSettings0;
         TProxyWrapperFactory ProxyWrapperFactory;
         TMutex ProxyCreationLock;
- 
-        bool StartExecuted; 
-        bool StopExecuted; 
-        bool CleanupExecuted; 
+
+        bool StartExecuted;
+        bool StopExecuted;
+        bool CleanupExecuted;
 
         std::deque<std::function<void()>> DeferredPreStop;
-    public: 
-        TActorSystem(THolder<TActorSystemSetup>& setup, void* appData = nullptr, 
-                     TIntrusivePtr<NLog::TSettings> loggerSettings = TIntrusivePtr<NLog::TSettings>(nullptr)); 
-        ~TActorSystem(); 
- 
-        void Start(); 
-        void Stop(); 
-        void Cleanup(); 
- 
+    public:
+        TActorSystem(THolder<TActorSystemSetup>& setup, void* appData = nullptr,
+                     TIntrusivePtr<NLog::TSettings> loggerSettings = TIntrusivePtr<NLog::TSettings>(nullptr));
+        ~TActorSystem();
+
+        void Start();
+        void Stop();
+        void Cleanup();
+
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 executorPool = 0,
                           ui64 revolvingCounter = 0, const TActorId& parentId = TActorId());
- 
-        bool Send(TAutoPtr<IEventHandle> ev) const; 
+
+        bool Send(TAutoPtr<IEventHandle> ev) const;
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0) const;
- 
+
         /**
          * Schedule one-shot event that will be send at given time point in the future.
          *
@@ -321,47 +321,47 @@ namespace NActors {
             THolder<IEventBase> event,
             TDuration timeout);
 
-        ui64 AllocateIDSpace(ui64 count); 
- 
+        ui64 AllocateIDSpace(ui64 count);
+
         TActorId InterconnectProxy(ui32 destinationNode) const;
         ui32 BroadcastToProxies(const std::function<IEventHandle*(const TActorId&)>&);
- 
-        void UpdateLinkStatus(ui8 status, ui32 destinationNode); 
-        ui8 LinkStatus(ui32 destinationNode); 
- 
+
+        void UpdateLinkStatus(ui8 status, ui32 destinationNode);
+        ui8 LinkStatus(ui32 destinationNode);
+
         TActorId LookupLocalService(const TActorId& x) const;
         TActorId RegisterLocalService(const TActorId& serviceId, const TActorId& actorId);
 
         ui32 GetMaxActivityType() const {
             return SystemSetup ? SystemSetup->MaxActivityType : 1;
-        } 
- 
-        TInstant Timestamp() const { 
-            return TInstant::MicroSeconds(RelaxedLoad(&CurrentTimestamp)); 
-        } 
+        }
+
+        TInstant Timestamp() const {
+            return TInstant::MicroSeconds(RelaxedLoad(&CurrentTimestamp));
+        }
 
         TMonotonic Monotonic() const {
             return TMonotonic::MicroSeconds(RelaxedLoad(&CurrentMonotonic));
         }
 
-        template <typename T> 
-        T* AppData() const { 
-            return (T*)AppData0; 
-        } 
+        template <typename T>
+        T* AppData() const {
+            return (T*)AppData0;
+        }
 
-        NLog::TSettings* LoggerSettings() const { 
-            return LoggerSettings0.Get(); 
-        } 
+        NLog::TSettings* LoggerSettings() const {
+            return LoggerSettings0.Get();
+        }
 
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
- 
+
         void DeferPreStop(std::function<void()> fn) {
             DeferredPreStop.push_back(std::move(fn));
         }
 
-        /* This is the base for memory profiling tags. 
+        /* This is the base for memory profiling tags.
        System sets memory profiling tag for debug version of lfalloc.
        The tag is set as "base_tag + actor_activity_type". */
-        static ui32 MemProfActivityBase; 
-    }; 
-} 
+        static ui32 MemProfActivityBase;
+    };
+}

@@ -1,5 +1,5 @@
-#pragma once 
-#include "defs.h" 
+#pragma once
+#include "defs.h"
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/tx.pb.h>
@@ -8,51 +8,51 @@
 #include <ydb/core/base/appdata.h>
 
 #include <library/cpp/actors/core/event_pb.h>
- 
-namespace NKikimr { 
-struct TEvTxProxy { 
-    enum EEv { 
-        EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_PROXY), 
+
+namespace NKikimr {
+struct TEvTxProxy {
+    enum EEv {
+        EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_PROXY),
         EvAcquireReadStep,
- 
-        EvProposeTransactionStatus = EvProposeTransaction + 1 * 512, 
+
+        EvProposeTransactionStatus = EvProposeTransaction + 1 * 512,
         EvAcquireReadStepResult,
- 
-        EvEnd 
-    }; 
- 
+
+        EvEnd
+    };
+
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY)");
- 
-    struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrTx::TEvProposeTransaction, EvProposeTransaction> { 
+
+    struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrTx::TEvProposeTransaction, EvProposeTransaction> {
         TEvProposeTransaction() = default;
- 
-        TEvProposeTransaction(ui64 coordinator, ui64 txId, ui8 execLevel, ui64 minStep, ui64 maxStep); 
-    }; 
- 
-    struct TEvProposeTransactionStatus : public TEventPB<TEvProposeTransactionStatus, NKikimrTx::TEvProposeTransactionStatus, EvProposeTransactionStatus> { 
-        enum class EStatus { 
-            StatusUnknown, 
-            StatusDeclined, 
-            StatusOutdated, 
-            StatusAborted, 
-            StatusDeclinedNoSpace, 
+
+        TEvProposeTransaction(ui64 coordinator, ui64 txId, ui8 execLevel, ui64 minStep, ui64 maxStep);
+    };
+
+    struct TEvProposeTransactionStatus : public TEventPB<TEvProposeTransactionStatus, NKikimrTx::TEvProposeTransactionStatus, EvProposeTransactionStatus> {
+        enum class EStatus {
+            StatusUnknown,
+            StatusDeclined,
+            StatusOutdated,
+            StatusAborted,
+            StatusDeclinedNoSpace,
             StatusRestarting, // coordinator is restarting (tx dropped)
- 
-            StatusAccepted = 16, // accepted by coordinator 
-            StatusPlanned, // planned by coordinator 
-            StatusProcessed, // plan entry delivered to all tablets (for synth-exec-level) 
-            StatusConfirmed, // execution confirmed by moderator (for synth-exec-level) 
-        }; 
- 
+
+            StatusAccepted = 16, // accepted by coordinator
+            StatusPlanned, // planned by coordinator
+            StatusProcessed, // plan entry delivered to all tablets (for synth-exec-level)
+            StatusConfirmed, // execution confirmed by moderator (for synth-exec-level)
+        };
+
         TEvProposeTransactionStatus() = default;
- 
+
         TEvProposeTransactionStatus(EStatus status, ui64 txid, ui64 stepId);
- 
-        EStatus GetStatus() const { 
+
+        EStatus GetStatus() const {
             Y_VERIFY_DEBUG(Record.HasStatus());
-            return static_cast<EStatus>(Record.GetStatus()); 
-        } 
-    }; 
+            return static_cast<EStatus>(Record.GetStatus());
+        }
+    };
 
     struct TEvAcquireReadStep
         : public TEventPB<TEvAcquireReadStep, NKikimrTx::TEvAcquireReadStep, EvAcquireReadStep>
@@ -74,39 +74,39 @@ struct TEvTxProxy {
             Record.SetStep(step);
         }
     };
-}; 
- 
-// basic 
- 
-struct TExecLevelHierarchy { 
-    struct TEntry { 
-        ui32 ExecLevel; 
-        ui64 ReversedDomainMask; 
-    }; 
- 
+};
+
+// basic
+
+struct TExecLevelHierarchy {
+    struct TEntry {
+        ui32 ExecLevel;
+        ui64 ReversedDomainMask;
+    };
+
     TVector<TEntry> Entries;
- 
-    ui32 Select(ui64 mask) const { 
-        for (ui32 i = 0, e = Entries.size(); i != e; ++i) { 
-            const TEntry &x = Entries[i]; 
- 
-            if ((x.ReversedDomainMask & mask) == 0) 
-                return x.ExecLevel; 
-        } 
-        return 0; 
-    } 
-}; 
- 
-// test hierarchy 
-// one availability domain #0. 
-// one synthetic execution level (#0) with 2 controller shards (#0, #1). 
-// one domain execution level (#1) with 2 controller shards (#0, #1). 
-// one proxy #0. 
-// one mediator (0-#0) 
-// three dummy tx-tablets in domain (##0-2) 
-//      or 8 data shard in domain (##0-7) 
-// one scheme shard (#F0) 
- 
+
+    ui32 Select(ui64 mask) const {
+        for (ui32 i = 0, e = Entries.size(); i != e; ++i) {
+            const TEntry &x = Entries[i];
+
+            if ((x.ReversedDomainMask & mask) == 0)
+                return x.ExecLevel;
+        }
+        return 0;
+    }
+};
+
+// test hierarchy
+// one availability domain #0.
+// one synthetic execution level (#0) with 2 controller shards (#0, #1).
+// one domain execution level (#1) with 2 controller shards (#0, #1).
+// one proxy #0.
+// one mediator (0-#0)
+// three dummy tx-tablets in domain (##0-2)
+//      or 8 data shard in domain (##0-7)
+// one scheme shard (#F0)
+
 struct TTestTxConfig {
     static constexpr ui64 DomainUid = 0;
     static constexpr ui64 Coordinator = 0x0000000000800001;
@@ -125,8 +125,8 @@ struct TTestTxConfig {
     static constexpr ui64 SchemeShard = 0x00000000008587a0;
     static constexpr ui64 Hive =  0x000000000000A001;
     static constexpr ui64 UseLessId = 0xFFFFFFFFFFFFFFF;
-}; 
- 
+};
+
 struct TEvSubDomain {
     enum EEv {
         EvConfigure = EventSpaceBegin(TKikimrEvents::ES_SUB_DOMAIN),
@@ -154,7 +154,7 @@ struct TEvSubDomain {
 
 TAutoPtr<TEvSubDomain::TEvConfigure> CreateDomainConfigurationFromStatic(const TAppData *appdata, ui64 tabletId);
 
-} 
+}
 
 template<>
 inline void Out<NKikimr::TEvTxProxy::TEvProposeTransactionStatus::EStatus>(IOutputStream& o,

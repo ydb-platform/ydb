@@ -5,7 +5,7 @@ import "ydb/core/protos/query_stats.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 
 import "ydb/public/api/protos/ydb_issue_message.proto";
- 
+
 package NKikimrTxUserProxy;
 option java_package = "ru.yandex.kikimr.proto";
 
@@ -188,7 +188,7 @@ message TTransaction {
 message TEvProposeTransaction {
     optional TTransaction Transaction = 1;
     optional uint64 ProxyFlags = 2;
-    optional uint64 ExecTimeoutPeriod = 3; 
+    optional uint64 ExecTimeoutPeriod = 3;
     optional string UserToken = 4; // already built and serialized user's token
     optional bool StreamResponse = 5;
     optional uint64 CancelAfterMs = 6;
@@ -213,9 +213,9 @@ message TEvProposeTransactionStatus {
     optional fixed64 TxId = 2;
     optional fixed64 Step = 3;
 
-    optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7; 
+    optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7;
     repeated Ydb.Issue.IssueMessage Issues = 8;
- 
+
     optional uint32 ExecutionEngineStatus = 10;
     optional uint32 ExecutionEngineResponseStatus = 11;
     optional bytes ExecutionEngineResponse = 12; // Native document.
@@ -225,7 +225,7 @@ message TEvProposeTransactionStatus {
     repeated bytes UnresolvedKeys = 16; // text
 
     optional TMiniKQLCompileResults MiniKQLCompileResults = 17;
-    optional NKikimrMiniKQL.TResult ExecutionEngineEvaluatedResponse = 18; 
+    optional NKikimrMiniKQL.TResult ExecutionEngineEvaluatedResponse = 18;
 
     optional NKikimrQueryStats.TTxStats TxStats = 19;
     optional TTxProxyTimings Timings = 20;

@@ -7,22 +7,22 @@
 #define LWTYPE_ACTORID ui64, ui64, ui32, ui32
 #define LWNAME_ACTORID(n) n "Raw1", n "Raw2", n "NodeId", n "PoolId"
 
-#define ACTORLIB_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)                                                                         \ 
-    PROBE(SlowEvent, GROUPS("ActorLibSlow"),                                                                                          \ 
-          TYPES(ui32, double, TString, TString, TString),                                                                             \ 
-          NAMES("poolId", "eventMs", "eventType", "actorId", "actorType"))                                                            \ 
-    PROBE(EventSlowDelivery, GROUPS("ActorLibSlow"),                                                                                  \ 
-          TYPES(ui32, double, double, ui64, TString, TString, TString),                                                               \ 
-          NAMES("poolId", "deliveryMs", "sinceActivationMs", "eventProcessedBefore", "eventType", "actorId", "actorType"))            \ 
-    PROBE(SlowActivation, GROUPS("ActorLibSlow"),                                                                                     \ 
-          TYPES(ui32, double),                                                                                                        \ 
-          NAMES("poolId", "activationMs"))                                                                                            \ 
-    PROBE(SlowRegisterNew, GROUPS("ActorLibSlow"),                                                                                    \ 
-          TYPES(ui32, double),                                                                                                        \ 
-          NAMES("poolId", "registerNewMs"))                                                                                           \ 
-    PROBE(SlowRegisterAdd, GROUPS("ActorLibSlow"),                                                                                    \ 
-          TYPES(ui32, double),                                                                                                        \ 
-          NAMES("poolId", "registerAddMs"))                                                                                           \ 
+#define ACTORLIB_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)                                                                         \
+    PROBE(SlowEvent, GROUPS("ActorLibSlow"),                                                                                          \
+          TYPES(ui32, double, TString, TString, TString),                                                                             \
+          NAMES("poolId", "eventMs", "eventType", "actorId", "actorType"))                                                            \
+    PROBE(EventSlowDelivery, GROUPS("ActorLibSlow"),                                                                                  \
+          TYPES(ui32, double, double, ui64, TString, TString, TString),                                                               \
+          NAMES("poolId", "deliveryMs", "sinceActivationMs", "eventProcessedBefore", "eventType", "actorId", "actorType"))            \
+    PROBE(SlowActivation, GROUPS("ActorLibSlow"),                                                                                     \
+          TYPES(ui32, double),                                                                                                        \
+          NAMES("poolId", "activationMs"))                                                                                            \
+    PROBE(SlowRegisterNew, GROUPS("ActorLibSlow"),                                                                                    \
+          TYPES(ui32, double),                                                                                                        \
+          NAMES("poolId", "registerNewMs"))                                                                                           \
+    PROBE(SlowRegisterAdd, GROUPS("ActorLibSlow"),                                                                                    \
+          TYPES(ui32, double),                                                                                                        \
+          NAMES("poolId", "registerAddMs"))                                                                                           \
     PROBE(MailboxPushedOutBySoftPreemption, GROUPS("ActorLibMailbox", "ActorLibMailboxPushedOut"),                                    \
           TYPES(ui32, TString, ui32, TDuration, ui64, TString, TString),                                                              \
           NAMES("poolId", "pool", "eventsProcessed", "procTimeMs", "workerId", "actorId", "actorType"))                               \
@@ -41,32 +41,32 @@
     PROBE(ActivationEnd, GROUPS(),                                                                                                    \
           TYPES(ui32, ui32, ui32),                                                                                                    \
           NAMES("cpu", "poolId", "workerId"))                                                                                         \
-    PROBE(ExecutorThreadStats, GROUPS("ActorLibStats"),                                                                               \ 
+    PROBE(ExecutorThreadStats, GROUPS("ActorLibStats"),                                                                               \
           TYPES(ui32, TString, ui64, ui64, ui64, double, double),                                                                     \
           NAMES("poolId", "pool", "workerId", "execCount", "readyActivationCount", "execMs", "nonExecMs"))                            \
-    PROBE(SlowICReadLoopAdjustSize, GROUPS("ActorLibSlowIC"),                                                                         \ 
-          TYPES(double),                                                                                                              \ 
-          NAMES("icReadLoopAdjustSizeMs"))                                                                                            \ 
-    PROBE(SlowICReadFromSocket, GROUPS("ActorLibSlowIC"),                                                                             \ 
-          TYPES(double),                                                                                                              \ 
-          NAMES("icReadFromSocketMs"))                                                                                                \ 
-    PROBE(SlowICReadLoopSend, GROUPS("ActorLibSlowIC"),                                                                               \ 
-          TYPES(double),                                                                                                              \ 
-          NAMES("icReadLoopSendMs"))                                                                                                  \ 
-    PROBE(SlowICAllocPacketBuffer, GROUPS("ActorLibSlowIC"),                                                                          \ 
-          TYPES(ui32, double),                                                                                                        \ 
-          NAMES("peerId", "icAllocPacketBufferMs"))                                                                                   \ 
-    PROBE(SlowICFillSendingBuffer, GROUPS("ActorLibSlowIC"),                                                                          \ 
-          TYPES(ui32, double),                                                                                                        \ 
-          NAMES("peerId", "icFillSendingBufferMs"))                                                                                   \ 
-    PROBE(SlowICPushSentPackets, GROUPS("ActorLibSlowIC"),                                                                            \ 
-          TYPES(ui32, double),                                                                                                        \ 
-          NAMES("peerId", "icPushSentPacketsMs"))                                                                                     \ 
-    PROBE(SlowICPushSendQueue, GROUPS("ActorLibSlowIC"),                                                                              \ 
-          TYPES(ui32, double),                                                                                                        \ 
-          NAMES("peerId", "icPushSendQueueMs"))                                                                                       \ 
+    PROBE(SlowICReadLoopAdjustSize, GROUPS("ActorLibSlowIC"),                                                                         \
+          TYPES(double),                                                                                                              \
+          NAMES("icReadLoopAdjustSizeMs"))                                                                                            \
+    PROBE(SlowICReadFromSocket, GROUPS("ActorLibSlowIC"),                                                                             \
+          TYPES(double),                                                                                                              \
+          NAMES("icReadFromSocketMs"))                                                                                                \
+    PROBE(SlowICReadLoopSend, GROUPS("ActorLibSlowIC"),                                                                               \
+          TYPES(double),                                                                                                              \
+          NAMES("icReadLoopSendMs"))                                                                                                  \
+    PROBE(SlowICAllocPacketBuffer, GROUPS("ActorLibSlowIC"),                                                                          \
+          TYPES(ui32, double),                                                                                                        \
+          NAMES("peerId", "icAllocPacketBufferMs"))                                                                                   \
+    PROBE(SlowICFillSendingBuffer, GROUPS("ActorLibSlowIC"),                                                                          \
+          TYPES(ui32, double),                                                                                                        \
+          NAMES("peerId", "icFillSendingBufferMs"))                                                                                   \
+    PROBE(SlowICPushSentPackets, GROUPS("ActorLibSlowIC"),                                                                            \
+          TYPES(ui32, double),                                                                                                        \
+          NAMES("peerId", "icPushSentPacketsMs"))                                                                                     \
+    PROBE(SlowICPushSendQueue, GROUPS("ActorLibSlowIC"),                                                                              \
+          TYPES(ui32, double),                                                                                                        \
+          NAMES("peerId", "icPushSendQueueMs"))                                                                                       \
     PROBE(SlowICWriteData, GROUPS("ActorLibSlowIC"),                                                                                  \
-          TYPES(ui32, double),                                                                                                        \ 
+          TYPES(ui32, double),                                                                                                        \
           NAMES("peerId", "icWriteDataMs"))                                                                                           \
     PROBE(SlowICDropConfirmed, GROUPS("ActorLibSlowIC"),                                                                              \
           TYPES(ui32, double),                                                                                                        \

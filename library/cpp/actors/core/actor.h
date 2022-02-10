@@ -1,41 +1,41 @@
-#pragma once 
- 
-#include "event.h" 
-#include "monotonic.h"
-#include <util/system/tls.h> 
-#include <library/cpp/actors/util/local_process_key.h>
- 
-namespace NActors { 
-    class TActorSystem;
-    class TMailboxTable; 
-    struct TMailboxHeader; 
- 
-    class TExecutorThread; 
-    class IActor; 
-    class ISchedulerCookie; 
- 
-    namespace NLog { 
-        struct TSettings; 
-    }
- 
-    struct TActorContext; 
+#pragma once
 
-    struct TActivationContext { 
-    public: 
-        TMailboxHeader& Mailbox; 
-        TExecutorThread& ExecutorThread; 
+#include "event.h"
+#include "monotonic.h"
+#include <util/system/tls.h>
+#include <library/cpp/actors/util/local_process_key.h>
+
+namespace NActors {
+    class TActorSystem;
+    class TMailboxTable;
+    struct TMailboxHeader;
+
+    class TExecutorThread;
+    class IActor;
+    class ISchedulerCookie;
+
+    namespace NLog {
+        struct TSettings;
+    }
+
+    struct TActorContext;
+
+    struct TActivationContext {
+    public:
+        TMailboxHeader& Mailbox;
+        TExecutorThread& ExecutorThread;
         const NHPTimer::STime EventStart;
- 
-    protected: 
+
+    protected:
         explicit TActivationContext(TMailboxHeader& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart)
-            : Mailbox(mailbox) 
-            , ExecutorThread(executorThread) 
+            : Mailbox(mailbox)
+            , ExecutorThread(executorThread)
             , EventStart(eventStart)
-        { 
-        } 
- 
-    public: 
-        static bool Send(TAutoPtr<IEventHandle> ev); 
+        {
+        }
+
+    public:
+        static bool Send(TAutoPtr<IEventHandle> ev);
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.
@@ -63,40 +63,40 @@ namespace NActors {
          * @param cookie     cookie that will be piggybacked with event
          */
         static void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
- 
-        static TInstant Now(); 
+
+        static TInstant Now();
         static TMonotonic Monotonic();
         NLog::TSettings* LoggerSettings() const;
- 
-        // register new actor in ActorSystem on new fresh mailbox. 
+
+        // register new actor in ActorSystem on new fresh mailbox.
         static TActorId Register(IActor* actor, TActorId parentId = TActorId(), TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>());
- 
+
         // Register new actor in ActorSystem on same _mailbox_ as current actor.
         // There is one thread per mailbox to execute actor, which mean
         // no _cpu core scalability_ for such actors.
         // This method of registration can be usefull if multiple actors share
         // some memory.
         static TActorId RegisterWithSameMailbox(IActor* actor, TActorId parentId);
- 
-        static const TActorContext& AsActorContext(); 
+
+        static const TActorContext& AsActorContext();
         static TActorContext ActorContextFor(TActorId id);
- 
+
         static TActorId InterconnectProxy(ui32 nodeid);
-        static TActorSystem* ActorSystem(); 
+        static TActorSystem* ActorSystem();
 
         static i64 GetCurrentEventTicks();
         static double GetCurrentEventTicksAsSeconds();
-    }; 
- 
-    struct TActorContext: public TActivationContext { 
+    };
+
+    struct TActorContext: public TActivationContext {
         const TActorId SelfID;
- 
+
         explicit TActorContext(TMailboxHeader& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
             : TActivationContext(mailbox, executorThread, eventStart)
-            , SelfID(selfID) 
-        { 
-        } 
- 
+            , SelfID(selfID)
+        {
+        }
+
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
         template <typename TEvent>
         bool Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
@@ -132,47 +132,47 @@ namespace NActors {
          * @param ev         the event to send
          * @param cookie     cookie that will be piggybacked with event
          */
-        void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const; 
+        void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
 
         TActorContext MakeFor(const TActorId& otherId) const {
             return TActorContext(Mailbox, ExecutorThread, EventStart, otherId);
-        } 
- 
-        // register new actor in ActorSystem on new fresh mailbox. 
+        }
+
+        // register new actor in ActorSystem on new fresh mailbox.
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const;
- 
+
         // Register new actor in ActorSystem on same _mailbox_ as current actor.
         // There is one thread per mailbox to execute actor, which mean
         // no _cpu core scalability_ for such actors.
         // This method of registration can be usefull if multiple actors share
         // some memory.
         TActorId RegisterWithSameMailbox(IActor* actor) const;
- 
-        std::pair<ui32, ui32> CountMailboxEvents(ui32 maxTraverse = Max<ui32>()) const; 
-    }; 
- 
-    extern Y_POD_THREAD(TActivationContext*) TlsActivationContext; 
- 
+
+        std::pair<ui32, ui32> CountMailboxEvents(ui32 maxTraverse = Max<ui32>()) const;
+    };
+
+    extern Y_POD_THREAD(TActivationContext*) TlsActivationContext;
+
     struct TActorIdentity: public TActorId {
         explicit TActorIdentity(TActorId actorId)
             : TActorId(actorId)
-        { 
-        } 
- 
+        {
+        }
+
         void operator=(TActorId actorId) {
-            *this = TActorIdentity(actorId); 
-        } 
- 
+            *this = TActorIdentity(actorId);
+        }
+
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
         void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
         void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
-    }; 
- 
+    };
+
     class IActor;
 
     class IActorOps : TNonCopyable {
-    public: 
+    public:
         virtual void Describe(IOutputStream&) const noexcept = 0;
         virtual bool Send(const TActorId& recipient, IEventBase*, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept = 0;
 
@@ -211,24 +211,24 @@ namespace NActors {
 
     class IActor : protected IActorOps {
     public:
-        typedef void (IActor::*TReceiveFunc)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx); 
- 
-    private: 
-        TReceiveFunc StateFunc; 
-        TActorIdentity SelfActorId; 
-        i64 ElapsedTicks; 
-        ui64 HandledEvents; 
+        typedef void (IActor::*TReceiveFunc)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+
+    private:
+        TReceiveFunc StateFunc;
+        TActorIdentity SelfActorId;
+        i64 ElapsedTicks;
+        ui64 HandledEvents;
 
         friend void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);
         friend class TDecorator;
- 
-    public: 
+
+    public:
         /// @sa services.proto NKikimrServices::TActivity::EType
-        enum EActorActivity { 
-            OTHER = 0, 
-            ACTOR_SYSTEM = 1, 
-            ACTORLIB_COMMON = 2, 
-            ACTORLIB_STATS = 3, 
+        enum EActorActivity {
+            OTHER = 0,
+            ACTOR_SYSTEM = 1,
+            ACTORLIB_COMMON = 2,
+            ACTORLIB_STATS = 3,
             LOG_ACTOR = 4,
             INTERCONNECT_PROXY_TCP = 12,
             INTERCONNECT_SESSION_TCP = 13,
@@ -246,64 +246,64 @@ namespace NActors {
             NAMESERVICE = 450,
             DNS_RESOLVER = 481,
             INTERCONNECT_PROXY_WRAPPER = 546,
-        }; 
+        };
 
         using EActivityType = EActorActivity;
         ui32 ActivityType;
 
-    protected: 
+    protected:
         IActor(TReceiveFunc stateFunc, ui32 activityType = OTHER)
-            : StateFunc(stateFunc) 
+            : StateFunc(stateFunc)
             , SelfActorId(TActorId())
-            , ElapsedTicks(0) 
-            , HandledEvents(0) 
-            , ActivityType(activityType) 
-        { 
-        } 
- 
-    public: 
-        virtual ~IActor() { 
-        } // must not be called for registered actors, see Die method instead 
- 
-    protected: 
-        virtual void Die(const TActorContext& ctx); // would unregister actor so call exactly once and only from inside of message processing 
-        virtual void PassAway(); 
- 
-    public: 
-        template <typename T> 
-        void Become(T stateFunc) { 
-            StateFunc = static_cast<TReceiveFunc>(stateFunc); 
-        } 
- 
+            , ElapsedTicks(0)
+            , HandledEvents(0)
+            , ActivityType(activityType)
+        {
+        }
+
+    public:
+        virtual ~IActor() {
+        } // must not be called for registered actors, see Die method instead
+
+    protected:
+        virtual void Die(const TActorContext& ctx); // would unregister actor so call exactly once and only from inside of message processing
+        virtual void PassAway();
+
+    public:
+        template <typename T>
+        void Become(T stateFunc) {
+            StateFunc = static_cast<TReceiveFunc>(stateFunc);
+        }
+
         template <typename T, typename... TArgs>
         void Become(T stateFunc, const TActorContext& ctx, TArgs&&... args) {
-            StateFunc = static_cast<TReceiveFunc>(stateFunc); 
+            StateFunc = static_cast<TReceiveFunc>(stateFunc);
             ctx.Schedule(std::forward<TArgs>(args)...);
-        } 
- 
+        }
+
         template <typename T, typename... TArgs>
         void Become(T stateFunc, TArgs&&... args) {
-            StateFunc = static_cast<TReceiveFunc>(stateFunc); 
+            StateFunc = static_cast<TReceiveFunc>(stateFunc);
             Schedule(std::forward<TArgs>(args)...);
-        } 
- 
-    protected: 
-        void SetActivityType(ui32 activityType) {
-            ActivityType = activityType; 
-        } 
+        }
 
-    public: 
-        TReceiveFunc CurrentStateFunc() const { 
-            return StateFunc; 
-        } 
- 
-        // NOTE: exceptions must not escape state function but if an exception hasn't be caught 
-        // by the actor then we want to crash an see the stack 
-        void Receive(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
-            (this->*StateFunc)(ev, ctx); 
-            HandledEvents++; 
-        } 
- 
+    protected:
+        void SetActivityType(ui32 activityType) {
+            ActivityType = activityType;
+        }
+
+    public:
+        TReceiveFunc CurrentStateFunc() const {
+            return StateFunc;
+        }
+
+        // NOTE: exceptions must not escape state function but if an exception hasn't be caught
+        // by the actor then we want to crash an see the stack
+        void Receive(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+            (this->*StateFunc)(ev, ctx);
+            HandledEvents++;
+        }
+
         // must be called to wrap any call trasitions from one actor to another
         template<typename TActor, typename TMethod, typename... TArgs>
         static decltype((std::declval<TActor>().*std::declval<TMethod>())(std::declval<TArgs>()...))
@@ -326,29 +326,29 @@ namespace NActors {
         virtual void Registered(TActorSystem* sys, const TActorId& owner);
 
         virtual TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) {
-            Y_UNUSED(self); 
-            Y_UNUSED(parentId); 
-            return TAutoPtr<IEventHandle>(); 
-        } 
- 
-        i64 GetElapsedTicks() const { 
-            return ElapsedTicks; 
-        } 
-        double GetElapsedTicksAsSeconds() const; 
-        void AddElapsedTicks(i64 ticks) { 
-            ElapsedTicks += ticks; 
-        } 
+            Y_UNUSED(self);
+            Y_UNUSED(parentId);
+            return TAutoPtr<IEventHandle>();
+        }
+
+        i64 GetElapsedTicks() const {
+            return ElapsedTicks;
+        }
+        double GetElapsedTicksAsSeconds() const;
+        void AddElapsedTicks(i64 ticks) {
+            ElapsedTicks += ticks;
+        }
         auto GetActivityType() const {
-            return ActivityType; 
-        } 
-        ui64 GetHandledEvents() const { 
-            return HandledEvents; 
-        } 
-        TActorIdentity SelfId() const { 
-            return SelfActorId; 
-        } 
- 
-    protected: 
+            return ActivityType;
+        }
+        ui64 GetHandledEvents() const {
+            return HandledEvents;
+        }
+        TActorIdentity SelfId() const {
+            return SelfActorId;
+        }
+
+    protected:
         void Describe(IOutputStream&) const noexcept override;
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
         template <typename TEvent>
@@ -364,25 +364,25 @@ namespace NActors {
         void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
         void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
- 
-        // register new actor in ActorSystem on new fresh mailbox. 
+
+        // register new actor in ActorSystem on new fresh mailbox.
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const noexcept final;
- 
+
         // Register new actor in ActorSystem on same _mailbox_ as current actor.
         // There is one thread per mailbox to execute actor, which mean
         // no _cpu core scalability_ for such actors.
         // This method of registration can be usefull if multiple actors share
         // some memory.
         TActorId RegisterWithSameMailbox(IActor* actor) const noexcept final;
- 
-        std::pair<ui32, ui32> CountMailboxEvents(ui32 maxTraverse = Max<ui32>()) const; 
+
+        std::pair<ui32, ui32> CountMailboxEvents(ui32 maxTraverse = Max<ui32>()) const;
 
     private:
         void ChangeSelfId(TActorId actorId) {
             SelfActorId = actorId;
         }
-    }; 
- 
+    };
+
     struct TActorActivityTag {};
 
     inline size_t GetActivityTypeCount() {
@@ -417,10 +417,10 @@ namespace NActors {
             }
         }
 
-    protected: 
+    protected:
         //* Comment this function to find unmarked activities
-        static constexpr IActor::EActivityType ActorActivityType() { 
-            return EActorActivity::OTHER; 
+        static constexpr IActor::EActivityType ActorActivityType() {
+            return EActorActivity::OTHER;
         } //*/
 
         // static constexpr char ActorName[] = "UNNAMED";
@@ -428,17 +428,17 @@ namespace NActors {
         TActor(void (TDerived::*func)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx), ui32 activityType = GetActivityTypeIndex())
             : IActor(static_cast<TReceiveFunc>(func), activityType)
         { }
- 
-    public: 
-        typedef TDerived TThis; 
-    }; 
- 
+
+    public:
+        typedef TDerived TThis;
+    };
+
 
 #define STFUNC_SIG TAutoPtr< ::NActors::IEventHandle>&ev, const ::NActors::TActorContext &ctx
 #define STATEFN_SIG TAutoPtr<::NActors::IEventHandle>& ev
-#define STFUNC(funcName) void funcName(TAutoPtr< ::NActors::IEventHandle>& ev, const ::NActors::TActorContext& ctx) 
-#define STATEFN(funcName) void funcName(TAutoPtr< ::NActors::IEventHandle>& ev, const ::NActors::TActorContext& ) 
- 
+#define STFUNC(funcName) void funcName(TAutoPtr< ::NActors::IEventHandle>& ev, const ::NActors::TActorContext& ctx)
+#define STATEFN(funcName) void funcName(TAutoPtr< ::NActors::IEventHandle>& ev, const ::NActors::TActorContext& )
+
 #define STRICT_STFUNC(NAME, HANDLERS)                                                               \
     void NAME(STFUNC_SIG) {                                                                         \
         Y_UNUSED(ctx);                                                                              \
@@ -449,15 +449,15 @@ namespace NActors {
         }                                                                                           \
     }
 
-    inline const TActorContext& TActivationContext::AsActorContext() { 
-        TActivationContext* tls = TlsActivationContext; 
-        return *static_cast<TActorContext*>(tls); 
-    } 
- 
+    inline const TActorContext& TActivationContext::AsActorContext() {
+        TActivationContext* tls = TlsActivationContext;
+        return *static_cast<TActorContext*>(tls);
+    }
+
     inline TActorContext TActivationContext::ActorContextFor(TActorId id) {
-        auto& tls = *TlsActivationContext; 
+        auto& tls = *TlsActivationContext;
         return TActorContext(tls.Mailbox, tls.ExecutorThread, tls.EventStart, id);
-    } 
+    }
 
     class TDecorator : public IActor {
     protected:
@@ -515,16 +515,16 @@ namespace NActors {
             return true;
         }
     };
-} 
- 
-template <> 
-inline void Out<NActors::TActorIdentity>(IOutputStream& o, const NActors::TActorIdentity& x) { 
-    return x.Out(o); 
-} 
- 
-template <> 
-struct THash<NActors::TActorIdentity> { 
-    inline ui64 operator()(const NActors::TActorIdentity& x) const { 
-        return x.Hash(); 
-    } 
-}; 
+}
+
+template <>
+inline void Out<NActors::TActorIdentity>(IOutputStream& o, const NActors::TActorIdentity& x) {
+    return x.Out(o);
+}
+
+template <>
+struct THash<NActors::TActorIdentity> {
+    inline ui64 operator()(const NActors::TActorIdentity& x) const {
+        return x.Hash();
+    }
+};

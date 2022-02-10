@@ -209,7 +209,7 @@ namespace NActors {
     TLoggerActor::~TLoggerActor() {
     }
 
-    void TLoggerActor::Log(TInstant time, NLog::EPriority priority, NLog::EComponent component, const char* c, ...) { 
+    void TLoggerActor::Log(TInstant time, NLog::EPriority priority, NLog::EComponent component, const char* c, ...) {
         Metrics->IncDirectMsgs();
         if (Settings && Settings->Satisfies(priority, component, 0ull)) {
             va_list params;
@@ -235,7 +235,7 @@ namespace NActors {
         }
     }
 
-    void TLoggerActor::HandleIgnoredEvent(TLogIgnored::TPtr& ev, const NActors::TActorContext& ctx) { 
+    void TLoggerActor::HandleIgnoredEvent(TLogIgnored::TPtr& ev, const NActors::TActorContext& ctx) {
         Y_UNUSED(ev);
         LogIgnoredCount(ctx.Now());
         IgnoredCount = 0;
@@ -254,12 +254,12 @@ namespace NActors {
         switch (prio) {
             case ::NActors::NLog::EPrio::Alert:
                 Metrics->IncAlertMsgs();
-                break; 
+                break;
             case ::NActors::NLog::EPrio::Emerg:
                 Metrics->IncEmergMsgs();
-                break; 
-            default: 
-                break; 
+                break;
+            default:
+                break;
         }
 
     }
@@ -273,7 +273,7 @@ namespace NActors {
                 AtomicSet(IsOverflow, 0);
 
             // Check if some records have to be dropped
-            if ((PassedCount > 10 && delayMillisec > (i64)Settings->TimeThresholdMs) || IgnoredCount > 0) { 
+            if ((PassedCount > 10 && delayMillisec > (i64)Settings->TimeThresholdMs) || IgnoredCount > 0) {
                 Metrics->IncIgnoredMsgs();
                 if (IgnoredCount == 0) {
                     ctx.Send(ctx.SelfID, new TLogIgnored());
@@ -302,7 +302,7 @@ namespace NActors {
         Schedule(WakeupInterval, new TEvents::TEvWakeup);
     }
 
-    void TLoggerActor::HandleLogComponentLevelRequest(TLogComponentLevelRequest::TPtr& ev, const NActors::TActorContext& ctx) { 
+    void TLoggerActor::HandleLogComponentLevelRequest(TLogComponentLevelRequest::TPtr& ev, const NActors::TActorContext& ctx) {
         Metrics->IncLevelRequests();
         TString explanation;
         int code = Settings->SetLevel(ev->Get()->Priority, ev->Get()->Component, explanation);
@@ -312,24 +312,24 @@ namespace NActors {
     void TLoggerActor::RenderComponentPriorities(IOutputStream& str) {
         using namespace NLog;
         HTML(str) {
-            H4() { 
-                str << "Priority Settings for the Components"; 
-            } 
+            H4() {
+                str << "Priority Settings for the Components";
+            }
             TABLE_SORTABLE_CLASS("table") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() { 
-                            str << "Component"; 
-                        } 
-                        TABLEH() { 
-                            str << "Level"; 
-                        } 
-                        TABLEH() { 
-                            str << "Sampling Level"; 
-                        } 
-                        TABLEH() { 
-                            str << "Sampling Rate"; 
-                        } 
+                        TABLEH() {
+                            str << "Component";
+                        }
+                        TABLEH() {
+                            str << "Level";
+                        }
+                        TABLEH() {
+                            str << "Sampling Level";
+                        }
+                        TABLEH() {
+                            str << "Sampling Rate";
+                        }
                     }
                 }
                 TABLEBODY() {
@@ -340,18 +340,18 @@ namespace NActors {
                         NLog::TComponentSettings componentSettings = Settings->GetComponentSettings(i);
 
                         TABLER() {
-                            TABLED() { 
-                                str << "<a href='logger?c=" << i << "'>" << name << "</a>"; 
-                            } 
-                            TABLED() { 
+                            TABLED() {
+                                str << "<a href='logger?c=" << i << "'>" << name << "</a>";
+                            }
+                            TABLED() {
                                 str << PriorityToString(EPrio(componentSettings.Raw.X.Level));
-                            } 
-                            TABLED() { 
+                            }
+                            TABLED() {
                                 str << PriorityToString(EPrio(componentSettings.Raw.X.SamplingLevel));
-                            } 
-                            TABLED() { 
-                                str << componentSettings.Raw.X.SamplingRate; 
-                            } 
+                            }
+                            TABLED() {
+                                str << componentSettings.Raw.X.SamplingRate;
+                            }
                         }
                     }
                 }
@@ -366,7 +366,7 @@ namespace NActors {
      * 3. Number of messages per components, per priority
      * 4. Log level changes (last N changes)
      */
-    void TLoggerActor::HandleMonInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) { 
+    void TLoggerActor::HandleMonInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
         const auto& params = ev->Get()->Request.GetParams();
         NLog::EComponent component = NLog::InvalidComponent;
         NLog::EPriority priority = NLog::PRI_DEBUG;
@@ -415,9 +415,9 @@ namespace NActors {
             HTML(str) {
                 DIV_CLASS("row") {
                     DIV_CLASS("col-md-12") {
-                        H4() { 
-                            str << "Current log settings for " << Settings->ComponentName(component) << Endl; 
-                        } 
+                        H4() {
+                            str << "Current log settings for " << Settings->ComponentName(component) << Endl;
+                        }
                         UL() {
                             LI() {
                                 str << "Priority: "
@@ -437,9 +437,9 @@ namespace NActors {
 
                 DIV_CLASS("row") {
                     DIV_CLASS("col-md-12") {
-                        H4() { 
-                            str << "Change priority" << Endl; 
-                        } 
+                        H4() {
+                            str << "Change priority" << Endl;
+                        }
                         UL() {
                             for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
                                 LI() {
@@ -448,9 +448,9 @@ namespace NActors {
                                 }
                             }
                         }
-                        H4() { 
-                            str << "Change sampling priority" << Endl; 
-                        } 
+                        H4() {
+                            str << "Change sampling priority" << Endl;
+                        }
                         UL() {
                             for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
                                 LI() {
@@ -459,17 +459,17 @@ namespace NActors {
                                 }
                             }
                         }
-                        H4() { 
-                            str << "Change sampling rate" << Endl; 
-                        } 
+                        H4() {
+                            str << "Change sampling rate" << Endl;
+                        }
                         str << "<form method=\"GET\">" << Endl;
                         str << "Rate: <input type=\"number\" name=\"sr\" value=\"" << samplingRate << "\"/>" << Endl;
                         str << "<input type=\"hidden\" name=\"c\" value=\"" << component << "\">" << Endl;
                         str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"Change\"/>" << Endl;
                         str << "</form>" << Endl;
-                        H4() { 
-                            str << "<a href='logger'>Cancel</a>" << Endl; 
-                        } 
+                        H4() {
+                            str << "<a href='logger'>Cancel</a>" << Endl;
+                        }
                     }
                 }
             }
@@ -492,76 +492,76 @@ namespace NActors {
             HTML(str) {
                 if (!explanation.empty()) {
                     DIV_CLASS("row") {
-                        DIV_CLASS("col-md-12 alert alert-info") { 
-                            str << explanation; 
-                        } 
+                        DIV_CLASS("col-md-12 alert alert-info") {
+                            str << explanation;
+                        }
                     }
                 }
 
                 DIV_CLASS("row") {
                     DIV_CLASS("col-md-6") {
-                        RenderComponentPriorities(str); 
-                    } 
-                    DIV_CLASS("col-md-6") { 
-                        H4() { 
-                            str << "Change priority for all components"; 
-                        } 
+                        RenderComponentPriorities(str);
+                    }
+                    DIV_CLASS("col-md-6") {
+                        H4() {
+                            str << "Change priority for all components";
+                        }
                         TABLE_CLASS("table table-condensed") {
                             TABLEHEAD() {
                                 TABLER() {
-                                    TABLEH() { 
-                                        str << "Priority"; 
-                                    } 
+                                    TABLEH() {
+                                        str << "Priority";
+                                    }
                                 }
                             }
                             TABLEBODY() {
                                 for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
                                     TABLER() {
-                                        TABLED() { 
-                                            str << "<a href = 'logger?c=-1&p=" << p << "'>" 
+                                        TABLED() {
+                                            str << "<a href = 'logger?c=-1&p=" << p << "'>"
                                                 << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
                                         }
                                     }
                                 }
                             }
                         }
-                        H4() { 
-                            str << "Change sampling priority for all components"; 
-                        } 
+                        H4() {
+                            str << "Change sampling priority for all components";
+                        }
                         TABLE_CLASS("table table-condensed") {
                             TABLEHEAD() {
                                 TABLER() {
-                                    TABLEH() { 
-                                        str << "Priority"; 
-                                    } 
+                                    TABLEH() {
+                                        str << "Priority";
+                                    }
                                 }
                             }
                             TABLEBODY() {
                                 for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
                                     TABLER() {
-                                        TABLED() { 
-                                            str << "<a href = 'logger?c=-1&sp=" << p << "'>" 
+                                        TABLED() {
+                                            str << "<a href = 'logger?c=-1&sp=" << p << "'>"
                                                 << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
                                         }
                                     }
                                 }
                             }
                         }
-                        H4() { 
-                            str << "Change sampling rate for all components"; 
-                        } 
+                        H4() {
+                            str << "Change sampling rate for all components";
+                        }
                         str << "<form method=\"GET\">" << Endl;
                         str << "Rate: <input type=\"number\" name=\"sr\" value=\"0\"/>" << Endl;
                         str << "<input type=\"hidden\" name=\"c\" value=\"-1\">" << Endl;
                         str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"Change\"/>" << Endl;
                         str << "</form>" << Endl;
-                        H4() { 
-                            str << "Drop log entries in case of overflow: " 
-                                << (Settings->AllowDrop ? "Enabled" : "Disabled"); 
-                        } 
+                        H4() {
+                            str << "Drop log entries in case of overflow: "
+                                << (Settings->AllowDrop ? "Enabled" : "Disabled");
+                        }
                         str << "<form method=\"GET\">" << Endl;
-                        str << "<input type=\"hidden\" name=\"allowdrop\" value=\"" << (Settings->AllowDrop ? "0" : "1") << "\"/>" << Endl; 
-                        str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"" << (Settings->AllowDrop ? "Disable" : "Enable") << "\"/>" << Endl; 
+                        str << "<input type=\"hidden\" name=\"allowdrop\" value=\"" << (Settings->AllowDrop ? "0" : "1") << "\"/>" << Endl;
+                        str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"" << (Settings->AllowDrop ? "Disable" : "Enable") << "\"/>" << Endl;
                         str << "</form>" << Endl;
                     }
                 }
@@ -605,34 +605,34 @@ namespace NActors {
                     TLogRecord(logPrio, logRecord.data(), logRecord.size()));
             } break;
 
-            case NActors::NLog::TSettings::JSON_FORMAT: { 
-                NJsonWriter::TBuf json; 
-                json.BeginObject() 
-                    .WriteKey("@timestamp") 
+            case NActors::NLog::TSettings::JSON_FORMAT: {
+                NJsonWriter::TBuf json;
+                json.BeginObject()
+                    .WriteKey("@timestamp")
                     .WriteString(Settings->UseLocalTimestamps ? FormatLocalTimestamp(time, buf) : time.ToString().data())
-                    .WriteKey("microseconds") 
-                    .WriteULongLong(time.MicroSeconds()) 
-                    .WriteKey("host") 
-                    .WriteString(Settings->ShortHostName) 
-                    .WriteKey("cluster") 
-                    .WriteString(Settings->ClusterName) 
-                    .WriteKey("priority") 
-                    .WriteString(PriorityToString(priority)) 
-                    .WriteKey("npriority") 
-                    .WriteInt((int)priority) 
-                    .WriteKey("component") 
-                    .WriteString(Settings->ComponentName(component)) 
-                    .WriteKey("tag") 
-                    .WriteString("KIKIMR") 
-                    .WriteKey("revision") 
-                    .WriteInt(GetProgramSvnRevision()) 
-                    .WriteKey("message") 
-                    .WriteString(formatted) 
-                    .EndObject(); 
+                    .WriteKey("microseconds")
+                    .WriteULongLong(time.MicroSeconds())
+                    .WriteKey("host")
+                    .WriteString(Settings->ShortHostName)
+                    .WriteKey("cluster")
+                    .WriteString(Settings->ClusterName)
+                    .WriteKey("priority")
+                    .WriteString(PriorityToString(priority))
+                    .WriteKey("npriority")
+                    .WriteInt((int)priority)
+                    .WriteKey("component")
+                    .WriteString(Settings->ComponentName(component))
+                    .WriteKey("tag")
+                    .WriteString("KIKIMR")
+                    .WriteKey("revision")
+                    .WriteInt(GetProgramSvnRevision())
+                    .WriteKey("message")
+                    .WriteString(formatted)
+                    .EndObject();
                 auto logRecord = json.Str();
                 LogBackend->WriteData(
                     TLogRecord(logPrio, logRecord.data(), logRecord.size()));
-            } break; 
+            } break;
         }
 
         return true;
@@ -657,7 +657,7 @@ namespace NActors {
         return buf;
     }
 
-    TAutoPtr<TLogBackend> CreateSysLogBackend(const TString& ident, 
+    TAutoPtr<TLogBackend> CreateSysLogBackend(const TString& ident,
                                               bool logPError, bool logCons) {
         int flags = 0;
         if (logPError)
@@ -668,20 +668,20 @@ namespace NActors {
         return new TSysLogBackend(ident.data(), TSysLogBackend::TSYSLOG_LOCAL1, flags);
     }
 
-    class TStderrBackend: public TLogBackend { 
+    class TStderrBackend: public TLogBackend {
     public:
-        TStderrBackend() { 
-        } 
+        TStderrBackend() {
+        }
         void WriteData(const TLogRecord& rec) override {
-#ifdef _MSC_VER 
-            if (IsDebuggerPresent()) { 
+#ifdef _MSC_VER
+            if (IsDebuggerPresent()) {
                 TString x;
-                x.reserve(rec.Len + 2); 
-                x.append(rec.Data, rec.Len); 
-                x.append('\n'); 
-                OutputDebugString(x.c_str()); 
-            } 
-#endif 
+                x.reserve(rec.Len + 2);
+                x.append(rec.Data, rec.Len);
+                x.append('\n');
+                OutputDebugString(x.c_str());
+            }
+#endif
             bool isOk = false;
             do {
                 try {

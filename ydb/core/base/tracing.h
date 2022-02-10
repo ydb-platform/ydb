@@ -111,7 +111,7 @@ public:
 class ITrace {
 public:
     enum EType {
-        TypeSysTabletBootstrap, 
+        TypeSysTabletBootstrap,
         TypeReqRebuildHistoryGraph
     };
 

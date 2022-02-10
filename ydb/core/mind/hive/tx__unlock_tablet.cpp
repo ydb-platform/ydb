@@ -113,7 +113,7 @@ ITransaction* THive::CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTab
     return new TTxUnlockTabletExecution(rec, sender, cookie, this);
 }
 
-ITransaction* THive::CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo) { 
+ITransaction* THive::CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo) {
     return new TTxUnlockTabletExecution(tabletId, seqNo, this);
 }
 

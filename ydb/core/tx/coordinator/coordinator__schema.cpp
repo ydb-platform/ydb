@@ -20,7 +20,7 @@ struct TTxCoordinator::TTxSchema : public TTransactionBase<TTxCoordinator> {
     }
 };
 
-ITransaction* TTxCoordinator::CreateTxSchema() { 
+ITransaction* TTxCoordinator::CreateTxSchema() {
     return new TTxSchema(this);
 }
 

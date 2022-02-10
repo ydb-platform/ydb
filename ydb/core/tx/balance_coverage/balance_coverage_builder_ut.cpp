@@ -1,4 +1,4 @@
-#include "balance_coverage_builder.h" 
+#include "balance_coverage_builder.h"
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {

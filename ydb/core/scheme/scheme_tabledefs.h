@@ -1,7 +1,7 @@
-#pragma once 
- 
-#include "defs.h" 
-#include "scheme_tablecell.h" 
+#pragma once
+
+#include "defs.h"
+#include "scheme_tablecell.h"
 
 #include <ydb/core/base/pathid.h>
 #include <ydb/core/protos/tx.pb.h>
@@ -9,23 +9,23 @@
 #include <ydb/library/aclib/aclib.h>
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
- 
+
 #include <util/generic/maybe.h>
 #include <util/generic/map.h>
 
-namespace NKikimr { 
- 
+namespace NKikimr {
+
 using TSchemaVersion = ui64;
 
-// ident for table, must be unique in selected scope 
-// for global transactions ownerid is tabletid of owning schemeshard and tableid is counter designated by schemeshard 
+// ident for table, must be unique in selected scope
+// for global transactions ownerid is tabletid of owning schemeshard and tableid is counter designated by schemeshard
 // SysViewInfo is not empty for system views attached to corresponding table
 
-struct TTableId { 
+struct TTableId {
     TPathId PathId;
     TString SysViewInfo;
     TSchemaVersion SchemaVersion = 0;
- 
+
     TTableId() = default;
 
     // raw ctors
@@ -33,8 +33,8 @@ struct TTableId {
         : PathId(ownerId, tableId)
         , SysViewInfo(sysViewInfo)
         , SchemaVersion(schemaVersion)
-    {} 
- 
+    {}
+
     TTableId(ui64 ownerId, ui64 tableId, const TString& sysViewInfo)
         : TTableId(ownerId, tableId, sysViewInfo, 0)
     {}
@@ -45,8 +45,8 @@ struct TTableId {
 
     TTableId(ui64 ownerId, ui64 tableId)
         : TTableId(ownerId, tableId, TString(), 0)
-    {} 
- 
+    {}
+
     // ctors from TPathId
     TTableId(const TPathId& pathId, const TString& sysViewInfo, ui64 schemaVersion)
         : TTableId(pathId.OwnerId, pathId.LocalPathId, sysViewInfo, schemaVersion)
@@ -64,14 +64,14 @@ struct TTableId {
         : TTableId(pathId, TString(), 0)
     {}
 
-    explicit operator bool() const noexcept { 
+    explicit operator bool() const noexcept {
         return bool(PathId);
-    } 
- 
+    }
+
     bool HasSamePath(const TTableId &x) const noexcept {
         return PathId == x.PathId && SysViewInfo == x.SysViewInfo;
-    } 
- 
+    }
+
     bool IsSystemView() const noexcept {
         return !SysViewInfo.empty();
     }
@@ -103,9 +103,9 @@ struct TTableId {
         }
 
         return hash;
-    } 
-}; 
- 
+    }
+};
+
 struct TIndexId {
     TPathId PathId;
     TSchemaVersion SchemaVersion = 0;
@@ -138,45 +138,45 @@ using TTablePathHashMap = THashMap<TTableId, T, TTablePathHashFn, TTablePathEqua
 
 using TTablePathHashSet = THashSet<TTableId, TTablePathHashFn, TTablePathEqualFn>;
 
-// defines key range as low and high borders (possibly partial - w/o defined key values on tail) 
-// missing values interpreted as infinity and mean "greater then any key with set prefix" 
-// column order must match table key order 
-// [{a, null}, {b, null}) => { (a, null), (b, null), inclusive = true, inclusive = false ) } 
-// ({a, inf}, {b, inf}) => { (a), (b), false, false) } ('inclusive' does not matter for infinity) 
-// [{a, 1}, {inf}) => { (a, 1), (), inclusive = true, inclusive = false) } 
-// (-inf, +inf) => { (null, null), (), inclusive = true, false) } ((null, null) is smallest defined key greater then -infinity, so we must include it in range 
-// [{a, 1}, {b, 3}] => { (a, 1), (b, 3), inclusive = true, inclusive = true) } (probably most used case w/o any corner cases 
-class TTableRange { 
-public: 
+// defines key range as low and high borders (possibly partial - w/o defined key values on tail)
+// missing values interpreted as infinity and mean "greater then any key with set prefix"
+// column order must match table key order
+// [{a, null}, {b, null}) => { (a, null), (b, null), inclusive = true, inclusive = false ) }
+// ({a, inf}, {b, inf}) => { (a), (b), false, false) } ('inclusive' does not matter for infinity)
+// [{a, 1}, {inf}) => { (a, 1), (), inclusive = true, inclusive = false) }
+// (-inf, +inf) => { (null, null), (), inclusive = true, false) } ((null, null) is smallest defined key greater then -infinity, so we must include it in range
+// [{a, 1}, {b, 3}] => { (a, 1), (b, 3), inclusive = true, inclusive = true) } (probably most used case w/o any corner cases
+class TTableRange {
+public:
     TConstArrayRef<TCell> From;
     TConstArrayRef<TCell> To;
     bool InclusiveFrom;
     bool InclusiveTo;
     bool Point;
- 
+
     explicit TTableRange(TConstArrayRef<TCell> point)
-        : From(point) 
-        , To() 
-        , InclusiveFrom(true) 
-        , InclusiveTo(true) 
+        : From(point)
+        , To()
+        , InclusiveFrom(true)
+        , InclusiveTo(true)
         , Point(true) {}
- 
+
     TTableRange(TConstArrayRef<TCell> fromValues, bool inclusiveFrom, TConstArrayRef<TCell> toValues, bool inclusiveTo,
         bool point = false)
-        : From(fromValues) 
-        , To(toValues) 
-        , InclusiveFrom(inclusiveFrom || point) 
-        , InclusiveTo(inclusiveTo || point) 
+        : From(fromValues)
+        , To(toValues)
+        , InclusiveFrom(inclusiveFrom || point)
+        , InclusiveTo(inclusiveTo || point)
         , Point(point)
     {
         if (Point) {
             Y_VERIFY_DEBUG(toValues.empty() || fromValues.size() == toValues.size());
         }
     }
- 
+
     bool IsEmptyRange(TConstArrayRef<const NScheme::TTypeId> cellTypeIds) const;
-}; 
- 
+};
+
 class TSerializedTableRange {
 public:
     TSerializedCellVec From;
@@ -283,55 +283,55 @@ int ComparePointAndRange(const TConstArrayRef<TCell>& point, const TTableRange& 
 // Template args determine where range lies regarding compared border.
 // E.g. CompareBorders<true, true>(...) compares borders of ranges lying on the left
 // of compared borders (or in other words upper range borders are compared).
-template<bool FirstLeft, bool SecondLeft> 
+template<bool FirstLeft, bool SecondLeft>
 int CompareBorders(TConstArrayRef<TCell> first, TConstArrayRef<TCell> second, bool inclusiveFirst, bool inclusiveSecond,
     TConstArrayRef<NScheme::TTypeId> cellTypes)
 {
-    const ui32 firstSize = first.size(); 
-    const ui32 secondSize = second.size(); 
- 
-    for (ui32 idx = 0, keyColumns = cellTypes.size(); idx < keyColumns; ++idx) { 
-        const bool firstComplete = (firstSize == idx); 
-        const bool secondComplete = (secondSize == idx); 
- 
-        if (firstComplete) { 
-            if (secondComplete) 
-                return 0; 
-            return 1; 
-        } 
- 
-        if (secondComplete) 
-            return -1; 
- 
-        if (first[idx].IsNull()) { 
-            if (!second[idx].IsNull()) 
-                return -1; 
-        } else if (second[idx].IsNull()) { 
-            return 1; 
+    const ui32 firstSize = first.size();
+    const ui32 secondSize = second.size();
+
+    for (ui32 idx = 0, keyColumns = cellTypes.size(); idx < keyColumns; ++idx) {
+        const bool firstComplete = (firstSize == idx);
+        const bool secondComplete = (secondSize == idx);
+
+        if (firstComplete) {
+            if (secondComplete)
+                return 0;
+            return 1;
+        }
+
+        if (secondComplete)
+            return -1;
+
+        if (first[idx].IsNull()) {
+            if (!second[idx].IsNull())
+                return -1;
+        } else if (second[idx].IsNull()) {
+            return 1;
         } else if (const int compares = CompareTypedCells(first[idx], second[idx], cellTypes[idx])) {
-            return compares; 
-        } 
-    } 
- 
-    if (FirstLeft && SecondLeft) { 
-        if (inclusiveFirst == inclusiveSecond) 
-            return 0; 
-        return (inclusiveFirst ? 1 : -1); 
-    } else if (FirstLeft && !SecondLeft) { 
-        if (inclusiveFirst && inclusiveSecond) 
-            return 0; 
-        return -1; 
-    } else if (!FirstLeft && SecondLeft) { 
-        if (inclusiveFirst && inclusiveSecond) 
-            return 0; 
-        return 1; 
-    } else { // !FirstLeft && !SecondLeft 
-        if (inclusiveFirst == inclusiveSecond) 
-            return 0; 
-        return (inclusiveFirst ? -1 : 1); 
-    } 
-} 
- 
+            return compares;
+        }
+    }
+
+    if (FirstLeft && SecondLeft) {
+        if (inclusiveFirst == inclusiveSecond)
+            return 0;
+        return (inclusiveFirst ? 1 : -1);
+    } else if (FirstLeft && !SecondLeft) {
+        if (inclusiveFirst && inclusiveSecond)
+            return 0;
+        return -1;
+    } else if (!FirstLeft && SecondLeft) {
+        if (inclusiveFirst && inclusiveSecond)
+            return 0;
+        return 1;
+    } else { // !FirstLeft && !SecondLeft
+        if (inclusiveFirst == inclusiveSecond)
+            return 0;
+        return (inclusiveFirst ? -1 : 1);
+    }
+}
+
 /// @note returns 0 on any overlap
 inline int CompareRanges(const TTableRange& rangeX, const TTableRange& rangeY,
                          const TConstArrayRef<NScheme::TTypeId> types)
@@ -385,13 +385,13 @@ private:
         TOwnedCellVec FromKey;
         TOwnedCellVec ToKey;
     };
- 
+
     TOwnedTableRange(TInit init)
         : TTableRange(std::move(init.Range))
         , FromKey_(std::move(init.FromKey))
         , ToKey_(std::move(init.ToKey))
     { }
- 
+
     static TInit Allocate(TOwnedCellVec fromKey, bool inclusiveFrom,
                           TOwnedCellVec toKey, bool inclusiveTo,
                           bool point)
@@ -422,11 +422,11 @@ private:
         Point = false;
     }
 
-public: 
+public:
     TOwnedTableRange()
         : TTableRange({ }, false, { }, false, false)
     { }
- 
+
     explicit TOwnedTableRange(TOwnedCellVec point)
         : TOwnedTableRange(Allocate(std::move(point), true, TOwnedCellVec(), true, true))
     { }
@@ -434,7 +434,7 @@ public:
     explicit TOwnedTableRange(TConstArrayRef<TCell> point)
         : TOwnedTableRange(Allocate(TOwnedCellVec(point), true, TOwnedCellVec(), true, true))
     { }
- 
+
     TOwnedTableRange(TOwnedCellVec fromKey, bool inclusiveFrom, TOwnedCellVec toKey, bool inclusiveTo, bool point = false)
         : TOwnedTableRange(Allocate(std::move(fromKey), inclusiveFrom, std::move(toKey), inclusiveTo, point))
     { }
@@ -494,8 +494,8 @@ public:
 private:
     TOwnedCellVec FromKey_;
     TOwnedCellVec ToKey_;
-}; 
- 
+};
+
 struct TReadTarget {
     enum class EMode {
         Online,
@@ -579,63 +579,63 @@ struct TSecurityObject : TAtomicRefCount<TSecurityObject>, NACLib::TSecurityObje
     {}
 };
 
-// key description of one minikql operation 
+// key description of one minikql operation
 class TKeyDesc : TNonCopyable {
-public: 
- 
-    // what we do on row? 
-    enum struct ERowOperation { 
-        Unknown = 1, 
-        Read = 2, 
-        Update = 3, 
-        Erase = 4, 
-    }; 
- 
-    // what we do on column? 
-    enum struct EColumnOperation { 
-        Read = 1, 
-        Set = 2, // == erase 
-        InplaceUpdate = 3, 
-    }; 
- 
+public:
+
+    // what we do on row?
+    enum struct ERowOperation {
+        Unknown = 1,
+        Read = 2,
+        Update = 3,
+        Erase = 4,
+    };
+
+    // what we do on column?
+    enum struct EColumnOperation {
+        Read = 1,
+        Set = 2, // == erase
+        InplaceUpdate = 3,
+    };
+
     enum ESystemColumnIds : ui32 {
         EColumnIdInvalid = Max<ui32>(),
         EColumnIdSystemStart = EColumnIdInvalid - 1000,
         EColumnIdDataShard = EColumnIdSystemStart + 1
     };
 
-#define SCHEME_KEY_DESCRIPTION_STATUS_MAP(XX) \ 
-    XX(Unknown, 0) \ 
-    XX(Ok, 1) \ 
-    XX(TypeCheckFailed, 2) \ 
-    XX(OperationNotSupported, 3) \ 
+#define SCHEME_KEY_DESCRIPTION_STATUS_MAP(XX) \
+    XX(Unknown, 0) \
+    XX(Ok, 1) \
+    XX(TypeCheckFailed, 2) \
+    XX(OperationNotSupported, 3) \
     XX(NotExists, 4) \
     XX(SnapshotNotExist, 5) \
     XX(SnapshotNotReady, 6)
- 
-    enum class EStatus { 
-        SCHEME_KEY_DESCRIPTION_STATUS_MAP(ENUM_VALUE_GEN) 
-    }; 
- 
+
+    enum class EStatus {
+        SCHEME_KEY_DESCRIPTION_STATUS_MAP(ENUM_VALUE_GEN)
+    };
+
     static void Out(IOutputStream& out, EStatus x);
- 
-    // one column operation (in) 
-    struct TColumnOp { 
-        ui32 Column; 
-        EColumnOperation Operation; 
-        ui32 ExpectedType; 
+
+    // one column operation (in)
+    struct TColumnOp {
+        ui32 Column;
+        EColumnOperation Operation;
+        ui32 ExpectedType;
         ui32 InplaceUpdateMode;
         ui32 ImmediateUpdateSize;
-    }; 
- 
-    // one column info (out) 
-    struct TColumnInfo { 
-        ui32 Column; 
-        ui32 Type; 
-        ui32 AllowInplaceMode; 
-        EStatus Status; 
-    }; 
- 
+    };
+
+    // one column info (out)
+    struct TColumnInfo {
+        ui32 Column;
+        ui32 Type;
+        ui32 AllowInplaceMode;
+        EStatus Status;
+    };
+
     struct TRangeLimits {
         ui64 ItemsLimit;
         ui64 BytesLimit;
@@ -662,8 +662,8 @@ public:
         TMaybe<TPartitionRangeInfo> Range;
     };
 
-    // in 
-    const TTableId TableId; 
+    // in
+    const TTableId TableId;
     const TOwnedTableRange Range;
     const TRangeLimits RangeLimits;
     const ERowOperation RowOperation;
@@ -671,30 +671,30 @@ public:
     const TVector<TColumnOp> Columns;
     const bool Reverse;
     TReadTarget ReadTarget; // Set for Read row operation
- 
-    // out 
-    EStatus Status; 
+
+    // out
+    EStatus Status;
     TVector<TColumnInfo> ColumnInfos;
     TVector<TPartitionInfo> Partitions;
     TIntrusivePtr<TSecurityObject> SecurityObject;
- 
+
     bool IsSystemView() const { return Partitions.empty(); }
 
-    template<typename TKeyColumnTypes, typename TColumns> 
+    template<typename TKeyColumnTypes, typename TColumns>
     TKeyDesc(const TTableId& tableId, const TTableRange& range, ERowOperation rowOperation,
             const TKeyColumnTypes &keyColumnTypes, const TColumns &columns,
             ui64 itemsLimit = 0, ui64 bytesLimit = 0, bool reverse = false)
-        : TableId(tableId) 
+        : TableId(tableId)
         , Range(range.From, range.InclusiveFrom, range.To, range.InclusiveTo, range.Point)
         , RangeLimits(itemsLimit, bytesLimit)
         , RowOperation(rowOperation)
-        , KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end()) 
-        , Columns(columns.begin(), columns.end()) 
+        , KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
+        , Columns(columns.begin(), columns.end())
         , Reverse(reverse)
-        , Status(EStatus::Unknown) 
-    {} 
-}; 
- 
+        , Status(EStatus::Unknown)
+    {}
+};
+
 struct TSystemColumnInfo {
     TKeyDesc::ESystemColumnIds ColumnId;
     NKikimr::NScheme::TTypeId TypeId;
@@ -710,8 +710,8 @@ inline int ComparePointKeys(const TKeyDesc& point1, const TKeyDesc& point2) {
     Y_VERIFY(point2.Range.Point);
     return CompareTypedCellVectors(
         point1.Range.From.data(), point2.Range.From.data(), point1.KeyColumnTypes.data(), point1.KeyColumnTypes.size());
-} 
- 
+}
+
 inline int ComparePointAndRangeKeys(const TKeyDesc& point, const TKeyDesc& range) {
     Y_VERIFY(point.Range.Point);
     return ComparePointAndRange(point.Range.From, range.Range, point.KeyColumnTypes, range.KeyColumnTypes);

@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 #include <bitset>
 #include <library/cpp/actors/core/interconnect.h>
 #include <ydb/core/base/hive.h>
@@ -113,9 +113,9 @@ namespace std {
     };
 }
 
-namespace NKikimr { 
+namespace NKikimr {
 namespace NHive {
- 
+
 struct TCompleteNotifications {
     TVector<THolder<IEventHandle>> Notifications;
     TActorId SelfID;
@@ -180,7 +180,7 @@ protected:
     friend class TQueryMigrationWaitActor;
     friend class TReleaseTabletsWaitActor;
     friend class TDrainNodeWaitActor;
- 
+
     friend class TTxInitScheme;
     friend class TTxDeleteTablet;
     friend class TTxDeleteOwnerTablets;
@@ -260,19 +260,19 @@ protected:
                                            TFollowerId followerId,
                                            TEvLocal::TEvTabletStatus::EStatus status,
                                            TEvTablet::TEvTabletDead::EReason reason);
-    ITransaction* CreateBootTablet(TTabletId tabletId); 
+    ITransaction* CreateBootTablet(TTabletId tabletId);
     ITransaction* CreateKillNode(TNodeId nodeId, const TActorId& local);
     ITransaction* CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters> groups = {});
-    ITransaction* CreateCheckTablets(); 
+    ITransaction* CreateCheckTablets();
     ITransaction* CreateSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec);
     ITransaction* CreateStopTablet(TTabletId tabletId, const TActorId& actorToNotify);
     ITransaction* CreateResumeTablet(TTabletId tabletId, const TActorId& actorToNotify);
     ITransaction* CreateStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external = false);
-    ITransaction* CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev); 
+    ITransaction* CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev);
     ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup);
     ITransaction* CreateLockTabletExecution(const NKikimrHive::TEvLockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
     ITransaction* CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
-    ITransaction* CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo); 
+    ITransaction* CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo);
     ITransaction* CreateRequestTabletSequence(TEvHive::TEvRequestTabletIdSequence::TPtr event);
     ITransaction* CreateResponseTabletSequence(TEvHive::TEvResponseTabletIdSequence::TPtr event);
     ITransaction* CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected> event);
@@ -286,24 +286,24 @@ protected:
     ITransaction* CreateConfigureSubdomain(TEvHive::TEvConfigureHive::TPtr event);
     ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator);
     ITransaction* CreateSwitchDrainOff(TNodeId nodeId, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements);
- 
+
 public:
     TDomainsView DomainsView;
- 
+
 protected:
     TActorId BSControllerPipeClient;
     TActorId RootHivePipeClient;
-    ui64 HiveUid; // Hive Personal Identifier - identifies a unique individual hive 
-    ui32 HiveDomain; 
+    ui64 HiveUid; // Hive Personal Identifier - identifies a unique individual hive
+    ui32 HiveDomain;
     TTabletId RootHiveId;
     TTabletId HiveId;
     ui64 HiveGeneration;
     TSubDomainKey RootDomainKey;
     TSubDomainKey PrimaryDomainKey;
     TString RootDomainName;
-    TIntrusivePtr<NTabletPipe::TBoundedClientCacheConfig> PipeClientCacheConfig; 
+    TIntrusivePtr<NTabletPipe::TBoundedClientCacheConfig> PipeClientCacheConfig;
     THolder<NTabletPipe::IClientCache> PipeClientCache;
-    TPipeTracker PipeTracker; 
+    TPipeTracker PipeTracker;
     NTabletPipe::TClientRetryPolicy PipeRetryPolicy;
     std::unordered_map<TNodeId, TNodeInfo> Nodes;
     std::unordered_map<TTabletId, TLeaderTabletInfo> Tablets;
@@ -368,7 +368,7 @@ protected:
     NKikimrHive::TEvSeizeTablets MigrationFilter;
 
     TActorId ResponsivenessActorID;
-    TTabletResponsivenessPinger *ResponsivenessPinger; 
+    TTabletResponsivenessPinger *ResponsivenessPinger;
     // remove after upgrade to sub hives
     ui64 NextTabletId = 0x10000;
     /////////////////////////////////////
@@ -498,41 +498,41 @@ protected:
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
     void Handle(NSysView::TEvSysView::TEvGetTabletIdsRequest::TPtr& ev);
     void Handle(NSysView::TEvSysView::TEvGetTabletsRequest::TPtr& ev);
- 
-protected: 
+
+protected:
     void RestartPipeTx(ui64 tabletId);
- 
-public: 
+
+public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::HIVE_ACTOR;
     }
 
     THive(TTabletStorageInfo *info, const TActorId &tablet);
- 
+
 protected:
     STATEFN(StateInit);
     STATEFN(StateWork);
- 
+
     void SendToBSControllerPipe(IEventBase* payload);
     void SendToRootHivePipe(IEventBase* payload);
     void RestartBSControllerPipe();
     void RestartRootHivePipe();
- 
+
     struct TBestNodeResult {
         TNodeInfo* BestNode;
         bool TryToContinue;
- 
+
         TBestNodeResult(TNodeInfo& bestNode)
             : BestNode(&bestNode)
             , TryToContinue(true)
         {}
- 
+
         TBestNodeResult(bool tryToContinue)
             : BestNode(nullptr)
             , TryToContinue(tryToContinue)
         {}
     };
- 
+
     TBestNodeResult FindBestNode(const TTabletInfo& tablet);
 
     struct TSelectedNode {
@@ -793,8 +793,8 @@ protected:
     void ResolveDomain(TSubDomainKey domain);
     TString GetDomainName(TSubDomainKey domain);
     TSubDomainKey GetMySubDomainKey() const;
-}; 
- 
+};
+
 } // NHive
 } // NKikimr
 

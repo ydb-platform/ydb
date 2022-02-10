@@ -125,7 +125,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
     { // setup domain info
         app.ClearDomainsAndHive();
         auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds("dc-1", domainId, 0,
-                                                                                  domainId, domainId, TVector<ui32>{domainId}, 
+                                                                                  domainId, domainId, TVector<ui32>{domainId},
                                                                                   domainId, TVector<ui32>{domainId},
                                                                                   100500,
                                                                                   TVector<ui64>{},

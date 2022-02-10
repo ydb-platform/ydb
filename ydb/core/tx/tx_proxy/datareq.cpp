@@ -27,16 +27,16 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-#include <util/generic/hash_set.h> 
+#include <util/generic/hash_set.h>
 #include <util/generic/queue.h>
- 
-#ifndef KIKIMR_DATAREQ_WATCHDOG_PERIOD 
-#define KIKIMR_DATAREQ_WATCHDOG_PERIOD 10000 
-#endif 
- 
-namespace NKikimr { 
-namespace NTxProxy { 
- 
+
+#ifndef KIKIMR_DATAREQ_WATCHDOG_PERIOD
+#define KIKIMR_DATAREQ_WATCHDOG_PERIOD 10000
+#endif
+
+namespace NKikimr {
+namespace NTxProxy {
+
 const ui32 MaxDatashardProgramSize = 48 * 1024 * 1024; // 48 MB
 const ui32 ShardCancelDeadlineShiftSec = 60;
 
@@ -46,8 +46,8 @@ namespace {
     static constexpr TDuration MaxReattachDuration = TDuration::Seconds(4);
 }
 
-struct TFlatMKQLRequest : public TThrRefBase { 
-    TAutoPtr<NMiniKQL::IEngineFlat> Engine; 
+struct TFlatMKQLRequest : public TThrRefBase {
+    TAutoPtr<NMiniKQL::IEngineFlat> Engine;
     ui64 LockTxId;
     bool NeedDiagnostics;
     bool LlvmRuntime;
@@ -56,14 +56,14 @@ struct TFlatMKQLRequest : public TThrRefBase {
     TMaybe<ui64> PerShardKeysSizeLimitBytes;
     NKikimrTxUserProxy::TMiniKQLTransaction::TLimits Limits;
     TRowVersion Snapshot = TRowVersion::Min();
- 
+
     TMap<ui64, TAutoPtr<TBalanceCoverageBuilder>> BalanceCoverageBuilders;
- 
-    NMiniKQL::IEngineFlat::EResult EngineResultStatusCode; 
-    NMiniKQL::IEngineFlat::EStatus EngineResponseStatus; 
+
+    NMiniKQL::IEngineFlat::EResult EngineResultStatusCode;
+    NMiniKQL::IEngineFlat::EStatus EngineResponseStatus;
     TString EngineResponse;
-    NKikimrMiniKQL::TResult EngineEvaluatedResponse; 
- 
+    NKikimrMiniKQL::TResult EngineEvaluatedResponse;
+
     TFlatMKQLRequest()
         : LockTxId(0)
         , NeedDiagnostics(false)
@@ -71,8 +71,8 @@ struct TFlatMKQLRequest : public TThrRefBase {
         , CollectStats(false)
         , ReadOnlyProgram(false)
         , EngineResultStatusCode(NMiniKQL::IEngineFlat::EResult::Unknown)
-        , EngineResponseStatus(NMiniKQL::IEngineFlat::EStatus::Unknown) 
-    {} 
+        , EngineResponseStatus(NMiniKQL::IEngineFlat::EStatus::Unknown)
+    {}
 
     void RequestAdditionResults(ui64 txId) {
         auto lockTxId = Engine->GetLockTxId();
@@ -83,8 +83,8 @@ struct TFlatMKQLRequest : public TThrRefBase {
 
         NeedDiagnostics = Engine->HasDiagnosticsRequest();
     }
-}; 
- 
+};
+
 // Class used to merge key ranges and arrange shards for ordered scans.
 class TKeySpace {
 public:
@@ -182,7 +182,7 @@ struct TReadTableRequest : public TThrRefBase {
     }
 };
 
-class TDataReq : public TActor<TDataReq> { 
+class TDataReq : public TActor<TDataReq> {
 public:
     enum class EParseRangeKeyExp {
         NONE,
@@ -239,14 +239,14 @@ public:
         }
     };
 
-    struct TPerTablet { 
-        enum { 
-            AffectedRead = 1 << 0, 
-            AffectedWrite = 1 << 1, 
-        }; 
- 
+    struct TPerTablet {
+        enum {
+            AffectedRead = 1 << 0,
+            AffectedWrite = 1 << 1,
+        };
+
 #define DATA_REQ_PER_TABLET_STATUS_MAP(XX) \
-            XX(StatusUnknown, 128) \ 
+            XX(StatusUnknown, 128) \
             XX(StatusWait, 0) \
             XX(StatusPrepared, 1) \
             XX(StatusError, 2) \
@@ -254,36 +254,36 @@ public:
 
         enum class ETabletStatus {
             DATA_REQ_PER_TABLET_STATUS_MAP(ENUM_VALUE_GEN)
-        }; 
- 
-        ui64 MinStep = 0; 
-        ui64 MaxStep = 0; 
-        ui32 AffectedFlags = 0; 
-        ETabletStatus TabletStatus = ETabletStatus::StatusUnknown; 
-        ui64 ReadSize = 0; 
-        ui64 ReplySize = 0; 
+        };
+
+        ui64 MinStep = 0;
+        ui64 MaxStep = 0;
+        ui32 AffectedFlags = 0;
+        ETabletStatus TabletStatus = ETabletStatus::StatusUnknown;
+        ui64 ReadSize = 0;
+        ui64 ReplySize = 0;
         ui64 ProgramSize = 0;
-        ui64 IncomingReadSetsSize = 0; 
+        ui64 IncomingReadSetsSize = 0;
         ui64 OutgoingReadSetsSize = 0;
         bool StreamCleared = false;
         bool Restarting = false;
         size_t RestartCount = 0;
-        TTableId TableId; 
+        TTableId TableId;
         THolder<NKikimrQueryStats::TTxStats> Stats;
         TReattachState ReattachState;
-    }; 
+    };
 private:
- 
-    struct TEvPrivate { 
-        enum EEv { 
-            EvProxyDataReqOngoingTransactionsWatchdog = EventSpaceBegin(TEvents::ES_PRIVATE), 
+
+    struct TEvPrivate {
+        enum EEv {
+            EvProxyDataReqOngoingTransactionsWatchdog = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvReattachToShard,
-            EvEnd 
-        }; 
- 
-        static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)"); 
- 
-        struct TEvProxyDataReqOngoingTransactionWatchdog : public TEventSimple<TEvProxyDataReqOngoingTransactionWatchdog, EvProxyDataReqOngoingTransactionsWatchdog> {}; 
+            EvEnd
+        };
+
+        static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+        struct TEvProxyDataReqOngoingTransactionWatchdog : public TEventSimple<TEvProxyDataReqOngoingTransactionWatchdog, EvProxyDataReqOngoingTransactionsWatchdog> {};
 
         struct TEvReattachToShard : public TEventLocal<TEvReattachToShard, EvReattachToShard> {
             const ui64 TabletId;
@@ -292,82 +292,82 @@ private:
                 : TabletId(tabletId)
             { }
         };
-    }; 
- 
-    const TTxProxyServices Services; 
-    const ui64 TxId; 
-    ui64 SelectedCoordinator; 
- 
-    ui64 ProxyFlags; 
-    TDuration ExecTimeoutPeriod; 
+    };
+
+    const TTxProxyServices Services;
+    const ui64 TxId;
+    ui64 SelectedCoordinator;
+
+    ui64 ProxyFlags;
+    TDuration ExecTimeoutPeriod;
     TDuration CancelAfter;
-    TSchedulerCookieHolder ExecTimeoutCookieHolder; 
- 
+    TSchedulerCookieHolder ExecTimeoutCookieHolder;
+
     TActorId RequestSource;
     ui32 TxFlags;
     bool CanUseFollower;
     bool StreamResponse;
- 
-    TIntrusivePtr<TFlatMKQLRequest> FlatMKQLRequest; 
+
+    TIntrusivePtr<TFlatMKQLRequest> FlatMKQLRequest;
     TIntrusivePtr<TReadTableRequest> ReadTableRequest;
     TString DatashardErrors;
     TVector<ui64> ComplainingDatashards;
     TVector<TString> UnresolvedKeys;
     TAutoPtr<const NACLib::TUserToken> UserToken;
- 
+
     THashMap<ui64, TPerTablet> PerTablet;
-    NYql::TIssueManager IssueManager; 
+    NYql::TIssueManager IssueManager;
     TTablePathHashSet InvalidatedTables;
-    ui64 TabletsLeft; // todo: add scale modifiers 
-    ui64 TabletErrors; 
- 
-    ui64 AggrMinStep; 
-    ui64 AggrMaxStep; 
- 
-    ui64 PlanStep; 
+    ui64 TabletsLeft; // todo: add scale modifiers
+    ui64 TabletErrors;
+
+    ui64 AggrMinStep;
+    ui64 AggrMaxStep;
+
+    ui64 PlanStep;
     ECoordinatorStatus CoordinatorStatus = ECoordinatorStatus::Unknown;
- 
+
     ui64 ResultsReceivedCount;
     ui64 ResultsReceivedSize;
 
     TRequestControls RequestControls;
 
-    TInstant WallClockAccepted; 
+    TInstant WallClockAccepted;
     TInstant WallClockResolveStarted;
-    TInstant WallClockResolved; 
-    TInstant WallClockPrepared; 
-    TInstant WallClockPlanned; 
- 
-    TDuration ElapsedPrepareExec; 
-    TDuration ElapsedExecExec; 
-    TDuration ElapsedPrepareComplete; 
-    TDuration ElapsedExecComplete; 
- 
-    TInstant WallClockFirstPrepareReply; 
-    TInstant WallClockLastPrepareReply; 
- 
-    TInstant WallClockMinPrepareArrive; 
-    TInstant WallClockMaxPrepareArrive; 
-    TDuration WallClockMinPrepareComplete; 
-    TDuration WallClockMaxPrepareComplete; 
- 
-    TInstant WallClockFirstExecReply; 
-    TInstant WallClockLastExecReply; 
- 
+    TInstant WallClockResolved;
+    TInstant WallClockPrepared;
+    TInstant WallClockPlanned;
+
+    TDuration ElapsedPrepareExec;
+    TDuration ElapsedExecExec;
+    TDuration ElapsedPrepareComplete;
+    TDuration ElapsedExecComplete;
+
+    TInstant WallClockFirstPrepareReply;
+    TInstant WallClockLastPrepareReply;
+
+    TInstant WallClockMinPrepareArrive;
+    TInstant WallClockMaxPrepareArrive;
+    TDuration WallClockMinPrepareComplete;
+    TDuration WallClockMaxPrepareComplete;
+
+    TInstant WallClockFirstExecReply;
+    TInstant WallClockLastExecReply;
+
     TDuration CpuTime;
 
-    TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> PrepareFlatMKQLRequest(TStringBuf miniKQLProgram, TStringBuf miniKQLParams, const TActorContext &ctx); 
+    TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> PrepareFlatMKQLRequest(TStringBuf miniKQLProgram, TStringBuf miniKQLParams, const TActorContext &ctx);
     void ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx);
     void ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx);
- 
+
     TIntrusivePtr<TTxProxyMon> TxProxyMon;
 
-    void Die(const TActorContext &ctx) override { 
-        --*TxProxyMon->DataReqInFly; 
- 
+    void Die(const TActorContext &ctx) override {
+        --*TxProxyMon->DataReqInFly;
+
         Send(Services.FollowerPipeCache, new TEvPipeCache::TEvUnlink(0));
         Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
- 
+
         ProcessStreamClearance(false, ctx);
         if (ReadTableRequest) {
             for (auto &tr : ReadTableRequest->StreamingShards) {
@@ -375,19 +375,19 @@ private:
             }
         }
 
-        TActor::Die(ctx); 
-    } 
- 
+        TActor::Die(ctx);
+    }
+
     static TInstant Now() {
         return AppData()->TimeProvider->Now();
     }
 
-    void ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, NKikimrIssues::TStatusIds::EStatusCode code, bool reportIssues, const TActorContext &ctx); 
-    void MarkShardError(ui64 tabletId, TDataReq::TPerTablet &perTablet, bool invalidateDistCache, const TActorContext &ctx); 
-    void TryToInvalidateTable(TTableId tableId, const TActorContext &ctx); 
- 
-    void RegisterPlan(const TActorContext &ctx); 
-    void MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx); 
+    void ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, NKikimrIssues::TStatusIds::EStatusCode code, bool reportIssues, const TActorContext &ctx);
+    void MarkShardError(ui64 tabletId, TDataReq::TPerTablet &perTablet, bool invalidateDistCache, const TActorContext &ctx);
+    void TryToInvalidateTable(TTableId tableId, const TActorContext &ctx);
+
+    void RegisterPlan(const TActorContext &ctx);
+    void MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
     void MakeFlatMKQLResponse(const TActorContext &ctx, const NCpuTime::TCpuTimer& timer);
 
     void ProcessStreamResponseData(TEvDataShard::TEvProposeTransactionResult::TPtr &ev,
@@ -397,41 +397,41 @@ private:
 
     ui64 SelectCoordinator(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx);
     const TDomainsInfo::TDomain& SelectDomain(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx);
- 
-    void HandleWatchdog(const TActorContext &ctx); 
- 
+
+    void HandleWatchdog(const TActorContext &ctx);
+
     void HandleUndeliveredResolve(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx); 
- 
-    void Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx);
+
+    void Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvProposeTransactionRestart::TPtr &ev, const TActorContext &ctx);
     void HandlePrepare(TEvDataShard::TEvProposeTransactionAttachResult::TPtr &ev, const TActorContext &ctx);
-    void HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx); 
-    void HandlePrepareErrors(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx); 
-    void HandlePrepareErrorTimeout(const TActorContext &ctx); 
+    void HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
+    void HandlePrepareErrors(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
+    void HandlePrepareErrorTimeout(const TActorContext &ctx);
     void HandlePlan(TEvDataShard::TEvProposeTransactionAttachResult::TPtr &ev, const TActorContext &ctx);
-    void HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx); 
+    void HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx);
-    void HandleResolve(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx); 
+    void HandleResolve(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProcessing::TEvStreamQuotaRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProcessing::TEvStreamQuotaResponse::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProcessing::TEvStreamQuotaRelease::TPtr &ev, const TActorContext &ctx);
- 
+
     void Handle(TEvPrivate::TEvReattachToShard::TPtr &ev, const TActorContext &ctx);
-    void HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx); 
-    void HandlePrepareErrors(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx); 
-    void HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx); 
-    void HandleExecTimeout(const TActorContext &ctx); 
-    void HandleExecTimeoutResolve(const TActorContext &ctx); 
+    void HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx);
+    void HandlePrepareErrors(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx);
+    void HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx);
+    void HandleExecTimeout(const TActorContext &ctx);
+    void HandleExecTimeoutResolve(const TActorContext &ctx);
 
     void ExtractDatashardErrors(const NKikimrTxDataShard::TEvProposeTransactionResult & record);
-    void CancelProposal(ui64 exceptTablet); 
+    void CancelProposal(ui64 exceptTablet);
     void FailProposedRequest(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, TString errMsg, const TActorContext &ctx);
 
     void SendStreamClearanceResponse(ui64 shard, bool cleared, const TActorContext &ctx);
@@ -447,25 +447,25 @@ private:
     void BuildTxStats(NKikimrQueryStats::TTxStats& stats);
     bool IsReadOnlyRequest() const;
 
-public: 
+public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_REQ_PROXY;
     }
 
     TDataReq(const TTxProxyServices &services, ui64 txid, const TIntrusivePtr<TTxProxyMon> mon,
              const TRequestControls& requestControls)
-        : TActor(&TThis::StateWaitInit) 
-        , Services(services) 
-        , TxId(txid) 
-        , SelectedCoordinator(0) 
-        , ProxyFlags(0) 
+        : TActor(&TThis::StateWaitInit)
+        , Services(services)
+        , TxId(txid)
+        , SelectedCoordinator(0)
+        , ProxyFlags(0)
         , TxFlags(0)
         , CanUseFollower(true)
-        , TabletsLeft(0) 
-        , TabletErrors(0) 
-        , AggrMinStep(0) 
-        , AggrMaxStep(Max<ui64>()) 
-        , PlanStep(0) 
+        , TabletsLeft(0)
+        , TabletErrors(0)
+        , AggrMinStep(0)
+        , AggrMaxStep(Max<ui64>())
+        , PlanStep(0)
         , ResultsReceivedCount(0)
         , ResultsReceivedSize(0)
         , RequestControls(requestControls)
@@ -475,41 +475,41 @@ public:
         , WallClockPrepared(TInstant::MicroSeconds(0))
         , WallClockPlanned(TInstant::MicroSeconds(0))
         , TxProxyMon(mon)
-    { 
-        ++*TxProxyMon->DataReqInFly; 
-    } 
- 
-    STFUNC(StateWaitInit) { 
+    {
+        ++*TxProxyMon->DataReqInFly;
+    }
+
+    STFUNC(StateWaitInit) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvTxProxyReq::TEvMakeRequest, Handle);
-        } 
-    } 
- 
-    STFUNC(StateWaitResolve) { 
+        }
+    }
+
+    STFUNC(StateWaitResolve) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
-        switch (ev->GetTypeRewrite()) { 
-            HFuncTraced(TEvTxProcessing::TEvStreamIsDead, HandleResolve); 
+        switch (ev->GetTypeRewrite()) {
+            HFuncTraced(TEvTxProcessing::TEvStreamIsDead, HandleResolve);
             HFuncTraced(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             HFuncTraced(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
             HFuncTraced(TEvents::TEvUndelivered, HandleUndeliveredResolve); // we must wait for resolve completion
-            CFunc(TEvents::TSystem::Wakeup, HandleExecTimeoutResolve); // we must wait for resolve completion to keep key description 
-            CFunc(TEvPrivate::EvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog); 
-        } 
-    } 
- 
-    // resolve zombie state to keep shared key desc 
-    STFUNC(StateResolveTimeout) { 
-        TRACE_EVENT(NKikimrServices::TX_PROXY); 
-        switch (ev->GetTypeRewrite()) { 
-            CFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType, Die); 
-            CFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult::EventType, Die); 
-        } 
-    } 
- 
-    STFUNC(StateWaitPrepare) { 
+            CFunc(TEvents::TSystem::Wakeup, HandleExecTimeoutResolve); // we must wait for resolve completion to keep key description
+            CFunc(TEvPrivate::EvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog);
+        }
+    }
+
+    // resolve zombie state to keep shared key desc
+    STFUNC(StateResolveTimeout) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
+            CFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType, Die);
+            CFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult::EventType, Die);
+        }
+    }
+
+    STFUNC(StateWaitPrepare) {
+        TRACE_EVENT(NKikimrServices::TX_PROXY);
+        switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
             HFuncTraced(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePrepare);
@@ -520,28 +520,28 @@ public:
             HFuncTraced(TEvTxProcessing::TEvStreamQuotaRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvStreamQuotaResponse, Handle);
             HFuncTraced(TEvTxProcessing::TEvStreamQuotaRelease, Handle);
-            HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePrepare); 
+            HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
             HFuncTraced(TEvPrivate::TEvReattachToShard, Handle);
-            HFuncTraced(TEvents::TEvUndelivered, Handle); 
+            HFuncTraced(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeout);
-            CFunc(TEvPrivate::EvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog); 
-        } 
-    } 
- 
-    STFUNC(StatePrepareErrors) { 
+            CFunc(TEvPrivate::EvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog);
+        }
+    }
+
+    STFUNC(StatePrepareErrors) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePrepareErrors);
             HFuncTraced(TEvTxProcessing::TEvStreamIsDead, Handle);
-            HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePrepareErrors); 
-            HFuncTraced(TEvents::TEvUndelivered, Handle); 
-            CFunc(TEvents::TSystem::Wakeup, HandlePrepareErrorTimeout); 
-        } 
-    } 
- 
-    STFUNC(StateWaitPlan) { 
+            HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePrepareErrors);
+            HFuncTraced(TEvents::TEvUndelivered, Handle);
+            CFunc(TEvents::TSystem::Wakeup, HandlePrepareErrorTimeout);
+        }
+    }
+
+    STFUNC(StateWaitPlan) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
             HFuncTraced(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
             HFuncTraced(TEvTxProxy::TEvProposeTransactionStatus, Handle);
@@ -553,15 +553,15 @@ public:
             HFuncTraced(TEvTxProcessing::TEvStreamQuotaRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvStreamQuotaResponse, Handle);
             HFuncTraced(TEvTxProcessing::TEvStreamQuotaRelease, Handle);
-            HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePlan); 
+            HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePlan);
             HFuncTraced(TEvPrivate::TEvReattachToShard, Handle);
-            HFuncTraced(TEvents::TEvUndelivered, Handle); 
+            HFuncTraced(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeout);
-            CFunc(TEvPrivate::EvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog); 
-        } 
-    } 
-}; 
- 
+            CFunc(TEvPrivate::EvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog);
+        }
+    }
+};
+
 TKeySpace::TKeySpace()
     : OrderedQueue(false)
 {
@@ -707,39 +707,39 @@ bool TKeySpace::TryToMergeWithPrev(TRanges::iterator it)
     return false;
 }
 
-void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, NKikimrIssues::TStatusIds::EStatusCode code, bool reportIssues, const TActorContext &ctx) { 
-    auto *x = new TEvTxUserProxy::TEvProposeTransactionStatus(status); 
-    x->Record.SetTxId(TxId); 
- 
-    if (reportIssues && IssueManager.GetIssues()) { 
-        IssuesToMessage(IssueManager.GetIssues(), x->Record.MutableIssues()); 
-        IssueManager.Reset(); 
-    } 
- 
-    x->Record.SetStatusCode(code); 
- 
+void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, NKikimrIssues::TStatusIds::EStatusCode code, bool reportIssues, const TActorContext &ctx) {
+    auto *x = new TEvTxUserProxy::TEvProposeTransactionStatus(status);
+    x->Record.SetTxId(TxId);
+
+    if (reportIssues && IssueManager.GetIssues()) {
+        IssuesToMessage(IssueManager.GetIssues(), x->Record.MutableIssues());
+        IssueManager.Reset();
+    }
+
+    x->Record.SetStatusCode(code);
+
     for (auto& unresolvedKey : UnresolvedKeys) {
         x->Record.AddUnresolvedKeys(unresolvedKey);
     }
 
-    if (PlanStep) 
-        x->Record.SetStep(PlanStep); 
- 
-    if (FlatMKQLRequest) { 
-        x->Record.SetExecutionEngineStatus((ui32)FlatMKQLRequest->EngineResultStatusCode); 
-        if (FlatMKQLRequest->EngineResponseStatus != NMiniKQL::IEngineFlat::EStatus::Unknown) 
-            x->Record.SetExecutionEngineResponseStatus((ui32)FlatMKQLRequest->EngineResponseStatus); 
-        if (!FlatMKQLRequest->EngineResponse.empty()) 
-            x->Record.SetExecutionEngineResponse(FlatMKQLRequest->EngineResponse); 
+    if (PlanStep)
+        x->Record.SetStep(PlanStep);
+
+    if (FlatMKQLRequest) {
+        x->Record.SetExecutionEngineStatus((ui32)FlatMKQLRequest->EngineResultStatusCode);
+        if (FlatMKQLRequest->EngineResponseStatus != NMiniKQL::IEngineFlat::EStatus::Unknown)
+            x->Record.SetExecutionEngineResponseStatus((ui32)FlatMKQLRequest->EngineResponseStatus);
+        if (!FlatMKQLRequest->EngineResponse.empty())
+            x->Record.SetExecutionEngineResponse(FlatMKQLRequest->EngineResponse);
         x->Record.MutableExecutionEngineEvaluatedResponse()->Swap(&FlatMKQLRequest->EngineEvaluatedResponse);
-        if (FlatMKQLRequest->Engine) { 
-            auto errors = FlatMKQLRequest->Engine->GetErrors(); 
+        if (FlatMKQLRequest->Engine) {
+            auto errors = FlatMKQLRequest->Engine->GetErrors();
             if (!errors.empty()) {
-                x->Record.SetMiniKQLErrors(errors); 
-            } 
-        } 
-    } 
- 
+                x->Record.SetMiniKQLErrors(errors);
+            }
+        }
+    }
+
     if (ReadTableRequest) {
         x->Record.SetSerializedReadTableResponse(ReadTableRequest->ResponseData);
         x->Record.SetDataShardTabletId(ReadTableRequest->ResponseDataFrom);
@@ -749,36 +749,36 @@ void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus
     if (!DatashardErrors.empty())
         x->Record.SetDataShardErrors(DatashardErrors);
 
-    if (const ui32 cs = ComplainingDatashards.size()) { 
-        x->Record.MutableComplainingDataShards()->Reserve(cs); 
-        for (auto ds : ComplainingDatashards) 
-            x->Record.AddComplainingDataShards(ds); 
-    } 
- 
-    if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyTrackWallClock) { 
+    if (const ui32 cs = ComplainingDatashards.size()) {
+        x->Record.MutableComplainingDataShards()->Reserve(cs);
+        for (auto ds : ComplainingDatashards)
+            x->Record.AddComplainingDataShards(ds);
+    }
+
+    if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyTrackWallClock) {
         auto *timings = x->Record.MutableTimings();
-        if (WallClockAccepted.GetValue()) 
+        if (WallClockAccepted.GetValue())
             timings->SetWallClockAccepted(WallClockAccepted.MicroSeconds());
-        if (WallClockResolved.GetValue()) 
+        if (WallClockResolved.GetValue())
             timings->SetWallClockResolved(WallClockResolved.MicroSeconds());
-        if (WallClockPrepared.GetValue()) 
+        if (WallClockPrepared.GetValue())
             timings->SetWallClockPrepared(WallClockPrepared.MicroSeconds());
-        if (WallClockPlanned.GetValue()) 
+        if (WallClockPlanned.GetValue())
             timings->SetWallClockPlanned(WallClockPlanned.MicroSeconds());
-        if (ElapsedExecExec.GetValue()) 
+        if (ElapsedExecExec.GetValue())
             timings->SetElapsedExecExec(ElapsedExecExec.MicroSeconds());
-        if (ElapsedExecComplete.GetValue()) 
+        if (ElapsedExecComplete.GetValue())
             timings->SetElapsedExecComplete(ElapsedExecComplete.MicroSeconds());
-        if (ElapsedPrepareExec.GetValue()) 
+        if (ElapsedPrepareExec.GetValue())
             timings->SetElapsedPrepareExec(ElapsedExecExec.MicroSeconds());
-        if (ElapsedPrepareComplete.GetValue()) 
+        if (ElapsedPrepareComplete.GetValue())
             timings->SetElapsedPrepareComplete(ElapsedExecComplete.MicroSeconds());
         timings->SetWallClockNow(Now().MicroSeconds());
-    } 
- 
+    }
+
     TInstant wallClockEnd = Now();
-    TDuration prepareTime = WallClockPrepared.GetValue() ? WallClockPrepared - WallClockAccepted : TDuration::Zero(); 
-    TDuration executeTime = WallClockPrepared.GetValue() ? wallClockEnd - WallClockPrepared : wallClockEnd - WallClockAccepted; 
+    TDuration prepareTime = WallClockPrepared.GetValue() ? WallClockPrepared - WallClockAccepted : TDuration::Zero();
+    TDuration executeTime = WallClockPrepared.GetValue() ? wallClockEnd - WallClockPrepared : wallClockEnd - WallClockAccepted;
     TDuration totalTime = wallClockEnd - WallClockAccepted;
 
     (*TxProxyMon->ResultsReceivedCount) += ResultsReceivedCount;
@@ -797,58 +797,58 @@ void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus
         stats->SetDurationUs(totalTime.MicroSeconds());
     }
 
-    switch (status) { 
-    case TEvTxUserProxy::TResultStatus::ProxyAccepted: 
-    case TEvTxUserProxy::TResultStatus::ProxyResolved: 
-    case TEvTxUserProxy::TResultStatus::ProxyPrepared: 
-    case TEvTxUserProxy::TResultStatus::CoordinatorPlanned: 
-    case TEvTxUserProxy::TResultStatus::ExecComplete: 
-    case TEvTxUserProxy::TResultStatus::ExecAborted: 
-    case TEvTxUserProxy::TResultStatus::ExecAlready: 
-        LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_INFO, NKikimrServices::TX_PROXY, TxId, 
-            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
-            << " RESPONSE Status# " << TEvTxUserProxy::TResultStatus::Str(status) 
-            << "  prepare time: " << prepareTime.ToString() 
-            << "  execute time: " << executeTime.ToString() 
-            << "  total time: " << totalTime.ToString() 
-            << "  marker# P13"); 
- 
+    switch (status) {
+    case TEvTxUserProxy::TResultStatus::ProxyAccepted:
+    case TEvTxUserProxy::TResultStatus::ProxyResolved:
+    case TEvTxUserProxy::TResultStatus::ProxyPrepared:
+    case TEvTxUserProxy::TResultStatus::CoordinatorPlanned:
+    case TEvTxUserProxy::TResultStatus::ExecComplete:
+    case TEvTxUserProxy::TResultStatus::ExecAborted:
+    case TEvTxUserProxy::TResultStatus::ExecAlready:
+        LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_INFO, NKikimrServices::TX_PROXY, TxId,
+            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << " RESPONSE Status# " << TEvTxUserProxy::TResultStatus::Str(status)
+            << "  prepare time: " << prepareTime.ToString()
+            << "  execute time: " << executeTime.ToString()
+            << "  total time: " << totalTime.ToString()
+            << "  marker# P13");
+
         TxProxyMon->ReportStatusOK->Inc();
- 
-        TxProxyMon->TxPrepareTimeHgram->Collect(prepareTime.MilliSeconds()); 
-        TxProxyMon->TxExecuteTimeHgram->Collect(executeTime.MilliSeconds()); 
-        TxProxyMon->TxTotalTimeHgram->Collect(totalTime.MilliSeconds()); 
- 
-        if (PerTablet.size() > 1) { 
-            if (WallClockFirstPrepareReply.GetValue()) { 
-                TxProxyMon->TxPrepareSpreadHgram->Collect((WallClockLastPrepareReply - WallClockFirstPrepareReply).MilliSeconds()); 
-                TxProxyMon->TxPrepareArriveSpreadHgram->Collect((WallClockMaxPrepareArrive - WallClockMinPrepareArrive).MilliSeconds()); 
-                TxProxyMon->TxPrepareCompleteSpreadHgram->Collect((WallClockMaxPrepareComplete - WallClockMinPrepareComplete).MilliSeconds()); 
-            } 
-            if (WallClockFirstExecReply.GetValue()) { 
-                TxProxyMon->TxExecSpreadHgram->Collect((WallClockLastExecReply - WallClockFirstExecReply).MilliSeconds()); 
-            } 
-        } 
-        break; 
-    case TEvTxUserProxy::TResultStatus::ProxyShardTryLater: 
-    case TEvTxUserProxy::TResultStatus::ProxyShardOverloaded: 
+
+        TxProxyMon->TxPrepareTimeHgram->Collect(prepareTime.MilliSeconds());
+        TxProxyMon->TxExecuteTimeHgram->Collect(executeTime.MilliSeconds());
+        TxProxyMon->TxTotalTimeHgram->Collect(totalTime.MilliSeconds());
+
+        if (PerTablet.size() > 1) {
+            if (WallClockFirstPrepareReply.GetValue()) {
+                TxProxyMon->TxPrepareSpreadHgram->Collect((WallClockLastPrepareReply - WallClockFirstPrepareReply).MilliSeconds());
+                TxProxyMon->TxPrepareArriveSpreadHgram->Collect((WallClockMaxPrepareArrive - WallClockMinPrepareArrive).MilliSeconds());
+                TxProxyMon->TxPrepareCompleteSpreadHgram->Collect((WallClockMaxPrepareComplete - WallClockMinPrepareComplete).MilliSeconds());
+            }
+            if (WallClockFirstExecReply.GetValue()) {
+                TxProxyMon->TxExecSpreadHgram->Collect((WallClockLastExecReply - WallClockFirstExecReply).MilliSeconds());
+            }
+        }
+        break;
+    case TEvTxUserProxy::TResultStatus::ProxyShardTryLater:
+    case TEvTxUserProxy::TResultStatus::ProxyShardOverloaded:
         LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_NOTICE, NKikimrServices::TX_PROXY, TxId,
-            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
-            << " RESPONSE Status# " << TEvTxUserProxy::TResultStatus::Str(status) 
-            << " shard: " << ComplainingDatashards.front() 
+            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << " RESPONSE Status# " << TEvTxUserProxy::TResultStatus::Str(status)
+            << " shard: " << ComplainingDatashards.front()
             << " table: " << fnGetTableIdByShard(ComplainingDatashards.front())
-            << "  marker# P13a"); 
+            << "  marker# P13a");
         TxProxyMon->ReportStatusNotOK->Inc();
-        break; 
-    case TEvTxUserProxy::TResultStatus::ProxyShardNotAvailable: 
-    case TEvTxUserProxy::TResultStatus::ProxyShardUnknown: 
-        LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_INFO, NKikimrServices::TX_PROXY, TxId, 
-            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
-            << " RESPONSE Status# " << TEvTxUserProxy::TResultStatus::Str(status) 
-            << " shard: " << (ComplainingDatashards ? ComplainingDatashards.front() : 0) 
-            << "  marker# P13b"); 
-        TxProxyMon->ReportStatusNotOK->Inc(); 
-        break; 
+        break;
+    case TEvTxUserProxy::TResultStatus::ProxyShardNotAvailable:
+    case TEvTxUserProxy::TResultStatus::ProxyShardUnknown:
+        LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_INFO, NKikimrServices::TX_PROXY, TxId,
+            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << " RESPONSE Status# " << TEvTxUserProxy::TResultStatus::Str(status)
+            << " shard: " << (ComplainingDatashards ? ComplainingDatashards.front() : 0)
+            << "  marker# P13b");
+        TxProxyMon->ReportStatusNotOK->Inc();
+        break;
     case TEvTxUserProxy::TResultStatus::ExecResponseData:
         LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_DEBUG, NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
@@ -856,18 +856,18 @@ void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus
             << "  marker# P13d");
         TxProxyMon->ReportStatusStreamData->Inc();
         break;
-    default: 
+    default:
         LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_PROXY, TxId,
-            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
-            << " RESPONSE Status# " << TEvTxUserProxy::TResultStatus::Str(status) 
-            << "  marker# P13c"); 
-        TxProxyMon->ReportStatusNotOK->Inc(); 
-        break; 
-    } 
- 
-    ctx.Send(RequestSource, x); // todo: error tracking 
-} 
- 
+            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << " RESPONSE Status# " << TEvTxUserProxy::TResultStatus::Str(status)
+            << "  marker# P13c");
+        TxProxyMon->ReportStatusNotOK->Inc();
+        break;
+    }
+
+    ctx.Send(RequestSource, x); // todo: error tracking
+}
+
 void Aggregate(NKikimrQueryStats::TReadOpStats& aggr, const NKikimrQueryStats::TReadOpStats& stats) {
     aggr.SetCount(aggr.GetCount() + stats.GetCount());
     aggr.SetRows(aggr.GetRows() + stats.GetRows());
@@ -930,8 +930,8 @@ void TDataReq::BuildTxStats(NKikimrQueryStats::TTxStats& stats) {
 }
 
 void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx) {
-    NMiniKQL::IEngineFlat &engine = *FlatMKQLRequest->Engine; 
- 
+    NMiniKQL::IEngineFlat &engine = *FlatMKQLRequest->Engine;
+
     // Restore DbKeys
     auto &keyDescriptions = engine.GetDbKeys();
     Y_VERIFY(keyDescriptions.size() == cacheRequest->ResultSet.size());
@@ -949,23 +949,23 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
     }
     FlatMKQLRequest->EngineResultStatusCode = engine.PrepareShardPrograms(shardLimits);
     auto afterBuild = Now();
- 
-    if (FlatMKQLRequest->EngineResultStatusCode != NMiniKQL::IEngineFlat::EResult::Ok) { 
-        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ENGINE_ERROR)); 
-        ReportStatus( 
-            TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, 
-            NKikimrIssues::TStatusIds::BAD_REQUEST, true, ctx); 
-        TxProxyMon->MiniKQLWrongRequest->Inc(); 
-        return Die(ctx); 
-    } 
- 
+
+    if (FlatMKQLRequest->EngineResultStatusCode != NMiniKQL::IEngineFlat::EResult::Ok) {
+        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ENGINE_ERROR));
+        ReportStatus(
+            TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest,
+            NKikimrIssues::TStatusIds::BAD_REQUEST, true, ctx);
+        TxProxyMon->MiniKQLWrongRequest->Inc();
+        return Die(ctx);
+    }
+
     FlatMKQLRequest->ReadOnlyProgram = engine.IsReadOnlyProgram();
 
-    TxProxyMon->TxPrepareBuildShardProgramsHgram->Collect((afterBuild - beforeBuild).MicroSeconds()); 
- 
+    TxProxyMon->TxPrepareBuildShardProgramsHgram->Collect((afterBuild - beforeBuild).MicroSeconds());
+
     if (engine.GetAffectedShardCount() > 1 || FlatMKQLRequest->Snapshot) // TODO KIKIMR-11912
         CanUseFollower = false;
- 
+
     TDuration shardCancelAfter = ExecTimeoutPeriod;
     if (CancelAfter) {
         shardCancelAfter = Min(shardCancelAfter, CancelAfter);
@@ -974,13 +974,13 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
     TInstant shardCancelDeadline = WallClockAccepted + shardCancelAfter
         + TDuration::Seconds(ShardCancelDeadlineShiftSec);
 
-    for (ui32 shx = 0, affectedShards = engine.GetAffectedShardCount(); shx != affectedShards; ++shx) { 
-        NMiniKQL::IEngineFlat::TShardData shardData; 
-        const auto shardDataRes = engine.GetAffectedShard(shx, shardData); 
+    for (ui32 shx = 0, affectedShards = engine.GetAffectedShardCount(); shx != affectedShards; ++shx) {
+        NMiniKQL::IEngineFlat::TShardData shardData;
+        const auto shardDataRes = engine.GetAffectedShard(shx, shardData);
         Y_VERIFY(shardDataRes == NMiniKQL::IEngineFlat::EResult::Ok);
- 
-        NKikimrTxDataShard::TDataTransaction dataTransaction; 
-        dataTransaction.SetMiniKQL(shardData.Program); 
+
+        NKikimrTxDataShard::TDataTransaction dataTransaction;
+        dataTransaction.SetMiniKQL(shardData.Program);
         dataTransaction.SetImmediate(shardData.Immediate || FlatMKQLRequest->Snapshot && FlatMKQLRequest->ReadOnlyProgram);
         dataTransaction.SetReadOnly(FlatMKQLRequest->ReadOnlyProgram);
         dataTransaction.SetCancelAfterMs(shardCancelAfter.MilliSeconds());
@@ -995,7 +995,7 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
         if (FlatMKQLRequest->PerShardKeysSizeLimitBytes)
             dataTransaction.SetPerShardKeysSizeLimitBytes(*FlatMKQLRequest->PerShardKeysSizeLimitBytes);
         const TString transactionBuffer = dataTransaction.SerializeAsString();
- 
+
         if (transactionBuffer.size() > MaxDatashardProgramSize) {
             TString error = TStringBuilder() << "Datashard program size limit exceeded ("
                 << transactionBuffer.size() << " > " << MaxDatashardProgramSize << ")";
@@ -1018,34 +1018,34 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
             return Die(ctx);
         }
 
-        const auto affectedType = shardData.HasWrites ? TPerTablet::AffectedWrite : TPerTablet::AffectedRead; 
- 
-        TPerTablet &perTablet = PerTablet[shardData.ShardId]; 
-        Y_VERIFY(perTablet.TabletStatus == TPerTablet::ETabletStatus::StatusUnknown); 
-        perTablet.TabletStatus = TPerTablet::ETabletStatus::StatusWait; 
+        const auto affectedType = shardData.HasWrites ? TPerTablet::AffectedWrite : TPerTablet::AffectedRead;
+
+        TPerTablet &perTablet = PerTablet[shardData.ShardId];
+        Y_VERIFY(perTablet.TabletStatus == TPerTablet::ETabletStatus::StatusUnknown);
+        perTablet.TabletStatus = TPerTablet::ETabletStatus::StatusWait;
         perTablet.ProgramSize = transactionBuffer.size();
-        ++TabletsLeft; 
- 
-        perTablet.AffectedFlags |= affectedType; 
- 
-        // we would need shard -> table mapping for scheme cache invalidation on errors 
+        ++TabletsLeft;
+
+        perTablet.AffectedFlags |= affectedType;
+
+        // we would need shard -> table mapping for scheme cache invalidation on errors
         for (const auto& keyDescription : keyDescriptions) {
             for (auto& partition : keyDescription->Partitions) {
                 if (auto *x = PerTablet.FindPtr(partition.ShardId)) {
                     x->TableId = keyDescription->TableId;
                 }
-            } 
-        } 
- 
-        TxProxyMon->MiniKQLResolveSentToShard->Inc(); 
- 
-        LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, 
-            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
+            }
+        }
+
+        TxProxyMon->MiniKQLResolveSentToShard->Inc();
+
+        LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
+            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " SEND TEvProposeTransaction to datashard " << shardData.ShardId
             << " with " << shardData.Program.size() << " bytes program"
             << " affected shards " << engine.GetAffectedShardCount()
             << " followers " << (CanUseFollower ? "allowed" : "disallowed") << " marker# P4");
- 
+
         const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
         TEvDataShard::TEvProposeTransaction* ev;
         if (FlatMKQLRequest->Snapshot && FlatMKQLRequest->ReadOnlyProgram) {
@@ -1055,18 +1055,18 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
             ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA,
                 ctx.SelfID, TxId, transactionBuffer, TxFlags | (shardData.Immediate ? NTxDataShard::TTxFlags::Immediate : 0));
         }
- 
+
         Send(pipeCache, new TEvPipeCache::TEvForward(ev, shardData.ShardId, true));
- 
-        FlatMKQLRequest->BalanceCoverageBuilders[shardData.ShardId] = new TBalanceCoverageBuilder(); 
-    } 
- 
-    engine.AfterShardProgramsExtracted(); 
+
+        FlatMKQLRequest->BalanceCoverageBuilders[shardData.ShardId] = new TBalanceCoverageBuilder();
+    }
+
+    engine.AfterShardProgramsExtracted();
     TxProxyMon->TxPrepareSendShardProgramsHgram->Collect((Now() - afterBuild).MicroSeconds());
- 
-    Become(&TThis::StateWaitPrepare); 
-} 
- 
+
+    Become(&TThis::StateWaitPrepare);
+}
+
 void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx)
 {
     auto &entry = cacheRequest->ResultSet[0];
@@ -1135,27 +1135,27 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
     Become(&TThis::StateWaitPrepare);
 }
 
-TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> TDataReq::PrepareFlatMKQLRequest(TStringBuf miniKQLProgram, TStringBuf miniKQLParams, const TActorContext &ctx) { 
+TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> TDataReq::PrepareFlatMKQLRequest(TStringBuf miniKQLProgram, TStringBuf miniKQLParams, const TActorContext &ctx) {
     Y_UNUSED(ctx);
- 
+
     TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
- 
-    *TxProxyMon->MiniKQLParamsSize += miniKQLParams.size(); 
-    *TxProxyMon->MiniKQLProgramSize += miniKQLProgram.size(); 
- 
+
+    *TxProxyMon->MiniKQLParamsSize += miniKQLParams.size();
+    *TxProxyMon->MiniKQLProgramSize += miniKQLProgram.size();
+
     auto beforeSetProgram = Now();
-    FlatMKQLRequest->EngineResultStatusCode = FlatMKQLRequest->Engine->SetProgram(miniKQLProgram, miniKQLParams); 
+    FlatMKQLRequest->EngineResultStatusCode = FlatMKQLRequest->Engine->SetProgram(miniKQLProgram, miniKQLParams);
     TxProxyMon->TxPrepareSetProgramHgram->Collect((Now() - beforeSetProgram).MicroSeconds());
- 
-    if (FlatMKQLRequest->EngineResultStatusCode != NMiniKQL::IEngineFlat::EResult::Ok) 
-        return nullptr; 
- 
+
+    if (FlatMKQLRequest->EngineResultStatusCode != NMiniKQL::IEngineFlat::EResult::Ok)
+        return nullptr;
+
     WallClockResolveStarted = Now();
-    auto &keyDescriptions = FlatMKQLRequest->Engine->GetDbKeys(); 
- 
+    auto &keyDescriptions = FlatMKQLRequest->Engine->GetDbKeys();
+
     // check keys and set use follower flag
     CanUseFollower = true;
-    request->ResultSet.reserve(keyDescriptions.size()); 
+    request->ResultSet.reserve(keyDescriptions.size());
     for (auto &keyd : keyDescriptions) {
         if (keyd->RowOperation != TKeyDesc::ERowOperation::Read || keyd->ReadTarget.GetMode() != TReadTarget::EMode::Follower) {
             CanUseFollower = false;
@@ -1166,56 +1166,56 @@ TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> TDataReq::PrepareFlatMKQLReque
         }
         request->ResultSet.emplace_back(std::move(keyd));
     }
- 
-    return new TEvTxProxySchemeCache::TEvResolveKeySet(request); 
-} 
- 
-void TDataReq::TryToInvalidateTable(TTableId tableId, const TActorContext &ctx) { 
-    const bool notYetInvalidated = InvalidatedTables.insert(tableId).second; 
-    if (notYetInvalidated) 
+
+    return new TEvTxProxySchemeCache::TEvResolveKeySet(request);
+}
+
+void TDataReq::TryToInvalidateTable(TTableId tableId, const TActorContext &ctx) {
+    const bool notYetInvalidated = InvalidatedTables.insert(tableId).second;
+    if (notYetInvalidated)
         ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(tableId, TActorId()));
-} 
- 
-void TDataReq::MarkShardError(ui64 shardId, TDataReq::TPerTablet &perTablet, bool invalidateDistCache, const TActorContext &ctx) { 
+}
+
+void TDataReq::MarkShardError(ui64 shardId, TDataReq::TPerTablet &perTablet, bool invalidateDistCache, const TActorContext &ctx) {
     if (perTablet.TabletStatus == TDataReq::TPerTablet::ETabletStatus::StatusError)
-        return; 
- 
+        return;
+
     perTablet.TabletStatus = TDataReq::TPerTablet::ETabletStatus::StatusError;
- 
-    if (invalidateDistCache) 
-        TryToInvalidateTable(perTablet.TableId, ctx); 
- 
+
+    if (invalidateDistCache)
+        TryToInvalidateTable(perTablet.TableId, ctx);
+
     Y_UNUSED(shardId);
- 
+
     if (++TabletErrors == TabletsLeft) {
         LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " invalidateDistCache: " << invalidateDistCache
             << " DIE TDataReq MarkShardError TabletsLeft# " << TabletsLeft);
         TxProxyMon->MarkShardError->Inc();
-        return Die(ctx); 
+        return Die(ctx);
     }
-} 
- 
-void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorContext &ctx) { 
+}
+
+void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorContext &ctx) {
     RequestControls.Reqister(ctx);
 
-    TEvTxProxyReq::TEvMakeRequest *msg = ev->Get(); 
-    const NKikimrTxUserProxy::TEvProposeTransaction &record = msg->Ev->Get()->Record; 
+    TEvTxProxyReq::TEvMakeRequest *msg = ev->Get();
+    const NKikimrTxUserProxy::TEvProposeTransaction &record = msg->Ev->Get()->Record;
     Y_VERIFY(record.HasTransaction());
- 
-    ProxyFlags = record.HasProxyFlags() ? record.GetProxyFlags() : 0; 
+
+    ProxyFlags = record.HasProxyFlags() ? record.GetProxyFlags() : 0;
     ExecTimeoutPeriod = record.HasExecTimeoutPeriod()
         ? TDuration::MilliSeconds(record.GetExecTimeoutPeriod())
         : TDuration::MilliSeconds(RequestControls.DefaultTimeoutMs);
-    if (ExecTimeoutPeriod.Minutes() > 60) { 
+    if (ExecTimeoutPeriod.Minutes() > 60) {
         LOG_WARN_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
                            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
                            << " huge ExecTimeoutPeriod requested " << ExecTimeoutPeriod.ToString()
                            << ", trimming to 30 min");
-        ExecTimeoutPeriod = TDuration::Minutes(30); 
-    } 
- 
+        ExecTimeoutPeriod = TDuration::Minutes(30);
+    }
+
     CancelAfter = TDuration::MilliSeconds(record.GetCancelAfterMs());
     if (CancelAfter.Hours() > 8) {
         LOG_WARN_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
@@ -1226,8 +1226,8 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
     }
 
     WallClockAccepted = Now();
-    ctx.Schedule(TDuration::MilliSeconds(KIKIMR_DATAREQ_WATCHDOG_PERIOD), new TEvPrivate::TEvProxyDataReqOngoingTransactionWatchdog()); 
- 
+    ctx.Schedule(TDuration::MilliSeconds(KIKIMR_DATAREQ_WATCHDOG_PERIOD), new TEvPrivate::TEvProxyDataReqOngoingTransactionWatchdog());
+
     // Schedule execution timeout
     {
         TAutoPtr<IEventHandle> wakeupEv(new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
@@ -1236,11 +1236,11 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
         CreateLongTimer(ctx, ExecTimeoutPeriod, wakeupEv, AppData(ctx)->SystemPoolId, ExecTimeoutCookieHolder.Get());
     }
 
-    const NKikimrTxUserProxy::TTransaction &txbody = record.GetTransaction(); 
-    RequestSource = msg->Ev->Sender; 
+    const NKikimrTxUserProxy::TTransaction &txbody = record.GetTransaction();
+    RequestSource = msg->Ev->Sender;
     TxFlags = txbody.GetFlags() & ~NTxDataShard::TTxFlags::Immediate; // Ignore external immediate flag
     StreamResponse = record.GetStreamResponse();
- 
+
     // Subscribe for TEvStreamIsDead event.
     if (StreamResponse)
         ctx.Send(RequestSource, new TEvents::TEvSubscribe, IEventHandle::FlagTrackDelivery);
@@ -1273,13 +1273,13 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
     TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq;
 
     NCpuTime::TCpuTimer timer(CpuTime);
-    if (txbody.HasMiniKQLTransaction()) { 
+    if (txbody.HasMiniKQLTransaction()) {
         const auto& mkqlTxBody = txbody.GetMiniKQLTransaction();
 
         const TAppData* appData = AppData(ctx);
         const auto functionRegistry = appData->FunctionRegistry;
 
-        if (mkqlTxBody.GetFlatMKQL()) { 
+        if (mkqlTxBody.GetFlatMKQL()) {
             FlatMKQLRequest = new TFlatMKQLRequest;
             FlatMKQLRequest->LlvmRuntime = mkqlTxBody.GetLlvmRuntime();
             FlatMKQLRequest->CollectStats = mkqlTxBody.GetCollectStats();
@@ -1294,88 +1294,88 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
             NMiniKQL::TEngineFlatSettings settings(NMiniKQL::IEngineFlat::EProtocol::V1, functionRegistry,
                                                    *TAppData::RandomProvider, *TAppData::TimeProvider,
                                                    nullptr, TxProxyMon->AllocPoolCounters);
-            settings.EvaluateResultType = mkqlTxBody.GetEvaluateResultType(); 
-            settings.EvaluateResultValue = mkqlTxBody.GetEvaluateResultValue(); 
+            settings.EvaluateResultType = mkqlTxBody.GetEvaluateResultType();
+            settings.EvaluateResultValue = mkqlTxBody.GetEvaluateResultValue();
             if (FlatMKQLRequest->LlvmRuntime) {
                 LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
                     "Using LLVM runtime to execute transaction: " << TxId);
                 settings.LlvmRuntime = true;
             }
-            if (ctx.LoggerSettings()->Satisfies(NLog::PRI_DEBUG, NKikimrServices::MINIKQL_ENGINE, TxId)) { 
-                auto actorSystem = ctx.ExecutorThread.ActorSystem; 
-                auto txId = TxId; 
-                settings.BacktraceWriter = [txId, actorSystem](const char* operation, ui32 line, const TBackTrace* backtrace) { 
-                    LOG_DEBUG_SAMPLED_BY(*actorSystem, NKikimrServices::MINIKQL_ENGINE, txId, 
-                        "Proxy data request, txId: %" PRIu64 ", %s (%" PRIu32 ")\n%s", 
+            if (ctx.LoggerSettings()->Satisfies(NLog::PRI_DEBUG, NKikimrServices::MINIKQL_ENGINE, TxId)) {
+                auto actorSystem = ctx.ExecutorThread.ActorSystem;
+                auto txId = TxId;
+                settings.BacktraceWriter = [txId, actorSystem](const char* operation, ui32 line, const TBackTrace* backtrace) {
+                    LOG_DEBUG_SAMPLED_BY(*actorSystem, NKikimrServices::MINIKQL_ENGINE, txId,
+                        "Proxy data request, txId: %" PRIu64 ", %s (%" PRIu32 ")\n%s",
                         txId, operation, line, backtrace ? backtrace->PrintToString().data() : "");
-                }; 
+                };
                 settings.LogErrorWriter = [txId, actorSystem](const TString& message) {
                     LOG_ERROR_S(*actorSystem, NKikimrServices::MINIKQL_ENGINE, "Proxy data request, txId: "
                         << txId << ", engine error: " << message);
                 };
-            } 
- 
-            if ((TxFlags & NTxDataShard::TTxFlags::ForceOnline) != 0) { 
-                settings.ForceOnline = true; 
-            } 
+            }
 
-            FlatMKQLRequest->Engine = NMiniKQL::CreateEngineFlat(settings); 
+            if ((TxFlags & NTxDataShard::TTxFlags::ForceOnline) != 0) {
+                settings.ForceOnline = true;
+            }
+
+            FlatMKQLRequest->Engine = NMiniKQL::CreateEngineFlat(settings);
             FlatMKQLRequest->Engine->SetStepTxId({ 0, TxId });
 
             TString program = mkqlTxBody.GetProgram().GetBin();
             TString params = mkqlTxBody.GetParams().GetBin();
-            resolveReq = PrepareFlatMKQLRequest(program, params, ctx); 
+            resolveReq = PrepareFlatMKQLRequest(program, params, ctx);
 
             FlatMKQLRequest->RequestAdditionResults(TxId);
-        } 
-    } 
- 
-    if (!resolveReq || !resolveReq->Request) { 
-        ReportStatus( 
-            TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, 
-            NKikimrIssues::TStatusIds::BAD_REQUEST, true, ctx); 
+        }
+    }
+
+    if (!resolveReq || !resolveReq->Request) {
+        ReportStatus(
+            TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest,
+            NKikimrIssues::TStatusIds::BAD_REQUEST, true, ctx);
         TxProxyMon->MakeRequestWrongRequest->Inc();
-        return Die(ctx); 
-    } else if (resolveReq->Request->ResultSet.empty()) { 
+        return Die(ctx);
+    } else if (resolveReq->Request->ResultSet.empty()) {
         TxProxyMon->MakeRequestEmptyAffectedSet->Inc();
-        if (FlatMKQLRequest) { 
+        if (FlatMKQLRequest) {
             FlatMKQLRequest->EngineResultStatusCode = FlatMKQLRequest->Engine->PrepareShardPrograms(
                 NMiniKQL::IEngineFlat::TShardLimits(0, 0));
-            if (FlatMKQLRequest->EngineResultStatusCode != NMiniKQL::IEngineFlat::EResult::Ok) { 
-                IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ENGINE_ERROR, "could not prepare shard programs")); 
-                ReportStatus( 
-                    TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, 
-                    NKikimrIssues::TStatusIds::QUERY_ERROR, true, ctx); 
-                TxProxyMon->MiniKQLWrongRequest->Inc(); 
-                return Die(ctx); 
-            } 
-            FlatMKQLRequest->Engine->AfterShardProgramsExtracted(); 
+            if (FlatMKQLRequest->EngineResultStatusCode != NMiniKQL::IEngineFlat::EResult::Ok) {
+                IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ENGINE_ERROR, "could not prepare shard programs"));
+                ReportStatus(
+                    TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest,
+                    NKikimrIssues::TStatusIds::QUERY_ERROR, true, ctx);
+                TxProxyMon->MiniKQLWrongRequest->Inc();
+                return Die(ctx);
+            }
+            FlatMKQLRequest->Engine->AfterShardProgramsExtracted();
             return MakeFlatMKQLResponse(ctx, timer);
-        } else { 
-            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ENGINE_ERROR, "empty affected set")); 
-            ReportStatus( 
-                TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::EmptyAffectedSet, 
-                NKikimrIssues::TStatusIds::QUERY_ERROR, true, ctx); 
-            return Die(ctx); 
-        } 
-    } else { 
-        if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyReportAccepted) 
-            ReportStatus( 
-                TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyAccepted, 
-                NKikimrIssues::TStatusIds::TRANSIENT, false, ctx); 
-    } 
- 
+        } else {
+            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ENGINE_ERROR, "empty affected set"));
+            ReportStatus(
+                TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::EmptyAffectedSet,
+                NKikimrIssues::TStatusIds::QUERY_ERROR, true, ctx);
+            return Die(ctx);
+        }
+    } else {
+        if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyReportAccepted)
+            ReportStatus(
+                TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyAccepted,
+                NKikimrIssues::TStatusIds::TRANSIENT, false, ctx);
+    }
+
     resolveReq->Request->DatabaseName = record.GetDatabaseName();
     TxProxyMon->MakeRequestProxyAccepted->Inc();
     LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-        << " SEND to# " << Services.SchemeCache.ToString() << " TSchemeCache with " 
+        << " SEND to# " << Services.SchemeCache.ToString() << " TSchemeCache with "
         << resolveReq->Request->ResultSet.size() << " scheme entries. DataReq marker# P2" );
- 
-    ctx.Send(Services.SchemeCache, resolveReq.Release()); 
-    Become(&TThis::StateWaitResolve); 
-} 
- 
+
+    ctx.Send(Services.SchemeCache, resolveReq.Release());
+    Become(&TThis::StateWaitResolve);
+}
+
 void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
     TEvTxProxySchemeCache::TEvNavigateKeySetResult *msg = ev->Get();
     NSchemeCache::TSchemeCacheNavigate *resp = msg->Request.Get();
@@ -1387,12 +1387,12 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
                          << resp->ErrorCount);
 
     if (resp->ErrorCount > 0) {
-        const TString errorExplanation = "unresolved table: " + ReadTableRequest->TablePath; 
-        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errorExplanation)); 
+        const TString errorExplanation = "unresolved table: " + ReadTableRequest->TablePath;
+        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errorExplanation));
 
-        UnresolvedKeys.push_back(errorExplanation); 
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx); 
- 
+        UnresolvedKeys.push_back(errorExplanation);
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
+
         TxProxyMon->ResolveKeySetWrongRequest->Inc();
         return Die(ctx);
     }
@@ -1403,10 +1403,10 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
     for (size_t i = 0; i < ReadTableRequest->Columns.size(); ++i) {
         auto &col = ReadTableRequest->Columns[i];
         if (colNames.contains(col.Name)) {
-            const TString errorExplanation = "duplicated columns are not supported: " + col.Name; 
-            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errorExplanation)); 
-            UnresolvedKeys.push_back(errorExplanation); 
-            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx); 
+            const TString errorExplanation = "duplicated columns are not supported: " + col.Name;
+            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errorExplanation));
+            UnresolvedKeys.push_back(errorExplanation);
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
 
             TxProxyMon->ResolveKeySetWrongRequest->Inc();
 
@@ -1456,12 +1456,12 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
 
     // Report unresolved columns.
     if (!colNames.empty()) {
-        for (auto entry: colNames) { 
-            const TString &errorExplanation = "unresolved column: " + entry.first; 
-            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errorExplanation)); 
-            UnresolvedKeys.push_back(errorExplanation); 
-        } 
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx); 
+        for (auto entry: colNames) {
+            const TString &errorExplanation = "unresolved column: " + entry.first;
+            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errorExplanation));
+            UnresolvedKeys.push_back(errorExplanation);
+        }
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
         TxProxyMon->ResolveKeySetWrongRequest->Inc();
         return Die(ctx);
     }
@@ -1490,8 +1490,8 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
                        ReadTableRequest->FromValues, fromExpand)
         || !ParseRangeKey(ReadTableRequest->Range.GetTo(), keyTypes,
                           ReadTableRequest->ToValues, toExpand)) {
-        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::KEY_PARSE_ERROR, "could not parse key string")); 
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::QUERY_ERROR, true, ctx); 
+        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::KEY_PARSE_ERROR, "could not parse key string"));
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::QUERY_ERROR, true, ctx);
         TxProxyMon->ResolveKeySetWrongRequest->Inc();
         return Die(ctx);
     }
@@ -1502,10 +1502,10 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
                       toInclusive);
 
     if (range.IsEmptyRange({keyTypes.begin(), keyTypes.end()})) {
-        const TString errorExplanation = "empty range requested"; 
-        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::EMPTY_OP_RANGE, errorExplanation)); 
-        UnresolvedKeys.push_back(errorExplanation); 
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::QUERY_ERROR, true, ctx); 
+        const TString errorExplanation = "empty range requested";
+        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::EMPTY_OP_RANGE, errorExplanation));
+        UnresolvedKeys.push_back(errorExplanation);
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::QUERY_ERROR, true, ctx);
         TxProxyMon->ResolveKeySetWrongRequest->Inc();
         return Die(ctx);
     }
@@ -1522,10 +1522,10 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
     ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 }
 
-void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, const TActorContext &ctx) { 
-    TEvTxProxySchemeCache::TEvResolveKeySetResult *msg = ev->Get(); 
+void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, const TActorContext &ctx) {
+    TEvTxProxySchemeCache::TEvResolveKeySetResult *msg = ev->Get();
     NSchemeCache::TSchemeCacheRequest *request = msg->Request.Get();
- 
+
     LOG_LOG_S_SAMPLED_BY(ctx, (request->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
         NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
@@ -1533,48 +1533,48 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
 
     TxProxyMon->CacheRequestLatency->Collect((Now() - WallClockAccepted).MilliSeconds());
     WallClockResolved = Now();
- 
-    if (request->ErrorCount > 0) { 
-        bool gotHardResolveError = false; 
-        for (const auto &x : request->ResultSet) { 
+
+    if (request->ErrorCount > 0) {
+        bool gotHardResolveError = false;
+        for (const auto &x : request->ResultSet) {
             if ((ui32)x.Status < (ui32) NSchemeCache::TSchemeCacheRequest::EStatus::OkScheme) {
-                TryToInvalidateTable(x.KeyDescription->TableId, ctx); 
- 
+                TryToInvalidateTable(x.KeyDescription->TableId, ctx);
+
                 TStringStream ss;
-                switch (x.Status) { 
-                    case NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist: 
-                        gotHardResolveError = true; 
+                switch (x.Status) {
+                    case NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist:
+                        gotHardResolveError = true;
                         ss << "table not exists: " << x.KeyDescription->TableId;
-                        break; 
-                    case NSchemeCache::TSchemeCacheRequest::EStatus::TypeCheckError: 
-                        gotHardResolveError = true; 
+                        break;
+                    case NSchemeCache::TSchemeCacheRequest::EStatus::TypeCheckError:
+                        gotHardResolveError = true;
                         ss << "type check error: " << x.KeyDescription->TableId;
-                        break; 
-                    default: 
+                        break;
+                    default:
                         ss << "unresolved table: " << x.KeyDescription->TableId << ". Status: " << x.Status;
-                        break; 
-                } 
- 
-                IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, ss.Str())); 
+                        break;
+                }
+
+                IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, ss.Str()));
                 UnresolvedKeys.push_back(ss.Str());
             }
         }
- 
-        if (gotHardResolveError) { 
-            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx); 
-            TxProxyMon->ResolveKeySetWrongRequest->Inc(); 
-        } else { 
-            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, NKikimrIssues::TStatusIds::REJECTED, true, ctx); 
-        } 
- 
-        return Die(ctx); 
-    } 
- 
-    if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyReportResolved)
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyResolved, NKikimrIssues::TStatusIds::TRANSIENT, false, ctx); 
 
-    TxProxyMon->TxPrepareResolveHgram->Collect((WallClockResolved - WallClockResolveStarted).MicroSeconds()); 
- 
+        if (gotHardResolveError) {
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
+            TxProxyMon->ResolveKeySetWrongRequest->Inc();
+        } else {
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, NKikimrIssues::TStatusIds::REJECTED, true, ctx);
+        }
+
+        return Die(ctx);
+    }
+
+    if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyReportResolved)
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyResolved, NKikimrIssues::TStatusIds::TRANSIENT, false, ctx);
+
+    TxProxyMon->TxPrepareResolveHgram->Collect((WallClockResolved - WallClockResolveStarted).MicroSeconds());
+
     NCpuTime::TCpuTimer timer(CpuTime);
     for (const NSchemeCache::TSchemeCacheRequest::TEntry& entry : request->ResultSet) {
         ui32 access = 0;
@@ -1596,14 +1596,14 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
                 && entry.KeyDescription->Status == TKeyDesc::EStatus::Ok
                 && entry.KeyDescription->SecurityObject != nullptr
                 && !entry.KeyDescription->SecurityObject->CheckAccess(access, *UserToken)) {
-            TStringStream explanation; 
-            explanation << "Access denied for " << UserToken->GetUserSID() 
-                << " with access " << NACLib::AccessRightsToString(access) 
+            TStringStream explanation;
+            explanation << "Access denied for " << UserToken->GetUserSID()
+                << " with access " << NACLib::AccessRightsToString(access)
                 << " to tableId# " << entry.KeyDescription->TableId;
- 
-            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation.Str()); 
-            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, explanation.Str())); 
-            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, NKikimrIssues::TStatusIds::ACCESS_DENIED, true, ctx); 
+
+            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation.Str());
+            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, explanation.Str()));
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, NKikimrIssues::TStatusIds::ACCESS_DENIED, true, ctx);
             return Die(ctx);
         }
 
@@ -1628,8 +1628,8 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
     }
 
     if (!CheckDomainLocality(*request)) {
-        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DOMAIN_LOCALITY_ERROR)); 
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError, NKikimrIssues::TStatusIds::BAD_REQUEST, true, ctx); 
+        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DOMAIN_LOCALITY_ERROR));
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError, NKikimrIssues::TStatusIds::BAD_REQUEST, true, ctx);
         TxProxyMon->ResolveKeySetDomainLocalityFail->Inc();
         return Die(ctx);
     }
@@ -1645,8 +1645,8 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
     } else {
         Y_FAIL("No request");
     }
-} 
- 
+}
+
 void TDataReq::Handle(TEvPrivate::TEvReattachToShard::TPtr &ev, const TActorContext &ctx) {
     const ui64 tabletId = ev->Get()->TabletId;
     TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
@@ -1664,31 +1664,31 @@ void TDataReq::Handle(TEvPrivate::TEvReattachToShard::TPtr &ev, const TActorCont
                 tabletId, true), 0, ++perTablet->ReattachState.Cookie);
 }
 
-void TDataReq::HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) { 
-    TEvPipeCache::TEvDeliveryProblem *msg = ev->Get(); 
-    TPerTablet *perTablet = PerTablet.FindPtr(msg->TabletId); 
-    Y_VERIFY(perTablet); 
- 
+void TDataReq::HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
+    TEvPipeCache::TEvDeliveryProblem *msg = ev->Get();
+    TPerTablet *perTablet = PerTablet.FindPtr(msg->TabletId);
+    Y_VERIFY(perTablet);
+
     bool wasRestarting = std::exchange(perTablet->Restarting, false);
 
     // We can only be sure tx was not prepared if initial propose was not delivered
     bool notPrepared = msg->NotDelivered && !perTablet->RestartCount;
 
     // Disconnected while waiting for initial propose response
-    if (perTablet->TabletStatus == TPerTablet::ETabletStatus::StatusWait) { 
-        LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR, 
-            NKikimrServices::TX_PROXY, TxId, 
+    if (perTablet->TabletStatus == TPerTablet::ETabletStatus::StatusWait) {
+        LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR,
+            NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId << " shard " << msg->TabletId << " delivery problem"
             << " (waiting, notDelivered=" << msg->NotDelivered << ", notPrepared=" << notPrepared << ")");
- 
-        ComplainingDatashards.push_back(msg->TabletId); 
+
+        ComplainingDatashards.push_back(msg->TabletId);
         CancelProposal(notPrepared ? msg->TabletId : 0);
- 
+
         if (notPrepared) {
-            TStringStream explanation; 
+            TStringStream explanation;
             explanation << "could not deliver program to shard " << msg->TabletId << " with txid# " << TxId;
-            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, explanation.Str())); 
-            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, NKikimrIssues::TStatusIds::REJECTED, true, ctx); 
+            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, explanation.Str()));
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, NKikimrIssues::TStatusIds::REJECTED, true, ctx);
         } else if (wasRestarting) {
             // We are waiting for propose and have a restarting flag, which means shard was
             // persisting our tx. We did not receive a reply, so we cannot be sure if it
@@ -1698,20 +1698,20 @@ void TDataReq::HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const T
             explanation << "could not prepare program at shard " << msg->TabletId << " with txid# " << TxId;
             IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, explanation.Str()));
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, NKikimrIssues::TStatusIds::REJECTED, true, ctx);
-        } else { 
-            TStringStream explanation; 
+        } else {
+            TStringStream explanation;
             explanation << "tx state unknown for shard " << msg->TabletId << " with txid# " << TxId;
-            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, explanation.Str())); 
+            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, explanation.Str()));
             auto status = IsReadOnlyRequest()
                 ? TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable
                 : TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown;
             ReportStatus(status, NKikimrIssues::TStatusIds::TIMEOUT, true, ctx);
-        } 
- 
-        Become(&TThis::StatePrepareErrors, ctx, TDuration::MilliSeconds(500), new TEvents::TEvWakeup); 
+        }
+
+        Become(&TThis::StatePrepareErrors, ctx, TDuration::MilliSeconds(500), new TEvents::TEvWakeup);
         TxProxyMon->ClientConnectedError->Inc();
-        return HandlePrepareErrors(ev, ctx); 
-    } 
+        return HandlePrepareErrors(ev, ctx);
+    }
 
     // Disconnected while waiting for other shards to prepare
     if (perTablet->TabletStatus == TPerTablet::ETabletStatus::StatusPrepared) {
@@ -1748,29 +1748,29 @@ void TDataReq::HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const T
         TxProxyMon->ClientConnectedError->Inc();
         return HandlePrepareErrors(ev, ctx);
     }
-} 
- 
-void TDataReq::HandlePrepareErrors(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) { 
-    TEvPipeCache::TEvDeliveryProblem *msg = ev->Get(); 
-    TPerTablet *perTablet = PerTablet.FindPtr(msg->TabletId); 
-    Y_VERIFY(perTablet); 
- 
-    if (perTablet->TabletStatus == TPerTablet::ETabletStatus::StatusWait) { 
-        LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR, 
-            NKikimrServices::TX_PROXY, TxId, 
+}
+
+void TDataReq::HandlePrepareErrors(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
+    TEvPipeCache::TEvDeliveryProblem *msg = ev->Get();
+    TPerTablet *perTablet = PerTablet.FindPtr(msg->TabletId);
+    Y_VERIFY(perTablet);
+
+    if (perTablet->TabletStatus == TPerTablet::ETabletStatus::StatusWait) {
+        LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR,
+            NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId << " shard " << msg->TabletId << " delivery problem (gathering prepare errors)");
- 
-        return MarkShardError(msg->TabletId, *perTablet, true, ctx); 
-    } 
-} 
- 
- 
-void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) { 
-    TEvDataShard::TEvProposeTransactionResult *msg = ev->Get(); 
-    const NKikimrTxDataShard::TEvProposeTransactionResult &record = msg->Record; 
- 
-    const ui64 tabletId = msg->GetOrigin(); 
-    TPerTablet *perTablet = PerTablet.FindPtr(tabletId); 
+
+        return MarkShardError(msg->TabletId, *perTablet, true, ctx);
+    }
+}
+
+
+void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
+    TEvDataShard::TEvProposeTransactionResult *msg = ev->Get();
+    const NKikimrTxDataShard::TEvProposeTransactionResult &record = msg->Record;
+
+    const ui64 tabletId = msg->GetOrigin();
+    TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
     Y_VERIFY(perTablet);
 
     LOG_LOG_S_SAMPLED_BY(ctx, (msg->GetStatus() != NKikimrTxDataShard::TEvProposeTransactionResult::ERROR ?
@@ -1778,34 +1778,34 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
         NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
         << " HANDLE Prepare TEvProposeTransactionResult TDataReq TabletStatus# " << perTablet->TabletStatus
-        << " GetStatus# " << msg->GetStatus() 
-        << " shard id " << tabletId 
+        << " GetStatus# " << msg->GetStatus()
+        << " shard id " << tabletId
         << " read size " << record.GetReadSize()
         << " out readset size " << record.OutgoingReadSetInfoSize()
-        << " marker# P6"); 
- 
+        << " marker# P6");
+
     WallClockLastPrepareReply = Now();
-    const TInstant reportedArriveTime = TInstant::MicroSeconds(record.GetPrepareArriveTime()); 
-    const TDuration completionDelta = WallClockLastPrepareReply - reportedArriveTime; 
-    WallClockMinPrepareArrive = WallClockMinPrepareArrive.GetValue() ? Min(WallClockMinPrepareArrive, reportedArriveTime) : reportedArriveTime; 
-    WallClockMaxPrepareArrive = Max(WallClockMaxPrepareArrive, reportedArriveTime); 
-    WallClockMinPrepareComplete = WallClockMaxPrepareComplete.GetValue() ? Min(WallClockMaxPrepareComplete, completionDelta) : completionDelta; 
-    WallClockMaxPrepareComplete = Max(WallClockMaxPrepareComplete, completionDelta); 
- 
-    if (WallClockFirstPrepareReply.GetValue() == 0) 
-        WallClockFirstPrepareReply = WallClockLastPrepareReply; 
- 
+    const TInstant reportedArriveTime = TInstant::MicroSeconds(record.GetPrepareArriveTime());
+    const TDuration completionDelta = WallClockLastPrepareReply - reportedArriveTime;
+    WallClockMinPrepareArrive = WallClockMinPrepareArrive.GetValue() ? Min(WallClockMinPrepareArrive, reportedArriveTime) : reportedArriveTime;
+    WallClockMaxPrepareArrive = Max(WallClockMaxPrepareArrive, reportedArriveTime);
+    WallClockMinPrepareComplete = WallClockMaxPrepareComplete.GetValue() ? Min(WallClockMaxPrepareComplete, completionDelta) : completionDelta;
+    WallClockMaxPrepareComplete = Max(WallClockMaxPrepareComplete, completionDelta);
+
+    if (WallClockFirstPrepareReply.GetValue() == 0)
+        WallClockFirstPrepareReply = WallClockLastPrepareReply;
+
     if (perTablet->TabletStatus == TPerTablet::ETabletStatus::StatusPrepared) { // do nothing
         TxProxyMon->TxResultTabletPrepared->Inc();
-        return; 
+        return;
     }
- 
-    switch (msg->GetStatus()) { 
-    case NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED: 
+
+    switch (msg->GetStatus()) {
+    case NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED:
     {
         perTablet->TabletStatus = TPerTablet::ETabletStatus::StatusPrepared;
-        perTablet->MinStep = record.GetMinStep(); 
-        perTablet->MaxStep = record.GetMaxStep(); 
+        perTablet->MinStep = record.GetMinStep();
+        perTablet->MaxStep = record.GetMaxStep();
         perTablet->ReadSize = record.GetReadSize();
         perTablet->ReplySize = record.GetReplySize();
         perTablet->OutgoingReadSetsSize = record.OutgoingReadSetInfoSize();
@@ -1817,17 +1817,17 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
             Y_VERIFY(targetTablet);
             targetTablet->IncomingReadSetsSize += size;
         }
- 
-        AggrMaxStep = Min(AggrMaxStep, perTablet->MaxStep); 
-        AggrMinStep = Max(AggrMinStep, perTablet->MinStep); 
- 
+
+        AggrMaxStep = Min(AggrMaxStep, perTablet->MaxStep);
+        AggrMinStep = Max(AggrMinStep, perTablet->MinStep);
+
         TxProxyMon->TxResultPrepared->Inc();
 
-        if (record.HasExecLatency()) 
-            ElapsedPrepareExec = Max<TDuration>(ElapsedPrepareExec, TDuration::MilliSeconds(record.GetExecLatency())); 
-        if (record.HasProposeLatency()) 
-            ElapsedPrepareComplete = Max<TDuration>(ElapsedPrepareComplete, TDuration::MilliSeconds(record.GetProposeLatency())); 
- 
+        if (record.HasExecLatency())
+            ElapsedPrepareExec = Max<TDuration>(ElapsedPrepareExec, TDuration::MilliSeconds(record.GetExecLatency()));
+        if (record.HasProposeLatency())
+            ElapsedPrepareComplete = Max<TDuration>(ElapsedPrepareComplete, TDuration::MilliSeconds(record.GetProposeLatency()));
+
         ui64 privateCoordinator = TCoordinators(TVector<ui64>(
                                                     record.GetDomainCoordinators().begin(),
                                                     record.GetDomainCoordinators().end()))
@@ -1866,22 +1866,22 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
 
         return RegisterPlan(ctx);
     }
-    case NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE: 
+    case NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE:
         perTablet->TabletStatus = TPerTablet::ETabletStatus::StatusFinished;
 
-        if (record.HasExecLatency()) 
-            ElapsedExecExec = Max<TDuration>(ElapsedExecExec, TDuration::MilliSeconds(record.GetExecLatency())); 
-        if (record.HasProposeLatency()) 
-            ElapsedExecComplete = Max<TDuration>(ElapsedExecComplete, TDuration::MilliSeconds(record.GetProposeLatency())); 
- 
+        if (record.HasExecLatency())
+            ElapsedExecExec = Max<TDuration>(ElapsedExecExec, TDuration::MilliSeconds(record.GetExecLatency()));
+        if (record.HasProposeLatency())
+            ElapsedExecComplete = Max<TDuration>(ElapsedExecComplete, TDuration::MilliSeconds(record.GetProposeLatency()));
+
         TxProxyMon->TxResultComplete->Inc();
-        return MergeResult(ev, ctx); 
+        return MergeResult(ev, ctx);
     case NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA:
         ProcessStreamResponseData(ev, ctx);
         return;
     case NKikimrTxDataShard::TEvProposeTransactionResult::ERROR: {
         ExtractDatashardErrors(record);
-        CancelProposal(tabletId); 
+        CancelProposal(tabletId);
         bool schemeChanged = false;
         for (const auto& e : record.GetError()) {
             if (e.GetKind() == NKikimrTxDataShard::TError::SCHEME_CHANGED) {
@@ -1893,26 +1893,26 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
         } else {
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, NKikimrIssues::TStatusIds::REJECTED, true, ctx);
         }
-        Become(&TThis::StatePrepareErrors, ctx, TDuration::MilliSeconds(500), new TEvents::TEvWakeup); 
+        Become(&TThis::StatePrepareErrors, ctx, TDuration::MilliSeconds(500), new TEvents::TEvWakeup);
         TxProxyMon->TxResultError->Inc();
-        return HandlePrepareErrors(ev, ctx); 
+        return HandlePrepareErrors(ev, ctx);
     }
     case NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED:
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAborted, NKikimrIssues::TStatusIds::SUCCESS, true, ctx); 
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAborted, NKikimrIssues::TStatusIds::SUCCESS, true, ctx);
         TxProxyMon->TxResultAborted->Inc();
         return Die(ctx);
-    case NKikimrTxDataShard::TEvProposeTransactionResult::TRY_LATER: 
-        ExtractDatashardErrors(record); 
-        CancelProposal(tabletId); 
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater, NKikimrIssues::TStatusIds::REJECTED, true, ctx); 
-        TxProxyMon->TxResultShardTryLater->Inc(); 
-        return Die(ctx); 
-    case NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED: 
-        ExtractDatashardErrors(record); 
-        CancelProposal(tabletId); 
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardOverloaded, NKikimrIssues::TStatusIds::OVERLOADED, true, ctx); 
-        TxProxyMon->TxResultShardOverloaded->Inc(); 
-        return Die(ctx); 
+    case NKikimrTxDataShard::TEvProposeTransactionResult::TRY_LATER:
+        ExtractDatashardErrors(record);
+        CancelProposal(tabletId);
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater, NKikimrIssues::TStatusIds::REJECTED, true, ctx);
+        TxProxyMon->TxResultShardTryLater->Inc();
+        return Die(ctx);
+    case NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED:
+        ExtractDatashardErrors(record);
+        CancelProposal(tabletId);
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardOverloaded, NKikimrIssues::TStatusIds::OVERLOADED, true, ctx);
+        TxProxyMon->TxResultShardOverloaded->Inc();
+        return Die(ctx);
     case NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR:
         ExtractDatashardErrors(record);
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError, NKikimrIssues::TStatusIds::ERROR, true, ctx);
@@ -1933,30 +1933,30 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, NKikimrIssues::TStatusIds::BAD_REQUEST, true, ctx);
         TxProxyMon->TxResultCancelled->Inc();
         return Die(ctx);
-    default: 
-        // everything other is hard error 
-        ExtractDatashardErrors(record); 
-        CancelProposal(tabletId); 
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown, NKikimrIssues::TStatusIds::ERROR, true, ctx); 
+    default:
+        // everything other is hard error
+        ExtractDatashardErrors(record);
+        CancelProposal(tabletId);
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown, NKikimrIssues::TStatusIds::ERROR, true, ctx);
         TxProxyMon->TxResultFatal->Inc();
-        return Die(ctx); 
-    } 
-} 
- 
-void TDataReq::CancelProposal(ui64 exceptTablet) { 
+        return Die(ctx);
+    }
+}
+
+void TDataReq::CancelProposal(ui64 exceptTablet) {
     if (CanUseFollower)
-        return; 
- 
-    for (const auto &x : PerTablet) 
-        if (x.first != exceptTablet) { 
+        return;
+
+    for (const auto &x : PerTablet)
+        if (x.first != exceptTablet) {
             Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                new TEvDataShard::TEvCancelTransactionProposal(TxId), 
-                x.first, 
-                false 
-            )); 
-        } 
-} 
- 
+                new TEvDataShard::TEvCancelTransactionProposal(TxId),
+                x.first,
+                false
+            ));
+        }
+}
+
 void TDataReq::ExtractDatashardErrors(const NKikimrTxDataShard::TEvProposeTransactionResult & record) {
     TString allErrors;
     for (const auto &er : record.GetError()) {
@@ -1964,109 +1964,109 @@ void TDataReq::ExtractDatashardErrors(const NKikimrTxDataShard::TEvProposeTransa
     }
 
     DatashardErrors = allErrors;
-    ComplainingDatashards.push_back(record.GetOrigin()); 
+    ComplainingDatashards.push_back(record.GetOrigin());
 }
 
-void TDataReq::HandlePrepareErrors(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) { 
-    TEvDataShard::TEvProposeTransactionResult *msg = ev->Get(); 
-    const NKikimrTxDataShard::TEvProposeTransactionResult &record = msg->Record; 
- 
-    const ui64 tabletId = msg->GetOrigin(); 
-    TPerTablet *perTablet = PerTablet.FindPtr(tabletId); 
+void TDataReq::HandlePrepareErrors(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
+    TEvDataShard::TEvProposeTransactionResult *msg = ev->Get();
+    const NKikimrTxDataShard::TEvProposeTransactionResult &record = msg->Record;
+
+    const ui64 tabletId = msg->GetOrigin();
+    TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
     Y_VERIFY(perTablet);
- 
+
     LOG_LOG_S_SAMPLED_BY(ctx, (msg->GetStatus() != NKikimrTxDataShard::TEvProposeTransactionResult::ERROR ?
         NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
         NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-        << " HANDLE PrepareErrors TEvProposeTransactionResult TDataReq TabletStatus# " << perTablet->TabletStatus 
-        << " shard id " << tabletId); 
+        << " HANDLE PrepareErrors TEvProposeTransactionResult TDataReq TabletStatus# " << perTablet->TabletStatus
+        << " shard id " << tabletId);
 
     if (perTablet->TabletStatus != TPerTablet::ETabletStatus::StatusWait) // do nothing for already processed cases
-        return; 
- 
-    switch (msg->GetStatus()) { 
-    case NKikimrTxDataShard::TEvProposeTransactionResult::ERROR: 
-        for (const auto &er : record.GetError()) { 
-            const NKikimrTxDataShard::TError::EKind errorKind = er.GetKind(); 
-            switch (errorKind) { 
-                case NKikimrTxDataShard::TError::SCHEME_ERROR: 
-                case NKikimrTxDataShard::TError::WRONG_PAYLOAD_TYPE: 
-                case NKikimrTxDataShard::TError::WRONG_SHARD_STATE: 
-                case NKikimrTxDataShard::TError::SCHEME_CHANGED: 
-                    return MarkShardError(tabletId, *perTablet, true, ctx); 
-                default: 
-                    break; 
-            } 
-        } 
+        return;
+
+    switch (msg->GetStatus()) {
+    case NKikimrTxDataShard::TEvProposeTransactionResult::ERROR:
+        for (const auto &er : record.GetError()) {
+            const NKikimrTxDataShard::TError::EKind errorKind = er.GetKind();
+            switch (errorKind) {
+                case NKikimrTxDataShard::TError::SCHEME_ERROR:
+                case NKikimrTxDataShard::TError::WRONG_PAYLOAD_TYPE:
+                case NKikimrTxDataShard::TError::WRONG_SHARD_STATE:
+                case NKikimrTxDataShard::TError::SCHEME_CHANGED:
+                    return MarkShardError(tabletId, *perTablet, true, ctx);
+                default:
+                    break;
+            }
+        }
         [[fallthrough]];
-    default: 
-        return MarkShardError(tabletId, *perTablet, false, ctx); 
-    } 
-} 
- 
-void TDataReq::HandlePrepareErrorTimeout(const TActorContext &ctx) { 
+    default:
+        return MarkShardError(tabletId, *perTablet, false, ctx);
+    }
+}
+
+void TDataReq::HandlePrepareErrorTimeout(const TActorContext &ctx) {
     TxProxyMon->PrepareErrorTimeout->Inc();
-    return Die(ctx); 
-} 
- 
-void TDataReq::Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev, const TActorContext &ctx) { 
-    // from coordinator 
-    TEvTxProxy::TEvProposeTransactionStatus *msg = ev->Get(); 
-    const NKikimrTx::TEvProposeTransactionStatus &record = msg->Record; 
-    switch (msg->GetStatus()) { 
-    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted: 
+    return Die(ctx);
+}
+
+void TDataReq::Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev, const TActorContext &ctx) {
+    // from coordinator
+    TEvTxProxy::TEvProposeTransactionStatus *msg = ev->Get();
+    const NKikimrTx::TEvProposeTransactionStatus &record = msg->Record;
+    switch (msg->GetStatus()) {
+    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted:
         TxProxyMon->ClientTxStatusAccepted->Inc();
         // nop
         LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " HANDLE TEvProposeTransactionStatus TDataReq marker# P11 Status# " <<  msg->GetStatus());
         break;
-    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusProcessed: 
+    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusProcessed:
         TxProxyMon->ClientTxStatusProcessed->Inc();
         // nop
         LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " HANDLE TEvProposeTransactionStatus TDataReq marker# P11 Status# " <<  msg->GetStatus());
         break;
-    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusConfirmed: 
+    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusConfirmed:
         TxProxyMon->ClientTxStatusConfirmed->Inc();
-        // nop 
+        // nop
         LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " HANDLE TEvProposeTransactionStatus TDataReq marker# P11 Status# " <<  msg->GetStatus());
-        break; 
-    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned: 
-        // ok 
-        PlanStep = record.GetStepId(); 
+        break;
+    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
+        // ok
+        PlanStep = record.GetStepId();
         CoordinatorStatus = ECoordinatorStatus::Planned;
- 
+
         TxProxyMon->ClientTxStatusPlanned->Inc();
         LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " HANDLE TEvProposeTransactionStatus TDataReq marker# P10 Status# " << msg->GetStatus());
         WallClockPlanned = Now();
-        if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyReportPlanned) 
-            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorPlanned, NKikimrIssues::TStatusIds::TRANSIENT, false, ctx); 
-        break; 
-    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated: 
-    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclined: 
-    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace: 
+        if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyReportPlanned)
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorPlanned, NKikimrIssues::TStatusIds::TRANSIENT, false, ctx);
+        break;
+    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated:
+    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclined:
+    case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace:
     case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting: // TODO: retry
         // cancel proposal only for defined cases and fall through for generic error handling
-        CancelProposal(0); 
+        CancelProposal(0);
         [[fallthrough]];
-    default: 
-        // smth goes wrong 
+    default:
+        // smth goes wrong
         LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " HANDLE TEvProposeTransactionStatus TDataReq marker# P9 Status# " << msg->GetStatus());
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorDeclined, NKikimrIssues::TStatusIds::REJECTED, true, ctx); 
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorDeclined, NKikimrIssues::TStatusIds::REJECTED, true, ctx);
         TxProxyMon->ClientTxStatusCoordinatorDeclined->Inc();
-        return Die(ctx); 
-    } 
-} 
- 
+        return Die(ctx);
+    }
+}
+
 void TDataReq::Handle(TEvDataShard::TEvProposeTransactionRestart::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ctx);
     const auto &record = ev->Get()->Record;
@@ -2179,11 +2179,11 @@ void TDataReq::HandlePlan(TEvDataShard::TEvProposeTransactionAttachResult::TPtr 
     return Die(ctx);
 }
 
-void TDataReq::HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) { 
-    // from tablets 
-    TEvDataShard::TEvProposeTransactionResult *msg = ev->Get(); 
-    const auto &record = msg->Record; 
- 
+void TDataReq::HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
+    // from tablets
+    TEvDataShard::TEvProposeTransactionResult *msg = ev->Get();
+    const auto &record = msg->Record;
+
     const ui64 tabletId = msg->GetOrigin();
     TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
 
@@ -2193,29 +2193,29 @@ void TDataReq::HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, c
         ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
         NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-        << " HANDLE Plan TEvProposeTransactionResult TDataReq GetStatus# " << msg->GetStatus() 
+        << " HANDLE Plan TEvProposeTransactionResult TDataReq GetStatus# " << msg->GetStatus()
         << " shard id " << tabletId
-        << " marker# P12"); 
+        << " marker# P12");
 
-    if (record.HasExecLatency()) 
-        ElapsedExecExec = Max<TDuration>(ElapsedExecExec, TDuration::MilliSeconds(record.GetExecLatency())); 
-    if (record.HasProposeLatency()) 
-        ElapsedExecComplete = Max<TDuration>(ElapsedExecComplete, TDuration::MilliSeconds(record.GetProposeLatency())); 
- 
-    switch (msg->GetStatus()) { 
-    case NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE: 
+    if (record.HasExecLatency())
+        ElapsedExecExec = Max<TDuration>(ElapsedExecExec, TDuration::MilliSeconds(record.GetExecLatency()));
+    if (record.HasProposeLatency())
+        ElapsedExecComplete = Max<TDuration>(ElapsedExecComplete, TDuration::MilliSeconds(record.GetProposeLatency()));
+
+    switch (msg->GetStatus()) {
+    case NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE:
         if (Y_LIKELY(perTablet)) {
             perTablet->TabletStatus = TPerTablet::ETabletStatus::StatusFinished;
         }
         TxProxyMon->PlanClientTxResultComplete->Inc();
-        return MergeResult(ev, ctx); 
+        return MergeResult(ev, ctx);
     case NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA:
         ProcessStreamResponseData(ev, ctx);
         return;
-    case NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED: 
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAborted, NKikimrIssues::TStatusIds::SUCCESS, true, ctx); 
+    case NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED:
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAborted, NKikimrIssues::TStatusIds::SUCCESS, true, ctx);
         TxProxyMon->PlanClientTxResultAborted->Inc();
-        return Die(ctx); 
+        return Die(ctx);
     case NKikimrTxDataShard::TEvProposeTransactionResult::RESULT_UNAVAILABLE:
         ExtractDatashardErrors(record);
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResultUnavailable, NKikimrIssues::TStatusIds::ERROR, true, ctx);
@@ -2226,54 +2226,54 @@ void TDataReq::HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, c
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecCancelled, NKikimrIssues::TStatusIds::ERROR, true, ctx);
         TxProxyMon->PlanClientTxResultCancelled->Inc();
         return Die(ctx);
-    default: 
+    default:
         ExtractDatashardErrors(record);
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError, NKikimrIssues::TStatusIds::ERROR, true, ctx); 
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError, NKikimrIssues::TStatusIds::ERROR, true, ctx);
         TxProxyMon->PlanClientTxResultExecError->Inc();
-        return Die(ctx); 
-    } 
-} 
- 
-void TDataReq::HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) { 
-    TEvPipeCache::TEvDeliveryProblem *msg = ev->Get(); 
- 
-    if (msg->TabletId == SelectedCoordinator) { 
-        if (msg->NotDelivered) { 
-            LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR, 
-                NKikimrServices::TX_PROXY, TxId, 
-                "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
-                << " not delivered to coordinator" 
-                << " coordinator id " << msg->TabletId << " marker# P8"); 
- 
-            TStringStream explanation; 
-            explanation << "tx failed to plan with txid#" << TxId; 
-            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::TX_DECLINED_BY_COORDINATOR, explanation.Str())); 
- 
-            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorDeclined, NKikimrIssues::TStatusIds::REJECTED, true, ctx); 
-            TxProxyMon->PlanCoordinatorDeclined->Inc(); 
+        return Die(ctx);
+    }
+}
+
+void TDataReq::HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
+    TEvPipeCache::TEvDeliveryProblem *msg = ev->Get();
+
+    if (msg->TabletId == SelectedCoordinator) {
+        if (msg->NotDelivered) {
+            LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR,
+                NKikimrServices::TX_PROXY, TxId,
+                "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+                << " not delivered to coordinator"
+                << " coordinator id " << msg->TabletId << " marker# P8");
+
+            TStringStream explanation;
+            explanation << "tx failed to plan with txid#" << TxId;
+            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::TX_DECLINED_BY_COORDINATOR, explanation.Str()));
+
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorDeclined, NKikimrIssues::TStatusIds::REJECTED, true, ctx);
+            TxProxyMon->PlanCoordinatorDeclined->Inc();
         } else if (CoordinatorStatus == ECoordinatorStatus::Planned) {
             // We lost pipe to coordinator, but we already know tx is planned
             return;
-        } else { 
-            LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR, 
-                NKikimrServices::TX_PROXY, TxId, 
-                "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
-                << " delivery problem to coordinator" 
-                << " coordinator id " << msg->TabletId << " marker# P8b"); 
- 
-            TStringStream explanation; 
-            explanation << "tx state unknown, lost pipe with selected tx coordinator with txid#" << TxId; 
-            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, explanation.Str())); 
- 
+        } else {
+            LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR,
+                NKikimrServices::TX_PROXY, TxId,
+                "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+                << " delivery problem to coordinator"
+                << " coordinator id " << msg->TabletId << " marker# P8b");
+
+            TStringStream explanation;
+            explanation << "tx state unknown, lost pipe with selected tx coordinator with txid#" << TxId;
+            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, explanation.Str()));
+
             auto status = IsReadOnlyRequest()
                 ? TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorDeclined
                 : TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorUnknown;
 
             ReportStatus(status, NKikimrIssues::TStatusIds::TIMEOUT, true, ctx);
-            TxProxyMon->PlanClientDestroyed->Inc(); 
-        } 
- 
-        return Die(ctx); 
+            TxProxyMon->PlanClientDestroyed->Inc();
+        }
+
+        return Die(ctx);
     } else if (TPerTablet *perTablet = PerTablet.FindPtr(msg->TabletId)) {
         bool wasRestarting = std::exchange(perTablet->Restarting, false);
         switch (perTablet->TabletStatus) {
@@ -2305,31 +2305,31 @@ void TDataReq::HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TAct
             return;
         }
 
-        LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR, 
-            NKikimrServices::TX_PROXY, TxId, 
+        LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR,
+            NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId << " shard " << msg->TabletId << " lost pipe while waiting for reply"
                 << (msg->NotDelivered ? " (last message not delivered)" : ""));
- 
-        ComplainingDatashards.push_back(msg->TabletId); 
- 
-        TStringStream explanation; 
-        explanation << "tx state unknown for shard " << msg->TabletId << " with txid#" << TxId; 
-        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, explanation.Str())); 
- 
+
+        ComplainingDatashards.push_back(msg->TabletId);
+
+        TStringStream explanation;
+        explanation << "tx state unknown for shard " << msg->TabletId << " with txid#" << TxId;
+        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, explanation.Str()));
+
         auto status = IsReadOnlyRequest()
             ? TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable
             : TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown;
         ReportStatus(status, NKikimrIssues::TStatusIds::TIMEOUT, true, ctx);
-        TxProxyMon->ClientConnectedError->Inc(); 
- 
-        return Die(ctx); 
-    } 
+        TxProxyMon->ClientConnectedError->Inc();
 
-    LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR, 
-        NKikimrServices::TX_PROXY, TxId, 
-        "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId << " lost pipe with unknown endpoint, ignoring"); 
-} 
- 
+        return Die(ctx);
+    }
+
+    LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR,
+        NKikimrServices::TX_PROXY, TxId,
+        "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId << " lost pipe with unknown endpoint, ignoring");
+}
+
 void TDataReq::Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev, const TActorContext &ctx) {
     auto *response = new TEvDataShard::TEvGetReadTableSinkStateResponse;
 
@@ -2397,8 +2397,8 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, cons
     // Handle shard restart. For now temporary snapshots are used by scan transaction
     // and therefore any shard restart may cause inconsistent response.
     if (ReadTableRequest->ClearanceSenders.contains(shard) || PerTablet[shard].StreamCleared) {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, 
-                        "Cannot recover from shard restart, shard: " << shard << ", txid: " << TxId); 
+            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
+                        "Cannot recover from shard restart, shard: " << shard << ", txid: " << TxId);
 
             // We must send response to current request too
             auto response = MakeHolder<TEvTxProcessing::TEvStreamClearanceResponse>();
@@ -2406,10 +2406,10 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, cons
             response->Record.SetCleared(false);
             ctx.Send(ev->Sender, response.Release());
 
-            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError, NKikimrIssues::TStatusIds::ERROR, true, ctx); 
-            Die(ctx); 
-            return; 
-        } 
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError, NKikimrIssues::TStatusIds::ERROR, true, ctx);
+            Die(ctx);
+            return;
+        }
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                 "Got clearance request, shard: " << rec.GetShardId()
@@ -2428,9 +2428,9 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, cons
     ProcessStreamClearance(true, ctx);
 }
 
-void TDataReq::Handle(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx) 
+void TDataReq::Handle(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx)
 {
-    Y_UNUSED(ev); 
+    Y_UNUSED(ev);
     Y_VERIFY(ReadTableRequest);
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
@@ -2440,16 +2440,16 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorCo
     Die(ctx);
 }
 
-void TDataReq::HandleResolve(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx) { 
-    Y_UNUSED(ev); 
-    Y_VERIFY(ReadTableRequest); 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-        "Abort read table transaction because stream is dead txid: " << TxId); 
- 
-    ReportStatus(TEvTxUserProxy::TResultStatus::ExecComplete, NKikimrIssues::TStatusIds::REJECTED, true, ctx); 
-    Become(&TThis::StateResolveTimeout); 
-} 
- 
+void TDataReq::HandleResolve(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx) {
+    Y_UNUSED(ev);
+    Y_VERIFY(ReadTableRequest);
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+        "Abort read table transaction because stream is dead txid: " << TxId);
+
+    ReportStatus(TEvTxUserProxy::TResultStatus::ExecComplete, NKikimrIssues::TStatusIds::REJECTED, true, ctx);
+    Become(&TThis::StateResolveTimeout);
+}
+
 void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaRequest::TPtr &ev, const TActorContext &ctx)
 {
     Y_VERIFY_DEBUG(ReadTableRequest);
@@ -2479,34 +2479,34 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaRelease::TPtr &ev, const TA
     ctx.Send(ev->Forward(RequestSource));
 }
 
-void TDataReq::HandleExecTimeoutResolve(const TActorContext &ctx) { 
-    LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, 
-        "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
-        << " HANDLE ExecTimeout TDataReq"); 
-    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout, NKikimrIssues::TStatusIds::TIMEOUT, true, ctx); 
-    TxProxyMon->ExecTimeout->Inc(); 
-    Become(&TThis::StateResolveTimeout); 
-} 
- 
-void TDataReq::HandleExecTimeout(const TActorContext &ctx) { 
+void TDataReq::HandleExecTimeoutResolve(const TActorContext &ctx) {
     LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
         << " HANDLE ExecTimeout TDataReq");
-    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout, NKikimrIssues::TStatusIds::TIMEOUT, true, ctx); 
+    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout, NKikimrIssues::TStatusIds::TIMEOUT, true, ctx);
     TxProxyMon->ExecTimeout->Inc();
-    return Die(ctx); 
-} 
- 
-void TDataReq::MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) { 
+    Become(&TThis::StateResolveTimeout);
+}
+
+void TDataReq::HandleExecTimeout(const TActorContext &ctx) {
+    LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
+        "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+        << " HANDLE ExecTimeout TDataReq");
+    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout, NKikimrIssues::TStatusIds::TIMEOUT, true, ctx);
+    TxProxyMon->ExecTimeout->Inc();
+    return Die(ctx);
+}
+
+void TDataReq::MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
     NKikimrTxDataShard::TEvProposeTransactionResult &record = ev->Get()->Record;
- 
+
     ResultsReceivedCount++;
     ResultsReceivedSize += record.GetTxResult().size();
 
     WallClockLastExecReply = Now();
-    if (WallClockFirstExecReply.GetValue() == 0) 
-        WallClockFirstExecReply = WallClockLastExecReply; 
- 
+    if (WallClockFirstExecReply.GetValue() == 0)
+        WallClockFirstExecReply = WallClockLastExecReply;
+
     const ui64 tabletId = record.GetOrigin();
     TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
 
@@ -2555,27 +2555,27 @@ void TDataReq::MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, 
         ));
     }
 
-    const ui64 originShard = record.GetOrigin(); 
-    auto builderIt = FlatMKQLRequest->BalanceCoverageBuilders.find(originShard); 
-    if (builderIt != FlatMKQLRequest->BalanceCoverageBuilders.end()) { 
-        if (builderIt->second->AddResult(record.GetBalanceTrackList())) { 
+    const ui64 originShard = record.GetOrigin();
+    auto builderIt = FlatMKQLRequest->BalanceCoverageBuilders.find(originShard);
+    if (builderIt != FlatMKQLRequest->BalanceCoverageBuilders.end()) {
+        if (builderIt->second->AddResult(record.GetBalanceTrackList())) {
             engine.AddShardReply(originShard, record.GetTxResult());
-            if (builderIt->second->IsComplete()) { 
-                engine.FinalizeOriginReplies(originShard); 
-                FlatMKQLRequest->BalanceCoverageBuilders.erase(builderIt); 
-            } 
-        } 
-    } 
- 
+            if (builderIt->second->IsComplete()) {
+                engine.FinalizeOriginReplies(originShard);
+                FlatMKQLRequest->BalanceCoverageBuilders.erase(builderIt);
+            }
+        }
+    }
+
     if (FlatMKQLRequest->BalanceCoverageBuilders.empty()) {
         return MakeFlatMKQLResponse(ctx, timer);
     } else {
         CpuTime += timer.GetTime();
     }
-} 
- 
+}
+
 void TDataReq::MakeFlatMKQLResponse(const TActorContext &ctx, const NCpuTime::TCpuTimer& timer) {
-    NMiniKQL::IEngineFlat &engine = *FlatMKQLRequest->Engine; 
+    NMiniKQL::IEngineFlat &engine = *FlatMKQLRequest->Engine;
     engine.SetStepTxId({ PlanStep, TxId });
 
     engine.SetDeadline(WallClockAccepted + ExecTimeoutPeriod);
@@ -2583,30 +2583,30 @@ void TDataReq::MakeFlatMKQLResponse(const TActorContext &ctx, const NCpuTime::TC
         engine.SetMemoryLimit(FlatMKQLRequest->Limits.GetComputeNodeMemoryLimitBytes());
     }
 
-    engine.BuildResult(); 
-    FlatMKQLRequest->EngineResponseStatus = engine.GetStatus(); 
- 
-    switch (FlatMKQLRequest->EngineResponseStatus) { 
-    case NMiniKQL::IEngineFlat::EStatus::Unknown: 
-    case NMiniKQL::IEngineFlat::EStatus::Error: 
-        LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, 
-            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
-            << " MergeResult ExecError TDataReq marker# P16"); 
+    engine.BuildResult();
+    FlatMKQLRequest->EngineResponseStatus = engine.GetStatus();
+
+    switch (FlatMKQLRequest->EngineResponseStatus) {
+    case NMiniKQL::IEngineFlat::EStatus::Unknown:
+    case NMiniKQL::IEngineFlat::EStatus::Error:
+        LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
+            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << " MergeResult ExecError TDataReq marker# P16");
         CpuTime += timer.GetTime();
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError, NKikimrIssues::TStatusIds::ERROR, true, ctx); 
-        TxProxyMon->MergeResultMiniKQLExecError->Inc(); 
-        return Die(ctx); 
-    case NMiniKQL::IEngineFlat::EStatus::Complete: 
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError, NKikimrIssues::TStatusIds::ERROR, true, ctx);
+        TxProxyMon->MergeResultMiniKQLExecError->Inc();
+        return Die(ctx);
+    case NMiniKQL::IEngineFlat::EStatus::Complete:
     case NMiniKQL::IEngineFlat::EStatus::Aborted: {
-        LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, 
-            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
-            << " MergeResult ExecComplete TDataReq marker# P17"); 
+        LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
+            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << " MergeResult ExecComplete TDataReq marker# P17");
 
         auto fillResult = engine.FillResultValue(FlatMKQLRequest->EngineEvaluatedResponse);
         switch (fillResult) {
         case NMiniKQL::IEngineFlat::EResult::Ok:
             CpuTime += timer.GetTime();
-            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete, NKikimrIssues::TStatusIds::SUCCESS, true, ctx); 
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete, NKikimrIssues::TStatusIds::SUCCESS, true, ctx);
             TxProxyMon->MergeResultMiniKQLExecComplete->Inc();
             break;
         case NMiniKQL::IEngineFlat::EResult::ResultTooBig:
@@ -2639,13 +2639,13 @@ void TDataReq::MakeFlatMKQLResponse(const TActorContext &ctx, const NCpuTime::TC
             break;
         }
 
-        return Die(ctx); 
+        return Die(ctx);
     }
-    default: 
+    default:
         Y_FAIL("unknown engine status# %" PRIu32 " txid# %" PRIu64, (ui32)FlatMKQLRequest->EngineResponseStatus, (ui64)TxId);
-    } 
-} 
- 
+    }
+}
+
 void TDataReq::ProcessStreamResponseData(TEvDataShard::TEvProposeTransactionResult::TPtr &ev,
                                          const TActorContext &ctx)
 {
@@ -2694,7 +2694,7 @@ void TDataReq::FinishShardStream(TEvDataShard::TEvProposeTransactionResult::TPtr
 }
 
 void TDataReq::FinishStreamResponse(const TActorContext &ctx) {
-    ReportStatus(TEvTxUserProxy::TResultStatus::ExecComplete, NKikimrIssues::TStatusIds::SUCCESS, true, ctx); 
+    ReportStatus(TEvTxUserProxy::TResultStatus::ExecComplete, NKikimrIssues::TStatusIds::SUCCESS, true, ctx);
     Die(ctx);
 }
 
@@ -2747,8 +2747,8 @@ void TDataReq::FailProposedRequest(TEvTxUserProxy::TEvProposeTransactionStatus::
 
     DatashardErrors = errMsg;
     // Cancel the Tx on all shards (so we pass invalid tablet id)
-    CancelProposal(0); 
-    ReportStatus(status, NKikimrIssues::TStatusIds::ERROR, true, ctx); 
+    CancelProposal(0);
+    ReportStatus(status, NKikimrIssues::TStatusIds::ERROR, true, ctx);
     Become(&TThis::StatePrepareErrors, ctx, TDuration::MilliSeconds(500), new TEvents::TEvWakeup);
     TxProxyMon->TxResultError->Inc();
 }
@@ -2775,20 +2775,20 @@ bool TDataReq::CheckDomainLocality(NSchemeCache::TSchemeCacheRequest &cacheReque
     return true;
 }
 
-void TDataReq::RegisterPlan(const TActorContext &ctx) { 
+void TDataReq::RegisterPlan(const TActorContext &ctx) {
     WallClockPrepared = Now();
-    TDomainsInfo *domainsInfo = AppData(ctx)->DomainsInfo.Get(); 
+    TDomainsInfo *domainsInfo = AppData(ctx)->DomainsInfo.Get();
     Y_VERIFY(domainsInfo);
- 
+
     ui64 totalReadSize = 0;
     TSet<ui32> affectedDomains;
-    for (const auto &xp : PerTablet) { 
-        const ui32 tabletDomain = domainsInfo->GetDomainUidByTabletId(xp.first); 
+    for (const auto &xp : PerTablet) {
+        const ui32 tabletDomain = domainsInfo->GetDomainUidByTabletId(xp.first);
         Y_VERIFY(tabletDomain != Max<ui32>());
-        affectedDomains.insert(tabletDomain); 
+        affectedDomains.insert(tabletDomain);
         totalReadSize += xp.second.ReadSize;
-    } 
- 
+    }
+
     // Check reply size
     ui64 sizeLimit = RequestControls.PerRequestDataSizeLimit;
     if (FlatMKQLRequest && FlatMKQLRequest->Limits.GetTotalReadSizeLimitBytes()) {
@@ -2822,50 +2822,50 @@ void TDataReq::RegisterPlan(const TActorContext &ctx) {
     }
 
     if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyReportPrepared)
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyPrepared, NKikimrIssues::TStatusIds::TRANSIENT, false, ctx); 
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyPrepared, NKikimrIssues::TStatusIds::TRANSIENT, false, ctx);
 
     Y_VERIFY(SelectedCoordinator, "shouldn't be run with null SelectedCoordinator");
-    TAutoPtr<TEvTxProxy::TEvProposeTransaction> req(new TEvTxProxy::TEvProposeTransaction(SelectedCoordinator, TxId, 0, 
-        AggrMinStep, AggrMaxStep)); 
- 
-    auto *reqAffectedSet = req->Record.MutableTransaction()->MutableAffectedSet(); 
-    reqAffectedSet->Reserve(PerTablet.size()); 
- 
-    for (const auto &xp : PerTablet) { 
-        auto x = reqAffectedSet->Add(); 
-        x->SetTabletId(xp.first); 
-        x->SetFlags(xp.second.AffectedFlags); 
-    } 
- 
+    TAutoPtr<TEvTxProxy::TEvProposeTransaction> req(new TEvTxProxy::TEvProposeTransaction(SelectedCoordinator, TxId, 0,
+        AggrMinStep, AggrMaxStep));
+
+    auto *reqAffectedSet = req->Record.MutableTransaction()->MutableAffectedSet();
+    reqAffectedSet->Reserve(PerTablet.size());
+
+    for (const auto &xp : PerTablet) {
+        auto x = reqAffectedSet->Add();
+        x->SetTabletId(xp.first);
+        x->SetFlags(xp.second.AffectedFlags);
+    }
+
     LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-        << " SEND EvProposeTransaction to# " << SelectedCoordinator << " Coordinator marker# P7 "); 
- 
+        << " SEND EvProposeTransaction to# " << SelectedCoordinator << " Coordinator marker# P7 ");
+
     Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), SelectedCoordinator, true));
     CoordinatorStatus = ECoordinatorStatus::Waiting;
-    Become(&TThis::StateWaitPlan); 
-} 
- 
+    Become(&TThis::StateWaitPlan);
+}
+
 void TDataReq::HandleUndeliveredResolve(TEvents::TEvUndelivered::TPtr &, const TActorContext &ctx) {
     IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "unexpected event delivery problem"));
     ReportStatus(TEvTxUserProxy::TResultStatus::Unknown, NKikimrIssues::TStatusIds::INTERNAL_ERROR, true, ctx);
     Become(&TThis::StateResolveTimeout);
 }
 
-void TDataReq::Handle(TEvents::TEvUndelivered::TPtr &, const TActorContext &ctx) { 
-    IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "unexpected event delivery problem")); 
-    ReportStatus(TEvTxUserProxy::TResultStatus::Unknown, NKikimrIssues::TStatusIds::INTERNAL_ERROR, true, ctx); 
-    return Die(ctx); 
-} 
- 
-void TDataReq::HandleWatchdog(const TActorContext &ctx) { 
+void TDataReq::Handle(TEvents::TEvUndelivered::TPtr &, const TActorContext &ctx) {
+    IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "unexpected event delivery problem"));
+    ReportStatus(TEvTxUserProxy::TResultStatus::Unknown, NKikimrIssues::TStatusIds::INTERNAL_ERROR, true, ctx);
+    return Die(ctx);
+}
+
+void TDataReq::HandleWatchdog(const TActorContext &ctx) {
     const TDuration fromStart = Now() - this->WallClockAccepted;
     LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_INFO, NKikimrServices::TX_PROXY, TxId,
               "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
               << " Transactions still running for " << fromStart);
-    ctx.Schedule(TDuration::MilliSeconds(KIKIMR_DATAREQ_WATCHDOG_PERIOD), new TEvPrivate::TEvProxyDataReqOngoingTransactionWatchdog()); 
-} 
- 
+    ctx.Schedule(TDuration::MilliSeconds(KIKIMR_DATAREQ_WATCHDOG_PERIOD), new TEvPrivate::TEvProxyDataReqOngoingTransactionWatchdog());
+}
+
 void TDataReq::SendStreamClearanceResponse(ui64 shard, bool cleared, const TActorContext &ctx)
 {
     TAutoPtr<TEvTxProcessing::TEvStreamClearanceResponse> response
@@ -2979,9 +2979,9 @@ bool TDataReq::IsReadOnlyRequest() const {
 IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<NKikimr::NTxProxy::TTxProxyMon>& mon,
                              const TRequestControls& requestControls) {
     return new NTxProxy::TDataReq(services, txid, mon, requestControls);
-} 
- 
-}} 
+}
+
+}}
 
 
 #define STATUS_TO_STRING_IMPL_ITEM(name, ...) \

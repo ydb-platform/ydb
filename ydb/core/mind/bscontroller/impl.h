@@ -19,7 +19,7 @@ namespace NKikimr {
 namespace NBsController {
 
 using NTabletFlatExecutor::TTabletExecutedFlat;
-using NTabletFlatExecutor::ITransaction; 
+using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
 
@@ -1635,8 +1635,8 @@ private:
     void ProcessSelectGroupsQueueItem(TList<TSelectGroupsQueueItem>::iterator it);
 
     void NotifyNodesAwaitingKeysForGroups(ui32 groupId);
-    ITransaction* CreateTxInitScheme(); 
-    ITransaction* CreateTxMigrate(); 
+    ITransaction* CreateTxInitScheme();
+    ITransaction* CreateTxMigrate();
     ITransaction* CreateTxLoadEverything();
     ITransaction* CreateTxUpdateSeenOperational(TVector<TGroupId> groups);
     ITransaction* CreateTxUpdateLastSeenReady(std::vector<std::pair<TVSlotId, TInstant>> lastSeenReadyQ);

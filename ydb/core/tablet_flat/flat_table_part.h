@@ -1,6 +1,6 @@
-#pragma once 
+#pragma once
 
-#include "defs.h" 
+#include "defs.h"
 #include "flat_part_scheme.h"
 #include "flat_page_index.h"
 #include "flat_page_data.h"
@@ -11,11 +11,11 @@
 #include "flat_page_txidstat.h"
 #include "flat_page_txstatus.h"
 #include "util_basics.h"
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NTable {
     struct IPages;
- 
+
     /**
      * Cold parts are parts that don't have any metadata loaded into memory,
      * so we don't know much about them. Concrete implementations should

@@ -3,14 +3,14 @@ IF (NOT OS_WINDOWS)
     UNITTEST_FOR(ydb/core/quoter)
 
     OWNER(g:kikimr)
- 
+
     PEERDIR(
         library/cpp/testing/gmock_in_unittest
         ydb/core/testlib
     )
- 
+
     YQL_LAST_ABI_VERSION()
- 
+
     SRCS(
         kesus_quoter_ut.cpp
         quoter_service_ut.cpp
@@ -30,6 +30,6 @@ IF (NOT OS_WINDOWS)
         SIZE(MEDIUM)
         TIMEOUT(600)
     ENDIF()
- 
+
     END()
 ENDIF()

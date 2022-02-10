@@ -1,7 +1,7 @@
 #pragma once
 
 #include "compile_result.h"
-#include "compile_context.h" 
+#include "compile_context.h"
 #include "db_key_resolver.h"
 
 #include <library/cpp/actors/core/actor.h>
@@ -46,7 +46,7 @@ struct TMiniKQLCompileActorEvents {
     struct TEvCompileResult : public NActors::TEventBase<TEvCompileResult, CompileResult> {
         explicit TEvCompileResult(const TMiniKQLCompileResult& result, THashMap<TString, ui64> &&resolveCookies);
         DEFINE_SIMPLE_LOCAL_EVENT(TEvCompileResult, "EvCompileResult");
- 
+
         TMiniKQLCompileResult Result;
         THashMap<TString, ui64> CompileResolveCookies;
     };
@@ -58,6 +58,6 @@ CreateCompileActor(const TString& program,
                    IDbSchemeResolver* dbSchemeResolver,
                    NActors::TActorId responseTo,
                    THashMap<TString, ui64> &&resolveRefreshCookies,
-                   bool forceCacheRefresh); // TEvCompileResult. 
+                   bool forceCacheRefresh); // TEvCompileResult.
 
 } // namespace NYql

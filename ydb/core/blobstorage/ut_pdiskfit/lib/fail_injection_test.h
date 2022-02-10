@@ -111,7 +111,7 @@ struct TPDiskFailureInjectionTest {
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
 
-    TProgramShouldContinue KikimrShouldContinue; 
+    TProgramShouldContinue KikimrShouldContinue;
     std::unique_ptr<NKikimr::TAppData> AppData;
     std::shared_ptr<NKikimr::NPDisk::IIoContextFactory> IoContext;
     std::unique_ptr<NActors::TActorSystem> ActorSystem;

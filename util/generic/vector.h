@@ -68,7 +68,7 @@ public:
     }
 
     inline TVector(const TSelf& src)
-        : TBase(src) 
+        : TBase(src)
     {
     }
 
@@ -83,10 +83,10 @@ public:
     {
     }
 
-    inline TSelf& operator=(const TSelf& src) { 
-        TBase::operator=(src); 
-        return *this; 
-    } 
+    inline TSelf& operator=(const TSelf& src) {
+        TBase::operator=(src);
+        return *this;
+    }
 
     inline TSelf& operator=(TSelf&& src) noexcept {
         TBase::operator=(std::forward<TSelf>(src));

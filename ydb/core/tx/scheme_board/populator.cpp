@@ -16,15 +16,15 @@
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/log.h>
 
-#include <util/digest/city.h> 
- 
+#include <util/digest/city.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/generic/algorithm.h> 
+#include <util/generic/algorithm.h>
 
 namespace NKikimr {
 namespace NSchemeBoard {
@@ -33,7 +33,7 @@ namespace NSchemeBoard {
 #define SBP_LOG_D(stream) SB_LOG_D(SCHEME_BOARD_POPULATOR, stream)
 #define SBP_LOG_N(stream) SB_LOG_N(SCHEME_BOARD_POPULATOR, stream)
 #define SBP_LOG_E(stream) SB_LOG_E(SCHEME_BOARD_POPULATOR, stream)
-#define SBP_LOG_CRIT(stream) SB_LOG_CRIT(SCHEME_BOARD_POPULATOR, stream) 
+#define SBP_LOG_CRIT(stream) SB_LOG_CRIT(SCHEME_BOARD_POPULATOR, stream)
 
 namespace {
 
@@ -70,8 +70,8 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
         if (msg->HasDeletedLocalPathIds()) {
             auto& deletedLocalPathIds = *update->Record.MutableDeletedLocalPathIds();
 
-            deletedLocalPathIds.SetBegin(msg->DeletedPathBegin); 
-            deletedLocalPathIds.SetEnd(msg->DeletedPathEnd); 
+            deletedLocalPathIds.SetBegin(msg->DeletedPathBegin);
+            deletedLocalPathIds.SetEnd(msg->DeletedPathEnd);
 
             CurPathId = TPathId(Owner, msg->DeletedPathEnd);
         }
@@ -410,8 +410,8 @@ public:
     explicit TReplicaPopulator(
             const TActorId& parent,
             const TActorId& replica,
-            const ui64 owner, 
-            const ui64 generation) 
+            const ui64 owner,
+            const ui64 generation)
         : Parent(parent)
         , Replica(replica)
         , Owner(owner)
@@ -498,40 +498,40 @@ private:
 
 class TPopulator: public TMonitorableActor<TPopulator> {
     TConstArrayRef<TActorId> SelectReplicas(TPathId pathId, TStringBuf path) {
-        SelectionReplicaCache.clear(); 
+        SelectionReplicaCache.clear();
 
-        const ui64 pathHash = CityHash64(path); 
+        const ui64 pathHash = CityHash64(path);
         const ui64 idHash = pathId.Hash();
 
-        TStateStorageInfo::TSelection selection; 
+        TStateStorageInfo::TSelection selection;
 
-        GroupInfo->SelectReplicas(pathHash, &selection); 
-        SelectionReplicaCache.insert(SelectionReplicaCache.end(), selection.begin(), selection.end()); 
+        GroupInfo->SelectReplicas(pathHash, &selection);
+        SelectionReplicaCache.insert(SelectionReplicaCache.end(), selection.begin(), selection.end());
 
-        GroupInfo->SelectReplicas(idHash, &selection); 
+        GroupInfo->SelectReplicas(idHash, &selection);
         for (const TActorId& replica : selection) {
             if (Find(SelectionReplicaCache, replica) == SelectionReplicaCache.end()) {
-                SelectionReplicaCache.emplace_back(replica); 
+                SelectionReplicaCache.emplace_back(replica);
             }
         }
- 
+
         if (SelectionReplicaCache) {
             return TConstArrayRef<TActorId>(&SelectionReplicaCache.front(), SelectionReplicaCache.size());
         } else {
             return TConstArrayRef<TActorId>();
         }
-    } 
- 
+    }
+
     void Update(const TPathId pathId, const bool isDeletion, const ui64 cookie) {
         auto it = Descriptions.find(pathId);
         Y_VERIFY(it != Descriptions.end());
- 
+
         const auto& record = it->second.Record;
 
         TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, record.GetPath());
-        for (const auto& replica : replicas) { 
+        for (const auto& replica : replicas) {
             const TActorId* replicaPopulator = ReplicaToReplicaPopulator.FindPtr(replica);
-            Y_VERIFY(replicaPopulator != nullptr); 
+            Y_VERIFY(replicaPopulator != nullptr);
 
             auto update = MakeHolder<TSchemeBoardEvents::TEvUpdateBuilder>(Owner, Generation, record, isDeletion);
             if (!isDeletion) {
@@ -552,14 +552,14 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         const TActorId replicaPopulator = ev->Sender;
         const TActorId replica = ev->Get()->Replica;
 
-        if (ReplicaToReplicaPopulator[replica] != replicaPopulator) { 
+        if (ReplicaToReplicaPopulator[replica] != replicaPopulator) {
             SBP_LOG_CRIT("Inconsistent replica populator"
                 << ": self# " << SelfId()
                 << ", replica# " << replica
                 << ", replicaPopulator# " << replicaPopulator);
-            return; 
-        } 
- 
+            return;
+        }
+
         if (Descriptions.empty()) {
             Send(replicaPopulator, new TSchemeBoardEvents::TEvDescribeResult(true));
             return;
@@ -788,9 +788,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             << ": self# " << SelfId()
             << ", sender# " << ev->Sender);
 
-        const auto& info = ev->Get()->Info; 
+        const auto& info = ev->Get()->Info;
 
-        if (!info) { 
+        if (!info) {
             SBP_LOG_E("Publish on unconfigured SchemeBoard"
                 << ": self# " << SelfId()
                 << ", StateStorage group# " << StateStorageGroup);
@@ -798,7 +798,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             return;
         }
 
-        GroupInfo = info; 
+        GroupInfo = info;
         for (auto& replica : info->SelectAllReplicas()) {
             IActor* replicaPopulator = new TReplicaPopulator(SelfId(), replica, Owner, Generation);
             ReplicaToReplicaPopulator.emplace(replica, Register(replicaPopulator, TMailboxType::ReadAsFilled));
@@ -908,12 +908,12 @@ public:
     explicit TPopulator(
             const ui64 owner,
             const ui64 generation,
-            const ui32 ssId, 
+            const ui32 ssId,
             TMap<TPathId, TTwoPartDescription> descriptions,
             const ui64 maxPathId)
         : Owner(owner)
         , Generation(generation)
-        , StateStorageGroup(ssId) 
+        , StateStorageGroup(ssId)
         , Descriptions(std::move(descriptions))
         , MaxPathId(TPathId(owner, maxPathId))
     {
@@ -975,7 +975,7 @@ private:
 
     TDelayedUpdates DelayedUpdates;
 
-    TIntrusiveConstPtr<TStateStorageInfo> GroupInfo; 
+    TIntrusiveConstPtr<TStateStorageInfo> GroupInfo;
     THashMap<TActorId, TActorId> ReplicaToReplicaPopulator;
 
     TVector<TActorId> SelectionReplicaCache;
@@ -994,11 +994,11 @@ private:
 IActor* CreateSchemeBoardPopulator(
     const ui64 owner,
     const ui64 generation,
-    const ui32 ssId, 
+    const ui32 ssId,
     TMap<TPathId, NSchemeBoard::TTwoPartDescription> descriptions,
     const ui64 maxPathId
 ) {
-    return new NSchemeBoard::TPopulator(owner, generation, ssId, std::move(descriptions), maxPathId); 
+    return new NSchemeBoard::TPopulator(owner, generation, ssId, std::move(descriptions), maxPathId);
 }
 
 } // NKikimr

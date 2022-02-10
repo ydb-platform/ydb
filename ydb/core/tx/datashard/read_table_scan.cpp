@@ -324,7 +324,7 @@ public:
 private:
     void Die(const TActorContext &ctx) override
     {
-        ctx.Send(TActivationContext::InterconnectProxy(Sink.NodeId()), 
+        ctx.Send(TActivationContext::InterconnectProxy(Sink.NodeId()),
                  new TEvents::TEvUnsubscribe());
 
         TActor<TReadTableScan>::Die(ctx);

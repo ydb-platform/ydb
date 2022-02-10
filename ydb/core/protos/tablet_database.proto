@@ -13,35 +13,35 @@ message TExecutorSettings {
         optional bool KeepInMemory = 5;
     }
 
-    message TCompactionPolicy { 
-        message TGenerationPolicy { 
-            optional uint32 GenerationId = 1; 
-            optional uint64 SizeToCompact = 2; // 
-            optional uint32 CountToCompact = 3; // 
-            optional uint64 TimeFromCompaction = 4; // AND ^^ 
-            optional uint32 ForceCountToCompact = 10; // OR one of force limits happend 
-            optional uint64 ForceSizeToCompact = 11; // 
-            optional uint64 ForceTimeFromCompaction = 12; // 
-            optional uint32 CompactionQueue = 20; // what broker queue to use for compaction (by default: generationid + 1) 
-        } 
+    message TCompactionPolicy {
+        message TGenerationPolicy {
+            optional uint32 GenerationId = 1;
+            optional uint64 SizeToCompact = 2; //
+            optional uint32 CountToCompact = 3; //
+            optional uint64 TimeFromCompaction = 4; // AND ^^
+            optional uint32 ForceCountToCompact = 10; // OR one of force limits happend
+            optional uint64 ForceSizeToCompact = 11; //
+            optional uint64 ForceTimeFromCompaction = 12; //
+            optional uint32 CompactionQueue = 20; // what broker queue to use for compaction (by default: generationid + 1)
+        }
 
-        optional uint64 InMemSizeToSnapshot = 1; // 
-        optional uint32 InMemStepsToSnapshot = 2; // snapshot inmem state when size AND steps from last snapshot passed  
-        optional uint32 InMemForceStepsToSnapshot = 3; // OR steps passed 
-        optional uint64 InMemForceSizeToSnapshot = 4; // OR size reached 
-        optional uint64 InMemForceTimeToSnapshot = 5; // OR time from last snapshot passed 
-        optional uint32 InMemCompactionQueue = 6; // default: 0 
+        optional uint64 InMemSizeToSnapshot = 1; //
+        optional uint32 InMemStepsToSnapshot = 2; // snapshot inmem state when size AND steps from last snapshot passed 
+        optional uint32 InMemForceStepsToSnapshot = 3; // OR steps passed
+        optional uint64 InMemForceSizeToSnapshot = 4; // OR size reached
+        optional uint64 InMemForceTimeToSnapshot = 5; // OR time from last snapshot passed
+        optional uint32 InMemCompactionQueue = 6; // default: 0
 
-        repeated TGenerationPolicy Generation = 10; 
-    } 
+        repeated TGenerationPolicy Generation = 10;
+    }
 
-    message TDatabasePolicy { 
-        optional uint64 MainCacheSize = 1; 
-        optional uint32 ExecutorTxInFly = 2; 
-        optional uint32 TabletMetaInfoChannelIndex = 3; 
+    message TDatabasePolicy {
+        optional uint64 MainCacheSize = 1;
+        optional uint32 ExecutorTxInFly = 2;
+        optional uint32 TabletMetaInfoChannelIndex = 3;
 
-        optional TCompactionPolicy CompactionPolicy = 10; 
-        repeated TLocalityGroupPolicy LocalityGroupPolicy = 11; 
+        optional TCompactionPolicy CompactionPolicy = 10;
+        repeated TLocalityGroupPolicy LocalityGroupPolicy = 11;
 
         reserved 100; //optional bool ExposeCounters = 100;
     }

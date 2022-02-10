@@ -1,20 +1,20 @@
-#include "statestorage.h" 
-#include "tablet.h" 
-#include "tabletid.h" 
- 
+#include "statestorage.h"
+#include "tablet.h"
+#include "tabletid.h"
+
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
 namespace NKikimr {
 
 class TTabletKillRequest : public TActorBootstrapped<TTabletKillRequest> {
-private: 
-    const ui64 TabletId; 
+private:
+    const ui64 TabletId;
     const ui32 NodeId;
     const ui32 MaxGeneration;
 
-    void Handle(TEvStateStorage::TEvInfo::TPtr &ev, const TActorContext &ctx) { 
-        TEvStateStorage::TEvInfo *msg = ev->Get(); 
+    void Handle(TEvStateStorage::TEvInfo::TPtr &ev, const TActorContext &ctx) {
+        TEvStateStorage::TEvInfo *msg = ev->Get();
         TActorId LeaderActor;
         if (NodeId == 0) {
             LeaderActor = msg->CurrentLeader;
@@ -47,13 +47,13 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         const TActorId stateStorageProxyId = MakeStateStorageProxyID(StateStorageGroupFromTabletID(TabletId));
-        ctx.Send(stateStorageProxyId, new TEvStateStorage::TEvLookup(TabletId, 0)); 
+        ctx.Send(stateStorageProxyId, new TEvStateStorage::TEvLookup(TabletId, 0));
         Become(&TTabletKillRequest::StateFunc);
     }
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvStateStorage::TEvInfo, Handle); 
+            HFunc(TEvStateStorage::TEvInfo, Handle);
         }
     }
 };
@@ -62,5 +62,5 @@ IActor* CreateTabletKiller(ui64 tabletId, ui32 nodeId, ui32 maxGeneration) {
     return new TTabletKillRequest(tabletId, nodeId, maxGeneration);
 }
 
-} 
- 
+}
+

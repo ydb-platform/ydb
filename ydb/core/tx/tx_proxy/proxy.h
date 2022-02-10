@@ -1,5 +1,5 @@
-#pragma once 
-#include "defs.h" 
+#pragma once
+#include "defs.h"
 #include "mon.h"
 
 #include <ydb/public/lib/base/defs.h>
@@ -12,17 +12,17 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
 
-#include <util/generic/set.h> 
-#include <util/generic/hash.h> 
- 
-namespace NKikimr { 
- 
-namespace NMiniKQL { 
-    struct TKeyDescriptionRange; 
-    struct TKeyDescriptionSuffixItem; 
-    struct TKeyDescription; 
-} 
- 
+#include <util/generic/set.h>
+#include <util/generic/hash.h>
+
+namespace NKikimr {
+
+namespace NMiniKQL {
+    struct TKeyDescriptionRange;
+    struct TKeyDescriptionSuffixItem;
+    struct TKeyDescription;
+}
+
 namespace NTxProxy {
     struct TTxProxyServices {
         TActorId Proxy;
@@ -32,16 +32,16 @@ namespace NTxProxy {
     };
 }
 
-struct TEvTxUserProxy { 
-    enum EEv { 
-        EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_USERPROXY), // reply would be with generic TEvTxProxy::TEvProposeTransactionStatus 
-        EvNavigate, // --/-- TEvSchemeShard::TEvNavigateSchemePartResult 
- 
-        EvProposeTransactionStatus = EvProposeTransaction + 1 * 512, 
-        EvNavigateStatus, 
+struct TEvTxUserProxy {
+    enum EEv {
+        EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_USERPROXY), // reply would be with generic TEvTxProxy::TEvProposeTransactionStatus
+        EvNavigate, // --/-- TEvSchemeShard::TEvNavigateSchemePartResult
+
+        EvProposeTransactionStatus = EvProposeTransaction + 1 * 512,
+        EvNavigateStatus,
         EvInvalidateTable,
         EvInvalidateTableResult,
- 
+
         EvCancelBackupRequestDeprecated,
         EvCancelBackupResultDeprecated,
 
@@ -61,27 +61,27 @@ struct TEvTxUserProxy {
 
         EvResolveTablesResponse,
 
-        EvEnd 
-    }; 
- 
+        EvEnd
+    };
+
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_USERPROXY), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_USERPROXY)");
- 
-    struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrTxUserProxy::TEvProposeTransaction, EvProposeTransaction> { 
-        enum EProxyFlags { 
-            ProxyTrackWallClock = 1 << 0, 
-            ProxyReportAccepted = 1 << 1, 
-            ProxyReportResolved = 1 << 2, 
-            ProxyReportPrepared = 1 << 3, 
-            ProxyReportPlanned = 1 << 4, 
-        }; 
- 
-        TEvProposeTransaction() 
-        {} 
- 
-        TEvProposeTransaction(ui64 proxyFlags) 
-        { 
-            Record.SetProxyFlags(proxyFlags); 
-        } 
+
+    struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrTxUserProxy::TEvProposeTransaction, EvProposeTransaction> {
+        enum EProxyFlags {
+            ProxyTrackWallClock = 1 << 0,
+            ProxyReportAccepted = 1 << 1,
+            ProxyReportResolved = 1 << 2,
+            ProxyReportPrepared = 1 << 3,
+            ProxyReportPlanned = 1 << 4,
+        };
+
+        TEvProposeTransaction()
+        {}
+
+        TEvProposeTransaction(ui64 proxyFlags)
+        {
+            Record.SetProxyFlags(proxyFlags);
+        }
 
         bool HasSchemeProposal() const {
                 return HasModifyScheme() || HasTransactionalModification();
@@ -135,32 +135,32 @@ struct TEvTxUserProxy {
 
             return false;
         }
-    }; 
- 
-    struct TEvNavigate : public TEventPB<TEvNavigate, NKikimrTxUserProxy::TEvNavigate, EvNavigate> { 
-        TEvNavigate() 
-        {} 
-    }; 
- 
+    };
+
+    struct TEvNavigate : public TEventPB<TEvNavigate, NKikimrTxUserProxy::TEvNavigate, EvNavigate> {
+        TEvNavigate()
+        {}
+    };
+
     using TResultStatus = NTxProxy::TResultStatus;
- 
-    struct TEvProposeTransactionStatus : public TEventPB<TEvProposeTransactionStatus, NKikimrTxUserProxy::TEvProposeTransactionStatus, EvProposeTransactionStatus> { 
-        using EStatus = TResultStatus::EStatus; 
- 
-        TEvProposeTransactionStatus() 
-        {} 
- 
-        TEvProposeTransactionStatus(EStatus status) { 
-            Record.SetStatus(static_cast<ui32>(status)); 
-        } 
- 
-        EStatus Status() const { 
-            return static_cast<EStatus>(Record.GetStatus()); 
-        } 
+
+    struct TEvProposeTransactionStatus : public TEventPB<TEvProposeTransactionStatus, NKikimrTxUserProxy::TEvProposeTransactionStatus, EvProposeTransactionStatus> {
+        using EStatus = TResultStatus::EStatus;
+
+        TEvProposeTransactionStatus()
+        {}
+
+        TEvProposeTransactionStatus(EStatus status) {
+            Record.SetStatus(static_cast<ui32>(status));
+        }
+
+        EStatus Status() const {
+            return static_cast<EStatus>(Record.GetStatus());
+        }
 
         TString ToString() const;
-    }; 
- 
+    };
+
     struct TEvInvalidateTable : public TEventPB<TEvInvalidateTable, NKikimrTxUserProxy::TEvInvalidateTable, EvInvalidateTable> {
         TEvInvalidateTable() = default;
         TEvInvalidateTable(const TTableId& tableId) {
@@ -219,44 +219,44 @@ struct TEvTxUserProxy {
             , Issues(issues)
         {}
     };
-}; 
- 
-struct TEvTxProxyReq { 
-    enum EEv { 
-        EvMakeRequest = EventSpaceBegin(TKikimrEvents::ES_TX_PROXY_REQ), 
-        EvSchemeRequest, 
-        EvNavigateScheme, 
- 
-        EvEnd, 
-    }; 
- 
+};
+
+struct TEvTxProxyReq {
+    enum EEv {
+        EvMakeRequest = EventSpaceBegin(TKikimrEvents::ES_TX_PROXY_REQ),
+        EvSchemeRequest,
+        EvNavigateScheme,
+
+        EvEnd,
+    };
+
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY_REQ), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY_REQ)");
- 
-    struct TEvMakeRequest : public TEventLocal<TEvMakeRequest, EvMakeRequest> { 
-        TEvTxUserProxy::TEvProposeTransaction::TPtr Ev; 
- 
-        TEvMakeRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev) 
-            : Ev(ev) 
-        {} 
-    }; 
- 
-    struct TEvSchemeRequest : public TEventLocal<TEvSchemeRequest, EvSchemeRequest> { 
-        TEvTxUserProxy::TEvProposeTransaction::TPtr Ev; 
- 
-        TEvSchemeRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev) 
-            : Ev(ev) 
-        {} 
-    }; 
- 
-    struct TEvNavigateScheme : public TEventLocal<TEvNavigateScheme, EvNavigateScheme> { 
-        TEvTxUserProxy::TEvNavigate::TPtr Ev; 
- 
-        TEvNavigateScheme(TEvTxUserProxy::TEvNavigate::TPtr &ev) 
-            : Ev(ev) 
-        {} 
-    }; 
-}; 
- 
+
+    struct TEvMakeRequest : public TEventLocal<TEvMakeRequest, EvMakeRequest> {
+        TEvTxUserProxy::TEvProposeTransaction::TPtr Ev;
+
+        TEvMakeRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev)
+            : Ev(ev)
+        {}
+    };
+
+    struct TEvSchemeRequest : public TEventLocal<TEvSchemeRequest, EvSchemeRequest> {
+        TEvTxUserProxy::TEvProposeTransaction::TPtr Ev;
+
+        TEvSchemeRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev)
+            : Ev(ev)
+        {}
+    };
+
+    struct TEvNavigateScheme : public TEventLocal<TEvNavigateScheme, EvNavigateScheme> {
+        TEvTxUserProxy::TEvNavigate::TPtr Ev;
+
+        TEvNavigateScheme(TEvTxUserProxy::TEvNavigate::TPtr &ev)
+            : Ev(ev)
+        {}
+    };
+};
+
 namespace NTxProxy {
 
     using TTableColumnInfo = TSysTables::TTableColumnInfo;
@@ -312,5 +312,5 @@ namespace NTxProxy {
 
 IActor* CreateTxProxy(const TVector<ui64> &allocators);
 TActorId MakeTxProxyID();
- 
-} 
+
+}

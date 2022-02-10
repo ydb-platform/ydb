@@ -16,8 +16,8 @@ SRCS(
     localdb_ut.cpp
     logoblob_ut.cpp
     shared_data_ut.cpp
-    statestorage_ut.cpp 
-    statestorage_guardian_impl_ut.cpp 
+    statestorage_ut.cpp
+    statestorage_guardian_impl_ut.cpp
 )
 
 END()

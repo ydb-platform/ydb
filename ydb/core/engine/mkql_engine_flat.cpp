@@ -16,7 +16,7 @@
 
 #include <util/string/printf.h>
 #include <util/string/vector.h>
-#include <util/generic/set.h> 
+#include <util/generic/set.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

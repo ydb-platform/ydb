@@ -10,8 +10,8 @@ namespace {
     struct TFreq {
         inline TFreq()
             : Freq(InitHPTimer())
-            , Rate(1.0 / Freq) 
-            , CyclesPerSecond(static_cast<ui64>(Rate)) 
+            , Rate(1.0 / Freq)
+            , CyclesPerSecond(static_cast<ui64>(Rate))
         {
         }
 
@@ -80,16 +80,16 @@ namespace {
         }
 
         inline double GetClockRate() const {
-            return Rate; 
+            return Rate;
         }
 
-        inline ui64 GetCyclesPerSecond() const { 
-            return CyclesPerSecond; 
-        } 
- 
+        inline ui64 GetCyclesPerSecond() const {
+            return CyclesPerSecond;
+        }
+
         const double Freq;
-        const double Rate; 
-        const ui64 CyclesPerSecond; 
+        const double Rate;
+        const ui64 CyclesPerSecond;
     };
 }
 
@@ -102,9 +102,9 @@ double NHPTimer::GetClockRate() noexcept {
 }
 
 ui64 NHPTimer::GetCyclesPerSecond() noexcept {
-    return TFreq::Instance().GetCyclesPerSecond(); 
-} 
- 
+    return TFreq::Instance().GetCyclesPerSecond();
+}
+
 void NHPTimer::GetTime(STime* pTime) noexcept {
     *pTime = GetCycleCount();
 }

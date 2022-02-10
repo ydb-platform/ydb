@@ -1,14 +1,14 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     ddoarn
     xenoxeno
     g:kikimr
 )
 
-SRCS( 
-    configured_tablet_bootstrapper.cpp 
-    configured_tablet_bootstrapper.h 
+SRCS(
+    configured_tablet_bootstrapper.cpp
+    configured_tablet_bootstrapper.h
     defs.h
     dynamic_nameserver.cpp
     dynamic_nameserver.h
@@ -18,8 +18,8 @@ SRCS(
     labels_maintainer.h
     lease_holder.cpp
     lease_holder.h
-    local.cpp 
-    local.h 
+    local.cpp
+    local.h
     node_broker.cpp
     node_broker.h
     node_broker_impl.h
@@ -32,8 +32,8 @@ SRCS(
     node_broker__update_config_subscription.cpp
     node_broker__update_epoch.cpp
     table_adapter.h
-    tenant_node_enumeration.cpp 
-    tenant_node_enumeration.h 
+    tenant_node_enumeration.cpp
+    tenant_node_enumeration.h
     tenant_pool.h
     tenant_pool.cpp
     tenant_slot_broker.cpp
@@ -49,9 +49,9 @@ SRCS(
     tenant_slot_broker__update_pool_status.cpp
     tenant_slot_broker__update_node_location.cpp
     tenant_slot_broker__update_slot_status.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/actors/core
     ydb/core/actorlib_impl
     ydb/core/base
@@ -75,9 +75,9 @@ PEERDIR(
     ydb/core/tx/scheme_board
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE(
     address_classification

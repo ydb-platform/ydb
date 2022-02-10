@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/events.h>
@@ -13,33 +13,33 @@
 #include <ydb/library/aclib/aclib.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/hash.h> 
-#include <util/generic/hash_set.h> 
-#include <util/generic/ptr.h> 
- 
-namespace NKikimr { 
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/ptr.h>
+
+namespace NKikimr {
 namespace NSchemeCache {
- 
-struct TSchemeCacheConfig : public TThrRefBase { 
-    struct TTagEntry { 
+
+struct TSchemeCacheConfig : public TThrRefBase {
+    struct TTagEntry {
         ui32 Tag = 0;
         ui64 RootSchemeShard = 0;
         TString Name;
- 
+
         explicit TTagEntry(ui32 tag, ui64 rootSchemeShard, const TString& name)
-            : Tag(tag) 
-            , RootSchemeShard(rootSchemeShard) 
-            , Name(name) 
-        {} 
-    }; 
- 
+            : Tag(tag)
+            , RootSchemeShard(rootSchemeShard)
+            , Name(name)
+        {}
+    };
+
     TSchemeCacheConfig() = default;
     explicit TSchemeCacheConfig(const TAppData* appData, NMonitoring::TDynamicCounterPtr counters);
 
     TVector<TTagEntry> Roots;
     NMonitoring::TDynamicCounterPtr Counters;
-}; 
- 
+};
+
 struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     using TPtr = TIntrusivePtr<TDomainInfo>;
 
@@ -104,19 +104,19 @@ struct TSchemeCacheNavigate {
         OpUnknown = 0,
         OpTable = 1, // would return table info
         OpPath = 2, // would return owning scheme shard id
-        OpTopic = 3, // would return topic info 
-        OpList = 4, // would list children and cache them 
+        OpTopic = 3, // would return topic info
+        OpList = 4, // would list children and cache them
     };
 
-    enum EKind { 
-        KindUnknown = 0, 
-        KindPath = 2, 
-        KindTable = 3, 
-        KindTopic = 4, 
+    enum EKind {
+        KindUnknown = 0,
+        KindPath = 2,
+        KindTable = 3,
+        KindTopic = 4,
         KindRtmr = 5,
         KindKesus = 6,
-        KindSolomon = 7, 
-        KindSubdomain = 8, 
+        KindSolomon = 7,
+        KindSubdomain = 8,
         KindExtSubdomain = 9,
         KindIndex = 10,
         KindOlapStore = 11,
@@ -124,9 +124,9 @@ struct TSchemeCacheNavigate {
         KindCdcStream = 13,
         KindSequence = 14,
         KindReplication = 15,
-    }; 
- 
-    struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> { 
+    };
+
+    struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
         struct TChild {
             const TString Name;
             const TPathId PathId;
@@ -143,8 +143,8 @@ struct TSchemeCacheNavigate {
 
         EKind Kind = KindUnknown;
         TVector<TChild> Children;
-    }; 
- 
+    };
+
     struct TDirEntryInfo : public TAtomicRefCount<TDirEntryInfo>{
         NKikimrSchemeOp::TDirEntry Info;
     };
@@ -154,11 +154,11 @@ struct TSchemeCacheNavigate {
         NKikimrSubDomains::TDomainDescription Description;
     };
 
-    struct TPQGroupInfo : public TAtomicRefCount<TPQGroupInfo> { 
-        EKind Kind = KindUnknown; 
+    struct TPQGroupInfo : public TAtomicRefCount<TPQGroupInfo> {
+        EKind Kind = KindUnknown;
         NKikimrSchemeOp::TPersQueueGroupDescription Description;
-    }; 
- 
+    };
+
     struct TRtmrVolumeInfo : public TAtomicRefCount<TRtmrVolumeInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TRtmrVolumeDescription Description;
@@ -236,7 +236,7 @@ struct TSchemeCacheNavigate {
 
         // other
         TIntrusiveConstPtr<TDomainDescription> DomainDescription;
-        TIntrusiveConstPtr<TPQGroupInfo> PQGroupInfo; 
+        TIntrusiveConstPtr<TPQGroupInfo> PQGroupInfo;
         TIntrusiveConstPtr<TRtmrVolumeInfo> RTMRVolumeInfo;
         TIntrusiveConstPtr<TKesusInfo> KesusInfo;
         TIntrusiveConstPtr<TSolomonVolumeInfo> SolomonVolumeInfo;
@@ -245,7 +245,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TCdcStreamInfo> CdcStreamInfo;
         TIntrusiveConstPtr<TSequenceInfo> SequenceInfo;
         TIntrusiveConstPtr<TReplicationInfo> ReplicationInfo;
- 
+
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
     };
@@ -335,32 +335,32 @@ struct TSchemeCacheRequest {
 
 struct TSchemeCacheRequestContext : TAtomicRefCount<TSchemeCacheRequestContext>, TNonCopyable {
     TActorId Sender;
-    ui64 WaitCounter; 
+    ui64 WaitCounter;
     TAutoPtr<TSchemeCacheRequest> Request;
     const TInstant CreatedAt;
- 
+
     TSchemeCacheRequestContext(const TActorId& sender, TAutoPtr<TSchemeCacheRequest> request, const TInstant& now = TInstant::Now())
-        : Sender(sender) 
-        , WaitCounter(0) 
-        , Request(request) 
+        : Sender(sender)
+        , WaitCounter(0)
+        , Request(request)
         , CreatedAt(now)
-    {} 
-}; 
- 
+    {}
+};
+
 struct TSchemeCacheNavigateContext : TAtomicRefCount<TSchemeCacheNavigateContext>, TNonCopyable {
     TActorId Sender;
-    ui64 WaitCounter; 
+    ui64 WaitCounter;
     TAutoPtr<TSchemeCacheNavigate> Request;
     const TInstant CreatedAt;
- 
+
     TSchemeCacheNavigateContext(const TActorId& sender, TAutoPtr<TSchemeCacheNavigate> request, const TInstant& now = TInstant::Now())
-        : Sender(sender) 
-        , WaitCounter(0) 
-        , Request(request) 
+        : Sender(sender)
+        , WaitCounter(0)
+        , Request(request)
         , CreatedAt(now)
-    {} 
-}; 
- 
+    {}
+};
+
 class TDescribeResult
     : public TAtomicRefCount<TDescribeResult>
     , public NKikimrScheme::TEvDescribeSchemeResult

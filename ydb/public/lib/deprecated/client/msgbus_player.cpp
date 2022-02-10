@@ -119,7 +119,7 @@ ui32 TMsgBusPlayer::PlayTrace(const TString &traceFile, ui32 maxInFlight, std::f
         if (read != sizeof(NBus::TBusHeader))
             ythrow yexception() << "Error reading message header";
         filePos += read;
-        NBus::TBusHeader messageHeader(::TArrayRef<char>(messageBuffer.Data(), messageBuffer.Size())); 
+        NBus::TBusHeader messageHeader(::TArrayRef<char>(messageBuffer.Data(), messageBuffer.Size()));
         messageBuffer.Resize(messageHeader.Size - sizeof(NBus::TBusHeader));
         if (!messageBuffer.Empty()) {
             read = stream->Load(messageBuffer.Data(), messageBuffer.Size());
@@ -128,7 +128,7 @@ ui32 TMsgBusPlayer::PlayTrace(const TString &traceFile, ui32 maxInFlight, std::f
             filePos += read;
         }
         if (replyKey == YBUS_KEYINVALID) {
-            TAutoPtr<NBus::TBusMessage> request = protocol.Deserialize(messageHeader.Type, ::TArrayRef<char>(messageBuffer.Data(), messageBuffer.Size())); 
+            TAutoPtr<NBus::TBusMessage> request = protocol.Deserialize(messageHeader.Type, ::TArrayRef<char>(messageBuffer.Data(), messageBuffer.Size()));
             if (request == nullptr)
                 ythrow yexception() << "Error deserializing message (" << DumpMessageHeader(messageHeader) << ")";
             TBusKey requestKey = messageHeader.Id;

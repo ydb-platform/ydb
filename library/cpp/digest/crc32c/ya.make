@@ -1,5 +1,5 @@
-LIBRARY() 
- 
+LIBRARY()
+
 #!!!
 OWNER(
     ddoarn
@@ -15,8 +15,8 @@ PEERDIR(
     contrib/libs/crcutil
 )
 
-SRCS( 
+SRCS(
     crc32c.cpp
-) 
- 
-END() 
+)
+
+END()

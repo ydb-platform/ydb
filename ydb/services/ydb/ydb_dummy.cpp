@@ -64,9 +64,9 @@ class TBiStreamPingRequestRPC : public TActorBootstrapped<TBiStreamPingRequestRP
         TEvBiStreamPingRequest::TResponse>;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::GRPC_REQ; 
-    } 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::GRPC_REQ;
+    }
 
     TBiStreamPingRequestRPC(TEvBiStreamPingRequest* msg)
         : Request_(msg) {}

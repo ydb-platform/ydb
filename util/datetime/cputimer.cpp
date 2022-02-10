@@ -36,7 +36,7 @@ static ui64 GetCyclesPerSecond() {
     if (ManuallySetCyclesPerSecond != 0) {
         return ManuallySetCyclesPerSecond;
     } else {
-        return NHPTimer::GetCyclesPerSecond(); 
+        return NHPTimer::GetCyclesPerSecond();
     }
 }
 

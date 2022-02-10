@@ -1,5 +1,5 @@
 #include "datashard_impl.h"
-#include "datashard_direct_transaction.h" 
+#include "datashard_direct_transaction.h"
 
 namespace NKikimr {
 namespace NDataShard {
@@ -10,9 +10,9 @@ template <typename TEvRequest>
 class TTxDirectBase : public TTransactionBase<TDataShard> {
     TEvRequest Ev;
 
-    TOperation::TPtr Op; 
-    TVector<EExecutionUnitKind> CompleteList; 
- 
+    TOperation::TPtr Op;
+    TVector<EExecutionUnitKind> CompleteList;
+
 public:
     TTxDirectBase(TDataShard* ds, TEvRequest ev)
         : TBase(ds)
@@ -25,26 +25,26 @@ public:
             << ": at tablet# " << Self->TabletID());
 
         if (Self->IsFollower()) {
-            return true; // TODO: report error 
+            return true; // TODO: report error
         }
 
-        if (Ev) { 
-            const ui64 tieBreaker = Self->NextTieBreakerIndex++; 
-            Op = new TDirectTransaction(tieBreaker, ctx.Now(), tieBreaker, Ev); 
-            Op->BuildExecutionPlan(false); 
-            Self->Pipeline.GetExecutionUnit(Op->GetCurrentUnit()).AddOperation(Op); 
+        if (Ev) {
+            const ui64 tieBreaker = Self->NextTieBreakerIndex++;
+            Op = new TDirectTransaction(tieBreaker, ctx.Now(), tieBreaker, Ev);
+            Op->BuildExecutionPlan(false);
+            Self->Pipeline.GetExecutionUnit(Op->GetCurrentUnit()).AddOperation(Op);
 
-            Ev = nullptr; 
+            Ev = nullptr;
         }
 
-        auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx); 
-        if (!CompleteList.empty()) { 
+        auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
+        if (!CompleteList.empty()) {
             return true;
-        } else if (status == EExecutionStatus::Restart) { 
-            return false; 
-        } else { 
-            Op = nullptr; 
-            return true; 
+        } else if (status == EExecutionStatus::Restart) {
+            return false;
+        } else {
+            Op = nullptr;
+            return true;
         }
     }
 
@@ -52,9 +52,9 @@ public:
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxDirectBase(" << GetTxType() << ") Complete"
             << ": at tablet# " << Self->TabletID());
 
-        Self->Pipeline.RunCompleteList(Op, CompleteList, ctx); 
+        Self->Pipeline.RunCompleteList(Op, CompleteList, ctx);
         if (Self->Pipeline.CanRunAnotherOp()) {
-            Self->PlanQueue.Progress(ctx); 
+            Self->PlanQueue.Progress(ctx);
         }
     }
 

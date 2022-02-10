@@ -1,6 +1,6 @@
-#pragma once 
-#include "defs.h" 
-#include "flat_update_op.h" 
+#pragma once
+#include "defs.h"
+#include "flat_update_op.h"
 #include "flat_dbase_scheme.h"
 #include "flat_mem_warm.h"
 #include "flat_iterator.h"
@@ -15,7 +15,7 @@
 #include "flat_table_misc.h"
 #include "flat_sausage_solid.h"
 #include "util_basics.h"
- 
+
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -24,17 +24,17 @@
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 
-namespace NKikimr { 
+namespace NKikimr {
 namespace NTable {
- 
+
 class TTableEpochs;
 class TKeyRangeCache;
 
 class TTable: public TAtomicRefCount<TTable> {
-public: 
+public:
     using TOpsRef = TArrayRef<const TUpdateOp>;
     using TMemGlob = NPageCollection::TMemGlob;
- 
+
     struct TStat {
         /*_ In memory (~memtable) data statistics   */
 
@@ -135,9 +135,9 @@ public:
                    IPages* env, ui64 flg,
                    ui64 itemsLimit, ui64 bytesLimit,
                    EDirection direction, TRowVersion snapshot) const;
- 
+
     void Update(ERowOp, TRawVals key, TOpsRef, TArrayRef<TMemGlob> apart, TRowVersion rowVersion);
- 
+
     void UpdateTx(ERowOp, TRawVals key, TOpsRef, TArrayRef<TMemGlob> apart, ui64 txId);
     void CommitTx(ui64 txId, TRowVersion rowVersion);
     void RemoveTx(ui64 txId);

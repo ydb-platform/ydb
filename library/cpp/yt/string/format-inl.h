@@ -190,32 +190,32 @@ struct TValueFormatter<TEnum, typename std::enable_if<TEnumTraits<TEnum>::IsEnum
 };
 
 template <class TRange, class TFormatter>
-typename TFormattableView<TRange, TFormatter>::TBegin TFormattableView<TRange, TFormatter>::begin() const 
-{ 
-    return RangeBegin; 
-} 
- 
-template <class TRange, class TFormatter> 
-typename TFormattableView<TRange, TFormatter>::TEnd TFormattableView<TRange, TFormatter>::end() const 
-{ 
-    return RangeEnd; 
-} 
- 
-template <class TRange, class TFormatter> 
-TFormattableView<TRange, TFormatter> MakeFormattableView( 
-    const TRange& range,
-    TFormatter&& formatter) 
+typename TFormattableView<TRange, TFormatter>::TBegin TFormattableView<TRange, TFormatter>::begin() const
 {
-    return TFormattableView<TRange, std::decay_t<TFormatter>>{range.begin(), range.end(), std::forward<TFormatter>(formatter)}; 
+    return RangeBegin;
 }
 
 template <class TRange, class TFormatter>
-TFormattableView<TRange, TFormatter> MakeShrunkFormattableView( 
+typename TFormattableView<TRange, TFormatter>::TEnd TFormattableView<TRange, TFormatter>::end() const
+{
+    return RangeEnd;
+}
+
+template <class TRange, class TFormatter>
+TFormattableView<TRange, TFormatter> MakeFormattableView(
     const TRange& range,
-    TFormatter&& formatter, 
+    TFormatter&& formatter)
+{
+    return TFormattableView<TRange, std::decay_t<TFormatter>>{range.begin(), range.end(), std::forward<TFormatter>(formatter)};
+}
+
+template <class TRange, class TFormatter>
+TFormattableView<TRange, TFormatter> MakeShrunkFormattableView(
+    const TRange& range,
+    TFormatter&& formatter,
     size_t limit)
 {
-    return TFormattableView<TRange, std::decay_t<TFormatter>>{range.begin(), range.end(), std::forward<TFormatter>(formatter), limit}; 
+    return TFormattableView<TRange, std::decay_t<TFormatter>>{range.begin(), range.end(), std::forward<TFormatter>(formatter), limit};
 }
 
 template <class TRange, class TFormatter>
@@ -258,13 +258,13 @@ void FormatKeyValueRange(TStringBuilderBase* builder, const TRange& range, const
     builder->AppendChar('}');
 }
 
-// TFormattableView 
+// TFormattableView
 template <class TRange, class TFormatter>
-struct TValueFormatter<TFormattableView<TRange, TFormatter>> 
+struct TValueFormatter<TFormattableView<TRange, TFormatter>>
 {
     static void Do(TStringBuilderBase* builder, const TFormattableView<TRange, TFormatter>& range, TStringBuf /*format*/)
     {
-        FormatRange(builder, range, range.Formatter, range.Limit); 
+        FormatRange(builder, range, range.Formatter, range.Limit);
     }
 };
 
@@ -337,9 +337,9 @@ struct TValueFormatter<std::multimap<K, V>>
     }
 };
 
-// THashSet 
+// THashSet
 template <class T>
-struct TValueFormatter<THashSet<T>> 
+struct TValueFormatter<THashSet<T>>
 {
     static void Do(TStringBuilderBase* builder, const THashSet<T>& collection, TStringBuf /*format*/)
     {

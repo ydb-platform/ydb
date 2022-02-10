@@ -88,7 +88,7 @@ TYsonString::TYsonString(const TYsonStringBuf& ysonStringBuf)
         Begin_ = payload->GetData();
         Size_ = data.Size();
         Type_ = ysonStringBuf.GetType();
-    } else { 
+    } else {
         Begin_ = nullptr;
         Size_ = 0;
         Type_ = EYsonType::Node; // fake

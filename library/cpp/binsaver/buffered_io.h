@@ -1,37 +1,37 @@
 #pragma once
 
 #include <util/system/yassert.h>
-#include <util/generic/utility.h> 
-#include <util/generic/ylimits.h> 
+#include <util/generic/utility.h>
+#include <util/generic/ylimits.h>
 #include <string.h>
 
 struct IBinaryStream {
     virtual ~IBinaryStream() = default;
     ;
- 
+
     inline i64 Write(const void* userBuffer, i64 size) {
-        if (size <= Max<int>()) { 
-            return WriteImpl(userBuffer, static_cast<int>(size)); 
-        } else { 
-            return LongWrite(userBuffer, size); 
-        } 
-    } 
- 
+        if (size <= Max<int>()) {
+            return WriteImpl(userBuffer, static_cast<int>(size));
+        } else {
+            return LongWrite(userBuffer, size);
+        }
+    }
+
     inline i64 Read(void* userBuffer, i64 size) {
-        if (size <= Max<int>()) { 
-            return ReadImpl(userBuffer, static_cast<int>(size)); 
-        } else { 
-            return LongRead(userBuffer, size); 
-        } 
-    } 
- 
+        if (size <= Max<int>()) {
+            return ReadImpl(userBuffer, static_cast<int>(size));
+        } else {
+            return LongRead(userBuffer, size);
+        }
+    }
+
     virtual bool IsValid() const = 0;
     virtual bool IsFailed() const = 0;
- 
-private: 
+
+private:
     virtual int WriteImpl(const void* userBuffer, int size) = 0;
     virtual int ReadImpl(void* userBuffer, int size) = 0;
- 
+
     i64 LongRead(void* userBuffer, i64 size);
     i64 LongWrite(const void* userBuffer, i64 size);
 };
@@ -39,7 +39,7 @@ private:
 template <int N_SIZE = 16384>
 class TBufferedStream {
     char Buf[N_SIZE];
-    i64 Pos, BufSize; 
+    i64 Pos, BufSize;
     IBinaryStream& Stream;
     bool bIsReading, bIsEof, bFailed;
 
@@ -49,13 +49,13 @@ class TBufferedStream {
             return;
         }
         char* dst = (char*)userBuffer;
-        i64 leftBytes = BufSize - Pos; 
+        i64 leftBytes = BufSize - Pos;
         memcpy(dst, Buf + Pos, leftBytes);
         dst += leftBytes;
         size -= leftBytes;
         Pos = BufSize = 0;
         if (size > N_SIZE) {
-            i64 n = Stream.Read(dst, size); 
+            i64 n = Stream.Read(dst, size);
             bFailed = Stream.IsFailed();
             if (n != size) {
                 bIsEof = true;

@@ -46,7 +46,7 @@ namespace NBinSaverInternals {
 struct IBinSaver {
 public:
     typedef unsigned char chunk_id;
-    typedef ui32 TStoredSize; // changing this will break compatibility 
+    typedef ui32 TStoredSize; // changing this will break compatibility
 
 private:
     // This overload is required to avoid infinite recursion when overriding serialization in derived classes:
@@ -85,20 +85,20 @@ private:
     // vector
     template <class T, class TA>
     void DoVector(TVector<T, TA>& data) {
-        TStoredSize nSize; 
+        TStoredSize nSize;
         if (IsReading()) {
             data.clear();
             Add(2, &nSize);
             data.resize(nSize);
         } else {
-            nSize = data.size(); 
-            CheckOverflow(nSize, data.size()); 
+            nSize = data.size();
+            CheckOverflow(nSize, data.size());
             Add(2, &nSize);
         }
-        for (TStoredSize i = 0; i < nSize; i++) 
+        for (TStoredSize i = 0; i < nSize; i++)
             Add(1, &data[i]);
     }
- 
+
     template <class T, int N>
     void DoArray(T (&data)[N]) {
         for (size_t i = 0; i < N; i++) {
@@ -108,16 +108,16 @@ private:
 
     template <typename TLarge>
     void CheckOverflow(TStoredSize nSize, TLarge origSize) {
-        if (nSize != origSize) { 
-            fprintf(stderr, "IBinSaver: object size is too large to be serialized (%" PRIu32 " != %" PRIu64 ")\n", nSize, (ui64)origSize); 
-            abort(); 
-        } 
-    } 
- 
+        if (nSize != origSize) {
+            fprintf(stderr, "IBinSaver: object size is too large to be serialized (%" PRIu32 " != %" PRIu64 ")\n", nSize, (ui64)origSize);
+            abort();
+        }
+    }
+
     template <class T, class TA>
     void DoDataVector(TVector<T, TA>& data) {
-        TStoredSize nSize = data.size(); 
-        CheckOverflow(nSize, data.size()); 
+        TStoredSize nSize = data.size();
+        CheckOverflow(nSize, data.size());
         Add(1, &nSize);
         if (IsReading()) {
             data.clear();
@@ -131,22 +131,22 @@ private:
     void DoAnyMap(AM& data) {
         if (IsReading()) {
             data.clear();
-            TStoredSize nSize; 
+            TStoredSize nSize;
             Add(3, &nSize);
             TVector<typename AM::key_type, typename std::allocator_traits<typename AM::allocator_type>::template rebind_alloc<typename AM::key_type>> indices;
             indices.resize(nSize);
-            for (TStoredSize i = 0; i < nSize; ++i) 
+            for (TStoredSize i = 0; i < nSize; ++i)
                 Add(1, &indices[i]);
-            for (TStoredSize i = 0; i < nSize; ++i) 
+            for (TStoredSize i = 0; i < nSize; ++i)
                 Add(2, &data[indices[i]]);
         } else {
-            TStoredSize nSize = data.size(); 
-            CheckOverflow(nSize, data.size()); 
+            TStoredSize nSize = data.size();
+            CheckOverflow(nSize, data.size());
             Add(3, &nSize);
 
             TVector<typename AM::key_type, typename std::allocator_traits<typename AM::allocator_type>::template rebind_alloc<typename AM::key_type>> indices;
             indices.resize(nSize);
-            TStoredSize i = 1; 
+            TStoredSize i = 1;
             for (auto pos = data.begin(); pos != data.end(); ++pos, ++i)
                 indices[nSize - i] = pos->first;
             for (TStoredSize j = 0; j < nSize; ++j)
@@ -161,21 +161,21 @@ private:
     void DoAnyMultiMap(AMM& data) {
         if (IsReading()) {
             data.clear();
-            TStoredSize nSize; 
+            TStoredSize nSize;
             Add(3, &nSize);
             TVector<typename AMM::key_type, typename std::allocator_traits<typename AMM::allocator_type>::template rebind_alloc<typename AMM::key_type>> indices;
             indices.resize(nSize);
-            for (TStoredSize i = 0; i < nSize; ++i) 
+            for (TStoredSize i = 0; i < nSize; ++i)
                 Add(1, &indices[i]);
-            for (TStoredSize i = 0; i < nSize; ++i) { 
+            for (TStoredSize i = 0; i < nSize; ++i) {
                 std::pair<typename AMM::key_type, typename AMM::mapped_type> valToInsert;
                 valToInsert.first = indices[i];
                 Add(2, &valToInsert.second);
                 data.insert(valToInsert);
             }
         } else {
-            TStoredSize nSize = data.size(); 
-            CheckOverflow(nSize, data.size()); 
+            TStoredSize nSize = data.size();
+            CheckOverflow(nSize, data.size());
             Add(3, &nSize);
             for (auto pos = data.begin(); pos != data.end(); ++pos)
                 Add(1, (typename AMM::key_type*)(&pos->first));
@@ -188,16 +188,16 @@ private:
     void DoAnySet(T& data) {
         if (IsReading()) {
             data.clear();
-            TStoredSize nSize; 
+            TStoredSize nSize;
             Add(2, &nSize);
-            for (TStoredSize i = 0; i < nSize; ++i) { 
+            for (TStoredSize i = 0; i < nSize; ++i) {
                 typename T::value_type member;
                 Add(1, &member);
                 data.insert(member);
             }
         } else {
-            TStoredSize nSize = data.size(); 
-            CheckOverflow(nSize, data.size()); 
+            TStoredSize nSize = data.size();
+            CheckOverflow(nSize, data.size());
             Add(2, &nSize);
             for (const auto& elem : data) {
                 auto member = elem;
@@ -231,15 +231,15 @@ private:
     template <class TStringType>
     void DataChunkStr(TStringType& data, i64 elemSize) {
         if (bRead) {
-            TStoredSize nCount = 0; 
-            File.Read(&nCount, sizeof(TStoredSize)); 
+            TStoredSize nCount = 0;
+            File.Read(&nCount, sizeof(TStoredSize));
             data.resize(nCount);
             if (nCount)
                 File.Read(&*data.begin(), nCount * elemSize);
         } else {
-            TStoredSize nCount = data.size(); 
-            CheckOverflow(nCount, data.size()); 
-            File.Write(&nCount, sizeof(TStoredSize)); 
+            TStoredSize nCount = data.size();
+            CheckOverflow(nCount, data.size());
+            File.Write(&nCount, sizeof(TStoredSize));
             File.Write(data.c_str(), nCount * elemSize);
         }
     }
@@ -254,10 +254,10 @@ private:
     }
 
     void DataChunk(void* pData, i64 nSize) {
-        i64 chunkSize = 1 << 30; 
-        for (i64 offset = 0; offset < nSize; offset += chunkSize) { 
+        i64 chunkSize = 1 << 30;
+        for (i64 offset = 0; offset < nSize; offset += chunkSize) {
             void* ptr = (char*)pData + offset;
-            i64 size = offset + chunkSize < nSize ? chunkSize : (nSize - offset); 
+            i64 size = offset + chunkSize < nSize ? chunkSize : (nSize - offset);
             if (bRead)
                 File.Read(ptr, size);
             else

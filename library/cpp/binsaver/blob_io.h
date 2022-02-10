@@ -7,7 +7,7 @@
 
 class TYaBlobStream: public IBinaryStream {
     TBlob Blob;
-    i64 Pos; 
+    i64 Pos;
 
     int WriteImpl(const void*, int) override {
         Y_ASSERT(0);
@@ -16,7 +16,7 @@ class TYaBlobStream: public IBinaryStream {
     int ReadImpl(void* userBuffer, int size) override {
         if (size == 0)
             return 0;
-        i64 res = Min<i64>(Blob.Length() - Pos, size); 
+        i64 res = Min<i64>(Blob.Length() - Pos, size);
         if (res)
             memcpy(userBuffer, ((const char*)Blob.Data()) + Pos, res);
         Pos += res;

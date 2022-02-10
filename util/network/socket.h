@@ -248,18 +248,18 @@ public:
     {
     }
 
-    inline TSocketHolder(TSocketHolder&& other) noexcept {
+    inline TSocketHolder(TSocketHolder&& other) noexcept { 
         Fd_ = other.Fd_;
         other.Fd_ = INVALID_SOCKET;
     }
 
-    inline TSocketHolder& operator=(TSocketHolder&& other) noexcept {
-        Close();
-        Swap(other);
-
-        return *this;
-    }
-
+    inline TSocketHolder& operator=(TSocketHolder&& other) noexcept { 
+        Close(); 
+        Swap(other); 
+ 
+        return *this; 
+    } 
+ 
     inline ~TSocketHolder() {
         Close();
     }

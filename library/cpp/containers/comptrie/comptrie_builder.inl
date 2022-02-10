@@ -22,22 +22,22 @@
 #define CONSTEXPR_MAX2(a, b) (a) > (b) ? (a) : (b)
 #define CONSTEXPR_MAX3(a, b, c) CONSTEXPR_MAX2(CONSTEXPR_MAX2(a, b), c)
 
-// TCompactTrieBuilder::TCompactTrieBuilderImpl
-
-template <class T, class D, class S>
-class TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl {
+// TCompactTrieBuilder::TCompactTrieBuilderImpl 
+ 
+template <class T, class D, class S> 
+class TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl { 
 protected:
     TMemoryPool Pool;
     size_t PayloadSize;
     THolder<TFixedSizeAllocator> NodeAllocator;
-    class TNode;
+    class TNode; 
     class TArc;
-    TNode* Root;
+    TNode* Root; 
     TCompactTrieBuilderFlags Flags;
-    size_t EntryCount;
-    size_t NodeCount;
+    size_t EntryCount; 
+    size_t NodeCount; 
     TPacker Packer;
-
+ 
     enum EPayload {
         DATA_ABSENT,
         DATA_INSIDE,
@@ -66,10 +66,10 @@ protected:
     ui64 ArcSave(const TArc* thiz, IOutputStream& os) const;
     ui64 ArcSaveAndDestroy(const TArc* thiz, IOutputStream& os);
 
-public:
+public: 
     TCompactTrieBuilderImpl(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc);
     virtual ~TCompactTrieBuilderImpl();
-
+ 
     void DestroyNode(TNode* node);
     void NodeReleasePayload(TNode* thiz);
 
@@ -80,40 +80,40 @@ public:
     bool AddEntryPtr(const TSymbol* key, size_t keylen, const char* value);
     bool AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& fileName);
     bool AddSubtreeInBuffer(const TSymbol* key, size_t keylen, TArrayWithSizeHolder<char>&& buffer);
-    bool FindEntry(const TSymbol* key, size_t keylen, TData* value) const;
+    bool FindEntry(const TSymbol* key, size_t keylen, TData* value) const; 
     bool FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const;
-
+ 
     size_t Save(IOutputStream& os) const;
     size_t SaveAndDestroy(IOutputStream& os);
 
-    void Clear();
-
+    void Clear(); 
+ 
     // lies if some key was added at least twice
-    size_t GetEntryCount() const;
-    size_t GetNodeCount() const;
+    size_t GetEntryCount() const; 
+    size_t GetNodeCount() const; 
 
     size_t MeasureByteSize() const {
         return NodeMeasureSubtree(Root);
     }
-};
-
-template <class T, class D, class S>
+}; 
+ 
+template <class T, class D, class S> 
 class TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TArc {
-public:
+public: 
     TBlob Label;
     TNode* Node;
     mutable size_t LeftOffset;
     mutable size_t RightOffset;
-
+ 
     TArc(const TBlob& lbl, TNode* nd);
 };
-
+ 
 template <class T, class D, class S>
 class TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode {
 public:
     typedef typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl TBuilderImpl;
     typedef typename TBuilderImpl::TArc TArc;
-
+ 
     struct ISubtree {
         virtual ~ISubtree() = default;
         virtual bool IsLast() const = 0;
@@ -130,10 +130,10 @@ public:
     };
 
     class TArcSet: public ISubtree, public TCompactVector<TArc> {
-    public:
+    public: 
         typedef typename TCompactVector<TArc>::iterator iterator;
         typedef typename TCompactVector<TArc>::const_iterator const_iterator;
-
+ 
         TArcSet() {
             Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree()
         }
@@ -212,8 +212,8 @@ public:
             Y_ASSERT(this->empty());
         }
 
-    };
-
+    }; 
+ 
     struct TBufferedSubtree: public ISubtree {
         TArrayWithSizeHolder<char> Buffer;
 
@@ -350,7 +350,7 @@ public:
     }
 
     EPayload PayloadType;
-
+ 
     inline const char* PayloadPtr() const {
         return ((const char*) this) + sizeof(TNode);
     }
@@ -409,28 +409,28 @@ public:
     {
         new (Subtree()) TArcSet;
     }
-
+ 
     ~TNode() {
         Subtree()->~ISubtree();
         Y_ASSERT(PayloadType == DATA_ABSENT);
     }
 
-};
-
-// TCompactTrieBuilder
-
-template <class T, class D, class S>
+}; 
+ 
+// TCompactTrieBuilder 
+ 
+template <class T, class D, class S> 
 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilder(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc)
     : Impl(new TCompactTrieBuilderImpl(flags, packer, alloc))
 {
 }
-
-template <class T, class D, class S>
+ 
+template <class T, class D, class S> 
 bool TCompactTrieBuilder<T, D, S>::Add(const TSymbol* key, size_t keylen, const TData& value) {
     return Impl->AddEntry(key, keylen, value);
-}
-
-template <class T, class D, class S>
+} 
+ 
+template <class T, class D, class S> 
 bool TCompactTrieBuilder<T, D, S>::AddPtr(const TSymbol* key, size_t keylen, const char* value) {
     return Impl->AddEntryPtr(key, keylen, value);
 }
@@ -446,11 +446,11 @@ bool TCompactTrieBuilder<T, D, S>::AddSubtreeInBuffer(const TSymbol* key, size_t
 }
 
 template <class T, class D, class S>
-bool TCompactTrieBuilder<T, D, S>::Find(const TSymbol* key, size_t keylen, TData* value) const {
-    return Impl->FindEntry(key, keylen, value);
-}
-
-template <class T, class D, class S>
+bool TCompactTrieBuilder<T, D, S>::Find(const TSymbol* key, size_t keylen, TData* value) const { 
+    return Impl->FindEntry(key, keylen, value); 
+} 
+ 
+template <class T, class D, class S> 
 bool TCompactTrieBuilder<T, D, S>::FindLongestPrefix(
                 const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const {
     return Impl->FindLongestPrefix(key, keylen, prefixlen, value);
@@ -458,50 +458,50 @@ bool TCompactTrieBuilder<T, D, S>::FindLongestPrefix(
 
 template <class T, class D, class S>
 size_t TCompactTrieBuilder<T, D, S>::Save(IOutputStream& os) const {
-    return Impl->Save(os);
-}
-
-template <class T, class D, class S>
+    return Impl->Save(os); 
+} 
+ 
+template <class T, class D, class S> 
 size_t TCompactTrieBuilder<T, D, S>::SaveAndDestroy(IOutputStream& os) {
     return Impl->SaveAndDestroy(os);
 }
 
 template <class T, class D, class S>
-void TCompactTrieBuilder<T, D, S>::Clear() {
-    Impl->Clear();
-}
-
-template <class T, class D, class S>
-size_t TCompactTrieBuilder<T, D, S>::GetEntryCount() const {
-    return Impl->GetEntryCount();
-}
-
-template <class T, class D, class S>
-size_t TCompactTrieBuilder<T, D, S>::GetNodeCount() const {
-    return Impl->GetNodeCount();
-}
-
-// TCompactTrieBuilder::TCompactTrieBuilderImpl
-
-template <class T, class D, class S>
+void TCompactTrieBuilder<T, D, S>::Clear() { 
+    Impl->Clear(); 
+} 
+ 
+template <class T, class D, class S> 
+size_t TCompactTrieBuilder<T, D, S>::GetEntryCount() const { 
+    return Impl->GetEntryCount(); 
+} 
+ 
+template <class T, class D, class S> 
+size_t TCompactTrieBuilder<T, D, S>::GetNodeCount() const { 
+    return Impl->GetNodeCount(); 
+} 
+ 
+// TCompactTrieBuilder::TCompactTrieBuilderImpl 
+ 
+template <class T, class D, class S> 
 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TCompactTrieBuilderImpl(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc)
     : Pool(1000000, TMemoryPool::TLinearGrow::Instance(), alloc)
     , PayloadSize(sizeof(void*)) // XXX: find better value
     , NodeAllocator(new TFixedSizeAllocator(sizeof(TNode) + PayloadSize, alloc))
     , Flags(flags)
-    , EntryCount(0)
-    , NodeCount(1)
+    , EntryCount(0) 
+    , NodeCount(1) 
     , Packer(packer)
-{
+{ 
     Root = new (*NodeAllocator) TNode;
-}
-
-template <class T, class D, class S>
-TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::~TCompactTrieBuilderImpl() {
+} 
+ 
+template <class T, class D, class S> 
+TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::~TCompactTrieBuilderImpl() { 
     DestroyNode(Root);
-}
-
-template <class T, class D, class S>
+} 
+ 
+template <class T, class D, class S> 
 void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ConvertSymbolArrayToChar(
                 const TSymbol* key, size_t keylen, TTempBuf& buf, size_t buflen) const {
     char* ckeyptr = buf.Data();
@@ -600,16 +600,16 @@ template <class T, class D, class S>
 typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
                 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryForSomething(
                                 const TSymbol* key, size_t keylen, bool& isNewAddition) {
-    using namespace NCompactTrie;
-
-    EntryCount++;
-
+    using namespace NCompactTrie; 
+ 
+    EntryCount++; 
+ 
     if (Flags & CTBF_VERBOSE)
-        ShowProgress(EntryCount);
-
-    TNode* current = Root;
+        ShowProgress(EntryCount); 
+ 
+    TNode* current = Root; 
     size_t passed;
-
+ 
     // Special case of empty key: replace it by 1-byte "\0" key.
     size_t ckeylen = keylen ? keylen * sizeof(TSymbol) : 1;
     TTempBuf ckeybuf(ckeylen);
@@ -620,13 +620,13 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
     }
 
     char* ckey = ckeybuf.Data();
-
+ 
     TNode* next;
     while ((ckeylen > 0) && (next = NodeForwardAdd(current, ckey, ckeylen, passed, &NodeCount)) != nullptr) {
         current = next;
         ckeylen -= passed;
         ckey += passed;
-    }
+    } 
 
     if (ckeylen != 0) {
         //new leaf
@@ -640,7 +640,7 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
         ythrow yexception() << "Duplicate key";
     return current;
 }
-
+ 
 template <class T, class D, class S>
 char* TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryForData(const TSymbol* key, size_t keylen,
         size_t datalen, bool& isNewAddition) {
@@ -656,12 +656,12 @@ char* TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryForData(con
         current->PayloadAsPtr() = (char*) Pool.Allocate(datalen); // XXX: allocate unaligned
     }
     return current->GetPayload();
-}
-
-template <class T, class D, class S>
-bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindEntry(const TSymbol* key, size_t keylen, TData* value) const {
-    using namespace NCompactTrie;
-
+} 
+ 
+template <class T, class D, class S> 
+bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindEntry(const TSymbol* key, size_t keylen, TData* value) const { 
+    using namespace NCompactTrie; 
+ 
     if (!keylen) {
         const char zero = '\0';
         return FindEntryImpl(&zero, 1, value);
@@ -670,20 +670,20 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindEntry(const TSym
         TTempBuf ckeybuf(ckeylen);
         ConvertSymbolArrayToChar(key, keylen, ckeybuf, ckeylen);
         return FindEntryImpl(ckeybuf.Data(), ckeylen, value);
-    }
+    } 
 }
-
+ 
 template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindEntryImpl(const char* keyptr, size_t keylen, TData* value) const {
     const TNode* node = Root;
     bool result = false;
     TStringBuf key(keyptr, keylen);
     while (key && (node = node->Subtree()->Find(key, value, result, Packer))) {
-    }
+    } 
     return result;
-}
-
-template <class T, class D, class S>
+} 
+ 
+template <class T, class D, class S> 
 bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefix(
                 const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const {
     using namespace NCompactTrie;
@@ -740,25 +740,25 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefixImp
 }
 
 template <class T, class D, class S>
-void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::Clear() {
+void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::Clear() { 
     DestroyNode(Root);
     Pool.Clear();
     NodeAllocator.Reset(new TFixedSizeAllocator(sizeof(TNode) + PayloadSize, TDefaultAllocator::Instance()));
     Root = new (*NodeAllocator) TNode;
     EntryCount = 0;
     NodeCount = 1;
-}
-
-template <class T, class D, class S>
+} 
+ 
+template <class T, class D, class S> 
 size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::Save(IOutputStream& os) const {
     const size_t len = NodeMeasureSubtree(Root);
     if (len != NodeSaveSubtree(Root, os))
         ythrow yexception() << "something wrong";
-
-    return len;
-}
-
-template <class T, class D, class S>
+ 
+    return len; 
+} 
+ 
+template <class T, class D, class S> 
 size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::SaveAndDestroy(IOutputStream& os) {
     const size_t len = NodeMeasureSubtree(Root);
     if (len != NodeSaveSubtreeAndDestroy(Root, os))
@@ -768,16 +768,16 @@ size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::SaveAndDestroy(IOu
 }
 
 template <class T, class D, class S>
-size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::GetEntryCount() const {
-    return EntryCount;
-}
-
-template <class T, class D, class S>
-size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::GetNodeCount() const {
-    return NodeCount;
-}
-
-template <class T, class D, class S>
+size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::GetEntryCount() const { 
+    return EntryCount; 
+} 
+ 
+template <class T, class D, class S> 
+size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::GetNodeCount() const { 
+    return NodeCount; 
+} 
+ 
+template <class T, class D, class S> 
 typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
                 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeForwardAdd(
                                 TNode* thiz, const char* label, size_t len, size_t& passed, size_t* nodeCount) {
@@ -815,25 +815,25 @@ void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeLinkTo(TNode* th
     typename TNode::TArcSet* arcSet = dynamic_cast<typename TNode::TArcSet*>(thiz->Subtree());
     if (!arcSet)
         ythrow yexception() << "Bad input order - expected input strings to be prefix-grouped.";
-
-    // Buffer the node at the last arc
+ 
+    // Buffer the node at the last arc 
     if ((Flags & CTBF_PREFIX_GROUPED) && !arcSet->empty())
         NodeBufferSubtree(arcSet->back().Node);
-
+ 
     arcSet->Add(label, node);
-}
-
-template <class T, class D, class S>
+} 
+ 
+template <class T, class D, class S> 
 size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeMeasureSubtree(TNode* thiz) const {
     return (size_t)thiz->Subtree()->Measure(this);
-}
-
-template <class T, class D, class S>
+} 
+ 
+template <class T, class D, class S> 
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveSubtree(TNode* thiz, IOutputStream& os) const {
     return thiz->Subtree()->Save(this, os);
-}
-
-template <class T, class D, class S>
+} 
+ 
+template <class T, class D, class S> 
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveSubtreeAndDestroy(TNode* thiz, IOutputStream& os) {
     return thiz->Subtree()->SaveAndDestroy(this, os);
 }
@@ -844,12 +844,12 @@ void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeBufferSubtree(TN
 
     TArcSet* arcSet = dynamic_cast<TArcSet*>(thiz->Subtree());
     if (!arcSet)
-        return;
-
+        return; 
+ 
     size_t bufferLength = (size_t)arcSet->Measure(this);
     TArrayWithSizeHolder<char> buffer;
     buffer.Resize(bufferLength);
-
+ 
     TMemoryOutput bufout(buffer.Get(), buffer.Size());
 
     ui64 written = arcSet->Save(this, bufout);
@@ -857,100 +857,100 @@ void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeBufferSubtree(TN
 
     arcSet->Destroy(this);
     arcSet->~TArcSet();
-
+ 
     typename TNode::TBufferedSubtree* bufferedArcSet = new (thiz->Subtree()) typename TNode::TBufferedSubtree;
 
     bufferedArcSet->Buffer.Swap(buffer);
-}
-
-template <class T, class D, class S>
+} 
+ 
+template <class T, class D, class S> 
 size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeMeasureLeafValue(TNode* thiz) const {
     if (!thiz->IsFinal())
-        return 0;
-
+        return 0; 
+ 
     return Packer.SkipLeaf(thiz->GetPayload());
-}
-
-template <class T, class D, class S>
+} 
+ 
+template <class T, class D, class S> 
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveLeafValue(TNode* thiz, IOutputStream& os) const {
     if (!thiz->IsFinal())
         return 0;
-
+ 
     size_t len = Packer.SkipLeaf(thiz->GetPayload());
     os.Write(thiz->GetPayload(), len);
     return len;
-}
-
-// TCompactTrieBuilder::TCompactTrieBuilderImpl::TNode::TArc
-
-template <class T, class D, class S>
+} 
+ 
+// TCompactTrieBuilder::TCompactTrieBuilderImpl::TNode::TArc 
+ 
+template <class T, class D, class S> 
 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TArc::TArc(const TBlob& lbl, TNode* nd)
-    : Label(lbl)
-    , Node(nd)
-    , LeftOffset(0)
-    , RightOffset(0)
+    : Label(lbl) 
+    , Node(nd) 
+    , LeftOffset(0) 
+    , RightOffset(0) 
 {}
-
-template <class T, class D, class S>
+ 
+template <class T, class D, class S> 
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcMeasure(
                 const TArc* thiz, size_t leftsize, size_t rightsize) const {
-    using namespace NCompactTrie;
-
+    using namespace NCompactTrie; 
+ 
     size_t coresize = 2 + NodeMeasureLeafValue(thiz->Node); // 2 == (char + flags)
     size_t treesize = NodeMeasureSubtree(thiz->Node);
-
+ 
     if (thiz->Label.Length() > 0)
         treesize += 2 * (thiz->Label.Length() - 1);
 
-    // Triple measurements are needed because the space needed to store the offset
-    // shall be added to the offset itself. Hence three iterations.
-    size_t leftoffsetsize = leftsize ? MeasureOffset(coresize + treesize) : 0;
-    size_t rightoffsetsize = rightsize ? MeasureOffset(coresize + treesize + leftsize) : 0;
-    leftoffsetsize = leftsize ? MeasureOffset(coresize + treesize + leftoffsetsize + rightoffsetsize) : 0;
+    // Triple measurements are needed because the space needed to store the offset 
+    // shall be added to the offset itself. Hence three iterations. 
+    size_t leftoffsetsize = leftsize ? MeasureOffset(coresize + treesize) : 0; 
+    size_t rightoffsetsize = rightsize ? MeasureOffset(coresize + treesize + leftsize) : 0; 
+    leftoffsetsize = leftsize ? MeasureOffset(coresize + treesize + leftoffsetsize + rightoffsetsize) : 0; 
     rightoffsetsize = rightsize ? MeasureOffset(coresize + treesize + leftsize + leftoffsetsize + rightoffsetsize) : 0;
-    leftoffsetsize = leftsize ? MeasureOffset(coresize + treesize + leftoffsetsize + rightoffsetsize) : 0;
+    leftoffsetsize = leftsize ? MeasureOffset(coresize + treesize + leftoffsetsize + rightoffsetsize) : 0; 
     rightoffsetsize = rightsize ? MeasureOffset(coresize + treesize + leftsize + leftoffsetsize + rightoffsetsize) : 0;
-
-    coresize += leftoffsetsize + rightoffsetsize;
+ 
+    coresize += leftoffsetsize + rightoffsetsize; 
     thiz->LeftOffset = leftsize ? coresize + treesize : 0;
     thiz->RightOffset = rightsize ? coresize + treesize + leftsize : 0;
-
-    return coresize + treesize + leftsize + rightsize;
-}
-
-template <class T, class D, class S>
+ 
+    return coresize + treesize + leftsize + rightsize; 
+} 
+ 
+template <class T, class D, class S> 
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveSelf(const TArc* thiz, IOutputStream& os) const {
-    using namespace NCompactTrie;
-
+    using namespace NCompactTrie; 
+ 
     ui64 written = 0;
 
     size_t leftoffsetsize = MeasureOffset(thiz->LeftOffset);
     size_t rightoffsetsize = MeasureOffset(thiz->RightOffset);
-
+ 
     size_t labelLen = thiz->Label.Length();
-
+ 
     for (size_t i = 0; i < labelLen; ++i) {
         char flags = 0;
-
+ 
         if (i == 0) {
             flags |= (leftoffsetsize << MT_LEFTSHIFT);
             flags |= (rightoffsetsize << MT_RIGHTSHIFT);
         }
-
+ 
         if (i == labelLen-1) {
             if (thiz->Node->IsFinal())
                flags |= MT_FINAL;
-
+ 
             if (!thiz->Node->IsLast())
                 flags |= MT_NEXT;
         } else {
             flags |= MT_NEXT;
         }
-
+ 
         os.Write(&flags, 1);
         os.Write(&thiz->Label.AsCharPtr()[i], 1);
         written += 2;
-
+ 
         if (i == 0) {
             written += ArcSaveOffset(thiz->LeftOffset, os);
             written += ArcSaveOffset(thiz->RightOffset, os);
@@ -966,8 +966,8 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSave(const TArc* 
     ui64 written =  ArcSaveSelf(thiz, os);
     written += NodeSaveSubtree(thiz->Node, os);
     return written;
-}
-
+} 
+ 
 template <class T, class D, class S>
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveAndDestroy(const TArc* thiz, IOutputStream& os) {
     ui64 written = ArcSaveSelf(thiz, os);
@@ -975,9 +975,9 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveAndDestroy(co
     return written;
 }
 
-// TCompactTrieBuilder::TCompactTrieBuilderImpl::TNode::TArcSet
-
-template <class T, class D, class S>
+// TCompactTrieBuilder::TCompactTrieBuilderImpl::TNode::TArcSet 
+ 
+template <class T, class D, class S> 
 typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::iterator
                     TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Find(char ch) {
     using namespace NCompTriePrivate;
@@ -985,12 +985,12 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::
 
     if (it != this->end() && it->Label[0] == (unsigned char)ch) {
         return it;
-    }
-
-    return this->end();
-}
-
-template <class T, class D, class S>
+    } 
+ 
+    return this->end(); 
+} 
+ 
+template <class T, class D, class S> 
 typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::const_iterator
                     TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Find(char ch) const {
     using namespace NCompTriePrivate;
@@ -1007,8 +1007,8 @@ template <class T, class D, class S>
 void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Add(const TBlob& s, TNode* node) {
     using namespace NCompTriePrivate;
     this->insert(LowerBound(this->begin(), this->end(), s[0], TCmp()), TArc(s, node));
-}
-
+} 
+ 
 template <class T, class D, class S>
 const typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
     TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Find(
@@ -1045,8 +1045,8 @@ const typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
     return nullptr;
 }
 
-// Different
-
+// Different 
+ 
 //----------------------------------------------------------------------------------------------------------------------
 // Minimize the trie. The result is equivalent to the original
 // trie, except that it takes less space (and has marginally lower
@@ -1060,11 +1060,11 @@ const typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
 // Because of non-local structure and epsilon links, it won't work
 // as you expect it to, and can destroy the trie in the making.
 
-template <class TPacker>
+template <class TPacker> 
 size_t CompactTrieMinimize(IOutputStream& os, const char* data, size_t datalength, bool verbose /*= false*/, const TPacker& packer /*= TPacker()*/, NCompactTrie::EMinimizeMode mode) {
-    using namespace NCompactTrie;
+    using namespace NCompactTrie; 
     return CompactTrieMinimizeImpl(os, data, datalength, verbose, &packer, mode);
-}
+} 
 
 template <class TTrieBuilder>
 size_t CompactTrieMinimize(IOutputStream& os, const TTrieBuilder& builder, bool verbose /*=false*/) {

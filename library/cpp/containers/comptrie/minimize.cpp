@@ -6,8 +6,8 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/algorithm.h>
-
-namespace NCompactTrie {
+ 
+namespace NCompactTrie { 
     // Minimize the trie. The result is equivalent to the original
     // trie, except that it takes less space (and has marginally lower
     // performance, because of eventual epsilon links).
@@ -169,7 +169,7 @@ namespace NCompactTrie {
             bool IsFinal() const {
                 return Node.IsFinal();
             }
-
+ 
             // NextNode returns child nodes, starting from the last node: Right, then Left, then Forward
             size_t NextNode(const TOffsetMap& mergedNodes) {
                 while (Selector < 3) {

@@ -6,9 +6,9 @@
 #define COMPTRIE_DATA_CHECK 1
 #endif
 
-// NCompactTrie
-
-namespace NCompactTrie {
+// NCompactTrie 
+ 
+namespace NCompactTrie { 
     const char MT_FINAL = '\x80';
     const char MT_NEXT = '\x40';
     const char MT_SIZEMASK = '\x07';
@@ -16,16 +16,16 @@ namespace NCompactTrie {
     const size_t MT_RIGHTSHIFT = 0;
 
     Y_FORCE_INLINE size_t UnpackOffset(const char* p, size_t len);
-    size_t MeasureOffset(size_t offset);
-    size_t PackOffset(char* buffer, size_t offset);
+    size_t MeasureOffset(size_t offset); 
+    size_t PackOffset(char* buffer, size_t offset); 
     static inline ui64 ArcSaveOffset(size_t offset, IOutputStream& os);
     Y_FORCE_INLINE char LeapByte(const char*& datapos, const char* dataend, char label);
-
-    template <class T>
-    inline static size_t ExtraBits() {
-        return (sizeof(T) - 1) * 8;
-    }
-
+ 
+    template <class T> 
+    inline static size_t ExtraBits() { 
+        return (sizeof(T) - 1) * 8; 
+    } 
+ 
     static inline bool IsEpsilonLink(const char flags) {
         return !(flags & (MT_FINAL | MT_NEXT));
     }
@@ -49,9 +49,9 @@ namespace NCompactTrie {
         return flags & MT_SIZEMASK;
     }
 
-    void ShowProgress(size_t n); // just print dots
-}
-
+    void ShowProgress(size_t n); // just print dots 
+} 
+ 
 namespace NCompTriePrivate {
     template <typename TChar>
     struct TStringForChar {

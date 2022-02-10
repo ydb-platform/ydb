@@ -228,16 +228,16 @@ public:
 
     /// Creates a precharged blob with a single-threaded (non atomic) refcounter. It maps the file on the path as data.
     static TBlob PrechargedFromFileSingleThreaded(const TString& path);
-
+ 
     /// Creates a precharged blob with a multi-threaded (atomic) refcounter. It maps the file on the path as data.
     static TBlob PrechargedFromFile(const TString& path);
-
+ 
     /// Creates a precharged blob with a single-threaded (non atomic) refcounter. It maps the file content as data.
     static TBlob PrechargedFromFileSingleThreaded(const TFile& file);
-
+ 
     /// Creates a precharged blob with a multi-threaded (atomic) refcounter. It maps the file content as data.
     static TBlob PrechargedFromFile(const TFile& file);
-
+ 
     /// Creates a locked blob with a single-threaded (non atomic) refcounter. It maps the file on the path as data.
     static TBlob LockedFromFileSingleThreaded(const TString& path);
 
@@ -264,16 +264,16 @@ public:
 
     /// Creates a blob with a single-threaded (non atomic) refcounter. Dynamically allocates memory and copies data from the file on the path using pread().
     static TBlob FromFileContentSingleThreaded(const TString& path);
-
+ 
     /// Creates a blob with a multi-threaded (atomic) refcounter. Dynamically allocates memory and copies data from the file on the path using pread().
     static TBlob FromFileContent(const TString& path);
-
+ 
     /// Creates a blob with a single-threaded (non atomic) refcounter. Dynamically allocates memory and copies data from the file using pread().
     static TBlob FromFileContentSingleThreaded(const TFile& file);
-
+ 
     /// Creates a blob with a multi-threaded (atomic) refcounter. Dynamically allocates memory and copies data from the file using pread().
     static TBlob FromFileContent(const TFile& file);
-
+ 
     /// Creates a blob with a single-threaded (non atomic) refcounter. Dynamically allocates memory and copies data from the provided range of the file content using pread().
     static TBlob FromFileContentSingleThreaded(const TFile& file, ui64 offset, size_t length);
 

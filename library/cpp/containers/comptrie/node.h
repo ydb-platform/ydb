@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cstddef>
-
-namespace NCompactTrie {
+ 
+namespace NCompactTrie { 
     class ILeafSkipper;
 
     enum TDirection {

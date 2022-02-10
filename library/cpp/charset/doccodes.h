@@ -20,7 +20,7 @@ enum ECharset {
     CODES_IBM855,       // [12] IBM_855
     CODES_UTF8,         // [13] UTF8
     CODES_UNKNOWNPLANE, // [14] Unrecognized characters are mapped into the PUA: U+F000..U+F0FF
-
+ 
     CODES_KAZWIN,       // [15] WINDOWS_1251_K   Kazakh version of Windows-1251
     CODES_TATWIN,       // [16] WINDOWS_1251_T   Tatarian version of Windows-1251
     CODES_ARMSCII,      // [17] Armenian ASCII
@@ -100,30 +100,30 @@ enum ECharset {
     CODES_TIS620,
     CODES_VISCII,
 
-    // libiconv multibyte codepages
+    // libiconv multibyte codepages 
     CODES_BIG5, // [90]
-    CODES_BIG5_HKSCS,
-    CODES_BIG5_HKSCS_1999,
-    CODES_BIG5_HKSCS_2001,
-    CODES_CP932,
-    CODES_CP936,
-    CODES_CP949,
-    CODES_CP950,
-    CODES_EUC_CN,
-    CODES_EUC_JP,
+    CODES_BIG5_HKSCS, 
+    CODES_BIG5_HKSCS_1999, 
+    CODES_BIG5_HKSCS_2001, 
+    CODES_CP932, 
+    CODES_CP936, 
+    CODES_CP949, 
+    CODES_CP950, 
+    CODES_EUC_CN, 
+    CODES_EUC_JP, 
     CODES_EUC_KR, // [100]
-    CODES_EUC_TW,
-    CODES_GB18030,
-    CODES_GBK,
-    CODES_HZ,
-    CODES_ISO_2022_CN,
-    CODES_ISO_2022_CN_EXT,
-    CODES_ISO_2022_JP,
-    CODES_ISO_2022_JP_1,
-    CODES_ISO_2022_JP_2,
+    CODES_EUC_TW, 
+    CODES_GB18030, 
+    CODES_GBK, 
+    CODES_HZ, 
+    CODES_ISO_2022_CN, 
+    CODES_ISO_2022_CN_EXT, 
+    CODES_ISO_2022_JP, 
+    CODES_ISO_2022_JP_1, 
+    CODES_ISO_2022_JP_2, 
     CODES_ISO_2022_KR, // [110]
-    CODES_JOHAB,
-    CODES_SHIFT_JIS,
-
-    CODES_MAX
+    CODES_JOHAB, 
+    CODES_SHIFT_JIS, 
+ 
+    CODES_MAX 
 };

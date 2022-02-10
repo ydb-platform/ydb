@@ -209,7 +209,7 @@ static inline TBlob ConstructFromMap(const TMemoryMap& map, ui64 offset, size_t 
 template <class TCounter, class T>
 static inline TBlob ConstructAsMap(const T& t, EMappingMode mode) {
     TMemoryMap::EOpenMode openMode = (mode == EMappingMode::Precharged) ? (TMemoryMap::oRdOnly | TMemoryMap::oPrecharge) : TMemoryMap::oRdOnly;
-
+ 
     TMemoryMap map(t, openMode);
     const ui64 toMap = map.Length();
 
@@ -301,7 +301,7 @@ TBlob TBlob::FromMemoryMap(const TMemoryMap& map, ui64 offset, size_t length) {
 }
 
 template <class TCounter>
-static inline TBlob ReadFromFile(const TFile& file, ui64 offset, size_t length) {
+static inline TBlob ReadFromFile(const TFile& file, ui64 offset, size_t length) { 
     using TBase = TDynamicBlobBase<TCounter>;
     THolder<TBase> base(new (length) TBase);
 
@@ -316,32 +316,32 @@ static inline TBlob ReadFromFile(const TFile& file, ui64 offset, size_t length) 
 }
 
 template <class TCounter>
-static inline TBlob ConstructFromFileContent(const TFile& file, ui64 offset, ui64 length) {
-    if (length > Max<size_t>()) {
-        ythrow yexception() << "can not read whole file(length = " << length << ")";
-    }
-
-    return ReadFromFile<TCounter>(file, offset, static_cast<size_t>(length));
+static inline TBlob ConstructFromFileContent(const TFile& file, ui64 offset, ui64 length) { 
+    if (length > Max<size_t>()) { 
+        ythrow yexception() << "can not read whole file(length = " << length << ")"; 
+    } 
+ 
+    return ReadFromFile<TCounter>(file, offset, static_cast<size_t>(length)); 
 }
 
 TBlob TBlob::FromFileContentSingleThreaded(const TString& path) {
-    TFile file(path, RdOnly);
-    return ConstructFromFileContent<TSimpleCounter>(file, 0, file.GetLength());
-}
-
+    TFile file(path, RdOnly); 
+    return ConstructFromFileContent<TSimpleCounter>(file, 0, file.GetLength()); 
+} 
+ 
 TBlob TBlob::FromFileContent(const TString& path) {
-    TFile file(path, RdOnly);
-    return ConstructFromFileContent<TAtomicCounter>(file, 0, file.GetLength());
-}
-
+    TFile file(path, RdOnly); 
+    return ConstructFromFileContent<TAtomicCounter>(file, 0, file.GetLength()); 
+} 
+ 
 TBlob TBlob::FromFileContentSingleThreaded(const TFile& file) {
-    return ConstructFromFileContent<TSimpleCounter>(file, 0, file.GetLength());
-}
-
+    return ConstructFromFileContent<TSimpleCounter>(file, 0, file.GetLength()); 
+} 
+ 
 TBlob TBlob::FromFileContent(const TFile& file) {
-    return ConstructFromFileContent<TAtomicCounter>(file, 0, file.GetLength());
-}
-
+    return ConstructFromFileContent<TAtomicCounter>(file, 0, file.GetLength()); 
+} 
+ 
 TBlob TBlob::FromFileContentSingleThreaded(const TFile& file, ui64 offset, size_t length) {
     return ConstructFromFileContent<TSimpleCounter>(file, offset, length);
 }

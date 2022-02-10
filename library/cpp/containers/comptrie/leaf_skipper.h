@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace NCompactTrie {
+namespace NCompactTrie { 
     class ILeafSkipper {
     public:
         virtual size_t SkipLeaf(const char* p) const = 0;
@@ -53,4 +53,4 @@ namespace NCompactTrie {
             return !(*this == other);
         }
     };
-}
+} 

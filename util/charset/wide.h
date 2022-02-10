@@ -12,7 +12,7 @@
 #include <util/system/compiler.h>
 #include <util/system/cpu_id.h>
 #include <util/system/yassert.h>
-
+ 
 #include <cstring>
 
 #ifdef _sse2_
@@ -29,46 +29,46 @@ namespace NDetail {
     }
 
     template <bool isPointer>
-    struct TSelector;
+    struct TSelector; 
+ 
+    template <>
+    struct TSelector<false> { 
+        template <class T> 
+        static inline void WriteSymbol(wchar16 s, T& dest) noexcept {
+            dest.push_back(s); 
+        } 
+    }; 
 
     template <>
-    struct TSelector<false> {
-        template <class T>
+    struct TSelector<true> { 
+        template <class T> 
         static inline void WriteSymbol(wchar16 s, T& dest) noexcept {
-            dest.push_back(s);
-        }
-    };
-
-    template <>
-    struct TSelector<true> {
-        template <class T>
-        static inline void WriteSymbol(wchar16 s, T& dest) noexcept {
-            *(dest++) = s;
-        }
-    };
-
+            *(dest++) = s; 
+        } 
+    }; 
+ 
     inline wchar32 ReadSurrogatePair(const wchar16* chars) noexcept {
-        const wchar32 SURROGATE_OFFSET = static_cast<wchar32>(0x10000 - (0xD800 << 10) - 0xDC00);
-        wchar16 lead = chars[0];
-        wchar16 tail = chars[1];
-
+        const wchar32 SURROGATE_OFFSET = static_cast<wchar32>(0x10000 - (0xD800 << 10) - 0xDC00); 
+        wchar16 lead = chars[0]; 
+        wchar16 tail = chars[1]; 
+ 
         Y_ASSERT(IsW16SurrogateLead(lead));
         Y_ASSERT(IsW16SurrogateTail(tail));
-
-        return (static_cast<wchar32>(lead) << 10) + tail + SURROGATE_OFFSET;
-    }
-
-    template <class T>
+ 
+        return (static_cast<wchar32>(lead) << 10) + tail + SURROGATE_OFFSET; 
+    } 
+ 
+    template <class T> 
     inline void WriteSurrogatePair(wchar32 s, T& dest) noexcept;
-
+ 
 }
-
+ 
 inline wchar16* SkipSymbol(wchar16* begin, const wchar16* end) noexcept {
     return begin + W16SymbolSize(begin, end);
-}
+} 
 inline const wchar16* SkipSymbol(const wchar16* begin, const wchar16* end) noexcept {
     return begin + W16SymbolSize(begin, end);
-}
+} 
 inline wchar32* SkipSymbol(wchar32* begin, const wchar32* end) noexcept {
     Y_ASSERT(begin < end);
     return begin + 1;
@@ -77,45 +77,45 @@ inline const wchar32* SkipSymbol(const wchar32* begin, const wchar32* end) noexc
     Y_ASSERT(begin < end);
     return begin + 1;
 }
-
+ 
 inline wchar32 ReadSymbol(const wchar16* begin, const wchar16* end) noexcept {
     Y_ASSERT(begin < end);
     if (IsW16SurrogateLead(*begin)) {
         if (begin + 1 < end && IsW16SurrogateTail(*(begin + 1)))
             return ::NDetail::ReadSurrogatePair(begin);
-
-        return BROKEN_RUNE;
+ 
+        return BROKEN_RUNE; 
     } else if (IsW16SurrogateTail(*begin)) {
         return BROKEN_RUNE;
-    }
-
-    return *begin;
-}
-
+    } 
+ 
+    return *begin; 
+} 
+ 
 inline wchar32 ReadSymbol(const wchar32* begin, const wchar32* end) noexcept {
     Y_ASSERT(begin < end);
     return *begin;
 }
 
-//! presuming input data is either big enought of null terminated
+//! presuming input data is either big enought of null terminated 
 inline wchar32 ReadSymbolAndAdvance(const wchar16*& begin) noexcept {
     Y_ASSERT(*begin);
     if (IsW16SurrogateLead(begin[0])) {
         if (IsW16SurrogateTail(begin[1])) {
             Y_ASSERT(begin[1] != 0);
             const wchar32 c = ::NDetail::ReadSurrogatePair(begin);
-            begin += 2;
-            return c;
-        }
-        ++begin;
-        return BROKEN_RUNE;
+            begin += 2; 
+            return c; 
+        } 
+        ++begin; 
+        return BROKEN_RUNE; 
     } else if (IsW16SurrogateTail(begin[0])) {
         ++begin;
         return BROKEN_RUNE;
-    }
-    return *(begin++);
-}
-
+    } 
+    return *(begin++); 
+} 
+ 
 //! presuming input data is either big enought of null terminated
 inline wchar32 ReadSymbolAndAdvance(const wchar32*& begin) noexcept {
     Y_ASSERT(*begin);
@@ -127,63 +127,63 @@ inline wchar32 ReadSymbolAndAdvance(const wchar16*& begin, const wchar16* end) n
     if (IsW16SurrogateLead(begin[0])) {
         if (begin + 1 != end && IsW16SurrogateTail(begin[1])) {
             const wchar32 c = ::NDetail::ReadSurrogatePair(begin);
-            begin += 2;
-            return c;
-        }
-        ++begin;
-        return BROKEN_RUNE;
+            begin += 2; 
+            return c; 
+        } 
+        ++begin; 
+        return BROKEN_RUNE; 
     } else if (IsW16SurrogateTail(begin[0])) {
         ++begin;
         return BROKEN_RUNE;
-    }
-    return *(begin++);
-}
-
+    } 
+    return *(begin++); 
+} 
+ 
 inline wchar32 ReadSymbolAndAdvance(const wchar32*& begin, const wchar32* end) noexcept {
     Y_ASSERT(begin < end);
-    return *(begin++);
-}
-
-template <class T>
+    return *(begin++); 
+} 
+ 
+template <class T> 
 inline size_t WriteSymbol(wchar16 s, T& dest) noexcept {
     ::NDetail::TSelector<std::is_pointer<T>::value>::WriteSymbol(s, dest);
-    return 1;
-}
-
-template <class T>
+    return 1; 
+} 
+ 
+template <class T> 
 inline size_t WriteSymbol(wchar32 s, T& dest) noexcept {
-    if (s > 0xFFFF) {
+    if (s > 0xFFFF) { 
         if (s >= ::NUnicode::UnicodeInstancesLimit()) {
-            return WriteSymbol(static_cast<wchar16>(BROKEN_RUNE), dest);
-        }
-
+            return WriteSymbol(static_cast<wchar16>(BROKEN_RUNE), dest); 
+        } 
+ 
         ::NDetail::WriteSurrogatePair(s, dest);
-        return 2;
-    }
-
-    return WriteSymbol(static_cast<wchar16>(s), dest);
-}
-
+        return 2; 
+    } 
+ 
+    return WriteSymbol(static_cast<wchar16>(s), dest); 
+} 
+ 
 inline bool WriteSymbol(wchar32 s, wchar16*& dest, const wchar16* destEnd) noexcept {
     Y_ASSERT(dest < destEnd);
-
-    if (s > 0xFFFF) {
-        if (s >= NUnicode::UnicodeInstancesLimit()) {
-            *(dest++) = static_cast<wchar16>(BROKEN_RUNE);
-            return true;
-        }
-
-        if (dest + 2 > destEnd)
-            return false;
-
+ 
+    if (s > 0xFFFF) { 
+        if (s >= NUnicode::UnicodeInstancesLimit()) { 
+            *(dest++) = static_cast<wchar16>(BROKEN_RUNE); 
+            return true; 
+        } 
+ 
+        if (dest + 2 > destEnd) 
+            return false; 
+ 
         ::NDetail::WriteSurrogatePair(s, dest);
-    } else {
-        *(dest++) = static_cast<wchar16>(s);
-    }
-
-    return true;
-}
-
+    } else { 
+        *(dest++) = static_cast<wchar16>(s); 
+    } 
+ 
+    return true; 
+} 
+ 
 inline size_t WriteSymbol(wchar32 s, wchar32*& dest) noexcept {
     *(dest++) = s;
     return 1;
@@ -191,12 +191,12 @@ inline size_t WriteSymbol(wchar32 s, wchar32*& dest) noexcept {
 
 inline bool WriteSymbol(wchar32 s, wchar32*& dest, const wchar32* destEnd) noexcept {
     Y_ASSERT(dest < destEnd);
-
-    *(dest++) = s;
-
-    return true;
-}
-
+ 
+    *(dest++) = s; 
+ 
+    return true; 
+} 
+ 
 template <class T>
 inline void ::NDetail::WriteSurrogatePair(wchar32 s, T& dest) noexcept {
     const wchar32 LEAD_OFFSET = 0xD800 - (0x10000 >> 10);
@@ -211,52 +211,52 @@ inline void ::NDetail::WriteSurrogatePair(wchar32 s, T& dest) noexcept {
     WriteSymbol(tail, dest);
 }
 
-class TCharIterator {
-private:
-    const wchar16* Begin;
-    const wchar16* End;
-
-public:
-    inline explicit TCharIterator(const wchar16* end)
-        : Begin(end)
-        , End(end)
+class TCharIterator { 
+private: 
+    const wchar16* Begin; 
+    const wchar16* End; 
+ 
+public: 
+    inline explicit TCharIterator(const wchar16* end) 
+        : Begin(end) 
+        , End(end) 
     {
     }
-
-    inline TCharIterator(const wchar16* begin, const wchar16* end)
-        : Begin(begin)
-        , End(end)
+ 
+    inline TCharIterator(const wchar16* begin, const wchar16* end) 
+        : Begin(begin) 
+        , End(end) 
     {
     }
 
     inline TCharIterator& operator++() {
-        Begin = SkipSymbol(Begin, End);
-
-        return *this;
-    }
-
+        Begin = SkipSymbol(Begin, End); 
+ 
+        return *this; 
+    } 
+ 
     inline bool operator==(const wchar16* other) const {
-        return Begin == other;
-    }
+        return Begin == other; 
+    } 
     inline bool operator!=(const wchar16* other) const {
-        return !(*this == other);
-    }
-
+        return !(*this == other); 
+    } 
+ 
     inline bool operator==(const TCharIterator& other) const {
-        return *this == other.Begin;
-    }
+        return *this == other.Begin; 
+    } 
     inline bool operator!=(const TCharIterator& other) const {
-        return *this != other.Begin;
-    }
-
+        return *this != other.Begin; 
+    } 
+ 
     inline wchar32 operator*() const {
-        return ReadSymbol(Begin, End);
-    }
-
-    inline const wchar16* Get() const {
-        return Begin;
-    }
-};
+        return ReadSymbol(Begin, End); 
+    } 
+ 
+    inline const wchar16* Get() const { 
+        return Begin; 
+    } 
+}; 
 
 namespace NDetail {
     template <bool robust, typename TCharType>
@@ -447,16 +447,16 @@ inline TString WideToUTF8(const TUtf32StringBuf w) {
 
 inline TUtf16String UTF32ToWide(const wchar32* begin, size_t len) {
     TUtf16String res;
-    res.reserve(len);
-
-    const wchar32* end = begin + len;
-    for (const wchar32* i = begin; i != end; ++i) {
-        WriteSymbol(*i, res);
-    }
-
-    return res;
-}
-
+    res.reserve(len); 
+ 
+    const wchar32* end = begin + len; 
+    for (const wchar32* i = begin; i != end; ++i) { 
+        WriteSymbol(*i, res); 
+    } 
+ 
+    return res; 
+} 
+ 
 // adopted from https://chromium.googlesource.com/chromium/src/+/master/base/strings/string_util.cc
 // Assuming that a pointer is the size of a "machine word", then
 // uintptr_t is an integer type that is also a machine word.
@@ -611,13 +611,13 @@ inline bool IsStringASCII<char>(const char* first, const char* last) {
 }
 #endif
 
-//! copies elements from one character sequence to another using memcpy
-//! for compatibility only
-template <typename TChar>
-inline void Copy(const TChar* first, size_t len, TChar* result) {
-    memcpy(result, first, len * sizeof(TChar));
-}
-
+//! copies elements from one character sequence to another using memcpy 
+//! for compatibility only 
+template <typename TChar> 
+inline void Copy(const TChar* first, size_t len, TChar* result) { 
+    memcpy(result, first, len * sizeof(TChar)); 
+} 
+ 
 template <typename TChar1, typename TChar2>
 inline void Copy(const TChar1* first, size_t len, TChar2* result) {
     Copy(first, first + len, result);
@@ -660,14 +660,14 @@ inline TUtf32String ASCIIToUTF32(const TStringBuf s) {
 
 //! returns @c true if string contains whitespace characters only
 inline bool IsSpace(const wchar16* s, size_t n) {
-    if (n == 0)
-        return false;
+    if (n == 0) 
+        return false; 
 
     Y_ASSERT(s);
-
+ 
     const wchar16* const e = s + n;
     for (const wchar16* p = s; p != e; ++p) {
-        if (!IsWhitespace(*p))
+        if (!IsWhitespace(*p)) 
             return false;
     }
     return true;

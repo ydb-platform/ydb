@@ -7,7 +7,7 @@ SRCS(
     generated/encrec_data.cpp
     codepage.cpp
     cp_encrec.cpp
-    doccodes.cpp
+    doccodes.cpp 
     iconv.cpp
     recyr.hh
     recyr_int.hh
@@ -16,7 +16,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/libiconv
+    contrib/libs/libiconv 
 )
 
 END()

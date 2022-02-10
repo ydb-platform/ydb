@@ -21,11 +21,11 @@ namespace NCompactTrie {
                 AtEmptyValue == rhs.AtEmptyValue &&
                 MaxKeyLength == rhs.MaxKeyLength);
     }
-
+ 
     bool TOpaqueTrieIterator::HasMaxKeyLength() const {
         return MaxKeyLength != size_t(-1) && MeasureNarrowKey() == MaxKeyLength;
     }
-
+ 
     bool TOpaqueTrieIterator::Forward() {
         if (AtEmptyValue) {
             AtEmptyValue = false;
@@ -34,11 +34,11 @@ namespace NCompactTrie {
                 return res; // there was not "\0" key
             }
             // otherwise we are skipping "\0" key
-        }
-
+        } 
+ 
         if (!Trie.Length)
             return false;
-
+ 
         if (Forks.Empty()) {
             TFork fork(Trie.Data, 0, Trie.Length, Trie.SkipFunction);
             Forks.Push(fork);
@@ -53,7 +53,7 @@ namespace NCompactTrie {
                 topFork = &Forks.Top();
             }
         }
-
+ 
         Y_ASSERT(!Forks.Empty());
         while (Forks.Top().CurrentDirection != D_FINAL && !HasMaxKeyLength()) {
             TFork nextFork = Forks.Top().NextFork(Trie.SkipFunction);
@@ -65,8 +65,8 @@ namespace NCompactTrie {
             top.NextDirection();
         }
         return true;
-    }
-
+    } 
+ 
     bool TOpaqueTrieIterator::Backward() {
         if (AtEmptyValue)
             return false;
@@ -141,14 +141,14 @@ namespace NCompactTrie {
         if (HasEmptyKey()) {
             return TString();
         }
-
+ 
         TString result(Key);
         if (TopHasLabelInKey()) {
             result.append(Top().GetLabel());
         }
         return result;
     }
-
+ 
     bool TForkStack::HasEmptyKey() const {
         // Special case: if we get a single zero label, treat it as an empty key
         // TODO delete this after format change
@@ -165,8 +165,8 @@ namespace NCompactTrie {
             return 0;
         }
         return result;
-    }
-
+    } 
+ 
     //-------------------------------------------------------------------------
 
     TFork::TFork(const char* data, size_t offset, size_t limit, const ILeafSkipper& skipper)
@@ -183,20 +183,20 @@ namespace NCompactTrie {
             ++CurrentDirection;
         }
     }
-
+ 
     bool TFork::operator==(const TFork& rhs) const {
         return (Data == rhs.Data &&
                 Node.GetOffset() == rhs.Node.GetOffset() &&
                 CurrentDirection == rhs.CurrentDirection);
     }
-
+ 
     inline bool TFork::NextDirection() {
         do {
             ++CurrentDirection;
         } while (CurrentDirection < D_MAX && !HasDirection(CurrentDirection));
         return CurrentDirection < D_MAX;
     }
-
+ 
     inline bool TFork::PrevDirection() {
         if (CurrentDirection == TDirection(0)) {
             return false;

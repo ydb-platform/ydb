@@ -102,28 +102,28 @@ static int ModeToMmapProt(TMemoryMapCommon::EOpenMode mode) {
 }
 #endif
 
-// maybe we should move this function to another .cpp file to avoid unwanted optimization?
+// maybe we should move this function to another .cpp file to avoid unwanted optimization? 
 void NPrivate::Precharge(const void* data, size_t dataSize, size_t off, size_t size) {
-    if (off > dataSize) {
-        assert(false);
+    if (off > dataSize) { 
+        assert(false); 
         return;
-    }
-    size_t endOff = (size == (size_t)-1 ? dataSize : off + size);
-    if (endOff > dataSize) {
-        assert(false);
-        endOff = dataSize;
-    }
-    size = endOff - off;
+    } 
+    size_t endOff = (size == (size_t)-1 ? dataSize : off + size); 
+    if (endOff > dataSize) { 
+        assert(false); 
+        endOff = dataSize; 
+    } 
+    size = endOff - off; 
     if (dataSize == 0 || size == 0) {
         return;
     }
-
+ 
     volatile const char *c = (const char*)data + off, *e = c + size;
     for (; c < e; c += 512) {
         *c;
     }
-}
-
+} 
+ 
 class TMemoryMap::TImpl: public TAtomicRefCount<TImpl> {
 public:
     inline void CreateMapping() {
@@ -527,8 +527,8 @@ TFileMap::~TFileMap() {
 
 void TFileMap::Precharge(size_t pos, size_t size) const {
     NPrivate::Precharge(Ptr(), MappedSize(), pos, size);
-}
-
+} 
+ 
 TMappedAllocation::TMappedAllocation(size_t size, bool shared, void* addr)
     : Ptr_(nullptr)
     , Size_(0)

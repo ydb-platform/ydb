@@ -510,7 +510,7 @@ size_t TTestData<wchar16>::HashOf_0123456() {
 
 template <class TStringType, typename TTestData>
 class TStringTestImpl {
-protected:
+protected: 
     using char_type = typename TStringType::char_type;
     using traits_type = typename TStringType::traits_type;
 
@@ -918,8 +918,8 @@ public:
         s = Data._01230123();
         TStringType from = Data._0();
         TStringType to = Data.z();
-
-        SubstGlobal(s, from, to);
+ 
+        SubstGlobal(s, from, to); 
         UNIT_ASSERT(s == Data.z123z123());
     }
 

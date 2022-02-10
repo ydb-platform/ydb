@@ -6,7 +6,7 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
-
+ 
 // Lay the trie in memory in such a way that there are less cache misses when jumping from root to leaf.
 // The trie becomes about 2% larger, but the access became about 25% faster in our experiments.
 // Can be called on minimized and non-minimized tries, in the first case in requires half a trie more memory.
@@ -183,7 +183,7 @@ namespace NCompactTrie {
             size_t GetDepth() const {
                 return Depth;
             }
-
+ 
             size_t GetNodeCount() const {
                 return NodeCount;
             }

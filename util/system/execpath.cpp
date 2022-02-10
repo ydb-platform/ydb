@@ -156,24 +156,24 @@ static TString GetExecPathImpl() {
 }
 
 static bool GetPersistentExecPathImpl(TString& to) {
-#if defined(_solaris_)
+#if defined(_solaris_) 
     to = TString("/proc/self/object/a.out");
     return true;
 #elif defined(_linux_) || defined(_cygwin_)
     to = TString("/proc/self/exe");
     return true;
-#elif defined(_freebsd_)
+#elif defined(_freebsd_) 
     to = TString("/proc/curproc/file");
     return true;
 #else // defined(_win_) || defined(_darwin_)  or unknown
     Y_UNUSED(to);
     return false;
-#endif
-}
-
+#endif 
+} 
+ 
 namespace {
-    struct TExecPathsHolder {
-        inline TExecPathsHolder() {
+    struct TExecPathsHolder { 
+        inline TExecPathsHolder() { 
             ExecPath = GetExecPathImpl();
 
             if (!GetPersistentExecPathImpl(PersistentExecPath)) {
@@ -186,14 +186,14 @@ namespace {
         }
 
         TString ExecPath;
-        TString PersistentExecPath;
+        TString PersistentExecPath; 
     };
 }
 
 const TString& GetExecPath() {
     return TExecPathsHolder::Instance()->ExecPath;
 }
-
-const TString& GetPersistentExecPath() {
+ 
+const TString& GetPersistentExecPath() { 
     return TExecPathsHolder::Instance()->PersistentExecPath;
-}
+} 

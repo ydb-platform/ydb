@@ -1,4 +1,4 @@
-{ 
+{
   "pagination": {
     "ListHapgs": {
       "input_token": "NextToken",
@@ -16,4 +16,4 @@
       "result_key": "ClientList"
     }
   }
-} 
+}

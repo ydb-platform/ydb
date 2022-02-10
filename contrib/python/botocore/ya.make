@@ -1,4 +1,4 @@
-PY23_LIBRARY() 
+PY23_LIBRARY()
 
 OWNER(g:python-contrib)
 
@@ -10,7 +10,7 @@ PEERDIR(
     contrib/python/dateutil
     contrib/python/jmespath
     contrib/python/six
-    contrib/python/urllib3 
+    contrib/python/urllib3
     library/python/resource
 )
 
@@ -82,9 +82,9 @@ PY_SRCS(
     botocore/translate.py
     botocore/utils.py
     botocore/validate.py
-    botocore/vendored/__init__.py 
+    botocore/vendored/__init__.py
     botocore/vendored/requests/__init__.py
-    botocore/vendored/requests/exceptions.py 
+    botocore/vendored/requests/exceptions.py
     botocore/vendored/requests/packages/__init__.py
     botocore/vendored/requests/packages/urllib3/__init__.py
     botocore/vendored/requests/packages/urllib3/exceptions.py
@@ -914,10 +914,10 @@ RESOURCE_FILES(
     #botocore/data/xray/2016-04-12/examples-1.json
     #botocore/data/xray/2016-04-12/paginators-1.json
     #botocore/data/xray/2016-04-12/service-2.json
-) 
- 
+)
+
 END()
- 
-RECURSE_FOR_TESTS( 
+
+RECURSE_FOR_TESTS(
     tests
-) 
+)

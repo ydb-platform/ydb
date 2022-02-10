@@ -1,41 +1,41 @@
-{ 
-  "pagination": { 
-    "DescribeComplianceByConfigRule": { 
-      "input_token": "NextToken", 
-      "output_token": "NextToken", 
-      "result_key": "ComplianceByConfigRules" 
-    }, 
-    "DescribeComplianceByResource": { 
-      "input_token": "NextToken", 
-      "output_token": "NextToken", 
+{
+  "pagination": {
+    "DescribeComplianceByConfigRule": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "result_key": "ComplianceByConfigRules"
+    },
+    "DescribeComplianceByResource": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
       "result_key": "ComplianceByResources",
       "limit_key": "Limit"
-    }, 
-    "DescribeConfigRules": { 
-      "input_token": "NextToken", 
-      "output_token": "NextToken", 
-      "result_key": "ConfigRules" 
-    }, 
-    "GetComplianceDetailsByConfigRule": { 
-      "input_token": "NextToken", 
-      "output_token": "NextToken", 
+    },
+    "DescribeConfigRules": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "result_key": "ConfigRules"
+    },
+    "GetComplianceDetailsByConfigRule": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
       "result_key": "EvaluationResults",
       "limit_key": "Limit"
-    }, 
-    "GetComplianceDetailsByResource": { 
-      "input_token": "NextToken", 
-      "output_token": "NextToken", 
-      "result_key": "EvaluationResults" 
-    }, 
-    "GetResourceConfigHistory": { 
-      "input_token": "nextToken", 
-      "output_token": "nextToken", 
-      "result_key": "configurationItems", 
-      "limit_key": "limit" 
-    }, 
-    "ListDiscoveredResources": { 
-      "input_token": "nextToken", 
-      "output_token": "nextToken", 
+    },
+    "GetComplianceDetailsByResource": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "result_key": "EvaluationResults"
+    },
+    "GetResourceConfigHistory": {
+      "input_token": "nextToken",
+      "output_token": "nextToken",
+      "result_key": "configurationItems",
+      "limit_key": "limit"
+    },
+    "ListDiscoveredResources": {
+      "input_token": "nextToken",
+      "output_token": "nextToken",
       "result_key": "resourceIdentifiers",
       "limit_key": "limit"
     },
@@ -181,6 +181,6 @@
       ],
       "output_token": "NextToken",
       "result_key": "Results"
-    } 
-  } 
-} 
+    }
+  }
+}

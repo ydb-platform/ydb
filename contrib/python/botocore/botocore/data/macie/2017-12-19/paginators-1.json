@@ -1,4 +1,4 @@
-{ 
+{
   "pagination": {
     "ListMemberAccounts": {
       "input_token": "nextToken",
@@ -13,4 +13,4 @@
       "result_key": "s3Resources"
     }
   }
-} 
+}

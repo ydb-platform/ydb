@@ -1,4 +1,4 @@
-{ 
+{
   "pagination": {
     "DescribeAgents": {
       "input_token": "nextToken",
@@ -37,4 +37,4 @@
       "result_key": "configurations"
     }
   }
-} 
+}

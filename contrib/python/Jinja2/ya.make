@@ -8,8 +8,8 @@ IF (PYTHON2)
     PEERDIR(contrib/python/Jinja2/py2)
 ELSE()
     PEERDIR(contrib/python/Jinja2/py3)
-ENDIF() 
- 
+ENDIF()
+
 NO_LINT()
 
 END()

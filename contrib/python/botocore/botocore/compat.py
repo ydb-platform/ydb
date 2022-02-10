@@ -16,7 +16,7 @@ import datetime
 import sys
 import inspect
 import warnings
-import hashlib 
+import hashlib
 import logging
 import shlex
 import os
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 if six.PY3:
-    from six.moves import http_client 
+    from six.moves import http_client
 
     class HTTPHeaders(http_client.HTTPMessage):
         pass

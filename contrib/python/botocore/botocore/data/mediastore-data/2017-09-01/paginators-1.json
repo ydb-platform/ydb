@@ -1,4 +1,4 @@
-{ 
+{
   "pagination": {
     "ListItems": {
       "input_token": "NextToken",
@@ -7,4 +7,4 @@
       "result_key": "Items"
     }
   }
-} 
+}

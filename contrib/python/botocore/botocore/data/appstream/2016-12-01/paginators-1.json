@@ -1,4 +1,4 @@
-{ 
+{
   "pagination": {
     "DescribeDirectoryConfigs": {
       "input_token": "NextToken",
@@ -57,4 +57,4 @@
       "result_key": "Names"
     }
   }
-} 
+}

@@ -1,4 +1,4 @@
-{ 
+{
   "pagination": {
     "DescribeDirectConnectGatewayAssociations": {
       "input_token": "nextToken",
@@ -19,4 +19,4 @@
       "result_key": "directConnectGateways"
     }
   }
-} 
+}

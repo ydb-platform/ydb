@@ -1,4 +1,4 @@
-{ 
+{
   "pagination": {
     "ListCreatedArtifacts": {
       "input_token": "NextToken",
@@ -31,4 +31,4 @@
       "result_key": "ApplicationStateList"
     }
   }
-} 
+}

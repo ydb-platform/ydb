@@ -1,18 +1,18 @@
-{ 
-  "version":"2.0", 
-  "metadata":{ 
-    "apiVersion":"2017-08-08", 
-    "endpointPrefix":"connect", 
-    "jsonVersion":"1.1", 
-    "protocol":"rest-json", 
-    "serviceAbbreviation":"Amazon Connect", 
-    "serviceFullName":"Amazon Connect Service", 
-    "serviceId":"Connect", 
-    "signatureVersion":"v4", 
-    "signingName":"connect", 
-    "uid":"connect-2017-08-08" 
-  }, 
-  "operations":{ 
+{
+  "version":"2.0",
+  "metadata":{
+    "apiVersion":"2017-08-08",
+    "endpointPrefix":"connect",
+    "jsonVersion":"1.1",
+    "protocol":"rest-json",
+    "serviceAbbreviation":"Amazon Connect",
+    "serviceFullName":"Amazon Connect Service",
+    "serviceId":"Connect",
+    "signatureVersion":"v4",
+    "signingName":"connect",
+    "uid":"connect-2017-08-08"
+  },
+  "operations":{
     "AssociateApprovedOrigin":{
       "name":"AssociateApprovedOrigin",
       "http":{
@@ -1227,25 +1227,25 @@
       ],
       "documentation":"<p>Starts recording the contact when the agent joins the call. StartContactRecording is a one-time action. For example, if you use StopContactRecording to stop recording an ongoing call, you can't use StartContactRecording to restart it. For scenarios where the recording has started and you want to suspend and resume it, such as when collecting sensitive information (for example, a credit card number), use SuspendContactRecording and ResumeContactRecording.</p> <p>You can use this API to override the recording behavior configured in the <a href=\"https://docs.aws.amazon.com/connect/latest/adminguide/set-recording-behavior.html\">Set recording behavior</a> block.</p> <p>Only voice recordings are supported at this time.</p>"
     },
-    "StartOutboundVoiceContact":{ 
-      "name":"StartOutboundVoiceContact", 
-      "http":{ 
-        "method":"PUT", 
-        "requestUri":"/contact/outbound-voice" 
-      }, 
-      "input":{"shape":"StartOutboundVoiceContactRequest"}, 
-      "output":{"shape":"StartOutboundVoiceContactResponse"}, 
-      "errors":[ 
-        {"shape":"InvalidRequestException"}, 
-        {"shape":"InvalidParameterException"}, 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"InternalServiceException"}, 
-        {"shape":"LimitExceededException"}, 
-        {"shape":"DestinationNotAllowedException"}, 
-        {"shape":"OutboundContactNotPermittedException"} 
-      ], 
+    "StartOutboundVoiceContact":{
+      "name":"StartOutboundVoiceContact",
+      "http":{
+        "method":"PUT",
+        "requestUri":"/contact/outbound-voice"
+      },
+      "input":{"shape":"StartOutboundVoiceContactRequest"},
+      "output":{"shape":"StartOutboundVoiceContactResponse"},
+      "errors":[
+        {"shape":"InvalidRequestException"},
+        {"shape":"InvalidParameterException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServiceException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"DestinationNotAllowedException"},
+        {"shape":"OutboundContactNotPermittedException"}
+      ],
       "documentation":"<p>Places an outbound call to a contact, and then initiates the contact flow. It performs the actions in the contact flow that's specified (in <code>ContactFlowId</code>).</p> <p>Agents do not initiate the outbound API, which means that they do not dial the contact. If the contact flow places an outbound call to a contact, and then puts the contact in queue, the call is then routed to the agent, like any other inbound case.</p> <p>There is a 60-second dialing timeout for this operation. If the call is not connected after 60 seconds, it fails.</p> <note> <p>UK numbers with a 447 prefix are not allowed by default. Before you can dial these UK mobile numbers, you must submit a service quota increase request. For more information, see <a href=\"https://docs.aws.amazon.com/connect/latest/adminguide/amazon-connect-service-limits.html\">Amazon Connect Service Quotas</a> in the <i>Amazon Connect Administrator Guide</i>. </p> </note>"
-    }, 
+    },
     "StartTaskContact":{
       "name":"StartTaskContact",
       "http":{
@@ -1264,21 +1264,21 @@
       ],
       "documentation":"<p>Initiates a contact flow to start a new task.</p>"
     },
-    "StopContact":{ 
-      "name":"StopContact", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/contact/stop" 
-      }, 
-      "input":{"shape":"StopContactRequest"}, 
-      "output":{"shape":"StopContactResponse"}, 
-      "errors":[ 
-        {"shape":"InvalidRequestException"}, 
-        {"shape":"ContactNotFoundException"}, 
-        {"shape":"InvalidParameterException"}, 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"InternalServiceException"} 
-      ], 
+    "StopContact":{
+      "name":"StopContact",
+      "http":{
+        "method":"POST",
+        "requestUri":"/contact/stop"
+      },
+      "input":{"shape":"StopContactRequest"},
+      "output":{"shape":"StopContactResponse"},
+      "errors":[
+        {"shape":"InvalidRequestException"},
+        {"shape":"ContactNotFoundException"},
+        {"shape":"InvalidParameterException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServiceException"}
+      ],
       "documentation":"<p>Ends the specified contact.</p>"
     },
     "StopContactRecording":{
@@ -1716,9 +1716,9 @@
         {"shape":"InternalServiceException"}
       ],
       "documentation":"<p>Assigns the specified security profiles to the specified user.</p>"
-    } 
-  }, 
-  "shapes":{ 
+    }
+  },
+  "shapes":{
     "ARN":{"type":"string"},
     "AfterContactWorkTimeLimit":{
       "type":"integer",
@@ -1950,21 +1950,21 @@
       },
       "documentation":"<p>A toggle for an individual feature at the instance level.</p>"
     },
-    "AttributeName":{ 
-      "type":"string", 
-      "max":32767, 
-      "min":1 
-    }, 
-    "AttributeValue":{ 
-      "type":"string", 
-      "max":32767, 
-      "min":0 
-    }, 
-    "Attributes":{ 
-      "type":"map", 
-      "key":{"shape":"AttributeName"}, 
+    "AttributeName":{
+      "type":"string",
+      "max":32767,
+      "min":1
+    },
+    "AttributeValue":{
+      "type":"string",
+      "max":32767,
+      "min":0
+    },
+    "Attributes":{
+      "type":"map",
+      "key":{"shape":"AttributeName"},
       "value":{"shape":"AttributeValue"}
-    }, 
+    },
     "AttributesList":{
       "type":"list",
       "member":{"shape":"Attribute"}
@@ -2020,10 +2020,10 @@
       },
       "documentation":"<p>A chat message.</p>"
     },
-    "ClientToken":{ 
-      "type":"string", 
-      "max":500 
-    }, 
+    "ClientToken":{
+      "type":"string",
+      "max":500
+    },
     "CommonDescriptionLength250":{
       "type":"string",
       "max":250,
@@ -2079,10 +2079,10 @@
     },
     "ContactFlowContent":{"type":"string"},
     "ContactFlowDescription":{"type":"string"},
-    "ContactFlowId":{ 
-      "type":"string", 
-      "max":500 
-    }, 
+    "ContactFlowId":{
+      "type":"string",
+      "max":500
+    },
     "ContactFlowName":{
       "type":"string",
       "min":1
@@ -2141,23 +2141,23 @@
       "member":{"shape":"ContactFlowType"},
       "max":10
     },
-    "ContactId":{ 
-      "type":"string", 
-      "max":256, 
-      "min":1 
-    }, 
-    "ContactNotFoundException":{ 
-      "type":"structure", 
-      "members":{ 
-        "Message":{ 
-          "shape":"Message", 
-          "documentation":"<p>The message.</p>" 
-        } 
-      }, 
-      "documentation":"<p>The contact with the specified ID is not active or does not exist.</p>", 
-      "error":{"httpStatusCode":410}, 
-      "exception":true 
-    }, 
+    "ContactId":{
+      "type":"string",
+      "max":256,
+      "min":1
+    },
+    "ContactNotFoundException":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"Message",
+          "documentation":"<p>The message.</p>"
+        }
+      },
+      "documentation":"<p>The contact with the specified ID is not active or does not exist.</p>",
+      "error":{"httpStatusCode":410},
+      "exception":true
+    },
     "ContactReferences":{
       "type":"map",
       "key":{"shape":"ReferenceKey"},
@@ -3169,18 +3169,18 @@
       "max":4096,
       "min":0
     },
-    "DestinationNotAllowedException":{ 
-      "type":"structure", 
-      "members":{ 
-        "Message":{ 
-          "shape":"Message", 
+    "DestinationNotAllowedException":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"Message",
           "documentation":"<p>The message about the outbound calls.</p>"
-        } 
-      }, 
+        }
+      },
       "documentation":"<p>Outbound calls to the destination number are not allowed.</p>",
-      "error":{"httpStatusCode":403}, 
-      "exception":true 
-    }, 
+      "error":{"httpStatusCode":403},
+      "exception":true
+    },
     "Dimensions":{
       "type":"structure",
       "members":{
@@ -4076,11 +4076,11 @@
       "max":100,
       "min":1
     },
-    "InstanceId":{ 
-      "type":"string", 
+    "InstanceId":{
+      "type":"string",
       "max":100,
       "min":1
-    }, 
+    },
     "InstanceStatus":{
       "type":"string",
       "enum":[
@@ -4242,18 +4242,18 @@
       "type":"string",
       "enum":["EVENT"]
     },
-    "InternalServiceException":{ 
-      "type":"structure", 
-      "members":{ 
-        "Message":{ 
-          "shape":"Message", 
-          "documentation":"<p>The message.</p>" 
-        } 
-      }, 
+    "InternalServiceException":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"Message",
+          "documentation":"<p>The message.</p>"
+        }
+      },
       "documentation":"<p>Request processing failed because of an error or failure with the service.</p>",
-      "error":{"httpStatusCode":500}, 
-      "exception":true 
-    }, 
+      "error":{"httpStatusCode":500},
+      "exception":true
+    },
     "InvalidContactFlowException":{
       "type":"structure",
       "members":{
@@ -4266,30 +4266,30 @@
       "error":{"httpStatusCode":400},
       "exception":true
     },
-    "InvalidParameterException":{ 
-      "type":"structure", 
-      "members":{ 
-        "Message":{ 
-          "shape":"Message", 
+    "InvalidParameterException":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"Message",
           "documentation":"<p>The message about the parameters.</p>"
-        } 
-      }, 
+        }
+      },
       "documentation":"<p>One or more of the specified parameters are not valid.</p>",
-      "error":{"httpStatusCode":400}, 
-      "exception":true 
-    }, 
-    "InvalidRequestException":{ 
-      "type":"structure", 
-      "members":{ 
-        "Message":{ 
-          "shape":"Message", 
+      "error":{"httpStatusCode":400},
+      "exception":true
+    },
+    "InvalidRequestException":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"Message",
           "documentation":"<p>The message about the request.</p>"
-        } 
-      }, 
-      "documentation":"<p>The request is not valid.</p>", 
-      "error":{"httpStatusCode":400}, 
-      "exception":true 
-    }, 
+        }
+      },
+      "documentation":"<p>The request is not valid.</p>",
+      "error":{"httpStatusCode":400},
+      "exception":true
+    },
     "KeyId":{
       "type":"string",
       "max":128,
@@ -4394,18 +4394,18 @@
         "V2"
       ]
     },
-    "LimitExceededException":{ 
-      "type":"structure", 
-      "members":{ 
-        "Message":{ 
-          "shape":"Message", 
+    "LimitExceededException":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"Message",
           "documentation":"<p>The message about the limit.</p>"
-        } 
-      }, 
+        }
+      },
       "documentation":"<p>The allowed limit for the resource has been exceeded.</p>",
-      "error":{"httpStatusCode":429}, 
-      "exception":true 
-    }, 
+      "error":{"httpStatusCode":429},
+      "exception":true
+    },
     "ListApprovedOriginsRequest":{
       "type":"structure",
       "required":["InstanceId"],
@@ -5380,7 +5380,7 @@
       },
       "documentation":"<p>Contains information about which channels are supported, and how many contacts an agent can have on a channel simultaneously.</p>"
     },
-    "Message":{"type":"string"}, 
+    "Message":{"type":"string"},
     "MinutesLimit60":{
       "type":"integer",
       "max":59,
@@ -5424,18 +5424,18 @@
       "min":1
     },
     "OutboundCallsEnabled":{"type":"boolean"},
-    "OutboundContactNotPermittedException":{ 
-      "type":"structure", 
-      "members":{ 
-        "Message":{ 
-          "shape":"Message", 
+    "OutboundContactNotPermittedException":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"Message",
           "documentation":"<p>The message about the contact.</p>"
-        } 
-      }, 
+        }
+      },
       "documentation":"<p>The contact is not permitted.</p>",
-      "error":{"httpStatusCode":403}, 
-      "exception":true 
-    }, 
+      "error":{"httpStatusCode":403},
+      "exception":true
+    },
     "PEM":{
       "type":"string",
       "max":1024,
@@ -5463,9 +5463,9 @@
       "min":1
     },
     "Password":{
-      "type":"string", 
+      "type":"string",
       "pattern":"/^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d\\S]{8,64}$/"
-    }, 
+    },
     "PhoneNumber":{"type":"string"},
     "PhoneNumberCountryCode":{
       "type":"string",
@@ -5769,12 +5769,12 @@
       "max":2
     },
     "PhoneType":{
-      "type":"string", 
+      "type":"string",
       "enum":[
         "SOFT_PHONE",
         "DESK_PHONE"
       ]
-    }, 
+    },
     "Prefix":{
       "type":"string",
       "max":128,
@@ -6146,18 +6146,18 @@
       "error":{"httpStatusCode":409},
       "exception":true
     },
-    "ResourceNotFoundException":{ 
-      "type":"structure", 
-      "members":{ 
-        "Message":{ 
-          "shape":"Message", 
+    "ResourceNotFoundException":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"Message",
           "documentation":"<p>The message about the resource.</p>"
-        } 
-      }, 
-      "documentation":"<p>The specified resource was not found.</p>", 
-      "error":{"httpStatusCode":404}, 
-      "exception":true 
-    }, 
+        }
+      },
+      "documentation":"<p>The specified resource was not found.</p>",
+      "error":{"httpStatusCode":404},
+      "exception":true
+    },
     "ResourceType":{
       "type":"string",
       "enum":[
@@ -6547,54 +6547,54 @@
       "members":{
       }
     },
-    "StartOutboundVoiceContactRequest":{ 
-      "type":"structure", 
-      "required":[ 
-        "DestinationPhoneNumber", 
-        "ContactFlowId", 
-        "InstanceId" 
-      ], 
-      "members":{ 
-        "DestinationPhoneNumber":{ 
-          "shape":"PhoneNumber", 
+    "StartOutboundVoiceContactRequest":{
+      "type":"structure",
+      "required":[
+        "DestinationPhoneNumber",
+        "ContactFlowId",
+        "InstanceId"
+      ],
+      "members":{
+        "DestinationPhoneNumber":{
+          "shape":"PhoneNumber",
           "documentation":"<p>The phone number of the customer, in E.164 format.</p>"
-        }, 
-        "ContactFlowId":{ 
-          "shape":"ContactFlowId", 
+        },
+        "ContactFlowId":{
+          "shape":"ContactFlowId",
           "documentation":"<p>The identifier of the contact flow for the outbound call. To see the ContactFlowId in the Amazon Connect console user interface, on the navigation menu go to <b>Routing</b>, <b>Contact Flows</b>. Choose the contact flow. On the contact flow page, under the name of the contact flow, choose <b>Show additional flow information</b>. The ContactFlowId is the last part of the ARN, shown here in bold: </p> <p>arn:aws:connect:us-west-2:xxxxxxxxxxxx:instance/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/contact-flow/<b>846ec553-a005-41c0-8341-xxxxxxxxxxxx</b> </p>"
-        }, 
-        "InstanceId":{ 
-          "shape":"InstanceId", 
+        },
+        "InstanceId":{
+          "shape":"InstanceId",
           "documentation":"<p>The identifier of the Amazon Connect instance. You can find the instanceId in the ARN of the instance.</p>"
-        }, 
-        "ClientToken":{ 
-          "shape":"ClientToken", 
+        },
+        "ClientToken":{
+          "shape":"ClientToken",
           "documentation":"<p>A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. The token is valid for 7 days after creation. If a contact is already started, the contact ID is returned. </p>",
-          "idempotencyToken":true 
-        }, 
-        "SourcePhoneNumber":{ 
-          "shape":"PhoneNumber", 
+          "idempotencyToken":true
+        },
+        "SourcePhoneNumber":{
+          "shape":"PhoneNumber",
           "documentation":"<p>The phone number associated with the Amazon Connect instance, in E.164 format. If you do not specify a source phone number, you must specify a queue.</p>"
-        }, 
-        "QueueId":{ 
-          "shape":"QueueId", 
+        },
+        "QueueId":{
+          "shape":"QueueId",
           "documentation":"<p>The queue for the call. If you specify a queue, the phone displayed for caller ID is the phone number specified in the queue. If you do not specify a queue, the queue defined in the contact flow is used. If you do not specify a queue, you must specify a source phone number.</p>"
-        }, 
-        "Attributes":{ 
-          "shape":"Attributes", 
+        },
+        "Attributes":{
+          "shape":"Attributes",
           "documentation":"<p>A custom key-value pair using an attribute map. The attributes are standard Amazon Connect attributes, and can be accessed in contact flows just like any other contact attributes.</p> <p>There can be up to 32,768 UTF-8 bytes across all key-value pairs per contact. Attribute keys can include only alphanumeric, dash, and underscore characters.</p>"
-        } 
-      } 
-    }, 
-    "StartOutboundVoiceContactResponse":{ 
-      "type":"structure", 
-      "members":{ 
-        "ContactId":{ 
-          "shape":"ContactId", 
+        }
+      }
+    },
+    "StartOutboundVoiceContactResponse":{
+      "type":"structure",
+      "members":{
+        "ContactId":{
+          "shape":"ContactId",
           "documentation":"<p>The identifier of this contact within the Amazon Connect instance.</p>"
-        } 
-      } 
-    }, 
+        }
+      }
+    },
     "StartTaskContactRequest":{
       "type":"structure",
       "required":[
@@ -6682,27 +6682,27 @@
       "members":{
       }
     },
-    "StopContactRequest":{ 
-      "type":"structure", 
-      "required":[ 
-        "ContactId", 
-        "InstanceId" 
-      ], 
-      "members":{ 
-        "ContactId":{ 
-          "shape":"ContactId", 
+    "StopContactRequest":{
+      "type":"structure",
+      "required":[
+        "ContactId",
+        "InstanceId"
+      ],
+      "members":{
+        "ContactId":{
+          "shape":"ContactId",
           "documentation":"<p>The ID of the contact.</p>"
-        }, 
-        "InstanceId":{ 
-          "shape":"InstanceId", 
+        },
+        "InstanceId":{
+          "shape":"InstanceId",
           "documentation":"<p>The identifier of the Amazon Connect instance. You can find the instanceId in the ARN of the instance.</p>"
-        } 
-      } 
-    }, 
-    "StopContactResponse":{ 
-      "type":"structure", 
-      "members":{ 
-      } 
+        }
+      }
+    },
+    "StopContactResponse":{
+      "type":"structure",
+      "members":{
+      }
     },
     "StorageType":{
       "type":"string",
@@ -7644,6 +7644,6 @@
       ]
     },
     "timestamp":{"type":"timestamp"}
-  }, 
+  },
   "documentation":"<p>Amazon Connect is a cloud-based contact center solution that you use to set up and manage a customer contact center and provide reliable customer engagement at any scale.</p> <p>Amazon Connect provides metrics and real-time reporting that enable you to optimize contact routing. You can also resolve customer issues more efficiently by getting customers in touch with the appropriate agents.</p> <p>There are limits to the number of Amazon Connect resources that you can create. There are also limits to the number of requests that you can make per second. For more information, see <a href=\"https://docs.aws.amazon.com/connect/latest/adminguide/amazon-connect-service-limits.html\">Amazon Connect Service Quotas</a> in the <i>Amazon Connect Administrator Guide</i>.</p> <p>You can connect programmatically to an AWS service by using an endpoint. For a list of Amazon Connect endpoints, see <a href=\"https://docs.aws.amazon.com/general/latest/gr/connect_region.html\">Amazon Connect Endpoints</a>.</p> <note> <p>Working with contact flows? Check out the <a href=\"https://docs.aws.amazon.com/connect/latest/adminguide/flow-language.html\">Amazon Connect Flow language</a>.</p> </note>"
-} 
+}

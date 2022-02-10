@@ -134,7 +134,7 @@ import string
 import concurrent.futures
 
 from botocore.compat import six
-from botocore.vendored.requests.packages.urllib3.exceptions import \ 
+from botocore.vendored.requests.packages.urllib3.exceptions import \
     ReadTimeoutError
 from botocore.exceptions import IncompleteReadError
 

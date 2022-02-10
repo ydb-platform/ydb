@@ -248,7 +248,7 @@ class ResourceImporter(object):
         relpath = self._find_mod_path(fullname)
         if isinstance(relpath, bytes):
             relpath = _s(relpath)
-        return relpath or modname 
+        return relpath or modname
 
     # PEP-302 extension 3 of 3: packaging introspection.
     # Used by `linecache` (while printing tracebacks) unless module filename

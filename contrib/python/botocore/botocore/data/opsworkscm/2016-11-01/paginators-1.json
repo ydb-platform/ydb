@@ -1,4 +1,4 @@
-{ 
+{
   "pagination": {
     "DescribeBackups": {
       "input_token": "NextToken",
@@ -25,4 +25,4 @@
       "result_key": "Tags"
     }
   }
-} 
+}

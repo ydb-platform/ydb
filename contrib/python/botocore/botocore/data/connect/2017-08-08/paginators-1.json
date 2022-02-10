@@ -1,4 +1,4 @@
-{ 
+{
   "pagination": {
     "GetMetricData": {
       "input_token": "NextToken",
@@ -139,4 +139,4 @@
       "result_key": "LexBots"
     }
   }
-} 
+}

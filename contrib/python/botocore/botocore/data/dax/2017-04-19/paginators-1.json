@@ -1,4 +1,4 @@
-{ 
+{
   "pagination": {
     "DescribeClusters": {
       "input_token": "NextToken",
@@ -42,4 +42,4 @@
       "result_key": "Tags"
     }
   }
-} 
+}

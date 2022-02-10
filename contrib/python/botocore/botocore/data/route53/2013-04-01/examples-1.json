@@ -1,6 +1,6 @@
-{ 
-  "version": "1.0", 
-  "examples": { 
+{
+  "version": "1.0",
+  "examples": {
     "AssociateVPCWithHostedZone": [
       {
         "input": {
@@ -758,5 +758,5 @@
         "title": "To get information about a hosted zone"
       }
     ]
-  } 
-} 
+  }
+}

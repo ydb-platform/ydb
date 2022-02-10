@@ -1,4 +1,4 @@
-{ 
+{
   "pagination": {
     "ListTerminologies": {
       "input_token": "NextToken",
@@ -7,4 +7,4 @@
       "result_key": "TerminologyPropertiesList"
     }
   }
-} 
+}

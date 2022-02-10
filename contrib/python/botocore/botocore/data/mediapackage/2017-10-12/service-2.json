@@ -1,6 +1,6 @@
-{ 
+{
   "documentation": "AWS Elemental MediaPackage",
-  "metadata": { 
+  "metadata": {
     "apiVersion": "2017-10-12",
     "endpointPrefix": "mediapackage",
     "jsonVersion": "1.1",
@@ -10,9 +10,9 @@
     "serviceId": "MediaPackage",
     "signatureVersion": "v4",
     "signingName": "mediapackage",
-    "uid": "mediapackage-2017-10-12" 
+    "uid": "mediapackage-2017-10-12"
   },
-  "operations": { 
+  "operations": {
     "ConfigureLogs": {
       "documentation": "Changes the Channel's properities to configure log subscription",
       "errors": [
@@ -49,41 +49,41 @@
         "shape": "ConfigureLogsResponse"
       }
     },
-    "CreateChannel": { 
+    "CreateChannel": {
       "documentation": "Creates a new Channel.",
-      "errors": [ 
-        { 
-          "shape": "UnprocessableEntityException" 
+      "errors": [
+        {
+          "shape": "UnprocessableEntityException"
         },
-        { 
-          "shape": "InternalServerErrorException" 
+        {
+          "shape": "InternalServerErrorException"
         },
-        { 
-          "shape": "ForbiddenException" 
+        {
+          "shape": "ForbiddenException"
         },
-        { 
-          "shape": "NotFoundException" 
+        {
+          "shape": "NotFoundException"
         },
-        { 
-          "shape": "ServiceUnavailableException" 
+        {
+          "shape": "ServiceUnavailableException"
         },
-        { 
-          "shape": "TooManyRequestsException" 
-        } 
+        {
+          "shape": "TooManyRequestsException"
+        }
       ],
-      "http": { 
+      "http": {
         "method": "POST",
         "requestUri": "/channels",
-        "responseCode": 200 
+        "responseCode": 200
       },
-      "input": { 
-        "shape": "CreateChannelRequest" 
+      "input": {
+        "shape": "CreateChannelRequest"
       },
       "name": "CreateChannel",
-      "output": { 
+      "output": {
         "documentation": "The new Channel record.",
-        "shape": "CreateChannelResponse" 
-      } 
+        "shape": "CreateChannelResponse"
+      }
     },
     "CreateHarvestJob": {
       "documentation": "Creates a new HarvestJob record.",
@@ -121,149 +121,149 @@
         "shape": "CreateHarvestJobResponse"
       }
     },
-    "CreateOriginEndpoint": { 
+    "CreateOriginEndpoint": {
       "documentation": "Creates a new OriginEndpoint record.",
-      "errors": [ 
-        { 
-          "shape": "UnprocessableEntityException" 
+      "errors": [
+        {
+          "shape": "UnprocessableEntityException"
         },
-        { 
-          "shape": "InternalServerErrorException" 
+        {
+          "shape": "InternalServerErrorException"
         },
-        { 
-          "shape": "ForbiddenException" 
+        {
+          "shape": "ForbiddenException"
         },
-        { 
-          "shape": "NotFoundException" 
+        {
+          "shape": "NotFoundException"
         },
-        { 
-          "shape": "ServiceUnavailableException" 
+        {
+          "shape": "ServiceUnavailableException"
         },
-        { 
-          "shape": "TooManyRequestsException" 
-        } 
+        {
+          "shape": "TooManyRequestsException"
+        }
       ],
-      "http": { 
+      "http": {
         "method": "POST",
         "requestUri": "/origin_endpoints",
-        "responseCode": 200 
+        "responseCode": 200
       },
-      "input": { 
-        "shape": "CreateOriginEndpointRequest" 
+      "input": {
+        "shape": "CreateOriginEndpointRequest"
       },
       "name": "CreateOriginEndpoint",
-      "output": { 
+      "output": {
         "documentation": "A new OriginEndpoint record.",
-        "shape": "CreateOriginEndpointResponse" 
-      } 
+        "shape": "CreateOriginEndpointResponse"
+      }
     },
-    "DeleteChannel": { 
+    "DeleteChannel": {
       "documentation": "Deletes an existing Channel.",
-      "errors": [ 
-        { 
-          "shape": "UnprocessableEntityException" 
+      "errors": [
+        {
+          "shape": "UnprocessableEntityException"
         },
-        { 
-          "shape": "InternalServerErrorException" 
+        {
+          "shape": "InternalServerErrorException"
         },
-        { 
-          "shape": "ForbiddenException" 
+        {
+          "shape": "ForbiddenException"
         },
-        { 
-          "shape": "NotFoundException" 
+        {
+          "shape": "NotFoundException"
         },
-        { 
-          "shape": "ServiceUnavailableException" 
+        {
+          "shape": "ServiceUnavailableException"
         },
-        { 
-          "shape": "TooManyRequestsException" 
-        } 
+        {
+          "shape": "TooManyRequestsException"
+        }
       ],
-      "http": { 
+      "http": {
         "method": "DELETE",
         "requestUri": "/channels/{id}",
-        "responseCode": 202 
+        "responseCode": 202
       },
-      "input": { 
-        "shape": "DeleteChannelRequest" 
+      "input": {
+        "shape": "DeleteChannelRequest"
       },
       "name": "DeleteChannel",
-      "output": { 
+      "output": {
         "documentation": "The Channel has been deleted.",
-        "shape": "DeleteChannelResponse" 
-      } 
+        "shape": "DeleteChannelResponse"
+      }
     },
-    "DeleteOriginEndpoint": { 
+    "DeleteOriginEndpoint": {
       "documentation": "Deletes an existing OriginEndpoint.",
-      "errors": [ 
-        { 
-          "shape": "UnprocessableEntityException" 
+      "errors": [
+        {
+          "shape": "UnprocessableEntityException"
         },
-        { 
-          "shape": "InternalServerErrorException" 
+        {
+          "shape": "InternalServerErrorException"
         },
-        { 
-          "shape": "ForbiddenException" 
+        {
+          "shape": "ForbiddenException"
         },
-        { 
-          "shape": "NotFoundException" 
+        {
+          "shape": "NotFoundException"
         },
-        { 
-          "shape": "ServiceUnavailableException" 
+        {
+          "shape": "ServiceUnavailableException"
         },
-        { 
-          "shape": "TooManyRequestsException" 
-        } 
+        {
+          "shape": "TooManyRequestsException"
+        }
       ],
-      "http": { 
+      "http": {
         "method": "DELETE",
         "requestUri": "/origin_endpoints/{id}",
-        "responseCode": 202 
+        "responseCode": 202
       },
-      "input": { 
-        "shape": "DeleteOriginEndpointRequest" 
+      "input": {
+        "shape": "DeleteOriginEndpointRequest"
       },
       "name": "DeleteOriginEndpoint",
-      "output": { 
+      "output": {
         "documentation": "The OriginEndpoint has been deleted.",
-        "shape": "DeleteOriginEndpointResponse" 
-      } 
+        "shape": "DeleteOriginEndpointResponse"
+      }
     },
-    "DescribeChannel": { 
+    "DescribeChannel": {
       "documentation": "Gets details about a Channel.",
-      "errors": [ 
-        { 
-          "shape": "UnprocessableEntityException" 
+      "errors": [
+        {
+          "shape": "UnprocessableEntityException"
         },
-        { 
-          "shape": "InternalServerErrorException" 
+        {
+          "shape": "InternalServerErrorException"
         },
-        { 
-          "shape": "ForbiddenException" 
+        {
+          "shape": "ForbiddenException"
         },
-        { 
-          "shape": "NotFoundException" 
+        {
+          "shape": "NotFoundException"
         },
-        { 
-          "shape": "ServiceUnavailableException" 
+        {
+          "shape": "ServiceUnavailableException"
         },
-        { 
-          "shape": "TooManyRequestsException" 
-        } 
+        {
+          "shape": "TooManyRequestsException"
+        }
       ],
-      "http": { 
+      "http": {
         "method": "GET",
         "requestUri": "/channels/{id}",
-        "responseCode": 200 
+        "responseCode": 200
       },
-      "input": { 
-        "shape": "DescribeChannelRequest" 
+      "input": {
+        "shape": "DescribeChannelRequest"
       },
       "name": "DescribeChannel",
-      "output": { 
+      "output": {
         "documentation": "A Channel record.",
-        "shape": "DescribeChannelResponse" 
-      } 
+        "shape": "DescribeChannelResponse"
+      }
     },
     "DescribeHarvestJob": {
       "documentation": "Gets details about an existing HarvestJob.",
@@ -301,77 +301,77 @@
         "shape": "DescribeHarvestJobResponse"
       }
     },
-    "DescribeOriginEndpoint": { 
+    "DescribeOriginEndpoint": {
       "documentation": "Gets details about an existing OriginEndpoint.",
-      "errors": [ 
-        { 
-          "shape": "UnprocessableEntityException" 
+      "errors": [
+        {
+          "shape": "UnprocessableEntityException"
         },
-        { 
-          "shape": "InternalServerErrorException" 
+        {
+          "shape": "InternalServerErrorException"
         },
-        { 
-          "shape": "ForbiddenException" 
+        {
+          "shape": "ForbiddenException"
         },
-        { 
-          "shape": "NotFoundException" 
+        {
+          "shape": "NotFoundException"
         },
-        { 
-          "shape": "ServiceUnavailableException" 
+        {
+          "shape": "ServiceUnavailableException"
         },
-        { 
-          "shape": "TooManyRequestsException" 
-        } 
+        {
+          "shape": "TooManyRequestsException"
+        }
       ],
-      "http": { 
+      "http": {
         "method": "GET",
         "requestUri": "/origin_endpoints/{id}",
-        "responseCode": 200 
+        "responseCode": 200
       },
-      "input": { 
-        "shape": "DescribeOriginEndpointRequest" 
+      "input": {
+        "shape": "DescribeOriginEndpointRequest"
       },
       "name": "DescribeOriginEndpoint",
-      "output": { 
+      "output": {
         "documentation": "An OriginEndpoint record.",
-        "shape": "DescribeOriginEndpointResponse" 
-      } 
+        "shape": "DescribeOriginEndpointResponse"
+      }
     },
-    "ListChannels": { 
+    "ListChannels": {
       "documentation": "Returns a collection of Channels.",
-      "errors": [ 
-        { 
-          "shape": "UnprocessableEntityException" 
+      "errors": [
+        {
+          "shape": "UnprocessableEntityException"
         },
-        { 
-          "shape": "InternalServerErrorException" 
+        {
+          "shape": "InternalServerErrorException"
         },
-        { 
-          "shape": "ForbiddenException" 
+        {
+          "shape": "ForbiddenException"
         },
-        { 
-          "shape": "NotFoundException" 
+        {
+          "shape": "NotFoundException"
         },
-        { 
-          "shape": "ServiceUnavailableException" 
+        {
+          "shape": "ServiceUnavailableException"
         },
-        { 
-          "shape": "TooManyRequestsException" 
-        } 
+        {
+          "shape": "TooManyRequestsException"
+        }
       ],
-      "http": { 
+      "http": {
         "method": "GET",
         "requestUri": "/channels",
-        "responseCode": 200 
+        "responseCode": 200
       },
-      "input": { 
-        "shape": "ListChannelsRequest" 
+      "input": {
+        "shape": "ListChannelsRequest"
       },
       "name": "ListChannels",
-      "output": { 
+      "output": {
         "documentation": "A collection of Channel records.",
-        "shape": "ListChannelsResponse" 
-      } 
+        "shape": "ListChannelsResponse"
+      }
     },
     "ListHarvestJobs": {
       "documentation": "Returns a collection of HarvestJob records.",
@@ -409,41 +409,41 @@
         "shape": "ListHarvestJobsResponse"
       }
     },
-    "ListOriginEndpoints": { 
+    "ListOriginEndpoints": {
       "documentation": "Returns a collection of OriginEndpoint records.",
-      "errors": [ 
-        { 
-          "shape": "UnprocessableEntityException" 
+      "errors": [
+        {
+          "shape": "UnprocessableEntityException"
         },
-        { 
-          "shape": "InternalServerErrorException" 
+        {
+          "shape": "InternalServerErrorException"
         },
-        { 
-          "shape": "ForbiddenException" 
+        {
+          "shape": "ForbiddenException"
         },
-        { 
-          "shape": "NotFoundException" 
+        {
+          "shape": "NotFoundException"
         },
-        { 
-          "shape": "ServiceUnavailableException" 
+        {
+          "shape": "ServiceUnavailableException"
         },
-        { 
-          "shape": "TooManyRequestsException" 
-        } 
+        {
+          "shape": "TooManyRequestsException"
+        }
       ],
-      "http": { 
+      "http": {
         "method": "GET",
         "requestUri": "/origin_endpoints",
-        "responseCode": 200 
+        "responseCode": 200
       },
-      "input": { 
-        "shape": "ListOriginEndpointsRequest" 
+      "input": {
+        "shape": "ListOriginEndpointsRequest"
       },
       "name": "ListOriginEndpoints",
-      "output": { 
+      "output": {
         "documentation": "A collection of OriginEndpoint records.",
-        "shape": "ListOriginEndpointsResponse" 
-      } 
+        "shape": "ListOriginEndpointsResponse"
+      }
     },
     "ListTagsForResource": {
       "errors": [],
@@ -461,43 +461,43 @@
         "shape": "ListTagsForResourceResponse"
       }
     },
-    "RotateChannelCredentials": { 
+    "RotateChannelCredentials": {
       "deprecated": true,
       "deprecatedMessage": "This API is deprecated. Please use RotateIngestEndpointCredentials instead",
       "documentation": "Changes the Channel's first IngestEndpoint's username and password. WARNING - This API is deprecated. Please use RotateIngestEndpointCredentials instead",
-      "errors": [ 
-        { 
-          "shape": "UnprocessableEntityException" 
+      "errors": [
+        {
+          "shape": "UnprocessableEntityException"
         },
-        { 
-          "shape": "InternalServerErrorException" 
+        {
+          "shape": "InternalServerErrorException"
         },
-        { 
-          "shape": "ForbiddenException" 
+        {
+          "shape": "ForbiddenException"
         },
-        { 
-          "shape": "NotFoundException" 
+        {
+          "shape": "NotFoundException"
         },
-        { 
-          "shape": "ServiceUnavailableException" 
+        {
+          "shape": "ServiceUnavailableException"
         },
-        { 
-          "shape": "TooManyRequestsException" 
-        } 
+        {
+          "shape": "TooManyRequestsException"
+        }
       ],
-      "http": { 
+      "http": {
         "method": "PUT",
         "requestUri": "/channels/{id}/credentials",
-        "responseCode": 200 
+        "responseCode": 200
       },
-      "input": { 
-        "shape": "RotateChannelCredentialsRequest" 
+      "input": {
+        "shape": "RotateChannelCredentialsRequest"
       },
       "name": "RotateChannelCredentials",
-      "output": { 
+      "output": {
         "documentation": "The updated Channel record.",
-        "shape": "RotateChannelCredentialsResponse" 
-      } 
+        "shape": "RotateChannelCredentialsResponse"
+      }
     },
     "RotateIngestEndpointCredentials": {
       "documentation": "Rotate the IngestEndpoint's username and password, as specified by the IngestEndpoint's id.",
@@ -559,88 +559,88 @@
       },
       "name": "UntagResource"
     },
-    "UpdateChannel": { 
+    "UpdateChannel": {
       "documentation": "Updates an existing Channel.",
-      "errors": [ 
-        { 
-          "shape": "UnprocessableEntityException" 
+      "errors": [
+        {
+          "shape": "UnprocessableEntityException"
         },
-        { 
-          "shape": "InternalServerErrorException" 
+        {
+          "shape": "InternalServerErrorException"
         },
-        { 
-          "shape": "ForbiddenException" 
+        {
+          "shape": "ForbiddenException"
         },
-        { 
-          "shape": "NotFoundException" 
+        {
+          "shape": "NotFoundException"
         },
-        { 
-          "shape": "ServiceUnavailableException" 
+        {
+          "shape": "ServiceUnavailableException"
         },
-        { 
-          "shape": "TooManyRequestsException" 
-        } 
+        {
+          "shape": "TooManyRequestsException"
+        }
       ],
-      "http": { 
+      "http": {
         "method": "PUT",
         "requestUri": "/channels/{id}",
-        "responseCode": 200 
+        "responseCode": 200
       },
-      "input": { 
-        "shape": "UpdateChannelRequest" 
+      "input": {
+        "shape": "UpdateChannelRequest"
       },
       "name": "UpdateChannel",
-      "output": { 
+      "output": {
         "documentation": "The updated Channel record.",
-        "shape": "UpdateChannelResponse" 
-      } 
+        "shape": "UpdateChannelResponse"
+      }
     },
-    "UpdateOriginEndpoint": { 
+    "UpdateOriginEndpoint": {
       "documentation": "Updates an existing OriginEndpoint.",
-      "errors": [ 
-        { 
-          "shape": "UnprocessableEntityException" 
+      "errors": [
+        {
+          "shape": "UnprocessableEntityException"
         },
-        { 
-          "shape": "InternalServerErrorException" 
+        {
+          "shape": "InternalServerErrorException"
         },
-        { 
-          "shape": "ForbiddenException" 
+        {
+          "shape": "ForbiddenException"
         },
-        { 
-          "shape": "NotFoundException" 
+        {
+          "shape": "NotFoundException"
         },
-        { 
-          "shape": "ServiceUnavailableException" 
+        {
+          "shape": "ServiceUnavailableException"
         },
-        { 
-          "shape": "TooManyRequestsException" 
-        } 
+        {
+          "shape": "TooManyRequestsException"
+        }
       ],
-      "http": { 
+      "http": {
         "method": "PUT",
         "requestUri": "/origin_endpoints/{id}",
-        "responseCode": 200 
+        "responseCode": 200
       },
-      "input": { 
-        "shape": "UpdateOriginEndpointRequest" 
+      "input": {
+        "shape": "UpdateOriginEndpointRequest"
       },
       "name": "UpdateOriginEndpoint",
-      "output": { 
+      "output": {
         "documentation": "An updated OriginEndpoint record.",
-        "shape": "UpdateOriginEndpointResponse" 
-      } 
-    } 
+        "shape": "UpdateOriginEndpointResponse"
+      }
+    }
   },
-  "shapes": { 
-    "AdMarkers": { 
-      "enum": [ 
+  "shapes": {
+    "AdMarkers": {
+      "enum": [
         "NONE",
         "SCTE35_ENHANCED",
         "PASSTHROUGH",
         "DATERANGE"
       ],
-      "type": "string" 
+      "type": "string"
     },
     "AdTriggers": {
       "documentation": "A list of SCTE-35 message types that are treated as ad markers in the output.  If empty, no\nad markers are output.  Specify multiple items to create ad markers for all of the included\nmessage types.\n",
@@ -679,31 +679,31 @@
       ],
       "type": "structure"
     },
-    "Channel": { 
+    "Channel": {
       "documentation": "A Channel resource configuration.",
-      "members": { 
-        "Arn": { 
+      "members": {
+        "Arn": {
           "documentation": "The Amazon Resource Name (ARN) assigned to the Channel.",
           "locationName": "arn",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Description": { 
+        "Description": {
           "documentation": "A short text description of the Channel.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "EgressAccessLogs": {
           "locationName": "egressAccessLogs",
           "shape": "EgressAccessLogs"
         },
-        "HlsIngest": { 
+        "HlsIngest": {
           "locationName": "hlsIngest",
-          "shape": "HlsIngest" 
+          "shape": "HlsIngest"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the Channel.",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "IngressAccessLogs": {
           "locationName": "ingressAccessLogs",
@@ -712,140 +712,140 @@
         "Tags": {
           "locationName": "tags",
           "shape": "Tags"
-        } 
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "ChannelCreateParameters": { 
+    "ChannelCreateParameters": {
       "documentation": "Configuration parameters for a new Channel.",
-      "members": { 
-        "Description": { 
+      "members": {
+        "Description": {
           "documentation": "A short text description of the Channel.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the Channel. The ID must be unique within the region and it\ncannot be changed after a Channel is created.\n",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "Tags": {
           "locationName": "tags",
           "shape": "Tags"
-        } 
+        }
       },
-      "required": [ 
-        "Id" 
+      "required": [
+        "Id"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "ChannelList": { 
+    "ChannelList": {
       "documentation": "A collection of Channel records.",
-      "members": { 
-        "Channels": { 
+      "members": {
+        "Channels": {
           "documentation": "A list of Channel records.",
           "locationName": "channels",
-          "shape": "__listOfChannel" 
+          "shape": "__listOfChannel"
         },
-        "NextToken": { 
+        "NextToken": {
           "documentation": "A token that can be used to resume pagination from the end of the collection.",
           "locationName": "nextToken",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "ChannelUpdateParameters": { 
+    "ChannelUpdateParameters": {
       "documentation": "Configuration parameters for updating an existing Channel.",
-      "members": { 
-        "Description": { 
+      "members": {
+        "Description": {
           "documentation": "A short text description of the Channel.",
           "locationName": "description",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "CmafEncryption": { 
+    "CmafEncryption": {
       "documentation": "A Common Media Application Format (CMAF) encryption configuration.",
-      "members": { 
+      "members": {
         "ConstantInitializationVector": {
           "documentation": "An optional 128-bit, 16-byte hex value represented by a 32-character string, used in conjunction with the key for encrypting blocks. If you don't specify a value, then MediaPackage creates the constant initialization vector (IV).",
           "locationName": "constantInitializationVector",
           "shape": "__string"
         },
-        "KeyRotationIntervalSeconds": { 
+        "KeyRotationIntervalSeconds": {
           "documentation": "Time (in seconds) between each encryption key rotation.",
           "locationName": "keyRotationIntervalSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "SpekeKeyProvider": { 
+        "SpekeKeyProvider": {
           "locationName": "spekeKeyProvider",
-          "shape": "SpekeKeyProvider" 
-        } 
+          "shape": "SpekeKeyProvider"
+        }
       },
-      "required": [ 
-        "SpekeKeyProvider" 
+      "required": [
+        "SpekeKeyProvider"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "CmafPackage": { 
+    "CmafPackage": {
       "documentation": "A Common Media Application Format (CMAF) packaging configuration.",
-      "members": { 
-        "Encryption": { 
+      "members": {
+        "Encryption": {
           "locationName": "encryption",
-          "shape": "CmafEncryption" 
+          "shape": "CmafEncryption"
         },
-        "HlsManifests": { 
+        "HlsManifests": {
           "documentation": "A list of HLS manifest configurations",
           "locationName": "hlsManifests",
-          "shape": "__listOfHlsManifest" 
+          "shape": "__listOfHlsManifest"
         },
-        "SegmentDurationSeconds": { 
+        "SegmentDurationSeconds": {
           "documentation": "Duration (in seconds) of each segment. Actual segments will be\nrounded to the nearest multiple of the source segment duration.\n",
           "locationName": "segmentDurationSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "SegmentPrefix": { 
+        "SegmentPrefix": {
           "documentation": "An optional custom string that is prepended to the name of each segment. If not specified, it defaults to the ChannelId.",
           "locationName": "segmentPrefix",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "StreamSelection": { 
+        "StreamSelection": {
           "locationName": "streamSelection",
-          "shape": "StreamSelection" 
-        } 
+          "shape": "StreamSelection"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "CmafPackageCreateOrUpdateParameters": { 
+    "CmafPackageCreateOrUpdateParameters": {
       "documentation": "A Common Media Application Format (CMAF) packaging configuration.",
-      "members": { 
-        "Encryption": { 
+      "members": {
+        "Encryption": {
           "locationName": "encryption",
-          "shape": "CmafEncryption" 
+          "shape": "CmafEncryption"
         },
-        "HlsManifests": { 
+        "HlsManifests": {
           "documentation": "A list of HLS manifest configurations",
           "locationName": "hlsManifests",
-          "shape": "__listOfHlsManifestCreateOrUpdateParameters" 
+          "shape": "__listOfHlsManifestCreateOrUpdateParameters"
         },
-        "SegmentDurationSeconds": { 
+        "SegmentDurationSeconds": {
           "documentation": "Duration (in seconds) of each segment. Actual segments will be\nrounded to the nearest multiple of the source segment duration.\n",
           "locationName": "segmentDurationSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "SegmentPrefix": { 
+        "SegmentPrefix": {
           "documentation": "An optional custom string that is prepended to the name of each segment. If not specified, it defaults to the ChannelId.",
           "locationName": "segmentPrefix",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "StreamSelection": { 
+        "StreamSelection": {
           "locationName": "streamSelection",
-          "shape": "StreamSelection" 
-        } 
+          "shape": "StreamSelection"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
     "ConfigureLogsParameters": {
       "documentation": "The configuration parameters for ingress and egress access logging.",
@@ -920,53 +920,53 @@
       },
       "type": "structure"
     },
-    "CreateChannelRequest": { 
+    "CreateChannelRequest": {
       "documentation": "A new Channel configuration.",
-      "members": { 
-        "Description": { 
+      "members": {
+        "Description": {
           "documentation": "A short text description of the Channel.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the Channel. The ID must be unique within the region and it\ncannot be changed after a Channel is created.\n",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "Tags": {
           "locationName": "tags",
           "shape": "Tags"
-        } 
+        }
       },
-      "required": [ 
-        "Id" 
+      "required": [
+        "Id"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "CreateChannelResponse": { 
-      "members": { 
-        "Arn": { 
+    "CreateChannelResponse": {
+      "members": {
+        "Arn": {
           "documentation": "The Amazon Resource Name (ARN) assigned to the Channel.",
           "locationName": "arn",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Description": { 
+        "Description": {
           "documentation": "A short text description of the Channel.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "EgressAccessLogs": {
           "locationName": "egressAccessLogs",
           "shape": "EgressAccessLogs"
         },
-        "HlsIngest": { 
+        "HlsIngest": {
           "locationName": "hlsIngest",
-          "shape": "HlsIngest" 
+          "shape": "HlsIngest"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the Channel.",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "IngressAccessLogs": {
           "locationName": "ingressAccessLogs",
@@ -975,9 +975,9 @@
         "Tags": {
           "locationName": "tags",
           "shape": "Tags"
-        } 
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
     "CreateHarvestJobRequest": {
       "documentation": "Configuration parameters used to create a new HarvestJob.",
@@ -1065,180 +1065,180 @@
       },
       "type": "structure"
     },
-    "CreateOriginEndpointRequest": { 
+    "CreateOriginEndpointRequest": {
       "documentation": "Configuration parameters used to create a new OriginEndpoint.",
-      "members": { 
+      "members": {
         "Authorization": {
           "locationName": "authorization",
           "shape": "Authorization"
         },
-        "ChannelId": { 
+        "ChannelId": {
           "documentation": "The ID of the Channel that the OriginEndpoint will be associated with.\nThis cannot be changed after the OriginEndpoint is created.\n",
           "locationName": "channelId",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "CmafPackage": { 
+        "CmafPackage": {
           "locationName": "cmafPackage",
-          "shape": "CmafPackageCreateOrUpdateParameters" 
+          "shape": "CmafPackageCreateOrUpdateParameters"
         },
-        "DashPackage": { 
+        "DashPackage": {
           "locationName": "dashPackage",
-          "shape": "DashPackage" 
+          "shape": "DashPackage"
         },
-        "Description": { 
+        "Description": {
           "documentation": "A short text description of the OriginEndpoint.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "HlsPackage": { 
+        "HlsPackage": {
           "locationName": "hlsPackage",
-          "shape": "HlsPackage" 
+          "shape": "HlsPackage"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the OriginEndpoint.  The ID must be unique within the region\nand it cannot be changed after the OriginEndpoint is created.\n",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "ManifestName": { 
+        "ManifestName": {
           "documentation": "A short string that will be used as the filename of the OriginEndpoint URL (defaults to \"index\").",
           "locationName": "manifestName",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "MssPackage": { 
+        "MssPackage": {
           "locationName": "mssPackage",
-          "shape": "MssPackage" 
+          "shape": "MssPackage"
         },
         "Origination": {
           "documentation": "Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint\nmay by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be\nrequested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination\n",
           "locationName": "origination",
           "shape": "Origination"
         },
-        "StartoverWindowSeconds": { 
+        "StartoverWindowSeconds": {
           "documentation": "Maximum duration (seconds) of content to retain for startover playback.\nIf not specified, startover playback will be disabled for the OriginEndpoint.\n",
           "locationName": "startoverWindowSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
         "Tags": {
           "locationName": "tags",
           "shape": "Tags"
         },
-        "TimeDelaySeconds": { 
+        "TimeDelaySeconds": {
           "documentation": "Amount of delay (seconds) to enforce on the playback of live content.\nIf not specified, there will be no time delay in effect for the OriginEndpoint.\n",
           "locationName": "timeDelaySeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "Whitelist": { 
+        "Whitelist": {
           "documentation": "A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.",
           "locationName": "whitelist",
-          "shape": "__listOf__string" 
-        } 
+          "shape": "__listOf__string"
+        }
       },
-      "required": [ 
+      "required": [
         "ChannelId",
-        "Id" 
+        "Id"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "CreateOriginEndpointResponse": { 
-      "members": { 
-        "Arn": { 
+    "CreateOriginEndpointResponse": {
+      "members": {
+        "Arn": {
           "documentation": "The Amazon Resource Name (ARN) assigned to the OriginEndpoint.",
           "locationName": "arn",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "Authorization": {
           "locationName": "authorization",
           "shape": "Authorization"
         },
-        "ChannelId": { 
+        "ChannelId": {
           "documentation": "The ID of the Channel the OriginEndpoint is associated with.",
           "locationName": "channelId",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "CmafPackage": { 
+        "CmafPackage": {
           "locationName": "cmafPackage",
-          "shape": "CmafPackage" 
+          "shape": "CmafPackage"
         },
-        "DashPackage": { 
+        "DashPackage": {
           "locationName": "dashPackage",
-          "shape": "DashPackage" 
+          "shape": "DashPackage"
         },
-        "Description": { 
+        "Description": {
           "documentation": "A short text description of the OriginEndpoint.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "HlsPackage": { 
+        "HlsPackage": {
           "locationName": "hlsPackage",
-          "shape": "HlsPackage" 
+          "shape": "HlsPackage"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the OriginEndpoint.",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "ManifestName": { 
+        "ManifestName": {
           "documentation": "A short string appended to the end of the OriginEndpoint URL.",
           "locationName": "manifestName",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "MssPackage": { 
+        "MssPackage": {
           "locationName": "mssPackage",
-          "shape": "MssPackage" 
+          "shape": "MssPackage"
         },
         "Origination": {
           "documentation": "Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint\nmay by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be\nrequested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination\n",
           "locationName": "origination",
           "shape": "Origination"
         },
-        "StartoverWindowSeconds": { 
+        "StartoverWindowSeconds": {
           "documentation": "Maximum duration (seconds) of content to retain for startover playback.\nIf not specified, startover playback will be disabled for the OriginEndpoint.\n",
           "locationName": "startoverWindowSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
         "Tags": {
           "locationName": "tags",
           "shape": "Tags"
         },
-        "TimeDelaySeconds": { 
+        "TimeDelaySeconds": {
           "documentation": "Amount of delay (seconds) to enforce on the playback of live content.\nIf not specified, there will be no time delay in effect for the OriginEndpoint.\n",
           "locationName": "timeDelaySeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "Url": { 
+        "Url": {
           "documentation": "The URL of the packaged OriginEndpoint for consumption.",
           "locationName": "url",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Whitelist": { 
+        "Whitelist": {
           "documentation": "A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.",
           "locationName": "whitelist",
-          "shape": "__listOf__string" 
-        } 
+          "shape": "__listOf__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "DashEncryption": { 
+    "DashEncryption": {
       "documentation": "A Dynamic Adaptive Streaming over HTTP (DASH) encryption configuration.",
-      "members": { 
-        "KeyRotationIntervalSeconds": { 
+      "members": {
+        "KeyRotationIntervalSeconds": {
           "documentation": "Time (in seconds) between each encryption key rotation.",
           "locationName": "keyRotationIntervalSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "SpekeKeyProvider": { 
+        "SpekeKeyProvider": {
           "locationName": "spekeKeyProvider",
-          "shape": "SpekeKeyProvider" 
-        } 
+          "shape": "SpekeKeyProvider"
+        }
       },
-      "required": [ 
-        "SpekeKeyProvider" 
+      "required": [
+        "SpekeKeyProvider"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "DashPackage": { 
+    "DashPackage": {
       "documentation": "A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration.",
-      "members": { 
+      "members": {
         "AdTriggers": {
           "locationName": "adTriggers",
           "shape": "AdTriggers"
@@ -1247,58 +1247,58 @@
           "locationName": "adsOnDeliveryRestrictions",
           "shape": "AdsOnDeliveryRestrictions"
         },
-        "Encryption": { 
+        "Encryption": {
           "locationName": "encryption",
-          "shape": "DashEncryption" 
+          "shape": "DashEncryption"
         },
         "ManifestLayout": {
           "documentation": "Determines the position of some tags in the Media Presentation Description (MPD).  When set to FULL, elements like SegmentTemplate and ContentProtection are included in each Representation.  When set to COMPACT, duplicate elements are combined and presented at the AdaptationSet level.",
           "locationName": "manifestLayout",
           "shape": "ManifestLayout"
         },
-        "ManifestWindowSeconds": { 
+        "ManifestWindowSeconds": {
           "documentation": "Time window (in seconds) contained in each manifest.",
           "locationName": "manifestWindowSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "MinBufferTimeSeconds": { 
+        "MinBufferTimeSeconds": {
           "documentation": "Minimum duration (in seconds) that a player will buffer media before starting the presentation.",
           "locationName": "minBufferTimeSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "MinUpdatePeriodSeconds": { 
+        "MinUpdatePeriodSeconds": {
           "documentation": "Minimum duration (in seconds) between potential changes to the Dynamic Adaptive Streaming over HTTP (DASH) Media Presentation Description (MPD).",
           "locationName": "minUpdatePeriodSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
         "PeriodTriggers": {
           "documentation": "A list of triggers that controls when the outgoing Dynamic Adaptive Streaming over HTTP (DASH)\nMedia Presentation Description (MPD) will be partitioned into multiple periods. If empty, the content will not\nbe partitioned into more than one period. If the list contains \"ADS\", new periods will be created where\nthe Channel source contains SCTE-35 ad markers.\n",
           "locationName": "periodTriggers",
           "shape": "__listOf__PeriodTriggersElement"
         },
-        "Profile": { 
+        "Profile": {
           "documentation": "The Dynamic Adaptive Streaming over HTTP (DASH) profile type.  When set to \"HBBTV_1_5\", HbbTV 1.5 compliant output is enabled.",
           "locationName": "profile",
-          "shape": "Profile" 
+          "shape": "Profile"
         },
-        "SegmentDurationSeconds": { 
+        "SegmentDurationSeconds": {
           "documentation": "Duration (in seconds) of each segment. Actual segments will be\nrounded to the nearest multiple of the source segment duration.\n",
           "locationName": "segmentDurationSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
         "SegmentTemplateFormat": {
           "documentation": "Determines the type of SegmentTemplate included in the Media Presentation Description (MPD).  When set to NUMBER_WITH_TIMELINE, a full timeline is presented in each SegmentTemplate, with $Number$ media URLs.  When set to TIME_WITH_TIMELINE, a full timeline is presented in each SegmentTemplate, with $Time$ media URLs. When set to NUMBER_WITH_DURATION, only a duration is included in each SegmentTemplate, with $Number$ media URLs.",
           "locationName": "segmentTemplateFormat",
           "shape": "SegmentTemplateFormat"
         },
-        "StreamSelection": { 
+        "StreamSelection": {
           "locationName": "streamSelection",
-          "shape": "StreamSelection" 
+          "shape": "StreamSelection"
         },
-        "SuggestedPresentationDelaySeconds": { 
+        "SuggestedPresentationDelaySeconds": {
           "documentation": "Duration (in seconds) to delay live content before presentation.",
           "locationName": "suggestedPresentationDelaySeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
         "UtcTiming": {
           "documentation": "Determines the type of UTCTiming included in the Media Presentation Description (MPD)",
@@ -1309,84 +1309,84 @@
           "documentation": "Specifies the value attribute of the UTCTiming field when utcTiming is set to HTTP-ISO or HTTP-HEAD",
           "locationName": "utcTimingUri",
           "shape": "__string"
-        } 
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "DeleteChannelRequest": { 
-      "members": { 
-        "Id": { 
+    "DeleteChannelRequest": {
+      "members": {
+        "Id": {
           "documentation": "The ID of the Channel to delete.",
           "location": "uri",
           "locationName": "id",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "required": [ 
-        "Id" 
+      "required": [
+        "Id"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "DeleteChannelResponse": { 
+    "DeleteChannelResponse": {
       "members": {},
-      "type": "structure" 
+      "type": "structure"
     },
-    "DeleteOriginEndpointRequest": { 
-      "members": { 
-        "Id": { 
+    "DeleteOriginEndpointRequest": {
+      "members": {
+        "Id": {
           "documentation": "The ID of the OriginEndpoint to delete.",
           "location": "uri",
           "locationName": "id",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "required": [ 
-        "Id" 
+      "required": [
+        "Id"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "DeleteOriginEndpointResponse": { 
+    "DeleteOriginEndpointResponse": {
       "members": {},
-      "type": "structure" 
+      "type": "structure"
     },
-    "DescribeChannelRequest": { 
-      "members": { 
-        "Id": { 
+    "DescribeChannelRequest": {
+      "members": {
+        "Id": {
           "documentation": "The ID of a Channel.",
           "location": "uri",
           "locationName": "id",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "required": [ 
-        "Id" 
+      "required": [
+        "Id"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "DescribeChannelResponse": { 
-      "members": { 
-        "Arn": { 
+    "DescribeChannelResponse": {
+      "members": {
+        "Arn": {
           "documentation": "The Amazon Resource Name (ARN) assigned to the Channel.",
           "locationName": "arn",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Description": { 
+        "Description": {
           "documentation": "A short text description of the Channel.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "EgressAccessLogs": {
           "locationName": "egressAccessLogs",
           "shape": "EgressAccessLogs"
         },
-        "HlsIngest": { 
+        "HlsIngest": {
           "locationName": "hlsIngest",
-          "shape": "HlsIngest" 
+          "shape": "HlsIngest"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the Channel.",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "IngressAccessLogs": {
           "locationName": "ingressAccessLogs",
@@ -1395,9 +1395,9 @@
         "Tags": {
           "locationName": "tags",
           "shape": "Tags"
-        } 
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
     "DescribeHarvestJobRequest": {
       "members": {
@@ -1462,98 +1462,98 @@
       },
       "type": "structure"
     },
-    "DescribeOriginEndpointRequest": { 
-      "members": { 
-        "Id": { 
+    "DescribeOriginEndpointRequest": {
+      "members": {
+        "Id": {
           "documentation": "The ID of the OriginEndpoint.",
           "location": "uri",
           "locationName": "id",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "required": [ 
-        "Id" 
+      "required": [
+        "Id"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "DescribeOriginEndpointResponse": { 
-      "members": { 
-        "Arn": { 
+    "DescribeOriginEndpointResponse": {
+      "members": {
+        "Arn": {
           "documentation": "The Amazon Resource Name (ARN) assigned to the OriginEndpoint.",
           "locationName": "arn",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "Authorization": {
           "locationName": "authorization",
           "shape": "Authorization"
         },
-        "ChannelId": { 
+        "ChannelId": {
           "documentation": "The ID of the Channel the OriginEndpoint is associated with.",
           "locationName": "channelId",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "CmafPackage": { 
+        "CmafPackage": {
           "locationName": "cmafPackage",
-          "shape": "CmafPackage" 
+          "shape": "CmafPackage"
         },
-        "DashPackage": { 
+        "DashPackage": {
           "locationName": "dashPackage",
-          "shape": "DashPackage" 
+          "shape": "DashPackage"
         },
-        "Description": { 
+        "Description": {
           "documentation": "A short text description of the OriginEndpoint.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "HlsPackage": { 
+        "HlsPackage": {
           "locationName": "hlsPackage",
-          "shape": "HlsPackage" 
+          "shape": "HlsPackage"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the OriginEndpoint.",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "ManifestName": { 
+        "ManifestName": {
           "documentation": "A short string appended to the end of the OriginEndpoint URL.",
           "locationName": "manifestName",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "MssPackage": { 
+        "MssPackage": {
           "locationName": "mssPackage",
-          "shape": "MssPackage" 
+          "shape": "MssPackage"
         },
         "Origination": {
           "documentation": "Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint\nmay by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be\nrequested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination\n",
           "locationName": "origination",
           "shape": "Origination"
         },
-        "StartoverWindowSeconds": { 
+        "StartoverWindowSeconds": {
           "documentation": "Maximum duration (seconds) of content to retain for startover playback.\nIf not specified, startover playback will be disabled for the OriginEndpoint.\n",
           "locationName": "startoverWindowSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
         "Tags": {
           "locationName": "tags",
           "shape": "Tags"
         },
-        "TimeDelaySeconds": { 
+        "TimeDelaySeconds": {
           "documentation": "Amount of delay (seconds) to enforce on the playback of live content.\nIf not specified, there will be no time delay in effect for the OriginEndpoint.\n",
           "locationName": "timeDelaySeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "Url": { 
+        "Url": {
           "documentation": "The URL of the packaged OriginEndpoint for consumption.",
           "locationName": "url",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Whitelist": { 
+        "Whitelist": {
           "documentation": "A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.",
           "locationName": "whitelist",
-          "shape": "__listOf__string" 
-        } 
+          "shape": "__listOf__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
     "EgressAccessLogs": {
       "documentation": "Configure egress access logging.",
@@ -1586,26 +1586,26 @@
       ],
       "type": "structure"
     },
-    "EncryptionMethod": { 
-      "enum": [ 
+    "EncryptionMethod": {
+      "enum": [
         "AES_128",
-        "SAMPLE_AES" 
+        "SAMPLE_AES"
       ],
-      "type": "string" 
+      "type": "string"
     },
-    "ForbiddenException": { 
+    "ForbiddenException": {
       "documentation": "The client is not authorized to access the requested resource.",
-      "error": { 
-        "httpStatusCode": 403 
+      "error": {
+        "httpStatusCode": 403
       },
       "exception": true,
-      "members": { 
-        "Message": { 
+      "members": {
+        "Message": {
           "locationName": "message",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
     "HarvestJob": {
       "documentation": "A HarvestJob resource configuration",
@@ -1710,106 +1710,106 @@
       },
       "type": "structure"
     },
-    "HlsEncryption": { 
+    "HlsEncryption": {
       "documentation": "An HTTP Live Streaming (HLS) encryption configuration.",
-      "members": { 
-        "ConstantInitializationVector": { 
+      "members": {
+        "ConstantInitializationVector": {
           "documentation": "A constant initialization vector for encryption (optional).\nWhen not specified the initialization vector will be periodically rotated.\n",
           "locationName": "constantInitializationVector",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "EncryptionMethod": { 
+        "EncryptionMethod": {
           "documentation": "The encryption method to use.",
           "locationName": "encryptionMethod",
-          "shape": "EncryptionMethod" 
+          "shape": "EncryptionMethod"
         },
-        "KeyRotationIntervalSeconds": { 
+        "KeyRotationIntervalSeconds": {
           "documentation": "Interval (in seconds) between each encryption key rotation.",
           "locationName": "keyRotationIntervalSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "RepeatExtXKey": { 
+        "RepeatExtXKey": {
           "documentation": "When enabled, the EXT-X-KEY tag will be repeated in output manifests.",
           "locationName": "repeatExtXKey",
-          "shape": "__boolean" 
+          "shape": "__boolean"
         },
-        "SpekeKeyProvider": { 
+        "SpekeKeyProvider": {
           "locationName": "spekeKeyProvider",
-          "shape": "SpekeKeyProvider" 
-        } 
+          "shape": "SpekeKeyProvider"
+        }
       },
-      "required": [ 
-        "SpekeKeyProvider" 
+      "required": [
+        "SpekeKeyProvider"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "HlsIngest": { 
+    "HlsIngest": {
       "documentation": "An HTTP Live Streaming (HLS) ingest resource configuration.",
-      "members": { 
-        "IngestEndpoints": { 
+      "members": {
+        "IngestEndpoints": {
           "documentation": "A list of endpoints to which the source stream should be sent.",
           "locationName": "ingestEndpoints",
-          "shape": "__listOfIngestEndpoint" 
-        } 
+          "shape": "__listOfIngestEndpoint"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "HlsManifest": { 
+    "HlsManifest": {
       "documentation": "A HTTP Live Streaming (HLS) manifest configuration.",
-      "members": { 
-        "AdMarkers": { 
+      "members": {
+        "AdMarkers": {
           "documentation": "This setting controls how ad markers are included in the packaged OriginEndpoint.\n\"NONE\" will omit all SCTE-35 ad markers from the output.\n\"PASSTHROUGH\" causes the manifest to contain a copy of the SCTE-35 ad\nmarkers (comments) taken directly from the input HTTP Live Streaming (HLS) manifest.\n\"SCTE35_ENHANCED\" generates ad markers and blackout tags based on SCTE-35\nmessages in the input source.\n\"DATERANGE\" inserts EXT-X-DATERANGE tags to signal ad and program transition events \nin HLS and CMAF manifests. For this option, you must set a programDateTimeIntervalSeconds value \nthat is greater than 0.\n",
           "locationName": "adMarkers",
-          "shape": "AdMarkers" 
+          "shape": "AdMarkers"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the manifest. The ID must be unique within the OriginEndpoint and it cannot be changed after it is created.",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "IncludeIframeOnlyStream": { 
+        "IncludeIframeOnlyStream": {
           "documentation": "When enabled, an I-Frame only stream will be included in the output.",
           "locationName": "includeIframeOnlyStream",
-          "shape": "__boolean" 
+          "shape": "__boolean"
         },
-        "ManifestName": { 
+        "ManifestName": {
           "documentation": "An optional short string appended to the end of the OriginEndpoint URL. If not specified, defaults to the manifestName for the OriginEndpoint.",
           "locationName": "manifestName",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "PlaylistType": { 
+        "PlaylistType": {
           "documentation": "The HTTP Live Streaming (HLS) playlist type.\nWhen either \"EVENT\" or \"VOD\" is specified, a corresponding EXT-X-PLAYLIST-TYPE\nentry will be included in the media playlist.\n",
           "locationName": "playlistType",
-          "shape": "PlaylistType" 
+          "shape": "PlaylistType"
         },
-        "PlaylistWindowSeconds": { 
+        "PlaylistWindowSeconds": {
           "documentation": "Time window (in seconds) contained in each parent manifest.",
           "locationName": "playlistWindowSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "ProgramDateTimeIntervalSeconds": { 
+        "ProgramDateTimeIntervalSeconds": {
           "documentation": "The interval (in seconds) between each EXT-X-PROGRAM-DATE-TIME tag\ninserted into manifests. Additionally, when an interval is specified\nID3Timed Metadata messages will be generated every 5 seconds using the\ningest time of the content.\nIf the interval is not specified, or set to 0, then\nno EXT-X-PROGRAM-DATE-TIME tags will be inserted into manifests and no\nID3Timed Metadata messages will be generated. Note that irrespective\nof this parameter, if any ID3 Timed Metadata is found in HTTP Live Streaming (HLS) input,\nit will be passed through to HLS output.\n",
           "locationName": "programDateTimeIntervalSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "Url": { 
+        "Url": {
           "documentation": "The URL of the packaged OriginEndpoint for consumption.",
           "locationName": "url",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "required": [ 
-        "Id" 
+      "required": [
+        "Id"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "HlsManifestCreateOrUpdateParameters": { 
+    "HlsManifestCreateOrUpdateParameters": {
       "documentation": "A HTTP Live Streaming (HLS) manifest configuration.",
-      "members": { 
-        "AdMarkers": { 
+      "members": {
+        "AdMarkers": {
           "documentation": "This setting controls how ad markers are included in the packaged OriginEndpoint.\n\"NONE\" will omit all SCTE-35 ad markers from the output.\n\"PASSTHROUGH\" causes the manifest to contain a copy of the SCTE-35 ad\nmarkers (comments) taken directly from the input HTTP Live Streaming (HLS) manifest.\n\"SCTE35_ENHANCED\" generates ad markers and blackout tags based on SCTE-35\nmessages in the input source.\n\"DATERANGE\" inserts EXT-X-DATERANGE tags to signal ad and program transition events \nin HLS and CMAF manifests. For this option, you must set a programDateTimeIntervalSeconds value \nthat is greater than 0.\n",
           "locationName": "adMarkers",
-          "shape": "AdMarkers" 
+          "shape": "AdMarkers"
         },
         "AdTriggers": {
           "locationName": "adTriggers",
@@ -1819,49 +1819,49 @@
           "locationName": "adsOnDeliveryRestrictions",
           "shape": "AdsOnDeliveryRestrictions"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the manifest. The ID must be unique within the OriginEndpoint and it cannot be changed after it is created.",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "IncludeIframeOnlyStream": { 
+        "IncludeIframeOnlyStream": {
           "documentation": "When enabled, an I-Frame only stream will be included in the output.",
           "locationName": "includeIframeOnlyStream",
-          "shape": "__boolean" 
+          "shape": "__boolean"
         },
-        "ManifestName": { 
+        "ManifestName": {
           "documentation": "An optional short string appended to the end of the OriginEndpoint URL. If not specified, defaults to the manifestName for the OriginEndpoint.",
           "locationName": "manifestName",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "PlaylistType": { 
+        "PlaylistType": {
           "documentation": "The HTTP Live Streaming (HLS) playlist type.\nWhen either \"EVENT\" or \"VOD\" is specified, a corresponding EXT-X-PLAYLIST-TYPE\nentry will be included in the media playlist.\n",
           "locationName": "playlistType",
-          "shape": "PlaylistType" 
+          "shape": "PlaylistType"
         },
-        "PlaylistWindowSeconds": { 
+        "PlaylistWindowSeconds": {
           "documentation": "Time window (in seconds) contained in each parent manifest.",
           "locationName": "playlistWindowSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "ProgramDateTimeIntervalSeconds": { 
+        "ProgramDateTimeIntervalSeconds": {
           "documentation": "The interval (in seconds) between each EXT-X-PROGRAM-DATE-TIME tag\ninserted into manifests. Additionally, when an interval is specified\nID3Timed Metadata messages will be generated every 5 seconds using the\ningest time of the content.\nIf the interval is not specified, or set to 0, then\nno EXT-X-PROGRAM-DATE-TIME tags will be inserted into manifests and no\nID3Timed Metadata messages will be generated. Note that irrespective\nof this parameter, if any ID3 Timed Metadata is found in HTTP Live Streaming (HLS) input,\nit will be passed through to HLS output.\n",
           "locationName": "programDateTimeIntervalSeconds",
-          "shape": "__integer" 
-        } 
+          "shape": "__integer"
+        }
       },
-      "required": [ 
-        "Id" 
+      "required": [
+        "Id"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "HlsPackage": { 
+    "HlsPackage": {
       "documentation": "An HTTP Live Streaming (HLS) packaging configuration.",
-      "members": { 
-        "AdMarkers": { 
+      "members": {
+        "AdMarkers": {
           "documentation": "This setting controls how ad markers are included in the packaged OriginEndpoint.\n\"NONE\" will omit all SCTE-35 ad markers from the output.\n\"PASSTHROUGH\" causes the manifest to contain a copy of the SCTE-35 ad\nmarkers (comments) taken directly from the input HTTP Live Streaming (HLS) manifest.\n\"SCTE35_ENHANCED\" generates ad markers and blackout tags based on SCTE-35\nmessages in the input source.\n\"DATERANGE\" inserts EXT-X-DATERANGE tags to signal ad and program transition events \nin HLS and CMAF manifests. For this option, you must set a programDateTimeIntervalSeconds value \nthat is greater than 0.\n",
           "locationName": "adMarkers",
-          "shape": "AdMarkers" 
+          "shape": "AdMarkers"
         },
         "AdTriggers": {
           "locationName": "adTriggers",
@@ -1871,72 +1871,72 @@
           "locationName": "adsOnDeliveryRestrictions",
           "shape": "AdsOnDeliveryRestrictions"
         },
-        "Encryption": { 
+        "Encryption": {
           "locationName": "encryption",
-          "shape": "HlsEncryption" 
+          "shape": "HlsEncryption"
         },
-        "IncludeIframeOnlyStream": { 
+        "IncludeIframeOnlyStream": {
           "documentation": "When enabled, an I-Frame only stream will be included in the output.",
           "locationName": "includeIframeOnlyStream",
-          "shape": "__boolean" 
+          "shape": "__boolean"
         },
-        "PlaylistType": { 
+        "PlaylistType": {
           "documentation": "The HTTP Live Streaming (HLS) playlist type.\nWhen either \"EVENT\" or \"VOD\" is specified, a corresponding EXT-X-PLAYLIST-TYPE\nentry will be included in the media playlist.\n",
           "locationName": "playlistType",
-          "shape": "PlaylistType" 
+          "shape": "PlaylistType"
         },
-        "PlaylistWindowSeconds": { 
+        "PlaylistWindowSeconds": {
           "documentation": "Time window (in seconds) contained in each parent manifest.",
           "locationName": "playlistWindowSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "ProgramDateTimeIntervalSeconds": { 
+        "ProgramDateTimeIntervalSeconds": {
           "documentation": "The interval (in seconds) between each EXT-X-PROGRAM-DATE-TIME tag\ninserted into manifests. Additionally, when an interval is specified\nID3Timed Metadata messages will be generated every 5 seconds using the\ningest time of the content.\nIf the interval is not specified, or set to 0, then\nno EXT-X-PROGRAM-DATE-TIME tags will be inserted into manifests and no\nID3Timed Metadata messages will be generated. Note that irrespective\nof this parameter, if any ID3 Timed Metadata is found in HTTP Live Streaming (HLS) input,\nit will be passed through to HLS output.\n",
           "locationName": "programDateTimeIntervalSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "SegmentDurationSeconds": { 
+        "SegmentDurationSeconds": {
           "documentation": "Duration (in seconds) of each fragment. Actual fragments will be\nrounded to the nearest multiple of the source fragment duration.\n",
           "locationName": "segmentDurationSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "StreamSelection": { 
+        "StreamSelection": {
           "locationName": "streamSelection",
-          "shape": "StreamSelection" 
+          "shape": "StreamSelection"
         },
-        "UseAudioRenditionGroup": { 
+        "UseAudioRenditionGroup": {
           "documentation": "When enabled, audio streams will be placed in rendition groups in the output.",
           "locationName": "useAudioRenditionGroup",
-          "shape": "__boolean" 
-        } 
+          "shape": "__boolean"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "IngestEndpoint": { 
+    "IngestEndpoint": {
       "documentation": "An endpoint for ingesting source content for a Channel.",
-      "members": { 
+      "members": {
         "Id": {
           "documentation": "The system generated unique identifier for the IngestEndpoint",
           "locationName": "id",
           "shape": "__string"
         },
-        "Password": { 
+        "Password": {
           "documentation": "The system generated password for ingest authentication.",
           "locationName": "password",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Url": { 
+        "Url": {
           "documentation": "The ingest URL to which the source stream should be sent.",
           "locationName": "url",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Username": { 
+        "Username": {
           "documentation": "The system generated username for ingest authentication.",
           "locationName": "username",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
     "IngressAccessLogs": {
       "documentation": "Configure ingress access logging.",
@@ -1949,51 +1949,51 @@
       },
       "type": "structure"
     },
-    "InternalServerErrorException": { 
+    "InternalServerErrorException": {
       "documentation": "An unexpected error occurred.",
-      "error": { 
-        "httpStatusCode": 500 
+      "error": {
+        "httpStatusCode": 500
       },
       "exception": true,
-      "members": { 
-        "Message": { 
+      "members": {
+        "Message": {
           "locationName": "message",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "ListChannelsRequest": { 
-      "members": { 
-        "MaxResults": { 
+    "ListChannelsRequest": {
+      "members": {
+        "MaxResults": {
           "documentation": "Upper bound on number of records to return.",
           "location": "querystring",
           "locationName": "maxResults",
-          "shape": "MaxResults" 
+          "shape": "MaxResults"
         },
-        "NextToken": { 
+        "NextToken": {
           "documentation": "A token used to resume pagination from the end of a previous request.",
           "location": "querystring",
           "locationName": "nextToken",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "ListChannelsResponse": { 
-      "members": { 
-        "Channels": { 
+    "ListChannelsResponse": {
+      "members": {
+        "Channels": {
           "documentation": "A list of Channel records.",
           "locationName": "channels",
-          "shape": "__listOfChannel" 
+          "shape": "__listOfChannel"
         },
-        "NextToken": { 
+        "NextToken": {
           "documentation": "A token that can be used to resume pagination from the end of the collection.",
           "locationName": "nextToken",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
     "ListHarvestJobsRequest": {
       "members": {
@@ -2039,43 +2039,43 @@
       },
       "type": "structure"
     },
-    "ListOriginEndpointsRequest": { 
-      "members": { 
-        "ChannelId": { 
+    "ListOriginEndpointsRequest": {
+      "members": {
+        "ChannelId": {
           "documentation": "When specified, the request will return only OriginEndpoints associated with the given Channel ID.",
           "location": "querystring",
           "locationName": "channelId",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "MaxResults": { 
+        "MaxResults": {
           "documentation": "The upper bound on the number of records to return.",
           "location": "querystring",
           "locationName": "maxResults",
-          "shape": "MaxResults" 
+          "shape": "MaxResults"
         },
-        "NextToken": { 
+        "NextToken": {
           "documentation": "A token used to resume pagination from the end of a previous request.",
           "location": "querystring",
           "locationName": "nextToken",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "ListOriginEndpointsResponse": { 
-      "members": { 
-        "NextToken": { 
+    "ListOriginEndpointsResponse": {
+      "members": {
+        "NextToken": {
           "documentation": "A token that can be used to resume pagination from the end of the collection.",
           "locationName": "nextToken",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "OriginEndpoints": { 
+        "OriginEndpoints": {
           "documentation": "A list of OriginEndpoint records.",
           "locationName": "originEndpoints",
-          "shape": "__listOfOriginEndpoint" 
-        } 
+          "shape": "__listOfOriginEndpoint"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
     "ListTagsForResourceRequest": {
       "members": {
@@ -2106,287 +2106,287 @@
       ],
       "type": "string"
     },
-    "MaxResults": { 
+    "MaxResults": {
       "max": 1000,
       "min": 1,
-      "type": "integer" 
+      "type": "integer"
     },
-    "MssEncryption": { 
+    "MssEncryption": {
       "documentation": "A Microsoft Smooth Streaming (MSS) encryption configuration.",
-      "members": { 
-        "SpekeKeyProvider": { 
+      "members": {
+        "SpekeKeyProvider": {
           "locationName": "spekeKeyProvider",
-          "shape": "SpekeKeyProvider" 
-        } 
+          "shape": "SpekeKeyProvider"
+        }
       },
-      "required": [ 
-        "SpekeKeyProvider" 
+      "required": [
+        "SpekeKeyProvider"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "MssPackage": { 
+    "MssPackage": {
       "documentation": "A Microsoft Smooth Streaming (MSS) packaging configuration.",
-      "members": { 
-        "Encryption": { 
+      "members": {
+        "Encryption": {
           "locationName": "encryption",
-          "shape": "MssEncryption" 
+          "shape": "MssEncryption"
         },
-        "ManifestWindowSeconds": { 
+        "ManifestWindowSeconds": {
           "documentation": "The time window (in seconds) contained in each manifest.",
           "locationName": "manifestWindowSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "SegmentDurationSeconds": { 
+        "SegmentDurationSeconds": {
           "documentation": "The duration (in seconds) of each segment.",
           "locationName": "segmentDurationSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "StreamSelection": { 
+        "StreamSelection": {
           "locationName": "streamSelection",
-          "shape": "StreamSelection" 
-        } 
+          "shape": "StreamSelection"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "NotFoundException": { 
+    "NotFoundException": {
       "documentation": "The requested resource does not exist.",
-      "error": { 
-        "httpStatusCode": 404 
+      "error": {
+        "httpStatusCode": 404
       },
       "exception": true,
-      "members": { 
-        "Message": { 
+      "members": {
+        "Message": {
           "locationName": "message",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "OriginEndpoint": { 
+    "OriginEndpoint": {
       "documentation": "An OriginEndpoint resource configuration.",
-      "members": { 
-        "Arn": { 
+      "members": {
+        "Arn": {
           "documentation": "The Amazon Resource Name (ARN) assigned to the OriginEndpoint.",
           "locationName": "arn",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "Authorization": {
           "locationName": "authorization",
           "shape": "Authorization"
         },
-        "ChannelId": { 
+        "ChannelId": {
           "documentation": "The ID of the Channel the OriginEndpoint is associated with.",
           "locationName": "channelId",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "CmafPackage": { 
+        "CmafPackage": {
           "locationName": "cmafPackage",
-          "shape": "CmafPackage" 
+          "shape": "CmafPackage"
         },
-        "DashPackage": { 
+        "DashPackage": {
           "locationName": "dashPackage",
-          "shape": "DashPackage" 
+          "shape": "DashPackage"
         },
-        "Description": { 
+        "Description": {
           "documentation": "A short text description of the OriginEndpoint.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "HlsPackage": { 
+        "HlsPackage": {
           "locationName": "hlsPackage",
-          "shape": "HlsPackage" 
+          "shape": "HlsPackage"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the OriginEndpoint.",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "ManifestName": { 
+        "ManifestName": {
           "documentation": "A short string appended to the end of the OriginEndpoint URL.",
           "locationName": "manifestName",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "MssPackage": { 
+        "MssPackage": {
           "locationName": "mssPackage",
-          "shape": "MssPackage" 
+          "shape": "MssPackage"
         },
         "Origination": {
           "documentation": "Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint\nmay by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be\nrequested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination\n",
           "locationName": "origination",
           "shape": "Origination"
         },
-        "StartoverWindowSeconds": { 
+        "StartoverWindowSeconds": {
           "documentation": "Maximum duration (seconds) of content to retain for startover playback.\nIf not specified, startover playback will be disabled for the OriginEndpoint.\n",
           "locationName": "startoverWindowSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
         "Tags": {
           "locationName": "tags",
           "shape": "Tags"
         },
-        "TimeDelaySeconds": { 
+        "TimeDelaySeconds": {
           "documentation": "Amount of delay (seconds) to enforce on the playback of live content.\nIf not specified, there will be no time delay in effect for the OriginEndpoint.\n",
           "locationName": "timeDelaySeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "Url": { 
+        "Url": {
           "documentation": "The URL of the packaged OriginEndpoint for consumption.",
           "locationName": "url",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Whitelist": { 
+        "Whitelist": {
           "documentation": "A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.",
           "locationName": "whitelist",
-          "shape": "__listOf__string" 
-        } 
+          "shape": "__listOf__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "OriginEndpointCreateParameters": { 
+    "OriginEndpointCreateParameters": {
       "documentation": "Configuration parameters for a new OriginEndpoint.",
-      "members": { 
+      "members": {
         "Authorization": {
           "locationName": "authorization",
           "shape": "Authorization"
         },
-        "ChannelId": { 
+        "ChannelId": {
           "documentation": "The ID of the Channel that the OriginEndpoint will be associated with.\nThis cannot be changed after the OriginEndpoint is created.\n",
           "locationName": "channelId",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "CmafPackage": { 
+        "CmafPackage": {
           "locationName": "cmafPackage",
-          "shape": "CmafPackageCreateOrUpdateParameters" 
+          "shape": "CmafPackageCreateOrUpdateParameters"
         },
-        "DashPackage": { 
+        "DashPackage": {
           "locationName": "dashPackage",
-          "shape": "DashPackage" 
+          "shape": "DashPackage"
         },
-        "Description": { 
+        "Description": {
           "documentation": "A short text description of the OriginEndpoint.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "HlsPackage": { 
+        "HlsPackage": {
           "locationName": "hlsPackage",
-          "shape": "HlsPackage" 
+          "shape": "HlsPackage"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the OriginEndpoint.  The ID must be unique within the region\nand it cannot be changed after the OriginEndpoint is created.\n",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "ManifestName": { 
+        "ManifestName": {
           "documentation": "A short string that will be used as the filename of the OriginEndpoint URL (defaults to \"index\").",
           "locationName": "manifestName",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "MssPackage": { 
+        "MssPackage": {
           "locationName": "mssPackage",
-          "shape": "MssPackage" 
+          "shape": "MssPackage"
         },
         "Origination": {
           "documentation": "Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint\nmay by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be\nrequested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination\n",
           "locationName": "origination",
           "shape": "Origination"
         },
-        "StartoverWindowSeconds": { 
+        "StartoverWindowSeconds": {
           "documentation": "Maximum duration (seconds) of content to retain for startover playback.\nIf not specified, startover playback will be disabled for the OriginEndpoint.\n",
           "locationName": "startoverWindowSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
         "Tags": {
           "locationName": "tags",
           "shape": "Tags"
         },
-        "TimeDelaySeconds": { 
+        "TimeDelaySeconds": {
           "documentation": "Amount of delay (seconds) to enforce on the playback of live content.\nIf not specified, there will be no time delay in effect for the OriginEndpoint.\n",
           "locationName": "timeDelaySeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "Whitelist": { 
+        "Whitelist": {
           "documentation": "A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.",
           "locationName": "whitelist",
-          "shape": "__listOf__string" 
-        } 
+          "shape": "__listOf__string"
+        }
       },
-      "required": [ 
+      "required": [
         "ChannelId",
         "Id"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "OriginEndpointList": { 
+    "OriginEndpointList": {
       "documentation": "A collection of OriginEndpoint records.",
-      "members": { 
-        "NextToken": { 
+      "members": {
+        "NextToken": {
           "documentation": "A token that can be used to resume pagination from the end of the collection.",
           "locationName": "nextToken",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "OriginEndpoints": { 
+        "OriginEndpoints": {
           "documentation": "A list of OriginEndpoint records.",
           "locationName": "originEndpoints",
-          "shape": "__listOfOriginEndpoint" 
-        } 
+          "shape": "__listOfOriginEndpoint"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "OriginEndpointUpdateParameters": { 
+    "OriginEndpointUpdateParameters": {
       "documentation": "Configuration parameters for updating an existing OriginEndpoint.",
-      "members": { 
+      "members": {
         "Authorization": {
           "locationName": "authorization",
           "shape": "Authorization"
         },
-        "CmafPackage": { 
+        "CmafPackage": {
           "locationName": "cmafPackage",
-          "shape": "CmafPackageCreateOrUpdateParameters" 
+          "shape": "CmafPackageCreateOrUpdateParameters"
         },
-        "DashPackage": { 
+        "DashPackage": {
           "locationName": "dashPackage",
-          "shape": "DashPackage" 
+          "shape": "DashPackage"
         },
-        "Description": { 
+        "Description": {
           "documentation": "A short text description of the OriginEndpoint.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "HlsPackage": { 
+        "HlsPackage": {
           "locationName": "hlsPackage",
-          "shape": "HlsPackage" 
+          "shape": "HlsPackage"
         },
-        "ManifestName": { 
+        "ManifestName": {
           "documentation": "A short string that will be appended to the end of the Endpoint URL.",
           "locationName": "manifestName",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "MssPackage": { 
+        "MssPackage": {
           "locationName": "mssPackage",
-          "shape": "MssPackage" 
+          "shape": "MssPackage"
         },
         "Origination": {
           "documentation": "Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint\nmay by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be\nrequested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination\n",
           "locationName": "origination",
           "shape": "Origination"
         },
-        "StartoverWindowSeconds": { 
+        "StartoverWindowSeconds": {
           "documentation": "Maximum duration (in seconds) of content to retain for startover playback.\nIf not specified, startover playback will be disabled for the OriginEndpoint.\n",
           "locationName": "startoverWindowSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "TimeDelaySeconds": { 
+        "TimeDelaySeconds": {
           "documentation": "Amount of delay (in seconds) to enforce on the playback of live content.\nIf not specified, there will be no time delay in effect for the OriginEndpoint.\n",
           "locationName": "timeDelaySeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "Whitelist": { 
+        "Whitelist": {
           "documentation": "A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.",
           "locationName": "whitelist",
-          "shape": "__listOf__string" 
-        } 
+          "shape": "__listOf__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
     "Origination": {
       "enum": [
@@ -2395,13 +2395,13 @@
       ],
       "type": "string"
     },
-    "PlaylistType": { 
-      "enum": [ 
+    "PlaylistType": {
+      "enum": [
         "NONE",
         "EVENT",
-        "VOD" 
+        "VOD"
       ],
-      "type": "string" 
+      "type": "string"
     },
     "PresetSpeke20Audio": {
       "enum": [
@@ -2415,53 +2415,53 @@
       ],
       "type": "string"
     },
-    "Profile": { 
-      "enum": [ 
+    "Profile": {
+      "enum": [
         "NONE",
-        "HBBTV_1_5" 
+        "HBBTV_1_5"
       ],
-      "type": "string" 
+      "type": "string"
     },
-    "RotateChannelCredentialsRequest": { 
+    "RotateChannelCredentialsRequest": {
       "deprecated": true,
-      "members": { 
-        "Id": { 
+      "members": {
+        "Id": {
           "documentation": "The ID of the channel to update.",
           "location": "uri",
           "locationName": "id",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "required": [ 
-        "Id" 
+      "required": [
+        "Id"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "RotateChannelCredentialsResponse": { 
+    "RotateChannelCredentialsResponse": {
       "deprecated": true,
-      "members": { 
-        "Arn": { 
+      "members": {
+        "Arn": {
           "documentation": "The Amazon Resource Name (ARN) assigned to the Channel.",
           "locationName": "arn",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Description": { 
+        "Description": {
           "documentation": "A short text description of the Channel.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "EgressAccessLogs": {
           "locationName": "egressAccessLogs",
           "shape": "EgressAccessLogs"
         },
-        "HlsIngest": { 
+        "HlsIngest": {
           "locationName": "hlsIngest",
-          "shape": "HlsIngest" 
+          "shape": "HlsIngest"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the Channel.",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "IngressAccessLogs": {
           "locationName": "ingressAccessLogs",
@@ -2470,9 +2470,9 @@
         "Tags": {
           "locationName": "tags",
           "shape": "Tags"
-        } 
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
     "RotateIngestEndpointCredentialsRequest": {
       "members": {
@@ -2565,23 +2565,23 @@
       ],
       "type": "string"
     },
-    "ServiceUnavailableException": { 
+    "ServiceUnavailableException": {
       "documentation": "An unexpected error occurred.",
-      "error": { 
-        "httpStatusCode": 503 
+      "error": {
+        "httpStatusCode": 503
       },
       "exception": true,
-      "members": { 
-        "Message": { 
+      "members": {
+        "Message": {
           "locationName": "message",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "SpekeKeyProvider": { 
+    "SpekeKeyProvider": {
       "documentation": "A configuration for accessing an external Secure Packager and Encoder Key Exchange (SPEKE) service that will provide encryption keys.",
-      "members": { 
+      "members": {
         "CertificateArn": {
           "documentation": "An Amazon Resource Name (ARN) of a Certificate Manager certificate\nthat MediaPackage will use for enforcing secure end-to-end data\ntransfer with the key provider service.\n",
           "locationName": "certificateArn",
@@ -2591,34 +2591,34 @@
           "locationName": "encryptionContractConfiguration",
           "shape": "EncryptionContractConfiguration"
         },
-        "ResourceId": { 
+        "ResourceId": {
           "documentation": "The resource ID to include in key requests.",
           "locationName": "resourceId",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "RoleArn": { 
+        "RoleArn": {
           "documentation": "An Amazon Resource Name (ARN) of an IAM role that AWS Elemental\nMediaPackage will assume when accessing the key provider service.\n",
           "locationName": "roleArn",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "SystemIds": { 
+        "SystemIds": {
           "documentation": "The system IDs to include in key requests.",
           "locationName": "systemIds",
-          "shape": "__listOf__string" 
+          "shape": "__listOf__string"
         },
-        "Url": { 
+        "Url": {
           "documentation": "The URL of the external key provider service.",
           "locationName": "url",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "required": [ 
+      "required": [
         "ResourceId",
         "SystemIds",
         "Url",
         "RoleArn"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
     "Status": {
       "enum": [
@@ -2628,34 +2628,34 @@
       ],
       "type": "string"
     },
-    "StreamOrder": { 
-      "enum": [ 
+    "StreamOrder": {
+      "enum": [
         "ORIGINAL",
         "VIDEO_BITRATE_ASCENDING",
-        "VIDEO_BITRATE_DESCENDING" 
+        "VIDEO_BITRATE_DESCENDING"
       ],
-      "type": "string" 
+      "type": "string"
     },
-    "StreamSelection": { 
+    "StreamSelection": {
       "documentation": "A StreamSelection configuration.",
-      "members": { 
-        "MaxVideoBitsPerSecond": { 
+      "members": {
+        "MaxVideoBitsPerSecond": {
           "documentation": "The maximum video bitrate (bps) to include in output.",
           "locationName": "maxVideoBitsPerSecond",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "MinVideoBitsPerSecond": { 
+        "MinVideoBitsPerSecond": {
           "documentation": "The minimum video bitrate (bps) to include in output.",
           "locationName": "minVideoBitsPerSecond",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "StreamOrder": { 
+        "StreamOrder": {
           "documentation": "A directive that determines the order of streams in the output.",
           "locationName": "streamOrder",
-          "shape": "StreamOrder" 
-        } 
+          "shape": "StreamOrder"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
     "TagResourceRequest": {
       "members": {
@@ -2697,33 +2697,33 @@
       ],
       "type": "structure"
     },
-    "TooManyRequestsException": { 
+    "TooManyRequestsException": {
       "documentation": "The client has exceeded their resource or throttling limits.",
-      "error": { 
-        "httpStatusCode": 429 
+      "error": {
+        "httpStatusCode": 429
       },
       "exception": true,
-      "members": { 
-        "Message": { 
+      "members": {
+        "Message": {
           "locationName": "message",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "UnprocessableEntityException": { 
+    "UnprocessableEntityException": {
       "documentation": "The parameters sent in the request are not valid.",
-      "error": { 
-        "httpStatusCode": 422 
+      "error": {
+        "httpStatusCode": 422
       },
       "exception": true,
-      "members": { 
-        "Message": { 
+      "members": {
+        "Message": {
           "locationName": "message",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
     "UntagResourceRequest": {
       "members": {
@@ -2745,50 +2745,50 @@
       ],
       "type": "structure"
     },
-    "UpdateChannelRequest": { 
+    "UpdateChannelRequest": {
       "documentation": "Configuration parameters used to update the Channel.",
-      "members": { 
-        "Description": { 
+      "members": {
+        "Description": {
           "documentation": "A short text description of the Channel.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the Channel to update.",
           "location": "uri",
           "locationName": "id",
-          "shape": "__string" 
-        } 
+          "shape": "__string"
+        }
       },
-      "required": [ 
-        "Id" 
+      "required": [
+        "Id"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "UpdateChannelResponse": { 
-      "members": { 
-        "Arn": { 
+    "UpdateChannelResponse": {
+      "members": {
+        "Arn": {
           "documentation": "The Amazon Resource Name (ARN) assigned to the Channel.",
           "locationName": "arn",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Description": { 
+        "Description": {
           "documentation": "A short text description of the Channel.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "EgressAccessLogs": {
           "locationName": "egressAccessLogs",
           "shape": "EgressAccessLogs"
         },
-        "HlsIngest": { 
+        "HlsIngest": {
           "locationName": "hlsIngest",
-          "shape": "HlsIngest" 
+          "shape": "HlsIngest"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the Channel.",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "IngressAccessLogs": {
           "locationName": "ingressAccessLogs",
@@ -2797,153 +2797,153 @@
         "Tags": {
           "locationName": "tags",
           "shape": "Tags"
-        } 
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
-    "UpdateOriginEndpointRequest": { 
+    "UpdateOriginEndpointRequest": {
       "documentation": "Configuration parameters used to update an existing OriginEndpoint.",
-      "members": { 
+      "members": {
         "Authorization": {
           "locationName": "authorization",
           "shape": "Authorization"
         },
-        "CmafPackage": { 
+        "CmafPackage": {
           "locationName": "cmafPackage",
-          "shape": "CmafPackageCreateOrUpdateParameters" 
+          "shape": "CmafPackageCreateOrUpdateParameters"
         },
-        "DashPackage": { 
+        "DashPackage": {
           "locationName": "dashPackage",
-          "shape": "DashPackage" 
+          "shape": "DashPackage"
         },
-        "Description": { 
+        "Description": {
           "documentation": "A short text description of the OriginEndpoint.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "HlsPackage": { 
+        "HlsPackage": {
           "locationName": "hlsPackage",
-          "shape": "HlsPackage" 
+          "shape": "HlsPackage"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the OriginEndpoint to update.",
           "location": "uri",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "ManifestName": { 
+        "ManifestName": {
           "documentation": "A short string that will be appended to the end of the Endpoint URL.",
           "locationName": "manifestName",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "MssPackage": { 
+        "MssPackage": {
           "locationName": "mssPackage",
-          "shape": "MssPackage" 
+          "shape": "MssPackage"
         },
         "Origination": {
           "documentation": "Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint\nmay by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be\nrequested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination\n",
           "locationName": "origination",
           "shape": "Origination"
         },
-        "StartoverWindowSeconds": { 
+        "StartoverWindowSeconds": {
           "documentation": "Maximum duration (in seconds) of content to retain for startover playback.\nIf not specified, startover playback will be disabled for the OriginEndpoint.\n",
           "locationName": "startoverWindowSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "TimeDelaySeconds": { 
+        "TimeDelaySeconds": {
           "documentation": "Amount of delay (in seconds) to enforce on the playback of live content.\nIf not specified, there will be no time delay in effect for the OriginEndpoint.\n",
           "locationName": "timeDelaySeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "Whitelist": { 
+        "Whitelist": {
           "documentation": "A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.",
           "locationName": "whitelist",
-          "shape": "__listOf__string" 
-        } 
+          "shape": "__listOf__string"
+        }
       },
-      "required": [ 
-        "Id" 
+      "required": [
+        "Id"
       ],
-      "type": "structure" 
+      "type": "structure"
     },
-    "UpdateOriginEndpointResponse": { 
-      "members": { 
-        "Arn": { 
+    "UpdateOriginEndpointResponse": {
+      "members": {
+        "Arn": {
           "documentation": "The Amazon Resource Name (ARN) assigned to the OriginEndpoint.",
           "locationName": "arn",
-          "shape": "__string" 
+          "shape": "__string"
         },
         "Authorization": {
           "locationName": "authorization",
           "shape": "Authorization"
         },
-        "ChannelId": { 
+        "ChannelId": {
           "documentation": "The ID of the Channel the OriginEndpoint is associated with.",
           "locationName": "channelId",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "CmafPackage": { 
+        "CmafPackage": {
           "locationName": "cmafPackage",
-          "shape": "CmafPackage" 
+          "shape": "CmafPackage"
         },
-        "DashPackage": { 
+        "DashPackage": {
           "locationName": "dashPackage",
-          "shape": "DashPackage" 
+          "shape": "DashPackage"
         },
-        "Description": { 
+        "Description": {
           "documentation": "A short text description of the OriginEndpoint.",
           "locationName": "description",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "HlsPackage": { 
+        "HlsPackage": {
           "locationName": "hlsPackage",
-          "shape": "HlsPackage" 
+          "shape": "HlsPackage"
         },
-        "Id": { 
+        "Id": {
           "documentation": "The ID of the OriginEndpoint.",
           "locationName": "id",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "ManifestName": { 
+        "ManifestName": {
           "documentation": "A short string appended to the end of the OriginEndpoint URL.",
           "locationName": "manifestName",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "MssPackage": { 
+        "MssPackage": {
           "locationName": "mssPackage",
-          "shape": "MssPackage" 
+          "shape": "MssPackage"
         },
         "Origination": {
           "documentation": "Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint\nmay by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be\nrequested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination\n",
           "locationName": "origination",
           "shape": "Origination"
         },
-        "StartoverWindowSeconds": { 
+        "StartoverWindowSeconds": {
           "documentation": "Maximum duration (seconds) of content to retain for startover playback.\nIf not specified, startover playback will be disabled for the OriginEndpoint.\n",
           "locationName": "startoverWindowSeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
         "Tags": {
           "locationName": "tags",
           "shape": "Tags"
         },
-        "TimeDelaySeconds": { 
+        "TimeDelaySeconds": {
           "documentation": "Amount of delay (seconds) to enforce on the playback of live content.\nIf not specified, there will be no time delay in effect for the OriginEndpoint.\n",
           "locationName": "timeDelaySeconds",
-          "shape": "__integer" 
+          "shape": "__integer"
         },
-        "Url": { 
+        "Url": {
           "documentation": "The URL of the packaged OriginEndpoint for consumption.",
           "locationName": "url",
-          "shape": "__string" 
+          "shape": "__string"
         },
-        "Whitelist": { 
+        "Whitelist": {
           "documentation": "A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.",
           "locationName": "whitelist",
-          "shape": "__listOf__string" 
-        } 
+          "shape": "__listOf__string"
+        }
       },
-      "type": "structure" 
+      "type": "structure"
     },
     "UtcTiming": {
       "enum": [
@@ -2972,20 +2972,20 @@
       ],
       "type": "string"
     },
-    "__boolean": { 
-      "type": "boolean" 
+    "__boolean": {
+      "type": "boolean"
     },
-    "__double": { 
-      "type": "double" 
+    "__double": {
+      "type": "double"
     },
-    "__integer": { 
-      "type": "integer" 
+    "__integer": {
+      "type": "integer"
     },
-    "__listOfChannel": { 
-      "member": { 
-        "shape": "Channel" 
+    "__listOfChannel": {
+      "member": {
+        "shape": "Channel"
       },
-      "type": "list" 
+      "type": "list"
     },
     "__listOfHarvestJob": {
       "member": {
@@ -2993,29 +2993,29 @@
       },
       "type": "list"
     },
-    "__listOfHlsManifest": { 
-      "member": { 
-        "shape": "HlsManifest" 
+    "__listOfHlsManifest": {
+      "member": {
+        "shape": "HlsManifest"
       },
-      "type": "list" 
+      "type": "list"
     },
-    "__listOfHlsManifestCreateOrUpdateParameters": { 
-      "member": { 
-        "shape": "HlsManifestCreateOrUpdateParameters" 
+    "__listOfHlsManifestCreateOrUpdateParameters": {
+      "member": {
+        "shape": "HlsManifestCreateOrUpdateParameters"
       },
-      "type": "list" 
+      "type": "list"
     },
-    "__listOfIngestEndpoint": { 
-      "member": { 
-        "shape": "IngestEndpoint" 
+    "__listOfIngestEndpoint": {
+      "member": {
+        "shape": "IngestEndpoint"
       },
-      "type": "list" 
+      "type": "list"
     },
-    "__listOfOriginEndpoint": { 
-      "member": { 
-        "shape": "OriginEndpoint" 
+    "__listOfOriginEndpoint": {
+      "member": {
+        "shape": "OriginEndpoint"
       },
-      "type": "list" 
+      "type": "list"
     },
     "__listOf__PeriodTriggersElement": {
       "member": {
@@ -3023,14 +3023,14 @@
       },
       "type": "list"
     },
-    "__listOf__string": { 
-      "member": { 
-        "shape": "__string" 
+    "__listOf__string": {
+      "member": {
+        "shape": "__string"
       },
-      "type": "list" 
+      "type": "list"
     },
-    "__long": { 
-      "type": "long" 
+    "__long": {
+      "type": "long"
     },
     "__mapOf__string": {
       "key": {
@@ -3041,8 +3041,8 @@
         "shape": "__string"
       }
     },
-    "__string": { 
-      "type": "string" 
-    } 
-  } 
+    "__string": {
+      "type": "string"
+    }
+  }
 }

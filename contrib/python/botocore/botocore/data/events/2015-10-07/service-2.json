@@ -1,17 +1,17 @@
-{ 
-  "version":"2.0", 
-  "metadata":{ 
-    "apiVersion":"2015-10-07", 
-    "endpointPrefix":"events", 
-    "jsonVersion":"1.1", 
-    "protocol":"json", 
+{
+  "version":"2.0",
+  "metadata":{
+    "apiVersion":"2015-10-07",
+    "endpointPrefix":"events",
+    "jsonVersion":"1.1",
+    "protocol":"json",
     "serviceFullName":"Amazon EventBridge",
     "serviceId":"EventBridge",
-    "signatureVersion":"v4", 
-    "targetPrefix":"AWSEvents", 
+    "signatureVersion":"v4",
+    "targetPrefix":"AWSEvents",
     "uid":"eventbridge-2015-10-07"
-  }, 
-  "operations":{ 
+  },
+  "operations":{
     "ActivateEventSource":{
       "name":"ActivateEventSource",
       "http":{
@@ -232,21 +232,21 @@
       ],
       "documentation":"<p>This operation is used by SaaS partners to delete a partner event source. This operation is not used by AWS customers.</p> <p>When you delete an event source, the status of the corresponding partner event bus in the AWS customer account becomes DELETED.</p> <p/>"
     },
-    "DeleteRule":{ 
-      "name":"DeleteRule", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"DeleteRuleRequest"}, 
-      "errors":[ 
-        {"shape":"ConcurrentModificationException"}, 
+    "DeleteRule":{
+      "name":"DeleteRule",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DeleteRuleRequest"},
+      "errors":[
+        {"shape":"ConcurrentModificationException"},
         {"shape":"ManagedRuleException"},
         {"shape":"InternalException"},
         {"shape":"ResourceNotFoundException"}
-      ], 
+      ],
       "documentation":"<p>Deletes the specified rule.</p> <p>Before you can delete the rule, you must remove all targets, using <a>RemoveTargets</a>.</p> <p>When you delete a rule, incoming events might continue to match to the deleted rule. Allow a short period of time for changes to take effect.</p> <p>If you call delete rule multiple times for the same rule, all calls will succeed. When you call delete rule for a non-existent custom eventbus, <code>ResourceNotFoundException</code> is returned.</p> <p>Managed rules are rules created and managed by another AWS service on your behalf. These rules are created by those other AWS services to support functionality in those services. You can delete these rules using the <code>Force</code> option, but you should do so only if you are sure the other service is not still using that rule.</p>"
-    }, 
+    },
     "DescribeApiDestination":{
       "name":"DescribeApiDestination",
       "http":{
@@ -290,20 +290,20 @@
       ],
       "documentation":"<p>Retrieves details about a connection.</p>"
     },
-    "DescribeEventBus":{ 
-      "name":"DescribeEventBus", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"DescribeEventBusRequest"}, 
-      "output":{"shape":"DescribeEventBusResponse"}, 
-      "errors":[ 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"InternalException"} 
-      ], 
+    "DescribeEventBus":{
+      "name":"DescribeEventBus",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DescribeEventBusRequest"},
+      "output":{"shape":"DescribeEventBusResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalException"}
+      ],
       "documentation":"<p>Displays details about an event bus in your account. This can include the external AWS accounts that are permitted to write events to your default event bus, and the associated policy. For custom event buses and partner event buses, it displays the name, ARN, policy, state, and creation time.</p> <p> To enable your account to receive events from other accounts on its default event bus, use <a>PutPermission</a>.</p> <p>For more information about partner event buses, see <a>CreateEventBus</a>.</p>"
-    }, 
+    },
     "DescribeEventSource":{
       "name":"DescribeEventSource",
       "http":{
@@ -348,50 +348,50 @@
       ],
       "documentation":"<p>Retrieves details about a replay. Use <code>DescribeReplay</code> to determine the progress of a running replay. A replay processes events to replay based on the time in the event, and replays them using 1 minute intervals. If you use <code>StartReplay</code> and specify an <code>EventStartTime</code> and an <code>EventEndTime</code> that covers a 20 minute time range, the events are replayed from the first minute of that 20 minute range first. Then the events from the second minute are replayed. You can use <code>DescribeReplay</code> to determine the progress of a replay. The value returned for <code>EventLastReplayedTime</code> indicates the time within the specified time range associated with the last event replayed.</p>"
     },
-    "DescribeRule":{ 
-      "name":"DescribeRule", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"DescribeRuleRequest"}, 
-      "output":{"shape":"DescribeRuleResponse"}, 
-      "errors":[ 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"InternalException"} 
-      ], 
+    "DescribeRule":{
+      "name":"DescribeRule",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DescribeRuleRequest"},
+      "output":{"shape":"DescribeRuleResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalException"}
+      ],
       "documentation":"<p>Describes the specified rule.</p> <p>DescribeRule does not list the targets of a rule. To see the targets associated with a rule, use <a>ListTargetsByRule</a>.</p>"
-    }, 
-    "DisableRule":{ 
-      "name":"DisableRule", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"DisableRuleRequest"}, 
-      "errors":[ 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"ConcurrentModificationException"}, 
+    },
+    "DisableRule":{
+      "name":"DisableRule",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DisableRuleRequest"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConcurrentModificationException"},
         {"shape":"ManagedRuleException"},
-        {"shape":"InternalException"} 
-      ], 
+        {"shape":"InternalException"}
+      ],
       "documentation":"<p>Disables the specified rule. A disabled rule won't match any events, and won't self-trigger if it has a schedule expression.</p> <p>When you disable a rule, incoming events might continue to match to the disabled rule. Allow a short period of time for changes to take effect.</p>"
-    }, 
-    "EnableRule":{ 
-      "name":"EnableRule", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"EnableRuleRequest"}, 
-      "errors":[ 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"ConcurrentModificationException"}, 
+    },
+    "EnableRule":{
+      "name":"EnableRule",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"EnableRuleRequest"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConcurrentModificationException"},
         {"shape":"ManagedRuleException"},
-        {"shape":"InternalException"} 
-      ], 
+        {"shape":"InternalException"}
+      ],
       "documentation":"<p>Enables the specified rule. If the rule does not exist, the operation fails.</p> <p>When you enable a rule, incoming events might not immediately start matching to a newly enabled rule. Allow a short period of time for changes to take effect.</p>"
-    }, 
+    },
     "ListApiDestinations":{
       "name":"ListApiDestinations",
       "http":{
@@ -501,34 +501,34 @@
       ],
       "documentation":"<p>Lists your replays. You can either list all the replays or you can provide a prefix to match to the replay names. Filter parameters are exclusive.</p>"
     },
-    "ListRuleNamesByTarget":{ 
-      "name":"ListRuleNamesByTarget", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"ListRuleNamesByTargetRequest"}, 
-      "output":{"shape":"ListRuleNamesByTargetResponse"}, 
-      "errors":[ 
+    "ListRuleNamesByTarget":{
+      "name":"ListRuleNamesByTarget",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListRuleNamesByTargetRequest"},
+      "output":{"shape":"ListRuleNamesByTargetResponse"},
+      "errors":[
         {"shape":"InternalException"},
         {"shape":"ResourceNotFoundException"}
-      ], 
+      ],
       "documentation":"<p>Lists the rules for the specified target. You can see which of the rules in Amazon EventBridge can invoke a specific target in your account.</p>"
-    }, 
-    "ListRules":{ 
-      "name":"ListRules", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"ListRulesRequest"}, 
-      "output":{"shape":"ListRulesResponse"}, 
-      "errors":[ 
+    },
+    "ListRules":{
+      "name":"ListRules",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListRulesRequest"},
+      "output":{"shape":"ListRulesResponse"},
+      "errors":[
         {"shape":"InternalException"},
         {"shape":"ResourceNotFoundException"}
-      ], 
+      ],
       "documentation":"<p>Lists your Amazon EventBridge rules. You can either list all the rules or you can provide a prefix to match to the rule names.</p> <p>ListRules does not list the targets of a rule. To see the targets associated with a rule, use <a>ListTargetsByRule</a>.</p>"
-    }, 
+    },
     "ListTagsForResource":{
       "name":"ListTagsForResource",
       "http":{
@@ -543,33 +543,33 @@
       ],
       "documentation":"<p>Displays the tags associated with an EventBridge resource. In EventBridge, rules and event buses can be tagged.</p>"
     },
-    "ListTargetsByRule":{ 
-      "name":"ListTargetsByRule", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"ListTargetsByRuleRequest"}, 
-      "output":{"shape":"ListTargetsByRuleResponse"}, 
-      "errors":[ 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"InternalException"} 
-      ], 
-      "documentation":"<p>Lists the targets assigned to the specified rule.</p>" 
-    }, 
-    "PutEvents":{ 
-      "name":"PutEvents", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"PutEventsRequest"}, 
-      "output":{"shape":"PutEventsResponse"}, 
-      "errors":[ 
-        {"shape":"InternalException"} 
-      ], 
+    "ListTargetsByRule":{
+      "name":"ListTargetsByRule",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListTargetsByRuleRequest"},
+      "output":{"shape":"ListTargetsByRuleResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalException"}
+      ],
+      "documentation":"<p>Lists the targets assigned to the specified rule.</p>"
+    },
+    "PutEvents":{
+      "name":"PutEvents",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"PutEventsRequest"},
+      "output":{"shape":"PutEventsResponse"},
+      "errors":[
+        {"shape":"InternalException"}
+      ],
       "documentation":"<p>Sends custom events to Amazon EventBridge so that they can be matched to rules.</p>"
-    }, 
+    },
     "PutPartnerEvents":{
       "name":"PutPartnerEvents",
       "http":{
@@ -584,88 +584,88 @@
       ],
       "documentation":"<p>This is used by SaaS partners to write events to a customer's partner event bus. AWS customers do not use this operation.</p>"
     },
-    "PutPermission":{ 
-      "name":"PutPermission", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"PutPermissionRequest"}, 
-      "errors":[ 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"PolicyLengthExceededException"}, 
-        {"shape":"InternalException"}, 
+    "PutPermission":{
+      "name":"PutPermission",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"PutPermissionRequest"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"PolicyLengthExceededException"},
+        {"shape":"InternalException"},
         {"shape":"ConcurrentModificationException"},
         {"shape":"OperationDisabledException"}
-      ], 
+      ],
       "documentation":"<p>Running <code>PutPermission</code> permits the specified AWS account or AWS organization to put events to the specified <i>event bus</i>. Amazon EventBridge (CloudWatch Events) rules in your account are triggered by these events arriving to an event bus in your account. </p> <p>For another account to send events to your account, that external account must have an EventBridge rule with your account's event bus as a target.</p> <p>To enable multiple AWS accounts to put events to your event bus, run <code>PutPermission</code> once for each of these accounts. Or, if all the accounts are members of the same AWS organization, you can run <code>PutPermission</code> once specifying <code>Principal</code> as \"*\" and specifying the AWS organization ID in <code>Condition</code>, to grant permissions to all accounts in that organization.</p> <p>If you grant permissions using an organization, then accounts in that organization must specify a <code>RoleArn</code> with proper permissions when they use <code>PutTarget</code> to add your account's event bus as a target. For more information, see <a href=\"https://docs.aws.amazon.com/eventbridge/latest/userguide/eventbridge-cross-account-event-delivery.html\">Sending and Receiving Events Between AWS Accounts</a> in the <i>Amazon EventBridge User Guide</i>.</p> <p>The permission policy on the default event bus cannot exceed 10 KB in size.</p>"
-    }, 
-    "PutRule":{ 
-      "name":"PutRule", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"PutRuleRequest"}, 
-      "output":{"shape":"PutRuleResponse"}, 
-      "errors":[ 
-        {"shape":"InvalidEventPatternException"}, 
-        {"shape":"LimitExceededException"}, 
-        {"shape":"ConcurrentModificationException"}, 
+    },
+    "PutRule":{
+      "name":"PutRule",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"PutRuleRequest"},
+      "output":{"shape":"PutRuleResponse"},
+      "errors":[
+        {"shape":"InvalidEventPatternException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ConcurrentModificationException"},
         {"shape":"ManagedRuleException"},
         {"shape":"InternalException"},
         {"shape":"ResourceNotFoundException"}
-      ], 
+      ],
       "documentation":"<p>Creates or updates the specified rule. Rules are enabled by default, or based on value of the state. You can disable a rule using <a>DisableRule</a>.</p> <p>A single rule watches for events from a single event bus. Events generated by AWS services go to your account's default event bus. Events generated by SaaS partner services or applications go to the matching partner event bus. If you have custom applications or services, you can specify whether their events go to your default event bus or a custom event bus that you have created. For more information, see <a>CreateEventBus</a>.</p> <p>If you are updating an existing rule, the rule is replaced with what you specify in this <code>PutRule</code> command. If you omit arguments in <code>PutRule</code>, the old values for those arguments are not kept. Instead, they are replaced with null values.</p> <p>When you create or update a rule, incoming events might not immediately start matching to new or updated rules. Allow a short period of time for changes to take effect.</p> <p>A rule must contain at least an EventPattern or ScheduleExpression. Rules with EventPatterns are triggered when a matching event is observed. Rules with ScheduleExpressions self-trigger based on the given schedule. A rule can have both an EventPattern and a ScheduleExpression, in which case the rule triggers on matching events as well as on a schedule.</p> <p>When you initially create a rule, you can optionally assign one or more tags to the rule. Tags can help you organize and categorize your resources. You can also use them to scope user permissions, by granting a user permission to access or change only rules with certain tag values. To use the <code>PutRule</code> operation and assign tags, you must have both the <code>events:PutRule</code> and <code>events:TagResource</code> permissions.</p> <p>If you are updating an existing rule, any tags you specify in the <code>PutRule</code> operation are ignored. To update the tags of an existing rule, use <a>TagResource</a> and <a>UntagResource</a>.</p> <p>Most services in AWS treat : or / as the same character in Amazon Resource Names (ARNs). However, EventBridge uses an exact match in event patterns and rules. Be sure to use the correct ARN characters when creating event patterns so that they match the ARN syntax in the event you want to match.</p> <p>In EventBridge, it is possible to create rules that lead to infinite loops, where a rule is fired repeatedly. For example, a rule might detect that ACLs have changed on an S3 bucket, and trigger software to change them to the desired state. If the rule is not written carefully, the subsequent change to the ACLs fires the rule again, creating an infinite loop.</p> <p>To prevent this, write the rules so that the triggered actions do not re-fire the same rule. For example, your rule could fire only if ACLs are found to be in a bad state, instead of after any change. </p> <p>An infinite loop can quickly cause higher than expected charges. We recommend that you use budgeting, which alerts you when charges exceed your specified limit. For more information, see <a href=\"https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/budgets-managing-costs.html\">Managing Your Costs with Budgets</a>.</p>"
-    }, 
-    "PutTargets":{ 
-      "name":"PutTargets", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"PutTargetsRequest"}, 
-      "output":{"shape":"PutTargetsResponse"}, 
-      "errors":[ 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"ConcurrentModificationException"}, 
-        {"shape":"LimitExceededException"}, 
+    },
+    "PutTargets":{
+      "name":"PutTargets",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"PutTargetsRequest"},
+      "output":{"shape":"PutTargetsResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConcurrentModificationException"},
+        {"shape":"LimitExceededException"},
         {"shape":"ManagedRuleException"},
-        {"shape":"InternalException"} 
-      ], 
+        {"shape":"InternalException"}
+      ],
       "documentation":"<p>Adds the specified targets to the specified rule, or updates the targets if they are already associated with the rule.</p> <p>Targets are the resources that are invoked when a rule is triggered.</p> <p>You can configure the following as targets for Events:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-api-destinations.html\">API destination</a> </p> </li> <li> <p>Amazon API Gateway REST API endpoints</p> </li> <li> <p>API Gateway</p> </li> <li> <p>AWS Batch job queue</p> </li> <li> <p>CloudWatch Logs group</p> </li> <li> <p>CodeBuild project</p> </li> <li> <p>CodePineline</p> </li> <li> <p>Amazon EC2 <code>CreateSnapshot</code> API call</p> </li> <li> <p>Amazon EC2 <code>RebootInstances</code> API call</p> </li> <li> <p>Amazon EC2 <code>StopInstances</code> API call</p> </li> <li> <p>Amazon EC2 <code>TerminateInstances</code> API call</p> </li> <li> <p>Amazon ECS tasks</p> </li> <li> <p>Event bus in a different AWS account or Region.</p> <p>You can use an event bus in the US East (N. Virginia) us-east-1, US West (Oregon) us-west-2, or Europe (Ireland) eu-west-1 Regions as a target for a rule.</p> </li> <li> <p>Firehose delivery stream (Kinesis Data Firehose)</p> </li> <li> <p>Inspector assessment template (Amazon Inspector)</p> </li> <li> <p>Kinesis stream (Kinesis Data Stream)</p> </li> <li> <p>AWS Lambda function</p> </li> <li> <p>Redshift clusters (Data API statement execution)</p> </li> <li> <p>Amazon SNS topic</p> </li> <li> <p>Amazon SQS queues (includes FIFO queues</p> </li> <li> <p>SSM Automation</p> </li> <li> <p>SSM OpsItem</p> </li> <li> <p>SSM Run Command</p> </li> <li> <p>Step Functions state machines</p> </li> </ul> <p>Creating rules with built-in targets is supported only in the AWS Management Console. The built-in targets are <code>EC2 CreateSnapshot API call</code>, <code>EC2 RebootInstances API call</code>, <code>EC2 StopInstances API call</code>, and <code>EC2 TerminateInstances API call</code>. </p> <p>For some target types, <code>PutTargets</code> provides target-specific parameters. If the target is a Kinesis data stream, you can optionally specify which shard the event goes to by using the <code>KinesisParameters</code> argument. To invoke a command on multiple EC2 instances with one rule, you can use the <code>RunCommandParameters</code> field.</p> <p>To be able to make API calls against the resources that you own, Amazon EventBridge (CloudWatch Events) needs the appropriate permissions. For AWS Lambda and Amazon SNS resources, EventBridge relies on resource-based policies. For EC2 instances, Kinesis data streams, AWS Step Functions state machines and API Gateway REST APIs, EventBridge relies on IAM roles that you specify in the <code>RoleARN</code> argument in <code>PutTargets</code>. For more information, see <a href=\"https://docs.aws.amazon.com/eventbridge/latest/userguide/auth-and-access-control-eventbridge.html\">Authentication and Access Control</a> in the <i>Amazon EventBridge User Guide</i>.</p> <p>If another AWS account is in the same region and has granted you permission (using <code>PutPermission</code>), you can send events to that account. Set that account's event bus as a target of the rules in your account. To send the matched events to the other account, specify that account's event bus as the <code>Arn</code> value when you run <code>PutTargets</code>. If your account sends events to another account, your account is charged for each sent event. Each event sent to another account is charged as a custom event. The account receiving the event is not charged. For more information, see <a href=\"https://aws.amazon.com/eventbridge/pricing/\">Amazon EventBridge (CloudWatch Events) Pricing</a>.</p> <note> <p> <code>Input</code>, <code>InputPath</code>, and <code>InputTransformer</code> are not available with <code>PutTarget</code> if the target is an event bus of a different AWS account.</p> </note> <p>If you are setting the event bus of another account as the target, and that account granted permission to your account through an organization instead of directly by the account ID, then you must specify a <code>RoleArn</code> with proper permissions in the <code>Target</code> structure. For more information, see <a href=\"https://docs.aws.amazon.com/eventbridge/latest/userguide/eventbridge-cross-account-event-delivery.html\">Sending and Receiving Events Between AWS Accounts</a> in the <i>Amazon EventBridge User Guide</i>.</p> <p>For more information about enabling cross-account events, see <a>PutPermission</a>.</p> <p> <b>Input</b>, <b>InputPath</b>, and <b>InputTransformer</b> are mutually exclusive and optional parameters of a target. When a rule is triggered due to a matched event:</p> <ul> <li> <p>If none of the following arguments are specified for a target, then the entire event is passed to the target in JSON format (unless the target is Amazon EC2 Run Command or Amazon ECS task, in which case nothing from the event is passed to the target).</p> </li> <li> <p>If <b>Input</b> is specified in the form of valid JSON, then the matched event is overridden with this constant.</p> </li> <li> <p>If <b>InputPath</b> is specified in the form of JSONPath (for example, <code>$.detail</code>), then only the part of the event specified in the path is passed to the target (for example, only the detail part of the event is passed).</p> </li> <li> <p>If <b>InputTransformer</b> is specified, then one or more specified JSONPaths are extracted from the event and used as values in a template that you specify as the input to the target.</p> </li> </ul> <p>When you specify <code>InputPath</code> or <code>InputTransformer</code>, you must use JSON dot notation, not bracket notation.</p> <p>When you add targets to a rule and the associated rule triggers soon after, new or updated targets might not be immediately invoked. Allow a short period of time for changes to take effect.</p> <p>This action can partially fail if too many requests are made at the same time. If that happens, <code>FailedEntryCount</code> is non-zero in the response and each entry in <code>FailedEntries</code> provides the ID of the failed target and the error code.</p>"
-    }, 
-    "RemovePermission":{ 
-      "name":"RemovePermission", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"RemovePermissionRequest"}, 
-      "errors":[ 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"InternalException"}, 
+    },
+    "RemovePermission":{
+      "name":"RemovePermission",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"RemovePermissionRequest"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalException"},
         {"shape":"ConcurrentModificationException"},
         {"shape":"OperationDisabledException"}
-      ], 
+      ],
       "documentation":"<p>Revokes the permission of another AWS account to be able to put events to the specified event bus. Specify the account to revoke by the <code>StatementId</code> value that you associated with the account when you granted it permission with <code>PutPermission</code>. You can find the <code>StatementId</code> by using <a>DescribeEventBus</a>.</p>"
-    }, 
-    "RemoveTargets":{ 
-      "name":"RemoveTargets", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"RemoveTargetsRequest"}, 
-      "output":{"shape":"RemoveTargetsResponse"}, 
-      "errors":[ 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"ConcurrentModificationException"}, 
+    },
+    "RemoveTargets":{
+      "name":"RemoveTargets",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"RemoveTargetsRequest"},
+      "output":{"shape":"RemoveTargetsResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConcurrentModificationException"},
         {"shape":"ManagedRuleException"},
-        {"shape":"InternalException"} 
-      ], 
+        {"shape":"InternalException"}
+      ],
       "documentation":"<p>Removes the specified targets from the specified rule. When the rule is triggered, those targets are no longer be invoked.</p> <p>When you remove a target, when the associated rule triggers, removed targets might continue to be invoked. Allow a short period of time for changes to take effect.</p> <p>This action can partially fail if too many requests are made at the same time. If that happens, <code>FailedEntryCount</code> is non-zero in the response and each entry in <code>FailedEntries</code> provides the ID of the failed target and the error code.</p>"
-    }, 
+    },
     "StartReplay":{
       "name":"StartReplay",
       "http":{
@@ -699,18 +699,18 @@
       ],
       "documentation":"<p>Assigns one or more tags (key-value pairs) to the specified EventBridge resource. Tags can help you organize and categorize your resources. You can also use them to scope user permissions by granting a user permission to access or change only resources with certain tag values. In EventBridge, rules and event buses can be tagged.</p> <p>Tags don't have any semantic meaning to AWS and are interpreted strictly as strings of characters.</p> <p>You can use the <code>TagResource</code> action with a resource that already has tags. If you specify a new tag key, this tag is appended to the list of tags associated with the resource. If you specify a tag key that is already associated with the resource, the new tag value that you specify replaces the previous value for that tag.</p> <p>You can associate as many as 50 tags with a resource.</p>"
     },
-    "TestEventPattern":{ 
-      "name":"TestEventPattern", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"TestEventPatternRequest"}, 
-      "output":{"shape":"TestEventPatternResponse"}, 
-      "errors":[ 
-        {"shape":"InvalidEventPatternException"}, 
-        {"shape":"InternalException"} 
-      ], 
+    "TestEventPattern":{
+      "name":"TestEventPattern",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"TestEventPatternRequest"},
+      "output":{"shape":"TestEventPatternResponse"},
+      "errors":[
+        {"shape":"InvalidEventPatternException"},
+        {"shape":"InternalException"}
+      ],
       "documentation":"<p>Tests whether the specified event pattern matches the provided event.</p> <p>Most services in AWS treat : or / as the same character in Amazon Resource Names (ARNs). However, EventBridge uses an exact match in event patterns and rules. Be sure to use the correct ARN characters when creating event patterns so that they match the ARN syntax in the event you want to match.</p>"
     },
     "UntagResource":{
@@ -777,21 +777,21 @@
         {"shape":"LimitExceededException"}
       ],
       "documentation":"<p>Updates settings for a connection.</p>"
-    } 
-  }, 
-  "shapes":{ 
+    }
+  },
+  "shapes":{
     "AccountId":{
       "type":"string",
       "max":12,
       "min":12,
       "pattern":"\\d{12}"
     },
-    "Action":{ 
-      "type":"string", 
-      "max":64, 
-      "min":1, 
-      "pattern":"events:[a-zA-Z]+" 
-    }, 
+    "Action":{
+      "type":"string",
+      "max":64,
+      "min":1,
+      "pattern":"events:[a-zA-Z]+"
+    },
     "ActivateEventSourceRequest":{
       "type":"structure",
       "required":["Name"],
@@ -963,11 +963,11 @@
       "max":512,
       "pattern":".*"
     },
-    "Arn":{ 
-      "type":"string", 
-      "max":1600, 
-      "min":1 
-    }, 
+    "Arn":{
+      "type":"string",
+      "max":1600,
+      "min":1
+    },
     "AssignPublicIp":{
       "type":"string",
       "enum":[
@@ -1000,53 +1000,53 @@
       },
       "documentation":"<p>This structure specifies the VPC subnets and security groups for the task, and whether a public IP address is to be used. This structure is relevant only for ECS tasks that use the <code>awsvpc</code> network mode.</p>"
     },
-    "BatchArrayProperties":{ 
-      "type":"structure", 
-      "members":{ 
-        "Size":{ 
-          "shape":"Integer", 
-          "documentation":"<p>The size of the array, if this is an array batch job. Valid values are integers between 2 and 10,000.</p>" 
-        } 
-      }, 
-      "documentation":"<p>The array properties for the submitted job, such as the size of the array. The array size can be between 2 and 10,000. If you specify array properties for a job, it becomes an array job. This parameter is used only if the target is an AWS Batch job.</p>" 
-    }, 
-    "BatchParameters":{ 
-      "type":"structure", 
-      "required":[ 
-        "JobDefinition", 
-        "JobName" 
-      ], 
-      "members":{ 
-        "JobDefinition":{ 
-          "shape":"String", 
-          "documentation":"<p>The ARN or name of the job definition to use if the event target is an AWS Batch job. This job definition must already exist.</p>" 
-        }, 
-        "JobName":{ 
-          "shape":"String", 
-          "documentation":"<p>The name to use for this execution of the job, if the target is an AWS Batch job.</p>" 
-        }, 
-        "ArrayProperties":{ 
-          "shape":"BatchArrayProperties", 
-          "documentation":"<p>The array properties for the submitted job, such as the size of the array. The array size can be between 2 and 10,000. If you specify array properties for a job, it becomes an array job. This parameter is used only if the target is an AWS Batch job.</p>" 
-        }, 
-        "RetryStrategy":{ 
-          "shape":"BatchRetryStrategy", 
+    "BatchArrayProperties":{
+      "type":"structure",
+      "members":{
+        "Size":{
+          "shape":"Integer",
+          "documentation":"<p>The size of the array, if this is an array batch job. Valid values are integers between 2 and 10,000.</p>"
+        }
+      },
+      "documentation":"<p>The array properties for the submitted job, such as the size of the array. The array size can be between 2 and 10,000. If you specify array properties for a job, it becomes an array job. This parameter is used only if the target is an AWS Batch job.</p>"
+    },
+    "BatchParameters":{
+      "type":"structure",
+      "required":[
+        "JobDefinition",
+        "JobName"
+      ],
+      "members":{
+        "JobDefinition":{
+          "shape":"String",
+          "documentation":"<p>The ARN or name of the job definition to use if the event target is an AWS Batch job. This job definition must already exist.</p>"
+        },
+        "JobName":{
+          "shape":"String",
+          "documentation":"<p>The name to use for this execution of the job, if the target is an AWS Batch job.</p>"
+        },
+        "ArrayProperties":{
+          "shape":"BatchArrayProperties",
+          "documentation":"<p>The array properties for the submitted job, such as the size of the array. The array size can be between 2 and 10,000. If you specify array properties for a job, it becomes an array job. This parameter is used only if the target is an AWS Batch job.</p>"
+        },
+        "RetryStrategy":{
+          "shape":"BatchRetryStrategy",
           "documentation":"<p>The retry strategy to use for failed jobs, if the target is an AWS Batch job. The retry strategy is the number of times to retry the failed job execution. Valid values are 1–10. When you specify a retry strategy here, it overrides the retry strategy defined in the job definition.</p>"
-        } 
-      }, 
-      "documentation":"<p>The custom parameters to be used when the target is an AWS Batch job.</p>" 
-    }, 
-    "BatchRetryStrategy":{ 
-      "type":"structure", 
-      "members":{ 
-        "Attempts":{ 
-          "shape":"Integer", 
+        }
+      },
+      "documentation":"<p>The custom parameters to be used when the target is an AWS Batch job.</p>"
+    },
+    "BatchRetryStrategy":{
+      "type":"structure",
+      "members":{
+        "Attempts":{
+          "shape":"Integer",
           "documentation":"<p>The number of times to attempt to retry, if the job fails. Valid values are 1–10.</p>"
-        } 
-      }, 
+        }
+      },
       "documentation":"<p>The retry strategy to use for failed jobs, if the target is an AWS Batch job. If you specify a retry strategy here, it overrides the retry strategy defined in the job definition.</p>"
-    }, 
-    "Boolean":{"type":"boolean"}, 
+    },
+    "Boolean":{"type":"boolean"},
     "CancelReplayRequest":{
       "type":"structure",
       "required":["ReplayName"],
@@ -1113,13 +1113,13 @@
       "max":1000,
       "min":0
     },
-    "ConcurrentModificationException":{ 
-      "type":"structure", 
-      "members":{ 
-      }, 
+    "ConcurrentModificationException":{
+      "type":"structure",
+      "members":{
+      },
       "documentation":"<p>There is concurrent modification on a rule, target, archive, or replay.</p>",
-      "exception":true 
-    }, 
+      "exception":true
+    },
     "Condition":{
       "type":"structure",
       "required":[
@@ -1870,13 +1870,13 @@
         }
       }
     },
-    "DeleteRuleRequest":{ 
-      "type":"structure", 
-      "required":["Name"], 
-      "members":{ 
-        "Name":{ 
-          "shape":"RuleName", 
-          "documentation":"<p>The name of the rule.</p>" 
+    "DeleteRuleRequest":{
+      "type":"structure",
+      "required":["Name"],
+      "members":{
+        "Name":{
+          "shape":"RuleName",
+          "documentation":"<p>The name of the rule.</p>"
         },
         "EventBusName":{
           "shape":"EventBusNameOrArn",
@@ -1885,9 +1885,9 @@
         "Force":{
           "shape":"Boolean",
           "documentation":"<p>If this is a managed rule, created by an AWS service on your behalf, you must specify <code>Force</code> as <code>True</code> to delete the rule. This parameter is ignored for rules that are not managed rules. You can check whether a rule is a managed rule by using <code>DescribeRule</code> or <code>ListRules</code> and checking the <code>ManagedBy</code> field of the response.</p>"
-        } 
-      } 
-    }, 
+        }
+      }
+    },
     "DescribeApiDestinationRequest":{
       "type":"structure",
       "required":["Name"],
@@ -2061,32 +2061,32 @@
         }
       }
     },
-    "DescribeEventBusRequest":{ 
-      "type":"structure", 
-      "members":{ 
+    "DescribeEventBusRequest":{
+      "type":"structure",
+      "members":{
         "Name":{
           "shape":"EventBusNameOrArn",
           "documentation":"<p>The name or ARN of the event bus to show details for. If you omit this, the default event bus is displayed.</p>"
         }
-      } 
-    }, 
-    "DescribeEventBusResponse":{ 
-      "type":"structure", 
-      "members":{ 
-        "Name":{ 
-          "shape":"String", 
-          "documentation":"<p>The name of the event bus. Currently, this is always <code>default</code>.</p>" 
-        }, 
-        "Arn":{ 
-          "shape":"String", 
-          "documentation":"<p>The Amazon Resource Name (ARN) of the account permitted to write events to the current account.</p>" 
-        }, 
-        "Policy":{ 
-          "shape":"String", 
-          "documentation":"<p>The policy that enables the external account to send events to your account.</p>" 
-        } 
-      } 
-    }, 
+      }
+    },
+    "DescribeEventBusResponse":{
+      "type":"structure",
+      "members":{
+        "Name":{
+          "shape":"String",
+          "documentation":"<p>The name of the event bus. Currently, this is always <code>default</code>.</p>"
+        },
+        "Arn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the account permitted to write events to the current account.</p>"
+        },
+        "Policy":{
+          "shape":"String",
+          "documentation":"<p>The policy that enables the external account to send events to your account.</p>"
+        }
+      }
+    },
     "DescribeEventSourceRequest":{
       "type":"structure",
       "required":["Name"],
@@ -2212,50 +2212,50 @@
         }
       }
     },
-    "DescribeRuleRequest":{ 
-      "type":"structure", 
-      "required":["Name"], 
-      "members":{ 
-        "Name":{ 
-          "shape":"RuleName", 
-          "documentation":"<p>The name of the rule.</p>" 
+    "DescribeRuleRequest":{
+      "type":"structure",
+      "required":["Name"],
+      "members":{
+        "Name":{
+          "shape":"RuleName",
+          "documentation":"<p>The name of the rule.</p>"
         },
         "EventBusName":{
           "shape":"EventBusNameOrArn",
           "documentation":"<p>The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.</p>"
-        } 
-      } 
-    }, 
-    "DescribeRuleResponse":{ 
-      "type":"structure", 
-      "members":{ 
-        "Name":{ 
-          "shape":"RuleName", 
-          "documentation":"<p>The name of the rule.</p>" 
-        }, 
-        "Arn":{ 
-          "shape":"RuleArn", 
-          "documentation":"<p>The Amazon Resource Name (ARN) of the rule.</p>" 
-        }, 
-        "EventPattern":{ 
-          "shape":"EventPattern", 
+        }
+      }
+    },
+    "DescribeRuleResponse":{
+      "type":"structure",
+      "members":{
+        "Name":{
+          "shape":"RuleName",
+          "documentation":"<p>The name of the rule.</p>"
+        },
+        "Arn":{
+          "shape":"RuleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the rule.</p>"
+        },
+        "EventPattern":{
+          "shape":"EventPattern",
           "documentation":"<p>The event pattern. For more information, see <a href=\"https://docs.aws.amazon.com/eventbridge/latest/userguide/eventbridge-and-event-patterns.html\">Events and Event Patterns</a> in the <i>Amazon EventBridge User Guide</i>.</p>"
-        }, 
-        "ScheduleExpression":{ 
-          "shape":"ScheduleExpression", 
+        },
+        "ScheduleExpression":{
+          "shape":"ScheduleExpression",
           "documentation":"<p>The scheduling expression. For example, \"cron(0 20 * * ? *)\", \"rate(5 minutes)\".</p>"
-        }, 
-        "State":{ 
-          "shape":"RuleState", 
-          "documentation":"<p>Specifies whether the rule is enabled or disabled.</p>" 
-        }, 
-        "Description":{ 
-          "shape":"RuleDescription", 
-          "documentation":"<p>The description of the rule.</p>" 
-        }, 
-        "RoleArn":{ 
-          "shape":"RoleArn", 
-          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role associated with the rule.</p>" 
+        },
+        "State":{
+          "shape":"RuleState",
+          "documentation":"<p>Specifies whether the rule is enabled or disabled.</p>"
+        },
+        "Description":{
+          "shape":"RuleDescription",
+          "documentation":"<p>The description of the rule.</p>"
+        },
+        "RoleArn":{
+          "shape":"RoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role associated with the rule.</p>"
         },
         "ManagedBy":{
           "shape":"ManagedBy",
@@ -2268,33 +2268,33 @@
         "CreatedBy":{
           "shape":"CreatedBy",
           "documentation":"<p>The account ID of the user that created the rule. If you use <code>PutRule</code> to put a rule on an event bus in another account, the other account is the owner of the rule, and the rule ARN includes the account ID for that account. However, the value for <code>CreatedBy</code> is the account ID as the account that created the rule in the other account.</p>"
-        } 
-      } 
-    }, 
-    "DisableRuleRequest":{ 
-      "type":"structure", 
-      "required":["Name"], 
-      "members":{ 
-        "Name":{ 
-          "shape":"RuleName", 
-          "documentation":"<p>The name of the rule.</p>" 
+        }
+      }
+    },
+    "DisableRuleRequest":{
+      "type":"structure",
+      "required":["Name"],
+      "members":{
+        "Name":{
+          "shape":"RuleName",
+          "documentation":"<p>The name of the rule.</p>"
         },
         "EventBusName":{
           "shape":"EventBusNameOrArn",
           "documentation":"<p>The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.</p>"
-        } 
-      } 
-    }, 
-    "EcsParameters":{ 
-      "type":"structure", 
-      "required":["TaskDefinitionArn"], 
-      "members":{ 
-        "TaskDefinitionArn":{ 
-          "shape":"Arn", 
+        }
+      }
+    },
+    "EcsParameters":{
+      "type":"structure",
+      "required":["TaskDefinitionArn"],
+      "members":{
+        "TaskDefinitionArn":{
+          "shape":"Arn",
           "documentation":"<p>The ARN of the task definition to use if the event target is an Amazon ECS task. </p>"
-        }, 
-        "TaskCount":{ 
-          "shape":"LimitMin1", 
+        },
+        "TaskCount":{
+          "shape":"LimitMin1",
           "documentation":"<p>The number of tasks to create based on <code>TaskDefinition</code>. The default is 1.</p>"
         },
         "LaunchType":{
@@ -2344,26 +2344,26 @@
         "Tags":{
           "shape":"TagList",
           "documentation":"<p>The metadata that you apply to the task to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. To learn more, see <a href=\"https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html#ECS-RunTask-request-tags\">RunTask</a> in the Amazon ECS API Reference.</p>"
-        } 
-      }, 
+        }
+      },
       "documentation":"<p>The custom parameters to be used when the target is an Amazon ECS task.</p>"
-    }, 
-    "EnableRuleRequest":{ 
-      "type":"structure", 
-      "required":["Name"], 
-      "members":{ 
-        "Name":{ 
-          "shape":"RuleName", 
-          "documentation":"<p>The name of the rule.</p>" 
+    },
+    "EnableRuleRequest":{
+      "type":"structure",
+      "required":["Name"],
+      "members":{
+        "Name":{
+          "shape":"RuleName",
+          "documentation":"<p>The name of the rule.</p>"
         },
         "EventBusName":{
           "shape":"EventBusNameOrArn",
           "documentation":"<p>The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.</p>"
-        } 
-      } 
-    }, 
-    "ErrorCode":{"type":"string"}, 
-    "ErrorMessage":{"type":"string"}, 
+        }
+      }
+    },
+    "ErrorCode":{"type":"string"},
+    "ErrorMessage":{"type":"string"},
     "EventBus":{
       "type":"structure",
       "members":{
@@ -2398,13 +2398,13 @@
       "min":1,
       "pattern":"(arn:aws[\\w-]*:events:[a-z]{2}-[a-z]+-[\\w-]+:[0-9]{12}:event-bus\\/)?[/\\.\\-_A-Za-z0-9]+"
     },
-    "EventId":{"type":"string"}, 
-    "EventPattern":{"type":"string"}, 
-    "EventResource":{"type":"string"}, 
-    "EventResourceList":{ 
-      "type":"list", 
-      "member":{"shape":"EventResource"} 
-    }, 
+    "EventId":{"type":"string"},
+    "EventPattern":{"type":"string"},
+    "EventResource":{"type":"string"},
+    "EventResourceList":{
+      "type":"list",
+      "member":{"shape":"EventResource"}
+    },
     "EventSource":{
       "type":"structure",
       "members":{
@@ -2459,7 +2459,7 @@
         "DELETED"
       ]
     },
-    "EventTime":{"type":"timestamp"}, 
+    "EventTime":{"type":"timestamp"},
     "HeaderKey":{
       "type":"string",
       "max":512,
@@ -2506,43 +2506,43 @@
       "documentation":"<p>An error occurred because a replay can be canceled only when the state is Running or Starting.</p>",
       "exception":true
     },
-    "InputTransformer":{ 
-      "type":"structure", 
-      "required":["InputTemplate"], 
-      "members":{ 
-        "InputPathsMap":{ 
-          "shape":"TransformerPaths", 
+    "InputTransformer":{
+      "type":"structure",
+      "required":["InputTemplate"],
+      "members":{
+        "InputPathsMap":{
+          "shape":"TransformerPaths",
           "documentation":"<p>Map of JSON paths to be extracted from the event. You can then insert these in the template in <code>InputTemplate</code> to produce the output you want to be sent to the target.</p> <p> <code>InputPathsMap</code> is an array key-value pairs, where each value is a valid JSON path. You can have as many as 100 key-value pairs. You must use JSON dot notation, not bracket notation.</p> <p>The keys cannot start with \"AWS.\" </p>"
-        }, 
-        "InputTemplate":{ 
-          "shape":"TransformerInput", 
+        },
+        "InputTemplate":{
+          "shape":"TransformerInput",
           "documentation":"<p>Input template where you specify placeholders that will be filled with the values of the keys from <code>InputPathsMap</code> to customize the data sent to the target. Enclose each <code>InputPathsMaps</code> value in brackets: &lt;<i>value</i>&gt; The InputTemplate must be valid JSON.</p> <p>If <code>InputTemplate</code> is a JSON object (surrounded by curly braces), the following restrictions apply:</p> <ul> <li> <p>The placeholder cannot be used as an object key.</p> </li> </ul> <p>The following example shows the syntax for using <code>InputPathsMap</code> and <code>InputTemplate</code>.</p> <p> <code> \"InputTransformer\":</code> </p> <p> <code>{</code> </p> <p> <code>\"InputPathsMap\": {\"instance\": \"$.detail.instance\",\"status\": \"$.detail.status\"},</code> </p> <p> <code>\"InputTemplate\": \"&lt;instance&gt; is in state &lt;status&gt;\"</code> </p> <p> <code>}</code> </p> <p>To have the <code>InputTemplate</code> include quote marks within a JSON string, escape each quote marks with a slash, as in the following example:</p> <p> <code> \"InputTransformer\":</code> </p> <p> <code>{</code> </p> <p> <code>\"InputPathsMap\": {\"instance\": \"$.detail.instance\",\"status\": \"$.detail.status\"},</code> </p> <p> <code>\"InputTemplate\": \"&lt;instance&gt; is in state \\\"&lt;status&gt;\\\"\"</code> </p> <p> <code>}</code> </p> <p>The <code>InputTemplate</code> can also be valid JSON with varibles in quotes or out, as in the following example:</p> <p> <code> \"InputTransformer\":</code> </p> <p> <code>{</code> </p> <p> <code>\"InputPathsMap\": {\"instance\": \"$.detail.instance\",\"status\": \"$.detail.status\"},</code> </p> <p> <code>\"InputTemplate\": '{\"myInstance\": &lt;instance&gt;,\"myStatus\": \"&lt;instance&gt; is in state \\\"&lt;status&gt;\\\"\"}'</code> </p> <p> <code>}</code> </p>"
-        } 
-      }, 
-      "documentation":"<p>Contains the parameters needed for you to provide custom input to a target based on one or more pieces of data extracted from the event.</p>" 
-    }, 
-    "InputTransformerPathKey":{ 
-      "type":"string", 
-      "max":256, 
-      "min":1, 
-      "pattern":"[A-Za-z0-9\\_\\-]+" 
-    }, 
-    "Integer":{"type":"integer"}, 
-    "InternalException":{ 
-      "type":"structure", 
-      "members":{ 
-      }, 
-      "documentation":"<p>This exception occurs due to unexpected causes.</p>", 
-      "exception":true, 
-      "fault":true 
-    }, 
-    "InvalidEventPatternException":{ 
-      "type":"structure", 
-      "members":{ 
-      }, 
+        }
+      },
+      "documentation":"<p>Contains the parameters needed for you to provide custom input to a target based on one or more pieces of data extracted from the event.</p>"
+    },
+    "InputTransformerPathKey":{
+      "type":"string",
+      "max":256,
+      "min":1,
+      "pattern":"[A-Za-z0-9\\_\\-]+"
+    },
+    "Integer":{"type":"integer"},
+    "InternalException":{
+      "type":"structure",
+      "members":{
+      },
+      "documentation":"<p>This exception occurs due to unexpected causes.</p>",
+      "exception":true,
+      "fault":true
+    },
+    "InvalidEventPatternException":{
+      "type":"structure",
+      "members":{
+      },
       "documentation":"<p>The event pattern is not valid.</p>",
-      "exception":true 
-    }, 
+      "exception":true
+    },
     "InvalidStateException":{
       "type":"structure",
       "members":{
@@ -2550,17 +2550,17 @@
       "documentation":"<p>The specified state is not a valid state for an event source.</p>",
       "exception":true
     },
-    "KinesisParameters":{ 
-      "type":"structure", 
-      "required":["PartitionKeyPath"], 
-      "members":{ 
-        "PartitionKeyPath":{ 
-          "shape":"TargetPartitionKeyPath", 
+    "KinesisParameters":{
+      "type":"structure",
+      "required":["PartitionKeyPath"],
+      "members":{
+        "PartitionKeyPath":{
+          "shape":"TargetPartitionKeyPath",
           "documentation":"<p>The JSON path to be extracted from the event and used as the partition key. For more information, see <a href=\"https://docs.aws.amazon.com/streams/latest/dev/key-concepts.html#partition-key\">Amazon Kinesis Streams Key Concepts</a> in the <i>Amazon Kinesis Streams Developer Guide</i>.</p>"
-        } 
-      }, 
+        }
+      },
       "documentation":"<p>This object enables you to specify a JSON path to extract from the event and use as the partition key for the Amazon Kinesis data stream, so that you can control the shard to which the event goes. If you do not include this parameter, the default is to use the <code>eventId</code> as the partition key.</p>"
-    }, 
+    },
     "LaunchType":{
       "type":"string",
       "enum":[
@@ -2568,22 +2568,22 @@
         "FARGATE"
       ]
     },
-    "LimitExceededException":{ 
-      "type":"structure", 
-      "members":{ 
-      }, 
+    "LimitExceededException":{
+      "type":"structure",
+      "members":{
+      },
       "documentation":"<p>The request failed because it attempted to create resource beyond the allowed service quota.</p>",
-      "exception":true 
-    }, 
-    "LimitMax100":{ 
-      "type":"integer", 
-      "max":100, 
-      "min":1 
-    }, 
-    "LimitMin1":{ 
-      "type":"integer", 
-      "min":1 
-    }, 
+      "exception":true
+    },
+    "LimitMax100":{
+      "type":"integer",
+      "max":100,
+      "min":1
+    },
+    "LimitMin1":{
+      "type":"integer",
+      "min":1
+    },
     "ListApiDestinationsRequest":{
       "type":"structure",
       "members":{
@@ -2850,75 +2850,75 @@
         }
       }
     },
-    "ListRuleNamesByTargetRequest":{ 
-      "type":"structure", 
-      "required":["TargetArn"], 
-      "members":{ 
-        "TargetArn":{ 
-          "shape":"TargetArn", 
-          "documentation":"<p>The Amazon Resource Name (ARN) of the target resource.</p>" 
-        }, 
+    "ListRuleNamesByTargetRequest":{
+      "type":"structure",
+      "required":["TargetArn"],
+      "members":{
+        "TargetArn":{
+          "shape":"TargetArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the target resource.</p>"
+        },
         "EventBusName":{
           "shape":"EventBusNameOrArn",
           "documentation":"<p>The name or ARN of the event bus to list rules for. If you omit this, the default event bus is used.</p>"
         },
-        "NextToken":{ 
-          "shape":"NextToken", 
-          "documentation":"<p>The token returned by a previous call to retrieve the next set of results.</p>" 
-        }, 
-        "Limit":{ 
-          "shape":"LimitMax100", 
-          "documentation":"<p>The maximum number of results to return.</p>" 
-        } 
-      } 
-    }, 
-    "ListRuleNamesByTargetResponse":{ 
-      "type":"structure", 
-      "members":{ 
-        "RuleNames":{ 
-          "shape":"RuleNameList", 
-          "documentation":"<p>The names of the rules that can invoke the given target.</p>" 
-        }, 
-        "NextToken":{ 
-          "shape":"NextToken", 
-          "documentation":"<p>Indicates whether there are additional results to retrieve. If there are no more results, the value is null.</p>" 
-        } 
-      } 
-    }, 
-    "ListRulesRequest":{ 
-      "type":"structure", 
-      "members":{ 
-        "NamePrefix":{ 
-          "shape":"RuleName", 
-          "documentation":"<p>The prefix matching the rule name.</p>" 
-        }, 
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token returned by a previous call to retrieve the next set of results.</p>"
+        },
+        "Limit":{
+          "shape":"LimitMax100",
+          "documentation":"<p>The maximum number of results to return.</p>"
+        }
+      }
+    },
+    "ListRuleNamesByTargetResponse":{
+      "type":"structure",
+      "members":{
+        "RuleNames":{
+          "shape":"RuleNameList",
+          "documentation":"<p>The names of the rules that can invoke the given target.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>Indicates whether there are additional results to retrieve. If there are no more results, the value is null.</p>"
+        }
+      }
+    },
+    "ListRulesRequest":{
+      "type":"structure",
+      "members":{
+        "NamePrefix":{
+          "shape":"RuleName",
+          "documentation":"<p>The prefix matching the rule name.</p>"
+        },
         "EventBusName":{
           "shape":"EventBusNameOrArn",
           "documentation":"<p>The name or ARN of the event bus to list the rules for. If you omit this, the default event bus is used.</p>"
         },
-        "NextToken":{ 
-          "shape":"NextToken", 
-          "documentation":"<p>The token returned by a previous call to retrieve the next set of results.</p>" 
-        }, 
-        "Limit":{ 
-          "shape":"LimitMax100", 
-          "documentation":"<p>The maximum number of results to return.</p>" 
-        } 
-      } 
-    }, 
-    "ListRulesResponse":{ 
-      "type":"structure", 
-      "members":{ 
-        "Rules":{ 
-          "shape":"RuleResponseList", 
-          "documentation":"<p>The rules that match the specified criteria.</p>" 
-        }, 
-        "NextToken":{ 
-          "shape":"NextToken", 
-          "documentation":"<p>Indicates whether there are additional results to retrieve. If there are no more results, the value is null.</p>" 
-        } 
-      } 
-    }, 
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token returned by a previous call to retrieve the next set of results.</p>"
+        },
+        "Limit":{
+          "shape":"LimitMax100",
+          "documentation":"<p>The maximum number of results to return.</p>"
+        }
+      }
+    },
+    "ListRulesResponse":{
+      "type":"structure",
+      "members":{
+        "Rules":{
+          "shape":"RuleResponseList",
+          "documentation":"<p>The rules that match the specified criteria.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>Indicates whether there are additional results to retrieve. If there are no more results, the value is null.</p>"
+        }
+      }
+    },
     "ListTagsForResourceRequest":{
       "type":"structure",
       "required":["ResourceARN"],
@@ -2938,41 +2938,41 @@
         }
       }
     },
-    "ListTargetsByRuleRequest":{ 
-      "type":"structure", 
-      "required":["Rule"], 
-      "members":{ 
-        "Rule":{ 
-          "shape":"RuleName", 
-          "documentation":"<p>The name of the rule.</p>" 
-        }, 
+    "ListTargetsByRuleRequest":{
+      "type":"structure",
+      "required":["Rule"],
+      "members":{
+        "Rule":{
+          "shape":"RuleName",
+          "documentation":"<p>The name of the rule.</p>"
+        },
         "EventBusName":{
           "shape":"EventBusNameOrArn",
           "documentation":"<p>The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.</p>"
         },
-        "NextToken":{ 
-          "shape":"NextToken", 
-          "documentation":"<p>The token returned by a previous call to retrieve the next set of results.</p>" 
-        }, 
-        "Limit":{ 
-          "shape":"LimitMax100", 
-          "documentation":"<p>The maximum number of results to return.</p>" 
-        } 
-      } 
-    }, 
-    "ListTargetsByRuleResponse":{ 
-      "type":"structure", 
-      "members":{ 
-        "Targets":{ 
-          "shape":"TargetList", 
-          "documentation":"<p>The targets assigned to the rule.</p>" 
-        }, 
-        "NextToken":{ 
-          "shape":"NextToken", 
-          "documentation":"<p>Indicates whether there are additional results to retrieve. If there are no more results, the value is null.</p>" 
-        } 
-      } 
-    }, 
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token returned by a previous call to retrieve the next set of results.</p>"
+        },
+        "Limit":{
+          "shape":"LimitMax100",
+          "documentation":"<p>The maximum number of results to return.</p>"
+        }
+      }
+    },
+    "ListTargetsByRuleResponse":{
+      "type":"structure",
+      "members":{
+        "Targets":{
+          "shape":"TargetList",
+          "documentation":"<p>The targets assigned to the rule.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>Indicates whether there are additional results to retrieve. If there are no more results, the value is null.</p>"
+        }
+      }
+    },
     "Long":{"type":"long"},
     "ManagedBy":{
       "type":"string",
@@ -2996,7 +2996,7 @@
       "max":185,
       "min":0
     },
-    "MessageGroupId":{"type":"string"}, 
+    "MessageGroupId":{"type":"string"},
     "NetworkConfiguration":{
       "type":"structure",
       "members":{
@@ -3007,11 +3007,11 @@
       },
       "documentation":"<p>This structure specifies the network configuration for an ECS task.</p>"
     },
-    "NextToken":{ 
-      "type":"string", 
-      "max":2048, 
-      "min":1 
-    }, 
+    "NextToken":{
+      "type":"string",
+      "max":2048,
+      "min":1
+    },
     "NonPartnerEventBusName":{
       "type":"string",
       "max":256,
@@ -3150,54 +3150,54 @@
         "binpack"
       ]
     },
-    "PolicyLengthExceededException":{ 
-      "type":"structure", 
-      "members":{ 
-      }, 
-      "documentation":"<p>The event bus policy is too long. For more information, see the limits.</p>", 
-      "exception":true 
-    }, 
-    "Principal":{ 
-      "type":"string", 
-      "max":12, 
-      "min":1, 
-      "pattern":"(\\d{12}|\\*)" 
-    }, 
+    "PolicyLengthExceededException":{
+      "type":"structure",
+      "members":{
+      },
+      "documentation":"<p>The event bus policy is too long. For more information, see the limits.</p>",
+      "exception":true
+    },
+    "Principal":{
+      "type":"string",
+      "max":12,
+      "min":1,
+      "pattern":"(\\d{12}|\\*)"
+    },
     "PropagateTags":{
       "type":"string",
       "enum":["TASK_DEFINITION"]
     },
-    "PutEventsRequest":{ 
-      "type":"structure", 
-      "required":["Entries"], 
-      "members":{ 
-        "Entries":{ 
-          "shape":"PutEventsRequestEntryList", 
-          "documentation":"<p>The entry that defines an event in your system. You can specify several parameters for the entry such as the source and type of the event, resources associated with the event, and so on.</p>" 
-        } 
-      } 
-    }, 
-    "PutEventsRequestEntry":{ 
-      "type":"structure", 
-      "members":{ 
-        "Time":{ 
-          "shape":"EventTime", 
+    "PutEventsRequest":{
+      "type":"structure",
+      "required":["Entries"],
+      "members":{
+        "Entries":{
+          "shape":"PutEventsRequestEntryList",
+          "documentation":"<p>The entry that defines an event in your system. You can specify several parameters for the entry such as the source and type of the event, resources associated with the event, and so on.</p>"
+        }
+      }
+    },
+    "PutEventsRequestEntry":{
+      "type":"structure",
+      "members":{
+        "Time":{
+          "shape":"EventTime",
           "documentation":"<p>The time stamp of the event, per <a href=\"https://www.rfc-editor.org/rfc/rfc3339.txt\">RFC3339</a>. If no time stamp is provided, the time stamp of the <a>PutEvents</a> call is used.</p>"
-        }, 
-        "Source":{ 
-          "shape":"String", 
+        },
+        "Source":{
+          "shape":"String",
           "documentation":"<p>The source of the event.</p>"
-        }, 
-        "Resources":{ 
-          "shape":"EventResourceList", 
+        },
+        "Resources":{
+          "shape":"EventResourceList",
           "documentation":"<p>AWS resources, identified by Amazon Resource Name (ARN), which the event primarily concerns. Any number, including zero, may be present.</p>"
-        }, 
-        "DetailType":{ 
-          "shape":"String", 
+        },
+        "DetailType":{
+          "shape":"String",
           "documentation":"<p>Free-form string used to decide what fields to expect in the event detail.</p>"
-        }, 
-        "Detail":{ 
-          "shape":"String", 
+        },
+        "Detail":{
+          "shape":"String",
           "documentation":"<p>A valid JSON string. There is no other schema imposed. The JSON string may contain fields and nested subobjects.</p>"
         },
         "EventBusName":{
@@ -3207,51 +3207,51 @@
         "TraceHeader":{
           "shape":"TraceHeader",
           "documentation":"<p>An AWS X-Ray trade header, which is an http header (X-Amzn-Trace-Id) that contains the trace-id associated with the event.</p> <p>To learn more about X-Ray trace headers, see <a href=\"https://docs.aws.amazon.com/xray/latest/devguide/xray-concepts.html#xray-concepts-tracingheader\">Tracing header</a> in the AWS X-Ray Developer Guide.</p>"
-        } 
-      }, 
-      "documentation":"<p>Represents an event to be submitted.</p>" 
-    }, 
-    "PutEventsRequestEntryList":{ 
-      "type":"list", 
-      "member":{"shape":"PutEventsRequestEntry"}, 
-      "max":10, 
-      "min":1 
-    }, 
-    "PutEventsResponse":{ 
-      "type":"structure", 
-      "members":{ 
-        "FailedEntryCount":{ 
-          "shape":"Integer", 
-          "documentation":"<p>The number of failed entries.</p>" 
-        }, 
-        "Entries":{ 
-          "shape":"PutEventsResultEntryList", 
-          "documentation":"<p>The successfully and unsuccessfully ingested events results. If the ingestion was successful, the entry has the event ID in it. Otherwise, you can use the error code and error message to identify the problem with the entry.</p>" 
-        } 
-      } 
-    }, 
-    "PutEventsResultEntry":{ 
-      "type":"structure", 
-      "members":{ 
-        "EventId":{ 
-          "shape":"EventId", 
-          "documentation":"<p>The ID of the event.</p>" 
-        }, 
-        "ErrorCode":{ 
-          "shape":"ErrorCode", 
-          "documentation":"<p>The error code that indicates why the event submission failed.</p>" 
-        }, 
-        "ErrorMessage":{ 
-          "shape":"ErrorMessage", 
-          "documentation":"<p>The error message that explains why the event submission failed.</p>" 
-        } 
-      }, 
-      "documentation":"<p>Represents an event that failed to be submitted.</p>" 
-    }, 
-    "PutEventsResultEntryList":{ 
-      "type":"list", 
-      "member":{"shape":"PutEventsResultEntry"} 
-    }, 
+        }
+      },
+      "documentation":"<p>Represents an event to be submitted.</p>"
+    },
+    "PutEventsRequestEntryList":{
+      "type":"list",
+      "member":{"shape":"PutEventsRequestEntry"},
+      "max":10,
+      "min":1
+    },
+    "PutEventsResponse":{
+      "type":"structure",
+      "members":{
+        "FailedEntryCount":{
+          "shape":"Integer",
+          "documentation":"<p>The number of failed entries.</p>"
+        },
+        "Entries":{
+          "shape":"PutEventsResultEntryList",
+          "documentation":"<p>The successfully and unsuccessfully ingested events results. If the ingestion was successful, the entry has the event ID in it. Otherwise, you can use the error code and error message to identify the problem with the entry.</p>"
+        }
+      }
+    },
+    "PutEventsResultEntry":{
+      "type":"structure",
+      "members":{
+        "EventId":{
+          "shape":"EventId",
+          "documentation":"<p>The ID of the event.</p>"
+        },
+        "ErrorCode":{
+          "shape":"ErrorCode",
+          "documentation":"<p>The error code that indicates why the event submission failed.</p>"
+        },
+        "ErrorMessage":{
+          "shape":"ErrorMessage",
+          "documentation":"<p>The error message that explains why the event submission failed.</p>"
+        }
+      },
+      "documentation":"<p>Represents an event that failed to be submitted.</p>"
+    },
+    "PutEventsResultEntryList":{
+      "type":"list",
+      "member":{"shape":"PutEventsResultEntry"}
+    },
     "PutPartnerEventsRequest":{
       "type":"structure",
       "required":["Entries"],
@@ -3329,23 +3329,23 @@
       "type":"list",
       "member":{"shape":"PutPartnerEventsResultEntry"}
     },
-    "PutPermissionRequest":{ 
-      "type":"structure", 
-      "members":{ 
+    "PutPermissionRequest":{
+      "type":"structure",
+      "members":{
         "EventBusName":{
           "shape":"NonPartnerEventBusName",
           "documentation":"<p>The name of the event bus associated with the rule. If you omit this, the default event bus is used.</p>"
         },
-        "Action":{ 
-          "shape":"Action", 
+        "Action":{
+          "shape":"Action",
           "documentation":"<p>The action that you are enabling the other account to perform. Currently, this must be <code>events:PutEvents</code>.</p>"
-        }, 
-        "Principal":{ 
-          "shape":"Principal", 
+        },
+        "Principal":{
+          "shape":"Principal",
           "documentation":"<p>The 12-digit AWS account ID that you are permitting to put events to your default event bus. Specify \"*\" to permit any account to put events to your default event bus.</p> <p>If you specify \"*\" without specifying <code>Condition</code>, avoid creating rules that may match undesirable events. To create more secure rules, make sure that the event pattern for each rule contains an <code>account</code> field with a specific account ID from which to receive events. Rules with an account field do not match any events sent from other accounts.</p>"
-        }, 
-        "StatementId":{ 
-          "shape":"StatementId", 
+        },
+        "StatementId":{
+          "shape":"StatementId",
           "documentation":"<p>An identifier string for the external account that you are granting permissions to. If you later want to revoke the permission for this external account, specify this <code>StatementId</code> when you run <a>RemovePermission</a>.</p>"
         },
         "Condition":{
@@ -3355,36 +3355,36 @@
         "Policy":{
           "shape":"String",
           "documentation":"<p>A JSON string that describes the permission policy statement. You can include a <code>Policy</code> parameter in the request instead of using the <code>StatementId</code>, <code>Action</code>, <code>Principal</code>, or <code>Condition</code> parameters.</p>"
-        } 
-      } 
-    }, 
-    "PutRuleRequest":{ 
-      "type":"structure", 
-      "required":["Name"], 
-      "members":{ 
-        "Name":{ 
-          "shape":"RuleName", 
+        }
+      }
+    },
+    "PutRuleRequest":{
+      "type":"structure",
+      "required":["Name"],
+      "members":{
+        "Name":{
+          "shape":"RuleName",
           "documentation":"<p>The name of the rule that you are creating or updating.</p>"
-        }, 
-        "ScheduleExpression":{ 
-          "shape":"ScheduleExpression", 
+        },
+        "ScheduleExpression":{
+          "shape":"ScheduleExpression",
           "documentation":"<p>The scheduling expression. For example, \"cron(0 20 * * ? *)\" or \"rate(5 minutes)\".</p>"
-        }, 
-        "EventPattern":{ 
-          "shape":"EventPattern", 
+        },
+        "EventPattern":{
+          "shape":"EventPattern",
           "documentation":"<p>The event pattern. For more information, see <a href=\"https://docs.aws.amazon.com/eventbridge/latest/userguide/eventbridge-and-event-patterns.html\">Events and Event Patterns</a> in the <i>Amazon EventBridge User Guide</i>.</p>"
-        }, 
-        "State":{ 
-          "shape":"RuleState", 
-          "documentation":"<p>Indicates whether the rule is enabled or disabled.</p>" 
-        }, 
-        "Description":{ 
-          "shape":"RuleDescription", 
-          "documentation":"<p>A description of the rule.</p>" 
-        }, 
-        "RoleArn":{ 
-          "shape":"RoleArn", 
-          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role associated with the rule.</p>" 
+        },
+        "State":{
+          "shape":"RuleState",
+          "documentation":"<p>Indicates whether the rule is enabled or disabled.</p>"
+        },
+        "Description":{
+          "shape":"RuleDescription",
+          "documentation":"<p>A description of the rule.</p>"
+        },
+        "RoleArn":{
+          "shape":"RoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role associated with the rule.</p>"
         },
         "Tags":{
           "shape":"TagList",
@@ -3393,74 +3393,74 @@
         "EventBusName":{
           "shape":"EventBusNameOrArn",
           "documentation":"<p>The name or ARN of the event bus to associate with this rule. If you omit this, the default event bus is used.</p>"
-        } 
-      } 
-    }, 
-    "PutRuleResponse":{ 
-      "type":"structure", 
-      "members":{ 
-        "RuleArn":{ 
-          "shape":"RuleArn", 
-          "documentation":"<p>The Amazon Resource Name (ARN) of the rule.</p>" 
-        } 
-      } 
-    }, 
-    "PutTargetsRequest":{ 
-      "type":"structure", 
-      "required":[ 
-        "Rule", 
-        "Targets" 
-      ], 
-      "members":{ 
-        "Rule":{ 
-          "shape":"RuleName", 
-          "documentation":"<p>The name of the rule.</p>" 
-        }, 
+        }
+      }
+    },
+    "PutRuleResponse":{
+      "type":"structure",
+      "members":{
+        "RuleArn":{
+          "shape":"RuleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the rule.</p>"
+        }
+      }
+    },
+    "PutTargetsRequest":{
+      "type":"structure",
+      "required":[
+        "Rule",
+        "Targets"
+      ],
+      "members":{
+        "Rule":{
+          "shape":"RuleName",
+          "documentation":"<p>The name of the rule.</p>"
+        },
         "EventBusName":{
           "shape":"EventBusNameOrArn",
           "documentation":"<p>The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.</p>"
         },
-        "Targets":{ 
-          "shape":"TargetList", 
-          "documentation":"<p>The targets to update or add to the rule.</p>" 
-        } 
-      } 
-    }, 
-    "PutTargetsResponse":{ 
-      "type":"structure", 
-      "members":{ 
-        "FailedEntryCount":{ 
-          "shape":"Integer", 
-          "documentation":"<p>The number of failed entries.</p>" 
-        }, 
-        "FailedEntries":{ 
-          "shape":"PutTargetsResultEntryList", 
-          "documentation":"<p>The failed target entries.</p>" 
-        } 
-      } 
-    }, 
-    "PutTargetsResultEntry":{ 
-      "type":"structure", 
-      "members":{ 
-        "TargetId":{ 
-          "shape":"TargetId", 
-          "documentation":"<p>The ID of the target.</p>" 
-        }, 
-        "ErrorCode":{ 
-          "shape":"ErrorCode", 
-          "documentation":"<p>The error code that indicates why the target addition failed. If the value is <code>ConcurrentModificationException</code>, too many requests were made at the same time.</p>" 
-        }, 
-        "ErrorMessage":{ 
-          "shape":"ErrorMessage", 
-          "documentation":"<p>The error message that explains why the target addition failed.</p>" 
-        } 
-      }, 
-      "documentation":"<p>Represents a target that failed to be added to a rule.</p>" 
-    }, 
-    "PutTargetsResultEntryList":{ 
-      "type":"list", 
-      "member":{"shape":"PutTargetsResultEntry"} 
-    }, 
+        "Targets":{
+          "shape":"TargetList",
+          "documentation":"<p>The targets to update or add to the rule.</p>"
+        }
+      }
+    },
+    "PutTargetsResponse":{
+      "type":"structure",
+      "members":{
+        "FailedEntryCount":{
+          "shape":"Integer",
+          "documentation":"<p>The number of failed entries.</p>"
+        },
+        "FailedEntries":{
+          "shape":"PutTargetsResultEntryList",
+          "documentation":"<p>The failed target entries.</p>"
+        }
+      }
+    },
+    "PutTargetsResultEntry":{
+      "type":"structure",
+      "members":{
+        "TargetId":{
+          "shape":"TargetId",
+          "documentation":"<p>The ID of the target.</p>"
+        },
+        "ErrorCode":{
+          "shape":"ErrorCode",
+          "documentation":"<p>The error code that indicates why the target addition failed. If the value is <code>ConcurrentModificationException</code>, too many requests were made at the same time.</p>"
+        },
+        "ErrorMessage":{
+          "shape":"ErrorMessage",
+          "documentation":"<p>The error message that explains why the target addition failed.</p>"
+        }
+      },
+      "documentation":"<p>Represents a target that failed to be added to a rule.</p>"
+    },
+    "PutTargetsResultEntryList":{
+      "type":"list",
+      "member":{"shape":"PutTargetsResultEntry"}
+    },
     "QueryStringKey":{
       "type":"string",
       "max":512,
@@ -3520,12 +3520,12 @@
       "type":"string",
       "max":1024
     },
-    "RemovePermissionRequest":{ 
-      "type":"structure", 
-      "members":{ 
-        "StatementId":{ 
-          "shape":"StatementId", 
-          "documentation":"<p>The statement ID corresponding to the account that is no longer allowed to put events to the default event bus.</p>" 
+    "RemovePermissionRequest":{
+      "type":"structure",
+      "members":{
+        "StatementId":{
+          "shape":"StatementId",
+          "documentation":"<p>The statement ID corresponding to the account that is no longer allowed to put events to the default event bus.</p>"
         },
         "RemoveAllPermissions":{
           "shape":"Boolean",
@@ -3534,69 +3534,69 @@
         "EventBusName":{
           "shape":"NonPartnerEventBusName",
           "documentation":"<p>The name of the event bus to revoke permissions for. If you omit this, the default event bus is used.</p>"
-        } 
-      } 
-    }, 
-    "RemoveTargetsRequest":{ 
-      "type":"structure", 
-      "required":[ 
-        "Rule", 
-        "Ids" 
-      ], 
-      "members":{ 
-        "Rule":{ 
-          "shape":"RuleName", 
-          "documentation":"<p>The name of the rule.</p>" 
-        }, 
+        }
+      }
+    },
+    "RemoveTargetsRequest":{
+      "type":"structure",
+      "required":[
+        "Rule",
+        "Ids"
+      ],
+      "members":{
+        "Rule":{
+          "shape":"RuleName",
+          "documentation":"<p>The name of the rule.</p>"
+        },
         "EventBusName":{
           "shape":"EventBusNameOrArn",
           "documentation":"<p>The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.</p>"
         },
-        "Ids":{ 
-          "shape":"TargetIdList", 
-          "documentation":"<p>The IDs of the targets to remove from the rule.</p>" 
+        "Ids":{
+          "shape":"TargetIdList",
+          "documentation":"<p>The IDs of the targets to remove from the rule.</p>"
         },
         "Force":{
           "shape":"Boolean",
           "documentation":"<p>If this is a managed rule, created by an AWS service on your behalf, you must specify <code>Force</code> as <code>True</code> to remove targets. This parameter is ignored for rules that are not managed rules. You can check whether a rule is a managed rule by using <code>DescribeRule</code> or <code>ListRules</code> and checking the <code>ManagedBy</code> field of the response.</p>"
-        } 
-      } 
-    }, 
-    "RemoveTargetsResponse":{ 
-      "type":"structure", 
-      "members":{ 
-        "FailedEntryCount":{ 
-          "shape":"Integer", 
-          "documentation":"<p>The number of failed entries.</p>" 
-        }, 
-        "FailedEntries":{ 
-          "shape":"RemoveTargetsResultEntryList", 
-          "documentation":"<p>The failed target entries.</p>" 
-        } 
-      } 
-    }, 
-    "RemoveTargetsResultEntry":{ 
-      "type":"structure", 
-      "members":{ 
-        "TargetId":{ 
-          "shape":"TargetId", 
-          "documentation":"<p>The ID of the target.</p>" 
-        }, 
-        "ErrorCode":{ 
-          "shape":"ErrorCode", 
-          "documentation":"<p>The error code that indicates why the target removal failed. If the value is <code>ConcurrentModificationException</code>, too many requests were made at the same time.</p>" 
-        }, 
-        "ErrorMessage":{ 
-          "shape":"ErrorMessage", 
-          "documentation":"<p>The error message that explains why the target removal failed.</p>" 
-        } 
-      }, 
-      "documentation":"<p>Represents a target that failed to be removed from a rule.</p>" 
-    }, 
-    "RemoveTargetsResultEntryList":{ 
-      "type":"list", 
-      "member":{"shape":"RemoveTargetsResultEntry"} 
-    }, 
+        }
+      }
+    },
+    "RemoveTargetsResponse":{
+      "type":"structure",
+      "members":{
+        "FailedEntryCount":{
+          "shape":"Integer",
+          "documentation":"<p>The number of failed entries.</p>"
+        },
+        "FailedEntries":{
+          "shape":"RemoveTargetsResultEntryList",
+          "documentation":"<p>The failed target entries.</p>"
+        }
+      }
+    },
+    "RemoveTargetsResultEntry":{
+      "type":"structure",
+      "members":{
+        "TargetId":{
+          "shape":"TargetId",
+          "documentation":"<p>The ID of the target.</p>"
+        },
+        "ErrorCode":{
+          "shape":"ErrorCode",
+          "documentation":"<p>The error code that indicates why the target removal failed. If the value is <code>ConcurrentModificationException</code>, too many requests were made at the same time.</p>"
+        },
+        "ErrorMessage":{
+          "shape":"ErrorMessage",
+          "documentation":"<p>The error message that explains why the target removal failed.</p>"
+        }
+      },
+      "documentation":"<p>Represents a target that failed to be removed from a rule.</p>"
+    },
+    "RemoveTargetsResultEntryList":{
+      "type":"list",
+      "member":{"shape":"RemoveTargetsResultEntry"}
+    },
     "Replay":{
       "type":"structure",
       "members":{
@@ -3707,13 +3707,13 @@
       "max":1600,
       "min":1
     },
-    "ResourceNotFoundException":{ 
-      "type":"structure", 
-      "members":{ 
-      }, 
+    "ResourceNotFoundException":{
+      "type":"structure",
+      "members":{
+      },
       "documentation":"<p>An entity that you specified does not exist.</p>",
-      "exception":true 
-    }, 
+      "exception":true
+    },
     "RetentionDays":{
       "type":"integer",
       "min":0
@@ -3732,41 +3732,41 @@
       },
       "documentation":"<p>A <code>RetryPolicy</code> object that includes information about the retry policy settings.</p>"
     },
-    "RoleArn":{ 
-      "type":"string", 
-      "max":1600, 
-      "min":1 
-    }, 
-    "Rule":{ 
-      "type":"structure", 
-      "members":{ 
-        "Name":{ 
-          "shape":"RuleName", 
-          "documentation":"<p>The name of the rule.</p>" 
-        }, 
-        "Arn":{ 
-          "shape":"RuleArn", 
-          "documentation":"<p>The Amazon Resource Name (ARN) of the rule.</p>" 
-        }, 
-        "EventPattern":{ 
-          "shape":"EventPattern", 
+    "RoleArn":{
+      "type":"string",
+      "max":1600,
+      "min":1
+    },
+    "Rule":{
+      "type":"structure",
+      "members":{
+        "Name":{
+          "shape":"RuleName",
+          "documentation":"<p>The name of the rule.</p>"
+        },
+        "Arn":{
+          "shape":"RuleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the rule.</p>"
+        },
+        "EventPattern":{
+          "shape":"EventPattern",
           "documentation":"<p>The event pattern of the rule. For more information, see <a href=\"https://docs.aws.amazon.com/eventbridge/latest/userguide/eventbridge-and-event-patterns.html\">Events and Event Patterns</a> in the <i>Amazon EventBridge User Guide</i>.</p>"
-        }, 
-        "State":{ 
-          "shape":"RuleState", 
-          "documentation":"<p>The state of the rule.</p>" 
-        }, 
-        "Description":{ 
-          "shape":"RuleDescription", 
-          "documentation":"<p>The description of the rule.</p>" 
-        }, 
-        "ScheduleExpression":{ 
-          "shape":"ScheduleExpression", 
+        },
+        "State":{
+          "shape":"RuleState",
+          "documentation":"<p>The state of the rule.</p>"
+        },
+        "Description":{
+          "shape":"RuleDescription",
+          "documentation":"<p>The description of the rule.</p>"
+        },
+        "ScheduleExpression":{
+          "shape":"ScheduleExpression",
           "documentation":"<p>The scheduling expression. For example, \"cron(0 20 * * ? *)\", \"rate(5 minutes)\".</p>"
-        }, 
-        "RoleArn":{ 
-          "shape":"RoleArn", 
-          "documentation":"<p>The Amazon Resource Name (ARN) of the role that is used for target invocation.</p>" 
+        },
+        "RoleArn":{
+          "shape":"RoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the role that is used for target invocation.</p>"
         },
         "ManagedBy":{
           "shape":"ManagedBy",
@@ -3775,92 +3775,92 @@
         "EventBusName":{
           "shape":"EventBusName",
           "documentation":"<p>The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.</p>"
-        } 
-      }, 
+        }
+      },
       "documentation":"<p>Contains information about a rule in Amazon EventBridge.</p>"
-    }, 
-    "RuleArn":{ 
-      "type":"string", 
-      "max":1600, 
-      "min":1 
-    }, 
-    "RuleDescription":{ 
-      "type":"string", 
-      "max":512 
-    }, 
-    "RuleName":{ 
-      "type":"string", 
-      "max":64, 
-      "min":1, 
-      "pattern":"[\\.\\-_A-Za-z0-9]+" 
-    }, 
-    "RuleNameList":{ 
-      "type":"list", 
-      "member":{"shape":"RuleName"} 
-    }, 
-    "RuleResponseList":{ 
-      "type":"list", 
-      "member":{"shape":"Rule"} 
-    }, 
-    "RuleState":{ 
-      "type":"string", 
-      "enum":[ 
-        "ENABLED", 
-        "DISABLED" 
-      ] 
-    }, 
-    "RunCommandParameters":{ 
-      "type":"structure", 
-      "required":["RunCommandTargets"], 
-      "members":{ 
-        "RunCommandTargets":{ 
-          "shape":"RunCommandTargets", 
+    },
+    "RuleArn":{
+      "type":"string",
+      "max":1600,
+      "min":1
+    },
+    "RuleDescription":{
+      "type":"string",
+      "max":512
+    },
+    "RuleName":{
+      "type":"string",
+      "max":64,
+      "min":1,
+      "pattern":"[\\.\\-_A-Za-z0-9]+"
+    },
+    "RuleNameList":{
+      "type":"list",
+      "member":{"shape":"RuleName"}
+    },
+    "RuleResponseList":{
+      "type":"list",
+      "member":{"shape":"Rule"}
+    },
+    "RuleState":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
+    },
+    "RunCommandParameters":{
+      "type":"structure",
+      "required":["RunCommandTargets"],
+      "members":{
+        "RunCommandTargets":{
+          "shape":"RunCommandTargets",
           "documentation":"<p>Currently, we support including only one RunCommandTarget block, which specifies either an array of InstanceIds or a tag.</p>"
-        } 
-      }, 
+        }
+      },
       "documentation":"<p>This parameter contains the criteria (either InstanceIds or a tag) used to specify which EC2 instances are to be sent the command. </p>"
-    }, 
-    "RunCommandTarget":{ 
-      "type":"structure", 
-      "required":[ 
-        "Key", 
-        "Values" 
-      ], 
-      "members":{ 
-        "Key":{ 
-          "shape":"RunCommandTargetKey", 
-          "documentation":"<p>Can be either <code>tag:</code> <i>tag-key</i> or <code>InstanceIds</code>.</p>" 
-        }, 
-        "Values":{ 
-          "shape":"RunCommandTargetValues", 
-          "documentation":"<p>If <code>Key</code> is <code>tag:</code> <i>tag-key</i>, <code>Values</code> is a list of tag values. If <code>Key</code> is <code>InstanceIds</code>, <code>Values</code> is a list of Amazon EC2 instance IDs.</p>" 
-        } 
-      }, 
+    },
+    "RunCommandTarget":{
+      "type":"structure",
+      "required":[
+        "Key",
+        "Values"
+      ],
+      "members":{
+        "Key":{
+          "shape":"RunCommandTargetKey",
+          "documentation":"<p>Can be either <code>tag:</code> <i>tag-key</i> or <code>InstanceIds</code>.</p>"
+        },
+        "Values":{
+          "shape":"RunCommandTargetValues",
+          "documentation":"<p>If <code>Key</code> is <code>tag:</code> <i>tag-key</i>, <code>Values</code> is a list of tag values. If <code>Key</code> is <code>InstanceIds</code>, <code>Values</code> is a list of Amazon EC2 instance IDs.</p>"
+        }
+      },
       "documentation":"<p>Information about the EC2 instances that are to be sent the command, specified as key-value pairs. Each <code>RunCommandTarget</code> block can include only one key, but this key may specify multiple values.</p>"
-    }, 
-    "RunCommandTargetKey":{ 
-      "type":"string", 
-      "max":128, 
-      "min":1, 
-      "pattern":"^[\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*$" 
-    }, 
-    "RunCommandTargetValue":{ 
-      "type":"string", 
-      "max":256, 
-      "min":1 
-    }, 
-    "RunCommandTargetValues":{ 
-      "type":"list", 
-      "member":{"shape":"RunCommandTargetValue"}, 
-      "max":50, 
-      "min":1 
-    }, 
-    "RunCommandTargets":{ 
-      "type":"list", 
-      "member":{"shape":"RunCommandTarget"}, 
-      "max":5, 
-      "min":1 
-    }, 
+    },
+    "RunCommandTargetKey":{
+      "type":"string",
+      "max":128,
+      "min":1,
+      "pattern":"^[\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*$"
+    },
+    "RunCommandTargetValue":{
+      "type":"string",
+      "max":256,
+      "min":1
+    },
+    "RunCommandTargetValues":{
+      "type":"list",
+      "member":{"shape":"RunCommandTargetValue"},
+      "max":50,
+      "min":1
+    },
+    "RunCommandTargets":{
+      "type":"list",
+      "member":{"shape":"RunCommandTarget"},
+      "max":5,
+      "min":1
+    },
     "SageMakerPipelineParameter":{
       "type":"structure",
       "required":[
@@ -3905,10 +3905,10 @@
       },
       "documentation":"<p>These are custom parameters to use when the target is a SageMaker Model Building Pipeline that starts based on EventBridge events.</p>"
     },
-    "ScheduleExpression":{ 
-      "type":"string", 
-      "max":256 
-    }, 
+    "ScheduleExpression":{
+      "type":"string",
+      "max":256
+    },
     "SecretsManagerSecretArn":{
       "type":"string",
       "max":2048,
@@ -3920,16 +3920,16 @@
       "max":100000,
       "min":1
     },
-    "SqsParameters":{ 
-      "type":"structure", 
-      "members":{ 
-        "MessageGroupId":{ 
-          "shape":"MessageGroupId", 
-          "documentation":"<p>The FIFO message group ID to use as the target.</p>" 
-        } 
-      }, 
-      "documentation":"<p>This structure includes the custom parameter to be used when the target is an SQS FIFO queue.</p>" 
-    }, 
+    "SqsParameters":{
+      "type":"structure",
+      "members":{
+        "MessageGroupId":{
+          "shape":"MessageGroupId",
+          "documentation":"<p>The FIFO message group ID to use as the target.</p>"
+        }
+      },
+      "documentation":"<p>This structure includes the custom parameter to be used when the target is an SQS FIFO queue.</p>"
+    },
     "StartReplayRequest":{
       "type":"structure",
       "required":[
@@ -3987,18 +3987,18 @@
         }
       }
     },
-    "StatementId":{ 
-      "type":"string", 
-      "max":64, 
-      "min":1, 
-      "pattern":"[a-zA-Z0-9-_]+" 
-    }, 
+    "StatementId":{
+      "type":"string",
+      "max":64,
+      "min":1,
+      "pattern":"[a-zA-Z0-9-_]+"
+    },
     "StatementName":{
       "type":"string",
       "max":500,
       "min":1
     },
-    "String":{"type":"string"}, 
+    "String":{"type":"string"},
     "StringList":{
       "type":"list",
       "member":{"shape":"String"}
@@ -4061,55 +4061,55 @@
       "max":256,
       "min":0
     },
-    "Target":{ 
-      "type":"structure", 
-      "required":[ 
-        "Id", 
-        "Arn" 
-      ], 
-      "members":{ 
-        "Id":{ 
-          "shape":"TargetId", 
-          "documentation":"<p>The ID of the target.</p>" 
-        }, 
-        "Arn":{ 
-          "shape":"TargetArn", 
-          "documentation":"<p>The Amazon Resource Name (ARN) of the target.</p>" 
-        }, 
-        "RoleArn":{ 
-          "shape":"RoleArn", 
-          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role to be used for this target when the rule is triggered. If one rule triggers multiple targets, you can use a different IAM role for each target.</p>" 
-        }, 
-        "Input":{ 
-          "shape":"TargetInput", 
-          "documentation":"<p>Valid JSON text passed to the target. In this case, nothing from the event itself is passed to the target. For more information, see <a href=\"http://www.rfc-editor.org/rfc/rfc7159.txt\">The JavaScript Object Notation (JSON) Data Interchange Format</a>.</p>" 
-        }, 
-        "InputPath":{ 
-          "shape":"TargetInputPath", 
-          "documentation":"<p>The value of the JSONPath that is used for extracting part of the matched event when passing it to the target. You must use JSON dot notation, not bracket notation. For more information about JSON paths, see <a href=\"http://goessner.net/articles/JsonPath/\">JSONPath</a>.</p>" 
-        }, 
-        "InputTransformer":{ 
-          "shape":"InputTransformer", 
-          "documentation":"<p>Settings to enable you to provide custom input to a target based on certain event data. You can extract one or more key-value pairs from the event and then use that data to send customized input to the target.</p>" 
-        }, 
-        "KinesisParameters":{ 
-          "shape":"KinesisParameters", 
+    "Target":{
+      "type":"structure",
+      "required":[
+        "Id",
+        "Arn"
+      ],
+      "members":{
+        "Id":{
+          "shape":"TargetId",
+          "documentation":"<p>The ID of the target.</p>"
+        },
+        "Arn":{
+          "shape":"TargetArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the target.</p>"
+        },
+        "RoleArn":{
+          "shape":"RoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role to be used for this target when the rule is triggered. If one rule triggers multiple targets, you can use a different IAM role for each target.</p>"
+        },
+        "Input":{
+          "shape":"TargetInput",
+          "documentation":"<p>Valid JSON text passed to the target. In this case, nothing from the event itself is passed to the target. For more information, see <a href=\"http://www.rfc-editor.org/rfc/rfc7159.txt\">The JavaScript Object Notation (JSON) Data Interchange Format</a>.</p>"
+        },
+        "InputPath":{
+          "shape":"TargetInputPath",
+          "documentation":"<p>The value of the JSONPath that is used for extracting part of the matched event when passing it to the target. You must use JSON dot notation, not bracket notation. For more information about JSON paths, see <a href=\"http://goessner.net/articles/JsonPath/\">JSONPath</a>.</p>"
+        },
+        "InputTransformer":{
+          "shape":"InputTransformer",
+          "documentation":"<p>Settings to enable you to provide custom input to a target based on certain event data. You can extract one or more key-value pairs from the event and then use that data to send customized input to the target.</p>"
+        },
+        "KinesisParameters":{
+          "shape":"KinesisParameters",
           "documentation":"<p>The custom parameter you can use to control the shard assignment, when the target is a Kinesis data stream. If you do not include this parameter, the default is to use the <code>eventId</code> as the partition key.</p>"
-        }, 
-        "RunCommandParameters":{ 
-          "shape":"RunCommandParameters", 
-          "documentation":"<p>Parameters used when you are using the rule to invoke Amazon EC2 Run Command.</p>" 
-        }, 
-        "EcsParameters":{ 
-          "shape":"EcsParameters", 
+        },
+        "RunCommandParameters":{
+          "shape":"RunCommandParameters",
+          "documentation":"<p>Parameters used when you are using the rule to invoke Amazon EC2 Run Command.</p>"
+        },
+        "EcsParameters":{
+          "shape":"EcsParameters",
           "documentation":"<p>Contains the Amazon ECS task definition and task count to be used, if the event target is an Amazon ECS task. For more information about Amazon ECS tasks, see <a href=\"https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_defintions.html\">Task Definitions </a> in the <i>Amazon EC2 Container Service Developer Guide</i>.</p>"
-        }, 
-        "BatchParameters":{ 
-          "shape":"BatchParameters", 
+        },
+        "BatchParameters":{
+          "shape":"BatchParameters",
           "documentation":"<p>If the event target is an AWS Batch job, this contains the job definition, job name, and other parameters. For more information, see <a href=\"https://docs.aws.amazon.com/batch/latest/userguide/jobs.html\">Jobs</a> in the <i>AWS Batch User Guide</i>.</p>"
-        }, 
-        "SqsParameters":{ 
-          "shape":"SqsParameters", 
+        },
+        "SqsParameters":{
+          "shape":"SqsParameters",
           "documentation":"<p>Contains the message group ID to use when the target is a FIFO queue.</p> <p>If you specify an SQS FIFO queue as a target, the queue must have content-based deduplication enabled.</p>"
         },
         "HttpParameters":{
@@ -4131,86 +4131,86 @@
         "RetryPolicy":{
           "shape":"RetryPolicy",
           "documentation":"<p>The <code>RetryPolicy</code> object that contains the retry policy configuration to use for the dead-letter queue.</p>"
-        } 
-      }, 
+        }
+      },
       "documentation":"<p>Targets are the resources to be invoked when a rule is triggered. For a complete list of services and resources that can be set as a target, see <a>PutTargets</a>.</p> <p>If you are setting the event bus of another account as the target, and that account granted permission to your account through an organization instead of directly by the account ID, then you must specify a <code>RoleArn</code> with proper permissions in the <code>Target</code> structure. For more information, see <a href=\"https://docs.aws.amazon.com/eventbridge/latest/userguide/eventbridge-cross-account-event-delivery.html\">Sending and Receiving Events Between AWS Accounts</a> in the <i>Amazon EventBridge User Guide</i>.</p>"
-    }, 
-    "TargetArn":{ 
-      "type":"string", 
-      "max":1600, 
-      "min":1 
-    }, 
-    "TargetId":{ 
-      "type":"string", 
-      "max":64, 
-      "min":1, 
-      "pattern":"[\\.\\-_A-Za-z0-9]+" 
-    }, 
-    "TargetIdList":{ 
-      "type":"list", 
-      "member":{"shape":"TargetId"}, 
-      "max":100, 
-      "min":1 
-    }, 
-    "TargetInput":{ 
-      "type":"string", 
-      "max":8192 
-    }, 
-    "TargetInputPath":{ 
-      "type":"string", 
-      "max":256 
-    }, 
-    "TargetList":{ 
-      "type":"list", 
-      "member":{"shape":"Target"}, 
-      "max":100, 
-      "min":1 
-    }, 
-    "TargetPartitionKeyPath":{ 
-      "type":"string", 
-      "max":256 
-    }, 
-    "TestEventPatternRequest":{ 
-      "type":"structure", 
-      "required":[ 
-        "EventPattern", 
-        "Event" 
-      ], 
-      "members":{ 
-        "EventPattern":{ 
-          "shape":"EventPattern", 
+    },
+    "TargetArn":{
+      "type":"string",
+      "max":1600,
+      "min":1
+    },
+    "TargetId":{
+      "type":"string",
+      "max":64,
+      "min":1,
+      "pattern":"[\\.\\-_A-Za-z0-9]+"
+    },
+    "TargetIdList":{
+      "type":"list",
+      "member":{"shape":"TargetId"},
+      "max":100,
+      "min":1
+    },
+    "TargetInput":{
+      "type":"string",
+      "max":8192
+    },
+    "TargetInputPath":{
+      "type":"string",
+      "max":256
+    },
+    "TargetList":{
+      "type":"list",
+      "member":{"shape":"Target"},
+      "max":100,
+      "min":1
+    },
+    "TargetPartitionKeyPath":{
+      "type":"string",
+      "max":256
+    },
+    "TestEventPatternRequest":{
+      "type":"structure",
+      "required":[
+        "EventPattern",
+        "Event"
+      ],
+      "members":{
+        "EventPattern":{
+          "shape":"EventPattern",
           "documentation":"<p>The event pattern. For more information, see <a href=\"https://docs.aws.amazon.com/eventbridge/latest/userguide/eventbridge-and-event-patterns.html\">Events and Event Patterns</a> in the <i>Amazon EventBridge User Guide</i>.</p>"
-        }, 
-        "Event":{ 
-          "shape":"String", 
+        },
+        "Event":{
+          "shape":"String",
           "documentation":"<p>The event, in JSON format, to test against the event pattern. The JSON must follow the format specified in <a href=\"https://docs.aws.amazon.com/eventbridge/latest/userguide/aws-events.html\">AWS Events</a>, and the following fields are mandatory:</p> <ul> <li> <p> <code>id</code> </p> </li> <li> <p> <code>account</code> </p> </li> <li> <p> <code>source</code> </p> </li> <li> <p> <code>time</code> </p> </li> <li> <p> <code>region</code> </p> </li> <li> <p> <code>resources</code> </p> </li> <li> <p> <code>detail-type</code> </p> </li> </ul>"
-        } 
-      } 
-    }, 
-    "TestEventPatternResponse":{ 
-      "type":"structure", 
-      "members":{ 
-        "Result":{ 
-          "shape":"Boolean", 
-          "documentation":"<p>Indicates whether the event matches the event pattern.</p>" 
-        } 
-      } 
-    }, 
+        }
+      }
+    },
+    "TestEventPatternResponse":{
+      "type":"structure",
+      "members":{
+        "Result":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the event matches the event pattern.</p>"
+        }
+      }
+    },
     "Timestamp":{"type":"timestamp"},
     "TraceHeader":{
       "type":"string",
       "max":500,
       "min":1
     },
-    "TransformerInput":{ 
-      "type":"string", 
-      "max":8192, 
-      "min":1 
-    }, 
-    "TransformerPaths":{ 
-      "type":"map", 
-      "key":{"shape":"InputTransformerPathKey"}, 
-      "value":{"shape":"TargetInputPath"}, 
+    "TransformerInput":{
+      "type":"string",
+      "max":8192,
+      "min":1
+    },
+    "TransformerPaths":{
+      "type":"map",
+      "key":{"shape":"InputTransformerPathKey"},
+      "value":{"shape":"TargetInputPath"},
       "max":100
     },
     "UntagResourceRequest":{
@@ -4461,7 +4461,7 @@
           "documentation":"<p>A time stamp for the time that the connection was last authorized.</p>"
         }
       }
-    } 
-  }, 
+    }
+  },
   "documentation":"<p>Amazon EventBridge helps you to respond to state changes in your AWS resources. When your resources change state, they automatically send events into an event stream. You can create rules that match selected events in the stream and route them to targets to take action. You can also use rules to take action on a predetermined schedule. For example, you can configure rules to:</p> <ul> <li> <p>Automatically invoke an AWS Lambda function to update DNS entries when an event notifies you that Amazon EC2 instance enters the running state.</p> </li> <li> <p>Direct specific API records from AWS CloudTrail to an Amazon Kinesis data stream for detailed analysis of potential security or availability risks.</p> </li> <li> <p>Periodically invoke a built-in target to create a snapshot of an Amazon EBS volume.</p> </li> </ul> <p>For more information about the features of Amazon EventBridge, see the <a href=\"https://docs.aws.amazon.com/eventbridge/latest/userguide\">Amazon EventBridge User Guide</a>.</p>"
-} 
+}

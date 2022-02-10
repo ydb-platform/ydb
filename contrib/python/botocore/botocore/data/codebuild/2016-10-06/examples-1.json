@@ -1,6 +1,6 @@
-{ 
-  "version": "1.0", 
-  "examples": { 
+{
+  "version": "1.0",
+  "examples": {
     "BatchGetBuilds": [
       {
         "input": {
@@ -277,5 +277,5 @@
         "title": "To get information about builds"
       }
     ]
-  } 
-} 
+  }
+}

@@ -1,4 +1,4 @@
-{ 
+{
   "pagination": {
     "DescribeComputeEnvironments": {
       "input_token": "nextToken",
@@ -25,4 +25,4 @@
       "result_key": "jobSummaryList"
     }
   }
-} 
+}

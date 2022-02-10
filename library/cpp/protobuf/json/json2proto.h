@@ -30,11 +30,11 @@ namespace NProtobufJson {
             FieldNameSnakeCaseDense // ABC -> abc,      UserID -> user_id
         };
 
-        enum EnumValueMode {
-            EnumCaseSensetive = 0, // default
+        enum EnumValueMode { 
+            EnumCaseSensetive = 0, // default 
             EnumCaseInsensetive,
             EnumSnakeCaseInsensitive
-        };
+        }; 
 
         TSelf& SetFieldNameMode(FldNameMode mode) {
             Y_ENSURE(mode == FieldNameOriginalCase || !UseJsonName, "FieldNameMode and UseJsonName are mutually exclusive");
@@ -68,11 +68,11 @@ namespace NProtobufJson {
             return *this;
         }
 
-        TSelf& SetMapAsObject(bool mapAsObject) {
-            MapAsObject = mapAsObject;
-            return *this;
-        }
-
+        TSelf& SetMapAsObject(bool mapAsObject) { 
+            MapAsObject = mapAsObject; 
+            return *this; 
+        } 
+ 
         TSelf& SetReplaceRepeatedFields(bool replaceRepeatedFields) {
             ReplaceRepeatedFields = replaceRepeatedFields;
             return *this;
@@ -83,11 +83,11 @@ namespace NProtobufJson {
             return *this;
         }
 
-        TSelf& SetEnumValueMode(EnumValueMode enumValueMode) {
-            EnumValueMode = enumValueMode;
-            return *this;
-        }
-
+        TSelf& SetEnumValueMode(EnumValueMode enumValueMode) { 
+            EnumValueMode = enumValueMode; 
+            return *this; 
+        } 
+ 
         TSelf& SetVectorizeScalars(bool vectorizeScalars) {
             VectorizeScalars = vectorizeScalars;
             return *this;
@@ -103,7 +103,7 @@ namespace NProtobufJson {
             return *this;
         }
 
-        FldNameMode FieldNameMode = FieldNameOriginalCase;
+        FldNameMode FieldNameMode = FieldNameOriginalCase; 
         bool AllowUnknownFields = true;
 
         /// Use 'json_name' protobuf option for field name, mutually exclusive
@@ -132,9 +132,9 @@ namespace NProtobufJson {
 
         /// Custom field names generator.
         TNameGenerator NameGenerator = {};
-
-        /// Enum value parsing mode.
-        EnumValueMode EnumValueMode = EnumCaseSensetive;
+ 
+        /// Enum value parsing mode. 
+        EnumValueMode EnumValueMode = EnumCaseSensetive; 
 
         /// Append scalars to repeated fields
         bool VectorizeScalars = false;

@@ -125,8 +125,8 @@ FindEnumValue(const NProtoBuf::EnumDescriptor* enumField,
 static void
 JsonEnum2Field(const NJson::TJsonValue& json,
                google::protobuf::Message& proto,
-               const google::protobuf::FieldDescriptor& field,
-               const NProtobufJson::TJson2ProtoConfig& config) {
+               const google::protobuf::FieldDescriptor& field, 
+               const NProtobufJson::TJson2ProtoConfig& config) { 
     using namespace google::protobuf;
 
     const Reflection* reflection = proto.GetReflection();
@@ -146,13 +146,13 @@ JsonEnum2Field(const NJson::TJsonValue& json,
         }
     } else if (json.IsString()) {
         const auto& value = json.GetString();
-        if (config.EnumValueMode == NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive) {
+        if (config.EnumValueMode == NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive) { 
             enumFieldValue = FindEnumValue(enumField, value, AsciiEqualsIgnoreCase);
         } else if (config.EnumValueMode == NProtobufJson::TJson2ProtoConfig::EnumSnakeCaseInsensitive) {
             enumFieldValue = FindEnumValue(enumField, value, NProtobufJson::EqualsIgnoringCaseAndUnderscores);
-        } else {
+        } else { 
             enumFieldValue = enumField->FindValueByName(value);
-        }
+        } 
         if (!enumFieldValue) {
             ythrow yexception() << "Invalid string value of JSON enum field: " << TStringBuf(value).Head(100) << ".";
         }
@@ -208,7 +208,7 @@ Json2SingleField(const NJson::TJsonValue& json,
         }
 
         case FieldDescriptor::CPPTYPE_ENUM: {
-            JsonEnum2Field(fieldJson, proto, field, config);
+            JsonEnum2Field(fieldJson, proto, field, config); 
             break;
         }
 
@@ -283,7 +283,7 @@ Json2RepeatedFieldValue(const NJson::TJsonValue& jsonValue,
         }
 
         case FieldDescriptor::CPPTYPE_ENUM: {
-            JsonEnum2Field(jsonValue, proto, field, config);
+            JsonEnum2Field(jsonValue, proto, field, config); 
             break;
         }
 

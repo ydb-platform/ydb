@@ -80,7 +80,7 @@ buildscript {{
     }}
 
     dependencies {{
-        classpath 'com.android.tools.build:gradle:4.0.2'
+        classpath 'com.android.tools.build:gradle:4.0.2' 
         classpath 'com.github.dcendents:android-maven-gradle-plugin:1.5'
     }}
 }}
@@ -143,13 +143,13 @@ android {{
             compileOnly(bundle)
     }}
 
-    android.libraryVariants.all {{ variant ->
-        def suffix = variant.buildType.name.capitalize()
-
-        def sourcesJarTask = project.tasks.create(name: "sourcesJar${{suffix}}", type: Jar) {{
-            classifier = 'sources'
-            from android.sourceSets.main.java.srcDirs
-            include '**/*.java'
+    android.libraryVariants.all {{ variant -> 
+        def suffix = variant.buildType.name.capitalize() 
+ 
+        def sourcesJarTask = project.tasks.create(name: "sourcesJar${{suffix}}", type: Jar) {{ 
+            classifier = 'sources' 
+            from android.sourceSets.main.java.srcDirs 
+            include '**/*.java' 
             eachFile {{ fcd ->
                 def segments = fcd.relativePath.segments
                 if (segments[0] == 'impl') {{
@@ -159,27 +159,27 @@ android {{
             includeEmptyDirs = false
         }}
 
-        def manifestFile = android.sourceSets.main.manifest.srcFile
-        def manifestXml = new XmlParser().parse(manifestFile)
+        def manifestFile = android.sourceSets.main.manifest.srcFile 
+        def manifestXml = new XmlParser().parse(manifestFile) 
 
-        def packageName = manifestXml['@package']
+        def packageName = manifestXml['@package'] 
         def groupName = packageName.tokenize('.')[0..-2].join('.')
 
-        def androidNs = new groovy.xml.Namespace("http://schemas.android.com/apk/res/android")
-        def packageVersion = manifestXml.attributes()[androidNs.versionName]
+        def androidNs = new groovy.xml.Namespace("http://schemas.android.com/apk/res/android") 
+        def packageVersion = manifestXml.attributes()[androidNs.versionName] 
 
-        def writePomTask = project.tasks.create(name: "writePom${{suffix}}") {{
-            pom {{
-                project {{
-                    groupId groupName
-                    version packageVersion
-                    packaging 'aar'
-                }}
-            }}.writeTo("$buildDir/${{rootProject.name}}$packageSuffix-pom.xml")
-        }}
+        def writePomTask = project.tasks.create(name: "writePom${{suffix}}") {{ 
+            pom {{ 
+                project {{ 
+                    groupId groupName 
+                    version packageVersion 
+                    packaging 'aar' 
+                }} 
+            }}.writeTo("$buildDir/${{rootProject.name}}$packageSuffix-pom.xml") 
+        }} 
 
-        tasks["bundle${{suffix}}Aar"].dependsOn sourcesJarTask
-        tasks["bundle${{suffix}}Aar"].dependsOn writePomTask
+        tasks["bundle${{suffix}}Aar"].dependsOn sourcesJarTask 
+        tasks["bundle${{suffix}}Aar"].dependsOn writePomTask 
     }}
 
     android.libraryVariants.all {{ variant ->
@@ -309,16 +309,16 @@ def gen_build_script(args):
         aars=wrap(args.aars),
         compile_only_aars=wrap(args.compile_only_aars),
         aidl_dirs=wrap(args.aidl_dirs),
-        assets_dirs=wrap(args.assets_dirs),
+        assets_dirs=wrap(args.assets_dirs), 
         bundles=wrap(bundles),
         do_not_strip=do_not_strip,
         enable_javadoc=enable_javadoc,
         flat_dirs_repo=flat_dirs_repo,
-        java_dirs=wrap(args.java_dirs),
+        java_dirs=wrap(args.java_dirs), 
         jni_libs_dirs=wrap(args.jni_libs_dirs),
         keystore=keystore,
-        manifest=args.manifest,
-        maven_repos=maven_repos,
+        manifest=args.manifest, 
+        maven_repos=maven_repos, 
         proguard_rules=args.proguard_rules,
         res_dirs=wrap(args.res_dirs),
     )
@@ -328,7 +328,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--aars', nargs='*', default=[])
     parser.add_argument('--compile-only-aars', nargs='*', default=[])
-    parser.add_argument('--aidl-dirs', nargs='*', default=[])
+    parser.add_argument('--aidl-dirs', nargs='*', default=[]) 
     parser.add_argument('--assets-dirs', nargs='*', default=[])
     parser.add_argument('--bundle-name', nargs='?', default='default-bundle-name')
     parser.add_argument('--bundles', nargs='*', default=[])
@@ -360,15 +360,15 @@ if __name__ == '__main__':
 
     args.build_gradle = os.path.join(args.output_dir, 'build.gradle')
     args.settings_gradle = os.path.join(args.output_dir, 'settings.gradle')
-    args.gradle_properties = os.path.join(args.output_dir, 'gradle.properties')
+    args.gradle_properties = os.path.join(args.output_dir, 'gradle.properties') 
 
     content = gen_build_script(args)
     with open(args.build_gradle, 'w') as f:
         f.write(content)
 
-    with open(args.gradle_properties, 'w') as f:
-        f.write('android.useAndroidX=true')
-
+    with open(args.gradle_properties, 'w') as f: 
+        f.write('android.useAndroidX=true') 
+ 
     if args.bundle_name:
         with open(args.settings_gradle, 'w') as f:
             f.write('rootProject.name = "{}"'.format(args.bundle_name))

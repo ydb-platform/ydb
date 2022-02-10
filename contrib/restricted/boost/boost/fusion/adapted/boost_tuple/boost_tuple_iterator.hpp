@@ -59,8 +59,8 @@ namespace boost { namespace fusion
             : cons(in_cons) {}
         Cons& cons;
 
-        boost_tuple_iterator(const boost_tuple_iterator& other) = default;
-
+        boost_tuple_iterator(const boost_tuple_iterator& other) = default; 
+ 
         template <typename Iterator>
         struct value_of : mpl::identity<typename Iterator::cons_type::head_type> {};
 

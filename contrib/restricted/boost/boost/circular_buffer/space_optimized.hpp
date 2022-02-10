@@ -16,7 +16,7 @@
 #endif
 
 #include <boost/type_traits/is_same.hpp>
-#include <boost/config/workaround.hpp>
+#include <boost/config/workaround.hpp> 
 
 namespace boost {
 
@@ -121,7 +121,7 @@ public:<br>
     using circular_buffer<T, Alloc>::max_size;
     using circular_buffer<T, Alloc>::empty;
 
-#if BOOST_WORKAROUND(BOOST_BORLANDC, BOOST_TESTED_AT(0x564))
+#if BOOST_WORKAROUND(BOOST_BORLANDC, BOOST_TESTED_AT(0x564)) 
     reference operator [] (size_type n) { return circular_buffer<T, Alloc>::operator[](n); }
     const_reference operator [] (size_type n) const { return circular_buffer<T, Alloc>::operator[](n); }
 #else
@@ -453,7 +453,7 @@ public:
     /*!
         \pre Valid range <code>[first, last)</code>.<br>
              <code>first</code> and <code>last</code> have to meet the requirements of
-             <a href="https://www.boost.org/sgi/stl/InputIterator.html">InputIterator</a>.
+             <a href="https://www.boost.org/sgi/stl/InputIterator.html">InputIterator</a>. 
         \post <code>capacity().%capacity() == std::distance(first, last) \&\& capacity().min_capacity() == 0 \&\&
               full() \&\& (*this)[0]== *first \&\& (*this)[1] == *(first + 1) \&\& ... \&\&
               (*this)[std::distance(first, last) - 1] == *(last - 1)</code><br><br>
@@ -478,7 +478,7 @@ public:
                of allocated memory) filled with a copy of the range.
         \pre Valid range <code>[first, last)</code>.<br>
              <code>first</code> and <code>last</code> have to meet the requirements of
-             <a href="https://www.boost.org/sgi/stl/InputIterator.html">InputIterator</a>.
+             <a href="https://www.boost.org/sgi/stl/InputIterator.html">InputIterator</a>. 
         \post <code>capacity() == capacity_ctrl \&\& size() \<= std::distance(first, last) \&\& (*this)[0]==
               *(last - capacity_ctrl.%capacity()) \&\& (*this)[1] == *(last - capacity_ctrl.%capacity() + 1) \&\& ...
               \&\& (*this)[capacity_ctrl.%capacity() - 1] == *(last - 1)</code><br><br>
@@ -499,7 +499,7 @@ public:
         \par Complexity
              Linear (in <code>std::distance(first, last)</code>; in
              <code>min[capacity_ctrl.%capacity(), std::distance(first, last)]</code> if the <code>InputIterator</code>
-             is a <a href="https://www.boost.org/sgi/stl/RandomAccessIterator.html">RandomAccessIterator</a>).
+             is a <a href="https://www.boost.org/sgi/stl/RandomAccessIterator.html">RandomAccessIterator</a>). 
     */
     template <class InputIterator>
     circular_buffer_space_optimized(capacity_type capacity_ctrl, InputIterator first, InputIterator last,
@@ -509,7 +509,7 @@ public:
         first, last, alloc)
     , m_capacity_ctrl(capacity_ctrl) {
         reduce_capacity(
-            is_same< BOOST_DEDUCED_TYPENAME std::iterator_traits<InputIterator>::iterator_category, std::input_iterator_tag >());
+            is_same< BOOST_DEDUCED_TYPENAME std::iterator_traits<InputIterator>::iterator_category, std::input_iterator_tag >()); 
     }
 
 #if defined(BOOST_CB_NEVER_DEFINED)
@@ -579,7 +579,7 @@ public:
     */
     circular_buffer_space_optimized<T, Alloc>& operator = (circular_buffer_space_optimized<T, Alloc>&& cb) BOOST_NOEXCEPT {
         cb.swap(*this); // now `this` holds `cb`
-        circular_buffer<T, Alloc>(get_allocator()) // temporary that holds initial `cb` allocator
+        circular_buffer<T, Alloc>(get_allocator()) // temporary that holds initial `cb` allocator 
             .swap(cb); // makes `cb` empty
         return *this;
     }
@@ -655,7 +655,7 @@ public:
         elements from the specified range.
         \pre Valid range <code>[first, last)</code>.<br>
              <code>first</code> and <code>last</code> have to meet the requirements of
-             <a href="https://www.boost.org/sgi/stl/InputIterator.html">InputIterator</a>.
+             <a href="https://www.boost.org/sgi/stl/InputIterator.html">InputIterator</a>. 
         \post <code>capacity().%capacity() == std::distance(first, last) \&\& capacity().min_capacity() == 0 \&\&
               size() == std::distance(first, last) \&\& (*this)[0]== *first \&\& (*this)[1] == *(first + 1) \&\& ...
               \&\& (*this)[std::distance(first, last) - 1] == *(last - 1)</code><br><br>
@@ -692,7 +692,7 @@ public:
         elements from the specified range.
         \pre Valid range <code>[first, last)</code>.<br>
              <code>first</code> and <code>last</code> have to meet the requirements of
-             <a href="https://www.boost.org/sgi/stl/InputIterator.html">InputIterator</a>.
+             <a href="https://www.boost.org/sgi/stl/InputIterator.html">InputIterator</a>. 
         \post <code>capacity() == capacity_ctrl \&\& size() \<= std::distance(first, last) \&\&
              (*this)[0]== *(last - capacity) \&\& (*this)[1] == *(last - capacity + 1) \&\& ... \&\&
              (*this)[capacity - 1] == *(last - 1)</code><br><br>
@@ -715,7 +715,7 @@ public:
         \par Complexity
              Linear (in <code>std::distance(first, last)</code>; in
              <code>min[capacity_ctrl.%capacity(), std::distance(first, last)]</code> if the <code>InputIterator</code>
-             is a <a href="https://www.boost.org/sgi/stl/RandomAccessIterator.html">RandomAccessIterator</a>).
+             is a <a href="https://www.boost.org/sgi/stl/RandomAccessIterator.html">RandomAccessIterator</a>). 
         \sa <code>\link operator=(const circular_buffer_space_optimized&) operator=\endlink</code>,
             <code>\link assign(size_type, param_value_type) assign(size_type, const_reference)\endlink</code>,
             <code>\link assign(capacity_type, size_type, param_value_type)
@@ -1114,7 +1114,7 @@ public:
     /*!
         \pre <code>pos</code> is a valid iterator pointing to the <code>circular_buffer_space_optimized</code> or its
              end.<br>Valid range <code>[first, last)</code> where <code>first</code> and <code>last</code> meet the
-             requirements of an <a href="https://www.boost.org/sgi/stl/InputIterator.html">InputIterator</a>.
+             requirements of an <a href="https://www.boost.org/sgi/stl/InputIterator.html">InputIterator</a>. 
         \post Elements from the range
               <code>[first + max[0, distance(first, last) - (pos - begin()) - reserve()], last)</code> will be
               inserted at the position <code>pos</code>.<br>The number of <code>min[pos - begin(), max[0,
@@ -1136,7 +1136,7 @@ public:
              Linear (in <code>[size() + std::distance(first, last)]</code>; in
              <code>min[capacity().%capacity(), size() + std::distance(first, last)]</code> if the
              <code>InputIterator</code> is a
-             <a href="https://www.boost.org/sgi/stl/RandomAccessIterator.html">RandomAccessIterator</a>).
+             <a href="https://www.boost.org/sgi/stl/RandomAccessIterator.html">RandomAccessIterator</a>). 
         \par Example
              Consider a <code>circular_buffer_space_optimized</code> with the capacity of 6 and the size of 4. Its
              internal buffer may look like the one below.<br><br>
@@ -1326,7 +1326,7 @@ public:
         \pre <code>pos</code> is a valid iterator pointing to the <code>circular_buffer_space_optimized</code> or its
              end.<br>
              Valid range <code>[first, last)</code> where <code>first</code> and <code>last</code> meet the
-             requirements of an <a href="https://www.boost.org/sgi/stl/InputIterator.html">InputIterator</a>.
+             requirements of an <a href="https://www.boost.org/sgi/stl/InputIterator.html">InputIterator</a>. 
         \post Elements from the range
               <code>[first, last - max[0, distance(first, last) - (end() - pos) - reserve()])</code> will be inserted
               before the position <code>pos</code>.<br>The number of <code>min[end() - pos, max[0,
@@ -1349,7 +1349,7 @@ public:
              Linear (in <code>[size() + std::distance(first, last)]</code>; in
              <code>min[capacity().%capacity(), size() + std::distance(first, last)]</code> if the
              <code>InputIterator</code> is a
-             <a href="https://www.boost.org/sgi/stl/RandomAccessIterator.html">RandomAccessIterator</a>).
+             <a href="https://www.boost.org/sgi/stl/RandomAccessIterator.html">RandomAccessIterator</a>). 
         \par Example
              Consider a <code>circular_buffer_space_optimized</code> with the capacity of 6 and the size of 4. Its
              internal buffer may look like the one below.<br><br>
@@ -1522,7 +1522,7 @@ public:
 private:
 // Helper methods
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     void adjust_min_capacity() {
         if (m_capacity_ctrl.min_capacity() > circular_buffer<T, Alloc>::capacity())
             circular_buffer<T, Alloc>::set_capacity(m_capacity_ctrl.min_capacity());
@@ -1530,7 +1530,7 @@ private:
             check_high_capacity();
     }
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     size_type ensure_reserve(size_type new_capacity, size_type buffer_size) const {
         if (buffer_size + new_capacity / 5 >= new_capacity)
             new_capacity *= 2; // ensure at least 20% reserve
@@ -1539,7 +1539,7 @@ private:
         return new_capacity;
     }
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     void check_low_capacity(size_type n = 1) {
         size_type new_size = size() + n;
         size_type new_capacity = circular_buffer<T, Alloc>::capacity();
@@ -1555,7 +1555,7 @@ private:
 #endif
     }
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     void check_high_capacity() {
         size_type new_capacity = circular_buffer<T, Alloc>::capacity();
         while (new_capacity / 3 >= size()) { // (new_capacity / 3) -> avoid oscillations
@@ -1572,48 +1572,48 @@ private:
 #endif
     }
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     void reduce_capacity(const true_type&) {
         circular_buffer<T, Alloc>::set_capacity((std::max)(m_capacity_ctrl.min_capacity(), size()));
     }
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     void reduce_capacity(const false_type&) {}
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     static size_type init_capacity(const capacity_type& capacity_ctrl, size_type n) {
         BOOST_CB_ASSERT(capacity_ctrl.capacity() >= n); // check for capacity lower than n
         return (std::max)(capacity_ctrl.min_capacity(), n);
     }
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     template <class IntegralType>
     static size_type init_capacity(const capacity_type& capacity_ctrl, IntegralType n, IntegralType,
         const true_type&) {
         return init_capacity(capacity_ctrl, static_cast<size_type>(n));
     }
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     template <class Iterator>
     static size_type init_capacity(const capacity_type& capacity_ctrl, Iterator first, Iterator last,
         const false_type&) {
         BOOST_CB_IS_CONVERTIBLE(Iterator, value_type); // check for invalid iterator type
-#if BOOST_WORKAROUND(BOOST_BORLANDC, BOOST_TESTED_AT(0x581))
-        return init_capacity(capacity_ctrl, first, last, std::iterator_traits<Iterator>::iterator_category());
+#if BOOST_WORKAROUND(BOOST_BORLANDC, BOOST_TESTED_AT(0x581)) 
+        return init_capacity(capacity_ctrl, first, last, std::iterator_traits<Iterator>::iterator_category()); 
 #else
         return init_capacity(
-            capacity_ctrl, first, last, BOOST_DEDUCED_TYPENAME std::iterator_traits<Iterator>::iterator_category());
+            capacity_ctrl, first, last, BOOST_DEDUCED_TYPENAME std::iterator_traits<Iterator>::iterator_category()); 
 #endif
     }
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     template <class InputIterator>
     static size_type init_capacity(const capacity_type& capacity_ctrl, InputIterator, InputIterator,
         const std::input_iterator_tag&) {
         return capacity_ctrl.capacity();
     }
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     template <class ForwardIterator>
     static size_type init_capacity(const capacity_type& capacity_ctrl, ForwardIterator first, ForwardIterator last,
         const std::forward_iterator_tag&) {
@@ -1622,13 +1622,13 @@ private:
             (std::min)(capacity_ctrl.capacity(), static_cast<size_type>(std::distance(first, last))));
     }
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     template <class IntegralType>
     void insert(const iterator& pos, IntegralType n, IntegralType item, const true_type&) {
         insert(pos, static_cast<size_type>(n), static_cast<value_type>(item));
     }
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     template <class Iterator>
     void insert(const iterator& pos, Iterator first, Iterator last, const false_type&) {
         size_type index = pos - begin();
@@ -1636,13 +1636,13 @@ private:
         circular_buffer<T, Alloc>::insert(begin() + index, first, last);
     }
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     template <class IntegralType>
     void rinsert(const iterator& pos, IntegralType n, IntegralType item, const true_type&) {
         rinsert(pos, static_cast<size_type>(n), static_cast<value_type>(item));
     }
 
-    /*! INTERNAL ONLY */
+    /*! INTERNAL ONLY */ 
     template <class Iterator>
     void rinsert(const iterator& pos, Iterator first, Iterator last, const false_type&) {
         size_type index = pos - begin();

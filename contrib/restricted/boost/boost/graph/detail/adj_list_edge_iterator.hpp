@@ -43,8 +43,8 @@ namespace boost {
 
       inline adj_list_edge_iterator() {}
 
-      inline adj_list_edge_iterator& operator=(const self& x) = default;
-
+      inline adj_list_edge_iterator& operator=(const self& x) = default; 
+ 
       inline adj_list_edge_iterator(const self& x) 
       : vBegin(x.vBegin), vCurr(x.vCurr), vEnd(x.vEnd),
         edges(x.edges), m_g(x.m_g) { }

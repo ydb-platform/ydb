@@ -3,7 +3,7 @@
 #include <util/network/ip.h>
 #include <util/network/init.h>
 #include <util/network/address.h>
-#include <util/generic/size_literals.h> 
+#include <util/generic/size_literals.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
@@ -112,12 +112,12 @@ public:
         return *this;
     }
 
-    inline THttpServerOptions& SetMaxInputContentLength(ui64 val) noexcept { 
-        MaxInputContentLength = val; 
- 
-        return *this; 
-    } 
- 
+    inline THttpServerOptions& SetMaxInputContentLength(ui64 val) noexcept {
+        MaxInputContentLength = val;
+
+        return *this;
+    }
+
     inline THttpServerOptions& SetMaxRequestsPerConnection(size_t val) noexcept {
         MaxRequestsPerConnection = val;
 
@@ -163,7 +163,7 @@ public:
     int ListenBacklog = SOMAXCONN;
     TDuration ClientTimeout;
     size_t OutputBufferSize = 0;
-    ui64 MaxInputContentLength = sizeof(size_t) <= 4 ? 2_GB : 64_GB; 
+    ui64 MaxInputContentLength = sizeof(size_t) <= 4 ? 2_GB : 64_GB;
     size_t MaxRequestsPerConnection = 0;  // If keep-alive is enabled, request limit before connection is closed
     bool UseElasticQueues = false;
 

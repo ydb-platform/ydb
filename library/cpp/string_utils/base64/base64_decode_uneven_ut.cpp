@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <library/cpp/string_utils/base64/base64.h>
 
 Y_UNIT_TEST_SUITE(TBase64DecodeUneven) {
@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(TBase64DecodeUneven) {
             "c3Qgb2YgdGhlIG1pbmQsIHRoYXQgYnkgYSBwZXJzZXZlcmFuY2Ugb2YgZGVsaWdodCBpbiB0"
             "aGUgY29udGludWVkIGFuZCBpbmRlZmF0aWdhYmxlIGdlbmVyYXRpb24gb2Yga25vd2xlZGdl"
             "LCBleGNlZWRzIHRoZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm5hbCBwbGVhc3VyZS4=";
- 
+
         UNIT_ASSERT_VALUES_EQUAL(encoded, Base64Encode(wikipedia_slogan));
         UNIT_ASSERT_VALUES_EQUAL(wikipedia_slogan, Base64DecodeUneven(encoded));
 

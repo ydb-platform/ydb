@@ -2,7 +2,7 @@
 
 #include <util/generic/buffer.h>
 #include <util/generic/cast.h>
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 
 bool THttpClientRequestExtension::Parse(char* req, TBaseServerRequestData& rd) {
     rd.SetSocket(Socket());
@@ -76,12 +76,12 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
                 }
 
                 if (!Input().ContentEncoded() && Input().GetContentLength(contentLength)) {
-                    if (contentLength > HttpServ()->Options().MaxInputContentLength) { 
-                        Output() << "HTTP/1.1 413 Payload Too Large\r\nContent-Length:0\r\n\r\n"; 
-                        Output().Finish(); 
-                        return false; 
-                    } 
- 
+                    if (contentLength > HttpServ()->Options().MaxInputContentLength) {
+                        Output() << "HTTP/1.1 413 Payload Too Large\r\nContent-Length:0\r\n\r\n";
+                        Output().Finish();
+                        return false;
+                    }
+
                     TBuffer buf(SafeIntegerCast<size_t>(contentLength));
                     buf.Resize(Input().Load(buf.Data(), (size_t)contentLength));
                     postData = TBlob::FromBuffer(buf);

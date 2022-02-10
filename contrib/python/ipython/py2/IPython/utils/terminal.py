@@ -9,8 +9,8 @@ Authors:
 * Alexander Belchenko (e-mail: bialix AT ukr.net)
 """
 
-from __future__ import absolute_import 
- 
+from __future__ import absolute_import
+
 # Copyright (c) IPython Development Team.
 # Distributed under the terms of the Modified BSD License.
 
@@ -21,10 +21,10 @@ try:
     from shutil import get_terminal_size as _get_terminal_size
 except ImportError:
     # use backport on Python 2
-    try: 
-        from backports.shutil_get_terminal_size import get_terminal_size as _get_terminal_size 
-    except ImportError: 
-        from ._get_terminal_size import get_terminal_size as _get_terminal_size 
+    try:
+        from backports.shutil_get_terminal_size import get_terminal_size as _get_terminal_size
+    except ImportError:
+        from ._get_terminal_size import get_terminal_size as _get_terminal_size
 
 from . import py3compat
 

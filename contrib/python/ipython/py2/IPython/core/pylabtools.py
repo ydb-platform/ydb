@@ -19,18 +19,18 @@ backends = {'tk': 'TkAgg',
             'wx': 'WXAgg',
             'qt4': 'Qt4Agg',
             'qt5': 'Qt5Agg',
-            'qt': 'Qt5Agg', 
+            'qt': 'Qt5Agg',
             'osx': 'MacOSX',
             'nbagg': 'nbAgg',
             'notebook': 'nbAgg',
-            'agg': 'agg', 
-            'svg': 'svg', 
-            'pdf': 'pdf', 
-            'ps': 'ps', 
-            'inline': 'module://ipykernel.pylab.backend_inline', 
-            'ipympl': 'module://ipympl.backend_nbagg', 
-            'widget': 'module://ipympl.backend_nbagg', 
-            } 
+            'agg': 'agg',
+            'svg': 'svg',
+            'pdf': 'pdf',
+            'ps': 'ps',
+            'inline': 'module://ipykernel.pylab.backend_inline',
+            'ipympl': 'module://ipympl.backend_nbagg',
+            'widget': 'module://ipympl.backend_nbagg',
+            }
 
 # We also need a reverse backends2guis mapping that will properly choose which
 # GUI support to activate based on the desired matplotlib backend.  For the
@@ -45,13 +45,13 @@ backend2gui['GTK'] = backend2gui['GTKCairo'] = 'gtk'
 backend2gui['GTK3Cairo'] = 'gtk3'
 backend2gui['WX'] = 'wx'
 backend2gui['CocoaAgg'] = 'osx'
-# And some backends that don't need GUI integration 
-del backend2gui['nbAgg'] 
-del backend2gui['agg'] 
-del backend2gui['svg'] 
-del backend2gui['pdf'] 
-del backend2gui['ps'] 
-del backend2gui['module://ipykernel.pylab.backend_inline'] 
+# And some backends that don't need GUI integration
+del backend2gui['nbAgg']
+del backend2gui['agg']
+del backend2gui['svg']
+del backend2gui['pdf']
+del backend2gui['ps']
+del backend2gui['module://ipykernel.pylab.backend_inline']
 
 #-----------------------------------------------------------------------------
 # Matplotlib utilities
@@ -111,7 +111,7 @@ def print_figure(fig, fmt='png', bbox_inches='tight', **kwargs):
     if not fig.axes and not fig.lines:
         return
 
-    dpi = fig.dpi 
+    dpi = fig.dpi
     if fmt == 'retina':
         dpi = dpi * 2
         fmt = 'png'
@@ -171,7 +171,7 @@ def mpl_runner(safe_execfile):
         properly handle interactive rendering."""
 
         import matplotlib
-        import matplotlib.pyplot as plt 
+        import matplotlib.pyplot as plt
 
         #print '*** Matplotlib runner ***' # dbg
         # turn off rendering until end of script
@@ -180,18 +180,18 @@ def mpl_runner(safe_execfile):
         safe_execfile(fname,*where,**kw)
         matplotlib.interactive(is_interactive)
         # make rendering call now, if the user tried to do it
-        if plt.draw_if_interactive.called: 
-            plt.draw() 
-            plt.draw_if_interactive.called = False 
+        if plt.draw_if_interactive.called:
+            plt.draw()
+            plt.draw_if_interactive.called = False
 
-        # re-draw everything that is stale 
-        try: 
-            da = plt.draw_all 
-        except AttributeError: 
-            pass 
-        else: 
-            da() 
- 
+        # re-draw everything that is stale
+        try:
+            da = plt.draw_all
+        except AttributeError:
+            pass
+        else:
+            da()
+
     return mpl_execfile
 
 
@@ -231,8 +231,8 @@ def select_figure_formats(shell, formats, **kwargs):
     formats = set(formats)
 
     [ f.pop(Figure, None) for f in shell.display_formatter.formatters.values() ]
-    mplbackend = matplotlib.get_backend().lower() 
-    if mplbackend == 'nbagg' or mplbackend == 'module://ipympl.backend_nbagg': 
+    mplbackend = matplotlib.get_backend().lower()
+    if mplbackend == 'nbagg' or mplbackend == 'module://ipympl.backend_nbagg':
         formatter = shell.display_formatter.ipython_display_formatter
         formatter.for_type(Figure, _reshow_nbagg_figure)
 
@@ -316,12 +316,12 @@ def activate_matplotlib(backend):
 
     # This must be imported last in the matplotlib series, after
     # backend/interactivity choices have been made
-    import matplotlib.pyplot as plt 
+    import matplotlib.pyplot as plt
 
-    plt.show._needmain = False 
+    plt.show._needmain = False
     # We need to detect at runtime whether show() is called by the user.
     # For this, we wrap it into a decorator which adds a 'called' flag.
-    plt.draw_if_interactive = flag_calls(plt.draw_if_interactive) 
+    plt.draw_if_interactive = flag_calls(plt.draw_if_interactive)
 
 
 def import_pylab(user_ns, import_all=True):

@@ -80,8 +80,8 @@ MARKER_EXPR = originalTextFor(MARKER_EXPR())("marker")
 MARKER_EXPR.setParseAction(
     lambda s, l, t: Marker(s[t._original_start : t._original_end])
 )
-MARKER_SEPARATOR = SEMICOLON 
-MARKER = MARKER_SEPARATOR + MARKER_EXPR 
+MARKER_SEPARATOR = SEMICOLON
+MARKER = MARKER_SEPARATOR + MARKER_EXPR
 
 VERSION_AND_MARKER = VERSION_SPEC + Optional(MARKER)
 URL_AND_MARKER = URL + Optional(MARKER)
@@ -89,9 +89,9 @@ URL_AND_MARKER = URL + Optional(MARKER)
 NAMED_REQUIREMENT = NAME + Optional(EXTRAS) + (URL_AND_MARKER | VERSION_AND_MARKER)
 
 REQUIREMENT = stringStart + NAMED_REQUIREMENT + stringEnd
-# pyparsing isn't thread safe during initialization, so we do it eagerly, see 
-# issue #104 
-REQUIREMENT.parseString("x[]") 
+# pyparsing isn't thread safe during initialization, so we do it eagerly, see
+# issue #104
+REQUIREMENT.parseString("x[]")
 
 
 class Requirement(object):
@@ -127,7 +127,7 @@ class Requirement(object):
             elif not (parsed_url.scheme and parsed_url.netloc) or (
                 not parsed_url.scheme and not parsed_url.netloc
             ):
-                raise InvalidRequirement("Invalid URL: {0}".format(req.url)) 
+                raise InvalidRequirement("Invalid URL: {0}".format(req.url))
             self.url = req.url  # type: TOptional[str]
         else:
             self.url = None

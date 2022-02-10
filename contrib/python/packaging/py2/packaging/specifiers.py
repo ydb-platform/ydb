@@ -238,7 +238,7 @@ class _IndividualSpecifier(BaseSpecifier):
                 ):
                     found_prereleases.append(version)
                 # Either this is not a prerelease, or we should have been
-                # accepting prereleases from the beginning. 
+                # accepting prereleases from the beginning.
                 else:
                     yielded = True
                     yield version
@@ -582,7 +582,7 @@ class Specifier(_IndividualSpecifier):
                 return False
 
         # Ensure that we do not allow a local version of the version mentioned
-        # in the specifier, which is technically greater than, to match. 
+        # in the specifier, which is technically greater than, to match.
         if prospective.local is not None:
             if Version(prospective.base_version) == Version(spec.base_version):
                 return False

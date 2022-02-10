@@ -6,7 +6,7 @@
 # Also generates AST code from the configuration file.
 # Should be called from the pycparser directory.
 #
-# Eli Bendersky [https://eli.thegreenplace.net/] 
+# Eli Bendersky [https://eli.thegreenplace.net/]
 # License: BSD
 #-----------------------------------------------------------------
 

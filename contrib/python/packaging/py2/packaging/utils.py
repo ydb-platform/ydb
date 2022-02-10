@@ -7,11 +7,11 @@ import re
 
 from ._typing import TYPE_CHECKING, cast
 from .tags import Tag, parse_tag
-from .version import InvalidVersion, Version 
+from .version import InvalidVersion, Version
 
 if TYPE_CHECKING:  # pragma: no cover
     from typing import FrozenSet, NewType, Tuple, Union
- 
+
     BuildTag = Union[Tuple[()], Tuple[int, str]]
     NormalizedName = NewType("NormalizedName", str)
 else:
@@ -41,48 +41,48 @@ def canonicalize_name(name):
     # This is taken from PEP 503.
     value = _canonicalize_regex.sub("-", name).lower()
     return cast(NormalizedName, value)
- 
- 
+
+
 def canonicalize_version(version):
     # type: (Union[Version, str]) -> Union[Version, str]
-    """ 
+    """
     This is very similar to Version.__str__, but has one subtle difference
-    with the way it handles the release segment. 
-    """ 
+    with the way it handles the release segment.
+    """
     if not isinstance(version, Version):
         try:
             version = Version(version)
         except InvalidVersion:
             # Legacy versions cannot be normalized
             return version
- 
-    parts = [] 
- 
-    # Epoch 
-    if version.epoch != 0: 
-        parts.append("{0}!".format(version.epoch)) 
- 
-    # Release segment 
-    # NB: This strips trailing '.0's to normalize 
+
+    parts = []
+
+    # Epoch
+    if version.epoch != 0:
+        parts.append("{0}!".format(version.epoch))
+
+    # Release segment
+    # NB: This strips trailing '.0's to normalize
     parts.append(re.sub(r"(\.0)+$", "", ".".join(str(x) for x in version.release)))
- 
-    # Pre-release 
-    if version.pre is not None: 
-        parts.append("".join(str(x) for x in version.pre)) 
- 
-    # Post-release 
-    if version.post is not None: 
-        parts.append(".post{0}".format(version.post)) 
- 
-    # Development release 
-    if version.dev is not None: 
-        parts.append(".dev{0}".format(version.dev)) 
- 
-    # Local version segment 
-    if version.local is not None: 
-        parts.append("+{0}".format(version.local)) 
- 
-    return "".join(parts) 
+
+    # Pre-release
+    if version.pre is not None:
+        parts.append("".join(str(x) for x in version.pre))
+
+    # Post-release
+    if version.post is not None:
+        parts.append(".post{0}".format(version.post))
+
+    # Development release
+    if version.dev is not None:
+        parts.append(".dev{0}".format(version.dev))
+
+    # Local version segment
+    if version.local is not None:
+        parts.append("+{0}".format(version.local))
+
+    return "".join(parts)
 
 
 def parse_wheel_filename(filename):

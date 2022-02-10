@@ -21,7 +21,7 @@ import threading
 from traitlets.config.configurable import LoggingConfigurable
 from decorator import decorator
 from IPython.utils.decorators import undoc
-from IPython.paths import locate_profile 
+from IPython.paths import locate_profile
 from IPython.utils import py3compat
 from traitlets import (
     Any, Bool, Dict, Instance, Integer, List, Unicode, TraitError,
@@ -301,8 +301,8 @@ class HistoryAccessor(HistoryAccessorBase):
         cur = self.db.execute("SELECT session, line, %s FROM %s " %\
                                 (toget, sqlfrom) + sql, params)
         if output:    # Regroup into 3-tuples, and parse JSON
-            return ((ses, lin, (py3compat.cast_unicode_py2(inp), py3compat.cast_unicode_py2(out))) 
-                    for ses, lin, inp, out in cur) 
+            return ((ses, lin, (py3compat.cast_unicode_py2(inp), py3compat.cast_unicode_py2(out)))
+                    for ses, lin, inp, out in cur)
         return cur
 
     @needs_sqlite

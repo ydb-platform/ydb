@@ -3,7 +3,7 @@
 from __future__ import print_function
 from __future__ import absolute_import
 
-import argparse 
+import argparse
 import io
 import sys
 from pprint import pformat
@@ -288,14 +288,14 @@ Currently the magic system has the following functions:""",
 
     @line_magic
     def profile(self, parameter_s=''):
-        """DEPRECATED since IPython 2.0. 
+        """DEPRECATED since IPython 2.0.
 
-        Raise `UsageError`. To profile code use the :magic:`prun` magic. 
-         
- 
+        Raise `UsageError`. To profile code use the :magic:`prun` magic.
+        
+
         See Also
         --------
-        prun : run code using the Python profiler (:magic:`prun`) 
+        prun : run code using the Python profiler (:magic:`prun`)
         """
         warn("%profile is now deprecated. Please use get_ipython().profile instead.")
         from IPython.core.application import BaseIPythonApplication
@@ -551,7 +551,7 @@ Currently the magic system has the following functions:""",
     @magic_arguments.magic_arguments()
     @magic_arguments.argument(
         '-e', '--export', action='store_true', default=False,
-        help=argparse.SUPPRESS 
+        help=argparse.SUPPRESS
     )
     @magic_arguments.argument(
         'filename', type=unicode_type,
@@ -562,24 +562,24 @@ Currently the magic system has the following functions:""",
         """Export and convert IPython notebooks.
 
         This function can export the current IPython history to a notebook file.
-        For example, to export the history to "foo.ipynb" do "%notebook foo.ipynb". 
- 
-        The -e or --export flag is deprecated in IPython 5.2, and will be 
-        removed in the future. 
+        For example, to export the history to "foo.ipynb" do "%notebook foo.ipynb".
+
+        The -e or --export flag is deprecated in IPython 5.2, and will be
+        removed in the future.
         """
         args = magic_arguments.parse_argstring(self.notebook, s)
 
         from nbformat import write, v4
- 
-        cells = [] 
-        hist = list(self.shell.history_manager.get_range()) 
-        if(len(hist)<=1): 
-            raise ValueError('History is empty, cannot export') 
-        for session, execution_count, source in hist[:-1]: 
-            cells.append(v4.new_code_cell( 
-                execution_count=execution_count, 
-                source=source 
-            )) 
-        nb = v4.new_notebook(cells=cells) 
-        with io.open(args.filename, 'w', encoding='utf-8') as f: 
-            write(nb, f, version=4) 
+
+        cells = []
+        hist = list(self.shell.history_manager.get_range())
+        if(len(hist)<=1):
+            raise ValueError('History is empty, cannot export')
+        for session, execution_count, source in hist[:-1]:
+            cells.append(v4.new_code_cell(
+                execution_count=execution_count,
+                source=source
+            ))
+        nb = v4.new_notebook(cells=cells)
+        with io.open(args.filename, 'w', encoding='utf-8') as f:
+            write(nb, f, version=4)

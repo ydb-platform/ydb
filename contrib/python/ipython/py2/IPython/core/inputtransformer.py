@@ -126,19 +126,19 @@ class TokenInputTransformer(InputTransformer):
     """
     def __init__(self, func):
         self.func = func
-        self.buf = [] 
+        self.buf = []
         self.reset_tokenizer()
- 
+
     def reset_tokenizer(self):
-        it = iter(self.buf) 
-        nxt = it.__next__ if PY3 else it.next 
-        self.tokenizer = generate_tokens(nxt) 
- 
+        it = iter(self.buf)
+        nxt = it.__next__ if PY3 else it.next
+        self.tokenizer = generate_tokens(nxt)
+
     def push(self, line):
-        self.buf.append(line + '\n') 
-        if all(l.isspace() for l in self.buf): 
+        self.buf.append(line + '\n')
+        if all(l.isspace() for l in self.buf):
             return self.reset()
- 
+
         tokens = []
         stop_at_NL = False
         try:
@@ -158,13 +158,13 @@ class TokenInputTransformer(InputTransformer):
         return self.output(tokens)
     
     def output(self, tokens):
-        self.buf[:] = [] 
+        self.buf[:] = []
         self.reset_tokenizer()
         return untokenize(self.func(tokens)).rstrip('\n')
     
     def reset(self):
-        l = ''.join(self.buf) 
-        self.buf[:] = [] 
+        l = ''.join(self.buf)
+        self.buf[:] = []
         self.reset_tokenizer()
         if l:
             return l.rstrip('\n')

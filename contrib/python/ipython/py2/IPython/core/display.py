@@ -11,7 +11,7 @@ try:
 except ImportError:
     from base64 import encodestring as base64_encode
 
-from binascii import b2a_hex, hexlify 
+from binascii import b2a_hex, hexlify
 import json
 import mimetypes
 import os
@@ -26,9 +26,9 @@ from IPython.testing.skipdoctest import skip_doctest
 __all__ = ['display', 'display_pretty', 'display_html', 'display_markdown',
 'display_svg', 'display_png', 'display_jpeg', 'display_latex', 'display_json',
 'display_javascript', 'display_pdf', 'DisplayObject', 'TextDisplayObject',
-'Pretty', 'HTML', 'Markdown', 'Math', 'Latex', 'SVG', 'ProgressBar', 'JSON', 'Javascript', 
+'Pretty', 'HTML', 'Markdown', 'Math', 'Latex', 'SVG', 'ProgressBar', 'JSON', 'Javascript',
 'Image', 'clear_output', 'set_matplotlib_formats', 'set_matplotlib_close',
-'publish_display_data', 'update_display', 'DisplayHandle'] 
+'publish_display_data', 'update_display', 'DisplayHandle']
 
 #-----------------------------------------------------------------------------
 # utility functions
@@ -79,8 +79,8 @@ def _display_mimetype(mimetype, objs, raw=False, metadata=None):
 #-----------------------------------------------------------------------------
 # Main functions
 #-----------------------------------------------------------------------------
-# use * to indicate transient is keyword-only 
-def publish_display_data(data, metadata=None, source=None, **kwargs): 
+# use * to indicate transient is keyword-only
+def publish_display_data(data, metadata=None, source=None, **kwargs):
     """Publish data and metadata to all frontends.
 
     See the ``display_data`` message in the messaging documentation for
@@ -115,38 +115,38 @@ def publish_display_data(data, metadata=None, source=None, **kwargs):
         to specify metadata about particular representations.
     source : str, deprecated
         Unused.
-    transient : dict, keyword-only 
-        A dictionary of transient data, such as display_id. 
+    transient : dict, keyword-only
+        A dictionary of transient data, such as display_id.
         """
     from IPython.core.interactiveshell import InteractiveShell
- 
-    display_pub = InteractiveShell.instance().display_pub 
- 
-    # only pass transient if supplied, 
-    # to avoid errors with older ipykernel. 
-    # TODO: We could check for ipykernel version and provide a detailed upgrade message. 
- 
-    display_pub.publish( 
+
+    display_pub = InteractiveShell.instance().display_pub
+
+    # only pass transient if supplied,
+    # to avoid errors with older ipykernel.
+    # TODO: We could check for ipykernel version and provide a detailed upgrade message.
+
+    display_pub.publish(
         data=data,
         metadata=metadata,
-        **kwargs 
+        **kwargs
     )
 
- 
-def _new_id(): 
-    """Generate a new random text id with urandom""" 
-    return b2a_hex(os.urandom(16)).decode('ascii') 
- 
- 
+
+def _new_id():
+    """Generate a new random text id with urandom"""
+    return b2a_hex(os.urandom(16)).decode('ascii')
+
+
 def display(*objs, **kwargs):
     """Display a Python object in all frontends.
 
     By default all representations will be computed and sent to the frontends.
     Frontends can decide which representation is used and how.
 
-    In terminal IPython this will be similar to using :func:`print`, for use in richer 
-    frontends see Jupyter notebook examples with rich display logic. 
- 
+    In terminal IPython this will be similar to using :func:`print`, for use in richer
+    frontends see Jupyter notebook examples with rich display logic.
+
     Parameters
     ----------
     objs : tuple of objects
@@ -154,11 +154,11 @@ def display(*objs, **kwargs):
     raw : bool, optional
         Are the objects to be displayed already mimetype-keyed dicts of raw display data,
         or Python objects that need to be formatted before display? [default: False]
-    include : list, tuple or set, optional 
+    include : list, tuple or set, optional
         A list of format type strings (MIME types) to include in the
         format data dict. If this is set *only* the format types included
         in this list will be computed.
-    exclude : list, tuple or set, optional 
+    exclude : list, tuple or set, optional
         A list of format type strings (MIME types) to exclude in the format
         data dict. If this is set all format types will be computed,
         except for those included in this argument.
@@ -166,147 +166,147 @@ def display(*objs, **kwargs):
         A dictionary of metadata to associate with the output.
         mime-type keys in this dictionary will be associated with the individual
         representation formats, if they exist.
-    transient : dict, optional 
-        A dictionary of transient data to associate with the output. 
-        Data in this dict should not be persisted to files (e.g. notebooks). 
-    display_id : str, bool optional 
-        Set an id for the display. 
-        This id can be used for updating this display area later via update_display. 
-        If given as `True`, generate a new `display_id` 
-    kwargs: additional keyword-args, optional 
-        Additional keyword-arguments are passed through to the display publisher. 
- 
-    Returns 
-    ------- 
- 
-    handle: DisplayHandle 
-        Returns a handle on updatable displays for use with :func:`update_display`, 
-        if `display_id` is given. Returns :any:`None` if no `display_id` is given 
-        (default). 
- 
-    Examples 
-    -------- 
- 
-    >>> class Json(object): 
-    ...     def __init__(self, json): 
-    ...         self.json = json 
-    ...     def _repr_pretty_(self, pp, cycle): 
-    ...         import json 
-    ...         pp.text(json.dumps(self.json, indent=2)) 
-    ...     def __repr__(self): 
-    ...         return str(self.json) 
-    ... 
- 
-    >>> d = Json({1:2, 3: {4:5}}) 
- 
-    >>> print(d) 
-    {1: 2, 3: {4: 5}} 
- 
-    >>> display(d) 
-    { 
-      "1": 2, 
-      "3": { 
-        "4": 5 
-      } 
-    } 
- 
-    >>> def int_formatter(integer, pp, cycle): 
-    ...     pp.text('I'*integer) 
- 
-    >>> plain = get_ipython().display_formatter.formatters['text/plain'] 
-    >>> plain.for_type(int, int_formatter) 
-    <function _repr_pprint at 0x...> 
-    >>> display(7-5) 
-    II 
- 
-    >>> del plain.type_printers[int] 
-    >>> display(7-5) 
-    2 
- 
-    See Also 
-    -------- 
- 
-    :func:`update_display` 
- 
-    Notes 
-    ----- 
- 
-    In Python, objects can declare their textual representation using the 
-    `__repr__` method. IPython expands on this idea and allows objects to declare 
-    other, rich representations including: 
- 
-      - HTML 
-      - JSON 
-      - PNG 
-      - JPEG 
-      - SVG 
-      - LaTeX 
- 
-    A single object can declare some or all of these representations; all are 
-    handled by IPython's display system. 
- 
-    The main idea of the first approach is that you have to implement special 
-    display methods when you define your class, one for each representation you 
-    want to use. Here is a list of the names of the special methods and the 
-    values they must return: 
- 
-      - `_repr_html_`: return raw HTML as a string 
-      - `_repr_json_`: return a JSONable dict 
-      - `_repr_jpeg_`: return raw JPEG data 
-      - `_repr_png_`: return raw PNG data 
-      - `_repr_svg_`: return raw SVG data as a string 
-      - `_repr_latex_`: return LaTeX commands in a string surrounded by "$". 
-      - `_repr_mimebundle_`: return a full mimebundle containing the mapping 
-      from all mimetypes to data 
- 
-    When you are directly writing your own classes, you can adapt them for 
-    display in IPython by following the above approach. But in practice, you 
-    often need to work with existing classes that you can't easily modify. 
- 
-    You can refer to the documentation on IPython display formatters in order to 
-    register custom formatters for already existing types. 
- 
-    .. versionadded:: 5.4 display available without import 
-    .. versionadded:: 6.1 display available without import 
- 
-    Since IPython 5.4 and 6.1 :func:`display` is automatically made available to 
-    the user without import. If you are using display in a document that might 
-    be used in a pure python context or with older version of IPython, use the 
-    following import at the top of your file:: 
- 
-        from IPython.display import display 
- 
+    transient : dict, optional
+        A dictionary of transient data to associate with the output.
+        Data in this dict should not be persisted to files (e.g. notebooks).
+    display_id : str, bool optional
+        Set an id for the display.
+        This id can be used for updating this display area later via update_display.
+        If given as `True`, generate a new `display_id`
+    kwargs: additional keyword-args, optional
+        Additional keyword-arguments are passed through to the display publisher.
+
+    Returns
+    -------
+
+    handle: DisplayHandle
+        Returns a handle on updatable displays for use with :func:`update_display`,
+        if `display_id` is given. Returns :any:`None` if no `display_id` is given
+        (default).
+
+    Examples
+    --------
+
+    >>> class Json(object):
+    ...     def __init__(self, json):
+    ...         self.json = json
+    ...     def _repr_pretty_(self, pp, cycle):
+    ...         import json
+    ...         pp.text(json.dumps(self.json, indent=2))
+    ...     def __repr__(self):
+    ...         return str(self.json)
+    ...
+
+    >>> d = Json({1:2, 3: {4:5}})
+
+    >>> print(d)
+    {1: 2, 3: {4: 5}}
+
+    >>> display(d)
+    {
+      "1": 2,
+      "3": {
+        "4": 5
+      }
+    }
+
+    >>> def int_formatter(integer, pp, cycle):
+    ...     pp.text('I'*integer)
+
+    >>> plain = get_ipython().display_formatter.formatters['text/plain']
+    >>> plain.for_type(int, int_formatter)
+    <function _repr_pprint at 0x...>
+    >>> display(7-5)
+    II
+
+    >>> del plain.type_printers[int]
+    >>> display(7-5)
+    2
+
+    See Also
+    --------
+
+    :func:`update_display`
+
+    Notes
+    -----
+
+    In Python, objects can declare their textual representation using the
+    `__repr__` method. IPython expands on this idea and allows objects to declare
+    other, rich representations including:
+
+      - HTML
+      - JSON
+      - PNG
+      - JPEG
+      - SVG
+      - LaTeX
+
+    A single object can declare some or all of these representations; all are
+    handled by IPython's display system.
+
+    The main idea of the first approach is that you have to implement special
+    display methods when you define your class, one for each representation you
+    want to use. Here is a list of the names of the special methods and the
+    values they must return:
+
+      - `_repr_html_`: return raw HTML as a string
+      - `_repr_json_`: return a JSONable dict
+      - `_repr_jpeg_`: return raw JPEG data
+      - `_repr_png_`: return raw PNG data
+      - `_repr_svg_`: return raw SVG data as a string
+      - `_repr_latex_`: return LaTeX commands in a string surrounded by "$".
+      - `_repr_mimebundle_`: return a full mimebundle containing the mapping
+      from all mimetypes to data
+
+    When you are directly writing your own classes, you can adapt them for
+    display in IPython by following the above approach. But in practice, you
+    often need to work with existing classes that you can't easily modify.
+
+    You can refer to the documentation on IPython display formatters in order to
+    register custom formatters for already existing types.
+
+    .. versionadded:: 5.4 display available without import
+    .. versionadded:: 6.1 display available without import
+
+    Since IPython 5.4 and 6.1 :func:`display` is automatically made available to
+    the user without import. If you are using display in a document that might
+    be used in a pure python context or with older version of IPython, use the
+    following import at the top of your file::
+
+        from IPython.display import display
+
     """
     from IPython.core.interactiveshell import InteractiveShell
-     
-    if not InteractiveShell.initialized(): 
-        # Directly print objects. 
-        print(*objs) 
-        return 
-     
-    raw = kwargs.pop('raw', False) 
-    include = kwargs.pop('include', None) 
-    exclude = kwargs.pop('exclude', None) 
-    metadata = kwargs.pop('metadata', None) 
-    transient = kwargs.pop('transient', None) 
-    display_id = kwargs.pop('display_id', None) 
-    if transient is None: 
-        transient = {} 
-    if display_id: 
-        if display_id is True: 
-            display_id = _new_id() 
-        transient['display_id'] = display_id 
-    if kwargs.get('update') and 'display_id' not in transient: 
-        raise TypeError('display_id required for update_display') 
-    if transient: 
-        kwargs['transient'] = transient 
+    
+    if not InteractiveShell.initialized():
+        # Directly print objects.
+        print(*objs)
+        return
+    
+    raw = kwargs.pop('raw', False)
+    include = kwargs.pop('include', None)
+    exclude = kwargs.pop('exclude', None)
+    metadata = kwargs.pop('metadata', None)
+    transient = kwargs.pop('transient', None)
+    display_id = kwargs.pop('display_id', None)
+    if transient is None:
+        transient = {}
+    if display_id:
+        if display_id is True:
+            display_id = _new_id()
+        transient['display_id'] = display_id
+    if kwargs.get('update') and 'display_id' not in transient:
+        raise TypeError('display_id required for update_display')
+    if transient:
+        kwargs['transient'] = transient
 
     if not raw:
         format = InteractiveShell.instance().display_formatter.format
 
     for obj in objs:
         if raw:
-            publish_display_data(data=obj, metadata=metadata, **kwargs) 
+            publish_display_data(data=obj, metadata=metadata, **kwargs)
         else:
             format_dict, md_dict = format(obj, include=include, exclude=exclude)
             if not format_dict:
@@ -315,86 +315,86 @@ def display(*objs, **kwargs):
             if metadata:
                 # kwarg-specified metadata gets precedence
                 _merge(md_dict, metadata)
-            publish_display_data(data=format_dict, metadata=md_dict, **kwargs) 
-    if display_id: 
-        return DisplayHandle(display_id) 
+            publish_display_data(data=format_dict, metadata=md_dict, **kwargs)
+    if display_id:
+        return DisplayHandle(display_id)
 
 
-# use * for keyword-only display_id arg 
-def update_display(obj, **kwargs): 
-    """Update an existing display by id 
- 
-    Parameters 
-    ---------- 
- 
-    obj: 
-        The object with which to update the display 
-    display_id: keyword-only 
-        The id of the display to update 
- 
-    See Also 
-    -------- 
- 
-    :func:`display` 
-    """ 
-    sentinel = object() 
-    display_id = kwargs.pop('display_id', sentinel) 
-    if display_id is sentinel: 
-        raise TypeError("update_display() missing 1 required keyword-only argument: 'display_id'") 
-    kwargs['update'] = True 
-    display(obj, display_id=display_id, **kwargs) 
- 
- 
-class DisplayHandle(object): 
-    """A handle on an updatable display 
- 
-    Call `.update(obj)` to display a new object. 
- 
-    Call `.display(obj`) to add a new instance of this display, 
-    and update existing instances. 
- 
-    See Also 
-    -------- 
- 
-        :func:`display`, :func:`update_display` 
- 
-    """ 
- 
-    def __init__(self, display_id=None): 
-        if display_id is None: 
-            display_id = _new_id() 
-        self.display_id = display_id 
- 
-    def __repr__(self): 
-        return "<%s display_id=%s>" % (self.__class__.__name__, self.display_id) 
- 
-    def display(self, obj, **kwargs): 
-        """Make a new display with my id, updating existing instances. 
-         
-        Parameters 
-        ---------- 
-         
-        obj: 
-            object to display 
-        **kwargs: 
-            additional keyword arguments passed to display 
-        """ 
-        display(obj, display_id=self.display_id, **kwargs) 
- 
-    def update(self, obj, **kwargs): 
-        """Update existing displays with my id 
-         
-        Parameters 
-        ---------- 
-         
-        obj: 
-            object to display 
-        **kwargs: 
-            additional keyword arguments passed to update_display 
-        """ 
-        update_display(obj, display_id=self.display_id, **kwargs) 
- 
- 
+# use * for keyword-only display_id arg
+def update_display(obj, **kwargs):
+    """Update an existing display by id
+
+    Parameters
+    ----------
+
+    obj:
+        The object with which to update the display
+    display_id: keyword-only
+        The id of the display to update
+
+    See Also
+    --------
+
+    :func:`display`
+    """
+    sentinel = object()
+    display_id = kwargs.pop('display_id', sentinel)
+    if display_id is sentinel:
+        raise TypeError("update_display() missing 1 required keyword-only argument: 'display_id'")
+    kwargs['update'] = True
+    display(obj, display_id=display_id, **kwargs)
+
+
+class DisplayHandle(object):
+    """A handle on an updatable display
+
+    Call `.update(obj)` to display a new object.
+
+    Call `.display(obj`) to add a new instance of this display,
+    and update existing instances.
+
+    See Also
+    --------
+
+        :func:`display`, :func:`update_display`
+
+    """
+
+    def __init__(self, display_id=None):
+        if display_id is None:
+            display_id = _new_id()
+        self.display_id = display_id
+
+    def __repr__(self):
+        return "<%s display_id=%s>" % (self.__class__.__name__, self.display_id)
+
+    def display(self, obj, **kwargs):
+        """Make a new display with my id, updating existing instances.
+        
+        Parameters
+        ----------
+        
+        obj:
+            object to display
+        **kwargs:
+            additional keyword arguments passed to display
+        """
+        display(obj, display_id=self.display_id, **kwargs)
+
+    def update(self, obj, **kwargs):
+        """Update existing displays with my id
+        
+        Parameters
+        ----------
+        
+        obj:
+            object to display
+        **kwargs:
+            additional keyword arguments passed to update_display
+        """
+        update_display(obj, display_id=self.display_id, **kwargs)
+
+
 def display_pretty(*objs, **kwargs):
     """Display the pretty (default) representation of an object.
 
@@ -664,8 +664,8 @@ class TextDisplayObject(DisplayObject):
 
 class Pretty(TextDisplayObject):
 
-    def _repr_pretty_(self, pp, cycle): 
-        return pp.text(self.data) 
+    def _repr_pretty_(self, pp, cycle):
+        return pp.text(self.data)
 
 
 class HTML(TextDisplayObject):
@@ -703,7 +703,7 @@ class Latex(TextDisplayObject):
 
 class SVG(DisplayObject):
 
-    _read_flags = 'rb' 
+    _read_flags = 'rb'
     # wrap data in a property, which extracts the <svg> tag, discarding
     # document headers
     _data = None
@@ -735,68 +735,68 @@ class SVG(DisplayObject):
     def _repr_svg_(self):
         return self.data
 
-class ProgressBar(DisplayObject): 
-    """Progressbar supports displaying a progressbar like element  
-    """ 
-    def __init__(self, total): 
-        """Creates a new progressbar 
-         
-        Parameters 
-        ---------- 
-        total : int 
-            maximum size of the progressbar 
-        """ 
-        self.total = total 
-        self._progress = 0 
-        self.html_width = '60ex' 
-        self.text_width = 60 
-        self._display_id = hexlify(os.urandom(8)).decode('ascii') 
+class ProgressBar(DisplayObject):
+    """Progressbar supports displaying a progressbar like element 
+    """
+    def __init__(self, total):
+        """Creates a new progressbar
+        
+        Parameters
+        ----------
+        total : int
+            maximum size of the progressbar
+        """
+        self.total = total
+        self._progress = 0
+        self.html_width = '60ex'
+        self.text_width = 60
+        self._display_id = hexlify(os.urandom(8)).decode('ascii')
 
-    def __repr__(self): 
-        fraction = self.progress / self.total 
-        filled = '=' * int(fraction * self.text_width) 
-        rest = ' ' * (self.text_width - len(filled)) 
-        return '[{}{}] {}/{}'.format( 
-            filled, rest, 
-            self.progress, self.total, 
-        ) 
- 
-    def _repr_html_(self): 
-        return "<progress style='width:{}' max='{}' value='{}'></progress>".format( 
-            self.html_width, self.total, self.progress) 
- 
-    def display(self): 
-        display(self, display_id=self._display_id) 
- 
-    def update(self): 
-        display(self, display_id=self._display_id, update=True) 
- 
-    @property 
-    def progress(self): 
-        return self._progress 
- 
-    @progress.setter 
-    def progress(self, value): 
-        self._progress = value 
-        self.update() 
- 
-    def __iter__(self): 
-        self.display() 
-        self._progress = -1 # First iteration is 0 
-        return self 
- 
-    def __next__(self): 
-        """Returns current value and increments display by one.""" 
-        self.progress += 1 
-        if self.progress < self.total: 
-            return self.progress 
-        else: 
-            raise StopIteration() 
-             
-    def next(self): 
-        """Python 2 compatibility""" 
-        return self.__next__()  
- 
+    def __repr__(self):
+        fraction = self.progress / self.total
+        filled = '=' * int(fraction * self.text_width)
+        rest = ' ' * (self.text_width - len(filled))
+        return '[{}{}] {}/{}'.format(
+            filled, rest,
+            self.progress, self.total,
+        )
+
+    def _repr_html_(self):
+        return "<progress style='width:{}' max='{}' value='{}'></progress>".format(
+            self.html_width, self.total, self.progress)
+
+    def display(self):
+        display(self, display_id=self._display_id)
+
+    def update(self):
+        display(self, display_id=self._display_id, update=True)
+
+    @property
+    def progress(self):
+        return self._progress
+
+    @progress.setter
+    def progress(self, value):
+        self._progress = value
+        self.update()
+
+    def __iter__(self):
+        self.display()
+        self._progress = -1 # First iteration is 0
+        return self
+
+    def __next__(self):
+        """Returns current value and increments display by one."""
+        self.progress += 1
+        if self.progress < self.total:
+            return self.progress
+        else:
+            raise StopIteration()
+            
+    def next(self):
+        """Python 2 compatibility"""
+        return self.__next__() 
+
 class JSON(DisplayObject):
     """JSON expects a JSON-able dict or list
     
@@ -1012,7 +1012,7 @@ class Image(DisplayObject):
             if ext is not None:
                 if ext == u'jpg' or ext == u'jpeg':
                     format = self._FMT_JPEG
-                elif ext == u'png': 
+                elif ext == u'png':
                     format = self._FMT_PNG
                 else:
                     format = ext.lower()

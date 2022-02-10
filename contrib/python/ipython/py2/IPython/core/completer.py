@@ -25,7 +25,7 @@ import re
 import sys
 import unicodedata
 import string
-import warnings 
+import warnings
 
 from traitlets.config.configurable import Configurable
 from IPython.core.error import TryNext
@@ -47,9 +47,9 @@ if sys.platform == 'win32':
 else:
     PROTECTABLES = ' ()[]{}?=\\|;:\'#*"^&'
 
-# Protect against returning an enormous number of completions which the frontend 
-# may have trouble processing. 
-MATCHES_LIMIT = 500 
+# Protect against returning an enormous number of completions which the frontend
+# may have trouble processing.
+MATCHES_LIMIT = 500
 
 def has_open_quotes(s):
     """Return whether a string has open quotes.
@@ -243,11 +243,11 @@ class Completer(Configurable):
         """
     ).tag(config=True)
 
-    backslash_combining_completions = Bool(True,  
-        help="Enable unicode completions, e.g. \\alpha<tab> . " 
-             "Includes completion of latex commands, unicode names, and expanding " 
-             "unicode characters back to latex commands.").tag(config=True) 
- 
+    backslash_combining_completions = Bool(True, 
+        help="Enable unicode completions, e.g. \\alpha<tab> . "
+             "Includes completion of latex commands, unicode names, and expanding "
+             "unicode characters back to latex commands.").tag(config=True)
+
     def __init__(self, namespace=None, global_namespace=None, **kwargs):
         """Create a new completer for the command line.
 
@@ -549,13 +549,13 @@ class IPCompleter(Completer):
         """,
     ).tag(config=True)
 
-    @observe('limit_to__all__') 
-    def _limit_to_all_changed(self, change): 
-        warnings.warn('`IPython.core.IPCompleter.limit_to__all__` configuration ' 
-            'value has been deprecated since IPython 5.0, will be made to have ' 
-            'no effects and then removed in future version of IPython.', 
-            UserWarning) 
- 
+    @observe('limit_to__all__')
+    def _limit_to_all_changed(self, change):
+        warnings.warn('`IPython.core.IPCompleter.limit_to__all__` configuration '
+            'value has been deprecated since IPython 5.0, will be made to have '
+            'no effects and then removed in future version of IPython.',
+            UserWarning)
+
     def __init__(self, shell=None, namespace=None, global_namespace=None,
                  use_readline=True, config=None, **kwargs):
         """IPCompleter() -> completer
@@ -1093,12 +1093,12 @@ class IPCompleter(Completer):
                     return [cast_unicode_py2(r) for r in res if r.lower().startswith(text_low)]
             except TryNext:
                 pass
-            except KeyboardInterrupt: 
-                """ 
-                If custom completer take too long, 
-                let keyboard interrupt abort and return nothing. 
-                """ 
-                break 
+            except KeyboardInterrupt:
+                """
+                If custom completer take too long,
+                let keyboard interrupt abort and return nothing.
+                """
+                break
 
         return None
 
@@ -1137,21 +1137,21 @@ class IPCompleter(Completer):
         if cursor_pos is None:
             cursor_pos = len(line_buffer) if text is None else len(text)
 
-        if self.use_main_ns: 
-            self.namespace = __main__.__dict__ 
+        if self.use_main_ns:
+            self.namespace = __main__.__dict__
 
-        if PY3 and self.backslash_combining_completions: 
- 
+        if PY3 and self.backslash_combining_completions:
+
             base_text = text if not line_buffer else line_buffer[:cursor_pos]
             latex_text, latex_matches = self.latex_matches(base_text)
             if latex_matches:
-                return latex_text, latex_matches 
+                return latex_text, latex_matches
             name_text = ''
             name_matches = []
             for meth in (self.unicode_name_matches, back_latex_name_matches, back_unicode_name_matches):
                 name_text, name_matches = meth(base_text)
                 if name_text:
-                    return name_text, name_matches[:MATCHES_LIMIT] 
+                    return name_text, name_matches[:MATCHES_LIMIT]
         
         # if text is either None or an empty string, rely on the line buffer
         if not text:
@@ -1192,6 +1192,6 @@ class IPCompleter(Completer):
         # different types of objects.  The rlcomplete() method could then
         # simply collapse the dict into a list for readline, but we'd have
         # richer completion semantics in other evironments.
-        self.matches = sorted(set(self.matches), key=completions_sorting_key)[:MATCHES_LIMIT] 
+        self.matches = sorted(set(self.matches), key=completions_sorting_key)[:MATCHES_LIMIT]
 
         return text, self.matches

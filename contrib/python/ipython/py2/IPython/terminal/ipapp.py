@@ -35,7 +35,7 @@ from IPython.extensions.storemagic import StoreMagics
 from .interactiveshell import TerminalInteractiveShell
 from IPython.paths import get_ipython_dir
 from traitlets import (
-    Bool, List, Dict, default, observe, Type 
+    Bool, List, Dict, default, observe, Type
 )
 
 #-----------------------------------------------------------------------------
@@ -185,13 +185,13 @@ class TerminalIPythonApp(BaseIPythonApplication, InteractiveShellApp):
     flags = Dict(flags)
     aliases = Dict(aliases)
     classes = List()
- 
-    interactive_shell_class = Type( 
-        klass=object,   # use default_value otherwise which only allow subclasses. 
-        default_value=TerminalInteractiveShell, 
-        help="Class to use to instantiate the TerminalInteractiveShell object. Useful for custom Frontends" 
-    ).tag(config=True) 
- 
+
+    interactive_shell_class = Type(
+        klass=object,   # use default_value otherwise which only allow subclasses.
+        default_value=TerminalInteractiveShell,
+        help="Class to use to instantiate the TerminalInteractiveShell object. Useful for custom Frontends"
+    ).tag(config=True)
+
     @default('classes')
     def _classes_default(self):
         """This has to be in a method, for TerminalIPythonApp to be available."""
@@ -327,7 +327,7 @@ class TerminalIPythonApp(BaseIPythonApplication, InteractiveShellApp):
         # shell.display_banner should always be False for the terminal
         # based app, because we call shell.show_banner() by hand below
         # so the banner shows *before* all extension loading stuff.
-        self.shell = self.interactive_shell_class.instance(parent=self, 
+        self.shell = self.interactive_shell_class.instance(parent=self,
                         profile_dir=self.profile_dir,
                         ipython_dir=self.ipython_dir, user_ns=self.user_ns)
         self.shell.configurables.append(self)
@@ -365,10 +365,10 @@ def load_default_config(ipython_dir=None):
         ipython_dir = get_ipython_dir()
 
     profile_dir = os.path.join(ipython_dir, 'profile_default')
-    app = TerminalIPythonApp() 
-    app.config_file_paths.append(profile_dir) 
-    app.load_config_file() 
-    return app.config 
+    app = TerminalIPythonApp()
+    app.config_file_paths.append(profile_dir)
+    app.load_config_file()
+    return app.config
 
 launch_new_instance = TerminalIPythonApp.launch_instance
 

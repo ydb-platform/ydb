@@ -11,7 +11,7 @@ class FrozenError(AttributeError):
 
     .. versionadded:: 20.1.0
     """
- 
+
     msg = "can't set attribute"
     args = [msg]
 
@@ -64,15 +64,15 @@ class UnannotatedAttributeError(RuntimeError):
 
     .. versionadded:: 17.3.0
     """
- 
- 
-class PythonTooOldError(RuntimeError): 
-    """ 
+
+
+class PythonTooOldError(RuntimeError):
+    """
     It was attempted to use an ``attrs`` feature that requires a newer Python
     version.
- 
-    .. versionadded:: 18.2.0 
-    """ 
+
+    .. versionadded:: 18.2.0
+    """
 
 
 class NotCallableError(TypeError):

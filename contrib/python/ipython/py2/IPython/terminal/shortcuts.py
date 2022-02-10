@@ -62,10 +62,10 @@ def register_ipython_shortcuts(registry, shell):
                          filter=(HasFocus(DEFAULT_BUFFER)
                                 & EmacsInsertMode()))(newline_with_copy_margin)
 
-    registry.add_binding(Keys.F2, 
-                         filter=HasFocus(DEFAULT_BUFFER) 
-                        )(open_input_in_editor) 
- 
+    registry.add_binding(Keys.F2,
+                         filter=HasFocus(DEFAULT_BUFFER)
+                        )(open_input_in_editor)
+
     if shell.display_completions == 'readlinelike':
         registry.add_binding(Keys.ControlI,
                              filter=(HasFocus(DEFAULT_BUFFER)
@@ -96,18 +96,18 @@ def newline_or_execute_outer(shell):
                 b.cancel_completion()
             return
 
-        # If there's only one line, treat it as if the cursor is at the end. 
-        # See https://github.com/ipython/ipython/issues/10425 
-        if d.line_count == 1: 
-            check_text = d.text 
-        else: 
-            check_text = d.text[:d.cursor_position] 
-        status, indent = shell.input_splitter.check_complete(check_text + '\n') 
- 
-        if not (d.on_last_line or 
-                d.cursor_position_row >= d.line_count - d.empty_line_count_at_the_end() 
-                ): 
-            b.insert_text('\n' + (' ' * (indent or 0))) 
+        # If there's only one line, treat it as if the cursor is at the end.
+        # See https://github.com/ipython/ipython/issues/10425
+        if d.line_count == 1:
+            check_text = d.text
+        else:
+            check_text = d.text[:d.cursor_position]
+        status, indent = shell.input_splitter.check_complete(check_text + '\n')
+
+        if not (d.on_last_line or
+                d.cursor_position_row >= d.line_count - d.empty_line_count_at_the_end()
+                ):
+            b.insert_text('\n' + (' ' * (indent or 0)))
             return
 
         if (status != 'incomplete') and b.accept_action.is_returnable:
@@ -181,9 +181,9 @@ def newline_with_copy_margin(event):
         pos_diff = cursor_start_pos - cursor_end_pos
         b.cursor_right(count=pos_diff)
 
-def open_input_in_editor(event): 
-    event.cli.current_buffer.tempfile_suffix = ".py" 
-    event.cli.current_buffer.open_in_editor(event.cli) 
+def open_input_in_editor(event):
+    event.cli.current_buffer.tempfile_suffix = ".py"
+    event.cli.current_buffer.open_in_editor(event.cli)
 
 
 if sys.platform == 'win32':

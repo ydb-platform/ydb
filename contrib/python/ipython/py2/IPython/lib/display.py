@@ -251,7 +251,7 @@ class YouTubeVideo(IFrame):
         start=int(timedelta(hours=1, minutes=46, seconds=40).total_seconds())
 
     Other parameters can be provided as documented at
-    https://developers.google.com/youtube/player_parameters#Parameters 
+    https://developers.google.com/youtube/player_parameters#Parameters
     
     When converting the notebook using nbconvert, a jpeg representation of the video
     will be inserted in the document.
@@ -324,11 +324,11 @@ class FileLink(object):
         ----------
         path : str
             path to the file or directory that should be formatted
-        url_prefix : str 
+        url_prefix : str
             prefix to be prepended to all files to form a working link [default:
-            ''] 
+            '']
         result_html_prefix : str
-            text to append to beginning to link [default: ''] 
+            text to append to beginning to link [default: '']
         result_html_suffix : str
             text to append at the end of link [default: '<br>']
         """

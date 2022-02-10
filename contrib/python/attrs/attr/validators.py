@@ -34,20 +34,20 @@ class _InstanceOfValidator(object):
         if not isinstance(value, self.type):
             raise TypeError(
                 "'{name}' must be {type!r} (got {value!r} that is a "
-                "{actual!r}).".format( 
-                    name=attr.name, 
-                    type=self.type, 
-                    actual=value.__class__, 
-                    value=value, 
-                ), 
-                attr, 
-                self.type, 
-                value, 
+                "{actual!r}).".format(
+                    name=attr.name,
+                    type=self.type,
+                    actual=value.__class__,
+                    value=value,
+                ),
+                attr,
+                self.type,
+                value,
             )
 
     def __repr__(self):
-        return "<instance_of validator for type {type!r}>".format( 
-            type=self.type 
+        return "<instance_of validator for type {type!r}>".format(
+            type=self.type
         )
 
 
@@ -150,17 +150,17 @@ class _ProvidesValidator(object):
         if not self.interface.providedBy(value):
             raise TypeError(
                 "'{name}' must provide {interface!r} which {value!r} "
-                "doesn't.".format( 
-                    name=attr.name, interface=self.interface, value=value 
-                ), 
-                attr, 
-                self.interface, 
-                value, 
+                "doesn't.".format(
+                    name=attr.name, interface=self.interface, value=value
+                ),
+                attr,
+                self.interface,
+                value,
             )
 
     def __repr__(self):
-        return "<provides validator for interface {interface!r}>".format( 
-            interface=self.interface 
+        return "<provides validator for interface {interface!r}>".format(
+            interface=self.interface
         )
 
 
@@ -192,8 +192,8 @@ class _OptionalValidator(object):
         self.validator(inst, attr, value)
 
     def __repr__(self):
-        return "<optional validator for {what} or None>".format( 
-            what=repr(self.validator) 
+        return "<optional validator for {what} or None>".format(
+            what=repr(self.validator)
         )
 
 
@@ -220,21 +220,21 @@ class _InValidator(object):
     options = attrib()
 
     def __call__(self, inst, attr, value):
-        try: 
-            in_options = value in self.options 
+        try:
+            in_options = value in self.options
         except TypeError:  # e.g. `1 in "abc"`
-            in_options = False 
- 
-        if not in_options: 
+            in_options = False
+
+        if not in_options:
             raise ValueError(
-                "'{name}' must be in {options!r} (got {value!r})".format( 
-                    name=attr.name, options=self.options, value=value 
-                ) 
+                "'{name}' must be in {options!r} (got {value!r})".format(
+                    name=attr.name, options=self.options, value=value
+                )
             )
 
     def __repr__(self):
-        return "<in_ validator with options {options!r}>".format( 
-            options=self.options 
+        return "<in_ validator with options {options!r}>".format(
+            options=self.options
         )
 
 

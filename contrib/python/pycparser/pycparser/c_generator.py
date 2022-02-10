@@ -3,7 +3,7 @@
 #
 # C code generator from pycparser AST nodes.
 #
-# Eli Bendersky [https://eli.thegreenplace.net/] 
+# Eli Bendersky [https://eli.thegreenplace.net/]
 # License: BSD
 #------------------------------------------------------------------------------
 from . import c_ast
@@ -43,7 +43,7 @@ class CGenerator(object):
 
     def visit_ID(self, n):
         return n.name
- 
+
     def visit_Pragma(self, n):
         ret = '#pragma'
         if n.string:
@@ -178,24 +178,24 @@ class CGenerator(object):
         return ', '.join(visited_subexprs)
 
     def visit_Enum(self, n):
-        return self._generate_struct_union_enum(n, name='enum') 
+        return self._generate_struct_union_enum(n, name='enum')
 
     def visit_Alignas(self, n):
         return '_Alignas({})'.format(self.visit(n.alignment))
 
-    def visit_Enumerator(self, n): 
-        if not n.value: 
-            return '{indent}{name},\n'.format( 
-                indent=self._make_indent(), 
-                name=n.name, 
-            ) 
-        else: 
-            return '{indent}{name} = {value},\n'.format( 
-                indent=self._make_indent(), 
-                name=n.name, 
-                value=self.visit(n.value), 
-            ) 
- 
+    def visit_Enumerator(self, n):
+        if not n.value:
+            return '{indent}{name},\n'.format(
+                indent=self._make_indent(),
+                name=n.name,
+            )
+        else:
+            return '{indent}{name} = {value},\n'.format(
+                indent=self._make_indent(),
+                name=n.name,
+                value=self.visit(n.value),
+            )
+
     def visit_FuncDef(self, n):
         decl = self.visit(n.decl)
         self.indent_level = 0
@@ -226,10 +226,10 @@ class CGenerator(object):
         s += self._make_indent() + '}\n'
         return s
 
-    def visit_CompoundLiteral(self, n): 
-        return '(' + self.visit(n.type) + '){' + self.visit(n.init) + '}' 
- 
- 
+    def visit_CompoundLiteral(self, n):
+        return '(' + self.visit(n.type) + '){' + self.visit(n.init) + '}'
+
+
     def visit_EmptyStatement(self, n):
         return ';'
 
@@ -325,21 +325,21 @@ class CGenerator(object):
         return '...'
 
     def visit_Struct(self, n):
-        return self._generate_struct_union_enum(n, 'struct') 
+        return self._generate_struct_union_enum(n, 'struct')
 
     def visit_Typename(self, n):
         return self._generate_type(n.type)
 
     def visit_Union(self, n):
-        return self._generate_struct_union_enum(n, 'union') 
+        return self._generate_struct_union_enum(n, 'union')
 
     def visit_NamedInitializer(self, n):
         s = ''
         for name in n.name:
             if isinstance(name, c_ast.ID):
                 s += '.' + name.name
-            else: 
-                s += '[' + self.visit(name) + ']' 
+            else:
+                s += '[' + self.visit(name) + ']'
         s += ' = ' + self._visit_expr(n.expr)
         return s
 
@@ -355,37 +355,37 @@ class CGenerator(object):
     def visit_PtrDecl(self, n):
         return self._generate_type(n, emit_declname=False)
 
-    def _generate_struct_union_enum(self, n, name): 
-        """ Generates code for structs, unions, and enums. name should be 
-            'struct', 'union', or 'enum'. 
+    def _generate_struct_union_enum(self, n, name):
+        """ Generates code for structs, unions, and enums. name should be
+            'struct', 'union', or 'enum'.
         """
-        if name in ('struct', 'union'): 
-            members = n.decls 
-            body_function = self._generate_struct_union_body 
-        else: 
-            assert name == 'enum' 
-            members = None if n.values is None else n.values.enumerators 
-            body_function = self._generate_enum_body 
+        if name in ('struct', 'union'):
+            members = n.decls
+            body_function = self._generate_struct_union_body
+        else:
+            assert name == 'enum'
+            members = None if n.values is None else n.values.enumerators
+            body_function = self._generate_enum_body
         s = name + ' ' + (n.name or '')
-        if members is not None: 
-            # None means no members 
-            # Empty sequence means an empty list of members 
+        if members is not None:
+            # None means no members
+            # Empty sequence means an empty list of members
             s += '\n'
             s += self._make_indent()
             self.indent_level += 2
             s += '{\n'
-            s += body_function(members) 
+            s += body_function(members)
             self.indent_level -= 2
             s += self._make_indent() + '}'
         return s
 
-    def _generate_struct_union_body(self, members): 
-        return ''.join(self._generate_stmt(decl) for decl in members) 
- 
-    def _generate_enum_body(self, members): 
-        # `[:-2] + '\n'` removes the final `,` from the enumerator list 
-        return ''.join(self.visit(value) for value in members)[:-2] + '\n' 
- 
+    def _generate_struct_union_body(self, members):
+        return ''.join(self._generate_stmt(decl) for decl in members)
+
+    def _generate_enum_body(self, members):
+        # `[:-2] + '\n'` removes the final `,` from the enumerator list
+        return ''.join(self.visit(value) for value in members)[:-2] + '\n'
+
     def _generate_stmt(self, n, add_indent=False):
         """ Generation from a statement node. This method exists as a wrapper
             for individual visit_* methods to handle different treatment of
@@ -498,5 +498,5 @@ class CGenerator(object):
         """ Returns True for nodes that are "simple" - i.e. nodes that always
             have higher precedence than operators.
         """
-        return isinstance(n, (c_ast.Constant, c_ast.ID, c_ast.ArrayRef, 
-                              c_ast.StructRef, c_ast.FuncCall)) 
+        return isinstance(n, (c_ast.Constant, c_ast.ID, c_ast.ArrayRef,
+                              c_ast.StructRef, c_ast.FuncCall))

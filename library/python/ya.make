@@ -7,17 +7,17 @@ RECURSE(
     archive/benchmark
     archive/test
     archive/test/data
-    asgi_yauth 
-    async_clients 
+    asgi_yauth
+    async_clients
     auth_client_parser
     awssdk-extensions
     awssdk_async_extensions
     base64
     base64/test
     bclclient
-    blackbox 
-    blackbox/tests 
-    blackbox/tvm2 
+    blackbox
+    blackbox/tests
+    blackbox/tvm2
     bloom
     boost_test
     bstr
@@ -52,16 +52,16 @@ RECURSE(
     cyson/ut
     deploy_formatter
     deprecated
-    dir-sync 
+    dir-sync
     django
     django/example
-    django-idm-api 
-    django-multic 
+    django-idm-api
+    django-multic
     django-sform
     django-sform/tests
-    django_alive 
+    django_alive
     django_celery_monitoring
-    django_russian 
+    django_russian
     django_template_common
     django_tools_log_context
     dssclient
@@ -86,15 +86,15 @@ RECURSE(
     geolocation/ut
     geohash
     geohash/ut
-    golovan_stats_aggregator 
-    granular_settings 
-    granular_settings/tests 
+    golovan_stats_aggregator
+    granular_settings
+    granular_settings/tests
     guid
     guid/test
     guid/at_fork_test
     gunicorn
     hnsw
-    ids 
+    ids
     import_test
     infected_masks
     infected_masks/ut
@@ -116,7 +116,7 @@ RECURSE(
     luigi/luigid_static
     maths
     messagebus
-    metrics_framework 
+    metrics_framework
     mime_types
     monitoring
     monlib
@@ -139,16 +139,16 @@ RECURSE(
     path/tests
     protobuf
     pymain
-    pyscopg2 
+    pyscopg2
     pytest
     pytest-mongodb
     pytest/allure
     pytest/empty
     pytest/plugins
     python-blackboxer
-    python-django-tanker 
-    python-django-yauth/tests 
-    python-django-yauth 
+    python-django-tanker
+    python-django-yauth/tests
+    python-django-yauth
     reactor
     redis_utils
     reservoir_sampling
@@ -174,8 +174,8 @@ RECURSE(
     spyt
     ssh_client
     ssh_sign
-    startrek_python_client 
-    startrek_python_client/tests_int 
+    startrek_python_client
+    startrek_python_client/tests_int
     statface_client
     step
     strings
@@ -195,8 +195,8 @@ RECURSE(
     thread/test
     tskv
     tvmauth
-    tvm2 
-    tvm2/tests 
+    tvm2
+    tvm2/tests
     type_info
     type_info/test
     unique_id
@@ -206,12 +206,12 @@ RECURSE(
     wiki
     windows
     windows/ut
-    yandex_tracker_client 
+    yandex_tracker_client
     yenv
     yt
     yt/test
-    ylock 
-    ylock/tests 
+    ylock
+    ylock/tests
     zipatch
 )
 

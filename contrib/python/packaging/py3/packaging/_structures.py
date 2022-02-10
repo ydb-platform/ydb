@@ -28,7 +28,7 @@ class InfinityType:
     def __neg__(self: object) -> "NegativeInfinityType":
         return NegativeInfinity
 
- 
+
 Infinity = InfinityType()
 
 
@@ -57,5 +57,5 @@ class NegativeInfinityType:
     def __neg__(self: object) -> InfinityType:
         return Infinity
 
- 
+
 NegativeInfinity = NegativeInfinityType()

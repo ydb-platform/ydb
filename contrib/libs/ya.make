@@ -151,7 +151,7 @@ RECURSE(
     libfuzzer12
     libgeotiff
     libgit2
-    libgraphqlparser 
+    libgraphqlparser
     libheif
     libical
     libiconv

@@ -316,21 +316,21 @@ namespace NXml {
     void TNode::SaveInternal(IOutputStream& stream, TZtStringBuf enc, int options) const {
         const char* encoding = enc.size() ? enc.data() : "utf-8";
         TSaveCtxtPtr ctx(xmlSaveToIO(XmlWriteToOstream, /* close */ nullptr, &stream,
-                                     encoding, options)); 
+                                     encoding, options));
         if (xmlSaveTree(ctx.Get(), (xmlNode*)GetPtr()) < 0)
             THROW(XmlException, "Failed saving node to stream");
     }
 
     void TNode::Save(IOutputStream& stream, TZtStringBuf enc, bool shouldFormat) const {
-        SaveInternal(stream, enc, shouldFormat ? XML_SAVE_FORMAT : 0); 
-    } 
- 
+        SaveInternal(stream, enc, shouldFormat ? XML_SAVE_FORMAT : 0);
+    }
+
     void TNode::SaveAsHtml(IOutputStream& stream, TZtStringBuf enc, bool shouldFormat) const {
-        int options = XML_SAVE_AS_HTML; 
-        options |= shouldFormat ? XML_SAVE_FORMAT : 0; 
-        SaveInternal(stream, enc, options); 
-    } 
- 
+        int options = XML_SAVE_AS_HTML;
+        options |= shouldFormat ? XML_SAVE_FORMAT : 0;
+        SaveInternal(stream, enc, options);
+    }
+
     TConstNodes::TConstNodes(const TConstNodes& nodes)
         : SizeValue(nodes.Size())
         , Doc(nodes.Doc)

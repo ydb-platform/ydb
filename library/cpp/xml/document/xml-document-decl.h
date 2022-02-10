@@ -388,7 +388,7 @@ namespace NXml {
         SetAttr(TZtStringBuf name, const T& value);
 
         void SetAttr(TZtStringBuf name, TZtStringBuf value);
- 
+
         void SetAttr(TZtStringBuf name);
 
         /**
@@ -469,7 +469,7 @@ namespace NXml {
         void AttrInternal(TCharPtr& value, T& res, TStringBuf errContext) const;
 
         void SaveInternal(IOutputStream& stream, TZtStringBuf enc, int options) const;
- 
+
         xmlNode* NodePointer;
         xmlDoc* DocPointer;
     };

@@ -19,8 +19,8 @@
 #include <contrib/libs/farmhash/farmhash.h>
 #include <contrib/libs/xxhash/xxhash.h>
 
-#include <contrib/libs/openssl/include/openssl/sha.h> 
- 
+#include <contrib/libs/openssl/include/openssl/sha.h>
+
 using namespace NKikimr;
 using namespace NUdf;
 
@@ -278,26 +278,26 @@ namespace {
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TSha1, char*(TAutoMap<char*>)) { 
-        const auto& inputRef = args[0].AsStringRef(); 
-        SHA_CTX sha; 
-        SHA1_Init(&sha); 
-        SHA1_Update(&sha, inputRef.Data(), inputRef.Size()); 
-        unsigned char hash[SHA_DIGEST_LENGTH]; 
-        SHA1_Final(hash, &sha); 
-        return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash), sizeof(hash))); 
-    } 
- 
-    SIMPLE_UDF(TSha256, char*(TAutoMap<char*>)) { 
-        const auto& inputRef = args[0].AsStringRef(); 
-        SHA256_CTX sha; 
-        SHA256_Init(&sha); 
-        SHA256_Update(&sha, inputRef.Data(), inputRef.Size()); 
-        unsigned char hash[SHA256_DIGEST_LENGTH]; 
-        SHA256_Final(hash, &sha); 
-        return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash), sizeof(hash))); 
-    } 
- 
+    SIMPLE_UDF(TSha1, char*(TAutoMap<char*>)) {
+        const auto& inputRef = args[0].AsStringRef();
+        SHA_CTX sha;
+        SHA1_Init(&sha);
+        SHA1_Update(&sha, inputRef.Data(), inputRef.Size());
+        unsigned char hash[SHA_DIGEST_LENGTH];
+        SHA1_Final(hash, &sha);
+        return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash), sizeof(hash)));
+    }
+
+    SIMPLE_UDF(TSha256, char*(TAutoMap<char*>)) {
+        const auto& inputRef = args[0].AsStringRef();
+        SHA256_CTX sha;
+        SHA256_Init(&sha);
+        SHA256_Update(&sha, inputRef.Data(), inputRef.Size());
+        unsigned char hash[SHA256_DIGEST_LENGTH];
+        SHA256_Final(hash, &sha);
+        return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash), sizeof(hash)));
+    }
+
     SIMPLE_UDF(TIntHash64, ui64(TAutoMap<ui64>)) {
         Y_UNUSED(valueBuilder);
         ui64 x = args[0].Get<ui64>();
@@ -372,13 +372,13 @@ namespace {
                   TFarmHashFingerprint32,
                   TFarmHashFingerprint64,
                   TFarmHashFingerprint128,
-                  TSuperFastHash, 
-                  TSha1, 
+                  TSuperFastHash,
+                  TSha1,
                   TSha256,
                   TIntHash64,
                   TXXH3,
                   TXXH3_128
-    ) 
+    )
 
 }
 

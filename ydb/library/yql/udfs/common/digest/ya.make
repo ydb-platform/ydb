@@ -15,7 +15,7 @@ SRCS(
 PEERDIR(
     contrib/libs/farmhash
     contrib/libs/highwayhash
-    contrib/libs/openssl 
+    contrib/libs/openssl
     contrib/libs/xxhash
     library/cpp/digest/argonish
     library/cpp/digest/crc32c

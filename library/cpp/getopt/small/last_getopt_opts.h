@@ -475,13 +475,13 @@ namespace NLastGetopt {
         }
 
         /**
-         * Get mapping for free args 
-         */ 
-        const TMap<ui32, TFreeArgSpec>& GetFreeArgSpecs() const { 
-            return FreeArgSpecs_; 
-        } 
- 
-        /** 
+         * Get mapping for free args
+         */
+        const TMap<ui32, TFreeArgSpec>& GetFreeArgSpecs() const {
+            return FreeArgSpecs_;
+        }
+
+        /**
          * Set exact expected number of free args
          *
          * @param count        new value

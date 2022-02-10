@@ -454,9 +454,9 @@ namespace NLastGetopt {
                 TStringBuf sep = "";
                 for (auto& mode : modes) {
                     if (!mode->Hidden && !mode->NoCompletion) {
-                        line << sep << B(mode->Name); 
-                        sep = " "; 
-                    } 
+                        line << sep << B(mode->Name);
+                        sep = " ";
+                    }
                 }
                 line << "' -- ${cur}) )";
             }
@@ -509,10 +509,10 @@ namespace NLastGetopt {
             auto& line = L << "COMPREPLY+=( $(compgen -W '";
             TStringBuf sep = "";
             for (auto& opt : unorderedOpts) {
-                if (opt->IsHidden()) { 
-                    continue; 
-                } 
- 
+                if (opt->IsHidden()) {
+                    continue;
+                }
+
                 for (auto& shortName : opt->GetShortNames()) {
                     line << sep << "-" << B(TStringBuf(&shortName, 1));
                     sep = " ";
@@ -531,7 +531,7 @@ namespace NLastGetopt {
             {
                 I;
                 for (auto& opt : unorderedOpts) {
-                    if (opt->HasArg_ == EHasArg::NO_ARGUMENT || opt->IsHidden()) { 
+                    if (opt->HasArg_ == EHasArg::NO_ARGUMENT || opt->IsHidden()) {
                         continue;
                     }
 
@@ -563,7 +563,7 @@ namespace NLastGetopt {
                     auto& line = L << "opts='@(";
                     TStringBuf sep = "";
                     for (auto& opt : unorderedOpts) {
-                        if (opt->HasArg_ == EHasArg::NO_ARGUMENT || opt->IsHidden()) { 
+                        if (opt->HasArg_ == EHasArg::NO_ARGUMENT || opt->IsHidden()) {
                             continue;
                         }
                         for (auto& shortName : opt->GetShortNames()) {

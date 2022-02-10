@@ -24,7 +24,7 @@ inline void AssertTypeComplete() {
     // 'delete' called on pointer to incomplete type is
     // undefined behavior (missing destructor call/corrupted memory manager).
     // 'sizeof' is used to trigger compile-time error.
-    static_assert(sizeof(T) != 0, "Type must be complete"); 
+    static_assert(sizeof(T) != 0, "Type must be complete");
 }
 
 template <class T>

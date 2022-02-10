@@ -63,7 +63,7 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     SETUP_METHOD(DropResource, TEvDropRateLimiterResource);
     SETUP_METHOD(ListResources, TEvListRateLimiterResources);
     SETUP_METHOD(DescribeResource, TEvDescribeRateLimiterResource);
-    SETUP_METHOD(AcquireResource, TEvAcquireRateLimiterResource); 
+    SETUP_METHOD(AcquireResource, TEvAcquireRateLimiterResource);
 
 #undef SETUP_METHOD
 }

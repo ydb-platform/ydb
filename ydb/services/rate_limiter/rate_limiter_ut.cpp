@@ -74,10 +74,10 @@ public:
     }
 
     void virtual CheckAcquireResource(const TString& coordinationNodePath, const TString& resourcePath, const NYdb::NRateLimiter::TAcquireResourceSettings& settings, NYdb::EStatus expected) {
-        const auto acquireResultFuture = RateLimiterClient.AcquireResource(coordinationNodePath, resourcePath, settings); 
-        ASSERT_STATUS(acquireResultFuture, expected); 
+        const auto acquireResultFuture = RateLimiterClient.AcquireResource(coordinationNodePath, resourcePath, settings);
+        ASSERT_STATUS(acquireResultFuture, expected);
     }
- 
+
     static TString CoordinationNodePath;
 
     NYdb::TKikimrWithGrpcAndRootSchema Server;
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
             UNIT_ASSERT_VALUES_EQUAL(paths[2], "parent1/child2");
         }
     }
- 
+
     std::unique_ptr<TTestSetup> MakeTestSetup(bool useActorApi) {
         if (useActorApi) {
             return std::make_unique<TTestSetupAcquireActor>();
@@ -318,33 +318,33 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
     }
 
     void AcquireResourceManyRequired(bool useActorApi) {
-        using NYdb::NRateLimiter::TAcquireResourceSettings; 
- 
+        using NYdb::NRateLimiter::TAcquireResourceSettings;
+
         auto setup = MakeTestSetup(useActorApi);
 
         ASSERT_STATUS_SUCCESS(setup->RateLimiterClient.CreateResource(TTestSetup::CoordinationNodePath, "res",
-                                                                     TCreateResourceSettings().MaxUnitsPerSecond(1).MaxBurstSizeCoefficient(42))); 
- 
+                                                                     TCreateResourceSettings().MaxUnitsPerSecond(1).MaxBurstSizeCoefficient(42)));
+
         setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(10000).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS);
- 
-        for (int i = 0; i < 3; ++i) { 
+
+        for (int i = 0; i < 3; ++i) {
             setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::TIMEOUT);
             setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).IsUsedAmount(true).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS);
-        } 
-    } 
- 
+        }
+    }
+
     void AcquireResourceManyUsed(bool useActorApi) {
-        using NYdb::NRateLimiter::TAcquireResourceSettings; 
- 
+        using NYdb::NRateLimiter::TAcquireResourceSettings;
+
         auto setup = MakeTestSetup(useActorApi);
         ASSERT_STATUS_SUCCESS(setup->RateLimiterClient.CreateResource(TTestSetup::CoordinationNodePath, "res",
-                                                                     TCreateResourceSettings().MaxUnitsPerSecond(1).MaxBurstSizeCoefficient(42))); 
- 
+                                                                     TCreateResourceSettings().MaxUnitsPerSecond(1).MaxBurstSizeCoefficient(42)));
+
         setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(10000).IsUsedAmount(true).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS);
-        for (int i = 0; i < 3; ++i) { 
+        for (int i = 0; i < 3; ++i) {
             setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::TIMEOUT);
             setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).IsUsedAmount(true).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS);
-        } 
+        }
     }
 
     Y_UNIT_TEST(AcquireResourceManyRequiredGrpcApi) {

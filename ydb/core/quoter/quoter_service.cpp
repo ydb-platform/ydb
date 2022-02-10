@@ -147,7 +147,7 @@ TResourceLeaf& TResState::Get(ui32 idx) {
     return Leafs[idx];
 }
 
-ui32 TResState::Allocate(TResource *resource, ui64 amount, bool isUsedAmount, ui32 requestIdx) { 
+ui32 TResState::Allocate(TResource *resource, ui64 amount, bool isUsedAmount, ui32 requestIdx) {
     ui32 idx;
     if (Unused) {
         idx = Unused.back();
@@ -160,7 +160,7 @@ ui32 TResState::Allocate(TResource *resource, ui64 amount, bool isUsedAmount, ui
     auto &x = Leafs[idx];
     x.Resource = resource;
     x.Amount = amount;
-    x.IsUsedAmount = isUsedAmount; 
+    x.IsUsedAmount = isUsedAmount;
     x.RequestIdx = requestIdx;
 
     Y_VERIFY_DEBUG(x.NextInWaitQueue == Max<ui32>());
@@ -232,12 +232,12 @@ void TResource::StopStarvation(TInstant now) {
 TDuration TResource::Charge(TRequest& request, TResourceLeaf& leaf, TInstant now) {
     MarkStartedCharging(request, leaf, now);
 
-    if (leaf.IsUsedAmount) { 
-        ChargeUsedAmount(leaf.Amount, now); 
-        Counters.RequestTime->Collect((now - request.StartTime).MilliSeconds()); 
-        return TDuration::Zero(); 
-    } 
- 
+    if (leaf.IsUsedAmount) {
+        ChargeUsedAmount(leaf.Amount, now);
+        Counters.RequestTime->Collect((now - request.StartTime).MilliSeconds());
+        return TDuration::Zero();
+    }
+
     const TDuration result = Charge(leaf.Amount, now);
     if (result == TDuration::Zero()) {
         Counters.RequestTime->Collect((now - request.StartTime).MilliSeconds());
@@ -245,24 +245,24 @@ TDuration TResource::Charge(TRequest& request, TResourceLeaf& leaf, TInstant now
     return result;
 }
 
-void TResource::ChargeUsedAmount(double amount, TInstant now) { 
-    BLOG_T("ChargeUsedAmount \"" << Resource << "\" for " << amount 
-           << ". Balance: " << Balance 
-           << ". FreeBalance: " << FreeBalance 
-           << ". Now: " << now); 
-    LastAllocated = now; 
-    FreeBalance -= amount; 
-    Balance -= amount; 
-    AmountConsumed += amount; 
+void TResource::ChargeUsedAmount(double amount, TInstant now) {
+    BLOG_T("ChargeUsedAmount \"" << Resource << "\" for " << amount
+           << ". Balance: " << Balance
+           << ". FreeBalance: " << FreeBalance
+           << ". Now: " << now);
+    LastAllocated = now;
+    FreeBalance -= amount;
+    Balance -= amount;
+    AmountConsumed += amount;
     History.Add(now, amount);
-    Counters.Consumed->Add(static_cast<i64>(amount)); 
-    if (Balance >= 0.0) { 
-        StopStarvation(now); 
-        return; 
-    } 
-    StartStarvation(now); 
-} 
- 
+    Counters.Consumed->Add(static_cast<i64>(amount));
+    if (Balance >= 0.0) {
+        StopStarvation(now);
+        return;
+    }
+    StartStarvation(now);
+}
+
 TDuration TResource::Charge(double amount, TInstant now) {
 // Zero - charged
 // Max - not in current tick (or resource already queued)
@@ -587,7 +587,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
         quoter->WaitingQueueResolve.emplace(reqIdx);
 
         // todo: make generic 'leaf for resolve' helper
-        const ui32 resLeafIdx = ResState.Allocate(nullptr, leaf.Amount, leaf.IsUsedAmount, reqIdx); 
+        const ui32 resLeafIdx = ResState.Allocate(nullptr, leaf.Amount, leaf.IsUsedAmount, reqIdx);
         TResourceLeaf& resLeaf = ResState.Get(resLeafIdx);
 
         resLeaf.QuoterId = quoterId;
@@ -618,7 +618,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
             auto rIndxIt = quoter->WaitingResource.emplace(leaf.Resource, TSet<ui32>());
             rIndxIt.first->second.emplace(reqIdx);
 
-            const ui32 resLeafIdx = ResState.Allocate(nullptr, leaf.Amount, leaf.IsUsedAmount, reqIdx); 
+            const ui32 resLeafIdx = ResState.Allocate(nullptr, leaf.Amount, leaf.IsUsedAmount, reqIdx);
             TResourceLeaf& resLeaf = ResState.Get(resLeafIdx);
 
             resLeaf.QuoterId = quoterId;
@@ -693,13 +693,13 @@ TQuoterService::EInitLeafStatus TQuoterService::TryCharge(TResource& quores, ui6
     const TInstant now = TActivationContext::Now();
     bool startedCharge = false;
     LWTRACK(ResourceQueueState, request.Orbit, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId, quores.QueueSize, quores.QueueWeight);
-    if (leaf.IsUsedAmount) { 
-        quores.ChargeUsedAmount(leaf.Amount, now); 
-        LWTRACK(Charge, request.Orbit, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId); 
-        quores.Counters.RequestTime->Collect((now - request.StartTime).MilliSeconds()); 
-        return EInitLeafStatus::Charged; 
-    } 
- 
+    if (leaf.IsUsedAmount) {
+        quores.ChargeUsedAmount(leaf.Amount, now);
+        LWTRACK(Charge, request.Orbit, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId);
+        quores.Counters.RequestTime->Collect((now - request.StartTime).MilliSeconds());
+        return EInitLeafStatus::Charged;
+    }
+
     if (quores.QueueSize == 0) {
         startedCharge = true;
         const TDuration delay = quores.Charge(leaf.Amount, now);
@@ -714,7 +714,7 @@ TQuoterService::EInitLeafStatus TQuoterService::TryCharge(TResource& quores, ui6
     }
 
     // need wait entry for resource
-    const ui32 resLeafIdx = ResState.Allocate(&quores, leaf.Amount, leaf.IsUsedAmount, reqIdx); 
+    const ui32 resLeafIdx = ResState.Allocate(&quores, leaf.Amount, leaf.IsUsedAmount, reqIdx);
     TResourceLeaf& resLeaf = ResState.Get(resLeafIdx);
 
     resLeaf.State = EResourceState::Wait;

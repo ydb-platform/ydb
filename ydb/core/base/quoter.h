@@ -40,24 +40,24 @@ struct TEvQuota {
         const TString Resource;
 
         const ui64 Amount;
-        const bool IsUsedAmount; 
+        const bool IsUsedAmount;
 
         TResourceLeaf(const TResourceLeaf&) = default;
 
-        TResourceLeaf(ui64 quoterId, ui64 resourceId, ui64 amount, bool isUsedAmount = false) 
+        TResourceLeaf(ui64 quoterId, ui64 resourceId, ui64 amount, bool isUsedAmount = false)
             : QuoterId(quoterId)
             , ResourceId(resourceId)
             , Amount(amount)
-            , IsUsedAmount(isUsedAmount) 
+            , IsUsedAmount(isUsedAmount)
         {}
 
-        TResourceLeaf(const TString &quoter, const TString &resource, ui64 amount, bool isUsedAmount = false) 
+        TResourceLeaf(const TString &quoter, const TString &resource, ui64 amount, bool isUsedAmount = false)
             : QuoterId(0)
             , ResourceId(0)
             , Quoter(quoter)
             , Resource(resource)
             , Amount(amount)
-            , IsUsedAmount(isUsedAmount) 
+            , IsUsedAmount(isUsedAmount)
         {}
     };
 

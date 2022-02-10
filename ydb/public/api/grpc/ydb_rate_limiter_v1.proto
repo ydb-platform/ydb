@@ -29,7 +29,7 @@ service RateLimiterService {
 
     // Describe properties of resource in coordination node.
     rpc DescribeResource(DescribeResourceRequest) returns (DescribeResourceResponse);
- 
-    // Take units for usage of a resource in coordination node. 
-    rpc AcquireResource(AcquireResourceRequest) returns (AcquireResourceResponse); 
+
+    // Take units for usage of a resource in coordination node.
+    rpc AcquireResource(AcquireResourceRequest) returns (AcquireResourceResponse);
 }

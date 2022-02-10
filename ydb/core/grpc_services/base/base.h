@@ -113,7 +113,7 @@ struct TRpcServices {
         EvDropRateLimiterResource,
         EvListRateLimiterResources,
         EvDescribeRateLimiterResource,
-        EvAcquireRateLimiterResource, 
+        EvAcquireRateLimiterResource,
         EvKikhouseCreateSnapshot,
         EvKikhouseRefreshSnapshot,
         EvKikhouseDiscardSnapshot,

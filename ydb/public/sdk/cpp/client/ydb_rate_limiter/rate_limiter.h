@@ -79,14 +79,14 @@ private:
     TVector<TString> ResourcePaths_;
 };
 
-// Settings for acquire resource request. 
-struct TAcquireResourceSettings : public TOperationRequestSettings<TAcquireResourceSettings> { 
-    using TSelf = TAcquireResourceSettings; 
- 
-    FLUENT_SETTING_OPTIONAL(ui64, Amount); 
-    FLUENT_SETTING_FLAG(IsUsedAmount); 
-}; 
- 
+// Settings for acquire resource request.
+struct TAcquireResourceSettings : public TOperationRequestSettings<TAcquireResourceSettings> {
+    using TSelf = TAcquireResourceSettings;
+
+    FLUENT_SETTING_OPTIONAL(ui64, Amount);
+    FLUENT_SETTING_FLAG(IsUsedAmount);
+};
+
 using TAsyncListResourcesResult = NThreading::TFuture<TListResourcesResult>;
 
 // Result for describe resource request.
@@ -160,9 +160,9 @@ public:
     // Describe properties of resource in coordination node.
     TAsyncDescribeResourceResult DescribeResource(const TString& coordinationNodePath, const TString& resourcePath, const TDescribeResourceSettings& = {});
 
-    // Acquire resources's units inside a coordination node. 
+    // Acquire resources's units inside a coordination node.
     TAsyncStatus AcquireResource(const TString& coordinationNodePath, const TString& resourcePath, const TAcquireResourceSettings& = {});
- 
+
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;

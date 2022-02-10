@@ -175,33 +175,33 @@ message DescribeResourceResponse {
 message DescribeResourceResult {
     Resource resource = 1;
 }
- 
-// 
-// AcquireResource method. 
-// 
- 
-message AcquireResourceRequest { 
-    Ydb.Operations.OperationParams operation_params = 1; 
- 
-    // Path of a coordination node. 
-    string coordination_node_path = 2; 
- 
-    // Path of resource inside a coordination node. 
-    string resource_path = 3; 
- 
-    oneof units { 
-        // Request resource's units for usage. 
-        uint64 required = 4; 
- 
-        // Actually used resource's units by client. 
-        uint64 used = 5; 
-    } 
-} 
- 
-message AcquireResourceResponse { 
-    // Holds AcquireResourceResult in case of successful call. 
-    Ydb.Operations.Operation operation = 1; 
-} 
- 
-message AcquireResourceResult { 
-} 
+
+//
+// AcquireResource method.
+//
+
+message AcquireResourceRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Path of a coordination node.
+    string coordination_node_path = 2;
+
+    // Path of resource inside a coordination node.
+    string resource_path = 3;
+
+    oneof units {
+        // Request resource's units for usage.
+        uint64 required = 4;
+
+        // Actually used resource's units by client.
+        uint64 used = 5;
+    }
+}
+
+message AcquireResourceResponse {
+    // Holds AcquireResourceResult in case of successful call.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message AcquireResourceResult {
+}

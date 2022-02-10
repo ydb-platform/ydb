@@ -18,9 +18,9 @@ void MadviseRandomAccess(TArrayRef<const ui8> data);
 void MadviseEvict(const void* begin, size_t size);
 void MadviseEvict(TArrayRef<const char> data);
 void MadviseEvict(TArrayRef<const ui8> data);
- 
-/// see linux madvise(MADV_DONTDUMP) 
-void MadviseExcludeFromCoreDump(const void* begin, size_t size); 
+
+/// see linux madvise(MADV_DONTDUMP)
+void MadviseExcludeFromCoreDump(const void* begin, size_t size);
 void MadviseExcludeFromCoreDump(TArrayRef<const char> data);
 void MadviseExcludeFromCoreDump(TArrayRef<const ui8> data);
 

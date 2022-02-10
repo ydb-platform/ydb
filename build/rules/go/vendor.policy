@@ -548,9 +548,9 @@ ALLOW .* -> vendor/google.golang.org/api/option
 # CONTRIB-1899 Firebase Remote Config client library
 ALLOW .* -> vendor/google.golang.org/api/firebaseremoteconfig/v1
 
-# CONTRIB-1497 Go package to encode and decode ITU-T G.711 sound data 
-ALLOW .* -> vendor/github.com/zaf/g711 
- 
+# CONTRIB-1497 Go package to encode and decode ITU-T G.711 sound data
+ALLOW .* -> vendor/github.com/zaf/g711
+
 # CONTRIB-1505 The exponential backoff algorithm & retry library
 ALLOW .* -> vendor/github.com/cenkalti/backoff/v4
 

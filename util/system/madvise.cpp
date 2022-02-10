@@ -14,8 +14,8 @@
 #ifndef MADV_DONTDUMP        /* This flag is defined in sys/mman.h since Linux 3.4, but currently old libc header is in use \
                                 for capability with Ubuntu 12.04, so we need to define it here manually */
     #define MADV_DONTDUMP 16 /* Explicity exclude from the core dump, overrides the coredump filter bits */
-#endif 
- 
+#endif
+
 #ifndef MADV_DODUMP        /* This flag is defined in sys/mman.h since Linux 3.4, but currently old libc header is in use \
                                 for capability with Ubuntu 12.04, so we need to define it here manually */
     #define MADV_DODUMP 17 /* Undo the effect of an earlier MADV_DONTDUMP */
@@ -80,7 +80,7 @@ void MadviseEvict(const void* begin, size_t size) {
     Madvise(MADV_FREE, begin, size);
 #endif
 }
- 
+
 void MadviseEvict(TArrayRef<const char> data) {
     MadviseEvict(data.data(), data.size());
 }
@@ -89,7 +89,7 @@ void MadviseEvict(TArrayRef<const ui8> data) {
     MadviseEvict(data.data(), data.size());
 }
 
-void MadviseExcludeFromCoreDump(const void* begin, size_t size) { 
+void MadviseExcludeFromCoreDump(const void* begin, size_t size) {
 #if defined(_darwin_)
     // Don't try to call function with flag which doesn't work
     // https://st.yandex-team.ru/PASSP-31755#6050bbafc68f501f2c22caab
@@ -98,7 +98,7 @@ void MadviseExcludeFromCoreDump(const void* begin, size_t size) {
 #elif !defined(_win_)
     Madvise(MADV_DONTDUMP, begin, size);
 #endif
-} 
+}
 
 void MadviseExcludeFromCoreDump(TArrayRef<const char> data) {
     MadviseExcludeFromCoreDump(data.data(), data.size());

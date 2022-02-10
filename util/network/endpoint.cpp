@@ -6,7 +6,7 @@ TEndpoint::TEndpoint(const TEndpoint::TAddrRef& addr)
 {
     const sockaddr* sa = Addr_->Addr();
 
-    if (sa->sa_family != AF_INET && sa->sa_family != AF_INET6 && sa->sa_family != AF_UNIX) {
+    if (sa->sa_family != AF_INET && sa->sa_family != AF_INET6 && sa->sa_family != AF_UNIX) { 
         ythrow yexception() << TStringBuf("endpoint can contain only ipv4, ipv6 or unix address");
     }
 }
@@ -17,7 +17,7 @@ TEndpoint::TEndpoint()
 }
 
 void TEndpoint::SetPort(ui16 port) {
-    if (Port() == port || Addr_->Addr()->sa_family == AF_UNIX) {
+    if (Port() == port || Addr_->Addr()->sa_family == AF_UNIX) { 
         return;
     }
 
@@ -33,10 +33,10 @@ void TEndpoint::SetPort(ui16 port) {
 }
 
 ui16 TEndpoint::Port() const noexcept {
-    if (Addr_->Addr()->sa_family == AF_UNIX) {
-        return 0;
-    }
-
+    if (Addr_->Addr()->sa_family == AF_UNIX) { 
+        return 0; 
+    } 
+ 
     const sockaddr* sa = Addr_->Addr();
 
     if (sa->sa_family == AF_INET) {
@@ -53,15 +53,15 @@ size_t TEndpoint::Hash() const {
         const sockaddr_in* sa4 = (const sockaddr_in*)sa;
 
         return IntHash((((ui64)sa4->sin_addr.s_addr) << 16) ^ sa4->sin_port);
-    } else if (sa->sa_family == AF_INET6) {
+    } else if (sa->sa_family == AF_INET6) { 
         const sockaddr_in6* sa6 = (const sockaddr_in6*)sa;
         const ui64* ptr = (const ui64*)&sa6->sin6_addr;
 
         return IntHash(ptr[0] ^ ptr[1] ^ sa6->sin6_port);
-    } else {
-        const sockaddr_un* un = (const sockaddr_un*)sa;
-        THash<TString> strHash;
-
-        return strHash(un->sun_path);
+    } else { 
+        const sockaddr_un* un = (const sockaddr_un*)sa; 
+        THash<TString> strHash; 
+ 
+        return strHash(un->sun_path); 
     }
 }

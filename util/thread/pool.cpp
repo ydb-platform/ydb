@@ -131,18 +131,18 @@ public:
 
     inline size_t Size() const noexcept {
         auto guard = Guard(QueueMutex);
- 
+
         return Queue.Size();
     }
- 
+
     inline size_t GetMaxQueueSize() const noexcept {
         return MaxQueueSize;
     }
- 
+
     inline size_t GetThreadCountExpected() const noexcept {
         return ThreadCountExpected;
     }
- 
+
     inline size_t GetThreadCountReal() const noexcept {
         return ThreadCountReal;
     }
@@ -251,7 +251,7 @@ private:
         --ThreadCountReal;
         StopCond.Signal();
     }
- 
+
 private:
     TThreadPool* Parent_;
     const bool Blocking;
@@ -269,7 +269,7 @@ private:
     size_t ThreadCountExpected;
     size_t ThreadCountReal;
     bool Forked;
- 
+
     class TAtforkQueueRestarter {
     public:
         static TAtforkQueueRestarter& Get() {
@@ -284,7 +284,7 @@ private:
 
         inline void UnregisterObject(TImpl* obj) {
             auto guard = Guard(ActionMutex);
- 
+
             obj->Unlink();
         }
 
@@ -296,11 +296,11 @@ private:
                 }
             }
         }
- 
+
         static void ProcessChildAction() {
             Get().ChildAction();
         }
- 
+
         TIntrusiveList<TImpl> RegisteredObjects;
         TMutex ActionMutex;
 
@@ -310,7 +310,7 @@ private:
 //no pthread_atfork on android libc
 #elif defined(_unix_)
             pthread_atfork(nullptr, nullptr, ProcessChildAction);
-#endif 
+#endif
         }
     };
 };
@@ -354,8 +354,8 @@ bool TThreadPool::Add(IObjectInQueue* obj) {
 
     if (Impl_->NeedRestart()) {
         Start(Impl_->GetThreadCountExpected(), Impl_->GetMaxQueueSize());
-    } 
- 
+    }
+
     return Impl_->Add(obj);
 }
 

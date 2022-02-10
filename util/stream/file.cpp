@@ -43,7 +43,7 @@ size_t TUnbufferedFileInput::DoSkip(size_t len) {
 }
 
 TUnbufferedFileOutput::TUnbufferedFileOutput(const TString& path)
-    : File_(path, CreateAlways | WrOnly | Seq) 
+    : File_(path, CreateAlways | WrOnly | Seq)
 {
     if (!File_.IsOpen()) {
         ythrow TFileError() << "can not open " << path;

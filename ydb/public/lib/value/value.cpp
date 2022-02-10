@@ -419,10 +419,10 @@ TString TValue::GetDataText() const {
         return ToString(Value.GetUint64());
     case NScheme::NTypeIds::Interval:
         return ToString(Value.GetInt64());
-    case NScheme::NTypeIds::JsonDocument:
-        return "\"<JsonDocument>\"";
+    case NScheme::NTypeIds::JsonDocument: 
+        return "\"<JsonDocument>\""; 
     }
-    return TStringBuilder() << "\"<unknown type "  << Type.GetData().GetScheme() << ">\"";
+    return TStringBuilder() << "\"<unknown type "  << Type.GetData().GetScheme() << ">\""; 
 }
 
 template <> TString TValue::GetTypeText<TFormatCxx>(const TFormatCxx& format) const {

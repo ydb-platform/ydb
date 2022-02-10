@@ -52,11 +52,11 @@ protected:
         Endpoint.Secure = event->Get()->Secure;
         int err = 0;
         if (Endpoint.Secure) {
-            if (!event->Get()->SslCertificatePem.empty()) {
-                Endpoint.SecureContext = TSslHelpers::CreateServerContext(event->Get()->SslCertificatePem);
-            } else {
-                Endpoint.SecureContext = TSslHelpers::CreateServerContext(event->Get()->CertificateFile, event->Get()->PrivateKeyFile);
-            }
+            if (!event->Get()->SslCertificatePem.empty()) { 
+                Endpoint.SecureContext = TSslHelpers::CreateServerContext(event->Get()->SslCertificatePem); 
+            } else { 
+                Endpoint.SecureContext = TSslHelpers::CreateServerContext(event->Get()->CertificateFile, event->Get()->PrivateKeyFile); 
+            } 
             if (Endpoint.SecureContext == nullptr) {
                 err = -1;
                 LOG_WARN_S(ctx, HttpLog, "Failed to construct server security context");

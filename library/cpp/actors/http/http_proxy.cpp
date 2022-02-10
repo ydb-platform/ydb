@@ -172,21 +172,21 @@ protected:
 
     void Handle(TEvHttpProxy::TEvReportSensors::TPtr event, const NActors::TActorContext&) {
         const TEvHttpProxy::TEvReportSensors& sensors(*event->Get());
-        const static TString urlNotFound = "not-found";
-        const TString& url = (sensors.Status == "404" ? urlNotFound : sensors.Url);
-
+        const static TString urlNotFound = "not-found"; 
+        const TString& url = (sensors.Status == "404" ? urlNotFound : sensors.Url); 
+ 
         Sensors.Rate({
                          {"sensor", "count"},
                          {"direction", sensors.Direction},
                          {"peer", sensors.Host},
-                         {"url", url},
+                         {"url", url}, 
                          {"status", sensors.Status}
                      })->Inc();
         Sensors.HistogramRate({
                                   {"sensor", "time_us"},
                                   {"direction", sensors.Direction},
                                   {"peer", sensors.Host},
-                                  {"url", url},
+                                  {"url", url}, 
                                   {"status", sensors.Status}
                               },
                               NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}))->Record(sensors.Time.MicroSeconds());
@@ -194,7 +194,7 @@ protected:
                                   {"sensor", "time_ms"},
                                   {"direction", sensors.Direction},
                                   {"peer", sensors.Host},
-                                  {"url", url},
+                                  {"url", url}, 
                                   {"status", sensors.Status}
                               },
                               NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}))->Record(sensors.Time.MilliSeconds());

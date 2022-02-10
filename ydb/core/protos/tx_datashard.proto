@@ -1125,8 +1125,8 @@ message TEvGetRSInfoResponse {
 }
 
 message TEvGetDataHistogramRequest {
-    optional uint32 CollectKeySampleMs = 1;
-    optional bool ActualData = 2;
+    optional uint32 CollectKeySampleMs = 1; 
+    optional bool ActualData = 2; 
 }
 
 message TEvGetDataHistogramResponse {

@@ -260,11 +260,11 @@ ALLOW .* -> vendor/github.com/jackc/pglogrepl
 # database/sql wrapper with a lot of helper functions
 ALLOW .* -> vendor/github.com/jmoiron/sqlx
 
-# gorm and drivers 
+# gorm and drivers
 ALLOW .* -> vendor/gorm.io/gorm
-ALLOW .* -> vendor/gorm.io/driver/sqlite 
+ALLOW .* -> vendor/gorm.io/driver/sqlite
 ALLOW .* -> vendor/gorm.io/driver/postgres
-ALLOW .* -> vendor/gorm.io/plugin/dbresolver 
+ALLOW .* -> vendor/gorm.io/plugin/dbresolver
 
 # clock mock for tests
 ALLOW .* -> vendor/github.com/jonboulle/clockwork
@@ -477,9 +477,9 @@ ALLOW .* -> vendor/github.com/grpc-ecosystem/grpc-gateway
 # tus: the open protocol for resumable file uploads
 ALLOW .* -> vendor/github.com/tus/tusd
 
-# Fast, fully fledged murmur3 in Go. 
-ALLOW .* -> vendor/github.com/twmb/murmur3 
- 
+# Fast, fully fledged murmur3 in Go.
+ALLOW .* -> vendor/github.com/twmb/murmur3
+
 # gopsutil: psutil for golang
 ALLOW .* -> vendor/github.com/shirou/gopsutil/v3
 
@@ -610,9 +610,9 @@ ALLOW .* -> vendor/github.com/yuin/goldmark
 # CONTRIB-1681 A FileSystem Abstraction System for Go
 ALLOW .* -> vendor/github.com/spf13/afero
 
-# CONTRIB-1702 parse and generate XML easily in go 
-ALLOW .* -> vendor/github.com/beevik/etree 
- 
+# CONTRIB-1702 parse and generate XML easily in go
+ALLOW .* -> vendor/github.com/beevik/etree
+
 # CONTRIB-1703 telebot client for telegram. responsible: alittleprince@
 ALLOW .* -> vendor/gopkg.in/tucnak/telebot.v2
 
@@ -782,15 +782,15 @@ ALLOW .* -> vendor/github.com/miekg/pkcs11
 # CONTRIB-2278
 ALLOW .* -> vendor/github.com/ThalesIgnite/crypto11
 
-# CONTRIB-2396: graphql client library 
-ALLOW .* -> vendor/github.com/hasura/go-graphql-client 
+# CONTRIB-2396: graphql client library
+ALLOW .* -> vendor/github.com/hasura/go-graphql-client
 
 # CONTRIB-2301: RTSP 1.0 client and server library
 ALLOW .* -> vendor/github.com/aler9/gortsplib
 
-# CONTRIB-2305: graph algorithms 
-ALLOW .* -> vendor/github.com/yourbasic/graph 
- 
+# CONTRIB-2305: graph algorithms
+ALLOW .* -> vendor/github.com/yourbasic/graph
+
 # CONTRIB-2328: histogram
 ALLOW .* -> vendor/github.com/HdrHistogram/hdrhistogram-go
 

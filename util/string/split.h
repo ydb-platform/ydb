@@ -175,26 +175,26 @@ struct TCharDelimiter {
 };
 
 template <class Iterator, class Condition>
-struct TFuncDelimiter {
-public:
+struct TFuncDelimiter { 
+public: 
     template <class... Args>
     TFuncDelimiter(Args&&... args)
         : Fn(std::forward<Args>(args)...)
-    {
-    }
-
+    { 
+    } 
+ 
     inline Iterator Find(Iterator& b, Iterator e) const noexcept {
-        if ((b = std::find_if(b, e, Fn)) != e) {
-            return b++;
-        }
-
-        return b;
-    }
-
-private:
+        if ((b = std::find_if(b, e, Fn)) != e) { 
+            return b++; 
+        } 
+ 
+        return b; 
+    } 
+ 
+private: 
     Condition Fn;
-};
-
+}; 
+ 
 template <class Char>
 struct TFindFirstOf {
     inline TFindFirstOf(Char* set)

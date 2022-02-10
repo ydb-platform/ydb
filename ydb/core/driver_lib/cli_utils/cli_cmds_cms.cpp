@@ -47,13 +47,13 @@ public:
 
         auto handler = [this](const NMsgBusProxy::TBusCmsResponse &response) -> int {
             auto &rec = response.Record;
-            switch (rec.GetStatus().GetCode()) {
-            case NKikimrCms::TStatus::OK:
-            case NKikimrCms::TStatus::ALLOW:
-            case NKikimrCms::TStatus::ALLOW_PARTIAL:
-                PrintOkResponse(rec);
-                return 0;
-            default:
+            switch (rec.GetStatus().GetCode()) { 
+            case NKikimrCms::TStatus::OK: 
+            case NKikimrCms::TStatus::ALLOW: 
+            case NKikimrCms::TStatus::ALLOW_PARTIAL: 
+                PrintOkResponse(rec); 
+                return 0; 
+            default: 
                 PrintErrorResponse(rec);
                 return 1;
             }
@@ -66,22 +66,22 @@ public:
 
     virtual void PrintErrorResponse(const NKikimrClient::TCmsResponse &response)
     {
-        PrintResponse(response);
+        PrintResponse(response); 
     }
 
     virtual void PrintOkResponse(const NKikimrClient::TCmsResponse &response)
     {
-        PrintResponse(response);
+        PrintResponse(response); 
     }
-
-    void PrintResponse(const NKikimrClient::TCmsResponse &response)
-    {
-        Cout << response.GetStatus().GetCode() << Endl
-             << response.DebugString();
-        if (const auto& issues = response.GetStatus().GetReason()) {
-            Cerr << issues << Endl;
-        }
-    }
+ 
+    void PrintResponse(const NKikimrClient::TCmsResponse &response) 
+    { 
+        Cout << response.GetStatus().GetCode() << Endl 
+             << response.DebugString(); 
+        if (const auto& issues = response.GetStatus().GetReason()) { 
+            Cerr << issues << Endl; 
+        } 
+    } 
 };
 
 class TClientCommandState : public TCmsClientCommand {
@@ -294,7 +294,7 @@ public:
 class TClientCommandWithAction : public TCmsClientCommand {
 public:
     enum EFreeField {
-        FF_TENANT,
+        FF_TENANT, 
         FF_HOST,
         FF_SERVICE,
         FF_DEVICE
@@ -311,7 +311,7 @@ public:
                              NKikimrCms::TAction::EType type,
                              EFreeField freeArgField,
                              bool hasDuration)
-        : TCmsClientCommand(CommandName(freeArgField), {}, description)
+        : TCmsClientCommand(CommandName(freeArgField), {}, description) 
         , Type(type)
         , FreeArgField(freeArgField)
         , HasDuration(hasDuration)
@@ -325,14 +325,14 @@ public:
         Host = "";
         Duration = 0;
 
-        if (FreeArgField == FF_SERVICE || FreeArgField == FF_DEVICE)
+        if (FreeArgField == FF_SERVICE || FreeArgField == FF_DEVICE) 
             config.Opts->AddLongOption("host", "Host name").Required()
                 .RequiredArgument("NAME").StoreResult(&Host);
         if (HasDuration)
             config.Opts->AddLongOption("duration", "Action duration in minutes")
                 .Required().RequiredArgument("NUM").StoreResult(&Duration);
         config.SetFreeArgsMin(1);
-        config.Opts->SetFreeArgDefaultTitle("<NAME>", FreeArgDescr(FreeArgField));
+        config.Opts->SetFreeArgDefaultTitle("<NAME>", FreeArgDescr(FreeArgField)); 
     }
 
     void Parse(TConfig& config) override
@@ -346,58 +346,58 @@ public:
             if (Host)
                 action.SetHost(Host);
             if (param) {
-                switch (FreeArgField) {
-                case FF_TENANT:
-                    action.SetTenant(param);
-                    break;
-                case FF_HOST:
+                switch (FreeArgField) { 
+                case FF_TENANT: 
+                    action.SetTenant(param); 
+                    break; 
+                case FF_HOST: 
                     action.SetHost(param);
-                    break;
-                case FF_SERVICE:
-                    *action.AddServices() = param;
-                    break;
-                case FF_DEVICE:
+                    break; 
+                case FF_SERVICE: 
+                    *action.AddServices() = param; 
+                    break; 
+                case FF_DEVICE: 
                     *action.AddDevices() = param;
-                    break;
-                default:
-                    Y_FAIL("Unknown free arg field");
-                }
+                    break; 
+                default: 
+                    Y_FAIL("Unknown free arg field"); 
+                } 
             }
             if (Duration)
                 action.SetDuration(TDuration::Minutes(Duration).GetValue());
         }
     }
-
-private:
-    static TString CommandName(EFreeField freeArgField) {
-        switch (freeArgField) {
-        case FF_TENANT:
-            return "tenant";
-        case FF_HOST:
-            return "host";
-        case FF_SERVICE:
-            return "service";
-        case FF_DEVICE:
-            return "device";
-        default:
-            Y_FAIL("Unknown free arg field");
-        }
-    }
-
-    static TString FreeArgDescr(EFreeField freeArgField) {
-        switch (freeArgField) {
-        case FF_TENANT:
-            return "Tenant name";
-        case FF_HOST:
-            return "Host name";
-        case FF_SERVICE:
-            return "Service name";
-        case FF_DEVICE:
-            return "Device name";
-        default:
-            Y_FAIL("Unknown free arg field");
-        }
-    }
+ 
+private: 
+    static TString CommandName(EFreeField freeArgField) { 
+        switch (freeArgField) { 
+        case FF_TENANT: 
+            return "tenant"; 
+        case FF_HOST: 
+            return "host"; 
+        case FF_SERVICE: 
+            return "service"; 
+        case FF_DEVICE: 
+            return "device"; 
+        default: 
+            Y_FAIL("Unknown free arg field"); 
+        } 
+    } 
+ 
+    static TString FreeArgDescr(EFreeField freeArgField) { 
+        switch (freeArgField) { 
+        case FF_TENANT: 
+            return "Tenant name"; 
+        case FF_HOST: 
+            return "Host name"; 
+        case FF_SERVICE: 
+            return "Service name"; 
+        case FF_DEVICE: 
+            return "Device name"; 
+        default: 
+            Y_FAIL("Unknown free arg field"); 
+        } 
+    } 
 };
 
 class TClientCommandMakeRequest : public TClientCommandWithAction {
@@ -410,7 +410,7 @@ public:
     ui32 Hours;
     ui32 Minutes;
     TString TenantPolicy;
-    TString AvailabilityMode;
+    TString AvailabilityMode; 
 
     TClientCommandMakeRequest(const TString &description,
                              NKikimrCms::TAction::EType type,
@@ -447,8 +447,8 @@ public:
             .RequiredArgument("none|default").StoreResult(&TenantPolicy);
         config.Opts->AddLongOption("allow-partial", "Allow partial permission")
             .NoArgument().SetFlag(&AllowPartial);
-        config.Opts->AddLongOption("availability-mode", "Availability mode")
-            .RequiredArgument("max|keep|force").DefaultValue("max").StoreResult(&AvailabilityMode);
+        config.Opts->AddLongOption("availability-mode", "Availability mode") 
+            .RequiredArgument("max|keep|force").DefaultValue("max").StoreResult(&AvailabilityMode); 
     }
 
     void Parse(TConfig& config) override
@@ -475,16 +475,16 @@ public:
             else
                 ythrow yexception() << "unknown tenant policy '" << TenantPolicy << "'";
         }
-        if (AvailabilityMode) {
-            if (AvailabilityMode == "max")
-                rec.SetAvailabilityMode(NKikimrCms::MODE_MAX_AVAILABILITY);
-            else if (AvailabilityMode == "keep")
-                rec.SetAvailabilityMode(NKikimrCms::MODE_KEEP_AVAILABLE);
-            else if (AvailabilityMode == "force")
-                rec.SetAvailabilityMode(NKikimrCms::MODE_FORCE_RESTART);
-            else
-                ythrow yexception() << "unknown availability mode '" << AvailabilityMode << "'";
-        }
+        if (AvailabilityMode) { 
+            if (AvailabilityMode == "max") 
+                rec.SetAvailabilityMode(NKikimrCms::MODE_MAX_AVAILABILITY); 
+            else if (AvailabilityMode == "keep") 
+                rec.SetAvailabilityMode(NKikimrCms::MODE_KEEP_AVAILABLE); 
+            else if (AvailabilityMode == "force") 
+                rec.SetAvailabilityMode(NKikimrCms::MODE_FORCE_RESTART); 
+            else 
+                ythrow yexception() << "unknown availability mode '" << AvailabilityMode << "'"; 
+        } 
         if (Hours || Minutes) {
             auto duration = TDuration::Minutes(Minutes) + TDuration::Hours(Hours);
             rec.SetDuration(duration.GetValue());
@@ -536,9 +536,9 @@ public:
                                                  TClientCommandWithAction::FF_HOST,
                                                  true));
         AddCommand(std::make_unique<TClientCommandMakeRequest>("Ask for permission to restart tenant's hosts",
-                                                 NKikimrCms::TAction::SHUTDOWN_HOST,
-                                                 TClientCommandWithAction::FF_TENANT,
-                                                 true));
+                                                 NKikimrCms::TAction::SHUTDOWN_HOST, 
+                                                 TClientCommandWithAction::FF_TENANT, 
+                                                 true)); 
     }
 };
 

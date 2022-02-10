@@ -5,7 +5,7 @@
 #include <ydb/library/backup/backup.h>
 #include <ydb/library/backup/util.h>
 
-#include <util/stream/format.h>
+#include <util/stream/format.h> 
 #include <util/string/split.h>
 
 namespace NYdb::NConsoleClient {
@@ -43,9 +43,9 @@ void TCommandDump::Config(TConfig& config) {
         .DefaultValue(".").StoreResult(&Path);
     config.Opts->AddLongOption("exclude", "Pattern(s) (PCRE) for paths excluded from dump."
             " Option can be used several times - one for each pattern.")
-        .RequiredArgument("STRING").Handler1T<TString>([this](const TString& arg) {
-            ExclusionPatterns.emplace_back(TRegExMatch(arg));
-        });
+        .RequiredArgument("STRING").Handler1T<TString>([this](const TString& arg) { 
+            ExclusionPatterns.emplace_back(TRegExMatch(arg)); 
+        }); 
     config.Opts->AddLongOption('o', "output", "[Required] Path in a local filesystem to a directory to place dump into."
             " Directory should either not exist or be empty.")
         .StoreResult(&FilePath);
@@ -54,7 +54,7 @@ void TCommandDump::Config(TConfig& config) {
     config.Opts->AddLongOption("avoid-copy", "Avoid copying."
             " By default, YDB makes a copy of a table before dumping it to reduce impact on workload and ensure consistency.\n"
             "In some cases (e.g. for tables with external blobs) copying should be disabled.")
-        .StoreTrue(&AvoidCopy);
+        .StoreTrue(&AvoidCopy); 
     config.Opts->AddLongOption("save-partial-result", "Do not remove partial dump result."
             " If this option is not enabled, all files that have already been created will be removed in case of error.")
         .StoreTrue(&SavePartialResult);
@@ -62,7 +62,7 @@ void TCommandDump::Config(TConfig& config) {
             " If this option is enabled, storage pool kind will be saved to dump."
             " In this case, if there will be no such storage pool kind in database on restore, error will occur."
             " By default this option is disabled and any existing storage pool kind will be used on restore.")
-        .StoreTrue(&PreservePoolKinds);
+        .StoreTrue(&PreservePoolKinds); 
     config.Opts->AddLongOption("consistency-level", "Consistency level."
             " Options: database, table\n"
             "database - take one consistent snapshot of all tables specified for dump."
@@ -91,8 +91,8 @@ int TCommandDump::Run(TConfig& config) {
 
     try {
         TString relPath = NYdb::RelPathFromAbsolute(config.Database, Path);
-        NYdb::NBackup::BackupFolder(CreateDriver(config), config.Database, relPath, FilePath, ExclusionPatterns,
-            IsSchemeOnly, useConsistentCopyTable, AvoidCopy, SavePartialResult, PreservePoolKinds);
+        NYdb::NBackup::BackupFolder(CreateDriver(config), config.Database, relPath, FilePath, ExclusionPatterns, 
+            IsSchemeOnly, useConsistentCopyTable, AvoidCopy, SavePartialResult, PreservePoolKinds); 
     } catch (const NYdb::NBackup::TYdbErrorException& e) {
         e.LogToStderr();
         return EXIT_FAILURE;
@@ -118,64 +118,64 @@ void TCommandRestore::Config(TConfig& config) {
     config.Opts->AddLongOption('p', "path",
             "[Required] Database path to a destination directory where restored directory or table will be placed.")
         .StoreResult(&Path);
-    config.Opts->AddLongOption('i', "input",
+    config.Opts->AddLongOption('i', "input", 
             "[Required] Path in a local filesystem to a directory with dump.")
         .StoreResult(&FilePath);
 
-    config.Opts->AddLongOption("dry-run", TStringBuilder()
-            << "Do not restore tables, only check that:" << Endl
+    config.Opts->AddLongOption("dry-run", TStringBuilder() 
+            << "Do not restore tables, only check that:" << Endl 
             << "  - all dumped tables exist in database;" << Endl
             << "  - all dumped table schemes are the same as in database.")
         .StoreTrue(&IsDryRun);
-
-    NDump::TRestoreSettings defaults;
-
-    config.Opts->AddLongOption("restore-data", "Whether to restore data or not")
-        .DefaultValue(defaults.RestoreData_).StoreResult(&RestoreData);
-
-    config.Opts->AddLongOption("restore-indexes", "Whether to restore indexes or not")
-        .DefaultValue(defaults.RestoreIndexes_).StoreResult(&RestoreIndexes);
-
-    config.Opts->AddLongOption("skip-document-tables", TStringBuilder()
-            << "Document API tables cannot be restored for now. "
-            << "Specify this option to skip such tables")
-        .DefaultValue(defaults.SkipDocumentTables_).StoreResult(&SkipDocumentTables)
-        .Hidden(); // Deprecated
-
+ 
+    NDump::TRestoreSettings defaults; 
+ 
+    config.Opts->AddLongOption("restore-data", "Whether to restore data or not") 
+        .DefaultValue(defaults.RestoreData_).StoreResult(&RestoreData); 
+ 
+    config.Opts->AddLongOption("restore-indexes", "Whether to restore indexes or not") 
+        .DefaultValue(defaults.RestoreIndexes_).StoreResult(&RestoreIndexes); 
+ 
+    config.Opts->AddLongOption("skip-document-tables", TStringBuilder() 
+            << "Document API tables cannot be restored for now. " 
+            << "Specify this option to skip such tables") 
+        .DefaultValue(defaults.SkipDocumentTables_).StoreResult(&SkipDocumentTables) 
+        .Hidden(); // Deprecated 
+ 
     config.Opts->AddLongOption("save-partial-result", "Do not remove partial restore result."
             " If this option is not enabled, all changes in database that have already been applied during restore"
             " will be reverted in case of error.")
         .StoreTrue(&SavePartialResult);
 
-    config.Opts->AddLongOption("bandwidth", "Limit data upload bandwidth, bytes per second (example: 2MiB)")
+    config.Opts->AddLongOption("bandwidth", "Limit data upload bandwidth, bytes per second (example: 2MiB)") 
         .DefaultValue("0").StoreResult(&UploadBandwidth);
-
-    config.Opts->AddLongOption("rps", "Limit requests per second (example: 100)")
-        .DefaultValue(defaults.RateLimiterSettings_.GetRps()).StoreResult(&UploadRps);
-
-    config.Opts->AddLongOption("upload-batch-rows", "Limit upload batch size in rows (example: 1K)")
-        .DefaultValue(defaults.RowsPerRequest_).StoreResult(&RowsPerRequest);
-
-    config.Opts->AddLongOption("upload-batch-bytes", "Limit upload batch size in bytes (example: 1MiB)")
-        .DefaultValue(HumanReadableSize(defaults.BytesPerRequest_, SF_BYTES)).StoreResult(&BytesPerRequest);
-
-    config.Opts->AddLongOption("upload-batch-rus", "Limit upload batch size in request units (example: 100)")
-        .DefaultValue(defaults.RequestUnitsPerRequest_).StoreResult(&RequestUnitsPerRequest);
-
+ 
+    config.Opts->AddLongOption("rps", "Limit requests per second (example: 100)") 
+        .DefaultValue(defaults.RateLimiterSettings_.GetRps()).StoreResult(&UploadRps); 
+ 
+    config.Opts->AddLongOption("upload-batch-rows", "Limit upload batch size in rows (example: 1K)") 
+        .DefaultValue(defaults.RowsPerRequest_).StoreResult(&RowsPerRequest); 
+ 
+    config.Opts->AddLongOption("upload-batch-bytes", "Limit upload batch size in bytes (example: 1MiB)") 
+        .DefaultValue(HumanReadableSize(defaults.BytesPerRequest_, SF_BYTES)).StoreResult(&BytesPerRequest); 
+ 
+    config.Opts->AddLongOption("upload-batch-rus", "Limit upload batch size in request units (example: 100)") 
+        .DefaultValue(defaults.RequestUnitsPerRequest_).StoreResult(&RequestUnitsPerRequest); 
+ 
     config.Opts->AddLongOption("in-flight", "Limit in-flight request count")
-        .DefaultValue(defaults.InFly_).StoreResult(&InFly);
-
+        .DefaultValue(defaults.InFly_).StoreResult(&InFly); 
+ 
     config.Opts->AddLongOption("bulk-upsert", "Use BulkUpsert - a more efficient way to upload data with lower consistency level."
         " Global secondary indexes are not supported in this mode.")
         .StoreTrue(&UseBulkUpsert)
         .Hidden(); // Deprecated. Using ImportData should be more effective.
-
+ 
     config.Opts->AddLongOption("import-data", "Use ImportData - a more efficient way to upload data with lower consistency level."
         " Global secondary indexes are not supported in this mode.")
-        .StoreTrue(&UseImportData);
-
-    config.Opts->MutuallyExclusive("bandwidth", "rps");
-    config.Opts->MutuallyExclusive("import-data", "bulk-upsert");
+        .StoreTrue(&UseImportData); 
+ 
+    config.Opts->MutuallyExclusive("bandwidth", "rps"); 
+    config.Opts->MutuallyExclusive("import-data", "bulk-upsert"); 
 }
 
 void TCommandRestore::Parse(TConfig& config) {
@@ -186,44 +186,44 @@ void TCommandRestore::Parse(TConfig& config) {
 int TCommandRestore::Run(TConfig& config) {
     NYdb::SetVerbosity(config.IsVerbose);
 
-    auto settings = NDump::TRestoreSettings()
-        .DryRun(IsDryRun)
-        .RestoreData(RestoreData)
-        .RestoreIndexes(RestoreIndexes)
-        .SkipDocumentTables(SkipDocumentTables)
+    auto settings = NDump::TRestoreSettings() 
+        .DryRun(IsDryRun) 
+        .RestoreData(RestoreData) 
+        .RestoreIndexes(RestoreIndexes) 
+        .SkipDocumentTables(SkipDocumentTables) 
         .SavePartialResult(SavePartialResult)
-        .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest))
-        .InFly(InFly);
+        .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest)) 
+        .InFly(InFly); 
 
-    if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) {
-        if (bytesPerRequest > NDump::TRestoreSettings::MaxBytesPerRequest) {
-            throw TMissUseException()
-                << "--upload-batch-bytes cannot be larger than "
-                << HumanReadableSize(NDump::TRestoreSettings::MaxBytesPerRequest, SF_BYTES);
-        }
-
-        settings.BytesPerRequest(bytesPerRequest);
+    if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) { 
+        if (bytesPerRequest > NDump::TRestoreSettings::MaxBytesPerRequest) { 
+            throw TMissUseException() 
+                << "--upload-batch-bytes cannot be larger than " 
+                << HumanReadableSize(NDump::TRestoreSettings::MaxBytesPerRequest, SF_BYTES); 
+        } 
+ 
+        settings.BytesPerRequest(bytesPerRequest); 
     }
-
-    if (RequestUnitsPerRequest) {
-        settings.RequestUnitsPerRequest(NYdb::SizeFromString(RequestUnitsPerRequest));
-    }
-
-    if (auto bandwidth = NYdb::SizeFromString(UploadBandwidth)) {
-        settings.RateLimiterSettings_.WithBandwidth(bandwidth, settings.BytesPerRequest_);
-    } else if (auto rps = NYdb::SizeFromString(UploadRps)) {
-        settings.RateLimiterSettings_.WithRps(rps);
-    }
-
-    if (UseBulkUpsert) {
-        settings.Mode(NDump::TRestoreSettings::EMode::BulkUpsert);
-    } else if (UseImportData) {
-        settings.Mode(NDump::TRestoreSettings::EMode::ImportData);
-    }
-
-    NDump::TClient client(CreateDriver(config));
-    ThrowOnError(client.Restore(FilePath, Path, settings));
-
+ 
+    if (RequestUnitsPerRequest) { 
+        settings.RequestUnitsPerRequest(NYdb::SizeFromString(RequestUnitsPerRequest)); 
+    } 
+ 
+    if (auto bandwidth = NYdb::SizeFromString(UploadBandwidth)) { 
+        settings.RateLimiterSettings_.WithBandwidth(bandwidth, settings.BytesPerRequest_); 
+    } else if (auto rps = NYdb::SizeFromString(UploadRps)) { 
+        settings.RateLimiterSettings_.WithRps(rps); 
+    } 
+ 
+    if (UseBulkUpsert) { 
+        settings.Mode(NDump::TRestoreSettings::EMode::BulkUpsert); 
+    } else if (UseImportData) { 
+        settings.Mode(NDump::TRestoreSettings::EMode::ImportData); 
+    } 
+ 
+    NDump::TClient client(CreateDriver(config)); 
+    ThrowOnError(client.Restore(FilePath, Path, settings)); 
+ 
     return EXIT_SUCCESS;
 }
 
@@ -233,12 +233,12 @@ int TCommandRestore::Run(TConfig& config) {
 
 TCommandCopy::TCommandCopy()
     : TTableCommand("copy", {}, "Copy table(s)")
-{
-    TItem::DefineFields({
-        {"Source", {{"source", "src", "s"}, "Source table path", true}},
-        {"Destination", {{"destination", "dst", "d"}, "Destination table path", true}}
-    });
-}
+{ 
+    TItem::DefineFields({ 
+        {"Source", {{"source", "src", "s"}, "Source table path", true}}, 
+        {"Destination", {{"destination", "dst", "d"}, "Destination table path", true}} 
+    }); 
+} 
 
 void TCommandCopy::Config(TConfig& config) {
     TTableCommand::Config(config);
@@ -248,7 +248,7 @@ void TCommandCopy::Config(TConfig& config) {
     TStringBuilder itemHelp;
     itemHelp << "[At least one] Item specification" << Endl
         << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
+        << TItem::FormatHelp(2); 
     config.Opts->AddLongOption("item", itemHelp)
         .RequiredArgument("PROPERTY=VALUE,...");
 }
@@ -260,11 +260,11 @@ void TCommandCopy::Parse(TConfig& config) {
     if (Items.empty()) {
         throw TMissUseException() << "At least one item should be provided";
     }
-
-    for (auto& item : Items) {
-        NConsoleClient::AdjustPath(item.Source, config);
-        NConsoleClient::AdjustPath(item.Destination, config);
-    }
+ 
+    for (auto& item : Items) { 
+        NConsoleClient::AdjustPath(item.Source, config); 
+        NConsoleClient::AdjustPath(item.Destination, config); 
+    } 
 }
 
 int TCommandCopy::Run(TConfig& config) {

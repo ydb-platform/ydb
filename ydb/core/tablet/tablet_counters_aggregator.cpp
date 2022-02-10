@@ -576,9 +576,9 @@ public:
         }
 
         QuietTabletCounters.erase(tabletID);
-
-        TString tabletIdStr = Sprintf("%" PRIu64, tabletID);
-        Counters->RemoveSubgroup("tabletid", tabletIdStr.data());
+ 
+        TString tabletIdStr = Sprintf("%" PRIu64, tabletID); 
+        Counters->RemoveSubgroup("tabletid", tabletIdStr.data()); 
     }
 
     void Query(const NKikimrTabletCountersAggregator::TEvTabletCountersRequest& request, NKikimrTabletCountersAggregator::TEvTabletCountersResponse& response) {

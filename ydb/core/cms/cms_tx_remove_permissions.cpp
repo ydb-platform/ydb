@@ -8,12 +8,12 @@ namespace NCms {
 
 class TCms::TTxRemovePermissions : public TTransactionBase<TCms> {
 public:
-    TTxRemovePermissions(TCms *self, TVector<TString> &&ids, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp, bool expired)
+    TTxRemovePermissions(TCms *self, TVector<TString> &&ids, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp, bool expired) 
         : TBase(self)
-        , Request(std::move(req))
+        , Request(std::move(req)) 
         , Response(resp)
         , Ids(ids)
-        , Expired(expired)
+        , Expired(expired) 
     {
     }
 
@@ -30,23 +30,23 @@ public:
             Self->State->Permissions.erase(id);
             db.Table<Schema::Permission>().Key(id).Delete();
 
-            if (Expired && Self->State->ScheduledRequests.contains(requestId)) {
-                Self->State->ScheduledRequests.erase(requestId);
-                db.Table<Schema::Request>().Key(requestId).Delete();
-
-                Self->AuditLog(ctx, TStringBuilder() << "Remove request"
-                    << ": id# " << requestId
-                    << ", reason# " << "permission " << id << " has expired");
-            }
-
+            if (Expired && Self->State->ScheduledRequests.contains(requestId)) { 
+                Self->State->ScheduledRequests.erase(requestId); 
+                db.Table<Schema::Request>().Key(requestId).Delete(); 
+ 
+                Self->AuditLog(ctx, TStringBuilder() << "Remove request" 
+                    << ": id# " << requestId 
+                    << ", reason# " << "permission " << id << " has expired"); 
+            } 
+ 
             if (Self->State->WalleRequests.contains(requestId)) {
                 auto taskId = Self->State->WalleRequests.find(requestId)->second;
                 Self->State->WalleTasks.find(taskId)->second.Permissions.erase(id);
             }
 
-            Self->AuditLog(ctx, TStringBuilder() << "Remove permission"
-                << ": id# " << id
-                << ", reason# " << (Request ? "explicit remove" : "scheduled cleanup"));
+            Self->AuditLog(ctx, TStringBuilder() << "Remove permission" 
+                << ": id# " << id 
+                << ", reason# " << (Request ? "explicit remove" : "scheduled cleanup")); 
         }
 
         return true;
@@ -57,23 +57,23 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemovePermissions Complete");
 
         if (Response) {
-            Y_VERIFY(Request);
-            Self->Reply(Request.Get(), Response, ctx);
+            Y_VERIFY(Request); 
+            Self->Reply(Request.Get(), Response, ctx); 
         }
 
         Self->RemoveEmptyWalleTasks(ctx);
     }
 
 private:
-    THolder<IEventBase> Request;
+    THolder<IEventBase> Request; 
     TAutoPtr<IEventHandle> Response;
     TVector<TString> Ids;
-    bool Expired;
+    bool Expired; 
 };
 
-ITransaction* TCms::CreateTxRemovePermissions(TVector<TString> ids, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp, bool expired)
+ITransaction* TCms::CreateTxRemovePermissions(TVector<TString> ids, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp, bool expired) 
 {
-    return new TTxRemovePermissions(this, std::move(ids), std::move(req), std::move(resp), expired);
+    return new TTxRemovePermissions(this, std::move(ids), std::move(req), std::move(resp), expired); 
 }
 
 } // NCms

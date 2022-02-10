@@ -36,7 +36,7 @@ struct TKikimrEvents : TEvents {
         ES_TX_DATASHARD,
         ES_DEPRECATED_4114,
         ES_TX_USERPROXY, // user proxy interface
-        ES_SCHEME_CACHE,
+        ES_SCHEME_CACHE, 
         ES_TX_PROXY_REQ,
         ES_TABLET_PIPE,
         ES_DEPRECATED_4118,
@@ -104,11 +104,11 @@ struct TKikimrEvents : TEvents {
         ES_USER_ACCOUNT_SERVICE,
         ES_PQ_PROXY_NEW,
         ES_GRPC_STREAMING,
-        ES_SCHEME_BOARD,
-        ES_FLAT_TX_SCHEMESHARD_PROTECTED,
-        ES_GRPC_REQUEST_PROXY,
-        ES_EXPORT_SERVICE,
-        ES_TX_ALLOCATOR_CLIENT,
+        ES_SCHEME_BOARD, 
+        ES_FLAT_TX_SCHEMESHARD_PROTECTED, 
+        ES_GRPC_REQUEST_PROXY, 
+        ES_EXPORT_SERVICE, 
+        ES_TX_ALLOCATOR_CLIENT, 
         ES_PQ_CLUSTER_TRACKER,
         ES_NET_CLASSIFIER,
         ES_SYSTEM_VIEW,
@@ -116,8 +116,8 @@ struct TKikimrEvents : TEvents {
         ES_SERVICE_ACCOUNT_SERVICE,
         ES_INDEX_BUILD,
         ES_BLOCKSTORE_PRIVATE,
-        ES_YT_WRAPPER,
-        ES_S3_WRAPPER,
+        ES_YT_WRAPPER, 
+        ES_S3_WRAPPER, 
         ES_FILESTORE,
         ES_FILESTORE_PRIVATE,
         ES_YDB_METERING,
@@ -125,7 +125,7 @@ struct TKikimrEvents : TEvents {
         ES_TX_OLAPSHARD,
         ES_TX_COLUMNSHARD,
         ES_CROSSREF,
-        ES_SCHEME_BOARD_MON,
+        ES_SCHEME_BOARD_MON, 
         ES_YQL_ANALYTICS_PROXY = NYq::TEventIds::ES_YQL_ANALYTICS_PROXY,
         ES_BLOB_CACHE,
         ES_LONG_TX_SERVICE,
@@ -135,16 +135,16 @@ struct TKikimrEvents : TEvents {
         ES_HEALTH_CHECK,
         ES_DQ = NYql::NDq::TDqEvents::ES_DQ_COMPUTE, // 4212
         ES_YQ, // 4213
-        ES_CHANGE_EXCHANGE,
+        ES_CHANGE_EXCHANGE, 
         ES_DATABASE_SERVICE, //4215
         ES_SEQUENCESHARD, // 4216
         ES_SEQUENCEPROXY, // 4217
         ES_CLOUD_STORAGE,
         ES_CLOUD_STORAGE_PRIVATE,
         ES_FOLDER_SERVICE_ADAPTER,
-        ES_PQ_PARTITION_WRITER,
-        ES_YDB_PROXY,
-        ES_REPLICATION_CONTROLLER,
+        ES_PQ_PARTITION_WRITER, 
+        ES_YDB_PROXY, 
+        ES_REPLICATION_CONTROLLER, 
     };
 };
 

@@ -20,33 +20,33 @@ namespace NSchemeShardUT_Private {
     NActors::TActorId CreateNotificationSubscriber(NActors::TTestActorRuntime &runtime, ui64 schemeshardId);
     NActors::TActorId CreateFakeMetering(NActors::TTestActorRuntime &runtime);
 
-    struct TTestEnvOptions {
-        using TSelf = TTestEnvOptions;
-
-        #define OPTION(type, name, defaultValue) \
-            TSelf& name(type value) { \
-                name##_ = value; \
-                return *this; \
-            } \
-            type name##_ = defaultValue
-
-        OPTION(ui32, NChannels, 4);
-        OPTION(bool, EnablePipeRetries, true);
-        OPTION(std::optional<bool>, EnableSystemViews, std::nullopt);
-        OPTION(std::optional<bool>, EnablePersistentPartitionStats, std::nullopt);
-        OPTION(std::optional<bool>, EnableTtlOnAsyncIndexedTables, std::nullopt);
-        OPTION(std::optional<bool>, AllowUpdateChannelsBindingOfSolomonPartitions, std::nullopt);
-        OPTION(std::optional<bool>, EnableAsyncIndexes, std::nullopt);
-        OPTION(std::optional<bool>, EnableNotNullColumns, std::nullopt);
+    struct TTestEnvOptions { 
+        using TSelf = TTestEnvOptions; 
+ 
+        #define OPTION(type, name, defaultValue) \ 
+            TSelf& name(type value) { \ 
+                name##_ = value; \ 
+                return *this; \ 
+            } \ 
+            type name##_ = defaultValue 
+ 
+        OPTION(ui32, NChannels, 4); 
+        OPTION(bool, EnablePipeRetries, true); 
+        OPTION(std::optional<bool>, EnableSystemViews, std::nullopt); 
+        OPTION(std::optional<bool>, EnablePersistentPartitionStats, std::nullopt); 
+        OPTION(std::optional<bool>, EnableTtlOnAsyncIndexedTables, std::nullopt); 
+        OPTION(std::optional<bool>, AllowUpdateChannelsBindingOfSolomonPartitions, std::nullopt); 
+        OPTION(std::optional<bool>, EnableAsyncIndexes, std::nullopt); 
+        OPTION(std::optional<bool>, EnableNotNullColumns, std::nullopt); 
         OPTION(std::optional<bool>, EnableSchemeTransactionsAtSchemeShard, std::nullopt);
         OPTION(std::optional<bool>, EnableOlapSchemaOperations, std::nullopt);
-        OPTION(std::optional<bool>, EnableProtoSourceIdInfo, std::nullopt);
+        OPTION(std::optional<bool>, EnableProtoSourceIdInfo, std::nullopt); 
         OPTION(std::optional<bool>, EnableBackgroundCompaction, std::nullopt);
-        OPTION(THashSet<TString>, SystemBackupSIDs, {});
-
-        #undef OPTION
-    };
-
+        OPTION(THashSet<TString>, SystemBackupSIDs, {}); 
+ 
+        #undef OPTION 
+    }; 
+ 
     class TTestEnv {
     public:
         using TSchemeShardFactory = std::function<IActor* (const TActorId &, TTabletStorageInfo *)>;
@@ -64,16 +64,16 @@ namespace NSchemeShardUT_Private {
     public:
         TTestEnv(TTestActorRuntime& runtime, ui32 nchannels = 4, bool enablePipeRetries = true,
             TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard, bool enableSystemViews = false);
-        TTestEnv(TTestActorRuntime& runtime, const TTestEnvOptions& opts,
+        TTestEnv(TTestActorRuntime& runtime, const TTestEnvOptions& opts, 
             TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard, std::shared_ptr<NKikimr::NDataShard::IExportFactory> dsExportFactory = {});
 
         TFakeHiveState::TPtr GetHiveState() const;
         TAutoPtr<ITabletScheduledEventsGuard> EnableSchemeshardPipeRetries(TTestActorRuntime& runtime);
         ui32 ReliablePropose(TTestActorRuntime& runtime, TEvSchemeShard::TEvModifySchemeTransaction* evTx, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
         ui32 ReliablePropose(TTestActorRuntime& runtime, TEvSchemeShard::TEvCancelTx* evTx, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
-        ui32 ReliablePropose(TTestActorRuntime& runtime, TEvExport::TEvCancelExportRequest* ev, const TVector<Ydb::StatusIds::StatusCode>& expectedStatuses = {Ydb::StatusIds::SUCCESS});
-        ui32 ReliablePropose(TTestActorRuntime& runtime, TEvExport::TEvForgetExportRequest* ev, const TVector<Ydb::StatusIds::StatusCode>& expectedStatuses = {Ydb::StatusIds::SUCCESS});
-        ui32 ReliablePropose(TTestActorRuntime& runtime, TEvImport::TEvCancelImportRequest* ev, const TVector<Ydb::StatusIds::StatusCode>& expectedStatuses = {Ydb::StatusIds::SUCCESS});
+        ui32 ReliablePropose(TTestActorRuntime& runtime, TEvExport::TEvCancelExportRequest* ev, const TVector<Ydb::StatusIds::StatusCode>& expectedStatuses = {Ydb::StatusIds::SUCCESS}); 
+        ui32 ReliablePropose(TTestActorRuntime& runtime, TEvExport::TEvForgetExportRequest* ev, const TVector<Ydb::StatusIds::StatusCode>& expectedStatuses = {Ydb::StatusIds::SUCCESS}); 
+        ui32 ReliablePropose(TTestActorRuntime& runtime, TEvImport::TEvCancelImportRequest* ev, const TVector<Ydb::StatusIds::StatusCode>& expectedStatuses = {Ydb::StatusIds::SUCCESS}); 
         template <class TContainer>
         void TestWaitNotification(TTestActorRuntime& runtime, TContainer txs, ui64 schemeshardId = TTestTxConfig::SchemeShard) {
             TSet<ui64> set(txs.begin(), txs.end());

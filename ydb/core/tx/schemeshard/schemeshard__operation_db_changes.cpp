@@ -30,14 +30,14 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistTableIndex(db, pId);
     }
 
-    for (const auto& pId: AlterCdcStreams) {
-        ss->PersistCdcStreamAlterData(db, pId);
-    }
-
-    for (const auto& pId: ApplyCdcStreams) {
-        ss->PersistCdcStream(db, pId);
-    }
-
+    for (const auto& pId: AlterCdcStreams) { 
+        ss->PersistCdcStreamAlterData(db, pId); 
+    } 
+ 
+    for (const auto& pId: ApplyCdcStreams) { 
+        ss->PersistCdcStream(db, pId); 
+    } 
+ 
     for (const auto& pId: Tables) {
         ss->PersistTable(db, pId);
     }

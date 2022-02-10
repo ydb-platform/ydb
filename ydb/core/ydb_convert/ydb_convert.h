@@ -39,5 +39,5 @@ TVector<TString> ConvertACLMaskToYdbPermissionNames(ui32);
 
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::Entry* to, bool processAcl);
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl);
-
+ 
 } // namespace NKikimr

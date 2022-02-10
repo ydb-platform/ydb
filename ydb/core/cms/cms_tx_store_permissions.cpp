@@ -8,11 +8,11 @@ namespace NCms {
 
 class TCms::TTxStorePermissions : public TTransactionBase<TCms> {
 public:
-    TTxStorePermissions(TCms *self, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
-                        const TString &owner, TAutoPtr<TRequestInfo> scheduled)
+    TTxStorePermissions(TCms *self, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp, 
+                        const TString &owner, TAutoPtr<TRequestInfo> scheduled) 
         : TBase(self)
-        , Request(std::move(req))
-        , Response(std::move(resp))
+        , Request(std::move(req)) 
+        , Response(std::move(resp)) 
         , Owner(owner)
         , Scheduled(scheduled)
         , NextPermissionId(self->State->NextPermissionId)
@@ -28,8 +28,8 @@ public:
         db.Table<Schema::Param>().Key(1).Update(NIceDb::TUpdate<Schema::Param::NextPermissionID>(NextPermissionId),
                                                 NIceDb::TUpdate<Schema::Param::NextRequestID>(NextRequestId));
 
-        const auto& rec = Response->Get<TEvCms::TEvPermissionResponse>()->Record;
-        for (const auto &permission : rec.GetPermissions()) {
+        const auto& rec = Response->Get<TEvCms::TEvPermissionResponse>()->Record; 
+        for (const auto &permission : rec.GetPermissions()) { 
             const auto &id = permission.GetId();
             const auto &requestId = Scheduled ? Scheduled->RequestId : "";
             ui64 deadline = permission.GetDeadline();
@@ -42,10 +42,10 @@ public:
                        NIceDb::TUpdate<Schema::Permission::Deadline>(deadline),
                        NIceDb::TUpdate<Schema::Permission::RequestID>(requestId));
 
-            Self->AuditLog(ctx, TStringBuilder() << "Store permission"
-                << ": id# " << id
-                << ", validity# " << TInstant::MicroSeconds(deadline)
-                << ", action# " << actionStr);
+            Self->AuditLog(ctx, TStringBuilder() << "Store permission" 
+                << ": id# " << id 
+                << ", validity# " << TInstant::MicroSeconds(deadline) 
+                << ", action# " << actionStr); 
         }
 
         if (Scheduled) {
@@ -62,17 +62,17 @@ public:
                            NIceDb::TUpdate<Schema::Request::Order>(order),
                            NIceDb::TUpdate<Schema::Request::Content>(requestStr));
 
-                Self->AuditLog(ctx, TStringBuilder() << "Store request"
-                    << ": id# " << id
-                    << ", owner# " << owner
-                    << ", order# " << order
-                    << ", body# " << requestStr);
+                Self->AuditLog(ctx, TStringBuilder() << "Store request" 
+                    << ": id# " << id 
+                    << ", owner# " << owner 
+                    << ", order# " << order 
+                    << ", body# " << requestStr); 
             } else {
                 db.Table<Schema::Request>().Key(id).Delete();
 
-                Self->AuditLog(ctx, TStringBuilder() << "Remove request"
-                    << ": id# " << id
-                    << ", owner# " << owner);
+                Self->AuditLog(ctx, TStringBuilder() << "Remove request" 
+                    << ": id# " << id 
+                    << ", owner# " << owner); 
             }
         }
 
@@ -84,23 +84,23 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStorePermissions complete");
 
-        Self->Reply(Request.Get(), Response, ctx);
+        Self->Reply(Request.Get(), Response, ctx); 
         Self->SchedulePermissionsCleanup(ctx);
     }
 
 private:
-    THolder<IEventBase> Request;
-    TAutoPtr<IEventHandle> Response;
+    THolder<IEventBase> Request; 
+    TAutoPtr<IEventHandle> Response; 
     TString Owner;
     TAutoPtr<TRequestInfo> Scheduled;
     ui64 NextPermissionId;
     ui64 NextRequestId;
 };
 
-ITransaction* TCms::CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
-                                             const TString &owner, TAutoPtr<TRequestInfo> scheduled)
+ITransaction* TCms::CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp, 
+                                             const TString &owner, TAutoPtr<TRequestInfo> scheduled) 
 {
-    return new TTxStorePermissions(this, std::move(req), std::move(resp), owner, std::move(scheduled));
+    return new TTxStorePermissions(this, std::move(req), std::move(resp), owner, std::move(scheduled)); 
 }
 
 } // NCms

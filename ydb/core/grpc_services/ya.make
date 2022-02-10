@@ -18,12 +18,12 @@ SRCS(
     rpc_alter_table.cpp
     rpc_begin_transaction.cpp
     rpc_calls.cpp
-    rpc_cancel_operation.cpp
+    rpc_cancel_operation.cpp 
     rpc_cms.cpp
     rpc_commit_transaction.cpp
     rpc_copy_table.cpp
     rpc_copy_tables.cpp
-    rpc_export.cpp
+    rpc_export.cpp 
     rpc_create_coordination_node.cpp
     rpc_create_session.cpp
     rpc_create_table.cpp
@@ -40,16 +40,16 @@ SRCS(
     rpc_execute_yql_script.cpp
     rpc_explain_yql_script.cpp
     rpc_explain_data_query.cpp
-    rpc_forget_operation.cpp
+    rpc_forget_operation.cpp 
     rpc_get_operation.cpp
     rpc_get_shard_locations.cpp
-    rpc_import.cpp
-    rpc_import_data.cpp
+    rpc_import.cpp 
+    rpc_import_data.cpp 
     rpc_keep_alive.cpp
     rpc_kh_describe.cpp
     rpc_kh_snapshots.cpp
     rpc_kqp_base.cpp
-    rpc_list_operations.cpp
+    rpc_list_operations.cpp 
     rpc_login.cpp
     rpc_load_rows.cpp
     rpc_log_store.cpp

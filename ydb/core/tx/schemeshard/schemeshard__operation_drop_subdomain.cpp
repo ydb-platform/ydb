@@ -91,8 +91,8 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
         context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-
+        context.OnComplete.PublishToSchemeBoard(OperationId, pathId); 
+ 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedDeleteParts);
         return true;
     }
@@ -115,8 +115,8 @@ public:
 
 
 class TDropSubdomain: public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
+    const TOperationId OperationId; 
+    const TTxTransaction Transaction; 
     TTxState::ETxState State = TTxState::Invalid;
 
     TTxState::ETxState NextState() {
@@ -156,11 +156,11 @@ class TDropSubdomain: public TSubOperation {
     }
 
 public:
-    TDropSubdomain(TOperationId id, const TTxTransaction& tx)
+    TDropSubdomain(TOperationId id, const TTxTransaction& tx) 
         : OperationId(id)
-        , Transaction(tx)
-    {
-    }
+        , Transaction(tx) 
+    { 
+    } 
 
     TDropSubdomain(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
@@ -172,10 +172,10 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& drop = Transaction.GetDrop();
+        const auto& drop = Transaction.GetDrop(); 
 
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = drop.GetName();
+        const TString& parentPathStr = Transaction.GetWorkingDir(); 
+        const TString& name = drop.GetName(); 
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropSubdomain Propose"
@@ -192,8 +192,8 @@ public:
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks 
+                .NotEmpty() 
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -222,8 +222,8 @@ public:
             return result;
         }
 
-        TString errStr;
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+        TString errStr; 
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -266,16 +266,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TDropSubdomain");
-    }
-
+    void AbortPropose(TOperationContext&) override { 
+        Y_FAIL("no AbortPropose for TDropSubdomain"); 
+    } 
+ 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropSubdomain AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->TabletID()); 
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
@@ -301,12 +301,12 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropSubdomain(TOperationId id, const TTxTransaction& tx) {
-    return new TDropSubdomain(id, tx);
-}
-
+ISubOperationBase::TPtr CreateDropSubdomain(TOperationId id, const TTxTransaction& tx) { 
+    return new TDropSubdomain(id, tx); 
+} 
+ 
 ISubOperationBase::TPtr CreateDropSubdomain(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_VERIFY(state != TTxState::Invalid); 
     return new TDropSubdomain(id, state);
 }
 

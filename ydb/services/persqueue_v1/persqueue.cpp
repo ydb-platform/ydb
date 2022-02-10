@@ -60,10 +60,10 @@ void TGRpcPersQueueService::DecRequest() {
 
 void TGRpcPersQueueService::InitNewSchemeCacheActor() {
     auto appData = ActorSystem->AppData<TAppData>();
-    auto cacheCounters = GetServiceCounters(Counters, "pqproxy|schemecache");
-    auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, cacheCounters);
-    NewSchemeCache = ActorSystem->Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()),
-        TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+    auto cacheCounters = GetServiceCounters(Counters, "pqproxy|schemecache"); 
+    auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, cacheCounters); 
+    NewSchemeCache = ActorSystem->Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()), 
+        TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId); 
 }
 
 void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {

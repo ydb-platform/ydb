@@ -41,20 +41,20 @@ void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
 
     app.SetEnableMvcc(opts.Mvcc);
 
-    auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
+    auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds( 
                       "dc-1", domainId, FAKE_SCHEMESHARD_TABLET_ID,
                       domainId, domainId, TVector<ui32>{domainId},
                       domainId, TVector<ui32>{domainId},
                       planResolution,
                       TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1)},
                       TVector<ui64>{},
-                      TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)});
+                      TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)}); 
 
-    TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();
-    ids.insert(ids.end(), domain->TxAllocators.begin(), domain->TxAllocators.end());
-    runtime.SetTxAllocatorTabletIds(ids);
-
-    app.AddDomain(domain.Release());
+    TVector<ui64> ids = runtime.GetTxAllocatorTabletIds(); 
+    ids.insert(ids.end(), domain->TxAllocators.begin(), domain->TxAllocators.end()); 
+    runtime.SetTxAllocatorTabletIds(ids); 
+ 
+    app.AddDomain(domain.Release()); 
     SetupTabletServices(runtime, &app);
 }
 
@@ -1091,7 +1091,7 @@ void CreateShardedTable(Tests::TServer::TPtr server,
                         TActorId sender,
                         const TString &root,
                         const TString &name,
-                        const TShardedTableOptions &opts)
+                        const TShardedTableOptions &opts) 
 {
     auto &runtime = *server->GetRuntime();
     auto &settings = server->GetSettings();
@@ -1104,56 +1104,56 @@ void CreateShardedTable(Tests::TServer::TPtr server,
         request->Record.SetExecTimeoutPeriod(Max<ui64>());
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
         tx.SetWorkingDir(root);
-
+ 
         NKikimrSchemeOp::TTableDescription* desc = nullptr;
-        if (opts.Indexes_) {
+        if (opts.Indexes_) { 
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
-            desc = tx.MutableCreateIndexedTable()->MutableTableDescription();
-        } else {
+            desc = tx.MutableCreateIndexedTable()->MutableTableDescription(); 
+        } else { 
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
-            desc = tx.MutableCreateTable();
-        }
-
-        desc->SetName(name);
-
-        for (const auto& column : opts.Columns_) {
-            auto col = desc->AddColumns();
-            col->SetName(column.Name);
-            col->SetType(column.Type);
+            desc = tx.MutableCreateTable(); 
+        } 
+ 
+        desc->SetName(name); 
+ 
+        for (const auto& column : opts.Columns_) { 
+            auto col = desc->AddColumns(); 
+            col->SetName(column.Name); 
+            col->SetType(column.Type); 
             col->SetNotNull(column.NotNull);
-            if (column.IsKey) {
-                desc->AddKeyColumnNames(column.Name);
-            }
+            if (column.IsKey) { 
+                desc->AddKeyColumnNames(column.Name); 
+            } 
         }
 
-        for (const auto& index : opts.Indexes_) {
-            auto* indexDesc = tx.MutableCreateIndexedTable()->MutableIndexDescription()->Add();
+        for (const auto& index : opts.Indexes_) { 
+            auto* indexDesc = tx.MutableCreateIndexedTable()->MutableIndexDescription()->Add(); 
+ 
+            indexDesc->SetName(index.Name); 
+            indexDesc->SetType(index.Type); 
+ 
+            for (const auto& col : index.IndexColumns) { 
+                indexDesc->AddKeyColumnNames(col); 
+            } 
+            for (const auto& col : index.DataColumns) { 
+                indexDesc->AddDataColumnNames(col); 
+            } 
+        } 
+ 
+        desc->SetUniformPartitionsCount(opts.Shards_); 
+ 
+        if (!opts.EnableOutOfOrder_) 
+            desc->MutablePartitionConfig()->MutablePipelineConfig()->SetEnableOutOfOrder(false); 
 
-            indexDesc->SetName(index.Name);
-            indexDesc->SetType(index.Type);
-
-            for (const auto& col : index.IndexColumns) {
-                indexDesc->AddKeyColumnNames(col);
-            }
-            for (const auto& col : index.DataColumns) {
-                indexDesc->AddDataColumnNames(col);
-            }
+        if (opts.Policy_) { 
+            opts.Policy_->Serialize(*desc->MutablePartitionConfig()->MutableCompactionPolicy()); 
         }
 
-        desc->SetUniformPartitionsCount(opts.Shards_);
-
-        if (!opts.EnableOutOfOrder_)
-            desc->MutablePartitionConfig()->MutablePipelineConfig()->SetEnableOutOfOrder(false);
-
-        if (opts.Policy_) {
-            opts.Policy_->Serialize(*desc->MutablePartitionConfig()->MutableCompactionPolicy());
-        }
-
-        switch (opts.ShadowData_) {
+        switch (opts.ShadowData_) { 
             case EShadowDataMode::Default:
                 break;
             case EShadowDataMode::Enabled:
-                desc->MutablePartitionConfig()->SetShadowData(true);
+                desc->MutablePartitionConfig()->SetShadowData(true); 
                 break;
         }
 
@@ -1182,23 +1182,23 @@ void CreateShardedTable(Tests::TServer::TPtr server,
     }
 }
 
-void CreateShardedTable(Tests::TServer::TPtr server,
+void CreateShardedTable(Tests::TServer::TPtr server, 
                         TActorId sender,
-                        const TString &root,
-                        const TString &name,
-                        ui64 shards,
-                        bool enableOutOfOrder,
-                        const NLocalDb::TCompactionPolicy* policy,
-                        EShadowDataMode shadowData)
-{
-    auto opts = TShardedTableOptions()
-        .Shards(shards)
-        .EnableOutOfOrder(enableOutOfOrder)
-        .Policy(policy)
-        .ShadowData(shadowData);
-    CreateShardedTable(server, sender, root, name, opts);
-}
-
+                        const TString &root, 
+                        const TString &name, 
+                        ui64 shards, 
+                        bool enableOutOfOrder, 
+                        const NLocalDb::TCompactionPolicy* policy, 
+                        EShadowDataMode shadowData) 
+{ 
+    auto opts = TShardedTableOptions() 
+        .Shards(shards) 
+        .EnableOutOfOrder(enableOutOfOrder) 
+        .Policy(policy) 
+        .ShadowData(shadowData); 
+    CreateShardedTable(server, sender, root, name, opts); 
+} 
+ 
 NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer::TPtr server,
                                                      TActorId sender,
                                                      const TString &path)
@@ -1209,7 +1209,7 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer::TPtr server
 
     auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
     request->Record.MutableDescribePath()->SetPath(path);
-    request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
+    request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true); 
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
     auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
 
@@ -1263,7 +1263,7 @@ TTableId ResolveTableId(
         auto& entry = request->ResultSet.emplace_back();
         entry.Path = SplitPath(path);
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        entry.ShowPrivatePath = true;
+        entry.ShowPrivatePath = true; 
         runtime.Send(new IEventHandle(MakeSchemeCacheID(), sender, new TEvTxProxySchemeCache::TEvNavigateKeySet(request)));
     }
 
@@ -1573,121 +1573,121 @@ ui64 AsyncAlterAndDisableShadow(
     return ev->Get()->Record.GetTxId();
 }
 
-ui64 AsyncAlterAddIndex(
-        Tests::TServer::TPtr server,
-        const TString& dbName,
-        const TString& tablePath,
-        const TShardedTableOptions::TIndex& indexDesc)
-{
-    auto &runtime = *server->GetRuntime();
-    auto &settings = server->GetSettings();
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, new TEvTxUserProxy::TEvAllocateTxId()));
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvAllocateTxIdResult>(sender);
-    const auto txId = ev->Get()->TxId;
-
-    NKikimrIndexBuilder::TIndexBuildSettings buildSettings;
-    buildSettings.set_source_path(tablePath);
-
-    Ydb::Table::TableIndex& index = *buildSettings.mutable_index();
-    index.set_name(indexDesc.Name);
-    *index.mutable_index_columns() = {indexDesc.IndexColumns.begin(), indexDesc.IndexColumns.end()};
-    *index.mutable_data_columns() = {indexDesc.DataColumns.begin(), indexDesc.DataColumns.end()};
-
-    switch (indexDesc.Type) {
+ui64 AsyncAlterAddIndex( 
+        Tests::TServer::TPtr server, 
+        const TString& dbName, 
+        const TString& tablePath, 
+        const TShardedTableOptions::TIndex& indexDesc) 
+{ 
+    auto &runtime = *server->GetRuntime(); 
+    auto &settings = server->GetSettings(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, new TEvTxUserProxy::TEvAllocateTxId())); 
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvAllocateTxIdResult>(sender); 
+    const auto txId = ev->Get()->TxId; 
+ 
+    NKikimrIndexBuilder::TIndexBuildSettings buildSettings; 
+    buildSettings.set_source_path(tablePath); 
+ 
+    Ydb::Table::TableIndex& index = *buildSettings.mutable_index(); 
+    index.set_name(indexDesc.Name); 
+    *index.mutable_index_columns() = {indexDesc.IndexColumns.begin(), indexDesc.IndexColumns.end()}; 
+    *index.mutable_data_columns() = {indexDesc.DataColumns.begin(), indexDesc.DataColumns.end()}; 
+ 
+    switch (indexDesc.Type) { 
     case NKikimrSchemeOp::EIndexTypeGlobal:
-        *index.mutable_global_index() = Ydb::Table::GlobalIndex();
-        break;
+        *index.mutable_global_index() = Ydb::Table::GlobalIndex(); 
+        break; 
     case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-        *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
-        break;
-    default:
-        UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(indexDesc.Type));
-    }
-
-    auto req = MakeHolder<TEvIndexBuilder::TEvCreateRequest>(txId, dbName, std::move(buildSettings));
-    auto tabletId = ChangeStateStorage(SchemeRoot, settings.Domain);
-    runtime.SendToPipe(tabletId, sender, req.Release(), 0, GetPipeConfigWithRetries());
-
-    auto resp = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
-    UNIT_ASSERT_EQUAL(resp->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
-    return txId;
-}
-
-ui64 AsyncAlterDropIndex(
-        Tests::TServer::TPtr server,
-        const TString& workingDir,
-        const TString& tableName,
-        const TString& indexName)
-{
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-    request->Record.SetExecTimeoutPeriod(Max<ui64>());
-    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+        *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex(); 
+        break; 
+    default: 
+        UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(indexDesc.Type)); 
+    } 
+ 
+    auto req = MakeHolder<TEvIndexBuilder::TEvCreateRequest>(txId, dbName, std::move(buildSettings)); 
+    auto tabletId = ChangeStateStorage(SchemeRoot, settings.Domain); 
+    runtime.SendToPipe(tabletId, sender, req.Release(), 0, GetPipeConfigWithRetries()); 
+ 
+    auto resp = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender); 
+    UNIT_ASSERT_EQUAL(resp->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS); 
+    return txId; 
+} 
+ 
+ui64 AsyncAlterDropIndex( 
+        Tests::TServer::TPtr server, 
+        const TString& workingDir, 
+        const TString& tableName, 
+        const TString& indexName) 
+{ 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
+    request->Record.SetExecTimeoutPeriod(Max<ui64>()); 
+    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme(); 
     tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropIndex);
-    tx.SetWorkingDir(workingDir);
-    auto &desc = *tx.MutableDropIndex();
-    desc.SetTableName(tableName);
-    desc.SetIndexName(indexName);
-
-    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
-    return ev->Get()->Record.GetTxId();
-}
-
-ui64 AsyncAlterAddStream(
-        Tests::TServer::TPtr server,
-        const TString& workingDir,
-        const TString& tableName,
-        const TShardedTableOptions::TCdcStream& streamDesc)
-{
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-    request->Record.SetExecTimeoutPeriod(Max<ui64>());
-    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+    tx.SetWorkingDir(workingDir); 
+    auto &desc = *tx.MutableDropIndex(); 
+    desc.SetTableName(tableName); 
+    desc.SetIndexName(indexName); 
+ 
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender); 
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress); 
+    return ev->Get()->Record.GetTxId(); 
+} 
+ 
+ui64 AsyncAlterAddStream( 
+        Tests::TServer::TPtr server, 
+        const TString& workingDir, 
+        const TString& tableName, 
+        const TShardedTableOptions::TCdcStream& streamDesc) 
+{ 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
+    request->Record.SetExecTimeoutPeriod(Max<ui64>()); 
+    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme(); 
     tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateCdcStream);
-    tx.SetWorkingDir(workingDir);
-    auto &desc = *tx.MutableCreateCdcStream();
-    desc.SetTableName(tableName);
-    desc.MutableStreamDescription()->SetName(streamDesc.Name);
-    desc.MutableStreamDescription()->SetMode(streamDesc.Mode);
-
-    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
-    return ev->Get()->Record.GetTxId();
-}
-
-ui64 AsyncAlterDropStream(
-        Tests::TServer::TPtr server,
-        const TString& workingDir,
-        const TString& tableName,
-        const TString& streamName)
-{
-    auto &runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-    request->Record.SetExecTimeoutPeriod(Max<ui64>());
-    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+    tx.SetWorkingDir(workingDir); 
+    auto &desc = *tx.MutableCreateCdcStream(); 
+    desc.SetTableName(tableName); 
+    desc.MutableStreamDescription()->SetName(streamDesc.Name); 
+    desc.MutableStreamDescription()->SetMode(streamDesc.Mode); 
+ 
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender); 
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress); 
+    return ev->Get()->Record.GetTxId(); 
+} 
+ 
+ui64 AsyncAlterDropStream( 
+        Tests::TServer::TPtr server, 
+        const TString& workingDir, 
+        const TString& tableName, 
+        const TString& streamName) 
+{ 
+    auto &runtime = *server->GetRuntime(); 
+    auto sender = runtime.AllocateEdgeActor(); 
+ 
+    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
+    request->Record.SetExecTimeoutPeriod(Max<ui64>()); 
+    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme(); 
     tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropCdcStream);
-    tx.SetWorkingDir(workingDir);
-    auto &desc = *tx.MutableDropCdcStream();
-    desc.SetTableName(tableName);
-    desc.SetStreamName(streamName);
-
-    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
-    return ev->Get()->Record.GetTxId();
-}
-
+    tx.SetWorkingDir(workingDir); 
+    auto &desc = *tx.MutableDropCdcStream(); 
+    desc.SetTableName(tableName); 
+    desc.SetStreamName(streamName); 
+ 
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender); 
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress); 
+    return ev->Get()->Record.GetTxId(); 
+} 
+ 
 void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId) {
     auto &runtime = *server->GetRuntime();
     auto &settings = server->GetSettings();
@@ -1844,7 +1844,7 @@ namespace {
                                 Result << ", ";
                             }
                             Result << columns[idx].Name << " = ";
-                            PrintValue(Result, parser.ColumnParser(idx));
+                            PrintValue(Result, parser.ColumnParser(idx)); 
                         }
                         Result << Endl;
                     }
@@ -1909,49 +1909,49 @@ namespace {
             }
         }
 
-        static void PrintValue(TStringBuilder& out, NYdb::TValueParser& parser) {
-            switch (parser.GetKind()) {
-            case NYdb::TTypeParser::ETypeKind::Optional:
-                parser.OpenOptional();
-                if (parser.IsNull()) {
-                    out << "(empty maybe)";
-                } else {
-                    PrintValue(out, parser);
-                }
-                parser.CloseOptional();
-                break;
-
-            case NYdb::TTypeParser::ETypeKind::Primitive:
-                PrintPrimitive(out, parser);
-                break;
-
-            default:
-                Y_FAIL("Unhandled");
-            }
-        }
-
-        static void PrintPrimitive(TStringBuilder& out, const NYdb::TValueParser& parser) {
-            #define PRINT_PRIMITIVE(type) \
-                case NYdb::EPrimitiveType::type: \
-                    out << parser.Get##type(); \
-                    break
-
-            switch (parser.GetPrimitiveType()) {
-            PRINT_PRIMITIVE(Uint32);
-            PRINT_PRIMITIVE(Uint64);
-            PRINT_PRIMITIVE(Date);
-            PRINT_PRIMITIVE(Datetime);
-            PRINT_PRIMITIVE(Timestamp);
-            PRINT_PRIMITIVE(String);
-            PRINT_PRIMITIVE(DyNumber);
-
-            default:
-                Y_FAIL("Unhandled");
-            }
-
-            #undef PRINT_PRIMITIVE
-        }
-
+        static void PrintValue(TStringBuilder& out, NYdb::TValueParser& parser) { 
+            switch (parser.GetKind()) { 
+            case NYdb::TTypeParser::ETypeKind::Optional: 
+                parser.OpenOptional(); 
+                if (parser.IsNull()) { 
+                    out << "(empty maybe)"; 
+                } else { 
+                    PrintValue(out, parser); 
+                } 
+                parser.CloseOptional(); 
+                break; 
+ 
+            case NYdb::TTypeParser::ETypeKind::Primitive: 
+                PrintPrimitive(out, parser); 
+                break; 
+ 
+            default: 
+                Y_FAIL("Unhandled"); 
+            } 
+        } 
+ 
+        static void PrintPrimitive(TStringBuilder& out, const NYdb::TValueParser& parser) { 
+            #define PRINT_PRIMITIVE(type) \ 
+                case NYdb::EPrimitiveType::type: \ 
+                    out << parser.Get##type(); \ 
+                    break 
+ 
+            switch (parser.GetPrimitiveType()) { 
+            PRINT_PRIMITIVE(Uint32); 
+            PRINT_PRIMITIVE(Uint64); 
+            PRINT_PRIMITIVE(Date); 
+            PRINT_PRIMITIVE(Datetime); 
+            PRINT_PRIMITIVE(Timestamp); 
+            PRINT_PRIMITIVE(String); 
+            PRINT_PRIMITIVE(DyNumber); 
+ 
+            default: 
+                Y_FAIL("Unhandled"); 
+            } 
+ 
+            #undef PRINT_PRIMITIVE 
+        } 
+ 
     private:
         struct TPendingRequest {
             TActorId Sender;

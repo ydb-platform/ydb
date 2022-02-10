@@ -7,11 +7,11 @@ PEERDIR(
 )
 
 SRCS(
-    cast.h
+    cast.h 
     dynumber.cpp
 )
 
-END()
+END() 
 
 RECURSE_FOR_TESTS(
     ut

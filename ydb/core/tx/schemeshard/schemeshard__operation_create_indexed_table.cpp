@@ -54,10 +54,10 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
         }
     }
 
-    if (baseTableDescription.GetIsBackup()) {
+    if (baseTableDescription.GetIsBackup()) { 
         return {CreateReject(nextId, NKikimrScheme::StatusInvalidParameter, "Cannot create table with explicit 'IsBackup' property")};
-    }
-
+    } 
+ 
     TSubDomainInfo::TPtr domainInfo = baseTablePath.DomainInfo();
 
     if (sequencesCount > 0 && domainInfo->GetSequenceShards().empty()) {
@@ -81,9 +81,9 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
     }
 
-    if (indexesCount > domainInfo->GetSchemeLimits().MaxTableIndices) {
+    if (indexesCount > domainInfo->GetSchemeLimits().MaxTableIndices) { 
         auto msg = TStringBuilder() << "indexes count has reached maximum value in the table"
-                                    << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
+                                    << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices 
                                     << ", intention to create new children: " << indexesCount;
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
     }
@@ -128,28 +128,28 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
         }
 
-        switch (indexDescription.GetType()) {
+        switch (indexDescription.GetType()) { 
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
-            if (!context.SS->EnableAsyncIndexes) {
-                TString msg = TStringBuilder() << "It is not allowed to create async indexes";
+            if (!context.SS->EnableAsyncIndexes) { 
+                TString msg = TStringBuilder() << "It is not allowed to create async indexes"; 
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
-            } else if (baseTableDescription.HasTTLSettings() && !AppData()->FeatureFlags.GetEnableTtlOnAsyncIndexedTables()) {
-                TString msg = TStringBuilder() << "TTL is not currently supported on tables with async indices";
+            } else if (baseTableDescription.HasTTLSettings() && !AppData()->FeatureFlags.GetEnableTtlOnAsyncIndexedTables()) { 
+                TString msg = TStringBuilder() << "TTL is not currently supported on tables with async indices"; 
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
-            }
-            break;
-
-        default:
-            break;
-        }
-
+            } 
+            break; 
+ 
+        default: 
+            break; 
+        } 
+ 
         TIndexColumns indexKeys = ExtractInfo(indexDescription);
         if (indexKeys.KeyColumns.empty()) {
             TString msg = TStringBuilder() << "no key colums in index creation config";
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
         }
 
-        if (!indexKeys.DataColumns.empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
+        if (!indexKeys.DataColumns.empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) { 
             TString msg = TStringBuilder() << "It is not allowed to create index with data column";
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
         }
@@ -216,7 +216,7 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
     }
 
     for (auto& column : baseTableDescription.GetColumns()) {
-        if (column.GetNotNull() && !AppData()->FeatureFlags.GetEnableNotNullColumns()) {
+        if (column.GetNotNull() && !AppData()->FeatureFlags.GetEnableNotNullColumns()) { 
             TString msg = TStringBuilder() << "It is not allowed to create not null column";
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
         }
@@ -254,17 +254,17 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
         scheme.SetFailOnExist(tx.GetFailOnExist());
 
         scheme.MutableCreateTable()->CopyFrom(baseTableDescription);
-        if (tx.HasAlterUserAttributes()) {
+        if (tx.HasAlterUserAttributes()) { 
             scheme.MutableAlterUserAttributes()->CopyFrom(tx.GetAlterUserAttributes());
-        }
-
+        } 
+ 
         result.push_back(CreateNewTable(NextPartId(nextId, result), scheme, sequences));
     }
 
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
         {
             auto scheme = TransactionTemplate(
-                tx.GetWorkingDir() + "/" + baseTableDescription.GetName(),
+                tx.GetWorkingDir() + "/" + baseTableDescription.GetName(), 
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
             scheme.SetFailOnExist(tx.GetFailOnExist());
 
@@ -272,13 +272,13 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
             if (!indexDescription.HasType()) {
                 scheme.MutableCreateTableIndex()->SetType(NKikimrSchemeOp::EIndexTypeGlobal);
             }
-
+ 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
         }
 
         {
             auto scheme = TransactionTemplate(
-                tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" + indexDescription.GetName(),
+                tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" + indexDescription.GetName(), 
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
             scheme.SetFailOnExist(tx.GetFailOnExist());
 

@@ -26,9 +26,9 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
     TDeque<TPathId> AlterIndexes;
     TDeque<TPathId> ApplyIndexes;
 
-    TDeque<TPathId> AlterCdcStreams;
-    TDeque<TPathId> ApplyCdcStreams;
-
+    TDeque<TPathId> AlterCdcStreams; 
+    TDeque<TPathId> ApplyCdcStreams; 
+ 
     TDeque<TOperationId> TxStates;
 
 public:
@@ -58,14 +58,14 @@ public:
         ApplyIndexes.push_back(pathId);
     }
 
-    void PersistAlterCdcStream(const TPathId& pathId) {
-        AlterCdcStreams.push_back(pathId);
-    }
-
-    void PersistApplyCdcStream(const TPathId& pathId) {
-        ApplyCdcStreams.push_back(pathId);
-    }
-
+    void PersistAlterCdcStream(const TPathId& pathId) { 
+        AlterCdcStreams.push_back(pathId); 
+    } 
+ 
+    void PersistApplyCdcStream(const TPathId& pathId) { 
+        ApplyCdcStreams.push_back(pathId); 
+    } 
+ 
     void PersistTxState(const TOperationId& opId) {
         TxStates.push_back(opId);
     }

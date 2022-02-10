@@ -200,8 +200,8 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
         context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-
+        context.OnComplete.PublishToSchemeBoard(OperationId, pathId); 
+ 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
     }
@@ -231,7 +231,7 @@ public:
 
 class TCopyTable: public TSubOperation {
     const TOperationId OperationId;
-    const TTxTransaction Transaction;
+    const TTxTransaction Transaction; 
     TTxState::ETxState State = TTxState::Invalid;
 
     TTxState::ETxState NextState() {
@@ -283,11 +283,11 @@ class TCopyTable: public TSubOperation {
     }
 
 public:
-    TCopyTable(TOperationId id, const TTxTransaction& tx)
+    TCopyTable(TOperationId id, const TTxTransaction& tx) 
         : OperationId(id)
-        , Transaction(tx)
-    {
-    }
+        , Transaction(tx) 
+    { 
+    } 
 
     TCopyTable(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
@@ -305,7 +305,7 @@ public:
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const TString& parentPath = Transaction.GetWorkingDir();
-        const TString& name = Transaction.GetCreateTable().GetName();
+        const TString& name = Transaction.GetCreateTable().GetName(); 
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -319,8 +319,8 @@ public:
         TPath parent = TPath::Resolve(parentPath, context.SS);
         {
             TPath::TChecker checks = parent.Check();
-            checks
-                .NotEmpty()
+            checks 
+                .NotEmpty() 
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -329,13 +329,13 @@ public:
 
             if (checks) {
                 if (parent.Base()->IsTableIndex()) {
-                    checks
-                        .IsInsideTableIndexPath()
+                    checks 
+                        .IsInsideTableIndexPath() 
                         .IsUnderCreating(NKikimrScheme::StatusNameConflict)
                         .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of copying base table
                 } else {
-                    checks
-                        .NotUnderOperation()
+                    checks 
+                        .NotUnderOperation() 
                         .IsCommonSensePath()
                         .IsLikeDirectory();
                 }
@@ -350,11 +350,11 @@ public:
             }
         }
 
-        TPath srcPath = TPath::Resolve(Transaction.GetCreateTable().GetCopyFromTable(), context.SS);
+        TPath srcPath = TPath::Resolve(Transaction.GetCreateTable().GetCopyFromTable(), context.SS); 
         {
             TPath::TChecker checks = srcPath.Check();
-            checks
-                .NotEmpty()
+            checks 
+                .NotEmpty() 
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
@@ -364,8 +364,8 @@ public:
 
             if (checks) {
                 if (parent.Base()->IsTableIndex()) {
-                    checks
-                        .IsInsideTableIndexPath() //copy imp index table as index index table, not a separate one
+                    checks 
+                        .IsInsideTableIndexPath() //copy imp index table as index index table, not a separate one 
                         .NotChildren(); //imp table doesnt have indexes
                 } else {
                     checks.IsCommonSensePath();
@@ -382,19 +382,19 @@ public:
         }
 
         const ui32 maxShardsToCreate = srcPath.Shards();
-        const TString acl = Transaction.GetModifyACL().GetDiffACL();
-
+        const TString acl = Transaction.GetModifyACL().GetDiffACL(); 
+ 
         TPath dstPath = parent.Child(name);
         {
             TPath::TChecker checks = dstPath.Check();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
+                checks 
+                    .IsResolved() 
                     .NotUnderDeleting()
                     .FailOnExist(TPathElement::EPathType::EPathTypeTable, acceptExisted);
             } else {
-                checks
-                    .NotEmpty()
+                checks 
+                    .NotEmpty() 
                     .NotResolved();
             }
 
@@ -409,8 +409,8 @@ public:
                     .PathsLimit()
                     .DirChildrenLimit()
                     .ShardsLimit(maxShardsToCreate)
-                    .PathShardsLimit(maxShardsToCreate)
-                    .IsValidACL(acl);
+                    .PathShardsLimit(maxShardsToCreate) 
+                    .IsValidACL(acl); 
             }
 
             if (!checks) {
@@ -422,20 +422,20 @@ public:
             }
         }
 
-        auto domainInfo = parent.DomainInfo();
-        bool transactionSupport = domainInfo->IsSupportTransactions();
-        if (domainInfo->GetAlter()) {
-            TPathId domainId = parent.DomainId();
-            Y_VERIFY(context.SS->PathsById.contains(domainId));
-            TPathElement::TPtr domain = context.SS->PathsById.at(domainId);
-            Y_VERIFY(domain->PlannedToCreate() || domain->HasActiveChanges());
+        auto domainInfo = parent.DomainInfo(); 
+        bool transactionSupport = domainInfo->IsSupportTransactions(); 
+        if (domainInfo->GetAlter()) { 
+            TPathId domainId = parent.DomainId(); 
+            Y_VERIFY(context.SS->PathsById.contains(domainId)); 
+            TPathElement::TPtr domain = context.SS->PathsById.at(domainId); 
+            Y_VERIFY(domain->PlannedToCreate() || domain->HasActiveChanges()); 
 
-            transactionSupport |= domainInfo->GetAlter()->IsSupportTransactions();
+            transactionSupport |= domainInfo->GetAlter()->IsSupportTransactions(); 
         }
-        if (!transactionSupport) {
+        if (!transactionSupport) { 
             result->SetError(NKikimrScheme::StatusNameConflict, "Inclusive subDomian do not support shared transactions");
-            return result;
-        }
+            return result; 
+        } 
 
         TString errStr;
 
@@ -465,14 +465,14 @@ public:
             }
         }
 
-        auto schema = Transaction.GetCreateTable();
+        auto schema = Transaction.GetCreateTable(); 
         const bool omitFollowers = schema.GetOmitFollowers();
-        const bool isBackup = schema.GetIsBackup();
+        const bool isBackup = schema.GetIsBackup(); 
         PrepareScheme(&schema, name, srcTableInfo, context);
         if (omitFollowers) {
             schema.MutablePartitionConfig()->AddFollowerGroups()->Clear();
-        }
-        schema.SetIsBackup(isBackup);
+        } 
+        schema.SetIsBackup(isBackup); 
 
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
         if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, srcTableInfo->PartitionConfig(), schema.GetPartitionConfig(), AppData(), errStr)
@@ -483,8 +483,8 @@ public:
         schema.MutablePartitionConfig()->CopyFrom(compilationPartitionConfig);
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
-        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
-        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry, limits, *domainInfo, errStr);
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits(); 
+        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry, limits, *domainInfo, errStr); 
         if (!alterData.Get()) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
@@ -541,10 +541,10 @@ public:
         context.DbChanges.PersistTable(allocatedPathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        // copy attrs without any checks
-        TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
-        userAttrs->Attrs = srcPath.Base()->UserAttrs->Attrs;
-
+        // copy attrs without any checks 
+        TUserAttributes::TPtr userAttrs = new TUserAttributes(1); 
+        userAttrs->Attrs = srcPath.Base()->UserAttrs->Attrs; 
+ 
         dstPath.MaterializeLeaf(owner, allocatedPathId);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
@@ -553,7 +553,7 @@ public:
         newTable->LastTxId = OperationId.GetTxId();
         newTable->PathState = TPathElement::EPathState::EPathStateCreate;
         newTable->PathType = TPathElement::EPathType::EPathTypeTable;
-        newTable->UserAttrs->AlterData = userAttrs;
+        newTable->UserAttrs->AlterData = userAttrs; 
 
         srcPath.Base()->PathState = TPathElement::EPathState::EPathStateCopying;
         srcPath.Base()->LastTxId = OperationId.GetTxId();
@@ -623,14 +623,14 @@ public:
                      "TCopyTable AbortPropose"
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << context.SS->TabletID());
-    }
-
+    } 
+ 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCopyTable AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->TabletID()); 
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
@@ -652,16 +652,16 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx) {
-    return new TCopyTable(id, tx);
-}
-
+ISubOperationBase::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx) { 
+    return new TCopyTable(id, tx); 
+} 
+ 
 ISubOperationBase::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return new TCopyTable(id, state);
 }
 
-TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) { 
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
 
     auto copying = tx.GetCreateTable();
@@ -700,7 +700,7 @@ TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxT
         operation->SetName(copying.GetName());
         operation->SetCopyFromTable(copying.GetCopyFromTable());
         operation->SetOmitFollowers(copying.GetOmitFollowers());
-        operation->SetIsBackup(copying.GetIsBackup());
+        operation->SetIsBackup(copying.GetIsBackup()); 
         operation->MutablePartitionConfig()->CopyFrom(copying.GetPartitionConfig());
 
         result.push_back(CreateCopyTable(NextPartId(nextId, result), schema));
@@ -710,13 +710,13 @@ TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxT
         auto name = child.first;
         auto pathId = child.second;
 
-        TPath childPath = srcPath.Child(name);
-        if (!childPath.IsTableIndex() || childPath.IsDeleted()) {
+        TPath childPath = srcPath.Child(name); 
+        if (!childPath.IsTableIndex() || childPath.IsDeleted()) { 
             continue;
         }
 
-        Y_VERIFY(childPath.Base()->PathId == pathId);
-        Y_VERIFY_S(childPath.Base()->GetChildren().size() == 1, childPath.PathString() << " has children " << childPath.Base()->GetChildren().size());
+        Y_VERIFY(childPath.Base()->PathId == pathId); 
+        Y_VERIFY_S(childPath.Base()->GetChildren().size() == 1, childPath.PathString() << " has children " << childPath.Base()->GetChildren().size()); 
 
         TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
         {
@@ -732,13 +732,13 @@ TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxT
             for (const auto& dataColumn: indexInfo->IndexDataColumns) {
                 *operation->MutableDataColumnNames()->Add() = dataColumn;
             }
-
+ 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
         }
 
-        TString implTableName = childPath.Base()->GetChildren().begin()->first;
-        TPath implTable = childPath.Child(implTableName);
-        Y_VERIFY(implTable.Base()->PathId == childPath.Base()->GetChildren().begin()->second);
+        TString implTableName = childPath.Base()->GetChildren().begin()->first; 
+        TPath implTable = childPath.Child(implTableName); 
+        Y_VERIFY(implTable.Base()->PathId == childPath.Base()->GetChildren().begin()->second); 
 
         {
             NKikimrSchemeOp::TModifyScheme schema;
@@ -750,7 +750,7 @@ TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxT
             operation->SetName(implTableName);
             operation->SetCopyFromTable(implTable.PathString());
             operation->SetOmitFollowers(copying.GetOmitFollowers());
-            operation->SetIsBackup(copying.GetIsBackup());
+            operation->SetIsBackup(copying.GetIsBackup()); 
 
             result.push_back(CreateCopyTable(NextPartId(nextId, result), schema));
         }

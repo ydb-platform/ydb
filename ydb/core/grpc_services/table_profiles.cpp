@@ -170,7 +170,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
             partitioningPolicy.SetUniformPartitionsCount(policy.uniform_partitions());
             break;
         case Ydb::Table::PartitioningPolicy::kExplicitPartitions:
-            if (!CopyExplicitPartitions(tableDesc, policy.explicit_partitions(), code, error))
+            if (!CopyExplicitPartitions(tableDesc, policy.explicit_partitions(), code, error)) 
                 return false;
             break;
         default:

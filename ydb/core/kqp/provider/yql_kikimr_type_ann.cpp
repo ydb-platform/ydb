@@ -613,17 +613,17 @@ private:
         }
 
         for (const auto& index : create.Indexes()) {
-            const auto type = index.Type().Value();
-            TIndexDescription::EType indexType;
-
-            if (type == "syncGlobal") {
-                indexType = TIndexDescription::EType::GlobalSync;
-            } else if (type == "asyncGlobal") {
-                indexType = TIndexDescription::EType::GlobalAsync;
-            } else {
-                YQL_ENSURE(false, "Unknown index type: " << type);
-            }
-
+            const auto type = index.Type().Value(); 
+            TIndexDescription::EType indexType; 
+ 
+            if (type == "syncGlobal") { 
+                indexType = TIndexDescription::EType::GlobalSync; 
+            } else if (type == "asyncGlobal") { 
+                indexType = TIndexDescription::EType::GlobalAsync; 
+            } else { 
+                YQL_ENSURE(false, "Unknown index type: " << type); 
+            } 
+ 
             TVector<TString> indexColums;
             TVector<TString> dataColums;
 
@@ -793,22 +793,22 @@ private:
                 meta->TableSettings.ReadReplicasSettings = TString(
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                 );
-            } else if (name == "setTtlSettings") {
-                TTtlSettings ttlSettings;
-                TString error;
-
-                YQL_ENSURE(setting.Value().Maybe<TCoNameValueTupleList>());
-                if (!TTtlSettings::TryParse(setting.Value().Cast<TCoNameValueTupleList>(), ttlSettings, error)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                        TStringBuilder() << "Invalid TTL settings: " << error));
-                    return TStatus::Error;
-                }
-
-                meta->TableSettings.TtlSettings.Set(ttlSettings);
-            } else if (name == "resetTtlSettings") {
-                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    "Can't reset TTL settings"));
-                return TStatus::Error;
+            } else if (name == "setTtlSettings") { 
+                TTtlSettings ttlSettings; 
+                TString error; 
+ 
+                YQL_ENSURE(setting.Value().Maybe<TCoNameValueTupleList>()); 
+                if (!TTtlSettings::TryParse(setting.Value().Cast<TCoNameValueTupleList>(), ttlSettings, error)) { 
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), 
+                        TStringBuilder() << "Invalid TTL settings: " << error)); 
+                    return TStatus::Error; 
+                } 
+ 
+                meta->TableSettings.TtlSettings.Set(ttlSettings); 
+            } else if (name == "resetTtlSettings") { 
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), 
+                    "Can't reset TTL settings")); 
+                return TStatus::Error; 
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     TStringBuilder() << "Unknown table profile setting: " << name));

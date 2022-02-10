@@ -19,7 +19,7 @@ inline TString DecodePreparedQueryId(const TString& in) {
         throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
             << "got empty preparedQueryId message";
     }
-    NOperationId::TOperationId opId(in);
+    NOperationId::TOperationId opId(in); 
     const auto& ids = opId.GetValue("id");
     if (ids.size() != 1) {
         throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)

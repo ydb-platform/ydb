@@ -739,19 +739,19 @@ public:
                                                       errText));
                                 return SyncError();
                             }
-                        } else if (name == "setTtlSettings") {
-                            TTtlSettings ttlSettings;
-                            TString error;
-
-                            YQL_ENSURE(setting.Value().Maybe<TCoNameValueTupleList>());
-                            if (!TTtlSettings::TryParse(setting.Value().Cast<TCoNameValueTupleList>(), ttlSettings, error)) {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                    TStringBuilder() << "Invalid TTL settings: " << error));
-                                return SyncError();
-                            }
-
+                        } else if (name == "setTtlSettings") { 
+                            TTtlSettings ttlSettings; 
+                            TString error; 
+ 
+                            YQL_ENSURE(setting.Value().Maybe<TCoNameValueTupleList>()); 
+                            if (!TTtlSettings::TryParse(setting.Value().Cast<TCoNameValueTupleList>(), ttlSettings, error)) { 
+                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), 
+                                    TStringBuilder() << "Invalid TTL settings: " << error)); 
+                                return SyncError(); 
+                            } 
+ 
                             ConvertTtlSettingsToProto(ttlSettings, *alterTableRequest.mutable_set_ttl_settings());
-                        } else if (name == "resetTtlSettings") {
+                        } else if (name == "resetTtlSettings") { 
                             alterTableRequest.mutable_drop_ttl_settings();
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
@@ -771,10 +771,10 @@ public:
                             add_index->set_name(TString(columnTuple.Item(1).Cast<TCoAtom>().Value()));
                         } else if (name == "indexType") {
                             const auto type = TString(columnTuple.Item(1).Cast<TCoAtom>().Value());
-                            if (type == "syncGlobal") {
+                            if (type == "syncGlobal") { 
                                 add_index->mutable_global_index();
-                            } else if (type == "asyncGlobal") {
-                                add_index->mutable_global_async_index();
+                            } else if (type == "asyncGlobal") { 
+                                add_index->mutable_global_async_index(); 
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -798,16 +798,16 @@ public:
                             return SyncError();
                         }
                     }
-                    switch (add_index->type_case()) {
-                        case Ydb::Table::TableIndex::kGlobalIndex:
+                    switch (add_index->type_case()) { 
+                        case Ydb::Table::TableIndex::kGlobalIndex: 
                             *add_index->mutable_global_index() = Ydb::Table::GlobalIndex();
-                            break;
-                        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+                            break; 
+                        case Ydb::Table::TableIndex::kGlobalAsyncIndex: 
                             *add_index->mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
-                            break;
-                        default:
-                            YQL_ENSURE(false, "Unknown index type: " << (ui32)add_index->type_case());
-                    }
+                            break; 
+                        default: 
+                            YQL_ENSURE(false, "Unknown index type: " << (ui32)add_index->type_case()); 
+                    } 
                 } else if (name == "dropIndex") {
                     auto nameNode = action.Value().Cast<TCoAtom>();
                     alterTableRequest.add_drop_indexes(TString(nameNode.Value()));

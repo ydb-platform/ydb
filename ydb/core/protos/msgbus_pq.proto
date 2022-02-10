@@ -90,27 +90,27 @@ message TPersQueuePartitionRequest {
         optional bool LastRequest = 2; // append size to last request's reservation
     }
 
-    message TCmdRegisterMessageGroup {
-        // Id of message group (SourceId)
-        optional bytes Id = 1;
-        // Range of the key to which it is allowed to write.
-        optional NKikimrPQ.TPartitionKeyRange PartitionKeyRange = 2;
-        // Starting sequence number
-        optional int64 StartingSeqNo = 3;
-        // Is the registration made after SplitMessageGroup or not
-        optional bool AfterSplit = 4;
-    }
-
-    message TCmdDeregisterMessageGroup {
-        // Id of message group (SourceId)
-        optional bytes Id = 1;
-    }
-
-    message TCmdSplitMessageGroup {
-        repeated TCmdDeregisterMessageGroup DeregisterGroups = 1;
-        repeated TCmdRegisterMessageGroup RegisterGroups = 2;
-    }
-
+    message TCmdRegisterMessageGroup { 
+        // Id of message group (SourceId) 
+        optional bytes Id = 1; 
+        // Range of the key to which it is allowed to write. 
+        optional NKikimrPQ.TPartitionKeyRange PartitionKeyRange = 2; 
+        // Starting sequence number 
+        optional int64 StartingSeqNo = 3; 
+        // Is the registration made after SplitMessageGroup or not 
+        optional bool AfterSplit = 4; 
+    } 
+ 
+    message TCmdDeregisterMessageGroup { 
+        // Id of message group (SourceId) 
+        optional bytes Id = 1; 
+    } 
+ 
+    message TCmdSplitMessageGroup { 
+        repeated TCmdDeregisterMessageGroup DeregisterGroups = 1; 
+        repeated TCmdRegisterMessageGroup RegisterGroups = 2; 
+    } 
+ 
     optional string Topic = 1; //mandatory for request for partitions
     optional int32 Partition = 2; //mandatory for request for partitions
     optional string OwnerCookie = 3; //mandatory for write
@@ -126,9 +126,9 @@ message TPersQueuePartitionRequest {
     optional TCmdGetClientOffset CmdGetClientOffset = 10;
     optional TCmdGetOwnership CmdGetOwnership = 11;
     optional TCmdReserveBytes CmdReserveBytes = 14;
-    optional TCmdRegisterMessageGroup CmdRegisterMessageGroup = 20;
-    optional TCmdDeregisterMessageGroup CmdDeregisterMessageGroup = 21;
-    optional TCmdSplitMessageGroup CmdSplitMessageGroup = 22;
+    optional TCmdRegisterMessageGroup CmdRegisterMessageGroup = 20; 
+    optional TCmdDeregisterMessageGroup CmdDeregisterMessageGroup = 21; 
+    optional TCmdSplitMessageGroup CmdSplitMessageGroup = 22; 
 
     optional NActorsProto.TActorId PipeClient = 15;
 
@@ -416,8 +416,8 @@ message TPersQueuePartitionResponse {
             optional int64 SeqNo = 2; // will not be set if no records with such sourceId in partition
             optional int64 Offset = 3; //the same
             optional int64 WriteTimestampMS = 4; //the same
-            optional bool Explicit = 5;
-            optional NKikimrPQ.TMessageGroupInfo.EState State = 6;
+            optional bool Explicit = 5; 
+            optional NKikimrPQ.TMessageGroupInfo.EState State = 6; 
         }
         repeated TSourceIdInfo SourceIdInfo = 2;
     }

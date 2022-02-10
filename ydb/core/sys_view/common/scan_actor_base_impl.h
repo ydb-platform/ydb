@@ -233,7 +233,7 @@ private:
             return;
         }
 
-        SchemeShardId = entry.DomainInfo->ExtractSchemeShard();
+        SchemeShardId = entry.DomainInfo->ExtractSchemeShard(); 
 
         if (entry.DomainInfo->Params.HasSysViewProcessor()) {
             SysViewProcessorId = entry.DomainInfo->Params.GetSysViewProcessor();

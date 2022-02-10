@@ -48,11 +48,11 @@ message Resources {
     repeated ComputationalUnits computational_units = 2;
 }
 
-message ServerlessResources {
-    // Full path to shared database's home dir whose resources will be used.
-    string shared_database_path = 1;
-}
-
+message ServerlessResources { 
+    // Full path to shared database's home dir whose resources will be used. 
+    string shared_database_path = 1; 
+} 
+ 
 message DatabaseOptions {
     // Do not initialize services required for transactions processing.
     bool disable_tx_service = 1;
@@ -91,9 +91,9 @@ message DatabaseQuotas {
     uint64 data_stream_shards_quota = 3;
     // A maximum storage that will be reserved for all data stream shards.
     uint64 data_stream_reserved_storage_quota = 5;
-    // A minimum value of `TtlSettings.run_interval_seconds` that can be specified.
-    // Default is 1800 (15 minutes).
-    uint32 ttl_min_run_internal_seconds = 4;
+    // A minimum value of `TtlSettings.run_interval_seconds` that can be specified. 
+    // Default is 1800 (15 minutes). 
+    uint32 ttl_min_run_internal_seconds = 4; 
 }
 
 // Request to create a new database. For successfull creation
@@ -103,14 +103,14 @@ message CreateDatabaseRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // Required. Full path to database's home dir. Used as database ID.
     string path = 2;
-    oneof resources_kind {
-        // Resources to allocate for database by CMS.
-        Resources resources = 3;
-        // Shared resources can be used by serverless databases.
-        Resources shared_resources = 6;
-        // If specified, the created database will be "serverless".
-        ServerlessResources serverless_resources = 7;
-    }
+    oneof resources_kind { 
+        // Resources to allocate for database by CMS. 
+        Resources resources = 3; 
+        // Shared resources can be used by serverless databases. 
+        Resources shared_resources = 6; 
+        // If specified, the created database will be "serverless". 
+        ServerlessResources serverless_resources = 7; 
+    } 
     // Additional database options.
     DatabaseOptions options = 4;
     // Attach attributes to database.
@@ -154,12 +154,12 @@ message GetDatabaseStatusResult {
     string path = 1;
     // Current database state.
     State state = 2;
-    oneof resources_kind {
-        // Database resources requested for allocation.
-        Resources required_resources = 3;
-        Resources required_shared_resources = 7;
-        ServerlessResources serverless_resources = 8;
-    }
+    oneof resources_kind { 
+        // Database resources requested for allocation. 
+        Resources required_resources = 3; 
+        Resources required_shared_resources = 7; 
+        ServerlessResources serverless_resources = 8; 
+    } 
     // Database resources allocated by CMS.
     Resources allocated_resources = 4;
     // Externally allocated database resources registered in CMS.

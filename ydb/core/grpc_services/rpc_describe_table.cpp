@@ -82,7 +82,7 @@ private:
 
                 FillStorageSettings(describeTableResult, tableDescription);
                 FillColumnFamilies(describeTableResult, tableDescription);
-                FillAttributes(describeTableResult, pathDescription);
+                FillAttributes(describeTableResult, pathDescription); 
                 FillPartitioningSettings(describeTableResult, tableDescription);
                 FillKeyBloomFilter(describeTableResult, tableDescription);
                 FillReadReplicasSettings(describeTableResult, tableDescription);
@@ -114,7 +114,7 @@ private:
 
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
         SetAuthToken(navigateRequest, *Request_);
-        SetDatabase(navigateRequest.get(), *Request_);
+        SetDatabase(navigateRequest.get(), *Request_); 
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
         record->SetPath(req->path());
         if (req->include_shard_key_bounds()) {

@@ -66,15 +66,15 @@ public:
                     "TTxUpdateSubDomainKey complete for " << Path);
 
         if (Tenant) {
-            if (Tenant->DomainId) {
-                Self->TenantIdToName.erase(Tenant->DomainId);
-            }
+            if (Tenant->DomainId) { 
+                Self->TenantIdToName.erase(Tenant->DomainId); 
+            } 
+ 
+            Tenant->DomainId = TDomainId(SchemeShardId, PathId); 
 
-            Tenant->DomainId = TDomainId(SchemeShardId, PathId);
-
-            Y_VERIFY(!Self->TenantIdToName.contains(Tenant->DomainId));
-            Self->TenantIdToName[Tenant->DomainId] = Tenant->Path;
-
+            Y_VERIFY(!Self->TenantIdToName.contains(Tenant->DomainId)); 
+            Self->TenantIdToName[Tenant->DomainId] = Tenant->Path; 
+ 
             if (Tenant->Worker == Worker)
                 Tenant->Worker = TActorId();
 

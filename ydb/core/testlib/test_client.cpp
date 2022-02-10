@@ -5,7 +5,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
-#include <ydb/services/auth/grpc_service.h>
+#include <ydb/services/auth/grpc_service.h> 
 #include <ydb/services/yq/grpc_service.h>
 #include <ydb/services/yq/private_grpc.h>
 #include <ydb/services/cms/grpc_service.h>
@@ -53,7 +53,7 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
 #include <ydb/core/tx/mediator/mediator.h>
-#include <ydb/core/tx/replication/controller/controller.h>
+#include <ydb/core/tx/replication/controller/controller.h> 
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/sequenceshard/sequenceshard.h>
@@ -161,8 +161,8 @@ namespace Tests {
         app.SetNetDataSourceUrl(Settings->NetClassifierConfig.GetUpdaterConfig().GetNetDataSourceUrl());
         app.SetEnableKqpSpilling(Settings->EnableKqpSpilling);
         app.SetKeepSnapshotTimeout(Settings->KeepSnapshotTimeout);
-        app.SetChangesQueueItemsLimit(Settings->ChangesQueueItemsLimit);
-        app.SetChangesQueueBytesLimit(Settings->ChangesQueueBytesLimit);
+        app.SetChangesQueueItemsLimit(Settings->ChangesQueueItemsLimit); 
+        app.SetChangesQueueBytesLimit(Settings->ChangesQueueBytesLimit); 
         app.CompactionConfig = Settings->CompactionConfig;
         app.FeatureFlags = Settings->FeatureFlags;
 
@@ -300,12 +300,12 @@ namespace Tests {
         future.Subscribe(startCb);
 
         GRpcServer->AddService(grpcService);
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbExportService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbImportService(system, counters, grpcRequestProxyId));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbExportService(system, counters, grpcRequestProxyId)); 
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbImportService(system, counters, grpcRequestProxyId)); 
         GRpcServer->AddService(new NGRpcService::TGRpcYdbSchemeService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbTableService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbScriptingService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcOperationService(system, counters, grpcRequestProxyId));
+        GRpcServer->AddService(new NGRpcService::TGRpcOperationService(system, counters, grpcRequestProxyId)); 
         GRpcServer->AddService(new NGRpcService::V1::TGRpcPersQueueService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxyId));
@@ -329,7 +329,7 @@ namespace Tests {
             }
         }
         GRpcServer->AddService(new NGRpcService::TGRpcYdbLogStoreService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxyId));
+        GRpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxyId)); 
         GRpcServer->Start();
     }
 
@@ -545,10 +545,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NSequenceShard::CreateSequenceShard, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.ReplicationController] =
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &NReplication::CreateController, TMailboxType::Revolving, appData.UserPoolId,
-                TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[appData.DefaultTabletTypes.ReplicationController] = 
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo( 
+                &NReplication::CreateController, TMailboxType::Revolving, appData.UserPoolId, 
+                TMailboxType::Revolving, appData.SystemPoolId)); 
     }
 
     void TServer::SetupLocalService(ui32 nodeIdx, const TString &domainName) {
@@ -653,14 +653,14 @@ namespace Tests {
         }
 
         {
-            auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << Settings->GrpcPort);
-            if (!Driver) {
-                Driver.Reset(new NYdb::TDriver(driverConfig));
-            }
-            Runtime->GetAppData(nodeIdx).YdbDriver = Driver.Get();
-        }
-
-        {
+            auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << Settings->GrpcPort); 
+            if (!Driver) { 
+                Driver.Reset(new NYdb::TDriver(driverConfig)); 
+            } 
+            Runtime->GetAppData(nodeIdx).YdbDriver = Driver.Get(); 
+        } 
+ 
+        { 
             if (Settings->PQConfig.GetEnabled() == true) {
                 IActor *pqMetaCache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(
                         new NMonitoring::TDynamicCounters(), TDuration::Seconds(1)
@@ -1303,23 +1303,23 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
-        op->SetWorkingDir(parent);
-
-        auto* createUser = op->MutableAlterLogin()->MutableCreateUser();
-        createUser->SetUser(user);
-        createUser->SetPassword(password);
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
+    NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password) { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin); 
+        op->SetWorkingDir(parent); 
+ 
+        auto* createUser = op->MutableAlterLogin()->MutableCreateUser(); 
+        createUser->SetUser(user); 
+        createUser->SetPassword(password); 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
     NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -1607,7 +1607,7 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    TAutoPtr<NMsgBusProxy::TBusResponse> TClient::LsImpl(const TString& path) {
+    TAutoPtr<NMsgBusProxy::TBusResponse> TClient::LsImpl(const TString& path) { 
         TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe());
         request->Record.SetPath(path);
         request->Record.MutableOptions()->SetShowPrivateTable(true);
@@ -1620,10 +1620,10 @@ namespace Tests {
         return dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
     }
 
-    TAutoPtr<NMsgBusProxy::TBusResponse> TClient::Ls(const TString& path) {
-        return LsImpl(path).Release();
-    }
-
+    TAutoPtr<NMsgBusProxy::TBusResponse> TClient::Ls(const TString& path) { 
+        return LsImpl(path).Release(); 
+    } 
+ 
     TClient::TPathVersion TClient::ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& describe) {
         UNIT_ASSERT(describe.Get());
         auto& record = describe->Record;
@@ -1665,7 +1665,7 @@ namespace Tests {
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         runtime->Send(
             new IEventHandle(
-                MakeSchemeCacheID(),
+                MakeSchemeCacheID(), 
                 sender,
                 new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release())),
             nodeIdx);

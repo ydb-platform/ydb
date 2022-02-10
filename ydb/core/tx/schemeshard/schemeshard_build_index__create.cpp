@@ -39,32 +39,32 @@ public:
 
         auto response = MakeHolder<TEvIndexBuilder::TEvCreateResponse>(request.GetTxId());
 
-        switch (request.GetSettings().index().type_case()) {
-        case Ydb::Table::TableIndex::kGlobalIndex:
-            break;
-        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-            if (!Self->EnableAsyncIndexes) {
+        switch (request.GetSettings().index().type_case()) { 
+        case Ydb::Table::TableIndex::kGlobalIndex: 
+            break; 
+        case Ydb::Table::TableIndex::kGlobalAsyncIndex: 
+            if (!Self->EnableAsyncIndexes) { 
                 return Reply(
                     std::move(response),
                     Ydb::StatusIds::UNSUPPORTED,
-                    TStringBuilder() << "Async indexes are not supported yet"
+                    TStringBuilder() << "Async indexes are not supported yet" 
                     );
             }
-            break;
-        default:
-            break;
+            break; 
+        default: 
+            break; 
         }
 
         const auto& dataColumns = request.GetSettings().index().data_columns();
 
         if (!dataColumns.empty() && !Self->AllowDataColumnForIndexTable) {
-            return Reply(
-                std::move(response),
-                Ydb::StatusIds::UNSUPPORTED,
-                TStringBuilder() << "Creating covered index is unsupported yet"
-                );
-        }
-
+            return Reply( 
+                std::move(response), 
+                Ydb::StatusIds::UNSUPPORTED, 
+                TStringBuilder() << "Creating covered index is unsupported yet" 
+                ); 
+        } 
+ 
         const auto id = TIndexBuildId(request.GetTxId());
         if (Self->IndexBuilds.contains(id)) {
             return Reply(
@@ -192,9 +192,9 @@ private:
         case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
             buildInfo->IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
             break;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
+        case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex: 
             buildInfo->IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
-            break;
+            break; 
         case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
             explain = "invalid or unset index type";
             return false;
@@ -237,7 +237,7 @@ private:
             AddIssue(record.MutableIssues(), errorMessage);
         }
 
-        Send(Request->Sender, std::move(responseEv), 0, Request->Cookie);
+        Send(Request->Sender, std::move(responseEv), 0, Request->Cookie); 
 
         return true;
     }

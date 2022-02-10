@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-static constexpr ui64 MaxPQStorage = Max<ui64>() / 2;
+static constexpr ui64 MaxPQStorage = Max<ui64>() / 2; 
 
 TPath::TChecker::TChecker(const TPath &path)
     : Path(path)
@@ -263,26 +263,26 @@ const TPath::TChecker& TPath::TChecker::IsUnderTheSameOperation(TTxId txId, TPat
     return *this;
 }
 
-const TPath::TChecker& TPath::TChecker::NotUnderTheSameOperation(TTxId txId, TPath::TChecker::EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
-
-    TTxId activeTxId = Path.ActiveOperation();
-    if (activeTxId != txId) {
-        return *this;
-    }
-
-    Failed = true;
-    Status = status;
-    Explain << "path is under the same operation"
-            << ", pathId: " << Path.Base()->PathId
+const TPath::TChecker& TPath::TChecker::NotUnderTheSameOperation(TTxId txId, TPath::TChecker::EStatus status) const { 
+    if (Failed) { 
+        return *this; 
+    } 
+ 
+    TTxId activeTxId = Path.ActiveOperation(); 
+    if (activeTxId != txId) { 
+        return *this; 
+    } 
+ 
+    Failed = true; 
+    Status = status; 
+    Explain << "path is under the same operation" 
+            << ", pathId: " << Path.Base()->PathId 
             << ", path type: " << NKikimrSchemeOp::EPathType_Name(Path.Base()->PathType)
             << ", path state: " << NKikimrSchemeOp::EPathState_Name(Path.Base()->PathState)
-            << ", txId: " << txId;
-    return *this;
-}
-
+            << ", txId: " << txId; 
+    return *this; 
+} 
+ 
 const TPath::TChecker& TPath::TChecker::NoOlapStore(TPath::TChecker::EStatus status) const {
     if (Failed) {
         return *this;
@@ -366,23 +366,23 @@ const TPath::TChecker& TPath::TChecker::IsSequence(TPath::TChecker::EStatus stat
     return *this;
 }
 
-const TPath::TChecker& TPath::TChecker::IsReplication(TPath::TChecker::EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
-
-    if (Path.Base()->IsReplication()) {
-        return *this;
-    }
-
-    Failed = true;
-    Status = status;
-    Explain << "path is not a replication"
-            << ", pathId: " <<  Path.Base()->PathId
-            << ", path type: " << NKikimrSchemeOp::EPathType_Name(Path.Base()->PathType);
-    return *this;
-}
-
+const TPath::TChecker& TPath::TChecker::IsReplication(TPath::TChecker::EStatus status) const { 
+    if (Failed) { 
+        return *this; 
+    } 
+ 
+    if (Path.Base()->IsReplication()) { 
+        return *this; 
+    } 
+ 
+    Failed = true; 
+    Status = status; 
+    Explain << "path is not a replication" 
+            << ", pathId: " <<  Path.Base()->PathId 
+            << ", path type: " << NKikimrSchemeOp::EPathType_Name(Path.Base()->PathType); 
+    return *this; 
+} 
+ 
 const TPath::TChecker& TPath::TChecker::IsCommonSensePath(TPath::TChecker::EStatus status) const {
     if (Failed) {
         return *this;
@@ -418,23 +418,23 @@ const TPath::TChecker& TPath::TChecker::IsInsideTableIndexPath(TPath::TChecker::
     return *this;
 }
 
-const TPath::TChecker& TPath::TChecker::IsInsideCdcStreamPath(TPath::TChecker::EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
-
-    if (Path.IsInsideCdcStreamPath()) {
-        return *this;
-    }
-
-    Failed = true;
-    Status = status;
-    Explain << "path doesn't go through directories towards cdc stream"
-            << ", it might be a cdc stream or private topic"
-            << ", pathId " << Path.Base()->PathId;
-    return *this;
-}
-
+const TPath::TChecker& TPath::TChecker::IsInsideCdcStreamPath(TPath::TChecker::EStatus status) const { 
+    if (Failed) { 
+        return *this; 
+    } 
+ 
+    if (Path.IsInsideCdcStreamPath()) { 
+        return *this; 
+    } 
+ 
+    Failed = true; 
+    Status = status; 
+    Explain << "path doesn't go through directories towards cdc stream" 
+            << ", it might be a cdc stream or private topic" 
+            << ", pathId " << Path.Base()->PathId; 
+    return *this; 
+} 
+ 
 const TPath::TChecker& TPath::TChecker::IsTable(TPath::TChecker::EStatus status) const {
     if (Failed) {
         return *this;
@@ -524,7 +524,7 @@ const TPath::TChecker& TPath::TChecker::IsKesus(TPath::TChecker::EStatus status)
     return *this;
 }
 
-const TPath::TChecker& TPath::TChecker::IsPQGroup(TPath::TChecker::EStatus status) const {
+const TPath::TChecker& TPath::TChecker::IsPQGroup(TPath::TChecker::EStatus status) const { 
     if (Failed) {
         return *this;
     }
@@ -628,23 +628,23 @@ const TPath::TChecker& TPath::TChecker::IsTableIndex(TPath::TChecker::EStatus st
     return *this;
 }
 
-const TPath::TChecker& TPath::TChecker::IsCdcStream(TPath::TChecker::EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
-
-    if (Path.Base()->IsCdcStream()) {
-        return *this;
-    }
-
-    Failed = true;
-    Status = status;
-    Explain << "path is not a cdc stream"
-            << ", pathId: " <<  Path.Base()->PathId
+const TPath::TChecker& TPath::TChecker::IsCdcStream(TPath::TChecker::EStatus status) const { 
+    if (Failed) { 
+        return *this; 
+    } 
+ 
+    if (Path.Base()->IsCdcStream()) { 
+        return *this; 
+    } 
+ 
+    Failed = true; 
+    Status = status; 
+    Explain << "path is not a cdc stream" 
+            << ", pathId: " <<  Path.Base()->PathId 
             << ", path type: " << NKikimrSchemeOp::EPathType_Name(Path.Base()->PathType);
-    return *this;
-}
-
+    return *this; 
+} 
+ 
 const TPath::TChecker& TPath::TChecker::IsLikeDirectory(TPath::TChecker::EStatus status) const {
     if (Failed) {
         return *this;
@@ -975,37 +975,37 @@ const TPath::TChecker& TPath::TChecker::NotDeleted(TPath::TChecker::EStatus stat
     return *this;
 }
 
-const TPath::TChecker& TPath::TChecker::IsValidACL(const TString& acl, EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
-
-    if (acl.empty()) {
-        return *this;
-    }
-
-    auto secObj = MakeHolder<NACLib::TACL>();
-    if (Path.IsResolved()) {
-        secObj.Reset(new NACLib::TACL(Path.Base()->ACL));
-    }
-
-    NACLib::TDiffACL diffACL(acl);
-    secObj->ApplyDiff(diffACL);
-    const ui64 bytesSize = secObj->SerializeAsString().size();
-
-    if (bytesSize <= Path.DomainInfo()->GetSchemeLimits().MaxAclBytesSize) {
-        return *this;
-    }
-
-    Failed = true;
-    Status = status;
-    Explain << "path's ACL is too long"
-            << ", path: " <<  Path.PathString()
-            << ", calculated ACL size: " << bytesSize
-            << ". Limit: " << Path.DomainInfo()->GetSchemeLimits().MaxAclBytesSize;
-    return *this;
-}
-
+const TPath::TChecker& TPath::TChecker::IsValidACL(const TString& acl, EStatus status) const { 
+    if (Failed) { 
+        return *this; 
+    } 
+ 
+    if (acl.empty()) { 
+        return *this; 
+    } 
+ 
+    auto secObj = MakeHolder<NACLib::TACL>(); 
+    if (Path.IsResolved()) { 
+        secObj.Reset(new NACLib::TACL(Path.Base()->ACL)); 
+    } 
+ 
+    NACLib::TDiffACL diffACL(acl); 
+    secObj->ApplyDiff(diffACL); 
+    const ui64 bytesSize = secObj->SerializeAsString().size(); 
+ 
+    if (bytesSize <= Path.DomainInfo()->GetSchemeLimits().MaxAclBytesSize) { 
+        return *this; 
+    } 
+ 
+    Failed = true; 
+    Status = status; 
+    Explain << "path's ACL is too long" 
+            << ", path: " <<  Path.PathString() 
+            << ", calculated ACL size: " << bytesSize 
+            << ". Limit: " << Path.DomainInfo()->GetSchemeLimits().MaxAclBytesSize; 
+    return *this; 
+} 
+ 
 TPath::TPath(TSchemeShard* ss)
     : SS(ss)
 {
@@ -1328,12 +1328,12 @@ bool TPath::IsUnderOperation() const {
 
     bool result = Base()->PathState != NKikimrSchemeOp::EPathState::EPathStateNoChanges;
     if (result) {
-        ui32 summ = (ui32)IsUnderCreating()
-            + (ui32)IsUnderAltering()
-            + (ui32)IsUnderCopying()
-            + (ui32)IsUnderBackuping()
-            + (ui32)IsUnderRestoring()
-            + (ui32)IsUnderDeleting()
+        ui32 summ = (ui32)IsUnderCreating() 
+            + (ui32)IsUnderAltering() 
+            + (ui32)IsUnderCopying() 
+            + (ui32)IsUnderBackuping() 
+            + (ui32)IsUnderRestoring() 
+            + (ui32)IsUnderDeleting() 
             + (ui32)IsUnderDomainUpgrade()
             + (ui32)IsUnderMoving();
         Y_VERIFY_S(summ == 1,
@@ -1405,12 +1405,12 @@ bool TPath::IsUnderBackuping() const {
     return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateBackup;
 }
 
-bool TPath::IsUnderRestoring() const {
-    Y_VERIFY(IsResolved());
-
+bool TPath::IsUnderRestoring() const { 
+    Y_VERIFY(IsResolved()); 
+ 
     return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateRestore;
-}
-
+} 
+ 
 bool TPath::IsUnderDeleting() const {
     Y_VERIFY(IsResolved());
 
@@ -1508,46 +1508,46 @@ bool TPath::IsInsideTableIndexPath() const {
     return true;
 }
 
-bool TPath::IsInsideCdcStreamPath() const {
-    Y_VERIFY(IsResolved());
-
-    // expected /<root>/.../<table>/<cdc_stream>/<private_topic>
-    if (Depth() < 3) {
-        return false;
-    }
-
-    auto item = Elements.rbegin();
-
-    //skip private_topic
-    if ((*item)->IsPQGroup()) {
-        ++item;
-    }
-
-    if (!(*item)->IsCdcStream()) {
-        return false;
-    }
-
-    ++item;
-    if (!(*item)->IsTable()) {
-        return false;
-    }
-
-    ++item;
-    for (; item != Elements.rend(); ++item) {
-        if (!(*item)->IsDirectory() && !(*item)->IsSubDomainRoot()) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool TPath::IsTableIndex() const {
-    Y_VERIFY(IsResolved());
-
-    return Base()->IsTableIndex();
-}
-
+bool TPath::IsInsideCdcStreamPath() const { 
+    Y_VERIFY(IsResolved()); 
+ 
+    // expected /<root>/.../<table>/<cdc_stream>/<private_topic> 
+    if (Depth() < 3) { 
+        return false; 
+    } 
+ 
+    auto item = Elements.rbegin(); 
+ 
+    //skip private_topic 
+    if ((*item)->IsPQGroup()) { 
+        ++item; 
+    } 
+ 
+    if (!(*item)->IsCdcStream()) { 
+        return false; 
+    } 
+ 
+    ++item; 
+    if (!(*item)->IsTable()) { 
+        return false; 
+    } 
+ 
+    ++item; 
+    for (; item != Elements.rend(); ++item) { 
+        if (!(*item)->IsDirectory() && !(*item)->IsSubDomainRoot()) { 
+            return false; 
+        } 
+    } 
+ 
+    return true; 
+} 
+ 
+bool TPath::IsTableIndex() const { 
+    Y_VERIFY(IsResolved()); 
+ 
+    return Base()->IsTableIndex(); 
+} 
+ 
 bool TPath::IsBackupTable() const {
     Y_VERIFY(IsResolved());
 
@@ -1560,24 +1560,24 @@ bool TPath::IsBackupTable() const {
     return tableInfo->IsBackup;
 }
 
-bool TPath::IsCdcStream() const {
-    Y_VERIFY(IsResolved());
-
-    return Base()->IsCdcStream();
-}
-
+bool TPath::IsCdcStream() const { 
+    Y_VERIFY(IsResolved()); 
+ 
+    return Base()->IsCdcStream(); 
+} 
+ 
 bool TPath::IsSequence() const {
     Y_VERIFY(IsResolved());
 
     return Base()->IsSequence();
 }
 
-bool TPath::IsReplication() const {
-    Y_VERIFY(IsResolved());
-
-    return Base()->IsReplication();
-}
-
+bool TPath::IsReplication() const { 
+    Y_VERIFY(IsResolved()); 
+ 
+    return Base()->IsReplication(); 
+} 
+ 
 ui32 TPath::Depth() const {
     return NameParts.size();
 }
@@ -1616,7 +1616,7 @@ bool TPath::IsValidLeafName(TString& explain) const {
         return false;
     }
 
-    if (AppData()->FeatureFlags.GetEnableSystemViews() && leaf == NSysView::SysPathName) {
+    if (AppData()->FeatureFlags.GetEnableSystemViews() && leaf == NSysView::SysPathName) { 
         explain += TStringBuilder()
             << "path part '" << NSysView::SysPathName << "' is reserved by the system";
         return false;

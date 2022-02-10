@@ -5,7 +5,7 @@
 #include <util/string/join.h>
 
 namespace NKikimr {
-
+ 
 TVector<TString> SplitPath(TString path);
 TString JoinPath(const TVector<TString>& path);
 TString CanonizePath(const TString &path);
@@ -19,15 +19,15 @@ bool IsEqualPaths(const TString& l, const TString& r) noexcept;
 bool IsStartWithSlash(const TString& l);
 bool CheckDbPath(const TString &path, const TString &domain, TString &error);
 TString::const_iterator PathPartBrokenAt(const TString &part, const TStringBuf extraSymbols = {});
-bool TrySplitPathByDb(const TString& path, const TString& database,
-    std::pair<TString, TString>& result, TString& error);
-
-template <typename TIter>
-TString CombinePath(TIter begin, TIter end, bool canonize = true) {
-    auto path = JoinRange("/", begin, end);
-    return canonize
-        ? CanonizePath(path)
-        : path;
+bool TrySplitPathByDb(const TString& path, const TString& database, 
+    std::pair<TString, TString>& result, TString& error); 
+ 
+template <typename TIter> 
+TString CombinePath(TIter begin, TIter end, bool canonize = true) { 
+    auto path = JoinRange("/", begin, end); 
+    return canonize 
+        ? CanonizePath(path) 
+        : path; 
 }
-
-}
+ 
+} 

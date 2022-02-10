@@ -94,9 +94,9 @@ struct TEvPQ {
         EvUpdateWriteTimestamp,
         EvHandleWriteResponse,
         EvQuotaDeadlineCheck,
-        EvRegisterMessageGroup,
-        EvDeregisterMessageGroup,
-        EvSplitMessageGroup,
+        EvRegisterMessageGroup, 
+        EvDeregisterMessageGroup, 
+        EvSplitMessageGroup, 
         EvUpdateCounters,
         EvMirrorerCounters,
         EvReadLimiterRequest,
@@ -520,66 +520,66 @@ struct TEvPQ {
         TEvQuotaDeadlineCheck()
         {}
     };
-
-    struct TEvRegisterMessageGroup : TEventLocal<TEvRegisterMessageGroup, EvRegisterMessageGroup> {
-        struct TBody {
-            explicit TBody(const TString& sourceId, TMaybe<NKikimrPQ::TPartitionKeyRange>&& keyRange, ui64 seqNo, bool afterSplit)
-                : SourceId(sourceId)
-                , KeyRange(std::move(keyRange))
-                , SeqNo(seqNo)
-                , AfterSplit(afterSplit)
-            {}
-
-            TString SourceId;
-            TMaybe<NKikimrPQ::TPartitionKeyRange> KeyRange;
-            ui64 SeqNo;
-            bool AfterSplit;
-            TMaybe<ui64> AssignedOffset; // will be assigned upon registration
-        };
-
-        template <typename... Args>
-        explicit TEvRegisterMessageGroup(ui64 cookie, Args&&... args)
-            : Cookie(cookie)
-            , Body(std::forward<Args>(args)...)
-        {}
-
-        const ui64 Cookie;
-        TBody Body;
-    };
-
-    struct TEvDeregisterMessageGroup : TEventLocal<TEvDeregisterMessageGroup, EvDeregisterMessageGroup> {
-        struct TBody {
-            explicit TBody(const TString& sourceId)
-                : SourceId(sourceId)
-            {}
-
-            TString SourceId;
-        };
-
-        template <typename... Args>
-        explicit TEvDeregisterMessageGroup(ui64 cookie, Args&&... args)
-            : Cookie(cookie)
-            , Body(std::forward<Args>(args)...)
-        {}
-
-        const ui64 Cookie;
-        TBody Body;
-    };
-
-    struct TEvSplitMessageGroup : TEventLocal<TEvSplitMessageGroup, EvSplitMessageGroup> {
-        using TRegisterBody = TEvRegisterMessageGroup::TBody;
-        using TDeregisterBody = TEvDeregisterMessageGroup::TBody;
-
-        explicit TEvSplitMessageGroup(ui64 cookie, TVector<TDeregisterBody>&& deregistrations, TVector<TRegisterBody>&& registrations)
-            : Cookie(cookie)
-            , Deregistrations(std::move(deregistrations))
-            , Registrations(std::move(registrations))
-        {}
-
-        const ui64 Cookie;
-        TVector<TDeregisterBody> Deregistrations;
-        TVector<TRegisterBody> Registrations;
-    };
+ 
+    struct TEvRegisterMessageGroup : TEventLocal<TEvRegisterMessageGroup, EvRegisterMessageGroup> { 
+        struct TBody { 
+            explicit TBody(const TString& sourceId, TMaybe<NKikimrPQ::TPartitionKeyRange>&& keyRange, ui64 seqNo, bool afterSplit) 
+                : SourceId(sourceId) 
+                , KeyRange(std::move(keyRange)) 
+                , SeqNo(seqNo) 
+                , AfterSplit(afterSplit) 
+            {} 
+ 
+            TString SourceId; 
+            TMaybe<NKikimrPQ::TPartitionKeyRange> KeyRange; 
+            ui64 SeqNo; 
+            bool AfterSplit; 
+            TMaybe<ui64> AssignedOffset; // will be assigned upon registration 
+        }; 
+ 
+        template <typename... Args> 
+        explicit TEvRegisterMessageGroup(ui64 cookie, Args&&... args) 
+            : Cookie(cookie) 
+            , Body(std::forward<Args>(args)...) 
+        {} 
+ 
+        const ui64 Cookie; 
+        TBody Body; 
+    }; 
+ 
+    struct TEvDeregisterMessageGroup : TEventLocal<TEvDeregisterMessageGroup, EvDeregisterMessageGroup> { 
+        struct TBody { 
+            explicit TBody(const TString& sourceId) 
+                : SourceId(sourceId) 
+            {} 
+ 
+            TString SourceId; 
+        }; 
+ 
+        template <typename... Args> 
+        explicit TEvDeregisterMessageGroup(ui64 cookie, Args&&... args) 
+            : Cookie(cookie) 
+            , Body(std::forward<Args>(args)...) 
+        {} 
+ 
+        const ui64 Cookie; 
+        TBody Body; 
+    }; 
+ 
+    struct TEvSplitMessageGroup : TEventLocal<TEvSplitMessageGroup, EvSplitMessageGroup> { 
+        using TRegisterBody = TEvRegisterMessageGroup::TBody; 
+        using TDeregisterBody = TEvDeregisterMessageGroup::TBody; 
+ 
+        explicit TEvSplitMessageGroup(ui64 cookie, TVector<TDeregisterBody>&& deregistrations, TVector<TRegisterBody>&& registrations) 
+            : Cookie(cookie) 
+            , Deregistrations(std::move(deregistrations)) 
+            , Registrations(std::move(registrations)) 
+        {} 
+ 
+        const ui64 Cookie; 
+        TVector<TDeregisterBody> Deregistrations; 
+        TVector<TRegisterBody> Registrations; 
+    }; 
 
     struct TEvUpdateCounters : public TEventLocal<TEvUpdateCounters, EvUpdateCounters> {
         TEvUpdateCounters()
@@ -618,6 +618,6 @@ struct TEvPQ {
         TEvReaderEventArrived()
         {}
     };
-};
+}; 
 
 } //NKikimr

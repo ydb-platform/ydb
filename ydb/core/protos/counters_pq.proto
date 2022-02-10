@@ -134,9 +134,9 @@ enum EPercentileCounters {
 
     COUNTER_LATENCY_PQ_RECEIVE_QUEUE = 15                       [(CounterOpts) = {Name: "LatencyReciveQueue"}];
     COUNTER_LATENCY_PQ_RESERVE_BYTES = 16                       [(CounterOpts) = {Name: "LatencyReserveBytes"}];
-    COUNTER_LATENCY_PQ_REGISTER_MESSAGE_GROUP = 17              [(CounterOpts) = {Name: "LatencyRegisterMessageGroup"}];
-    COUNTER_LATENCY_PQ_DEREGISTER_MESSAGE_GROUP = 18            [(CounterOpts) = {Name: "LatencyDeregisterMessageGroup"}];
-    COUNTER_LATENCY_PQ_SPLIT_MESSAGE_GROUP = 19                 [(CounterOpts) = {Name: "LatencySplitMessageGroup"}];
+    COUNTER_LATENCY_PQ_REGISTER_MESSAGE_GROUP = 17              [(CounterOpts) = {Name: "LatencyRegisterMessageGroup"}]; 
+    COUNTER_LATENCY_PQ_DEREGISTER_MESSAGE_GROUP = 18            [(CounterOpts) = {Name: "LatencyDeregisterMessageGroup"}]; 
+    COUNTER_LATENCY_PQ_SPLIT_MESSAGE_GROUP = 19                 [(CounterOpts) = {Name: "LatencySplitMessageGroup"}]; 
 }
 
 

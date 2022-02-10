@@ -1,7 +1,7 @@
 #pragma once
 
-#include "change_collector_iface.h"
-
+#include "change_collector_iface.h" 
+ 
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
@@ -17,7 +17,7 @@ namespace NMiniKQL {
 
         virtual TRowVersion GetWriteVersion(const TTableId& tableId) const;
         virtual TRowVersion GetReadVersion(const TTableId& tableId) const;
-        virtual IChangeCollector* GetChangeCollector(const TTableId& tableId) const;
+        virtual IChangeCollector* GetChangeCollector(const TTableId& tableId) const; 
     };
 
 }

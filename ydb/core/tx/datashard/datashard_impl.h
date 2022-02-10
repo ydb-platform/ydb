@@ -5,17 +5,17 @@
 #include "datashard_trans_queue.h"
 #include "datashard_outreadset.h"
 #include "datashard_pipeline.h"
-#include "datashard_schema_snapshots.h"
+#include "datashard_schema_snapshots.h" 
 #include "datashard_snapshots.h"
-#include "datashard_s3_downloads.h"
-#include "datashard_s3_uploads.h"
+#include "datashard_s3_downloads.h" 
+#include "datashard_s3_uploads.h" 
 #include "datashard_user_table.h"
 #include "datashard_build_index.h"
 #include "datashard_repl_offsets.h"
 #include "datashard_repl_offsets_client.h"
 #include "datashard_repl_offsets_server.h"
-#include "change_exchange.h"
-#include "change_record.h"
+#include "change_exchange.h" 
+#include "change_record.h" 
 #include "progress_queue.h"
 #include "read_iterator.h"
 
@@ -45,8 +45,8 @@
 
 #include <library/cpp/actors/interconnect/interconnect.h>
 
-#include <util/string/join.h>
-
+#include <util/string/join.h> 
+ 
 namespace NKikimr {
 namespace NDataShard {
 
@@ -188,22 +188,22 @@ class TDataShard
     class TTxDiscardVolatileSnapshot;
     class TTxCleanupRemovedSnapshots;
     class TTxMigrateSchemeShard;
-    class TTxGetS3Upload;
-    class TTxStoreS3UploadId;
-    class TTxChangeS3UploadStatus;
-    class TTxGetS3DownloadInfo;
-    class TTxStoreS3DownloadInfo;
-    class TTxUnsafeUploadRows;
+    class TTxGetS3Upload; 
+    class TTxStoreS3UploadId; 
+    class TTxChangeS3UploadStatus; 
+    class TTxGetS3DownloadInfo; 
+    class TTxStoreS3DownloadInfo; 
+    class TTxUnsafeUploadRows; 
     class TTxExecuteMvccStateChange;
     class TTxGetRemovedRowVersions;
     class TTxCompactBorrowed;
     class TTxCompactTable;
     class TTxPersistFullCompactionTs;
 
-    template <typename T> friend class TTxDirectBase;
-    class TTxUploadRows;
-    class TTxEraseRows;
-
+    template <typename T> friend class TTxDirectBase; 
+    class TTxUploadRows; 
+    class TTxEraseRows; 
+ 
     ITransaction *CreateTxMonitoring(TDataShard *self,
                                      NMon::TEvRemoteHttpInfo::TPtr ev);
     ITransaction *CreateTxGetInfo(TDataShard *self,
@@ -240,7 +240,7 @@ class TDataShard
     friend class TEngineBay;
     friend class NMiniKQL::TKqpScanComputeContext;
     friend class TSnapshotManager;
-    friend class TSchemaSnapshotManager;
+    friend class TSchemaSnapshotManager; 
     friend class TReplicationSourceOffsetsClient;
     friend class TReplicationSourceOffsetsServer;
 
@@ -249,12 +249,12 @@ class TDataShard
     friend class TWaitForStreamClearanceUnit;
     friend class TBuildIndexScan;
     friend class TReadColumnsScan;
-    friend class TCondEraseScan;
+    friend class TCondEraseScan; 
     friend class TDatashardKeySampler;
 
-    friend class TS3UploadsManager;
-    friend class TS3DownloadsManager;
-    friend class TS3Downloader;
+    friend class TS3UploadsManager; 
+    friend class TS3DownloadsManager; 
+    friend class TS3Downloader; 
     friend struct TSetupSysLocks;
 
     friend class TTxStartMvccStateChange;
@@ -264,14 +264,14 @@ class TDataShard
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
 
-    class TTxRequestChangeRecords;
-    class TTxRemoveChangeRecords;
-    class TTxChangeExchangeHandshake;
-    class TTxApplyChangeRecords;
-    class TTxActivateChangeSender;
-    class TTxActivateChangeSenderAck;
-    class TTxChangeExchangeSplitAck;
-
+    class TTxRequestChangeRecords; 
+    class TTxRemoveChangeRecords; 
+    class TTxChangeExchangeHandshake; 
+    class TTxApplyChangeRecords; 
+    class TTxActivateChangeSender; 
+    class TTxActivateChangeSenderAck; 
+    class TTxChangeExchangeSplitAck; 
+ 
     class TTxApplyReplicationChanges;
 
     struct TEvPrivate {
@@ -291,11 +291,11 @@ class TDataShard
             EvScanStats,
             EvPersistScanState,
             EvPersistScanStateAck,
-            EvConditionalEraseRowsRegistered,
-            EvAsyncJobComplete,
+            EvConditionalEraseRowsRegistered, 
+            EvAsyncJobComplete, 
             EvSubDomainPathIdFound,
-            EvRequestChangeRecords,
-            EvRemoveChangeRecords,
+            EvRequestChangeRecords, 
+            EvRemoveChangeRecords, 
             EvReplicationSourceOffsets,
             EvEnd
         };
@@ -384,26 +384,26 @@ class TDataShard
         };
 
         struct TEvPersistScanStateAck : public TEventLocal<TEvPersistScanStateAck, EvPersistScanStateAck> {};
-
-        struct TEvConditionalEraseRowsRegistered : public TEventLocal<TEvConditionalEraseRowsRegistered, EvConditionalEraseRowsRegistered> {
+ 
+        struct TEvConditionalEraseRowsRegistered : public TEventLocal<TEvConditionalEraseRowsRegistered, EvConditionalEraseRowsRegistered> { 
             explicit TEvConditionalEraseRowsRegistered(ui64 txId, const TActorId& actorId)
-                : TxId(txId)
-                , ActorId(actorId)
-            {
-            }
-
-            const ui64 TxId;
+                : TxId(txId) 
+                , ActorId(actorId) 
+            { 
+            } 
+ 
+            const ui64 TxId; 
             const TActorId ActorId;
-        };
-
-        struct TEvAsyncJobComplete : public TEventLocal<TEvAsyncJobComplete, EvAsyncJobComplete> {
+        }; 
+ 
+        struct TEvAsyncJobComplete : public TEventLocal<TEvAsyncJobComplete, EvAsyncJobComplete> { 
             explicit TEvAsyncJobComplete(TAutoPtr<IDestructable> prod)
-                : Prod(prod)
-            {
-            }
-
+                : Prod(prod) 
+            { 
+            } 
+ 
             TAutoPtr<IDestructable> Prod;
-        };
+        }; 
 
         struct TEvSubDomainPathIdFound : public TEventLocal<TEvSubDomainPathIdFound, EvSubDomainPathIdFound> {
             TEvSubDomainPathIdFound(ui64 schemeShardId, ui64 localPathId)
@@ -414,9 +414,9 @@ class TDataShard
             const ui64 SchemeShardId;
             const ui64 LocalPathId;
         };
-
-        struct TEvRequestChangeRecords : public TEventLocal<TEvRequestChangeRecords, EvRequestChangeRecords> {};
-        struct TEvRemoveChangeRecords : public TEventLocal<TEvRemoveChangeRecords, EvRemoveChangeRecords> {};
+ 
+        struct TEvRequestChangeRecords : public TEventLocal<TEvRequestChangeRecords, EvRequestChangeRecords> {}; 
+        struct TEvRemoveChangeRecords : public TEventLocal<TEvRemoveChangeRecords, EvRemoveChangeRecords> {}; 
 
         struct TEvReplicationSourceOffsets : public TEventLocal<TEvReplicationSourceOffsets, EvReplicationSourceOffsets> {
             struct TSplitKey {
@@ -540,14 +540,14 @@ class TDataShard
             struct PlanStep :       Column<7, NScheme::NTypeIds::Uint64> {};
             struct ReadOnly :       Column<8, NScheme::NTypeIds::Bool> {};
 
-            struct Success :        Column<9, NScheme::NTypeIds::Bool> {};
-            struct Error :          Column<10, NScheme::NTypeIds::String> { using Type = TString; };
-            struct DataSize :       Column<11, NScheme::NTypeIds::Uint64> {}; // Bytes
-            struct Rows :           Column<12, NScheme::NTypeIds::Uint64> {};
-
+            struct Success :        Column<9, NScheme::NTypeIds::Bool> {}; 
+            struct Error :          Column<10, NScheme::NTypeIds::String> { using Type = TString; }; 
+            struct DataSize :       Column<11, NScheme::NTypeIds::Uint64> {}; // Bytes 
+            struct Rows :           Column<12, NScheme::NTypeIds::Uint64> {}; 
+ 
             using TKey = TableKey<TxId>;
             using TColumns = TableColumns<TxId, Operation, Source, SourceTablet,
-                MinStep, MaxStep, PlanStep, ReadOnly, Success, Error, DataSize, Rows>;
+                MinStep, MaxStep, PlanStep, ReadOnly, Success, Error, DataSize, Rows>; 
         };
 
         // Here we persist snapshots metadata to preserve it across Src datashard restarts
@@ -591,8 +591,8 @@ class TDataShard
         };
 
         struct Snapshots : Table<14> {
-            struct Oid :             Column<1, NScheme::NTypeIds::Uint64> {}; // PathOwnerId
-            struct Tid :             Column<2, NScheme::NTypeIds::Uint64> {}; // LocalPathId
+            struct Oid :             Column<1, NScheme::NTypeIds::Uint64> {}; // PathOwnerId 
+            struct Tid :             Column<2, NScheme::NTypeIds::Uint64> {}; // LocalPathId 
             struct Step :            Column<3, NScheme::NTypeIds::Uint64> {};
             struct TxId :            Column<4, NScheme::NTypeIds::Uint64> {};
             struct Name :            Column<5, NScheme::NTypeIds::String> {};
@@ -603,97 +603,97 @@ class TDataShard
             using TColumns = TableColumns<Oid, Tid, Step, TxId, Name, Flags, TimeoutMs>;
         };
 
-        struct S3Uploads : Table<15> {
-            struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {};
-            struct UploadId :        Column<2, NScheme::NTypeIds::String> { using Type = TString; };
-            struct Status :          Column<3, NScheme::NTypeIds::Uint8> { using Type = TS3Upload::EStatus; static constexpr Type Default = TS3Upload::EStatus::UploadParts; };
-            struct Error :           Column<4, NScheme::NTypeIds::Utf8> { using Type = TString; };
-
-            using TKey = TableKey<TxId>;
-            using TColumns = TableColumns<TxId, UploadId, Status, Error>;
-        };
-
-        // deprecated
-        struct S3UploadParts : Table<20> {
-            struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {};
-            struct PartNumber :      Column<2, NScheme::NTypeIds::Uint32> {};
-            struct ETag :            Column<3, NScheme::NTypeIds::String> { using Type = TString; };
-
-            using TKey = TableKey<TxId>;
-            using TColumns = TableColumns<TxId, PartNumber, ETag>;
-        };
-
-        struct S3UploadedParts : Table<23> {
-            struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {};
-            struct PartNumber :      Column<2, NScheme::NTypeIds::Uint32> {};
-            struct ETag :            Column<3, NScheme::NTypeIds::String> { using Type = TString; };
-
-            using TKey = TableKey<TxId, PartNumber>;
-            using TColumns = TableColumns<TxId, PartNumber, ETag>;
-        };
-
-        struct S3Downloads : Table<16> {
-            struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {};
-            struct SchemeETag :      Column<2, NScheme::NTypeIds::String> { using Type = TString; };
-            struct DataETag :        Column<3, NScheme::NTypeIds::String> { using Type = TString; };
-            struct ProcessedBytes :  Column<4, NScheme::NTypeIds::Uint64> {};
-            struct WrittenBytes :    Column<5, NScheme::NTypeIds::Uint64> {};
-            struct WrittenRows :     Column<6, NScheme::NTypeIds::Uint64> {};
-
-            using TKey = TableKey<TxId>;
-            using TColumns = TableColumns<TxId, SchemeETag, DataETag, ProcessedBytes, WrittenBytes, WrittenRows>;
-        };
-
-        struct ChangeRecords : Table<17> {
-            struct Order :       Column<1, NScheme::NTypeIds::Uint64> {};
-            struct Group :       Column<2, NScheme::NTypeIds::Uint64> {};
-            struct PlanStep :    Column<3, NScheme::NTypeIds::Uint64> {};
-            struct TxId :        Column<4, NScheme::NTypeIds::Uint64> {};
-            struct PathOwnerId : Column<5, NScheme::NTypeIds::Uint64> {};
-            struct LocalPathId : Column<6, NScheme::NTypeIds::Uint64> {};
-            struct BodySize    : Column<7, NScheme::NTypeIds::Uint64> {};
-
-            using TKey = TableKey<Order>;
-            using TColumns = TableColumns<Order, Group, PlanStep, TxId, PathOwnerId, LocalPathId, BodySize>;
-        };
-
-        struct ChangeRecordDetails : Table<18> {
-            struct Order : Column<1, NScheme::NTypeIds::Uint64> {};
-            struct Kind :  Column<2, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::EKind; };
-            struct Body :  Column<3, NScheme::NTypeIds::String> { using Type = TString; };
-
-            using TKey = TableKey<Order>;
-            using TColumns = TableColumns<Order, Kind, Body>;
-        };
-
-        struct ChangeSenders : Table<19> {
-            struct Origin :          Column<1, NScheme::NTypeIds::Uint64> {};
-            struct Generation :      Column<2, NScheme::NTypeIds::Uint64> {};
-            struct LastRecordOrder : Column<3, NScheme::NTypeIds::Uint64> {};
-            struct LastSeenAt :      Column<4, NScheme::NTypeIds::Uint64> { using Type = TInstant::TValue; };
-
-            using TKey = TableKey<Origin>;
-            using TColumns = TableColumns<Origin, Generation, LastRecordOrder, LastSeenAt>;
-        };
-
-        // Table<20> was taken by S3UploadParts
-
-        struct SrcChangeSenderActivations : Table<21> {
-            struct DstTabletId : Column<1, NScheme::NTypeIds::Uint64> {};
-
-            using TKey = TableKey<DstTabletId>;
-            using TColumns = TableColumns<DstTabletId>;
-        };
-
-        struct DstChangeSenderActivations : Table<22> {
-            struct SrcTabletId : Column<1, NScheme::NTypeIds::Uint64> {};
-
-            using TKey = TableKey<SrcTabletId>;
-            using TColumns = TableColumns<SrcTabletId>;
-        };
-
-        // Table<23> is taken by S3UploadedParts
-
+        struct S3Uploads : Table<15> { 
+            struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct UploadId :        Column<2, NScheme::NTypeIds::String> { using Type = TString; }; 
+            struct Status :          Column<3, NScheme::NTypeIds::Uint8> { using Type = TS3Upload::EStatus; static constexpr Type Default = TS3Upload::EStatus::UploadParts; }; 
+            struct Error :           Column<4, NScheme::NTypeIds::Utf8> { using Type = TString; }; 
+ 
+            using TKey = TableKey<TxId>; 
+            using TColumns = TableColumns<TxId, UploadId, Status, Error>; 
+        }; 
+ 
+        // deprecated 
+        struct S3UploadParts : Table<20> { 
+            struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct PartNumber :      Column<2, NScheme::NTypeIds::Uint32> {}; 
+            struct ETag :            Column<3, NScheme::NTypeIds::String> { using Type = TString; }; 
+ 
+            using TKey = TableKey<TxId>; 
+            using TColumns = TableColumns<TxId, PartNumber, ETag>; 
+        }; 
+ 
+        struct S3UploadedParts : Table<23> { 
+            struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct PartNumber :      Column<2, NScheme::NTypeIds::Uint32> {}; 
+            struct ETag :            Column<3, NScheme::NTypeIds::String> { using Type = TString; }; 
+ 
+            using TKey = TableKey<TxId, PartNumber>; 
+            using TColumns = TableColumns<TxId, PartNumber, ETag>; 
+        }; 
+ 
+        struct S3Downloads : Table<16> { 
+            struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct SchemeETag :      Column<2, NScheme::NTypeIds::String> { using Type = TString; }; 
+            struct DataETag :        Column<3, NScheme::NTypeIds::String> { using Type = TString; }; 
+            struct ProcessedBytes :  Column<4, NScheme::NTypeIds::Uint64> {}; 
+            struct WrittenBytes :    Column<5, NScheme::NTypeIds::Uint64> {}; 
+            struct WrittenRows :     Column<6, NScheme::NTypeIds::Uint64> {}; 
+ 
+            using TKey = TableKey<TxId>; 
+            using TColumns = TableColumns<TxId, SchemeETag, DataETag, ProcessedBytes, WrittenBytes, WrittenRows>; 
+        }; 
+ 
+        struct ChangeRecords : Table<17> { 
+            struct Order :       Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct Group :       Column<2, NScheme::NTypeIds::Uint64> {}; 
+            struct PlanStep :    Column<3, NScheme::NTypeIds::Uint64> {}; 
+            struct TxId :        Column<4, NScheme::NTypeIds::Uint64> {}; 
+            struct PathOwnerId : Column<5, NScheme::NTypeIds::Uint64> {}; 
+            struct LocalPathId : Column<6, NScheme::NTypeIds::Uint64> {}; 
+            struct BodySize    : Column<7, NScheme::NTypeIds::Uint64> {}; 
+ 
+            using TKey = TableKey<Order>; 
+            using TColumns = TableColumns<Order, Group, PlanStep, TxId, PathOwnerId, LocalPathId, BodySize>; 
+        }; 
+ 
+        struct ChangeRecordDetails : Table<18> { 
+            struct Order : Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct Kind :  Column<2, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::EKind; }; 
+            struct Body :  Column<3, NScheme::NTypeIds::String> { using Type = TString; }; 
+ 
+            using TKey = TableKey<Order>; 
+            using TColumns = TableColumns<Order, Kind, Body>; 
+        }; 
+ 
+        struct ChangeSenders : Table<19> { 
+            struct Origin :          Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct Generation :      Column<2, NScheme::NTypeIds::Uint64> {}; 
+            struct LastRecordOrder : Column<3, NScheme::NTypeIds::Uint64> {}; 
+            struct LastSeenAt :      Column<4, NScheme::NTypeIds::Uint64> { using Type = TInstant::TValue; }; 
+ 
+            using TKey = TableKey<Origin>; 
+            using TColumns = TableColumns<Origin, Generation, LastRecordOrder, LastSeenAt>; 
+        }; 
+ 
+        // Table<20> was taken by S3UploadParts 
+ 
+        struct SrcChangeSenderActivations : Table<21> { 
+            struct DstTabletId : Column<1, NScheme::NTypeIds::Uint64> {}; 
+ 
+            using TKey = TableKey<DstTabletId>; 
+            using TColumns = TableColumns<DstTabletId>; 
+        }; 
+ 
+        struct DstChangeSenderActivations : Table<22> { 
+            struct SrcTabletId : Column<1, NScheme::NTypeIds::Uint64> {}; 
+ 
+            using TKey = TableKey<SrcTabletId>; 
+            using TColumns = TableColumns<SrcTabletId>; 
+        }; 
+ 
+        // Table<23> is taken by S3UploadedParts 
+ 
         struct ReplicationSourceOffsets : Table<24> {
             struct PathOwnerId : Column<1, NScheme::NTypeIds::Uint64> {};
             struct TablePathId : Column<2, NScheme::NTypeIds::Uint64> {};
@@ -736,24 +736,24 @@ class TDataShard
             using TColumns = TableColumns<Tid, FullCompactionTs>;
         };
 
-        struct SchemaSnapshots : Table<28> {
-            struct PathOwnerId :   Column<1, NScheme::NTypeIds::Uint64> {};
-            struct LocalPathId :   Column<2, NScheme::NTypeIds::Uint64> {};
-            struct SchemaVersion : Column<3, NScheme::NTypeIds::Uint64> {};
-            struct Step :          Column<4, NScheme::NTypeIds::Uint64> {};
-            struct TxId :          Column<5, NScheme::NTypeIds::Uint64> {};
-            struct Schema :        Column<6, NScheme::NTypeIds::String> {};
-
-            using TKey = TableKey<PathOwnerId, LocalPathId, SchemaVersion>;
-            using TColumns = TableColumns<PathOwnerId, LocalPathId, SchemaVersion, Step, TxId, Schema>;
-        };
-
+        struct SchemaSnapshots : Table<28> { 
+            struct PathOwnerId :   Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct LocalPathId :   Column<2, NScheme::NTypeIds::Uint64> {}; 
+            struct SchemaVersion : Column<3, NScheme::NTypeIds::Uint64> {}; 
+            struct Step :          Column<4, NScheme::NTypeIds::Uint64> {}; 
+            struct TxId :          Column<5, NScheme::NTypeIds::Uint64> {}; 
+            struct Schema :        Column<6, NScheme::NTypeIds::String> {}; 
+ 
+            using TKey = TableKey<PathOwnerId, LocalPathId, SchemaVersion>; 
+            using TColumns = TableColumns<PathOwnerId, LocalPathId, SchemaVersion, Step, TxId, Schema>; 
+        }; 
+ 
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
-            Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
+            Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts, 
             SrcChangeSenderActivations, DstChangeSenderActivations,
             ReplicationSourceOffsets, ReplicationSources, DstReplicationSourceOffsetsReceived,
-            UserTablesStats, SchemaSnapshots>;
+            UserTablesStats, SchemaSnapshots>; 
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -802,9 +802,9 @@ class TDataShard
             Sys_SubDomainLocalPathId, // 34 LocalPathId of the subdomain path id
             Sys_SubDomainOutOfSpace, // 35 Boolean flag indicating database is out of space
 
-            Sys_NextChangeRecordOrder, // 36 Next order of change record
-            Sys_LastChangeRecordGroup, // 37 Last group number of change records
-
+            Sys_NextChangeRecordOrder, // 36 Next order of change record 
+            Sys_LastChangeRecordGroup, // 37 Last group number of change records 
+ 
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,
@@ -919,9 +919,9 @@ class TDataShard
     void Handle(TEvDataShard::TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvConditionalEraseRowsRegistered::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvPrivate::TEvConditionalEraseRowsRegistered::TPtr& ev, const TActorContext& ctx); 
     void Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext& ctx);
@@ -939,18 +939,18 @@ class TDataShard
     void Handle(TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetS3Upload::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvStoreS3UploadId::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvGetS3Upload::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDataShard::TEvStoreS3UploadId::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev, const TActorContext& ctx); 
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx); 
 
-    void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvCancelRestore::TPtr &ev, const TActorContext &ctx);
-
+    void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvDataShard::TEvCancelRestore::TPtr &ev, const TActorContext &ctx); 
+ 
     void Handle(TEvTxProcessing::TEvStreamClearanceResponse::TPtr &ev, const TActorContext &ctx) {
         ForwardEventToOperation(ev, ctx);
     }
@@ -968,21 +968,21 @@ class TDataShard
     void Handle(TEvPrivate::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
-    // change sending
-    void Handle(TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx);
-    void ScheduleRequestChangeRecords(const TActorContext& ctx);
-    void ScheduleRemoveChangeRecords(const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvRequestChangeRecords::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvRemoveChangeRecords::TPtr& ev, const TActorContext& ctx);
-    // change receiving
-    void Handle(TEvChangeExchange::TEvHandshake::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TActorContext& ctx);
-    // activation
-    void Handle(TEvChangeExchange::TEvActivateSender::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvChangeExchange::TEvActivateSenderAck::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvChangeExchange::TEvSplitAck::TPtr& ev, const TActorContext& ctx);
-
+    // change sending 
+    void Handle(TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx); 
+    void ScheduleRequestChangeRecords(const TActorContext& ctx); 
+    void ScheduleRemoveChangeRecords(const TActorContext& ctx); 
+    void Handle(TEvPrivate::TEvRequestChangeRecords::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvPrivate::TEvRemoveChangeRecords::TPtr& ev, const TActorContext& ctx); 
+    // change receiving 
+    void Handle(TEvChangeExchange::TEvHandshake::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TActorContext& ctx); 
+    // activation 
+    void Handle(TEvChangeExchange::TEvActivateSender::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvChangeExchange::TEvActivateSenderAck::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvChangeExchange::TEvSplitAck::TPtr& ev, const TActorContext& ctx); 
+ 
     void Handle(TEvDataShard::TEvGetRemovedRowVersions::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvCompactBorrowed::TPtr& ev, const TActorContext& ctx);
@@ -1017,7 +1017,7 @@ class TDataShard
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
     void OnActivateExecutor(const TActorContext &ctx) override;
 
-    void Cleanup(const TActorContext &ctx);
+    void Cleanup(const TActorContext &ctx); 
     void SwitchToWork(const TActorContext &ctx);
     void SyncConfig();
 
@@ -1340,38 +1340,38 @@ public:
         return Executor()->Step();
     }
 
-    TSchemaOperation *FindSchemaTx(ui64 txId) { return TransQueue.FindSchemaTx(txId); }
+    TSchemaOperation *FindSchemaTx(ui64 txId) { return TransQueue.FindSchemaTx(txId); } 
 
-    TUserTable::TPtr AlterTableSchemaVersion(
-        const TActorContext& ctx, TTransactionContext& txc,
-        const TPathId& pathId, const ui64 tableSchemaVersion,
-        bool persist = true);
+    TUserTable::TPtr AlterTableSchemaVersion( 
+        const TActorContext& ctx, TTransactionContext& txc, 
+        const TPathId& pathId, const ui64 tableSchemaVersion, 
+        bool persist = true); 
 
-    TUserTable::TPtr AlterTableAddIndex(
-        const TActorContext& ctx, TTransactionContext& txc,
-        const TPathId& pathId, ui64 tableSchemaVersion,
+    TUserTable::TPtr AlterTableAddIndex( 
+        const TActorContext& ctx, TTransactionContext& txc, 
+        const TPathId& pathId, ui64 tableSchemaVersion, 
         const NKikimrSchemeOp::TIndexDescription& indexDesc);
-
-    TUserTable::TPtr AlterTableDropIndex(
-        const TActorContext& ctx, TTransactionContext& txc,
-        const TPathId& pathId, ui64 tableSchemaVersion,
-        const TPathId& indexPathId);
-
-    TUserTable::TPtr AlterTableAddCdcStream(
-        const TActorContext& ctx, TTransactionContext& txc,
-        const TPathId& pathId, ui64 tableSchemaVersion,
+ 
+    TUserTable::TPtr AlterTableDropIndex( 
+        const TActorContext& ctx, TTransactionContext& txc, 
+        const TPathId& pathId, ui64 tableSchemaVersion, 
+        const TPathId& indexPathId); 
+ 
+    TUserTable::TPtr AlterTableAddCdcStream( 
+        const TActorContext& ctx, TTransactionContext& txc, 
+        const TPathId& pathId, ui64 tableSchemaVersion, 
         const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
-
-    TUserTable::TPtr AlterTableDisableCdcStream(
-        const TActorContext& ctx, TTransactionContext& txc,
-        const TPathId& pathId, ui64 tableSchemaVersion,
-        const TPathId& streamPathId);
-
-    TUserTable::TPtr AlterTableDropCdcStream(
-        const TActorContext& ctx, TTransactionContext& txc,
-        const TPathId& pathId, ui64 tableSchemaVersion,
-        const TPathId& streamPathId);
-
+ 
+    TUserTable::TPtr AlterTableDisableCdcStream( 
+        const TActorContext& ctx, TTransactionContext& txc, 
+        const TPathId& pathId, ui64 tableSchemaVersion, 
+        const TPathId& streamPathId); 
+ 
+    TUserTable::TPtr AlterTableDropCdcStream( 
+        const TActorContext& ctx, TTransactionContext& txc, 
+        const TPathId& pathId, ui64 tableSchemaVersion, 
+        const TPathId& streamPathId); 
+ 
     TUserTable::TPtr CreateUserTable(TTransactionContext& txc, const NKikimrSchemeOp::TTableDescription& tableScheme);
     TUserTable::TPtr AlterUserTable(const TActorContext& ctx, TTransactionContext& txc,
                                     const NKikimrSchemeOp::TTableDescription& tableScheme);
@@ -1381,34 +1381,34 @@ public:
 
     ui32 GetLastLocalTid() const { return LastLocalTid; }
 
-    ui64 AllocateChangeRecordOrder(NIceDb::TNiceDb& db);
-    ui64 AllocateChangeRecordGroup(NIceDb::TNiceDb& db);
-    void PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record);
+    ui64 AllocateChangeRecordOrder(NIceDb::TNiceDb& db); 
+    ui64 AllocateChangeRecordGroup(NIceDb::TNiceDb& db); 
+    void PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record); 
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId& pathId);
-    void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
-    void EnqueueChangeRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records);
-    void CreateChangeSender(const TActorContext& ctx);
-    void KillChangeSender(const TActorContext& ctx);
-    void MaybeActivateChangeSender(const TActorContext& ctx);
-    const TActorId& GetChangeSender() const { return OutChangeSender; }
+    void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order); 
+    void EnqueueChangeRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records); 
+    void CreateChangeSender(const TActorContext& ctx); 
+    void KillChangeSender(const TActorContext& ctx); 
+    void MaybeActivateChangeSender(const TActorContext& ctx); 
+    const TActorId& GetChangeSender() const { return OutChangeSender; } 
     bool LoadChangeRecords(NIceDb::TNiceDb& db, TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>& changeRecords);
+ 
 
-
-    static void PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation& op);
+    static void PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation& op); 
     void NotifySchemeshard(const TActorContext& ctx, ui64 txId = 0);
-
+ 
     TThrRefBase* GetDataShardSysTables() { return DataShardSysTables.Get(); }
 
     TSnapshotManager& GetSnapshotManager() { return SnapshotManager; }
     const TSnapshotManager& GetSnapshotManager() const { return SnapshotManager; }
 
-    TSchemaSnapshotManager& GetSchemaSnapshotManager() { return SchemaSnapshotManager; }
-    const TSchemaSnapshotManager& GetSchemaSnapshotManager() const { return SchemaSnapshotManager; }
-
-    template <typename... Args>
-    bool PromoteCompleteEdge(Args&&... args) {
-        return SnapshotManager.PromoteCompleteEdge(std::forward<Args>(args)...);
-    }
+    TSchemaSnapshotManager& GetSchemaSnapshotManager() { return SchemaSnapshotManager; } 
+    const TSchemaSnapshotManager& GetSchemaSnapshotManager() const { return SchemaSnapshotManager; } 
+ 
+    template <typename... Args> 
+    bool PromoteCompleteEdge(Args&&... args) { 
+        return SnapshotManager.PromoteCompleteEdge(std::forward<Args>(args)...); 
+    } 
 
     TBuildIndexManager& GetBuildIndexManager() { return BuildIndexManager; }
     const TBuildIndexManager& GetBuildIndexManager() const { return BuildIndexManager; }
@@ -1441,8 +1441,8 @@ public:
     bool WaitPlanStep(ui64 step);
     bool CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const;
 
-    bool CheckChangesQueueOverflow() const;
-
+    bool CheckChangesQueueOverflow() const; 
+ 
 private:
     ///
     class TLoanReturnTracker {
@@ -1620,10 +1620,10 @@ private:
             return DataToSend.empty();
         }
 
-        bool Acked(ui64 dstTabletId) const {
-            return !DataToSend.contains(dstTabletId);
-        }
-
+        bool Acked(ui64 dstTabletId) const { 
+            return !DataToSend.contains(dstTabletId); 
+        } 
+ 
         bool Has(ui64 dstTabletId, TActorId pipeClientActorId) const {
             return PipesToDstShards.contains(dstTabletId) && *PipesToDstShards.FindPtr(dstTabletId) == pipeClientActorId;
         }
@@ -1641,141 +1641,141 @@ private:
         THashMap<ui64, TActorId> PipesToDstShards;
     };
 
-    ///
-    class TChangeSenderActivator {
-    public:
-        explicit TChangeSenderActivator(ui64 selfTabletId)
-            : Origin(selfTabletId)
+    /// 
+    class TChangeSenderActivator { 
+    public: 
+        explicit TChangeSenderActivator(ui64 selfTabletId) 
+            : Origin(selfTabletId) 
             , PipeRetryPolicy{
                 .RetryLimitCount = 20,
                 .MinRetryTime = TDuration::MilliSeconds(10),
                 .MaxRetryTime = TDuration::MilliSeconds(500),
                 .BackoffMultiplier = 2
             }
-        {
-        }
-
-        void AddDst(ui64 dstTabletId) {
-            Dst.insert(dstTabletId);
-        }
-
-        const THashSet<ui64>& GetDstSet() const {
-            return Dst;
-        }
-
-        void DoSend(ui64 dstTabletId, const TActorContext& ctx) {
-            Y_VERIFY(Dst.contains(dstTabletId));
-            NTabletPipe::TClientConfig clientConfig;
-            clientConfig.CheckAliveness = true;
-            clientConfig.RetryPolicy = PipeRetryPolicy;
-            PipesToDstShards[dstTabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, dstTabletId, clientConfig));
-
-            auto ev = MakeHolder<TEvChangeExchange::TEvActivateSender>();
-            ev->Record.SetOrigin(Origin);
-
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Activate change sender"
-                << ": origin# " << ev->Record.GetOrigin()
-                << ", dst# " << dstTabletId);
-
-            NTabletPipe::SendData(ctx, PipesToDstShards[dstTabletId], ev.Release());
-        }
-
-        bool Ack(ui64 dstTabletId, const TActorContext &ctx) {
-            if (!Dst.contains(dstTabletId)) {
-                return false;
-            }
-
-            NTabletPipe::CloseClient(ctx, PipesToDstShards[dstTabletId]);
-            PipesToDstShards.erase(dstTabletId);
-            Dst.erase(dstTabletId);
-
-            return true;
-        }
-
-        void AutoAck(ui64 dstTabletId, const TActorContext &ctx) {
-            if (!Ack(dstTabletId, ctx)) {
-                return;
-            }
-
-            auto ev = MakeHolder<TEvChangeExchange::TEvActivateSenderAck>();
-            ev->Record.SetOrigin(dstTabletId);
-            ctx.Send(ctx.SelfID, ev.Release());
-        }
-
-        bool AllAcked() const {
-            return Dst.empty();
-        }
-
-        bool Acked(ui64 dstTabletId) const {
-            return !Dst.contains(dstTabletId);
-        }
-
-        bool Has(ui64 dstTabletId, TActorId pipeClientActorId) const {
-            auto it = PipesToDstShards.find(dstTabletId);
-            if (it == PipesToDstShards.end()) {
-                return false;
-            }
-
-            return it->second == pipeClientActorId;
-        }
-
-        void Shutdown(const TActorContext &ctx) {
-            for (const auto& p : PipesToDstShards) {
-                NTabletPipe::CloseClient(ctx, p.second);
-            }
-        }
-
-        TString Dump() const {
-            return JoinSeq(", ", Dst);
-        }
-
-    private:
-        const ui64 Origin;
+        { 
+        } 
+ 
+        void AddDst(ui64 dstTabletId) { 
+            Dst.insert(dstTabletId); 
+        } 
+ 
+        const THashSet<ui64>& GetDstSet() const { 
+            return Dst; 
+        } 
+ 
+        void DoSend(ui64 dstTabletId, const TActorContext& ctx) { 
+            Y_VERIFY(Dst.contains(dstTabletId)); 
+            NTabletPipe::TClientConfig clientConfig; 
+            clientConfig.CheckAliveness = true; 
+            clientConfig.RetryPolicy = PipeRetryPolicy; 
+            PipesToDstShards[dstTabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, dstTabletId, clientConfig)); 
+ 
+            auto ev = MakeHolder<TEvChangeExchange::TEvActivateSender>(); 
+            ev->Record.SetOrigin(Origin); 
+ 
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Activate change sender" 
+                << ": origin# " << ev->Record.GetOrigin() 
+                << ", dst# " << dstTabletId); 
+ 
+            NTabletPipe::SendData(ctx, PipesToDstShards[dstTabletId], ev.Release()); 
+        } 
+ 
+        bool Ack(ui64 dstTabletId, const TActorContext &ctx) { 
+            if (!Dst.contains(dstTabletId)) { 
+                return false; 
+            } 
+ 
+            NTabletPipe::CloseClient(ctx, PipesToDstShards[dstTabletId]); 
+            PipesToDstShards.erase(dstTabletId); 
+            Dst.erase(dstTabletId); 
+ 
+            return true; 
+        } 
+ 
+        void AutoAck(ui64 dstTabletId, const TActorContext &ctx) { 
+            if (!Ack(dstTabletId, ctx)) { 
+                return; 
+            } 
+ 
+            auto ev = MakeHolder<TEvChangeExchange::TEvActivateSenderAck>(); 
+            ev->Record.SetOrigin(dstTabletId); 
+            ctx.Send(ctx.SelfID, ev.Release()); 
+        } 
+ 
+        bool AllAcked() const { 
+            return Dst.empty(); 
+        } 
+ 
+        bool Acked(ui64 dstTabletId) const { 
+            return !Dst.contains(dstTabletId); 
+        } 
+ 
+        bool Has(ui64 dstTabletId, TActorId pipeClientActorId) const { 
+            auto it = PipesToDstShards.find(dstTabletId); 
+            if (it == PipesToDstShards.end()) { 
+                return false; 
+            } 
+ 
+            return it->second == pipeClientActorId; 
+        } 
+ 
+        void Shutdown(const TActorContext &ctx) { 
+            for (const auto& p : PipesToDstShards) { 
+                NTabletPipe::CloseClient(ctx, p.second); 
+            } 
+        } 
+ 
+        TString Dump() const { 
+            return JoinSeq(", ", Dst); 
+        } 
+ 
+    private: 
+        const ui64 Origin; 
         NTabletPipe::TClientRetryPolicy PipeRetryPolicy;
-
-        THashSet<ui64> Dst;
-        THashMap<ui64, TActorId> PipesToDstShards;
-    };
-
-    class TChangeExchangeSplitter {
-    public:
-        explicit TChangeExchangeSplitter(const TDataShard* self)
-            : Self(self)
-        {
-        }
-
-        void AddDst(ui64 dstTabletId) {
-            DstTabletIds.insert(dstTabletId);
-        }
-
-        void DoSplit(const TActorContext& ctx) {
-            Y_VERIFY(DstTabletIds);
-            Worker = ctx.Register(CreateChangeExchangeSplit(Self, TVector<ui64>(DstTabletIds.begin(), DstTabletIds.end())));
-            Acked = false;
-        }
-
-        void Ack() {
-            Acked = true;
-        }
-
-        bool Done() const {
-            return !DstTabletIds || Acked;
-        }
-
-        void Shutdown(const TActorContext& ctx) {
-            if (Worker) {
-                ctx.Send(std::exchange(Worker, TActorId()), new TEvents::TEvPoisonPill());
-            }
-        }
-
-    private:
-        const TDataShard* Self;
-
-        THashSet<ui64> DstTabletIds;
-        TActorId Worker;
-        bool Acked = false;
-    };
-
+ 
+        THashSet<ui64> Dst; 
+        THashMap<ui64, TActorId> PipesToDstShards; 
+    }; 
+ 
+    class TChangeExchangeSplitter { 
+    public: 
+        explicit TChangeExchangeSplitter(const TDataShard* self) 
+            : Self(self) 
+        { 
+        } 
+ 
+        void AddDst(ui64 dstTabletId) { 
+            DstTabletIds.insert(dstTabletId); 
+        } 
+ 
+        void DoSplit(const TActorContext& ctx) { 
+            Y_VERIFY(DstTabletIds); 
+            Worker = ctx.Register(CreateChangeExchangeSplit(Self, TVector<ui64>(DstTabletIds.begin(), DstTabletIds.end()))); 
+            Acked = false; 
+        } 
+ 
+        void Ack() { 
+            Acked = true; 
+        } 
+ 
+        bool Done() const { 
+            return !DstTabletIds || Acked; 
+        } 
+ 
+        void Shutdown(const TActorContext& ctx) { 
+            if (Worker) { 
+                ctx.Send(std::exchange(Worker, TActorId()), new TEvents::TEvPoisonPill()); 
+            } 
+        } 
+ 
+    private: 
+        const TDataShard* Self; 
+ 
+        THashSet<ui64> DstTabletIds; 
+        TActorId Worker; 
+        bool Acked = false; 
+    }; 
+ 
     // For follower only
     struct TFollowerState {
         ui64 LastSchemeUpdate = 0;
@@ -1927,7 +1927,7 @@ private:
     std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> DstSplitDescription;
     std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> SrcSplitDescription;
     THashSet<TActorId> SrcAckSplitTo;
-    THashMap<TActorId, THashSet<ui64>> SrcAckPartitioningChangedTo;
+    THashMap<TActorId, THashSet<ui64>> SrcAckPartitioningChangedTo; 
     const ui32 SysTablesToTransferAtSplit[4] = {
             Schema::TxMain::TableId,
             Schema::TxDetails::TableId,
@@ -1941,8 +1941,8 @@ private:
     ui32 State;
     ui32 LastLocalTid;
     ui64 LastSeqno;
-    ui64 NextChangeRecordOrder;
-    ui64 LastChangeRecordGroup;
+    ui64 NextChangeRecordOrder; 
+    ui64 LastChangeRecordGroup; 
     ui64 TxReadSizeLimit;
     ui64 StatisticsDisabled;
     bool Stopping = false;
@@ -1960,15 +1960,15 @@ private:
     TSysLocks SysLocks;
 
     TSnapshotManager SnapshotManager;
-    TSchemaSnapshotManager SchemaSnapshotManager;
+    TSchemaSnapshotManager SchemaSnapshotManager; 
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
     TBuildIndexManager BuildIndexManager;
 
-    TS3UploadsManager S3Uploads;
-    TS3DownloadsManager S3Downloads;
-
+    TS3UploadsManager S3Uploads; 
+    TS3DownloadsManager S3Downloads; 
+ 
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
     TSet<ui64> MediatorTimeCastWaitingSteps;
 
@@ -1999,71 +1999,71 @@ private:
     // Simple volatile counter
     ui64 NextTieBreakerIndex = 1;
 
-    struct TInFlightCondErase {
-        ui64 TxId;
-        ui64 ScanId;
+    struct TInFlightCondErase { 
+        ui64 TxId; 
+        ui64 ScanId; 
         TActorId ActorId;
-        ui32 Condition;
-
-        TInFlightCondErase() {
-            Clear();
-        }
-
-        void Clear() {
-            TxId = 0;
-            ScanId = 0;
+        ui32 Condition; 
+ 
+        TInFlightCondErase() { 
+            Clear(); 
+        } 
+ 
+        void Clear() { 
+            TxId = 0; 
+            ScanId = 0; 
             ActorId = TActorId();
-            Condition = 0;
-        }
-
-        void Enqueue(ui64 txId, ui64 scanId, ui32 condition) {
-            TxId = txId;
-            ScanId = scanId;
-            Condition = condition;
-        }
-
-        explicit operator bool() const {
-            return bool(ScanId);
-        }
-
-        bool IsActive() const {
-            return bool(ActorId);
-        }
-    };
-
-    TInFlightCondErase InFlightCondErase;
-
-    /// change sending & receiving
-    struct TInChangeSender {
-        ui64 Generation;
-        ui64 LastRecordOrder;
-
-        explicit TInChangeSender(ui64 generation, ui64 lastRecordOrder = 0)
-            : Generation(generation)
-            , LastRecordOrder(lastRecordOrder)
-        {
-        }
-    };
-
-    using TRequestedRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
-
-    // split/merge
-    TChangeSenderActivator ChangeSenderActivator;
-    TChangeExchangeSplitter ChangeExchangeSplitter;
-    THashSet<ui64> ReceiveActivationsFrom;
-
-    // out
-    THashMap<TActorId, TSet<TRequestedRecord>> ChangeRecordsRequested;
-    TSet<ui64> ChangeRecordsToRemove; // ui64 is order
-    bool RequestChangeRecordsInFly = false;
-    bool RemoveChangeRecordsInFly = false;
-    THashMap<ui64, ui64> ChangesQueue; // order to size
-    ui64 ChangesQueueBytes = 0;
-    TActorId OutChangeSender;
-
-    // in
-    THashMap<ui64, TInChangeSender> InChangeSenders; // ui64 is shard id
-
+            Condition = 0; 
+        } 
+ 
+        void Enqueue(ui64 txId, ui64 scanId, ui32 condition) { 
+            TxId = txId; 
+            ScanId = scanId; 
+            Condition = condition; 
+        } 
+ 
+        explicit operator bool() const { 
+            return bool(ScanId); 
+        } 
+ 
+        bool IsActive() const { 
+            return bool(ActorId); 
+        } 
+    }; 
+ 
+    TInFlightCondErase InFlightCondErase; 
+ 
+    /// change sending & receiving 
+    struct TInChangeSender { 
+        ui64 Generation; 
+        ui64 LastRecordOrder; 
+ 
+        explicit TInChangeSender(ui64 generation, ui64 lastRecordOrder = 0) 
+            : Generation(generation) 
+            , LastRecordOrder(lastRecordOrder) 
+        { 
+        } 
+    }; 
+ 
+    using TRequestedRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo; 
+ 
+    // split/merge 
+    TChangeSenderActivator ChangeSenderActivator; 
+    TChangeExchangeSplitter ChangeExchangeSplitter; 
+    THashSet<ui64> ReceiveActivationsFrom; 
+ 
+    // out 
+    THashMap<TActorId, TSet<TRequestedRecord>> ChangeRecordsRequested; 
+    TSet<ui64> ChangeRecordsToRemove; // ui64 is order 
+    bool RequestChangeRecordsInFly = false; 
+    bool RemoveChangeRecordsInFly = false; 
+    THashMap<ui64, ui64> ChangesQueue; // order to size 
+    ui64 ChangesQueueBytes = 0; 
+    TActorId OutChangeSender; 
+ 
+    // in 
+    THashMap<ui64, TInChangeSender> InChangeSenders; // ui64 is shard id 
+ 
     // compactionId, tableId/ownerId, actorId
     using TCompactionWaiter = std::tuple<ui64, TPathId, TActorId>;
     using TCompactionWaiterList = TList<TCompactionWaiter>;
@@ -2138,13 +2138,13 @@ protected:
             HFuncTraced(TEvDataShard::TEvProposeTransaction, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransactionAttach, Handle);
             HFuncTraced(TEvDataShard::TEvCancelBackup, Handle);
-            HFuncTraced(TEvDataShard::TEvCancelRestore, Handle);
-            HFuncTraced(TEvDataShard::TEvGetS3Upload, Handle);
-            HFuncTraced(TEvDataShard::TEvStoreS3UploadId, Handle);
-            HFuncTraced(TEvDataShard::TEvChangeS3UploadStatus, Handle);
-            HFuncTraced(TEvDataShard::TEvGetS3DownloadInfo, Handle);
-            HFuncTraced(TEvDataShard::TEvStoreS3DownloadInfo, Handle);
-            HFuncTraced(TEvDataShard::TEvUnsafeUploadRowsRequest, Handle);
+            HFuncTraced(TEvDataShard::TEvCancelRestore, Handle); 
+            HFuncTraced(TEvDataShard::TEvGetS3Upload, Handle); 
+            HFuncTraced(TEvDataShard::TEvStoreS3UploadId, Handle); 
+            HFuncTraced(TEvDataShard::TEvChangeS3UploadStatus, Handle); 
+            HFuncTraced(TEvDataShard::TEvGetS3DownloadInfo, Handle); 
+            HFuncTraced(TEvDataShard::TEvStoreS3DownloadInfo, Handle); 
+            HFuncTraced(TEvDataShard::TEvUnsafeUploadRowsRequest, Handle); 
             HFuncTraced(TEvDataShard::TEvMigrateSchemeShardRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);
             HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
@@ -2181,9 +2181,9 @@ protected:
             HFunc(TEvDataShard::TEvS3ListingRequest, Handle);
             HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvDataShard::TEvUploadRowsRequest, Handle);
-            HFunc(TEvDataShard::TEvEraseRowsRequest, Handle);
-            HFunc(TEvDataShard::TEvConditionalEraseRowsRequest, Handle);
-            HFunc(TEvPrivate::TEvConditionalEraseRowsRegistered, Handle);
+            HFunc(TEvDataShard::TEvEraseRowsRequest, Handle); 
+            HFunc(TEvDataShard::TEvConditionalEraseRowsRequest, Handle); 
+            HFunc(TEvPrivate::TEvConditionalEraseRowsRegistered, Handle); 
             HFunc(TEvDataShard::TEvRead, Handle);
             HFunc(TEvDataShard::TEvReadContinue, Handle);
             HFunc(TEvDataShard::TEvReadAck, Handle);
@@ -2201,7 +2201,7 @@ protected:
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
-            HFunc(TEvPrivate::TEvAsyncJobComplete, Handle);
+            HFunc(TEvPrivate::TEvAsyncJobComplete, Handle); 
             CFunc(TEvPrivate::EvPeriodicWakeup, DoPeriodicTasks);
             HFunc(TEvents::TEvUndelivered, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
@@ -2210,15 +2210,15 @@ protected:
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);
-            HFunc(TEvChangeExchange::TEvRequestRecords, Handle);
-            HFunc(TEvChangeExchange::TEvRemoveRecords, Handle);
-            HFunc(TEvPrivate::TEvRequestChangeRecords, Handle);
-            HFunc(TEvPrivate::TEvRemoveChangeRecords, Handle);
-            HFunc(TEvChangeExchange::TEvHandshake, Handle);
-            HFunc(TEvChangeExchange::TEvApplyRecords, Handle);
-            HFunc(TEvChangeExchange::TEvActivateSender, Handle);
-            HFunc(TEvChangeExchange::TEvActivateSenderAck, Handle);
-            HFunc(TEvChangeExchange::TEvSplitAck, Handle);
+            HFunc(TEvChangeExchange::TEvRequestRecords, Handle); 
+            HFunc(TEvChangeExchange::TEvRemoveRecords, Handle); 
+            HFunc(TEvPrivate::TEvRequestChangeRecords, Handle); 
+            HFunc(TEvPrivate::TEvRemoveChangeRecords, Handle); 
+            HFunc(TEvChangeExchange::TEvHandshake, Handle); 
+            HFunc(TEvChangeExchange::TEvApplyRecords, Handle); 
+            HFunc(TEvChangeExchange::TEvActivateSender, Handle); 
+            HFunc(TEvChangeExchange::TEvActivateSenderAck, Handle); 
+            HFunc(TEvChangeExchange::TEvSplitAck, Handle); 
             HFunc(TEvDataShard::TEvGetRemovedRowVersions, Handle);
             HFunc(TEvDataShard::TEvCompactBorrowed, Handle);
             HFunc(TEvDataShard::TEvCompactTable, Handle);
@@ -2287,10 +2287,10 @@ protected:
         }
         Actors.clear();
 
-        KillChangeSender(ctx);
-        ChangeSenderActivator.Shutdown(ctx);
-        ChangeExchangeSplitter.Shutdown(ctx);
-
+        KillChangeSender(ctx); 
+        ChangeSenderActivator.Shutdown(ctx); 
+        ChangeExchangeSplitter.Shutdown(ctx); 
+ 
         StopFindSubDomainPathId();
         StopWatchingSubDomainPathId();
 

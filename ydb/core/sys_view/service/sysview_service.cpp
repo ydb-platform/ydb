@@ -26,7 +26,7 @@ void CollectQueryStats(const TActorContext& ctx, const NKqpProto::TKqpStatsQuery
     const TString& userSID, ui64 parametersSize, const TString& database,
     const NKikimrKqp::EQueryType type, ui64 requestUnits)
 {
-    if (!AppData()->FeatureFlags.GetEnableSystemViews()) {
+    if (!AppData()->FeatureFlags.GetEnableSystemViews()) { 
         return;
     }
 
@@ -339,7 +339,7 @@ public:
 
         ScanLimiter = MakeIntrusive<TScanLimiter>(ConcurrentScansLimit);
 
-        if (AppData()->FeatureFlags.GetEnablePersistentQueryStats()) {
+        if (AppData()->FeatureFlags.GetEnablePersistentQueryStats()) { 
             IntervalEnd = GetNextIntervalEnd();
             Schedule(IntervalEnd, new TEvPrivate::TEvProcessInterval(IntervalEnd));
         }
@@ -660,7 +660,7 @@ private:
     void Handle(TEvSysView::TEvGetIntervalMetricsRequest::TPtr& ev) {
         auto response = MakeHolder<TEvSysView::TEvGetIntervalMetricsResponse>();
 
-        if (!AppData()->FeatureFlags.GetEnablePersistentQueryStats()) {
+        if (!AppData()->FeatureFlags.GetEnablePersistentQueryStats()) { 
             Send(ev->Sender, std::move(response), 0, ev->Cookie);
             return;
         }
@@ -928,7 +928,7 @@ private:
             << ", query hash# " << stats->GetQueryTextHash()
             << ", cpu time# " << stats->GetTotalCpuTimeUs());
 
-        if (AppData()->FeatureFlags.GetEnablePersistentQueryStats() && !database.empty()) {
+        if (AppData()->FeatureFlags.GetEnablePersistentQueryStats() && !database.empty()) { 
             auto queryEnd = TInstant::MilliSeconds(stats->GetEndTimeMs());
             if (queryEnd < IntervalEnd - TotalInterval) {
                 return;

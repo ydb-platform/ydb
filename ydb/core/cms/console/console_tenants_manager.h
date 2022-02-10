@@ -46,7 +46,7 @@ private:
 public:
     using TUnitsCount = THashMap<std::pair<TString, TString>, ui64>;
     using TSlotsCount = THashMap<TSlotDescription, ui64>;
-    using TDomainId = TPathId;
+    using TDomainId = TPathId; 
 
     //////////////////////////////////////////////////
     // Counters
@@ -320,11 +320,11 @@ public:
             SetScopeId(Config, schemeShardId, pathId);
         }
 
-        void SetScopeId(const TDomainId& domainId)
-        {
-            SetScopeId(Config, domainId.OwnerId, domainId.LocalPathId);
-        }
-
+        void SetScopeId(const TDomainId& domainId) 
+        { 
+            SetScopeId(Config, domainId.OwnerId, domainId.LocalPathId); 
+        } 
+ 
         static void SetScopeId(NKikimrBlobStorage::TDefineStoragePool &config,
                                ui64 schemeShardId,
                                ui64 pathId)
@@ -514,13 +514,13 @@ public:
         // Current generation.
         ui64 Generation;
         // Subdomain ID.
-        TDomainId DomainId;
-        TDomainId SharedDomainId;
+        TDomainId DomainId; 
+        TDomainId SharedDomainId; 
         bool IsExternalSubdomain;
         bool IsExternalHive;
         bool IsExternalSysViewProcessor;
-        bool AreResourcesShared;
-        THashSet<TTenant::TPtr> HostedTenants;
+        bool AreResourcesShared; 
+        THashSet<TTenant::TPtr> HostedTenants; 
 
         TMaybe<Ydb::Cms::SchemaOperationQuotas> SchemaOperationQuotas;
         TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
@@ -738,7 +738,7 @@ public:
     TTenant::TPtr FindComputationalUnitKindUsage(const TString &kind, const TString &zone);
 
     TTenant::TPtr GetTenant(const TString &name);
-    TTenant::TPtr GetTenant(const TDomainId &domainId);
+    TTenant::TPtr GetTenant(const TDomainId &domainId); 
     void AddTenant(TTenant::TPtr tenant);
     void RemoveTenant(TTenant::TPtr tenant);
     void RemoveTenantFailed(TTenant::TPtr tenant,
@@ -986,7 +986,7 @@ private:
     TDomainsInfo::TDomain::TPtr Domain;
     TActorId TenantSlotBrokerPipe;
     THashMap<TString, TTenant::TPtr> Tenants;
-    THashMap<TDomainId, TString> TenantIdToName;
+    THashMap<TDomainId, TString> TenantIdToName; 
     THashMap<TString, TRemovedTenant> RemovedTenants;
     TTenantsConfig Config;
     TTxProcessor::TPtr TxProcessor;

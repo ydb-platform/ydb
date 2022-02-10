@@ -280,19 +280,19 @@ private:
 
         auto& entry = ResolveNamesResult->ResultSet.front();
 
-        for (const auto& index : entry.Indexes) {
-            switch (index.GetType()) {
-            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-                if (AppData(ctx)->FeatureFlags.GetEnableBulkUpsertToAsyncIndexedTables()) {
-                    continue;
-                } else {
-                    errorMessage = "Bulk upsert is not supported for tables with indexes";
-                    return false;
-                }
-            default:
-                errorMessage = "Only async-indexed tables are supported by BulkUpsert";
-                return false;
-            }
+        for (const auto& index : entry.Indexes) { 
+            switch (index.GetType()) { 
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync: 
+                if (AppData(ctx)->FeatureFlags.GetEnableBulkUpsertToAsyncIndexedTables()) { 
+                    continue; 
+                } else { 
+                    errorMessage = "Bulk upsert is not supported for tables with indexes"; 
+                    return false; 
+                } 
+            default: 
+                errorMessage = "Only async-indexed tables are supported by BulkUpsert"; 
+                return false; 
+            } 
         }
 
         TVector<ui32> keyColumnIds;
@@ -429,8 +429,8 @@ private:
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Invalid table path specified", ctx);
         }
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        entry.SyncVersion = true;
-        entry.ShowPrivatePath = AllowWriteToPrivateTable;
+        entry.SyncVersion = true; 
+        entry.ShowPrivatePath = AllowWriteToPrivateTable; 
         request->ResultSet.emplace_back(entry);
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
 

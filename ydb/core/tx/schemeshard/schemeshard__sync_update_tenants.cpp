@@ -90,9 +90,9 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
 
             Self->PersistParentDomainEffectiveACL(db, record.GetOwner(), record.GetEffectiveACL(), record.GetEffectiveACLVersion());
             for (const TPathId pathId : Self->ListSubThee(Self->RootPathId(), ctx)) {
-                SideEffects.PublishToSchemeBoard(InvalidOperationId, pathId);
-            }
-
+                SideEffects.PublishToSchemeBoard(InvalidOperationId, pathId); 
+            } 
+ 
             MakeSync();
         }
 

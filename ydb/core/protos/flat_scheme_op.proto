@@ -1,7 +1,7 @@
-import "ydb/core/protos/base.proto";
+import "ydb/core/protos/base.proto"; 
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/pqconfig.proto";
-import "ydb/core/protos/replication.proto";
+import "ydb/core/protos/replication.proto"; 
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/subdomains.proto";
@@ -285,40 +285,40 @@ message TShardIdx {
     optional uint64 LocalId = 2;
 }
 
-message TTTLSettings {
-    enum EUnit {
-        UNIT_AUTO = 0;
-        UNIT_SECONDS = 1;
-        UNIT_MILLISECONDS = 2;
-        UNIT_MICROSECONDS = 3;
-        UNIT_NANOSECONDS = 4;
-    }
-
-    message TSysSettings {
-        optional uint64 RunInterval = 1 [default = 3600000000]; // 1 hour
-        optional uint64 RetryInterval = 2 [default = 300000000]; // 5 minutes
-        optional uint32 BatchMaxBytes = 3 [default = 512000];
-        optional uint32 BatchMinKeys = 4 [default = 1];
-        optional uint32 BatchMaxKeys = 5 [default = 256];
-        optional uint32 MaxShardsInFlight = 6 [default = 1]; // zero means no limit
-    }
-
-    message TEnabled {
-        optional string ColumnName = 1;
+message TTTLSettings { 
+    enum EUnit { 
+        UNIT_AUTO = 0; 
+        UNIT_SECONDS = 1; 
+        UNIT_MILLISECONDS = 2; 
+        UNIT_MICROSECONDS = 3; 
+        UNIT_NANOSECONDS = 4; 
+    } 
+ 
+    message TSysSettings { 
+        optional uint64 RunInterval = 1 [default = 3600000000]; // 1 hour 
+        optional uint64 RetryInterval = 2 [default = 300000000]; // 5 minutes 
+        optional uint32 BatchMaxBytes = 3 [default = 512000]; 
+        optional uint32 BatchMinKeys = 4 [default = 1]; 
+        optional uint32 BatchMaxKeys = 5 [default = 256]; 
+        optional uint32 MaxShardsInFlight = 6 [default = 1]; // zero means no limit 
+    } 
+ 
+    message TEnabled { 
+        optional string ColumnName = 1; 
         optional uint32 ExpireAfterSeconds = 2;
-        optional EUnit ColumnUnit = 3;
-        optional TSysSettings SysSettings = 4;
-    }
-
-    message TDisabled {
-    }
-
-    oneof Status {
-        TEnabled Enabled = 1;
-        TDisabled Disabled = 2;
-    }
-}
-
+        optional EUnit ColumnUnit = 3; 
+        optional TSysSettings SysSettings = 4; 
+    } 
+ 
+    message TDisabled { 
+    } 
+ 
+    oneof Status { 
+        TEnabled Enabled = 1; 
+        TDisabled Disabled = 2; 
+    } 
+} 
+ 
 message TTableDescription {
     optional string Name = 1;
     optional uint64 Id_Deprecated = 2; // LocalPathId, deprecated
@@ -345,14 +345,14 @@ message TTableDescription {
 
     optional uint64 TableSchemaVersion = 33;
 
-    optional NKikimrProto.TPathID PathId = 34; // TPathId, owerride Id = 2
-
-    optional TTTLSettings TTLSettings = 35;
-
+    optional NKikimrProto.TPathID PathId = 34; // TPathId, owerride Id = 2 
+ 
+    optional TTTLSettings TTLSettings = 35; 
+ 
     optional bool OmitFollowers = 36 [default = false]; // used with CopyFromTable
-    optional bool IsBackup = 37 [default = false];
-
-    repeated TCdcStreamDescription CdcStreams = 38;
+    optional bool IsBackup = 37 [default = false]; 
+ 
+    repeated TCdcStreamDescription CdcStreams = 38; 
     repeated TSequenceDescription Sequences = 39;
 }
 
@@ -695,55 +695,55 @@ message TAlterLogin {
     }
 }
 
-enum ECdcStreamState {
-    ECdcStreamStateInvalid = 0;
-    ECdcStreamStateReady = 1;
-    ECdcStreamStateDisabled = 2;
-}
-
-enum ECdcStreamMode {
-    ECdcStreamModeInvalid = 0;
-    ECdcStreamModeKeysOnly = 1;
-    ECdcStreamModeUpdate = 2;
-    ECdcStreamModeNewImage = 3;
-    ECdcStreamModeOldImage = 4;
-    ECdcStreamModeNewAndOldImages = 5;
-}
-
-message TCdcStreamDescription {
-    optional string Name = 1;
-    optional ECdcStreamMode Mode = 2;
-    optional NKikimrProto.TPathID PathId = 3;
-    optional ECdcStreamState State = 4;
-    optional uint64 SchemaVersion = 5;
-}
-
-message TCreateCdcStream {
-    optional string TableName = 1;
-    optional TCdcStreamDescription StreamDescription = 2;
-}
-
-message TAlterCdcStream {
-    optional string TableName = 1;
-    optional string StreamName = 2;
-
-    message TDisable {
-    }
-
-    oneof Action {
-        TDisable Disable = 3;
-    }
-}
-
-message TDropCdcStream {
-    optional string TableName = 1;
-    optional string StreamName = 2;
-}
-
+enum ECdcStreamState { 
+    ECdcStreamStateInvalid = 0; 
+    ECdcStreamStateReady = 1; 
+    ECdcStreamStateDisabled = 2; 
+} 
+ 
+enum ECdcStreamMode { 
+    ECdcStreamModeInvalid = 0; 
+    ECdcStreamModeKeysOnly = 1; 
+    ECdcStreamModeUpdate = 2; 
+    ECdcStreamModeNewImage = 3; 
+    ECdcStreamModeOldImage = 4; 
+    ECdcStreamModeNewAndOldImages = 5; 
+} 
+ 
+message TCdcStreamDescription { 
+    optional string Name = 1; 
+    optional ECdcStreamMode Mode = 2; 
+    optional NKikimrProto.TPathID PathId = 3; 
+    optional ECdcStreamState State = 4; 
+    optional uint64 SchemaVersion = 5; 
+} 
+ 
+message TCreateCdcStream { 
+    optional string TableName = 1; 
+    optional TCdcStreamDescription StreamDescription = 2; 
+} 
+ 
+message TAlterCdcStream { 
+    optional string TableName = 1; 
+    optional string StreamName = 2; 
+ 
+    message TDisable { 
+    } 
+ 
+    oneof Action { 
+        TDisable Disable = 3; 
+    } 
+} 
+ 
+message TDropCdcStream { 
+    optional string TableName = 1; 
+    optional string StreamName = 2; 
+} 
+ 
 enum EIndexType {
     EIndexTypeInvalid = 0;
     EIndexTypeGlobal = 1;
-    EIndexTypeGlobalAsync = 2;
+    EIndexTypeGlobalAsync = 2; 
 }
 
 enum EIndexState {
@@ -767,8 +767,8 @@ message TIndexDescription {
     optional uint64 PathOwnerId = 7;
 
     repeated string DataColumnNames = 8;
-    // DataSize + IndexSize of indexImplTable
-    optional uint64 DataSize = 9;
+    // DataSize + IndexSize of indexImplTable 
+    optional uint64 DataSize = 9; 
 }
 
 message TIndexCreationConfig {
@@ -807,91 +807,91 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
 
     optional bool OmitIndexes = 3 [default = false];
     optional bool OmitFollowers = 4 [default = false];
-    optional bool IsBackup = 5 [default = false];
+    optional bool IsBackup = 5 [default = false]; 
 }
 
 message TConsistentTableCopyingConfig {
     repeated TCopyTableConfig CopyTableDescriptions = 1;
 }
 
-message TYTSettings {
-    optional string Host = 1;
-    optional string TablePattern = 2;
+message TYTSettings { 
+    optional string Host = 1; 
+    optional string TablePattern = 2; 
     optional string Token = 3;
-    optional uint32 Port = 4 [default = 80];
-
-    reserved 5; // YSONasText
-    reserved 6; // AddScheme
-    reserved 7; // CreateYTTable
-
-    optional bool UseTypeV3 = 8;
+    optional uint32 Port = 4 [default = 80]; 
+ 
+    reserved 5; // YSONasText 
+    reserved 6; // AddScheme 
+    reserved 7; // CreateYTTable 
+ 
+    optional bool UseTypeV3 = 8; 
 };
 
-message TS3Settings {
-    enum EScheme {
-        HTTP = 0;
-        HTTPS = 1;
-    }
-
-    optional string Endpoint = 1;
-    optional EScheme Scheme = 2 [default = HTTPS];
-    optional string Bucket = 3;
-    optional string ObjectKeyPattern = 4; // dst for backup, src for restore
-    optional string AccessKey = 5;
-    optional string SecretKey = 6;
-    optional Ydb.Export.ExportToS3Settings.StorageClass StorageClass = 7;
-
-    message TLimits {
-        optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB
-        optional uint32 WriteBatchSize = 2 [default = 67108864]; // 64 MB
-    };
-
-    optional TLimits Limits = 100;
-};
-
+message TS3Settings { 
+    enum EScheme { 
+        HTTP = 0; 
+        HTTPS = 1; 
+    } 
+ 
+    optional string Endpoint = 1; 
+    optional EScheme Scheme = 2 [default = HTTPS]; 
+    optional string Bucket = 3; 
+    optional string ObjectKeyPattern = 4; // dst for backup, src for restore 
+    optional string AccessKey = 5; 
+    optional string SecretKey = 6; 
+    optional Ydb.Export.ExportToS3Settings.StorageClass StorageClass = 7; 
+ 
+    message TLimits { 
+        optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB 
+        optional uint32 WriteBatchSize = 2 [default = 67108864]; // 64 MB 
+    }; 
+ 
+    optional TLimits Limits = 100; 
+}; 
+ 
 message TBackupTask {
     optional string TableName = 1;
-    optional uint64 TableId = 2;
+    optional uint64 TableId = 2; 
     optional uint32 ShardNum = 3;
     optional uint32 NumberOfRetries = 5;
-
-    reserved 6; // IfFailedBeforeTxId
-    reserved 7; // UserProvidedId
-    reserved 8; // UserProvidedComment
-
-    oneof Settings {
-        TYTSettings YTSettings = 4;
-        TS3Settings S3Settings = 9;
-    }
-
-    optional TPathDescription Table = 10; // for further restore
-
-    message TScanSettings {
-        optional uint64 RowsBatchSize = 1 [default = 0]; // no limit
-        optional uint64 BytesBatchSize = 2 [default = 67108864]; // 64 MB
-    }
-
-    optional TScanSettings ScanSettings = 11;
-    optional bool NeedToBill = 12;
+ 
+    reserved 6; // IfFailedBeforeTxId 
+    reserved 7; // UserProvidedId 
+    reserved 8; // UserProvidedComment 
+ 
+    oneof Settings { 
+        TYTSettings YTSettings = 4; 
+        TS3Settings S3Settings = 9; 
+    } 
+ 
+    optional TPathDescription Table = 10; // for further restore 
+ 
+    message TScanSettings { 
+        optional uint64 RowsBatchSize = 1 [default = 0]; // no limit 
+        optional uint64 BytesBatchSize = 2 [default = 67108864]; // 64 MB 
+    } 
+ 
+    optional TScanSettings ScanSettings = 11; 
+    optional bool NeedToBill = 12; 
 }
 
-message TRestoreTask {
-    optional string TableName = 1;
-    optional uint64 TableId = 2;
-    optional TTableDescription TableDescription = 3;
-    optional uint32 ShardNum = 4;
-    optional uint32 NumberOfRetries = 5;
-
-    oneof Settings {
-        TS3Settings S3Settings = 6;
-    }
-}
-
+message TRestoreTask { 
+    optional string TableName = 1; 
+    optional uint64 TableId = 2; 
+    optional TTableDescription TableDescription = 3; 
+    optional uint32 ShardNum = 4; 
+    optional uint32 NumberOfRetries = 5; 
+ 
+    oneof Settings { 
+        TS3Settings S3Settings = 6; 
+    } 
+} 
+ 
 message TPersQueueGroupDescription {
     message TPartition {
         optional uint32 PartitionId = 1;
         optional uint64 TabletId = 2;
-        optional NKikimrPQ.TPartitionKeyRange KeyRange = 3;
+        optional NKikimrPQ.TPartitionKeyRange KeyRange = 3; 
     }
 
     optional string Name = 1; // mandatory
@@ -909,14 +909,14 @@ message TPersQueueGroupDescription {
     repeated TPartition Partitions = 6; // do not set
     optional uint64 AlterVersion = 7;
     optional uint64 BalancerTabletID = 8;
-
-    // Can be passed upon creation.
-    // PQTabletConfig.PartitionKeySchema must be set.
-    // Size must be equal to TotalGroupCount - 1
-    repeated NKikimrMiniKQL.TValue PartitionBoundaries = 12;
-
-    // Can be passed upon creation
-    optional NKikimrPQ.TBootstrapConfig BootstrapConfig = 13;
+ 
+    // Can be passed upon creation. 
+    // PQTabletConfig.PartitionKeySchema must be set. 
+    // Size must be equal to TotalGroupCount - 1 
+    repeated NKikimrMiniKQL.TValue PartitionBoundaries = 12; 
+ 
+    // Can be passed upon creation 
+    optional NKikimrPQ.TBootstrapConfig BootstrapConfig = 13; 
 }
 
 message TRtmrVolumeDescription {
@@ -969,7 +969,7 @@ message TSolomonVolumeDescription {
         optional uint64 PartitionId = 1;
         optional uint64 TabletId = 2;
         optional uint64 ShardIdx = 3;
-        repeated NKikimrStoragePool.TChannelBind BoundChannels = 4;
+        repeated NKikimrStoragePool.TChannelBind BoundChannels = 4; 
     }
 
     optional string Name = 1; // mandatory
@@ -998,8 +998,8 @@ message TAlterSolomonVolume {
     optional uint32 ChannelProfileId = 2;
 
     optional uint64 PartitionCount = 3;
-
-    optional bool UpdateChannelsBinding = 4 [default = false];
+ 
+    optional bool UpdateChannelsBinding = 4 [default = false]; 
 }
 
 message TBlockStoreAssignOp {
@@ -1041,7 +1041,7 @@ message TMove { // private description of the operation
 
 message TSequenceDescription {
     optional string Name = 1; // mandatory
-    optional NKikimrProto.TPathID PathId = 2; // sequence path id, assigned by schemeshard
+    optional NKikimrProto.TPathID PathId = 2; // sequence path id, assigned by schemeshard 
     optional uint64 Version = 3; // incremented every time sequence is altered
     optional uint64 SequenceShard = 4; // current sequenceshard, assigned by schemeshard
 
@@ -1058,14 +1058,14 @@ message TSequenceSharding {
     repeated TShardIdx SequenceShards = 1;
 }
 
-message TReplicationDescription {
-    optional string Name = 1;
-    optional NKikimrReplication.TReplicationConfig Config = 2;
-    optional NKikimrProto.TPathID PathId = 3; // path id assigned by schemeshard
-    optional uint64 Version = 4;
-    optional uint64 ControllerId = 5; // replication controller's tablet id
-}
-
+message TReplicationDescription { 
+    optional string Name = 1; 
+    optional NKikimrReplication.TReplicationConfig Config = 2; 
+    optional NKikimrProto.TPathID PathId = 3; // path id assigned by schemeshard 
+    optional uint64 Version = 4; 
+    optional uint64 ControllerId = 5; // replication controller's tablet id 
+} 
+ 
 enum EOperationType {
     ESchemeOpMkDir = 1;
     ESchemeOpCreateTable = 2;
@@ -1134,8 +1134,8 @@ enum EOperationType {
     ESchemeOpCreateFileStore = 51;
     ESchemeOpAlterFileStore = 52;
     ESchemeOpDropFileStore = 53;
-
-    ESchemeOpRestore = 54;
+ 
+    ESchemeOpRestore = 54; 
 
     ESchemeOpCreateColumnStore = 55;
     ESchemeOpAlterColumnStore = 56;
@@ -1145,20 +1145,20 @@ enum EOperationType {
     ESchemeOpDropColumnTable = 60;
 
     ESchemeOpAlterLogin = 61;
-
-    /// CDC
-    // Create
-    ESchemeOpCreateCdcStream = 62;
-    ESchemeOpCreateCdcStreamImpl = 63;
-    ESchemeOpCreateCdcStreamAtTable = 64;
-    // Alter
-    ESchemeOpAlterCdcStream = 65;
-    ESchemeOpAlterCdcStreamImpl = 66;
-    ESchemeOpAlterCdcStreamAtTable = 67;
-    // Drop
-    ESchemeOpDropCdcStream = 68;
-    ESchemeOpDropCdcStreamImpl = 69;
-    ESchemeOpDropCdcStreamAtTable = 70;
+ 
+    /// CDC 
+    // Create 
+    ESchemeOpCreateCdcStream = 62; 
+    ESchemeOpCreateCdcStreamImpl = 63; 
+    ESchemeOpCreateCdcStreamAtTable = 64; 
+    // Alter 
+    ESchemeOpAlterCdcStream = 65; 
+    ESchemeOpAlterCdcStreamImpl = 66; 
+    ESchemeOpAlterCdcStreamAtTable = 67; 
+    // Drop 
+    ESchemeOpDropCdcStream = 68; 
+    ESchemeOpDropCdcStreamImpl = 69; 
+    ESchemeOpDropCdcStreamAtTable = 70; 
 
     ESchemeOpMoveTable = 71;
     ESchemeOpMoveTableIndex = 72;
@@ -1167,11 +1167,11 @@ enum EOperationType {
     ESchemeOpCreateSequence = 73;
     ESchemeOpAlterSequence = 74;
     ESchemeOpDropSequence = 75;
-
-    // Replication
-    ESchemeOpCreateReplication = 76;
-    ESchemeOpAlterReplication = 77;
-    ESchemeOpDropReplication = 78;
+ 
+    // Replication 
+    ESchemeOpCreateReplication = 76; 
+    ESchemeOpAlterReplication = 77; 
+    ESchemeOpDropReplication = 78; 
 }
 
 message TApplyIf {
@@ -1260,19 +1260,19 @@ message TModifyScheme {
     optional TIndexBuildControl CancelIndexBuild = 35;
     optional TFileStoreDescription CreateFileStore = 37;
     optional TFileStoreDescription AlterFileStore = 38;
-    optional TRestoreTask Restore = 39;
+    optional TRestoreTask Restore = 39; 
     optional TColumnStoreDescription CreateColumnStore = 40;
     optional TColumnTableDescription CreateColumnTable = 41;
     optional TAlterColumnStore AlterColumnStore = 42;
     optional TAlterColumnTable AlterColumnTable = 43;
     optional TAlterLogin AlterLogin = 44;
-    optional TCreateCdcStream CreateCdcStream = 45;
-    optional TAlterCdcStream AlterCdcStream = 46;
-    optional TDropCdcStream DropCdcStream = 47;
+    optional TCreateCdcStream CreateCdcStream = 45; 
+    optional TAlterCdcStream AlterCdcStream = 46; 
+    optional TDropCdcStream DropCdcStream = 47; 
     optional TMove MoveTable = 48;
     optional TMove MoveTableIndex = 49;
     optional TSequenceDescription Sequence = 51;
-    optional TReplicationDescription Replication = 52;
+    optional TReplicationDescription Replication = 52; 
 }
 
 // "Script", used by client to parse text files with multiple DDL commands
@@ -1288,7 +1288,7 @@ message TDescribeOptions {
     optional bool ReturnChildren = 5 [default = true];
     optional bool ReturnBoundaries = 6 [default = false];
     optional bool ShowPrivateTable = 7 [default = false];
-    optional bool ReturnChannelsBinding = 8 [default = false];
+    optional bool ReturnChannelsBinding = 8 [default = false]; 
 }
 
 // Request to read scheme for a specific path
@@ -1323,18 +1323,18 @@ enum EPathType {
     EPathTypeFileStore = 11;
     EPathTypeColumnStore = 12;
     EPathTypeColumnTable = 13;
-    EPathTypeCdcStream = 14;
+    EPathTypeCdcStream = 14; 
     EPathTypeSequence = 15;
-    EPathTypeReplication = 16;
+    EPathTypeReplication = 16; 
 }
 
-enum EPathSubType {
-    EPathSubTypeEmpty = 0;
-    EPathSubTypeSyncIndexImplTable = 1;
-    EPathSubTypeAsyncIndexImplTable = 2;
-    EPathSubTypeStreamImpl = 3;
-}
-
+enum EPathSubType { 
+    EPathSubTypeEmpty = 0; 
+    EPathSubTypeSyncIndexImplTable = 1; 
+    EPathSubTypeAsyncIndexImplTable = 2; 
+    EPathSubTypeStreamImpl = 3; 
+} 
+ 
 enum EPathState {
     EPathStateNotExist = 1;
     EPathStateNoChanges = 2;
@@ -1345,7 +1345,7 @@ enum EPathState {
     EPathStateBackup = 7;
     EPathStateUpgrade = 8;
     EPathStateMigrated = 9;
-    EPathStateRestore = 10;
+    EPathStateRestore = 10; 
     EPathStateMoving = 11;
 }
 
@@ -1372,10 +1372,10 @@ message TPathVersion {
     optional uint64 SubDomainStateVersion = 19;
     optional uint64 ColumnTableSchemaVersion = 20;
     optional uint64 ColumnTableTtlSettingsVersion = 21;
-    optional uint64 CdcStreamVersion = 22;
+    optional uint64 CdcStreamVersion = 22; 
     optional uint64 SecurityStateVersion = 23;
     optional uint64 SequenceVersion = 24;
-    optional uint64 ReplicationVersion = 25;
+    optional uint64 ReplicationVersion = 25; 
 }
 
 // Describes single path
@@ -1393,7 +1393,7 @@ message TDirEntry {
     optional bytes ACL = 11;
     optional bytes EffectiveACL = 12;
     optional uint64 PathVersion = 13;
-    optional EPathSubType PathSubType = 14;
+    optional EPathSubType PathSubType = 14; 
     optional TPathVersion Version = 15;
 
     optional uint64 BalancerTabletID = 999; //temporary optimization for old PQ read/write protocol. Must be removed later
@@ -1418,7 +1418,7 @@ message TBackupProgress {
     optional uint32 ErrorCount = 3;
     optional uint64 StartTime = 4;
     repeated TShardError Errors = 5;
-    optional TYTSettings YTSettings = 6;
+    optional TYTSettings YTSettings = 6; 
     optional uint64 DataTotalSize = 7;
     optional uint64 TxId = 8;
 }
@@ -1428,7 +1428,7 @@ message TLastBackupResult {
     optional uint64 CompleteTimeStamp = 2;
     optional uint64 StartTimeStamp = 3;
     repeated TShardError Errors = 4;
-    optional TYTSettings YTSettings = 5;
+    optional TYTSettings YTSettings = 5; 
     optional uint64 DataTotalSize = 6;
     optional uint64 TxId = 7;
 };
@@ -1457,9 +1457,9 @@ message TPathDescription {
     optional TFileStoreDescription FileStoreDescription = 20;
     optional TColumnStoreDescription ColumnStoreDescription = 21;
     optional TColumnTableDescription ColumnTableDescription = 22;
-    optional TCdcStreamDescription CdcStreamDescription = 23;
+    optional TCdcStreamDescription CdcStreamDescription = 23; 
     optional TSequenceDescription SequenceDescription = 24;
-    optional TReplicationDescription ReplicationDescription = 25;
+    optional TReplicationDescription ReplicationDescription = 25; 
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB

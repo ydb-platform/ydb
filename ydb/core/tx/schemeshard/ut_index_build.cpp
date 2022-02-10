@@ -195,18 +195,18 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                               "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
 
-        const auto attrs = AlterUserAttrs({
-            {"cloud_id", "CLOUD_ID_VAL"},
-            {"folder_id", "FOLDER_ID_VAL"},
-            {"database_id", "DATABASE_ID_VAL"}
-        });
-
-        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            Name: "ServerLessDB"
-            ResourcesDomainKey {
-                SchemeShard: %lu
-                PathId: 2
-            }
+        const auto attrs = AlterUserAttrs({ 
+            {"cloud_id", "CLOUD_ID_VAL"}, 
+            {"folder_id", "FOLDER_ID_VAL"}, 
+            {"database_id", "DATABASE_ID_VAL"} 
+        }); 
+ 
+        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"( 
+            Name: "ServerLessDB" 
+            ResourcesDomainKey { 
+                SchemeShard: %lu 
+                PathId: 2 
+            } 
         )", TTestTxConfig::SchemeShard), attrs);
         env.TestWaitNotification(runtime, txId);
 
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         }
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE); 
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
                            {NLs::PathExist,
@@ -291,9 +291,9 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         auto descr = TestGetBuilIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
         Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
 
-        const TString meteringData = R"({"usage":{"start":0,"quantity":179,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-9437199-2-101-1818-101-1818","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
-
-        UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData + "\n");
+        const TString meteringData = R"({"usage":{"start":0,"quantity":179,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-9437199-2-101-1818-101-1818","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})"; 
+ 
+        UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData + "\n"); 
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
                            {NLs::PathExist,
@@ -308,10 +308,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         listing = TestListBuilIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
         Y_ASSERT(listing.EntriesSize() == 0);
 
-        TestDropTableIndex(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
-            TableName: "Table"
-            IndexName: "index1"
-        )");
+        TestDropTableIndex(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"( 
+            TableName: "Table" 
+            IndexName: "index1" 
+        )"); 
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
@@ -337,65 +337,65 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         TestBuilIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index2", {"index"});
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        // CommonDB
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
-                               "Name: \"CommonDB\"");
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
-                              "StoragePools { "
-                              "  Name: \"pool-3\" "
-                              "  Kind: \"pool-kind-3\" "
-                              "} "
-                              "PlanResolution: 50 "
-                              "Coordinators: 1 "
-                              "Mediators: 1 "
-                              "TimeCastBucketsPerMediator: 2 "
-                              "ExternalSchemeShard: true "
-                              "Name: \"CommonDB\"");
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/CommonDB"),
-                           {NLs::PathExist,
-                            NLs::IsExternalSubDomain("CommonDB"),
-                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
-
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/CommonDB", R"(
-              Name: "Table"
-              Columns { Name: "key"     Type: "Uint32" }
-              Columns { Name: "index"   Type: "Uint32" }
-              Columns { Name: "value"   Type: "Utf8"   }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        for (ui32 delta = 0; delta < 101; ++delta) {
+ 
+        // CommonDB 
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", 
+                               "Name: \"CommonDB\""); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", 
+                              "StoragePools { " 
+                              "  Name: \"pool-3\" " 
+                              "  Kind: \"pool-kind-3\" " 
+                              "} " 
+                              "PlanResolution: 50 " 
+                              "Coordinators: 1 " 
+                              "Mediators: 1 " 
+                              "TimeCastBucketsPerMediator: 2 " 
+                              "ExternalSchemeShard: true " 
+                              "Name: \"CommonDB\""); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/CommonDB"), 
+                           {NLs::PathExist, 
+                            NLs::IsExternalSubDomain("CommonDB"), 
+                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)}); 
+ 
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/CommonDB", R"( 
+              Name: "Table" 
+              Columns { Name: "key"     Type: "Uint32" } 
+              Columns { Name: "index"   Type: "Uint32" } 
+              Columns { Name: "value"   Type: "Utf8"   } 
+              KeyColumnNames: ["key"] 
+        )"); 
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard); 
+ 
+        for (ui32 delta = 0; delta < 101; ++delta) { 
             fnWriteRow(TTestTxConfig::FakeHiveTablets + 12, 1 + delta, 1000 + delta, "aaaa", "Table");
-        }
-
-        TVector<TString> billRecords;
-        runtime.SetObserverFunc([&billRecords](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
-            if (ev->Type == NMetering::TEvMetering::TEvWriteMeteringJson::EventType) {
-                auto* msg = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>();
-                billRecords.push_back(msg->MeteringJson);
-            }
-
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-
-        TestBuilIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/CommonDB", "/MyRoot/CommonDB/Table", "index1", {"index"});
-        builIndexId = txId;
-
-        listing = TestListBuilIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
-        Y_ASSERT(listing.EntriesSize() == 1);
-
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        descr = TestGetBuilIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB", txId);
-        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
-
-        UNIT_ASSERT(billRecords.empty());
+        } 
+ 
+        TVector<TString> billRecords; 
+        runtime.SetObserverFunc([&billRecords](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) { 
+            if (ev->Type == NMetering::TEvMetering::TEvWriteMeteringJson::EventType) { 
+                auto* msg = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>(); 
+                billRecords.push_back(msg->MeteringJson); 
+            } 
+ 
+            return TTestActorRuntime::EEventAction::PROCESS; 
+        }); 
+ 
+        TestBuilIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/CommonDB", "/MyRoot/CommonDB/Table", "index1", {"index"}); 
+        builIndexId = txId; 
+ 
+        listing = TestListBuilIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB"); 
+        Y_ASSERT(listing.EntriesSize() == 1); 
+ 
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard); 
+ 
+        descr = TestGetBuilIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB", txId); 
+        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE); 
+ 
+        UNIT_ASSERT(billRecords.empty()); 
     }
 
     Y_UNIT_TEST(CancellationNotEnoughRetries) {
@@ -571,10 +571,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         auto listing = TestListBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         Y_ASSERT(listing.EntriesSize() == 0);
 
-        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
-            TableName: "WithFollowers"
-            IndexName: "UserDefinedIndexByValue0"
-        )");
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"( 
+            TableName: "WithFollowers" 
+            IndexName: "UserDefinedIndexByValue0" 
+        )"); 
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/WithFollowers"),
@@ -681,10 +681,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                        {NKikimrScheme::StatusMultipleModifications});
         env.TestWaitNotification(runtime, txId);
 
-        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
-            TableName: "Table"
-            IndexName: "nameOK"
-        )", {NKikimrScheme::StatusMultipleModifications});
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"( 
+            TableName: "Table" 
+            IndexName: "nameOK" 
+        )", {NKikimrScheme::StatusMultipleModifications}); 
         env.TestWaitNotification(runtime, txId);
 
         TestDropTable(runtime, ++txId, "/MyRoot", "Table",
@@ -746,28 +746,28 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                            {NLs::Finished,
                             NLs::PathVersionEqual(3),
                             NLs::IndexesCount(2)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"), 
                            {NLs::Finished,
                             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
                             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                             NLs::IndexKeys({"value0"})});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"), 
                            {NLs::Finished,
                             NLs::PathVersionEqual(3)});
 
-        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
-            TableName: "Table"
-            IndexName: "UserDefinedIndexByValue0"
-        )");
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"( 
+            TableName: "Table" 
+            IndexName: "UserDefinedIndexByValue0" 
+        )"); 
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::Finished,
                             NLs::PathVersionEqual(5),
                             NLs::IndexesCount(1)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"), 
                            {NLs::PathNotExist});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"), 
                            {NLs::PathNotExist});
 
         TestCopyTable(runtime, ++txId, "/MyRoot", "Copy", "/MyRoot/Table");
@@ -777,9 +777,9 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                            {NLs::Finished,
                             NLs::PathVersionEqual(5),
                             NLs::IndexesCount(1)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue1"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue1"), 
                            {NLs::PathExist});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue1/indexImplTable"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue1/indexImplTable"), 
                            {NLs::PathExist});
 
 
@@ -814,50 +814,50 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                            {NLs::Finished,
                             NLs::PathVersionEqual(3),
                             NLs::IndexesCount(1)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"), 
                            {NLs::Finished,
                             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
                             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                             NLs::IndexKeys({"value0"})});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"), 
                            {NLs::Finished,
                             NLs::PathVersionEqual(3)});
 
-        TestDropTableIndex(runtime, ++txId, "/MyRoot/NotExist", R"(
-            TableName: "Table"
-            IndexName: "UserDefinedIndexByValue0"
-        )", {NKikimrScheme::StatusPathDoesNotExist});
+        TestDropTableIndex(runtime, ++txId, "/MyRoot/NotExist", R"( 
+            TableName: "Table" 
+            IndexName: "UserDefinedIndexByValue0" 
+        )", {NKikimrScheme::StatusPathDoesNotExist}); 
         env.TestWaitNotification(runtime, txId);
 
-        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
-            TableName: "NotExist"
-            IndexName: "UserDefinedIndexByValue0"
-        )", {NKikimrScheme::StatusPathDoesNotExist});
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"( 
+            TableName: "NotExist" 
+            IndexName: "UserDefinedIndexByValue0" 
+        )", {NKikimrScheme::StatusPathDoesNotExist}); 
         env.TestWaitNotification(runtime, txId);
 
-        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
-            TableName: "Table"
-            IndexName: "NotExist"
-        )", {NKikimrScheme::StatusPathDoesNotExist});
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"( 
+            TableName: "Table" 
+            IndexName: "NotExist" 
+        )", {NKikimrScheme::StatusPathDoesNotExist}); 
         env.TestWaitNotification(runtime, txId);
 
-        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
-            TableName: "Table"
-            IndexName: "UserDefinedIndexByValue0"
-        )");
-        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
-            TableName: "Table"
-            IndexName: "UserDefinedIndexByValue0"
-        )", {NKikimrScheme::StatusMultipleModifications});
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"( 
+            TableName: "Table" 
+            IndexName: "UserDefinedIndexByValue0" 
+        )"); 
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"( 
+            TableName: "Table" 
+            IndexName: "UserDefinedIndexByValue0" 
+        )", {NKikimrScheme::StatusMultipleModifications}); 
         env.TestWaitNotification(runtime, {txId, txId - 1});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::Finished,
                             NLs::PathVersionEqual(5),
                             NLs::IndexesCount(0)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"), 
                            {NLs::PathNotExist});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"), 
                            {NLs::PathNotExist});
 
         TestDropTable(runtime, ++txId, "/MyRoot", "Table");

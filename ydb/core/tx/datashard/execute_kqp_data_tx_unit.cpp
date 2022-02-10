@@ -155,13 +155,13 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             DataShard.PromoteCompleteEdge(writeVersion.Step, txc);
         }
 
-        if (auto changes = dataTx->GetCollectedChanges()) {
-            op->ChangeRecords().reserve(changes.size());
-            for (const auto& change : changes) {
-                op->ChangeRecords().emplace_back(change.Order(), change.PathId(), change.BodySize());
-            }
-        }
-
+        if (auto changes = dataTx->GetCollectedChanges()) { 
+            op->ChangeRecords().reserve(changes.size()); 
+            for (const auto& change : changes) { 
+                op->ChangeRecords().emplace_back(change.Order(), change.PathId(), change.BodySize()); 
+            } 
+        } 
+ 
         KqpUpdateDataShardStatCounters(DataShard, dataTx->GetCounters());
         auto statsMode = kqpTx.GetRuntimeSettings().GetStatsMode();
         if (statsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC) {

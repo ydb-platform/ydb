@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
             { 3, "::2", "localhost", "localhost", 1, TNodeLocation() };
 
         TClusterInfo cluster;
-        cluster.AddNode(node1, nullptr);
+        cluster.AddNode(node1, nullptr); 
         UNIT_ASSERT(cluster.HasNode(1));
         UNIT_ASSERT(!cluster.HasNode(2));
         UNIT_ASSERT(cluster.HasNode("test1"));
@@ -272,14 +272,14 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT_VALUES_EQUAL(cluster.HostNodes("test1").size(), 1);
         CheckNode(cluster.Node(1), 1, "test1", "::1", EState::UNKNOWN);
 
-        cluster.AddNode(node2, nullptr);
+        cluster.AddNode(node2, nullptr); 
         UNIT_ASSERT(cluster.HasNode(1));
         UNIT_ASSERT(!cluster.HasNode("test1"));
         UNIT_ASSERT(cluster.HasNode("test2"));
         UNIT_ASSERT_VALUES_EQUAL(cluster.HostNodes("test2").size(), 1);
         CheckNode(cluster.Node(1), 1, "test2", "::1", EState::UNKNOWN);
 
-        cluster.AddNode(node3, nullptr);
+        cluster.AddNode(node3, nullptr); 
         UNIT_ASSERT(cluster.HasNode(2));
         UNIT_ASSERT(cluster.HasNode("localhost"));
         UNIT_ASSERT_VALUES_EQUAL(cluster.NodesCount("localhost"), 1);
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT_VALUES_EQUAL(cluster.HostNodes("localhost")[0]->NodeId, 2);
         CheckNode(cluster.Node(2), 2, "localhost", "::2", EState::UNKNOWN);
 
-        cluster.AddNode(node4, nullptr);
+        cluster.AddNode(node4, nullptr); 
         UNIT_ASSERT(cluster.HasNode(3));
         UNIT_ASSERT_VALUES_EQUAL(cluster.NodesCount("localhost"), 2);
 
@@ -374,7 +374,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
 
         permission.Action.SetHost("2");
         permission.Deadline = now - TDuration::Seconds(30);
-        cluster.SetNodeState(2, DOWN, MakeSystemStateInfo("1"));
+        cluster.SetNodeState(2, DOWN, MakeSystemStateInfo("1")); 
         UNIT_ASSERT_VALUES_EQUAL(cluster.AddLocks(permission, nullptr), 1);
         UNIT_ASSERT_VALUES_EQUAL(cluster.Node(2).State, EState::RESTART);
         UNIT_ASSERT_VALUES_EQUAL(cluster.Node(2).Lock->ActionDeadline, now + TDuration::Seconds(30));

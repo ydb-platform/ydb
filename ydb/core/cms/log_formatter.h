@@ -101,14 +101,14 @@ template<> template<>
 TString TLogFormatter<NKikimrCms::TEXT_FORMAT_SHORT>::FormatData(const NKikimrCms::TLogRecordData::TPDiskMonitorAction &data)
 {
     TStringStream ss;
-    ss << "Send command to BS_CONTROLLER to change status of PDisk "
+    ss << "Send command to BS_CONTROLLER to change status of PDisk " 
        << data.GetPDiskId().GetNodeId() << ":" << data.GetPDiskId().GetDiskId()
-       << " at " << (data.HasHost() ? data.GetHost() : "<undefined>")
+       << " at " << (data.HasHost() ? data.GetHost() : "<undefined>") 
        << " from " << data.GetCurrentStatus()
        << " to " << data.GetRequiredStatus();
-    if (data.HasReason()) {
-        ss << "(" << data.GetReason() << ")";
-    }
+    if (data.HasReason()) { 
+        ss << "(" << data.GetReason() << ")"; 
+    } 
     return ss.Str();
 }
 

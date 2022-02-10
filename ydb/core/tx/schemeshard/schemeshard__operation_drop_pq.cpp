@@ -241,11 +241,11 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
         context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-        context.OnComplete.ActivateTx(OperationId);
-
+        context.OnComplete.PublishToSchemeBoard(OperationId, pathId); 
+ 
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done); 
+        context.OnComplete.ActivateTx(OperationId); 
+ 
         return true;
     }
 
@@ -267,8 +267,8 @@ public:
 
 
 class TDropPQ: public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
+    const TOperationId OperationId; 
+    const TTxTransaction Transaction; 
     TTxState::ETxState State = TTxState::Invalid;
 
     TTxState::ETxState NextState() {
@@ -282,8 +282,8 @@ class TDropPQ: public TSubOperation {
             return TTxState::DeleteParts;
         case TTxState::DeleteParts:
             return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::Done;
+        case TTxState::Propose: 
+            return TTxState::Done; 
         default:
             return TTxState::Invalid;
         }
@@ -299,8 +299,8 @@ class TDropPQ: public TSubOperation {
             return THolder(new TDeleteParts(OperationId));
         case TTxState::Propose:
             return THolder(new TPropose(OperationId));
-        case TTxState::Done:
-            return THolder(new TDone(OperationId));
+        case TTxState::Done: 
+            return THolder(new TDone(OperationId)); 
         default:
             return nullptr;
         }
@@ -316,11 +316,11 @@ class TDropPQ: public TSubOperation {
     }
 
 public:
-    TDropPQ(TOperationId id, const TTxTransaction& tx)
+    TDropPQ(TOperationId id, const TTxTransaction& tx) 
         : OperationId(id)
-        , Transaction(tx)
-    {
-    }
+        , Transaction(tx) 
+    { 
+    } 
 
     TDropPQ(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
@@ -366,11 +366,11 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& drop = Transaction.GetDrop();
+        const auto& drop = Transaction.GetDrop(); 
 
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = drop.GetName();
-
+        const TString& parentPathStr = Transaction.GetWorkingDir(); 
+        const TString& name = drop.GetName(); 
+ 
         NKikimrSchemeOp::EDropWaitPolicy dropPolicy = drop.HasWaitPolicy() ? drop.GetWaitPolicy() : NKikimrSchemeOp::EDropFailOnChanges;
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -388,15 +388,15 @@ public:
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks 
+                .NotEmpty() 
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
                 .NotUnderOperation()
-                .IsPQGroup();
+                .IsPQGroup(); 
 
             if (checks) {
                 if (dropPolicy == NKikimrSchemeOp::EDropFailOnChanges) {
@@ -417,45 +417,45 @@ public:
             }
         }
 
-        TPath parent = path.Parent();
-        {
-            TPath::TChecker checks = parent.Check();
-            checks
-                .NotEmpty()
-                .IsResolved()
-                .NotDeleted();
-
-            if (checks) {
-                if (parent.Base()->IsCdcStream()) {
-                    checks
-                        .IsCdcStream()
-                        .IsInsideCdcStreamPath()
-                        .IsUnderDeleting(TEvSchemeShard::EStatus::StatusNameConflict)
-                        .IsUnderTheSameOperation(OperationId.GetTxId());
-                } else {
-                    checks
-                        .IsLikeDirectory()
-                        .IsCommonSensePath()
-                        .NotUnderDeleting();
-                }
-            }
-
-            if (!checks) {
-                TString explain = TStringBuilder() << "parent path fail checks"
-                                                   << ", path: " << parent.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
-                return result;
-            }
-        }
-
+        TPath parent = path.Parent(); 
+        { 
+            TPath::TChecker checks = parent.Check(); 
+            checks 
+                .NotEmpty() 
+                .IsResolved() 
+                .NotDeleted(); 
+ 
+            if (checks) { 
+                if (parent.Base()->IsCdcStream()) { 
+                    checks 
+                        .IsCdcStream() 
+                        .IsInsideCdcStreamPath() 
+                        .IsUnderDeleting(TEvSchemeShard::EStatus::StatusNameConflict) 
+                        .IsUnderTheSameOperation(OperationId.GetTxId()); 
+                } else { 
+                    checks 
+                        .IsLikeDirectory() 
+                        .IsCommonSensePath() 
+                        .NotUnderDeleting(); 
+                } 
+            } 
+ 
+            if (!checks) { 
+                TString explain = TStringBuilder() << "parent path fail checks" 
+                                                   << ", path: " << parent.PathString(); 
+                auto status = checks.GetStatus(&explain); 
+                result->SetError(status, explain); 
+                return result; 
+            } 
+        } 
+ 
         if (dropPolicy != NKikimrSchemeOp::EDropFailOnChanges) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "drop policy isn't supported");
             return result;
         }
 
-        TString errStr;
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+        TString errStr; 
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -501,16 +501,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TDropPQ");
-    }
-
+    void AbortPropose(TOperationContext&) override { 
+        Y_FAIL("no AbortPropose for TDropPQ"); 
+    } 
+ 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropPQ AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->TabletID()); 
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
@@ -535,12 +535,12 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropPQ(TOperationId id, const TTxTransaction& tx) {
-    return new TDropPQ(id, tx);
-}
-
+ISubOperationBase::TPtr CreateDropPQ(TOperationId id, const TTxTransaction& tx) { 
+    return new TDropPQ(id, tx); 
+} 
+ 
 ISubOperationBase::TPtr CreateDropPQ(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_VERIFY(state != TTxState::Invalid); 
     return new TDropPQ(id, state);
 }
 

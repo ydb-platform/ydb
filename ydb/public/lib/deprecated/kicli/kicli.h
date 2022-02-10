@@ -578,7 +578,7 @@ public:
         OlapStore,
         OlapTable,
         Sequence,
-        Replication,
+        Replication, 
     };
 
     TSchemaObject(TSchemaObject&&) = default;
@@ -693,8 +693,8 @@ public:
                                            const TString &host,
                                            const TString &tenant,
                                            const TString &nodeType,
-                                           const TString& domain = "",
-                                           const TString& token = "") const;
+                                           const TString& domain = "", 
+                                           const TString& token = "") const; 
 
 private:
     TNodeConfigurator(TKikimr& kikimr);
@@ -798,8 +798,8 @@ protected:
                                                const TString &host,
                                                const TString &tenant,
                                                const TString &nodeType,
-                                               const TString& domain,
-                                               const TString& token = TString());
+                                               const TString& domain, 
+                                               const TString& token = TString()); 
 
     template <typename T> static void DumpRequest(const T& pb) {
         if (DUMP_REQUESTS) {

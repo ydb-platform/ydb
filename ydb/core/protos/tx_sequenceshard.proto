@@ -1,5 +1,5 @@
 syntax = "proto3";
-import "ydb/core/protos/base.proto";
+import "ydb/core/protos/base.proto"; 
 
 package NKikimrTxSequenceShard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -18,7 +18,7 @@ message TEvMarkSchemeShardPipe {
 }
 
 message TEvCreateSequence {
-    NKikimrProto.TPathID PathId = 1;
+    NKikimrProto.TPathID PathId = 1; 
     uint64 TxId = 2;
     uint64 TxPartId = 3;
     oneof OptionalMinValue {
@@ -56,7 +56,7 @@ message TEvCreateSequenceResult {
 }
 
 message TEvAllocateSequence {
-    NKikimrProto.TPathID PathId = 1;
+    NKikimrProto.TPathID PathId = 1; 
     uint64 Cache = 2;
 }
 
@@ -80,7 +80,7 @@ message TEvAllocateSequenceResult {
 }
 
 message TEvDropSequence {
-    NKikimrProto.TPathID PathId = 1;
+    NKikimrProto.TPathID PathId = 1; 
     uint64 TxId = 2;
     uint64 TxPartId = 3;
 }
@@ -100,7 +100,7 @@ message TEvDropSequenceResult {
 }
 
 message TEvUpdateSequence {
-    NKikimrProto.TPathID PathId = 1;
+    NKikimrProto.TPathID PathId = 1; 
     uint64 TxId = 2;
     uint64 TxPartId = 3;
     oneof ChangeMinValue {
@@ -147,7 +147,7 @@ message TEvUpdateSequenceResult {
 }
 
 message TEvFreezeSequence {
-    NKikimrProto.TPathID PathId = 1;
+    NKikimrProto.TPathID PathId = 1; 
     uint64 TxId = 2;
     uint64 TxPartId = 3;
 }
@@ -177,7 +177,7 @@ message TEvFreezeSequenceResult {
 }
 
 message TEvRestoreSequence {
-    NKikimrProto.TPathID PathId = 1;
+    NKikimrProto.TPathID PathId = 1; 
     uint64 TxId = 2;
     uint64 TxPartId = 3;
     sint64 MinValue = 4;
@@ -205,7 +205,7 @@ message TEvRestoreSequenceResult {
 }
 
 message TEvRedirectSequence {
-    NKikimrProto.TPathID PathId = 1;
+    NKikimrProto.TPathID PathId = 1; 
     uint64 TxId = 2;
     uint64 TxPartId = 3;
     uint64 RedirectTo = 4;

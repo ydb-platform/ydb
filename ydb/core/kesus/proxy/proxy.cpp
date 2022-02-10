@@ -174,15 +174,15 @@ private:
             case TSchemeCacheNavigate::EStatus::PathNotPath:
                 LOG_TRACE_S(ctx, NKikimrServices::KESUS_PROXY,
                     "Resolve did not find path " << msg->KesusPath.Quote()
-                    << ": " << result.Status);
+                    << ": " << result.Status); 
                 entry.LastError.SetStatus(Ydb::StatusIds::NOT_FOUND);
                 entry.LastError.AddIssues()->set_message("Kesus not found");
                 break;
             default:
                 LOG_ERROR_S(ctx, NKikimrServices::KESUS_PROXY,
-                    "Kesus resolve failed: " << result.Status);
+                    "Kesus resolve failed: " << result.Status); 
                 entry.LastError.SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
-                entry.LastError.AddIssues()->set_message(ToString(result.Status));
+                entry.LastError.AddIssues()->set_message(ToString(result.Status)); 
                 break;
         }
         if (entry.ProxyActor && entry.LastError.GetStatus() != Ydb::StatusIds::SUCCESS) {

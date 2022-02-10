@@ -25,7 +25,7 @@ message StatusIds {
         SESSION_EXPIRED =     400150;
         CANCELLED =           400160;
         UNDETERMINED =        400170;
-        UNSUPPORTED =         400180;
+        UNSUPPORTED =         400180; 
         SESSION_BUSY =        400190;
     }
     // reserved range [401000, 402999] for internal client status

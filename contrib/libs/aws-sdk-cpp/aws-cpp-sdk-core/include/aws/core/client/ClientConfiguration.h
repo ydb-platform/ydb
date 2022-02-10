@@ -180,22 +180,22 @@ namespace Aws
              */
             Aws::String caPath;
             /**
-             * Same as caPath, but useful if you have users going through a proxy.
-             * Used to set CURLOPT_PROXY_CAPATH in libcurl.
-             */
-            Aws::String proxyCaPath;
-            /**
+             * Same as caPath, but useful if you have users going through a proxy. 
+             * Used to set CURLOPT_PROXY_CAPATH in libcurl. 
+             */ 
+            Aws::String proxyCaPath; 
+            /** 
              * If you certificate file is different from the default, you can tell clients that
              * aren't using the default trust store where to find your ca file.
              * If you are on windows or apple, you likely don't want this.
              */
              Aws::String caFile;
             /**
-             * Same as caFile, but useful if you have users going through a proxy.
-             * Used to set CURLOPT_PROXY_CAINFO in libcurl.
-             */
-             Aws::String proxyCaFile;
-            /**
+             * Same as caFile, but useful if you have users going through a proxy. 
+             * Used to set CURLOPT_PROXY_CAINFO in libcurl. 
+             */ 
+             Aws::String proxyCaFile; 
+            /** 
              * Rate Limiter implementation for outgoing bandwidth. Default is wide-open.
              */
             std::shared_ptr<Aws::Utils::RateLimits::RateLimiterInterface> writeRateLimiter;

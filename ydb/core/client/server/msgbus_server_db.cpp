@@ -236,7 +236,7 @@ protected:
         const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
         Y_VERIFY(request.ResultSet.size() == 1);
         if (request.ResultSet.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            return ReplyWithError(MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::ResolveError, ToString(request.ResultSet.front().Status), ctx);
+            return ReplyWithError(MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::ResolveError, ToString(request.ResultSet.front().Status), ctx); 
         }
         CacheNavigate = ev->Get()->Request;
         if (++Responses == Requests) {

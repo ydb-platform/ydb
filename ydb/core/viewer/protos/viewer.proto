@@ -31,9 +31,9 @@ enum EObjectType {
     SolomonVolume = 17;
     SubDomain = 18;
     FileStore = 19;
-    CdcStream = 20;
+    CdcStream = 20; 
     Sequence = 21;
-    Replication = 22;
+    Replication = 22; 
 }
 
 message TBrowseInfo {

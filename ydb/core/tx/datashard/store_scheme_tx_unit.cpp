@@ -76,9 +76,9 @@ EExecutionStatus TStoreSchemeTxUnit::Execute(TOperation::TPtr op,
         DataShard.PersistProcessingParams(tx->GetProcessingParams(), txc);
     }
 
-    TSchemaOperation schemeOp(op->GetTxId(), tx->GetSchemeTxType(), op->GetTarget(),
+    TSchemaOperation schemeOp(op->GetTxId(), tx->GetSchemeTxType(), op->GetTarget(), 
                              tx->GetSchemeShardId(), op->GetMinStep(), op->GetMaxStep(),
-                             0, op->IsReadOnly(), false, TString(), 0, 0);
+                             0, op->IsReadOnly(), false, TString(), 0, 0); 
     Pipeline.ProposeSchemeTx(schemeOp, txc);
 
     Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx);

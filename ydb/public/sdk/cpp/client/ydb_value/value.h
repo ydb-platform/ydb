@@ -21,9 +21,9 @@ public:
     TType(const Ydb::Type& typeProto);
     TType(Ydb::Type&& typeProto);
 
-    TString ToString() const;
-    void Out(IOutputStream& o) const;
-
+    TString ToString() const; 
+    void Out(IOutputStream& o) const; 
+ 
 private:
     const Ydb::Type& GetProto() const;
 
@@ -453,7 +453,7 @@ public:
 };
 
 } // namespace NYdb
-
-Y_DECLARE_OUT_SPEC(inline, NYdb::TType, o, x) {
-    return x.Out(o);
-}
+ 
+Y_DECLARE_OUT_SPEC(inline, NYdb::TType, o, x) { 
+    return x.Out(o); 
+} 

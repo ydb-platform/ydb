@@ -223,7 +223,7 @@ void PQTabletPrepare(ui32 mcip, ui64 msip, ui32 deleteTime, const TVector<std::p
 
             THolder<TEvPersQueue::TEvUpdateConfig> request(new TEvPersQueue::TEvUpdateConfig());
             for (i32 i = 0; i < partitions; ++i) {
-                request->Record.MutableTabletConfig()->AddPartitionIds(i);
+                request->Record.MutableTabletConfig()->AddPartitionIds(i); 
             }
             request->Record.MutableTabletConfig()->SetCacheSize(10*1024*1024);
             request->Record.SetTxId(12345);

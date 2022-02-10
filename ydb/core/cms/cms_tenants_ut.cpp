@@ -349,18 +349,18 @@ Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
         TestScheduledPermission(true);
     }
 
-    void TestShutdownHost(bool usePolicy)
+    void TestShutdownHost(bool usePolicy) 
     {
         TNodeTenantsMap staticTenants;
         staticTenants[0].push_back("user0");
         staticTenants[8].push_back("user0");
 
-        TCmsTestEnv env(16, 1, staticTenants);
+        TCmsTestEnv env(16, 1, staticTenants); 
 
         env.SetLimits(0, 10, 0, 0);
 
-        env.CheckPermissionRequest("user", false, false, false, usePolicy,
-                                   TStatus::ALLOW,
+        env.CheckPermissionRequest("user", false, false, false, usePolicy, 
+                                   TStatus::ALLOW, 
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
 
         env.CheckPermissionRequest("user", false, false, false, usePolicy,
@@ -368,63 +368,63 @@ Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(8), 60000000));
 
         env.CheckPermissionRequest("user", false, false, false, usePolicy,
-                                   TStatus::ALLOW,
+                                   TStatus::ALLOW, 
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(15), 60000000));
     }
 
-    Y_UNIT_TEST(RequestShutdownHost) {
-        TestShutdownHost(false);
+    Y_UNIT_TEST(RequestShutdownHost) { 
+        TestShutdownHost(false); 
     }
 
-    Y_UNIT_TEST(RequestShutdownHostWithTenantPolicy) {
-        TestShutdownHost(true);
+    Y_UNIT_TEST(RequestShutdownHostWithTenantPolicy) { 
+        TestShutdownHost(true); 
     }
 
-    Y_UNIT_TEST(RequestRestartServices) {
-        TCmsTestEnv env(16, 1, TNodeTenantsMap{
-            {8,  {"user0"}},
-            {9,  {"user0"}},
-            {10, {"user0"}},
-            {11, {"user0"}},
-            {12, {"user0"}},
-            {13, {"user0"}},
-            {14, {"user0"}},
-            {15, {"user0"}},
-        });
-
-        // there is not storage on dynamic nodes
-        env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_SERVICE,
-            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(8), 60000000, "storage"));
-
-        env.SetLimits(0, 50, 0, 0);
-        // it is allowed to restart 50%
-        env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
-            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(8),  60000000, "dynnode"),
-            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9),  60000000, "dynnode"),
-            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(10), 60000000, "dynnode"),
-            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "dynnode")
-        );
-        env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
-            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(12), 60000000, "dynnode"));
-
-        env.SetLimits(0, 0, 0, 0);
-        // it is allowed to restart them all
-        env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
-            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(12), 60000000, "dynnode"),
-            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(13), 60000000, "dynnode"),
-            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(14), 60000000, "dynnode"),
-            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(15), 60000000, "dynnode")
-        );
-
-        // it doesn't affect storage nodes
-        env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
-            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
-
-        // and fault model checks still work
-        env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
-            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
-    }
-
+    Y_UNIT_TEST(RequestRestartServices) { 
+        TCmsTestEnv env(16, 1, TNodeTenantsMap{ 
+            {8,  {"user0"}}, 
+            {9,  {"user0"}}, 
+            {10, {"user0"}}, 
+            {11, {"user0"}}, 
+            {12, {"user0"}}, 
+            {13, {"user0"}}, 
+            {14, {"user0"}}, 
+            {15, {"user0"}}, 
+        }); 
+ 
+        // there is not storage on dynamic nodes 
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_SERVICE, 
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(8), 60000000, "storage")); 
+ 
+        env.SetLimits(0, 50, 0, 0); 
+        // it is allowed to restart 50% 
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW, 
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(8),  60000000, "dynnode"), 
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9),  60000000, "dynnode"), 
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(10), 60000000, "dynnode"), 
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "dynnode") 
+        ); 
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP, 
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(12), 60000000, "dynnode")); 
+ 
+        env.SetLimits(0, 0, 0, 0); 
+        // it is allowed to restart them all 
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW, 
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(12), 60000000, "dynnode"), 
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(13), 60000000, "dynnode"), 
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(14), 60000000, "dynnode"), 
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(15), 60000000, "dynnode") 
+        ); 
+ 
+        // it doesn't affect storage nodes 
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW, 
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage")); 
+ 
+        // and fault model checks still work 
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP, 
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage")); 
+    } 
+ 
     void TestLimitForceRestartMode(bool tenant, bool ratio)
     {
         TNodeTenantsMap staticTenants;

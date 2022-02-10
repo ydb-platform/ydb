@@ -1,7 +1,7 @@
 #pragma once
 
-#include "feature_flags.h"
-
+#include "feature_flags.h" 
+ 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/domain.h>
@@ -17,24 +17,24 @@ namespace NKikimr {
     // Split this factory
     class TDataShardExportFactory : public NKikimr::NDataShard::IExportFactory {
     public:
-        NKikimr::NDataShard::IExport* CreateExportToYt(bool useTypeV3) const override {
-            Y_UNUSED(useTypeV3);
+        NKikimr::NDataShard::IExport* CreateExportToYt(bool useTypeV3) const override { 
+            Y_UNUSED(useTypeV3); 
             return nullptr;
         }
 
-        NKikimr::NDataShard::IExport* CreateExportToS3() const override {
-        #ifndef KIKIMR_DISABLE_S3_OPS
-            return new NKikimr::NDataShard::TS3Export();
-        #else
-            return nullptr;
-        #endif
+        NKikimr::NDataShard::IExport* CreateExportToS3() const override { 
+        #ifndef KIKIMR_DISABLE_S3_OPS 
+            return new NKikimr::NDataShard::TS3Export(); 
+        #else 
+            return nullptr; 
+        #endif 
         }
 
         void Shutdown() override {
         }
     };
 
-    struct TAppPrepare : public TTestFeatureFlagsHolder<TAppPrepare> {
+    struct TAppPrepare : public TTestFeatureFlagsHolder<TAppPrepare> { 
         struct TMine : public NActors::IDestructable {
             TIntrusivePtr<NScheme::TTypeRegistry> Types;
             TIntrusivePtr<NMiniKQL::IFunctionRegistry> Funcs;
@@ -78,8 +78,8 @@ namespace NKikimr {
         TString NetDataSourceUrl;
         NKikimrConfig::THiveConfig HiveConfig;
         NKikimrConfig::TDataShardConfig DataShardConfig;
-        NKikimrConfig::TMeteringConfig MeteringConfig;
-        NKikimrPQ::TPQConfig PQConfig;
+        NKikimrConfig::TMeteringConfig MeteringConfig; 
+        NKikimrPQ::TPQConfig PQConfig; 
 
     private:
         TAutoPtr<TMine> Mine;

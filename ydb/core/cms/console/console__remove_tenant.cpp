@@ -3,7 +3,7 @@
 namespace NKikimr {
 namespace NConsole {
 
-using namespace NOperationId;
+using namespace NOperationId; 
 
 class TTenantsManager::TTxRemoveTenant : public TTransactionBase<TTenantsManager> {
 public:
@@ -70,9 +70,9 @@ public:
         } else if (!Tenant->IsConfiguring() && !Tenant->IsRunning()) {
             return Error(Ydb::StatusIds::UNAVAILABLE,
                          Sprintf("Database '%s' is busy", path.data()), ctx);
-        } else if (Tenant->HostedTenants) {
-            return Error(Ydb::StatusIds::PRECONDITION_FAILED,
-                         Sprintf("Database '%s' has serverless databases. Remove all of them first", path.data()), ctx);
+        } else if (Tenant->HostedTenants) { 
+            return Error(Ydb::StatusIds::PRECONDITION_FAILED, 
+                         Sprintf("Database '%s' has serverless databases. Remove all of them first", path.data()), ctx); 
         }
 
         Tenant->TxId = ctx.Now().GetValue();

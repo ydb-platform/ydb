@@ -65,63 +65,63 @@ void CollectSlots(THashMap<std::pair<TString, TString>, TSlotState> &slots,
     CollectSlots(slots, args...);
 }
 
-struct TCreateTenantRequest {
-    using TSelf = TCreateTenantRequest;
-    using TAttrsCont = TVector<std::pair<TString, TString>>;
-    using TPoolsCont = TVector<TPoolAllocation>;
-    using TSlotsCont = TVector<TSlotRequest>;
-
-    enum class EType {
-        Unspecified,
-        Common,
-        Shared,
-        Serverless,
-    };
-
-    // All types
-    TString Path;
-    EType Type;
-    TAttrsCont Attrs;
-    // Common & Shared
-    TPoolsCont Pools;
-    TSlotsCont Slots;
-    // Serverless
-    TString SharedDbPath;
+struct TCreateTenantRequest { 
+    using TSelf = TCreateTenantRequest; 
+    using TAttrsCont = TVector<std::pair<TString, TString>>; 
+    using TPoolsCont = TVector<TPoolAllocation>; 
+    using TSlotsCont = TVector<TSlotRequest>; 
+ 
+    enum class EType { 
+        Unspecified, 
+        Common, 
+        Shared, 
+        Serverless, 
+    }; 
+ 
+    // All types 
+    TString Path; 
+    EType Type; 
+    TAttrsCont Attrs; 
+    // Common & Shared 
+    TPoolsCont Pools; 
+    TSlotsCont Slots; 
+    // Serverless 
+    TString SharedDbPath; 
     ui32 PlanResolution = 0;
-
-    TCreateTenantRequest() = delete;
-
-    explicit TCreateTenantRequest(const TString& path, EType type = EType::Unspecified)
-        : Path(path)
-        , Type(type)
-    {
-    }
-
-    TSelf& WithAttrs(const TAttrsCont& attrs) {
-        Attrs = attrs;
-        return *this;
-    }
-
-    TSelf& WithPools(const TPoolsCont& pools) {
-        if (Type == EType::Unspecified) {
-            Type = EType::Common;
-        }
-
-        UNIT_ASSERT(Type == EType::Common || Type == EType::Shared);
-        Pools = pools;
-        return *this;
-    }
-
-    TSelf& WithSlots(const TSlotsCont& slots) {
-        if (Type == EType::Unspecified) {
-            Type = EType::Common;
-        }
-
-        UNIT_ASSERT(Type == EType::Common || Type == EType::Shared);
-        Slots = slots;
-        return *this;
-    }
-
+ 
+    TCreateTenantRequest() = delete; 
+ 
+    explicit TCreateTenantRequest(const TString& path, EType type = EType::Unspecified) 
+        : Path(path) 
+        , Type(type) 
+    { 
+    } 
+ 
+    TSelf& WithAttrs(const TAttrsCont& attrs) { 
+        Attrs = attrs; 
+        return *this; 
+    } 
+ 
+    TSelf& WithPools(const TPoolsCont& pools) { 
+        if (Type == EType::Unspecified) { 
+            Type = EType::Common; 
+        } 
+ 
+        UNIT_ASSERT(Type == EType::Common || Type == EType::Shared); 
+        Pools = pools; 
+        return *this; 
+    } 
+ 
+    TSelf& WithSlots(const TSlotsCont& slots) { 
+        if (Type == EType::Unspecified) { 
+            Type = EType::Common; 
+        } 
+ 
+        UNIT_ASSERT(Type == EType::Common || Type == EType::Shared); 
+        Slots = slots; 
+        return *this; 
+    } 
+ 
     TSelf& WithSlots(const TString& type, const TString& zone, ui64 count) {
         if (Type == EType::Unspecified) {
             Type = EType::Common;
@@ -132,45 +132,45 @@ struct TCreateTenantRequest {
         return *this;
     }
 
-    TSelf& WithSharedDbPath(const TString& path) {
-        if (Type == EType::Unspecified) {
-            Type = EType::Serverless;
-        }
-
-        UNIT_ASSERT(Type == EType::Serverless);
-        SharedDbPath = path;
-        return *this;
-    }
+    TSelf& WithSharedDbPath(const TString& path) { 
+        if (Type == EType::Unspecified) { 
+            Type = EType::Serverless; 
+        } 
+ 
+        UNIT_ASSERT(Type == EType::Serverless); 
+        SharedDbPath = path; 
+        return *this; 
+    } 
 
     TSelf& WithPlanResolution(ui32 planResolution) {
         PlanResolution = planResolution;
         return *this;
     }
-};
-
-inline void CheckCreateTenant(TTenantTestRuntime &runtime,
+}; 
+ 
+inline void CheckCreateTenant(TTenantTestRuntime &runtime, 
                        const TString &token,
                        Ydb::StatusIds::StatusCode code,
-                       const TCreateTenantRequest &request)
+                       const TCreateTenantRequest &request) 
 {
-    using EType = TCreateTenantRequest::EType;
+    using EType = TCreateTenantRequest::EType; 
 
     auto *event = new NConsole::TEvConsole::TEvCreateTenantRequest;
-    event->Record.MutableRequest()->set_path(request.Path);
-
-    auto *resources = request.Type == EType::Shared
-        ? event->Record.MutableRequest()->mutable_shared_resources()
-        : event->Record.MutableRequest()->mutable_resources();
-
-    for (auto &req : request.Slots) {
-        auto &unit = *resources->add_computational_units();
+    event->Record.MutableRequest()->set_path(request.Path); 
+ 
+    auto *resources = request.Type == EType::Shared 
+        ? event->Record.MutableRequest()->mutable_shared_resources() 
+        : event->Record.MutableRequest()->mutable_resources(); 
+ 
+    for (auto &req : request.Slots) { 
+        auto &unit = *resources->add_computational_units(); 
         unit.set_unit_kind(req.Type);
         unit.set_availability_zone(req.Zone);
         unit.set_count(req.Count);
     }
 
-    for (auto &pool : request.Pools) {
-        auto &unit = *resources->add_storage_units();
+    for (auto &pool : request.Pools) { 
+        auto &unit = *resources->add_storage_units(); 
         unit.set_unit_kind(pool.PoolType);
         unit.set_count(pool.PoolSize);
     }
@@ -182,10 +182,10 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
         (*event->Record.MutableRequest()->mutable_attributes())[key] = value;
     }
 
-    if (request.Type == EType::Serverless) {
-        event->Record.MutableRequest()->mutable_serverless_resources()->set_shared_database_path(request.SharedDbPath);
-    }
-
+    if (request.Type == EType::Serverless) { 
+        event->Record.MutableRequest()->mutable_serverless_resources()->set_shared_database_path(request.SharedDbPath); 
+    } 
+ 
     if (request.PlanResolution) {
         event->Record.MutableRequest()->mutable_options()->set_plan_resolution(request.PlanResolution);
     }
@@ -217,40 +217,40 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
     }
 }
 
-inline void CheckCreateTenant(TTenantTestRuntime &runtime,
-                       Ydb::StatusIds::StatusCode code,
-                       const TCreateTenantRequest &request)
-{
-    CheckCreateTenant(runtime, "", code, request);
-}
-
+inline void CheckCreateTenant(TTenantTestRuntime &runtime, 
+                       Ydb::StatusIds::StatusCode code, 
+                       const TCreateTenantRequest &request) 
+{ 
+    CheckCreateTenant(runtime, "", code, request); 
+} 
+ 
 template <typename ...Ts>
 void CheckCreateTenant(TTenantTestRuntime &runtime,
                        const TString &path,
-                       const TString &token,
+                       const TString &token, 
                        Ydb::StatusIds::StatusCode code,
                        TVector<TPoolAllocation> pools,
                        const TVector<std::pair<TString, TString>> &attrs,
                        Ts... args)
 {
-    TVector<TSlotRequest> slots;
-    CollectSlots(slots, args...);
-
-    CheckCreateTenant(runtime, token, code,
-        TCreateTenantRequest(path)
-            .WithSlots(slots)
-            .WithPools(pools)
-            .WithAttrs(attrs));
-}
-
-template <typename ...Ts>
-void CheckCreateTenant(TTenantTestRuntime &runtime,
-                       const TString &path,
-                       Ydb::StatusIds::StatusCode code,
-                       TVector<TPoolAllocation> pools,
-                       const TVector<std::pair<TString, TString>> &attrs,
-                       Ts... args)
-{
+    TVector<TSlotRequest> slots; 
+    CollectSlots(slots, args...); 
+ 
+    CheckCreateTenant(runtime, token, code, 
+        TCreateTenantRequest(path) 
+            .WithSlots(slots) 
+            .WithPools(pools) 
+            .WithAttrs(attrs)); 
+} 
+ 
+template <typename ...Ts> 
+void CheckCreateTenant(TTenantTestRuntime &runtime, 
+                       const TString &path, 
+                       Ydb::StatusIds::StatusCode code, 
+                       TVector<TPoolAllocation> pools, 
+                       const TVector<std::pair<TString, TString>> &attrs, 
+                       Ts... args) 
+{ 
     CheckCreateTenant(runtime, path, "", code, pools, attrs, args...);
 }
 

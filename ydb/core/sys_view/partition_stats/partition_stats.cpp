@@ -31,7 +31,7 @@ public:
             hFunc(TEvSysView::TEvSetPartitioning, Handle);
             hFunc(TEvSysView::TEvRemoveTable, Handle);
             hFunc(TEvSysView::TEvSendPartitionStats, Handle);
-            hFunc(TEvSysView::TEvUpdateTtlStats, Handle);
+            hFunc(TEvSysView::TEvUpdateTtlStats, Handle); 
             hFunc(TEvSysView::TEvGetPartitionStats, Handle);
             hFunc(TEvPrivate::TEvProcess, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -99,30 +99,30 @@ private:
             return;
         }
 
-        auto& oldStats = it->second.Partitions[shardIdx];
-        auto& newStats = ev->Get()->Stats;
-
-        if (oldStats.HasTtlStats()) {
-            newStats.MutableTtlStats()->Swap(oldStats.MutableTtlStats());
-        }
-
-        oldStats.Swap(&newStats);
+        auto& oldStats = it->second.Partitions[shardIdx]; 
+        auto& newStats = ev->Get()->Stats; 
+ 
+        if (oldStats.HasTtlStats()) { 
+            newStats.MutableTtlStats()->Swap(oldStats.MutableTtlStats()); 
+        } 
+ 
+        oldStats.Swap(&newStats); 
     }
 
-    void Handle(TEvSysView::TEvUpdateTtlStats::TPtr& ev) {
-        const auto& domainKey = ev->Get()->DomainKey;
-        const auto& pathId = ev->Get()->PathId;
-        const auto& shardIdx = ev->Get()->ShardIdx;
-
-        auto& tables = DomainTables[domainKey];
-        auto it = tables.find(pathId);
-        if (it == tables.end()) {
-            return;
-        }
-
-        it->second.Partitions[shardIdx].MutableTtlStats()->Swap(&ev->Get()->Stats);
-    }
-
+    void Handle(TEvSysView::TEvUpdateTtlStats::TPtr& ev) { 
+        const auto& domainKey = ev->Get()->DomainKey; 
+        const auto& pathId = ev->Get()->PathId; 
+        const auto& shardIdx = ev->Get()->ShardIdx; 
+ 
+        auto& tables = DomainTables[domainKey]; 
+        auto it = tables.find(pathId); 
+        if (it == tables.end()) { 
+            return; 
+        } 
+ 
+        it->second.Partitions[shardIdx].MutableTtlStats()->Swap(&ev->Get()->Stats); 
+    } 
+ 
     void Handle(TEvSysView::TEvGetPartitionStats::TPtr& ev) {
         if (PendingRequests.size() >= PendingRequestsLimit) {
             auto result = MakeHolder<TEvSysView::TEvGetPartitionStatsResult>();
@@ -490,15 +490,15 @@ private:
                 insert({TSchema::TxRejectedByOutOfStorage::ColumnId, [] (const TPartitionStats& s) {
                     return TCell::Make<ui64>(s.GetStats().GetTxRejectedBySpace());
                 }});
-                insert({TSchema::LastTtlRunTime::ColumnId, [] (const TPartitionStats& s) {
-                    return s.GetStats().HasTtlStats() ? TCell::Make<ui64>(s.GetStats().GetTtlStats().GetLastRunTime() * 1000) : TCell();
-                }});
-                insert({TSchema::LastTtlRowsProcessed::ColumnId, [] (const TPartitionStats& s) {
-                    return s.GetStats().HasTtlStats() ? TCell::Make<ui64>(s.GetStats().GetTtlStats().GetLastRowsProcessed()) : TCell();
-                }});
-                insert({TSchema::LastTtlRowsErased::ColumnId, [] (const TPartitionStats& s) {
-                    return s.GetStats().HasTtlStats() ? TCell::Make<ui64>(s.GetStats().GetTtlStats().GetLastRowsErased()) : TCell();
-                }});
+                insert({TSchema::LastTtlRunTime::ColumnId, [] (const TPartitionStats& s) { 
+                    return s.GetStats().HasTtlStats() ? TCell::Make<ui64>(s.GetStats().GetTtlStats().GetLastRunTime() * 1000) : TCell(); 
+                }}); 
+                insert({TSchema::LastTtlRowsProcessed::ColumnId, [] (const TPartitionStats& s) { 
+                    return s.GetStats().HasTtlStats() ? TCell::Make<ui64>(s.GetStats().GetTtlStats().GetLastRowsProcessed()) : TCell(); 
+                }}); 
+                insert({TSchema::LastTtlRowsErased::ColumnId, [] (const TPartitionStats& s) { 
+                    return s.GetStats().HasTtlStats() ? TCell::Make<ui64>(s.GetStats().GetTtlStats().GetLastRowsErased()) : TCell(); 
+                }}); 
             }
         };
         static TExtractorsMap extractors;

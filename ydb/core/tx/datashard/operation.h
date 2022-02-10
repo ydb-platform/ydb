@@ -5,7 +5,7 @@
 #include "datashard_locks.h"
 #include "datashard_outreadset.h"
 #include "datashard_snapshots.h"
-#include "change_exchange.h"
+#include "change_exchange.h" 
 #include "execution_unit_kind.h"
 
 #include <ydb/core/engine/mkql_engine_flat.h>
@@ -100,7 +100,7 @@ enum class EOperationKind : ui32 {
     SchemeTx = NKikimrTxDataShard::ETransactionKind::TX_KIND_SCHEME,
     ReadTable = NKikimrTxDataShard::ETransactionKind::TX_KIND_SCAN,
     Snapshot = NKikimrTxDataShard::ETransactionKind::TX_KIND_SNAPSHOT,
-    DistributedErase = NKikimrTxDataShard::ETransactionKind::TX_KIND_DISTRIBUTED_ERASE,
+    DistributedErase = NKikimrTxDataShard::ETransactionKind::TX_KIND_DISTRIBUTED_ERASE, 
     CommitWrites = NKikimrTxDataShard::ETransactionKind::TX_KIND_COMMIT_WRITES,
 
     // Values [100, inf) are used for internal kinds.
@@ -153,7 +153,7 @@ public:
     bool IsSchemeTx() const { return Kind == EOperationKind::SchemeTx; }
     bool IsReadTable() const { return Kind == EOperationKind::ReadTable; }
     bool IsSnapshotTx() const { return Kind == EOperationKind::Snapshot; }
-    bool IsDistributedEraseTx() const { return Kind == EOperationKind::DistributedErase; }
+    bool IsDistributedEraseTx() const { return Kind == EOperationKind::DistributedErase; } 
     bool IsCommitWritesTx() const { return Kind == EOperationKind::CommitWrites; }
     bool Exists() const { return Kind != EOperationKind::Unknown; }
 
@@ -315,11 +315,11 @@ public:
     void ResetWaitingForScanFlag() { ResetFlag(TTxFlags::WaitingForScan); }
     bool IsWaitingForScan() const { return HasWaitingForScanFlag(); }
 
-    bool HasWaitingForAsyncJobFlag() const { return HasFlag(TTxFlags::WaitingForAsyncJob); }
-    void SetWaitingForAsyncJobFlag(bool val = true) { SetFlag(TTxFlags::WaitingForAsyncJob, val); }
-    void ResetWaitingForAsyncJobFlag() { ResetFlag(TTxFlags::WaitingForAsyncJob); }
-    bool IsWaitingForAsyncJob() const { return HasWaitingForAsyncJobFlag(); }
-
+    bool HasWaitingForAsyncJobFlag() const { return HasFlag(TTxFlags::WaitingForAsyncJob); } 
+    void SetWaitingForAsyncJobFlag(bool val = true) { SetFlag(TTxFlags::WaitingForAsyncJob, val); } 
+    void ResetWaitingForAsyncJobFlag() { ResetFlag(TTxFlags::WaitingForAsyncJob); } 
+    bool IsWaitingForAsyncJob() const { return HasWaitingForAsyncJobFlag(); } 
+ 
     bool HasWaitingForSnapshotFlag() const { return HasFlag(TTxFlags::WaitingForSnapshot); }
     void SetWaitingForSnapshotFlag(bool val = true) { SetFlag(TTxFlags::WaitingForSnapshot, val); }
     void ResetWaitingForSnapshotFlag() { ResetFlag(TTxFlags::WaitingForSnapshot); }
@@ -435,7 +435,7 @@ struct TOutputOpData {
     using TResultPtr = THolder<TEvDataShard::TEvProposeTransactionResult>;
     using TDelayedAcks = TVector<THolder<IEventHandle>>;
     using TOutReadSets = TMap<std::pair<ui64, ui64>, TString>; // source:target -> body
-    using TChangeRecord = TEvChangeExchange::TEvEnqueueRecords::TRecordInfo;
+    using TChangeRecord = TEvChangeExchange::TEvEnqueueRecords::TRecordInfo; 
 
     TResultPtr Result;
     // ACKs to send on successful operation completion.
@@ -445,8 +445,8 @@ struct TOutputOpData {
     // Updates and checked locks.
     TLocksUpdate LocksUpdate;
     TLocksCache LocksAccessLog;
-    // Collected change records
-    TVector<TChangeRecord> ChangeRecords;
+    // Collected change records 
+    TVector<TChangeRecord> ChangeRecords; 
 };
 
 struct TExecutionProfile {
@@ -583,8 +583,8 @@ public:
 
     TAutoPtr<IDestructable> &AsyncJobResult() { return InputDataRef().AsyncJobResult; }
     void SetAsyncJobResult(TAutoPtr<IDestructable> prod) { InputDataRef().AsyncJobResult = prod; }
-    bool HasAsyncJobResult() const { return InputData ? (bool)InputData->AsyncJobResult : false; }
-
+    bool HasAsyncJobResult() const { return InputData ? (bool)InputData->AsyncJobResult : false; } 
+ 
     ////////////////////////////////////////
     //            OUTPUT DATA             //
     ////////////////////////////////////////
@@ -605,8 +605,8 @@ public:
     TLocksUpdate &LocksUpdate() { return OutputDataRef().LocksUpdate; }
     TLocksCache &LocksAccessLog() { return OutputDataRef().LocksAccessLog; }
 
-    TVector<TOutputOpData::TChangeRecord> &ChangeRecords() { return OutputDataRef().ChangeRecords; }
-
+    TVector<TOutputOpData::TChangeRecord> &ChangeRecords() { return OutputDataRef().ChangeRecords; } 
+ 
     const NFH::TFlatHashSet<ui64> &GetAffectedLocks() const { return AffectedLocks; }
     void AddAffectedLock(ui64 lockTxId) { AffectedLocks.insert(lockTxId); }
 

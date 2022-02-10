@@ -29,7 +29,7 @@ private:
         const auto req = GetProtoRequest();
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->GetDatabaseName(), req->path());
+            pathPair = SplitPath(Request_->GetDatabaseName(), req->path()); 
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return ReplyWithResult(StatusIds::BAD_REQUEST, ctx);
@@ -38,7 +38,7 @@ private:
         const auto& workingDir = pathPair.first;
         const auto& name = pathPair.second;
 
-        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
+        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction(); 
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
         NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetWorkingDir(workingDir);

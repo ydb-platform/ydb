@@ -1,6 +1,6 @@
 #pragma once
 
-#include "audit_log.h"
+#include "audit_log.h" 
 #include "cms_state.h"
 #include "base_handler.h"
 #include "cms.h"
@@ -31,9 +31,9 @@ public:
     }
 };
 
-inline void WalleAuditLog(const IEventBase* request, const IEventBase* response, const TActorContext& ctx) {
-    AuditLog("Wall-E adapter", request, response, ctx);
-}
+inline void WalleAuditLog(const IEventBase* request, const IEventBase* response, const TActorContext& ctx) { 
+    AuditLog("Wall-E adapter", request, response, ctx); 
+} 
 
 } // NCms
 } // NKikimr

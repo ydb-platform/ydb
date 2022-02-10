@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_TIMEOUT = 600
 YDB_DATABASE_HEADER = "x-ydb-database"
 YDB_TRACE_ID_HEADER = "x-ydb-trace-id"
-YDB_REQUEST_TYPE_HEADER = "x-ydb-request-type"
+YDB_REQUEST_TYPE_HEADER = "x-ydb-request-type" 
 
 
 def _message_to_string(message):
@@ -141,12 +141,12 @@ def _construct_metadata(driver_config, settings):
     if driver_config.credentials is not None:
         metadata.extend(driver_config.credentials.auth_metadata())
 
-    if settings is not None:
-        if settings.trace_id is not None:
-            metadata.append((YDB_TRACE_ID_HEADER, settings.trace_id))
-        if settings.request_type is not None:
-            metadata.append((YDB_REQUEST_TYPE_HEADER, settings.request_type))
-
+    if settings is not None: 
+        if settings.trace_id is not None: 
+            metadata.append((YDB_TRACE_ID_HEADER, settings.trace_id)) 
+        if settings.request_type is not None: 
+            metadata.append((YDB_REQUEST_TYPE_HEADER, settings.request_type)) 
+ 
     metadata.append(_utilities.x_ydb_sdk_build_info_header())
     return metadata
 

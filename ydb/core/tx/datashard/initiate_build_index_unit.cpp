@@ -6,8 +6,8 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TInitiateBuildIndexUnit : public TExecutionUnit {
-    THolder<TEvChangeExchange::TEvAddSender> AddSender;
-
+    THolder<TEvChangeExchange::TEvAddSender> AddSender; 
+ 
 public:
     TInitiateBuildIndexUnit(TDataShard& dataShard, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::InitiateBuildIndex, false, dataShard, pipeline)
@@ -33,23 +33,23 @@ public:
         auto pathId = TPathId(params.GetPathId().GetOwnerId(), params.GetPathId().GetLocalId());
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
-        TUserTable::TPtr tableInfo;
-        if (params.HasIndexDescription()) {
-            const auto& indexDesc = params.GetIndexDescription();
-
+        TUserTable::TPtr tableInfo; 
+        if (params.HasIndexDescription()) { 
+            const auto& indexDesc = params.GetIndexDescription(); 
+ 
             if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
-                auto indexPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
-                AddSender.Reset(new TEvChangeExchange::TEvAddSender(
-                    pathId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId
-                ));
-            }
-
-            tableInfo = DataShard.AlterTableAddIndex(ctx, txc, pathId, params.GetTableSchemaVersion(), indexDesc);
-        } else {
-            tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, params.GetTableSchemaVersion());
-        }
-
-        Y_VERIFY(tableInfo);
+                auto indexPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId()); 
+                AddSender.Reset(new TEvChangeExchange::TEvAddSender( 
+                    pathId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId 
+                )); 
+            } 
+ 
+            tableInfo = DataShard.AlterTableAddIndex(ctx, txc, pathId, params.GetTableSchemaVersion(), indexDesc); 
+        } else { 
+            tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, params.GetTableSchemaVersion()); 
+        } 
+ 
+        Y_VERIFY(tableInfo); 
         DataShard.AddUserTable(pathId, tableInfo);
 
         ui64 step = tx->GetStep();
@@ -67,16 +67,16 @@ public:
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
         if (added) {
-            return EExecutionStatus::DelayCompleteNoMoreRestarts;
+            return EExecutionStatus::DelayCompleteNoMoreRestarts; 
         } else {
-            return EExecutionStatus::DelayComplete;
+            return EExecutionStatus::DelayComplete; 
         }
     }
 
-    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
-        if (AddSender) {
-            ctx.Send(DataShard.GetChangeSender(), AddSender.Release());
-        }
+    void Complete(TOperation::TPtr, const TActorContext& ctx) override { 
+        if (AddSender) { 
+            ctx.Send(DataShard.GetChangeSender(), AddSender.Release()); 
+        } 
     }
 };
 

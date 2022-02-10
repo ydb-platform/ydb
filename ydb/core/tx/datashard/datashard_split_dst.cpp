@@ -234,11 +234,11 @@ public:
         db.Table<Schema::SplitDstReceivedSnapshots>().Key(srcTabletId).Update();
         Self->ReceiveSnapshotsFrom.erase(srcTabletId);
 
-        if (record.GetWaitForActivation()) {
-            Self->ReceiveActivationsFrom.insert(srcTabletId);
-            db.Table<Schema::DstChangeSenderActivations>().Key(srcTabletId).Update();
-        }
-
+        if (record.GetWaitForActivation()) { 
+            Self->ReceiveActivationsFrom.insert(srcTabletId); 
+            db.Table<Schema::DstChangeSenderActivations>().Key(srcTabletId).Update(); 
+        } 
+ 
         if (Self->ReceiveSnapshotsFrom.empty()) {
             LastSnapshotReceived = true;
 

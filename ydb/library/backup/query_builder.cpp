@@ -180,12 +180,12 @@ void TQueryBuilder::AddPrimitiveMember(EPrimitiveType type, TStringBuf buf) {
         break;
 
     case EPrimitiveType::DyNumber:
-        if (buf == "null") {
-            Value.OptionalDyNumber(Nothing());
-        } else {
-            Y_ENSURE(NKikimr::NDyNumber::IsValidDyNumberString(buf));
-            Value.OptionalDyNumber(TString(buf));
-        }
+        if (buf == "null") { 
+            Value.OptionalDyNumber(Nothing()); 
+        } else { 
+            Y_ENSURE(NKikimr::NDyNumber::IsValidDyNumberString(buf)); 
+            Value.OptionalDyNumber(TString(buf)); 
+        } 
         break;
 
     case EPrimitiveType::Uuid:

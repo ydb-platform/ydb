@@ -7,7 +7,7 @@
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 
 #include <util/generic/ptr.h>
-#include <util/generic/hash.h>
+#include <util/generic/hash.h> 
 
 namespace NKikimr {
 
@@ -248,58 +248,58 @@ struct TUserTable : public TThrRefBase {
         {}
     };
 
-    struct TTableIndex {
+    struct TTableIndex { 
         using EIndexType = NKikimrSchemeOp::EIndexType;
-
-        TString Name;
-        EIndexType Type;
-        TVector<ui32> KeyColumnIds;
-        TVector<ui32> DataColumnIds;
-
-        TTableIndex() = default;
-
+ 
+        TString Name; 
+        EIndexType Type; 
+        TVector<ui32> KeyColumnIds; 
+        TVector<ui32> DataColumnIds; 
+ 
+        TTableIndex() = default; 
+ 
         TTableIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc, const TMap<ui32, TUserColumn>& columns)
-            : Name(indexDesc.GetName())
-            , Type(indexDesc.GetType())
-        {
-            THashMap<TStringBuf, ui32> nameToId;
-            for (const auto& [id, column] : columns) {
-                Y_VERIFY_DEBUG(!nameToId.contains(column.Name));
-                nameToId.emplace(column.Name, id);
-            }
-
-            auto fillColumnIds = [&nameToId](const auto& columnNames, TVector<ui32>& columnIds) {
-                columnIds.reserve(columnNames.size());
-                for (const auto& columnName : columnNames) {
-                    auto it = nameToId.find(columnName);
-                    Y_VERIFY(it != nameToId.end());
-                    columnIds.push_back(it->second);
-                }
-            };
-
-            fillColumnIds(indexDesc.GetKeyColumnNames(),  KeyColumnIds);
-            fillColumnIds(indexDesc.GetDataColumnNames(), DataColumnIds);
+            : Name(indexDesc.GetName()) 
+            , Type(indexDesc.GetType()) 
+        { 
+            THashMap<TStringBuf, ui32> nameToId; 
+            for (const auto& [id, column] : columns) { 
+                Y_VERIFY_DEBUG(!nameToId.contains(column.Name)); 
+                nameToId.emplace(column.Name, id); 
+            } 
+ 
+            auto fillColumnIds = [&nameToId](const auto& columnNames, TVector<ui32>& columnIds) { 
+                columnIds.reserve(columnNames.size()); 
+                for (const auto& columnName : columnNames) { 
+                    auto it = nameToId.find(columnName); 
+                    Y_VERIFY(it != nameToId.end()); 
+                    columnIds.push_back(it->second); 
+                } 
+            }; 
+ 
+            fillColumnIds(indexDesc.GetKeyColumnNames(),  KeyColumnIds); 
+            fillColumnIds(indexDesc.GetDataColumnNames(), DataColumnIds); 
         }
-    };
-
-    struct TCdcStream {
+    }; 
+ 
+    struct TCdcStream { 
         using EMode = NKikimrSchemeOp::ECdcStreamMode;
         using EState = NKikimrSchemeOp::ECdcStreamState;
-
-        TString Name;
-        EMode Mode;
-        EState State;
-
-        TCdcStream() = default;
-
+ 
+        TString Name; 
+        EMode Mode; 
+        EState State; 
+ 
+        TCdcStream() = default; 
+ 
         TCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc)
-            : Name(streamDesc.GetName())
-            , Mode(streamDesc.GetMode())
-            , State(streamDesc.GetState())
-        {
-        }
-    };
-
+            : Name(streamDesc.GetName()) 
+            , Mode(streamDesc.GetMode()) 
+            , State(streamDesc.GetState()) 
+        { 
+        } 
+    }; 
+ 
     struct TStats {
         NTable::TStats DataStats;
         ui64 IndexSize = 0;
@@ -353,10 +353,10 @@ struct TUserTable : public TThrRefBase {
     TVector<ui32> KeyColumnIds;
     TSerializedTableRange Range;
     bool IsBackup = false;
-
-    TMap<TPathId, TTableIndex> Indexes;
-    TMap<TPathId, TCdcStream> CdcStreams;
-    ui32 AsyncIndexCount = 0;
+ 
+    TMap<TPathId, TTableIndex> Indexes; 
+    TMap<TPathId, TCdcStream> CdcStreams; 
+    ui32 AsyncIndexCount = 0; 
 
     // Tablet thread access only, updated in-place
     mutable TStats Stats;
@@ -400,14 +400,14 @@ struct TUserTable : public TThrRefBase {
     bool ResetTableSchemaVersion();
 
     void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
-    void DropIndex(const TPathId& indexPathId);
-    bool HasAsyncIndexes() const;
-
+    void DropIndex(const TPathId& indexPathId); 
+    bool HasAsyncIndexes() const; 
+ 
     void AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
-    void DisableCdcStream(const TPathId& streamPathId);
-    void DropCdcStream(const TPathId& streamPathId);
-    bool HasCdcStreams() const;
-
+    void DisableCdcStream(const TPathId& streamPathId); 
+    void DropCdcStream(const TPathId& streamPathId); 
+    bool HasCdcStreams() const; 
+ 
 private:
     void DoApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, bool shadow,
             const NKikimrSchemeOp::TPartitionConfig& partConfig) const;

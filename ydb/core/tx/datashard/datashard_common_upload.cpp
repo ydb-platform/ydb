@@ -1,32 +1,32 @@
-#include "change_collector.h"
-#include "datashard_common_upload.h"
+#include "change_collector.h" 
+#include "datashard_common_upload.h" 
 
 namespace NKikimr {
 namespace NDataShard {
 
-template <typename TEvRequest, typename TEvResponse>
-TCommonUploadOps<TEvRequest, TEvResponse>::TCommonUploadOps(typename TEvRequest::TPtr& ev, bool breakLocks, bool collectChanges)
-    : BreakLocks(breakLocks)
-    , CollectChanges(collectChanges)
-    , Ev(ev)
+template <typename TEvRequest, typename TEvResponse> 
+TCommonUploadOps<TEvRequest, TEvResponse>::TCommonUploadOps(typename TEvRequest::TPtr& ev, bool breakLocks, bool collectChanges) 
+    : BreakLocks(breakLocks) 
+    , CollectChanges(collectChanges) 
+    , Ev(ev) 
 {
 }
 
-template <typename TEvRequest, typename TEvResponse>
-bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTransactionContext& txc,
-        const TRowVersion& readVersion, const TRowVersion& writeVersion)
-{
-    const auto& record = Ev->Get()->Record;
-
+template <typename TEvRequest, typename TEvResponse> 
+bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTransactionContext& txc, 
+        const TRowVersion& readVersion, const TRowVersion& writeVersion) 
+{ 
+    const auto& record = Ev->Get()->Record; 
+ 
     Result = MakeHolder<TEvResponse>(self->TabletID());
 
-    TInstant deadline = TInstant::MilliSeconds(record.GetCancelDeadlineMs());
+    TInstant deadline = TInstant::MilliSeconds(record.GetCancelDeadlineMs()); 
     if (deadline && deadline < AppData()->TimeProvider->Now()) {
         SetError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Deadline exceeded");
         return true;
     }
 
-    const ui64 tableId = record.GetTableId();
+    const ui64 tableId = record.GetTableId(); 
     const TTableId fullTableId(self->GetPathOwnerId(), tableId);
     const ui64 localTableId = self->GetLocalTableId(fullTableId);
     if (localTableId == 0) {
@@ -40,36 +40,36 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     Y_VERIFY(tableInfo.ShadowTid == shadowTableId);
 
     // Check schemas
-    if (record.GetRowScheme().KeyColumnIdsSize() != tableInfo.KeyColumnIds.size()) {
+    if (record.GetRowScheme().KeyColumnIdsSize() != tableInfo.KeyColumnIds.size()) { 
         SetError(NKikimrTxDataShard::TError::SCHEME_ERROR,
             Sprintf("Key column count mismatch: got %" PRIu64 ", expected %" PRIu64,
-                record.GetRowScheme().KeyColumnIdsSize(), tableInfo.KeyColumnIds.size()));
+                record.GetRowScheme().KeyColumnIdsSize(), tableInfo.KeyColumnIds.size())); 
         return true;
     }
 
     for (size_t i = 0; i < tableInfo.KeyColumnIds.size(); ++i) {
-        if (record.GetRowScheme().GetKeyColumnIds(i) != tableInfo.KeyColumnIds[i]) {
+        if (record.GetRowScheme().GetKeyColumnIds(i) != tableInfo.KeyColumnIds[i]) { 
             SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Key column schema at position %" PRISZT, i));
             return true;
         }
     }
 
-    const bool writeToTableShadow = record.GetWriteToTableShadow();
+    const bool writeToTableShadow = record.GetWriteToTableShadow(); 
     const bool readForTableShadow = writeToTableShadow && !shadowTableId;
     const ui32 writeTableId = writeToTableShadow && shadowTableId ? shadowTableId : localTableId;
 
-    if (CollectChanges) {
-        ChangeCollector.Reset(CreateChangeCollector(*self, txc.DB, tableInfo, true));
-        ChangeCollector->SetWriteVersion(writeVersion);
-        if (ChangeCollector->NeedToReadKeys()) {
-            ChangeCollector->SetReadVersion(readVersion);
-        }
-    }
-
+    if (CollectChanges) { 
+        ChangeCollector.Reset(CreateChangeCollector(*self, txc.DB, tableInfo, true)); 
+        ChangeCollector->SetWriteVersion(writeVersion); 
+        if (ChangeCollector->NeedToReadKeys()) { 
+            ChangeCollector->SetReadVersion(readVersion); 
+        } 
+    } 
+ 
     // Prepare (id, Type) vector for value columns
     TVector<NTable::TTag> tagsForSelect;
     TVector<std::pair<ui32, NScheme::TTypeId>> valueCols;
-    for (const auto& colId : record.GetRowScheme().GetValueColumnIds()) {
+    for (const auto& colId : record.GetRowScheme().GetValueColumnIds()) { 
         if (readForTableShadow) {
             tagsForSelect.push_back(colId);
         }
@@ -91,7 +91,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     NTable::TRowState rowState;
 
     ui64 bytes = 0;
-    for (const auto& r : record.GetRows()) {
+    for (const auto& r : record.GetRows()) { 
         // TODO: use safe parsing!
         keyCells.Parse(r.GetKeyColumns());
         valueCells.Parse(r.GetValueColumns());
@@ -135,10 +135,10 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
                 pageFault = true;
             }
 
-            if (pageFault) {
-                continue;
-            }
-
+            if (pageFault) { 
+                continue; 
+            } 
+ 
             if (rowState == NTable::ERowOp::Erase || rowState == NTable::ERowOp::Reset) {
                 // Row has been erased in the past, ignore this upsert
                 continue;
@@ -172,73 +172,73 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             continue;
         }
 
-        if (!writeToTableShadow) {
-            if (ChangeCollector) {
-                Y_VERIFY(CollectChanges);
-
+        if (!writeToTableShadow) { 
+            if (ChangeCollector) { 
+                Y_VERIFY(CollectChanges); 
+ 
                 if (!ChangeCollector->Collect(fullTableId, NTable::ERowOp::Upsert, key, value)) {
-                    pageFault = true;
-                }
-
-                if (pageFault) {
-                    continue;
-                }
-            }
-
-            if (BreakLocks) {
-                self->SysLocksTable().BreakLock(fullTableId, keyCells.GetCells());
-            }
+                    pageFault = true; 
+                } 
+ 
+                if (pageFault) { 
+                    continue; 
+                } 
+            } 
+ 
+            if (BreakLocks) { 
+                self->SysLocksTable().BreakLock(fullTableId, keyCells.GetCells()); 
+            } 
         }
 
         txc.DB.Update(writeTableId, NTable::ERowOp::Upsert, key, value, writeVersion);
     }
 
     if (pageFault) {
-        if (ChangeCollector) {
-            ChangeCollector->Reset();
-        }
-
+        if (ChangeCollector) { 
+            ChangeCollector->Reset(); 
+        } 
+ 
         return false;
     }
 
-    self->IncCounter(COUNTER_UPLOAD_ROWS, record.GetRows().size());
+    self->IncCounter(COUNTER_UPLOAD_ROWS, record.GetRows().size()); 
     self->IncCounter(COUNTER_UPLOAD_ROWS_BYTES, bytes);
 
     tableInfo.Stats.UpdateTime = TAppData::TimeProvider->Now();
     return true;
 }
 
-template <typename TEvRequest, typename TEvResponse>
+template <typename TEvRequest, typename TEvResponse> 
 void TCommonUploadOps<TEvRequest, TEvResponse>::SendResult(TDataShard* self, const TActorContext& ctx) {
-    Y_VERIFY(Result);
-
+    Y_VERIFY(Result); 
+ 
     if (Result->Record.GetStatus() == NKikimrTxDataShard::TError::OK) {
         self->IncCounter(COUNTER_BULK_UPSERT_SUCCESS);
     } else {
         self->IncCounter(COUNTER_BULK_UPSERT_ERROR);
     }
-
-    ctx.Send(Ev->Sender, std::move(Result));
+ 
+    ctx.Send(Ev->Sender, std::move(Result)); 
 }
 
-template <typename TEvRequest, typename TEvResponse>
-TVector<NMiniKQL::IChangeCollector::TChange> TCommonUploadOps<TEvRequest, TEvResponse>::GetCollectedChanges() const {
-    if (!ChangeCollector) {
-        return {};
-    }
-
-    auto changes = std::move(ChangeCollector->GetCollected());
-    return changes;
-}
-
-template <typename TEvRequest, typename TEvResponse>
-void TCommonUploadOps<TEvRequest, TEvResponse>::SetError(ui32 status, const TString& descr) {
-    Result->Record.SetStatus(status);
-    Result->Record.SetErrorDescription(descr);
-}
-
-template class TCommonUploadOps<TEvDataShard::TEvUploadRowsRequest, TEvDataShard::TEvUploadRowsResponse>;
-template class TCommonUploadOps<TEvDataShard::TEvUnsafeUploadRowsRequest, TEvDataShard::TEvUnsafeUploadRowsResponse>;
-
+template <typename TEvRequest, typename TEvResponse> 
+TVector<NMiniKQL::IChangeCollector::TChange> TCommonUploadOps<TEvRequest, TEvResponse>::GetCollectedChanges() const { 
+    if (!ChangeCollector) { 
+        return {}; 
+    } 
+ 
+    auto changes = std::move(ChangeCollector->GetCollected()); 
+    return changes; 
+} 
+ 
+template <typename TEvRequest, typename TEvResponse> 
+void TCommonUploadOps<TEvRequest, TEvResponse>::SetError(ui32 status, const TString& descr) { 
+    Result->Record.SetStatus(status); 
+    Result->Record.SetErrorDescription(descr); 
+} 
+ 
+template class TCommonUploadOps<TEvDataShard::TEvUploadRowsRequest, TEvDataShard::TEvUploadRowsResponse>; 
+template class TCommonUploadOps<TEvDataShard::TEvUnsafeUploadRowsRequest, TEvDataShard::TEvUnsafeUploadRowsResponse>; 
+ 
 } // NDataShard
-} // NKikimr
+} // NKikimr 

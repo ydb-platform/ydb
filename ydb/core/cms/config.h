@@ -1,120 +1,120 @@
 #pragma once
 
-#include "pdisk_state.h"
-
+#include "pdisk_state.h" 
+ 
 #include <ydb/core/protos/cms.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
-#include <util/generic/map.h>
+#include <util/generic/map.h> 
 
 namespace NKikimr {
 namespace NCms {
 
-struct TCmsSentinelConfig {
-    bool Enable = false;
-    bool DryRun = false;
-
-    TDuration UpdateConfigInterval;
-    TDuration RetryUpdateConfig;
-
-    TDuration UpdateStateInterval;
-    TDuration UpdateStateTimeout;
-
-    TDuration RetryChangeStatus;
-    ui32 ChangeStatusRetries;
-
-    ui32 DefaultStateLimit;
-    TMap<EPDiskState, ui32> StateLimits;
-
-    ui32 DataCenterRatio;
-    ui32 RoomRatio;
-    ui32 RackRatio;
-
-    void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const
-    {
-        config.SetEnable(Enable);
-        config.SetDryRun(DryRun);
-        config.SetUpdateConfigInterval(UpdateConfigInterval.GetValue());
-        config.SetRetryUpdateConfig(RetryUpdateConfig.GetValue());
-        config.SetUpdateStateInterval(UpdateStateInterval.GetValue());
-        config.SetUpdateStateTimeout(UpdateStateTimeout.GetValue());
-        config.SetRetryChangeStatus(RetryChangeStatus.GetValue());
-        config.SetChangeStatusRetries(ChangeStatusRetries);
-        config.SetDefaultStateLimit(DefaultStateLimit);
-        config.SetDataCenterRatio(DataCenterRatio);
-        config.SetRoomRatio(RoomRatio);
-        config.SetRackRatio(RackRatio);
-
-        SaveStateLimits(config);
-    }
-
-    void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig &config)
-    {
-        Enable = config.GetEnable();
-        DryRun = config.GetDryRun();
-        UpdateConfigInterval = TDuration::MicroSeconds(config.GetUpdateConfigInterval());
-        RetryUpdateConfig = TDuration::MicroSeconds(config.GetRetryUpdateConfig());
-        UpdateStateInterval = TDuration::MicroSeconds(config.GetUpdateStateInterval());
-        UpdateStateTimeout = TDuration::MicroSeconds(config.GetUpdateStateTimeout());
-        RetryChangeStatus = TDuration::MicroSeconds(config.GetRetryChangeStatus());
-        ChangeStatusRetries = config.GetChangeStatusRetries();
-        DefaultStateLimit = config.GetDefaultStateLimit();
-        DataCenterRatio = config.GetDataCenterRatio();
-        RoomRatio = config.GetRoomRatio();
-        RackRatio = config.GetRackRatio();
-
-        auto newStateLimits = LoadStateLimits(config);
-        StateLimits.swap(newStateLimits);
-    }
-
-    void SaveStateLimits(NKikimrCms::TCmsConfig::TSentinelConfig &config) const
-    {
-        auto defaultStateLimits = DefaultStateLimits();
-        bool differsFromDefault = false;
-
-        if (defaultStateLimits.size() != StateLimits.size()) {
-            differsFromDefault = true;
-        } else {
-            for (const auto& [state, limit] : defaultStateLimits) {
-                auto it = StateLimits.find(state);
-                if (it == StateLimits.end() || limit != it->second) {
-                    differsFromDefault = true;
-                    break;
-                }
-            }
-        }
-
-        if (!differsFromDefault) {
-            return;
-        }
-
-        for (const auto& [state, limit] : StateLimits) {
-            auto& stateLimit = *config.AddStateLimits();
-            stateLimit.SetState(static_cast<ui32>(state));
-            stateLimit.SetLimit(limit);
-        }
-    }
-
-    static TMap<EPDiskState, ui32> LoadStateLimits(const NKikimrCms::TCmsConfig::TSentinelConfig &config)
-    {
-        TMap<EPDiskState, ui32> stateLimits;
-
-        for (const auto &val : config.GetStateLimits()) {
-            stateLimits[static_cast<EPDiskState>(val.GetState())] = val.GetLimit();
-        }
-
-        if (stateLimits) {
-            return stateLimits;
-        }
-
-        return DefaultStateLimits();
-    }
-
-    static TMap<EPDiskState, ui32> DefaultStateLimits()
-    {
-        TMap<EPDiskState, ui32> stateLimits;
-        // error states
+struct TCmsSentinelConfig { 
+    bool Enable = false; 
+    bool DryRun = false; 
+ 
+    TDuration UpdateConfigInterval; 
+    TDuration RetryUpdateConfig; 
+ 
+    TDuration UpdateStateInterval; 
+    TDuration UpdateStateTimeout; 
+ 
+    TDuration RetryChangeStatus; 
+    ui32 ChangeStatusRetries; 
+ 
+    ui32 DefaultStateLimit; 
+    TMap<EPDiskState, ui32> StateLimits; 
+ 
+    ui32 DataCenterRatio; 
+    ui32 RoomRatio; 
+    ui32 RackRatio; 
+ 
+    void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const 
+    { 
+        config.SetEnable(Enable); 
+        config.SetDryRun(DryRun); 
+        config.SetUpdateConfigInterval(UpdateConfigInterval.GetValue()); 
+        config.SetRetryUpdateConfig(RetryUpdateConfig.GetValue()); 
+        config.SetUpdateStateInterval(UpdateStateInterval.GetValue()); 
+        config.SetUpdateStateTimeout(UpdateStateTimeout.GetValue()); 
+        config.SetRetryChangeStatus(RetryChangeStatus.GetValue()); 
+        config.SetChangeStatusRetries(ChangeStatusRetries); 
+        config.SetDefaultStateLimit(DefaultStateLimit); 
+        config.SetDataCenterRatio(DataCenterRatio); 
+        config.SetRoomRatio(RoomRatio); 
+        config.SetRackRatio(RackRatio); 
+ 
+        SaveStateLimits(config); 
+    } 
+ 
+    void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig &config) 
+    { 
+        Enable = config.GetEnable(); 
+        DryRun = config.GetDryRun(); 
+        UpdateConfigInterval = TDuration::MicroSeconds(config.GetUpdateConfigInterval()); 
+        RetryUpdateConfig = TDuration::MicroSeconds(config.GetRetryUpdateConfig()); 
+        UpdateStateInterval = TDuration::MicroSeconds(config.GetUpdateStateInterval()); 
+        UpdateStateTimeout = TDuration::MicroSeconds(config.GetUpdateStateTimeout()); 
+        RetryChangeStatus = TDuration::MicroSeconds(config.GetRetryChangeStatus()); 
+        ChangeStatusRetries = config.GetChangeStatusRetries(); 
+        DefaultStateLimit = config.GetDefaultStateLimit(); 
+        DataCenterRatio = config.GetDataCenterRatio(); 
+        RoomRatio = config.GetRoomRatio(); 
+        RackRatio = config.GetRackRatio(); 
+ 
+        auto newStateLimits = LoadStateLimits(config); 
+        StateLimits.swap(newStateLimits); 
+    } 
+ 
+    void SaveStateLimits(NKikimrCms::TCmsConfig::TSentinelConfig &config) const 
+    { 
+        auto defaultStateLimits = DefaultStateLimits(); 
+        bool differsFromDefault = false; 
+ 
+        if (defaultStateLimits.size() != StateLimits.size()) { 
+            differsFromDefault = true; 
+        } else { 
+            for (const auto& [state, limit] : defaultStateLimits) { 
+                auto it = StateLimits.find(state); 
+                if (it == StateLimits.end() || limit != it->second) { 
+                    differsFromDefault = true; 
+                    break; 
+                } 
+            } 
+        } 
+ 
+        if (!differsFromDefault) { 
+            return; 
+        } 
+ 
+        for (const auto& [state, limit] : StateLimits) { 
+            auto& stateLimit = *config.AddStateLimits(); 
+            stateLimit.SetState(static_cast<ui32>(state)); 
+            stateLimit.SetLimit(limit); 
+        } 
+    } 
+ 
+    static TMap<EPDiskState, ui32> LoadStateLimits(const NKikimrCms::TCmsConfig::TSentinelConfig &config) 
+    { 
+        TMap<EPDiskState, ui32> stateLimits; 
+ 
+        for (const auto &val : config.GetStateLimits()) { 
+            stateLimits[static_cast<EPDiskState>(val.GetState())] = val.GetLimit(); 
+        } 
+ 
+        if (stateLimits) { 
+            return stateLimits; 
+        } 
+ 
+        return DefaultStateLimits(); 
+    } 
+ 
+    static TMap<EPDiskState, ui32> DefaultStateLimits() 
+    { 
+        TMap<EPDiskState, ui32> stateLimits; 
+        // error states 
         stateLimits[NKikimrBlobStorage::TPDiskState::InitialFormatReadError] = 60;
         stateLimits[NKikimrBlobStorage::TPDiskState::InitialSysLogReadError] = 60;
         stateLimits[NKikimrBlobStorage::TPDiskState::InitialSysLogParseError] = 60;
@@ -124,19 +124,19 @@ struct TCmsSentinelConfig {
         stateLimits[NKikimrBlobStorage::TPDiskState::OpenFileError] = 60;
         stateLimits[NKikimrBlobStorage::TPDiskState::ChunkQuotaError] = 60;
         stateLimits[NKikimrBlobStorage::TPDiskState::DeviceIoError] = 60;
-        // node online, pdisk missing
+        // node online, pdisk missing 
         stateLimits[NKikimrBlobStorage::TPDiskState::Missing] = 60;
-        // node timeout
+        // node timeout 
         stateLimits[NKikimrBlobStorage::TPDiskState::Timeout] = 60;
-        // node offline
+        // node offline 
         stateLimits[NKikimrBlobStorage::TPDiskState::NodeDisconnected] = 60;
-        // disable for unknown states
+        // disable for unknown states 
         stateLimits[NKikimrBlobStorage::TPDiskState::Unknown] = 0;
-
-        return stateLimits;
-    }
-};
-
+ 
+        return stateLimits; 
+    } 
+}; 
+ 
 struct TCmsLogConfig {
     THashMap<ui32, bool> RecordLevels;
     bool EnabledByDefault = true;
@@ -185,7 +185,7 @@ struct TCmsConfig {
     TDuration InfoCollectionTimeout;
     NKikimrCms::TLimits TenantLimits;
     NKikimrCms::TLimits ClusterLimits;
-    TCmsSentinelConfig SentinelConfig;
+    TCmsSentinelConfig SentinelConfig; 
     TCmsLogConfig LogConfig;
 
     TCmsConfig()
@@ -202,10 +202,10 @@ struct TCmsConfig {
     {
         config.SetDefaultRetryTime(DefaultRetryTime.GetValue());
         config.SetDefaultPermissionDuration(DefaultPermissionDuration.GetValue());
-        config.SetInfoCollectionTimeout(InfoCollectionTimeout.GetValue());
+        config.SetInfoCollectionTimeout(InfoCollectionTimeout.GetValue()); 
         config.MutableTenantLimits()->CopyFrom(TenantLimits);
         config.MutableClusterLimits()->CopyFrom(ClusterLimits);
-        SentinelConfig.Serialize(*config.MutableSentinelConfig());
+        SentinelConfig.Serialize(*config.MutableSentinelConfig()); 
         LogConfig.Serialize(*config.MutableLogConfig());
     }
 
@@ -213,10 +213,10 @@ struct TCmsConfig {
     {
         DefaultRetryTime = TDuration::MicroSeconds(config.GetDefaultRetryTime());
         DefaultPermissionDuration = TDuration::MicroSeconds(config.GetDefaultPermissionDuration());
-        InfoCollectionTimeout = TDuration::MicroSeconds(config.GetInfoCollectionTimeout());
+        InfoCollectionTimeout = TDuration::MicroSeconds(config.GetInfoCollectionTimeout()); 
         TenantLimits.CopyFrom(config.GetTenantLimits());
         ClusterLimits.CopyFrom(config.GetClusterLimits());
-        SentinelConfig.Deserialize(config.GetSentinelConfig());
+        SentinelConfig.Deserialize(config.GetSentinelConfig()); 
         LogConfig.Deserialize(config.GetLogConfig());
     }
 

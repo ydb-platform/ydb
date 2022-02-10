@@ -4,11 +4,11 @@ import "ydb/library/login/protos/login.proto";
 
 package NKikimrSubDomains;
 
-message TDomainKey {
-    optional fixed64 SchemeShard = 1;
-    optional fixed64 PathId = 2;
-}
-
+message TDomainKey { 
+    optional fixed64 SchemeShard = 1; 
+    optional fixed64 PathId = 2; 
+} 
+ 
 message TSubDomainSettings {
     optional uint64 PlanResolution = 1;
     optional uint64 Coordinators = 2;
@@ -18,7 +18,7 @@ message TSubDomainSettings {
     repeated NKikimrStoragePool.TStoragePool StoragePools = 6;
     optional bool ExternalSchemeShard = 7 [default = false];
     optional bool ExternalHive = 8 [default = false];
-    optional TDomainKey ResourcesDomainKey = 9;
+    optional TDomainKey ResourcesDomainKey = 9; 
     optional bool ExternalSysViewProcessor = 10 [default = false];
     optional TSchemeQuotas DeclaredSchemeQuotas = 11;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 12;
@@ -38,17 +38,17 @@ message TProcessingParams {
     //put there SubSchemeShard and SubHive at the future
 }
 
-message TDiskSpaceUsage {
-    message TTables {
-        // in bytes
-        optional uint64 TotalSize = 1;
-        optional uint64 DataSize = 2;
-        optional uint64 IndexSize = 3;
-    }
-
-    optional TTables Tables = 1;
-}
-
+message TDiskSpaceUsage { 
+    message TTables { 
+        // in bytes 
+        optional uint64 TotalSize = 1; 
+        optional uint64 DataSize = 2; 
+        optional uint64 IndexSize = 3; 
+    } 
+ 
+    optional TTables Tables = 1; 
+} 
+ 
 message TDomainState {
     optional bool DiskQuotaExceeded = 1;
 }
@@ -65,10 +65,10 @@ message TDomainDescription {
     optional uint64 PathsLimit = 7;
     optional uint64 ShardsInside = 8;
     optional uint64 ShardsLimit = 9;
-
-    optional TDomainKey ResourcesDomainKey = 10;
-
-    optional TDiskSpaceUsage DiskSpaceUsage = 11; // TODO: temp for SLYDB-95
+ 
+    optional TDomainKey ResourcesDomainKey = 10; 
+ 
+    optional TDiskSpaceUsage DiskSpaceUsage = 11; // TODO: temp for SLYDB-95 
 
     optional TSchemeQuotas DeclaredSchemeQuotas = 12;
 

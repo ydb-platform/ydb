@@ -42,7 +42,7 @@ TVector<ISubOperationBase::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxT
         op->SetSnapshotTxId(config.GetSnaphotTxId());
         op->SetBuildIndexId(config.GetBuildIndexId());
 
-        result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
+        result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize)); 
     }
 
     {
@@ -52,7 +52,7 @@ TVector<ISubOperationBase::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxT
         alterIndex->SetName(index.LeafName());
         alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
 
-        result.push_back(CreateAlterTableIndex(NextPartId(nextId, result), tableIndexAltering));
+        result.push_back(CreateAlterTableIndex(NextPartId(nextId, result), tableIndexAltering)); 
     }
 
     {
@@ -63,7 +63,7 @@ TVector<ISubOperationBase::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxT
         alterTable->MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(false);
         alterTable->MutablePartitionConfig()->SetShadowData(false);
 
-        result.push_back(CreateFinalizeBuildIndexImplTable(NextPartId(nextId, result), indexImplTableAltering));
+        result.push_back(CreateFinalizeBuildIndexImplTable(NextPartId(nextId, result), indexImplTableAltering)); 
     }
 
     return result;
@@ -93,15 +93,15 @@ TVector<ISubOperationBase::TPtr> CancelBuildIndex(TOperationId nextId, const TTx
         op->SetSnapshotTxId(config.GetSnaphotTxId());
         op->SetBuildIndexId(config.GetBuildIndexId());
 
-        result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
+        result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize)); 
     }
 
     {
         auto tableIndexDropping = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
         auto operation = tableIndexDropping.MutableDrop();
         operation->SetName(ToString(index.Base()->Name));
-
-        result.push_back(CreateDropTableIndex(NextPartId(nextId, result), tableIndexDropping));
+ 
+        result.push_back(CreateDropTableIndex(NextPartId(nextId, result), tableIndexDropping)); 
     }
 
     Y_VERIFY(index.Base()->GetChildren().size() == 1);
@@ -133,8 +133,8 @@ TVector<ISubOperationBase::TPtr> CancelBuildIndex(TOperationId nextId, const TTx
             auto implTableDropping = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
             auto operation = implTableDropping.MutableDrop();
             operation->SetName(ToString(implTable.Base()->Name));
-
-            result.push_back(CreateDropTable(NextPartId(nextId,result), implTableDropping));
+ 
+            result.push_back(CreateDropTable(NextPartId(nextId,result), implTableDropping)); 
         }
     }
 

@@ -48,13 +48,13 @@ public:
             Y_VERIFY_S(solomonPartition, "rtmr partitions is null shard idx: " << shard.Idx << " Path: " << txState->TargetPathId);
 
             auto tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
-
-            if (solomonPartition->TabletId != InvalidTabletId && tabletId != solomonPartition->TabletId) {
-                Y_FAIL_S("Solomon partition tablet id mismatch"
-                    << ": expected: " << solomonPartition->TabletId
-                    << ", got: " << tabletId);
-            }
-
+ 
+            if (solomonPartition->TabletId != InvalidTabletId && tabletId != solomonPartition->TabletId) { 
+                Y_FAIL_S("Solomon partition tablet id mismatch" 
+                    << ": expected: " << solomonPartition->TabletId 
+                    << ", got: " << tabletId); 
+            } 
+ 
             solomonPartition->TabletId = tabletId;
         }
 
@@ -254,27 +254,27 @@ public:
 
         TSolomonVolumeInfo::TPtr solomon = context.SS->SolomonVolumes.at(path.Base()->PathId);
 
-        if (!alter.HasPartitionCount() && !alter.GetUpdateChannelsBinding()) {
+        if (!alter.HasPartitionCount() && !alter.GetUpdateChannelsBinding()) { 
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Empty alter");
             return result;
         }
 
-        if (alter.GetUpdateChannelsBinding() && !AppData()->FeatureFlags.GetAllowUpdateChannelsBindingOfSolomonPartitions()) {
+        if (alter.GetUpdateChannelsBinding() && !AppData()->FeatureFlags.GetAllowUpdateChannelsBindingOfSolomonPartitions()) { 
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Updating of channels binding is not available");
         }
 
-        if (alter.HasPartitionCount()) {
-            if (alter.GetPartitionCount() < solomon->Partitions.size()) {
+        if (alter.HasPartitionCount()) { 
+            if (alter.GetPartitionCount() < solomon->Partitions.size()) { 
                 result->SetError(NKikimrScheme::StatusInvalidParameter, "solomon volume has more shards than requested");
-                return result;
-            }
-
-            if (alter.GetPartitionCount() == solomon->Partitions.size()) {
+                return result; 
+            } 
+ 
+            if (alter.GetPartitionCount() == solomon->Partitions.size()) { 
                 result->SetError(NKikimrScheme::StatusSuccess, "solomon volume has olready the same shards as requested");
-                return result;
-            }
-        }
-
+                return result; 
+            } 
+        } 
+ 
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
@@ -307,42 +307,42 @@ public:
 
         context.SS->PersistLastTxId(db, path.Base());
 
-        if (alter.GetUpdateChannelsBinding()) {
-            txState.Shards.reserve(alter.HasPartitionCount() ? alter.GetPartitionCount() : solomon->Partitions.size());
-        } else {
-            Y_VERIFY(alter.HasPartitionCount());
-            txState.Shards.reserve(alter.GetPartitionCount() - solomon->Partitions.size());
-        }
+        if (alter.GetUpdateChannelsBinding()) { 
+            txState.Shards.reserve(alter.HasPartitionCount() ? alter.GetPartitionCount() : solomon->Partitions.size()); 
+        } else { 
+            Y_VERIFY(alter.HasPartitionCount()); 
+            txState.Shards.reserve(alter.GetPartitionCount() - solomon->Partitions.size()); 
+        } 
 
-        if (alter.GetUpdateChannelsBinding()) {
-            for (const auto& [shardIdx, partitionInfo] : solomon->Partitions) {
-                txState.Shards.emplace_back(shardIdx, TTabletTypes::KeyValue, TTxState::CreateParts);
+        if (alter.GetUpdateChannelsBinding()) { 
+            for (const auto& [shardIdx, partitionInfo] : solomon->Partitions) { 
+                txState.Shards.emplace_back(shardIdx, TTabletTypes::KeyValue, TTxState::CreateParts); 
 
                 auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
                 shardInfo.CurrentTxId = OperationId.GetTxId();
                 shardInfo.BindedChannels = channelsBinding;
 
-                context.SS->PersistShardMapping(db, shardIdx, partitionInfo->TabletId, path.Base()->PathId, OperationId.GetTxId(), solomonPartitionInfo.TabletType);
-                context.SS->PersistChannelsBinding(db, shardIdx, channelsBinding);
-            }
+                context.SS->PersistShardMapping(db, shardIdx, partitionInfo->TabletId, path.Base()->PathId, OperationId.GetTxId(), solomonPartitionInfo.TabletType); 
+                context.SS->PersistChannelsBinding(db, shardIdx, channelsBinding); 
+            } 
         }
 
-        if (alter.HasPartitionCount()) {
-            const ui64 shardsToCreate = alter.GetPartitionCount() - solomon->Partitions.size();
-
-            for (ui64 i = 0; i < shardsToCreate; ++i) {
+        if (alter.HasPartitionCount()) { 
+            const ui64 shardsToCreate = alter.GetPartitionCount() - solomon->Partitions.size(); 
+ 
+            for (ui64 i = 0; i < shardsToCreate; ++i) { 
                 const auto shardIdx = context.SS->RegisterShardInfo(solomonPartitionInfo);
                 context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, path.Base()->PathId, OperationId.GetTxId(), solomonPartitionInfo.TabletType);
                 context.SS->PersistChannelsBinding(db, shardIdx, channelsBinding);
 
-                alterSolomon->Partitions[shardIdx] = new TSolomonPartitionInfo(solomon->Partitions.size() + i);
-                txState.Shards.emplace_back(shardIdx, TTabletTypes::KeyValue, TTxState::CreateParts);
-            }
+                alterSolomon->Partitions[shardIdx] = new TSolomonPartitionInfo(solomon->Partitions.size() + i); 
+                txState.Shards.emplace_back(shardIdx, TTabletTypes::KeyValue, TTxState::CreateParts); 
+            } 
             context.SS->PersistUpdateNextShardIdx(db);
-
-            path.Base()->IncShardsInside(shardsToCreate);
-        }
-
+ 
+            path.Base()->IncShardsInside(shardsToCreate); 
+        } 
+ 
         solomon->AlterData = alterSolomon;
         context.SS->PersistAlterSolomonVolume(db, path.Base()->PathId, solomon);
 

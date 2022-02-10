@@ -3,10 +3,10 @@ import codecs
 import decimal
 import time
 import json
-import os
+import os 
 
 import pytest
-from hamcrest import any_of, assert_that, equal_to, is_, none, raises, less_than, has_length, not_
+from hamcrest import any_of, assert_that, equal_to, is_, none, raises, less_than, has_length, not_ 
 from tornado import ioloop, gen
 from google.protobuf import text_format
 import logging
@@ -115,28 +115,28 @@ class Base(object):
             cls.driver.stop()
 
 
-class WithTenant(Base):
-    @classmethod
-    def setup_class(cls):
+class WithTenant(Base): 
+    @classmethod 
+    def setup_class(cls): 
         cls.cluster = kikimr_cluster_factory()
-        cls.cluster.start()
-        cls.database_name = "/Root/tenant"
-        cls.cluster.create_database(
-            cls.database_name,
+        cls.cluster.start() 
+        cls.database_name = "/Root/tenant" 
+        cls.cluster.create_database( 
+            cls.database_name, 
             storage_pool_units_count={'hdd': 1}
-        )
+        ) 
         cls.cluster.register_and_start_slots(cls.database_name, count=1)
         cls.cluster.wait_tenant_up(cls.database_name)
         cls.connection_params = ydb.DriverConfig(endpoint="localhost:%d" % cls.cluster.nodes[1].port, database=cls.database_name)
-        cls.driver = ydb.Driver(cls.connection_params)
-        cls.driver.wait()
-
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.remove_database(cls.database_name)
-        super(WithTenant, cls).teardown_class()
-
-
+        cls.driver = ydb.Driver(cls.connection_params) 
+        cls.driver.wait() 
+ 
+    @classmethod 
+    def teardown_class(cls): 
+        cls.cluster.remove_database(cls.database_name) 
+        super(WithTenant, cls).teardown_class() 
+ 
+ 
 class TestExplain(Base):
     def test_explain_data_query(self):
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
@@ -1763,219 +1763,219 @@ class TestForPotentialDeadlock(object):
         connection = driver._store.get()
         driver.stop()
         connection.close()
-
-
-class TestRecursiveCreation(Base):
-    def test_mkdir(self):
-        path = '{}/test_recursive_mkdir/a/b/dir'.format(self.database_name)
-
-        self.driver.scheme_client.make_directory(path)
-        response = self.driver.scheme_client.describe_path(path)
-        assert_that(response.name, is_(os.path.basename(path)))
-
-    def test_create_table(self):
-        path = '{}/test_recursive_create_table/a/b/table'.format(self.database_name)
-
-        self.driver.table_client.session().create().create_table(
-            path,
-            ydb.TableDescription()
-            .with_columns(
-                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)),
-                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8))
-            )
-            .with_primary_key('key')
-        )
-        response = self.driver.scheme_client.describe_path(path)
-        assert_that(response.name, is_(os.path.basename(path)))
-
-
-class TestAttributes(WithTenant):
-    ATTRIBUTES = {
-        'one': '1',
-        'two': 'two',
-    }
-
-    def test_create_table(self):
-        path = '{}/test_attributes/create_table/table'.format(self.database_name)
+ 
+ 
+class TestRecursiveCreation(Base): 
+    def test_mkdir(self): 
+        path = '{}/test_recursive_mkdir/a/b/dir'.format(self.database_name) 
+ 
+        self.driver.scheme_client.make_directory(path) 
+        response = self.driver.scheme_client.describe_path(path) 
+        assert_that(response.name, is_(os.path.basename(path))) 
+ 
+    def test_create_table(self): 
+        path = '{}/test_recursive_create_table/a/b/table'.format(self.database_name) 
+ 
+        self.driver.table_client.session().create().create_table( 
+            path, 
+            ydb.TableDescription() 
+            .with_columns( 
+                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)), 
+                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8)) 
+            ) 
+            .with_primary_key('key') 
+        ) 
+        response = self.driver.scheme_client.describe_path(path) 
+        assert_that(response.name, is_(os.path.basename(path))) 
+ 
+ 
+class TestAttributes(WithTenant): 
+    ATTRIBUTES = { 
+        'one': '1', 
+        'two': 'two', 
+    } 
+ 
+    def test_create_table(self): 
+        path = '{}/test_attributes/create_table/table'.format(self.database_name) 
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         session.create_table(
-            path,
-            ydb.TableDescription()
-            .with_columns(
-                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)),
-                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8))
-            )
-            .with_primary_key('key')
-            .with_attributes(self.ATTRIBUTES)
-        )
-
+            path, 
+            ydb.TableDescription() 
+            .with_columns( 
+                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)), 
+                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8)) 
+            ) 
+            .with_primary_key('key') 
+            .with_attributes(self.ATTRIBUTES) 
+        ) 
+ 
         response = session.describe_table(path)
-        assert_that(response.attributes, equal_to(self.ATTRIBUTES))
-
-    def test_copy_table(self):
-        src_path = '{}/test_attributes/copy_table/src_table'.format(self.database_name)
-        dst_path = '{}/test_attributes/copy_table/dst_table'.format(self.database_name)
-
+        assert_that(response.attributes, equal_to(self.ATTRIBUTES)) 
+ 
+    def test_copy_table(self): 
+        src_path = '{}/test_attributes/copy_table/src_table'.format(self.database_name) 
+        dst_path = '{}/test_attributes/copy_table/dst_table'.format(self.database_name) 
+ 
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         session.create_table(
-            src_path,
-            ydb.TableDescription()
-            .with_columns(
-                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)),
-                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8))
-            )
-            .with_primary_key('key')
-            .with_attributes(self.ATTRIBUTES)
-        )
-
+            src_path, 
+            ydb.TableDescription() 
+            .with_columns( 
+                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)), 
+                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8)) 
+            ) 
+            .with_primary_key('key') 
+            .with_attributes(self.ATTRIBUTES) 
+        ) 
+ 
         session.copy_table(src_path, dst_path)
-
+ 
         response = session.describe_table(dst_path)
-        assert_that(response.attributes, equal_to(self.ATTRIBUTES))
-
-    def test_create_indexed_table(self):
-        path = '{}/test_attributes/create_indexed_table/table'.format(self.database_name)
-
+        assert_that(response.attributes, equal_to(self.ATTRIBUTES)) 
+ 
+    def test_create_indexed_table(self): 
+        path = '{}/test_attributes/create_indexed_table/table'.format(self.database_name) 
+ 
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         session.create_table(
-            path,
-            ydb.TableDescription()
-            .with_columns(
-                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)),
-                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8))
-            )
-            .with_primary_key('key')
-            .with_index(
-                ydb.TableIndex('by_value').with_index_columns('value')
-            )
-            .with_attributes(self.ATTRIBUTES)
-        )
-
+            path, 
+            ydb.TableDescription() 
+            .with_columns( 
+                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)), 
+                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8)) 
+            ) 
+            .with_primary_key('key') 
+            .with_index( 
+                ydb.TableIndex('by_value').with_index_columns('value') 
+            ) 
+            .with_attributes(self.ATTRIBUTES) 
+        ) 
+ 
         response = session.describe_table(path)
-        assert_that(response.attributes, equal_to(self.ATTRIBUTES))
-
-    def test_alter_table(self):
-        path = '{}/test_attributes/alter_table/table'.format(self.database_name)
-
-        # create
+        assert_that(response.attributes, equal_to(self.ATTRIBUTES)) 
+ 
+    def test_alter_table(self): 
+        path = '{}/test_attributes/alter_table/table'.format(self.database_name) 
+ 
+        # create 
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         session.create_table(
-            path,
-            ydb.TableDescription()
-            .with_columns(
-                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)),
-                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8))
-            )
-            .with_primary_key('key')
-        )
-
+            path, 
+            ydb.TableDescription() 
+            .with_columns( 
+                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)), 
+                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8)) 
+            ) 
+            .with_primary_key('key') 
+        ) 
+ 
         response = session.describe_table(path)
-        assert_that(response.attributes, equal_to({}))
-
-        # alter (add)
+        assert_that(response.attributes, equal_to({})) 
+ 
+        # alter (add) 
         session.alter_table(
-            path, add_columns=[], drop_columns=[], alter_attributes=self.ATTRIBUTES
-        )
-
+            path, add_columns=[], drop_columns=[], alter_attributes=self.ATTRIBUTES 
+        ) 
+ 
         response = session.describe_table(path)
-        assert_that(response.attributes, equal_to(self.ATTRIBUTES))
-
-        # alter (drop)
+        assert_that(response.attributes, equal_to(self.ATTRIBUTES)) 
+ 
+        # alter (drop) 
         session.alter_table(
-            path, add_columns=[], drop_columns=[], alter_attributes={
-                k: '' for k in self.ATTRIBUTES.keys()
-            }
-        )
-
+            path, add_columns=[], drop_columns=[], alter_attributes={ 
+                k: '' for k in self.ATTRIBUTES.keys() 
+            } 
+        ) 
+ 
         response = session.describe_table(path)
-        assert_that(response.attributes, equal_to({}))
-
-        # mixed alter
-        def mixed_alter():
+        assert_that(response.attributes, equal_to({})) 
+ 
+        # mixed alter 
+        def mixed_alter(): 
             session.alter_table(
-                path, add_columns=[], drop_columns=['value'], alter_attributes=self.ATTRIBUTES
-            )
-
-        assert_that(mixed_alter, raises(ydb.Unsupported))
-
-    @pytest.mark.parametrize('attributes', [
-        {'': 'v'},  # empty key
-        {'k': ''},  # empty value
-        {'k' * (100 + 1): 'v'},  # too long key
-        {'k': 'v' * (4096 + 1)},  # too long value
-        {'k1': 'v1' * 2048, 'k2': 'v2' * 2048, 'k3': 'v3' * 2048},  # bad total size
-    ])
-    def test_limits(self, attributes):
-        path = '{}/test_attributes/limits/table'.format(self.database_name)
+                path, add_columns=[], drop_columns=['value'], alter_attributes=self.ATTRIBUTES 
+            ) 
+ 
+        assert_that(mixed_alter, raises(ydb.Unsupported)) 
+ 
+    @pytest.mark.parametrize('attributes', [ 
+        {'': 'v'},  # empty key 
+        {'k': ''},  # empty value 
+        {'k' * (100 + 1): 'v'},  # too long key 
+        {'k': 'v' * (4096 + 1)},  # too long value 
+        {'k1': 'v1' * 2048, 'k2': 'v2' * 2048, 'k3': 'v3' * 2048},  # bad total size 
+    ]) 
+    def test_limits(self, attributes): 
+        path = '{}/test_attributes/limits/table'.format(self.database_name) 
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
-
-        def callee():
+ 
+        def callee(): 
             session.create_table(
-                path,
-                ydb.TableDescription()
-                .with_columns(
-                    ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)),
-                    ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                )
-                .with_primary_key('key')
-                .with_attributes(attributes)
-            )
-
-        assert_that(callee, any_of(raises(ydb.BadRequest), raises(ydb.GenericError)))
-
-
-class TestDocApiTables(WithTenant):
-    def _create_table(self, path):
+                path, 
+                ydb.TableDescription() 
+                .with_columns( 
+                    ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)), 
+                    ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8)) 
+                ) 
+                .with_primary_key('key') 
+                .with_attributes(attributes) 
+            ) 
+ 
+        assert_that(callee, any_of(raises(ydb.BadRequest), raises(ydb.GenericError))) 
+ 
+ 
+class TestDocApiTables(WithTenant): 
+    def _create_table(self, path): 
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         session.create_table(
-            path,
-            ydb.TableDescription()
-            .with_columns(
-                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)),
-                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8))
-            )
-            .with_primary_key('key')
+            path, 
+            ydb.TableDescription() 
+            .with_columns( 
+                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Int32)), 
+                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.Utf8)) 
+            ) 
+            .with_primary_key('key') 
             .with_attributes({'__document_api_version': '1'})
-        )
-
-    def test_create_table(self):
-        path = '{}/test_doc_api_tables/create_table/table'.format(self.database_name)
-        self._create_table(path)
-
-    @pytest.mark.parametrize('settings,ex', [
-        (None, ydb.BadRequest),
-        (ydb.BaseRequestSettings().with_request_type('_document_api_request'), None),
-    ])
-    def test_alter_table(self, settings, ex):
-        path = '{}/test_test_doc_api_tables/alter_table/table'.format(self.database_name)
-        self._create_table(path)
+        ) 
+ 
+    def test_create_table(self): 
+        path = '{}/test_doc_api_tables/create_table/table'.format(self.database_name) 
+        self._create_table(path) 
+ 
+    @pytest.mark.parametrize('settings,ex', [ 
+        (None, ydb.BadRequest), 
+        (ydb.BaseRequestSettings().with_request_type('_document_api_request'), None), 
+    ]) 
+    def test_alter_table(self, settings, ex): 
+        path = '{}/test_test_doc_api_tables/alter_table/table'.format(self.database_name) 
+        self._create_table(path) 
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
-
-        def callee():
+ 
+        def callee(): 
             session.alter_table(
-                path, add_columns=[], drop_columns=['value'], settings=settings
-            )
-
-        if ex:
-            assert_that(callee, raises(ex, "Document API table cannot be modified"))
-        else:
-            callee()
-
-    @pytest.mark.parametrize('settings,ex', [
-        (None, None),
-        (ydb.BaseRequestSettings().with_request_type('_document_api_request'), None),
-    ])
-    def test_drop_table(self, settings, ex):
-        path = '{}/test_test_doc_api_tables/drop_table/table'.format(self.database_name)
-        self._create_table(path)
+                path, add_columns=[], drop_columns=['value'], settings=settings 
+            ) 
+ 
+        if ex: 
+            assert_that(callee, raises(ex, "Document API table cannot be modified")) 
+        else: 
+            callee() 
+ 
+    @pytest.mark.parametrize('settings,ex', [ 
+        (None, None), 
+        (ydb.BaseRequestSettings().with_request_type('_document_api_request'), None), 
+    ]) 
+    def test_drop_table(self, settings, ex): 
+        path = '{}/test_test_doc_api_tables/drop_table/table'.format(self.database_name) 
+        self._create_table(path) 
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
-
-        def callee():
+ 
+        def callee(): 
             session.drop_table(
-                path, settings=settings
-            )
-
-        if ex:
-            assert_that(callee, raises(ex, "Document API table cannot be modified"))
-        else:
-            callee()
+                path, settings=settings 
+            ) 
+ 
+        if ex: 
+            assert_that(callee, raises(ex, "Document API table cannot be modified")) 
+        else: 
+            callee() 

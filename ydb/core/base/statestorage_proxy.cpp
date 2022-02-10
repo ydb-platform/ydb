@@ -1,15 +1,15 @@
 #include "statestorage_impl.h"
 #include "tabletid.h"
-
+ 
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/protos/services.pb.h>
-
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+ 
+#include <library/cpp/actors/core/actor_bootstrapped.h> 
+#include <library/cpp/actors/core/hfunc.h> 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/helpers/flow_controlled_queue.h>
-
+ 
 #include <util/digest/city.h>
 #include <util/generic/xrange.h>
 
@@ -736,7 +736,7 @@ public:
 class TStateStorageProxy : public TActor<TStateStorageProxy> {
     TIntrusivePtr<TStateStorageInfo> Info;
     TIntrusivePtr<TStateStorageInfo> BoardInfo;
-    TIntrusivePtr<TStateStorageInfo> SchemeBoardInfo;
+    TIntrusivePtr<TStateStorageInfo> SchemeBoardInfo; 
 
     TIntrusivePtr<TStateStorageInfo> FlowControlledInfo;
 
@@ -763,55 +763,55 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicas::TPtr &ev) {
-        ResolveReplicas(ev, ev->Get()->TabletID, Info);
-    }
+        ResolveReplicas(ev, ev->Get()->TabletID, Info); 
+    } 
 
-    void Handle(TEvStateStorage::TEvResolveBoard::TPtr &ev) {
-        if (!BoardInfo) {
-            Send(ev->Sender, new TEvStateStorage::TEvResolveReplicasList(), 0, ev->Cookie);
-            return;
-        }
-
-        const auto *msg = ev->Get();
-        const ui64 pathHash = CityHash64(msg->Path);
-
-        ResolveReplicas(ev, pathHash, BoardInfo);
-    }
-
-    void Handle(TEvStateStorage::TEvResolveSchemeBoard::TPtr &ev) {
-        if (!SchemeBoardInfo) {
-            Send(ev->Sender, new TEvStateStorage::TEvResolveReplicasList(), 0, ev->Cookie);
-            return;
-        }
-
-        const auto *msg = ev->Get();
-
+    void Handle(TEvStateStorage::TEvResolveBoard::TPtr &ev) { 
+        if (!BoardInfo) { 
+            Send(ev->Sender, new TEvStateStorage::TEvResolveReplicasList(), 0, ev->Cookie); 
+            return; 
+        } 
+ 
+        const auto *msg = ev->Get(); 
+        const ui64 pathHash = CityHash64(msg->Path); 
+ 
+        ResolveReplicas(ev, pathHash, BoardInfo); 
+    } 
+ 
+    void Handle(TEvStateStorage::TEvResolveSchemeBoard::TPtr &ev) { 
+        if (!SchemeBoardInfo) { 
+            Send(ev->Sender, new TEvStateStorage::TEvResolveReplicasList(), 0, ev->Cookie); 
+            return; 
+        } 
+ 
+        const auto *msg = ev->Get(); 
+ 
         ui64 fakeTabletId;
-        switch (msg->KeyType) {
-        case TEvStateStorage::TEvResolveSchemeBoard::KeyTypePath:
+        switch (msg->KeyType) { 
+        case TEvStateStorage::TEvResolveSchemeBoard::KeyTypePath: 
             fakeTabletId = CityHash64(msg->Path);
-            break;
-
-        case TEvStateStorage::TEvResolveSchemeBoard::KeyTypePathId:
+            break; 
+ 
+        case TEvStateStorage::TEvResolveSchemeBoard::KeyTypePathId: 
             fakeTabletId = msg->PathId.Hash();
-            break;
-
-        default:
-            Y_FAIL("unreachable");
-        }
-
+            break; 
+ 
+        default: 
+            Y_FAIL("unreachable"); 
+        } 
+ 
         ResolveReplicas(ev, fakeTabletId, SchemeBoardInfo);
-    }
-
-    void Handle(TEvStateStorage::TEvListSchemeBoard::TPtr &ev) {
-        if (!SchemeBoardInfo) {
+    } 
+ 
+    void Handle(TEvStateStorage::TEvListSchemeBoard::TPtr &ev) { 
+        if (!SchemeBoardInfo) { 
             Send(ev->Sender, new TEvStateStorage::TEvListSchemeBoardResult(nullptr), 0, ev->Cookie);
-            return;
-        }
-
+            return; 
+        } 
+ 
         Send(ev->Sender, new TEvStateStorage::TEvListSchemeBoardResult(SchemeBoardInfo), 0, ev->Cookie);
-    }
-
+    } 
+ 
     void Handle(TEvStateStorage::TEvReplicaProbeSubscribe::TPtr &ev) {
         const auto *msg = ev->Get();
 
@@ -872,8 +872,8 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
             }
     }
 
-    template<typename TEventPtr>
-    void ResolveReplicas(const TEventPtr &ev, ui64 tabletId, const TIntrusivePtr<TStateStorageInfo> &info) const {
+    template<typename TEventPtr> 
+    void ResolveReplicas(const TEventPtr &ev, ui64 tabletId, const TIntrusivePtr<TStateStorageInfo> &info) const { 
         THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
         info->SelectReplicas(tabletId, selection.Get());
 
@@ -950,14 +950,14 @@ public:
         return NKikimrServices::TActivity::SS_PROXY;
     }
 
-    TStateStorageProxy(
-            const TIntrusivePtr<TStateStorageInfo> &info,
-            const TIntrusivePtr<TStateStorageInfo> &boardInfo,
-            const TIntrusivePtr<TStateStorageInfo> &schemeBoardInfo)
+    TStateStorageProxy( 
+            const TIntrusivePtr<TStateStorageInfo> &info, 
+            const TIntrusivePtr<TStateStorageInfo> &boardInfo, 
+            const TIntrusivePtr<TStateStorageInfo> &schemeBoardInfo) 
         : TActor(&TThis::StateInit)
         , Info(info)
         , BoardInfo(boardInfo)
-        , SchemeBoardInfo(schemeBoardInfo)
+        , SchemeBoardInfo(schemeBoardInfo) 
     {}
 
     STATEFN(StateInit) {
@@ -970,8 +970,8 @@ public:
             hFunc(TEvStateStorage::TEvCleanup, Handle);
             hFunc(TEvStateStorage::TEvResolveReplicas, Handle);
             hFunc(TEvStateStorage::TEvResolveBoard, Handle);
-            hFunc(TEvStateStorage::TEvResolveSchemeBoard, Handle);
-            hFunc(TEvStateStorage::TEvListSchemeBoard, Handle);
+            hFunc(TEvStateStorage::TEvResolveSchemeBoard, Handle); 
+            hFunc(TEvStateStorage::TEvListSchemeBoard, Handle); 
             hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
             hFunc(TEvStateStorage::TEvReplicaProbeSubscribe, Handle);
             hFunc(TEvStateStorage::TEvReplicaProbeUnsubscribe, Handle);
@@ -1017,12 +1017,12 @@ public:
     }
 };
 
-IActor* CreateStateStorageProxy(
-    const TIntrusivePtr<TStateStorageInfo> &info,
-    const TIntrusivePtr<TStateStorageInfo> &board,
-    const TIntrusivePtr<TStateStorageInfo> &schemeBoard
-) {
-    return new TStateStorageProxy(info, board, schemeBoard);
+IActor* CreateStateStorageProxy( 
+    const TIntrusivePtr<TStateStorageInfo> &info, 
+    const TIntrusivePtr<TStateStorageInfo> &board, 
+    const TIntrusivePtr<TStateStorageInfo> &schemeBoard 
+) { 
+    return new TStateStorageProxy(info, board, schemeBoard); 
 }
 
 IActor* CreateStateStorageProxyStub() {

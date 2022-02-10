@@ -1,18 +1,18 @@
-LIBRARY()
-
-OWNER(
-    ilnaz
-    g:kikimr
-)
-
-SRCS(
+LIBRARY() 
+ 
+OWNER( 
+    ilnaz 
+    g:kikimr 
+) 
+ 
+SRCS( 
     csv_ydb_dump.cpp
     csv_arrow.cpp
-)
-
-PEERDIR(
-    contrib/libs/double-conversion
-    library/cpp/string_utils/quote
+) 
+ 
+PEERDIR( 
+    contrib/libs/double-conversion 
+    library/cpp/string_utils/quote 
     ydb/core/formats
     ydb/core/scheme
     ydb/library/binary_json
@@ -22,8 +22,8 @@ PEERDIR(
     ydb/library/yql/public/udf
     ydb/library/yql/utils
     ydb/public/lib/scheme_types
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
-
-END()
+ 
+END() 

@@ -24,13 +24,13 @@ message TTenantPoolConfig {
     optional string NodeType = 3;
 }
 
-enum EState {
-    STATE_UNKNOWN = 0;
-    TENANT_ASSIGNED = 1;
-    TENANT_OK = 2;
-    TENANT_UNKNOWN = 3;
-}
-
+enum EState { 
+    STATE_UNKNOWN = 0; 
+    TENANT_ASSIGNED = 1; 
+    TENANT_OK = 2; 
+    TENANT_UNKNOWN = 3; 
+} 
+ 
 message TSlotStatus {
     optional string Id = 1;
     optional string Type = 2;
@@ -38,8 +38,8 @@ message TSlotStatus {
     optional NKikimrTabletBase.TMetrics ResourceLimit = 4;
     optional string Label = 5;
     repeated NKikimrSchemeOp.TUserAttribute TenantAttributes = 6;
-    optional EState State = 7;
-    optional NKikimrSubDomains.TDomainKey DomainKey = 8;
+    optional EState State = 7; 
+    optional NKikimrSubDomains.TDomainKey DomainKey = 8; 
 }
 
 message TGetStatus {
@@ -73,8 +73,8 @@ message TConfigureSlotResult {
 }
 
 message TTakeOwnership {
-    optional uint64 Generation = 1;
-    optional uint64 SeqNo = 2;
+    optional uint64 Generation = 1; 
+    optional uint64 SeqNo = 2; 
 }
 
 message TLostOwnership {

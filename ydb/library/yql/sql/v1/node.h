@@ -18,7 +18,7 @@
 
 #include <array>
 #include <functional>
-#include <variant>
+#include <variant> 
 
 namespace NSQLTranslationV1 {
     constexpr const size_t SQL_MAX_INLINE_SCRIPT_LEN = 24;
@@ -1052,13 +1052,13 @@ namespace NSQLTranslationV1 {
     TMaybe<TStringContent> StringContent(TContext& ctx, TPosition pos, const TString& input);
     TMaybe<TStringContent> StringContentOrIdContent(TContext& ctx, TPosition pos, const TString& input);
 
-    struct TTtlSettings {
-        TIdentifier ColumnName;
-        TNodePtr Expr;
-
-        TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr);
-    };
-
+    struct TTtlSettings { 
+        TIdentifier ColumnName; 
+        TNodePtr Expr; 
+ 
+        TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr); 
+    }; 
+ 
     struct TTableSettings {
         TNodePtr CompactionPolicy;
         TMaybe<TIdentifier> AutoPartitioningBySize;
@@ -1070,12 +1070,12 @@ namespace NSQLTranslationV1 {
         TVector<TVector<TNodePtr>> PartitionAtKeys;
         TMaybe<TIdentifier> KeyBloomFilter;
         TNodePtr ReadReplicasSettings;
-        NYql::TResetableSetting<TTtlSettings, void> TtlSettings;
-
+        NYql::TResetableSetting<TTtlSettings, void> TtlSettings; 
+ 
         bool IsSet() const {
             return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad
                 || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter
-                || ReadReplicasSettings || TtlSettings;
+                || ReadReplicasSettings || TtlSettings; 
         }
     };
 
@@ -1089,52 +1089,52 @@ namespace NSQLTranslationV1 {
         TNodePtr Compression;
     };
 
-    struct TIndexDescription {
-        enum class EType {
-            GlobalSync,
-            GlobalAsync,
-        };
-
-        TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)
-            : Name(name)
-            , Type(type)
-        {}
-
-        TIdentifier Name;
-        EType Type;
-        TVector<TIdentifier> IndexColumns;
-        TVector<TIdentifier> DataColumns;
-    };
-
-    struct TChangefeedSettings {
-        struct TLocalSinkSettings {
-            // no special settings
-        };
-
-        TNodePtr Mode;
-        TNodePtr Format;
-        std::optional<std::variant<TLocalSinkSettings>> SinkSettings;
-    };
-
-    struct TChangefeedDescription {
-        TChangefeedDescription(const TIdentifier& name)
-            : Name(name)
-            , Disable(false)
-        {}
-
-        TIdentifier Name;
-        TChangefeedSettings Settings;
-        bool Disable;
-    };
-
+    struct TIndexDescription { 
+        enum class EType { 
+            GlobalSync, 
+            GlobalAsync, 
+        }; 
+ 
+        TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync) 
+            : Name(name) 
+            , Type(type) 
+        {} 
+ 
+        TIdentifier Name; 
+        EType Type; 
+        TVector<TIdentifier> IndexColumns; 
+        TVector<TIdentifier> DataColumns; 
+    }; 
+ 
+    struct TChangefeedSettings { 
+        struct TLocalSinkSettings { 
+            // no special settings 
+        }; 
+ 
+        TNodePtr Mode; 
+        TNodePtr Format; 
+        std::optional<std::variant<TLocalSinkSettings>> SinkSettings; 
+    }; 
+ 
+    struct TChangefeedDescription { 
+        TChangefeedDescription(const TIdentifier& name) 
+            : Name(name) 
+            , Disable(false) 
+        {} 
+ 
+        TIdentifier Name; 
+        TChangefeedSettings Settings; 
+        bool Disable; 
+    }; 
+ 
     struct TCreateTableParameters {
         TVector<TColumnSchema> Columns;
         TVector<TIdentifier> PkColumns;
         TVector<TIdentifier> PartitionByColumns;
         TVector<std::pair<TIdentifier, bool>> OrderByColumns;
-        TVector<TIndexDescription> Indexes;
+        TVector<TIndexDescription> Indexes; 
         TVector<TFamilyEntry> ColumnFamilies;
-        TVector<TChangefeedDescription> Changefeeds;
+        TVector<TChangefeedDescription> Changefeeds; 
         TTableSettings TableSettings;
     };
 
@@ -1145,20 +1145,20 @@ namespace NSQLTranslationV1 {
         TVector<TFamilyEntry> AddColumnFamilies;
         TVector<TFamilyEntry> AlterColumnFamilies;
         TTableSettings TableSettings;
-        TVector<TIndexDescription> AddIndexes;
+        TVector<TIndexDescription> AddIndexes; 
         TVector<TIdentifier> DropIndexes;
         TMaybe<TIdentifier> RenameTo;
-        TVector<TChangefeedDescription> AddChangefeeds;
-        TVector<TChangefeedDescription> AlterChangefeeds;
-        TVector<TIdentifier> DropChangefeeds;
+        TVector<TChangefeedDescription> AddChangefeeds; 
+        TVector<TChangefeedDescription> AlterChangefeeds; 
+        TVector<TIdentifier> DropChangefeeds; 
 
         bool IsEmpty() const {
             return AddColumns.empty() && DropColumns.empty() && AlterColumns.empty()
-                && AddColumnFamilies.empty() && AlterColumnFamilies.empty()
-                && !TableSettings.IsSet()
-                && AddIndexes.empty() && DropIndexes.empty()
-                && !RenameTo.Defined()
-                && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty();
+                && AddColumnFamilies.empty() && AlterColumnFamilies.empty() 
+                && !TableSettings.IsSet() 
+                && AddIndexes.empty() && DropIndexes.empty() 
+                && !RenameTo.Defined() 
+                && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty(); 
         }
     };
 

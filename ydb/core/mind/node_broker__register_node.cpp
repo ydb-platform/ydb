@@ -47,19 +47,19 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxRegisterNode Execute");
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
                     "Registration request from " << host << ":" << port << " "
-                    << (rec.GetFixedNodeId() ? "(fixed)" : "(not fixed)") << " "
-                    << "tenant: " << (rec.HasPath() ? rec.GetPath() : "<unspecified>"));
+                    << (rec.GetFixedNodeId() ? "(fixed)" : "(not fixed)") << " " 
+                    << "tenant: " << (rec.HasPath() ? rec.GetPath() : "<unspecified>")); 
 
         TNodeLocation loc(rec.GetLocation());
 
         Response = new TEvNodeBroker::TEvRegistrationResponse;
 
-        if (rec.HasPath() && ScopeId == NActors::TScopeId()) {
-            return Error(TStatus::ERROR,
-                         TStringBuilder() << "Cannot resolve scope id for path" << rec.GetPath(),
-                         ctx);
-        }
-
+        if (rec.HasPath() && ScopeId == NActors::TScopeId()) { 
+            return Error(TStatus::ERROR, 
+                         TStringBuilder() << "Cannot resolve scope id for path" << rec.GetPath(), 
+                         ctx); 
+        } 
+ 
         // Already registered?
         auto it = Self->Hosts.find(std::make_tuple(host, addr, port));
         if (it != Self->Hosts.end()) {
@@ -82,7 +82,7 @@ public:
                 node.Location = loc;
                 Self->DbUpdateNodeLocation(node, txc);
                 node.LegacyUpdatePending = false;
-            }
+            } 
 
             if (!node.IsFixed() && rec.GetFixedNodeId()) {
                 Self->DbFixNodeId(node, txc);

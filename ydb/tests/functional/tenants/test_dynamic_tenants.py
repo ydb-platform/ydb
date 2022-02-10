@@ -3,13 +3,13 @@ import os
 import logging
 import time
 
-from hamcrest import (
-    any_of,
-    assert_that,
-    calling,
-    equal_to,
-    raises,
-)
+from hamcrest import ( 
+    any_of, 
+    assert_that, 
+    calling, 
+    equal_to, 
+    raises, 
+) 
 
 import ydb
 
@@ -98,13 +98,13 @@ class TestCreateTenantThenExecYQLEmptyDatabaseHeader(DBWithDynamicSlot):
 
 class TestCreateTenantThenExecYQL(DBWithDynamicSlot):
     def test_case(self):
-        database = '/Root/users/database'
-
-        driver_config = ydb.DriverConfig(
-            "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
-            database
-        )
-
+        database = '/Root/users/database' 
+ 
+        driver_config = ydb.DriverConfig( 
+            "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port), 
+            database 
+        ) 
+ 
         driver_config2 = ydb.DriverConfig(
             "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
             database + "/"
@@ -298,112 +298,112 @@ class TestCreateAndDropTheSameTenant2(DBForStaticSlots):
             self.cluster.remove_database(database)
 
             logger.debug("done %d", iNo)
-
-
-class TestCheckAccess(DBWithDynamicSlot):
-    SLOT_COUNT = 2
-
-    def test_case(self):
-        users = {}
-        for user in ('user_1', 'user_2'):
-            users[user] = {
-                'path': os.path.join('/Root/users', user),
-                'owner': '%s@builtin' % user,
-            }
-
-        for user in users.values():
-            self.cluster.create_database(
-                user['path'],
-                storage_pool_units_count={
-                    'hdd': 1
-                }
-            )
-
+ 
+ 
+class TestCheckAccess(DBWithDynamicSlot): 
+    SLOT_COUNT = 2 
+ 
+    def test_case(self): 
+        users = {} 
+        for user in ('user_1', 'user_2'): 
+            users[user] = { 
+                'path': os.path.join('/Root/users', user), 
+                'owner': '%s@builtin' % user, 
+            } 
+ 
+        for user in users.values(): 
+            self.cluster.create_database( 
+                user['path'], 
+                storage_pool_units_count={ 
+                    'hdd': 1 
+                } 
+            ) 
+ 
             self.cluster.register_and_start_slots(user['path'], count=1)
             self.cluster.wait_tenant_up(user['path'])
 
-            driver_config = ydb.DriverConfig(
-                "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
-                user['path']
-            )
-
-            with ydb.Driver(driver_config) as driver:
-                driver.wait(timeout=10)
-
-                client = ydb.SchemeClient(driver)
-                client.modify_permissions(
-                    user['path'],
-                    ydb.ModifyPermissionsSettings().change_owner(user['owner'])
-                )
-
-        user_1 = users['user_1']
-        user_2 = users['user_2']
-
-        driver_config = ydb.DriverConfig(
-            "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
-            user_1['path'], auth_token=user_1['owner']
-        )
-
-        with ydb.Driver(driver_config) as driver:
-            driver.wait(timeout=10)
-            client = ydb.SchemeClient(driver)
-
-            while True:
-                try:
-                    client.list_directory(user_1['path'])
-                except ydb.Unauthorized:
-                    time.sleep(5)  # wait until caches are refreshed
-                else:
-                    break
-
-            assert_that(
-                calling(client.list_directory).with_args(
-                    user_2['path']
-                ),
-                raises(ydb.Unauthorized)
-            )
-
-            assert_that(
-                calling(client.list_directory).with_args(
-                    os.path.join(user_1['path'], 'a')
-                ),
-                raises(ydb.SchemeError)
-            )
-            assert_that(
-                calling(client.list_directory).with_args(
-                    os.path.join(user_2['path'], 'a')
-                ),
-                raises(ydb.SchemeError)
-            )
-
-            client.make_directory(os.path.join(user_1['path'], 'a'))
-            assert_that(
-                calling(client.make_directory).with_args(
-                    os.path.join(user_2['path'], 'a')
-                ),
-                raises(ydb.BadRequest)
-            )
-
-            with ydb.SessionPool(driver, size=1) as pool:
-                with pool.checkout() as session:
-                    session.execute_scheme(
+            driver_config = ydb.DriverConfig( 
+                "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port), 
+                user['path'] 
+            ) 
+ 
+            with ydb.Driver(driver_config) as driver: 
+                driver.wait(timeout=10) 
+ 
+                client = ydb.SchemeClient(driver) 
+                client.modify_permissions( 
+                    user['path'], 
+                    ydb.ModifyPermissionsSettings().change_owner(user['owner']) 
+                ) 
+ 
+        user_1 = users['user_1'] 
+        user_2 = users['user_2'] 
+ 
+        driver_config = ydb.DriverConfig( 
+            "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port), 
+            user_1['path'], auth_token=user_1['owner'] 
+        ) 
+ 
+        with ydb.Driver(driver_config) as driver: 
+            driver.wait(timeout=10) 
+            client = ydb.SchemeClient(driver) 
+ 
+            while True: 
+                try: 
+                    client.list_directory(user_1['path']) 
+                except ydb.Unauthorized: 
+                    time.sleep(5)  # wait until caches are refreshed 
+                else: 
+                    break 
+ 
+            assert_that( 
+                calling(client.list_directory).with_args( 
+                    user_2['path'] 
+                ), 
+                raises(ydb.Unauthorized) 
+            ) 
+ 
+            assert_that( 
+                calling(client.list_directory).with_args( 
+                    os.path.join(user_1['path'], 'a') 
+                ), 
+                raises(ydb.SchemeError) 
+            ) 
+            assert_that( 
+                calling(client.list_directory).with_args( 
+                    os.path.join(user_2['path'], 'a') 
+                ), 
+                raises(ydb.SchemeError) 
+            ) 
+ 
+            client.make_directory(os.path.join(user_1['path'], 'a')) 
+            assert_that( 
+                calling(client.make_directory).with_args( 
+                    os.path.join(user_2['path'], 'a') 
+                ), 
+                raises(ydb.BadRequest) 
+            ) 
+ 
+            with ydb.SessionPool(driver, size=1) as pool: 
+                with pool.checkout() as session: 
+                    session.execute_scheme( 
                         "create table `{}` (id Int64, primary key(id));".format(
-                            os.path.join(user_1['path'], 'q/w/table')
-                        )
-                    )
-                    assert_that(
-                        calling(session.execute_scheme).with_args(
+                            os.path.join(user_1['path'], 'q/w/table') 
+                        ) 
+                    ) 
+                    assert_that( 
+                        calling(session.execute_scheme).with_args( 
                             "create table `{}` (id Int64, primary key(id));".format(
-                                os.path.join(user_2['path'], 'q/w/table')
-                            )
-                        ),
-                        any_of(raises(ydb.GenericError), raises(ydb.Unauthorized))
-                    )
-
-            assert_that(
-                calling(client.list_directory).with_args(
-                    '/Root/'
-                ),
-                raises(ydb.Unauthorized)
-            )
-            client.list_directory('/')
+                                os.path.join(user_2['path'], 'q/w/table') 
+                            ) 
+                        ), 
+                        any_of(raises(ydb.GenericError), raises(ydb.Unauthorized)) 
+                    ) 
+ 
+            assert_that( 
+                calling(client.list_directory).with_args( 
+                    '/Root/' 
+                ), 
+                raises(ydb.Unauthorized) 
+            ) 
+            client.list_directory('/') 

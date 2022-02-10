@@ -1,7 +1,7 @@
 #pragma once
 
-#include <limits>
-
+#include <limits> 
+ 
 namespace NYdb {
 namespace NTable {
 
@@ -22,12 +22,12 @@ enum class EBuildIndexState {
     Cancelled = 6,
 };
 
-enum class EIndexType {
-    GlobalSync,
-    GlobalAsync,
-
-    Unknown = std::numeric_limits<int>::max()
-};
-
+enum class EIndexType { 
+    GlobalSync, 
+    GlobalAsync, 
+ 
+    Unknown = std::numeric_limits<int>::max() 
+}; 
+ 
 } // namespace NTable
 } // namespace NYdb

@@ -44,7 +44,7 @@ public:
             else if (msg->Request.GetMethod() == HTTP_METHOD_POST)
                 ProcessCreateTasksRequest(msg->Request, ctx);
             else
-                ReplyWithError("HTTP/1.1 405 Method Not Allowed\r\n\r\n", ctx);
+                ReplyWithError("HTTP/1.1 405 Method Not Allowed\r\n\r\n", ctx); 
         } else if (path.StartsWith("tasks/")) {
             TString id = path.substr(strlen("tasks/"));
             if (msg->Request.GetMethod() == HTTP_METHOD_GET)
@@ -52,9 +52,9 @@ public:
             else if (msg->Request.GetMethod() == HTTP_METHOD_DELETE)
                 ProcessRemoveTaskRequest(id, ctx);
             else
-                ReplyWithError("HTTP/1.1 405 Method Not Allowed\r\n\r\n", ctx);
+                ReplyWithError("HTTP/1.1 405 Method Not Allowed\r\n\r\n", ctx); 
         } else {
-            ReplyWithError(NMonitoring::HTTPNOTFOUND, ctx);
+            ReplyWithError(NMonitoring::HTTPNOTFOUND, ctx); 
         }
     }
 
@@ -69,7 +69,7 @@ private:
         try {
             ReadJsonTree(http.GetPostContent(), &json, true);
         } catch (yexception e) {
-            ReplyWithError(TString("HTTP/1.1 400 Bad Request\r\n\r\nCan't parse provided JSON: ") + e.what(), ctx);
+            ReplyWithError(TString("HTTP/1.1 400 Bad Request\r\n\r\nCan't parse provided JSON: ") + e.what(), ctx); 
             return;
         }
 
@@ -89,7 +89,7 @@ private:
         if (params.contains("dry_run"))
             request->Record.SetDryRun(params.find("dry_run")->second == "true");
 
-        SendToCms(request.Release(), ctx);
+        SendToCms(request.Release(), ctx); 
         Become(&TThis::StateCreateTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -97,8 +97,8 @@ private:
     {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvCms::TEvWalleCreateTaskResponse, Handle);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle); 
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle); 
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
             LOG_DEBUG(ctx, NKikimrServices::CMS, "TWalleApiHandler::StateCreateTask ignored event type: %" PRIx32 " event: %s",
@@ -106,7 +106,7 @@ private:
         }
     }
 
-    void Reply(const TWalleCreateTaskResponse &resp, const TActorContext &ctx)
+    void Reply(const TWalleCreateTaskResponse &resp, const TActorContext &ctx) 
     {
         TString status;
         if (!CheckStatus(resp.GetStatus(), status, false, ctx))
@@ -121,12 +121,12 @@ private:
         map.InsertValue("status", status);
         map.InsertValue("message", resp.GetStatus().GetReason());
 
-        Reply(WriteJson(map), ctx);
+        Reply(WriteJson(map), ctx); 
     }
 
     void Handle(TEvCms::TEvWalleCreateTaskResponse::TPtr &ev, const TActorContext &ctx)
     {
-        Reply(ev->Get()->Record, ctx);
+        Reply(ev->Get()->Record, ctx); 
     }
 
     //////////////////////////////////////////////
@@ -136,7 +136,7 @@ private:
     {
         TAutoPtr<TEvCms::TEvWalleListTasksRequest> request = new TEvCms::TEvWalleListTasksRequest;
 
-        SendToCms(request.Release(), ctx);
+        SendToCms(request.Release(), ctx); 
         Become(&TThis::StateListTasks, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -144,8 +144,8 @@ private:
     {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvCms::TEvWalleListTasksResponse, Handle);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle); 
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle); 
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
             LOG_DEBUG(ctx, NKikimrServices::CMS, "TWalleApiHandler::StateListTasks ignored event type: %" PRIx32 " event: %s",
@@ -153,7 +153,7 @@ private:
         }
     }
 
-    void Reply(const TWalleListTasksResponse &resp, const TActorContext &ctx)
+    void Reply(const TWalleListTasksResponse &resp, const TActorContext &ctx) 
     {
         NJson::TJsonValue tasks(NJson::JSON_ARRAY);
         for (auto &task : resp.GetTasks()) {
@@ -171,12 +171,12 @@ private:
         NJson::TJsonValue res;
         res.InsertValue("result", tasks);
 
-        Reply(WriteJson(res), ctx);
+        Reply(WriteJson(res), ctx); 
     }
 
     void Handle(TEvCms::TEvWalleListTasksResponse::TPtr &ev, const TActorContext &ctx)
     {
-        Reply(ev->Get()->Record, ctx);
+        Reply(ev->Get()->Record, ctx); 
     }
 
     //////////////////////////////////////////////
@@ -187,7 +187,7 @@ private:
         TAutoPtr<TEvCms::TEvWalleCheckTaskRequest> request = new TEvCms::TEvWalleCheckTaskRequest;
         request->Record.SetTaskId(id);
 
-        SendToCms(request.Release(), ctx);
+        SendToCms(request.Release(), ctx); 
         Become(&TThis::StateCheckTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -195,8 +195,8 @@ private:
     {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvCms::TEvWalleCheckTaskResponse, Handle);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle); 
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle); 
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
             LOG_DEBUG(ctx, NKikimrServices::CMS, "TWalleApiHandler::StateCheckTask ignored event type: %" PRIx32 " event: %s",
@@ -204,7 +204,7 @@ private:
         }
     }
 
-    void Reply(const TWalleCheckTaskResponse &resp, const TActorContext &ctx)
+    void Reply(const TWalleCheckTaskResponse &resp, const TActorContext &ctx) 
     {
         TString status;
         if (!CheckStatus(resp.GetStatus(), status, true, ctx))
@@ -219,12 +219,12 @@ private:
         map.InsertValue("status", status);
         map.InsertValue("message", resp.GetStatus().GetReason());
 
-        Reply(WriteJson(map), ctx);
+        Reply(WriteJson(map), ctx); 
     }
 
     void Handle(TEvCms::TEvWalleCheckTaskResponse::TPtr &ev, const TActorContext &ctx)
     {
-        Reply(ev->Get()->Record, ctx);
+        Reply(ev->Get()->Record, ctx); 
     }
 
     //////////////////////////////////////////////
@@ -235,7 +235,7 @@ private:
         TAutoPtr<TEvCms::TEvWalleRemoveTaskRequest> request = new TEvCms::TEvWalleRemoveTaskRequest;
         request->Record.SetTaskId(id);
 
-        SendToCms(request.Release(), ctx);
+        SendToCms(request.Release(), ctx); 
         Become(&TThis::StateRemoveTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -243,8 +243,8 @@ private:
     {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvCms::TEvWalleRemoveTaskResponse, Handle);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle); 
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle); 
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
             LOG_DEBUG(ctx, NKikimrServices::CMS, "TWalleApiHandler::StateRemoveTask ignored event type: %" PRIx32 " event: %s",
@@ -252,18 +252,18 @@ private:
         }
     }
 
-    void Reply(const TWalleRemoveTaskResponse &resp, const TActorContext &ctx)
+    void Reply(const TWalleRemoveTaskResponse &resp, const TActorContext &ctx) 
     {
         TString status;
         if (!CheckStatus(resp.GetStatus(), status, true, ctx))
             return;
 
-        Reply("", ctx);
+        Reply("", ctx); 
     }
 
     void Handle(TEvCms::TEvWalleRemoveTaskResponse::TPtr &ev, const TActorContext &ctx)
     {
-        Reply(ev->Get()->Record, ctx);
+        Reply(ev->Get()->Record, ctx); 
     }
 
     //////////////////////////////////////////////
@@ -293,29 +293,29 @@ private:
                 err = NMonitoring::HTTPNOTFOUND;
             else
                 err = Sprintf("HTTP/1.1 400 Bad Request\r\n\r\n%s", status.GetReason().data());
-            ReplyWithError(err, ctx);
+            ReplyWithError(err, ctx); 
             return false;
         }
 
         auto err = Sprintf("HTTP/1.1 500 Internal Server Error\r\n\r\n%s", status.GetReason().data());
-        ReplyWithError(err, ctx);
+        ReplyWithError(err, ctx); 
         return false;
     }
 
-    void ReplyWithError(const TString &err, const TActorContext &ctx)
+    void ReplyWithError(const TString &err, const TActorContext &ctx) 
     {
-        return ReplyAndDie(err, ctx);
+        return ReplyAndDie(err, ctx); 
     }
 
-    void Reply(const TString &json, const TActorContext &ctx)
+    void Reply(const TString &json, const TActorContext &ctx) 
     {
-        const TString header = json ? NMonitoring::HTTPOKJSON : NMonitoring::HTTPNOCONTENT;
-        return ReplyAndDie(header + json, ctx);
-    }
-
-    void ReplyAndDie(const TString &data, const TActorContext &ctx) {
-        AuditLog("Wall-E handler", RequestEvent, data, ctx);
-        ctx.Send(RequestEvent->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        const TString header = json ? NMonitoring::HTTPOKJSON : NMonitoring::HTTPNOCONTENT; 
+        return ReplyAndDie(header + json, ctx); 
+    } 
+ 
+    void ReplyAndDie(const TString &data, const TActorContext &ctx) { 
+        AuditLog("Wall-E handler", RequestEvent, data, ctx); 
+        ctx.Send(RequestEvent->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
         Die(ctx);
     }
 
@@ -327,50 +327,50 @@ private:
 
     void Timeout(const TActorContext& ctx)
     {
-        ReplyWithError(TString("HTTP/1.1 408 Request Timeout\r\n\r\nCMS request timeout"), ctx);
+        ReplyWithError(TString("HTTP/1.1 408 Request Timeout\r\n\r\nCMS request timeout"), ctx); 
     }
 
-
-    void SendToCms(IEventBase* ev, const TActorContext &ctx) {
-        Y_VERIFY(!CmsPipe);
-
-        ui32 domain = AppData(ctx)->DomainsInfo->Domains.begin()->first;
-        NTabletPipe::TClientConfig pipeConfig;
+ 
+    void SendToCms(IEventBase* ev, const TActorContext &ctx) { 
+        Y_VERIFY(!CmsPipe); 
+ 
+        ui32 domain = AppData(ctx)->DomainsInfo->Domains.begin()->first; 
+        NTabletPipe::TClientConfig pipeConfig; 
         pipeConfig.RetryPolicy = {
             .MinRetryTime = TDuration::MilliSeconds(10),
             .MaxRetryTime = TDuration::Seconds(10),
         };
         CmsPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(domain), pipeConfig));
-        NTabletPipe::SendData(ctx, CmsPipe, ev);
-    }
-
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
-        TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-
-        if (msg->ClientId != CmsPipe || msg->Status == NKikimrProto::OK) {
-            return;
-        }
-
-        HandlePipeDestroyed(ctx);
-    }
-
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
-        TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
-
-        if (msg->ClientId != CmsPipe) {
-            return;
-        }
-
-        HandlePipeDestroyed(ctx);
-    }
-
-    void HandlePipeDestroyed(const TActorContext &ctx) {
-        LOG_WARN(ctx, NKikimrServices::CMS, "TWalleApiHandler::HandlePipeDestroyed");
-
-        NTabletPipe::CloseAndForgetClient(SelfId(), CmsPipe);
-        Bootstrap(ctx);
-    }
-
+        NTabletPipe::SendData(ctx, CmsPipe, ev); 
+    } 
+ 
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) { 
+        TEvTabletPipe::TEvClientConnected *msg = ev->Get(); 
+ 
+        if (msg->ClientId != CmsPipe || msg->Status == NKikimrProto::OK) { 
+            return; 
+        } 
+ 
+        HandlePipeDestroyed(ctx); 
+    } 
+ 
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) { 
+        TEvTabletPipe::TEvClientDestroyed *msg = ev->Get(); 
+ 
+        if (msg->ClientId != CmsPipe) { 
+            return; 
+        } 
+ 
+        HandlePipeDestroyed(ctx); 
+    } 
+ 
+    void HandlePipeDestroyed(const TActorContext &ctx) { 
+        LOG_WARN(ctx, NKikimrServices::CMS, "TWalleApiHandler::HandlePipeDestroyed"); 
+ 
+        NTabletPipe::CloseAndForgetClient(SelfId(), CmsPipe); 
+        Bootstrap(ctx); 
+    } 
+ 
     NMon::TEvHttpInfo::TPtr RequestEvent;
     TActorId CmsPipe;
 };

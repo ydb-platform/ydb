@@ -95,7 +95,7 @@ protected:
 
 class TTestEnv: public TBaseTestEnv {
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 0)
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 0) 
     {
         Settings = new Tests::TServerSettings(PortManager.GetPort(3534));
 
@@ -188,7 +188,7 @@ void SetRowInSimpletable(TBaseTestEnv& env, ui64 key, ui64 value, const TString 
 
 class TTestEnvWithPoolsSupport: public TBaseTestEnv {
 public:
-    TTestEnvWithPoolsSupport(ui32 staticNodes = 1, ui32 dynamicNodes = 0, ui32 poolsCount = 2)
+    TTestEnvWithPoolsSupport(ui32 staticNodes = 1, ui32 dynamicNodes = 0, ui32 poolsCount = 2) 
     {
         Settings = new Tests::TServerSettings(PortManager.GetPort(3534));
         GetSettings().SetEnableMockOnSingleNode(false);

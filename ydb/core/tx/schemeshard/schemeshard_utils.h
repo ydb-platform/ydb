@@ -45,12 +45,12 @@ inline bool IsValidColumnName(const TString& name) {
 
 inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& workingDir, NKikimrSchemeOp::EOperationType type) {
     NKikimrSchemeOp::TModifyScheme tx;
-    tx.SetWorkingDir(workingDir);
-    tx.SetOperationType(type);
-
-    return tx;
-}
-
+    tx.SetWorkingDir(workingDir); 
+    tx.SetOperationType(type); 
+ 
+    return tx; 
+} 
+ 
 TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram,
                                   const TConstArrayRef<NScheme::TTypeId>& keyColumnTypes);
 

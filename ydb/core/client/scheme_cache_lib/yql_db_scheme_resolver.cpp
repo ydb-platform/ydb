@@ -44,7 +44,7 @@ class TTableProxyActor : public TActorBootstrapped<TTableProxyActor> {
                     reply.Table.TableName = src.TableName;
                     reply.Table.ColumnNames = std::move(src.ColumnNames);
                     reply.TableId = new TTableId(res.TableId);
-                    reply.CacheGeneration = 0;
+                    reply.CacheGeneration = 0; 
 
                     TSet<TString> replyColumns;
 
@@ -116,7 +116,7 @@ public:
             auto &x = request->ResultSet.back();
             x.Path = SplitPath(table.TableName);
             x.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-            x.ShowPrivatePath = true;
+            x.ShowPrivatePath = true; 
         }
 
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request));

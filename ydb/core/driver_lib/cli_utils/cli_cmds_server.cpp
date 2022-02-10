@@ -424,7 +424,7 @@ protected:
         OPTION("pq-file", PQConfig);
         OPTION("pqcd-file", PQClusterDiscoveryConfig);
         OPTION("netclassifier-file", NetClassifierConfig);
-        OPTION("auth-file", AuthConfig);
+        OPTION("auth-file", AuthConfig); 
         OPTION_MERGE("auth-token-file", AuthConfig);
         OPTION("key-file", KeyConfig);
         OPTION("pdisk-key-file", PDiskKeyConfig);
@@ -943,7 +943,7 @@ protected:
             NodeResolveHost = NodeHost;
 
         THolder<NClient::TRegistrationResult> result;
-        while (!result || !result->IsSuccess()) {
+        while (!result || !result->IsSuccess()) { 
             for (auto addr : addrs) {
                 result = TryToRegisterDynamicNode(addr, domainName, NodeHost, NodeAddress, NodeResolveHost, GetSchemePath());
                 if (result->IsSuccess()) {
@@ -1026,8 +1026,8 @@ protected:
                                                      FQDNHostName(),
                                                      TenantName,
                                                      NodeType,
-                                                     DeduceNodeDomain(),
-                                                     AppConfig.GetAuthConfig().GetStaffApiUserToken());
+                                                     DeduceNodeDomain(), 
+                                                     AppConfig.GetAuthConfig().GetStaffApiUserToken()); 
 
         if (!result.IsSuccess()) {
             error = result.GetErrorMessage();

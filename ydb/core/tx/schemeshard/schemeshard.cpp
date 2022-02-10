@@ -10,7 +10,7 @@ namespace NSchemeShard {
         TString owner, TString effectiveRootACL, ui64 effectiveRootACLVersion,
         const NKikimrSubDomains::TProcessingParams &processingParams, const TStoragePools &storagePools,
         const TMap<TString, TString> userAttrData, ui64 UserAttrsVersion, const NSchemeShard::TSchemeLimits &limits,
-        ui64 sharedHive, const TPathId& resourcesDomainId)
+        ui64 sharedHive, const TPathId& resourcesDomainId) 
     {
         Record.SetDomainSchemeShard(selfTabletId);
         Record.SetDomainPathId(pathId);
@@ -33,15 +33,15 @@ namespace NSchemeShard {
         Record.SetUserAttributesVersion(UserAttrsVersion);
 
         *Record.MutableSchemeLimits() = limits.AsProto();
-
-        if (sharedHive != ui64(InvalidTabletId)) {
-            Record.SetSharedHive(sharedHive);
-        }
-
-        if (resourcesDomainId) {
-            Record.SetResourcesDomainOwnerId(resourcesDomainId.OwnerId);
-            Record.SetResourcesDomainPathId(resourcesDomainId.LocalPathId);
-        }
+ 
+        if (sharedHive != ui64(InvalidTabletId)) { 
+            Record.SetSharedHive(sharedHive); 
+        } 
+ 
+        if (resourcesDomainId) { 
+            Record.SetResourcesDomainOwnerId(resourcesDomainId.OwnerId); 
+            Record.SetResourcesDomainPathId(resourcesDomainId.LocalPathId); 
+        } 
     }
 }
 

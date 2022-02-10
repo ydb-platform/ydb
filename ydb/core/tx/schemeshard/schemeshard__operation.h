@@ -31,9 +31,9 @@ struct TOperation: TSimpleRefCount<TOperation> {
     using TProposeShards = std::tuple<TSubTxId, TTabletId>;
     TDeque<TProposeShards> ShardsProposes;
 
-    using TPublishPath = std::pair<TPathId, ui64>;
-    TSet<TPublishPath> Publications;
-
+    using TPublishPath = std::pair<TPathId, ui64>; 
+    TSet<TPublishPath> Publications; 
+ 
     THashSet<TSubTxId> ReadyToNotifyParts;
     THashSet<TSubTxId> DoneParts;
     THashMap<TPathId, NKikimrSchemeOp::EPathState> ReleasePathAtDone;
@@ -67,16 +67,16 @@ struct TOperation: TSimpleRefCount<TOperation> {
     static TConsumeQuotaResult ConsumeQuota(const TTxTransaction& tx, const TOperationContext& context);
 
     static TSplitTransactionsResult SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context);
-
+ 
     ISubOperationBase::TPtr RestorePart(TTxState::ETxType opType, TTxState::ETxState opState);
 
     ISubOperationBase::TPtr ConstructPart(NKikimrSchemeOp::EOperationType opType, const TTxTransaction& tx);
     TVector<ISubOperationBase::TPtr> ConstructParts(const TTxTransaction& tx, TOperationContext& context);
     void AddPart(ISubOperationBase::TPtr part) { Parts.push_back(part);}
 
-    bool AddPublishingPath(TPathId pathId, ui64 version);
-    bool IsPublished() const;
-
+    bool AddPublishingPath(TPathId pathId, ui64 version); 
+    bool IsPublished() const; 
+ 
     void ReadyToNotifyPart(TSubTxId partId);
     bool IsReadyToNotify(const TActorContext& ctx) const;
     bool IsReadyToNotify() const;
@@ -136,9 +136,9 @@ private:
     TOperationId NextPartId() { return TOperationId(TxId, TSubTxId(Parts.size())); }
 };
 
-inline TOperationId NextPartId(const TOperationId& opId, const TVector<ISubOperationBase::TPtr>& parts) {
-    return TOperationId(opId.GetTxId(), opId.GetSubTxId() + parts.size());
+inline TOperationId NextPartId(const TOperationId& opId, const TVector<ISubOperationBase::TPtr>& parts) { 
+    return TOperationId(opId.GetTxId(), opId.GetSubTxId() + parts.size()); 
 }
-
+ 
 }
-}
+} 

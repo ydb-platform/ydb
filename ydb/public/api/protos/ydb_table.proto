@@ -11,7 +11,7 @@ import "ydb/public/api/protos/ydb_scheme.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_formats.proto";
 
-import "google/protobuf/empty.proto";
+import "google/protobuf/empty.proto"; 
 import "google/protobuf/timestamp.proto";
 
 package Ydb.Table;
@@ -47,9 +47,9 @@ message DeleteSessionResponse {
 message GlobalIndex {
 }
 
-message GlobalAsyncIndex {
-}
-
+message GlobalAsyncIndex { 
+} 
+ 
 // Represent secondary index
 message TableIndex {
     // Name of index
@@ -59,7 +59,7 @@ message TableIndex {
     // Type of index
     oneof type {
        GlobalIndex global_index = 3;
-       GlobalAsyncIndex global_async_index = 4;
+       GlobalAsyncIndex global_async_index = 4; 
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -81,13 +81,13 @@ message TableIndexDescription {
     // Type of index
     oneof type {
        GlobalIndex global_index = 3;
-       GlobalAsyncIndex global_async_index = 5;
+       GlobalAsyncIndex global_async_index = 5; 
     }
     Status status = 4;
     // list of columns content to be copied in to index table
     repeated string data_columns = 6;
-    // Size of index data in bytes
-    uint64 size_bytes = 7;
+    // Size of index data in bytes 
+    uint64 size_bytes = 7; 
 }
 
 // State of index building operation
@@ -250,65 +250,65 @@ message ColumnMeta {
     string family = 3;
 }
 
-message DateTypeColumnModeSettings {
-    // The row will be considered as expired at the moment of time, when the value
-    // stored in <column_name> is less than or equal to the current time (in epoch
-    // time format), and <expire_after_seconds> has passed since that moment;
-    // i.e. the expiration threshold is the value of <column_name> plus <expire_after_seconds>.
-
-    // The column type must be a date type
-    string column_name = 1;
-
-    uint32 expire_after_seconds = 2;
-}
-
-message ValueSinceUnixEpochModeSettings {
-    // Same as DateTypeColumnModeSettings (above), but useful when type of the
-    // value stored in <column_name> is not a date type.
-
-    enum Unit {
-        UNIT_UNSPECIFIED = 0;
-        UNIT_SECONDS = 1;
-        UNIT_MILLISECONDS = 2;
-        UNIT_MICROSECONDS = 3;
-        UNIT_NANOSECONDS = 4;
-    }
-
-    // The column type must be one of:
-    // - Uint32
-    // - Uint64
-    // - DyNumber
-    string column_name = 1;
-
-    // Interpretation of the value stored in <column_name>
-    Unit column_unit = 2;
-
-    // This option is always interpreted as seconds regardless of the
-    // <column_unit> value.
-    uint32 expire_after_seconds = 3;
-}
-
-message TtlSettings {
-    oneof mode {
-        DateTypeColumnModeSettings date_type_column = 1;
-        ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2;
-    }
-
-    // There is no guarantee that expired row will be deleted immediately upon
-    // expiration. There may be a delay between the time a row expires and the
-    // time that server deletes the row from the table.
-
-    // Ttl periodically runs background removal operations (BRO) on table's partitions.
-    // By default, there is:
-    // - no more than one BRO on the table;
-    // - BRO is started no more than once an hour on the same partition.
-    // Use options below to change that behavior.
-
-    // How often to run BRO on the same partition.
-    // BRO will not be started more often, but may be started less often.
-    uint32 run_interval_seconds = 3;
-}
-
+message DateTypeColumnModeSettings { 
+    // The row will be considered as expired at the moment of time, when the value 
+    // stored in <column_name> is less than or equal to the current time (in epoch 
+    // time format), and <expire_after_seconds> has passed since that moment; 
+    // i.e. the expiration threshold is the value of <column_name> plus <expire_after_seconds>. 
+ 
+    // The column type must be a date type 
+    string column_name = 1; 
+ 
+    uint32 expire_after_seconds = 2; 
+} 
+ 
+message ValueSinceUnixEpochModeSettings { 
+    // Same as DateTypeColumnModeSettings (above), but useful when type of the 
+    // value stored in <column_name> is not a date type. 
+ 
+    enum Unit { 
+        UNIT_UNSPECIFIED = 0; 
+        UNIT_SECONDS = 1; 
+        UNIT_MILLISECONDS = 2; 
+        UNIT_MICROSECONDS = 3; 
+        UNIT_NANOSECONDS = 4; 
+    } 
+ 
+    // The column type must be one of: 
+    // - Uint32 
+    // - Uint64 
+    // - DyNumber 
+    string column_name = 1; 
+ 
+    // Interpretation of the value stored in <column_name> 
+    Unit column_unit = 2; 
+ 
+    // This option is always interpreted as seconds regardless of the 
+    // <column_unit> value. 
+    uint32 expire_after_seconds = 3; 
+} 
+ 
+message TtlSettings { 
+    oneof mode { 
+        DateTypeColumnModeSettings date_type_column = 1; 
+        ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2; 
+    } 
+ 
+    // There is no guarantee that expired row will be deleted immediately upon 
+    // expiration. There may be a delay between the time a row expires and the 
+    // time that server deletes the row from the table. 
+ 
+    // Ttl periodically runs background removal operations (BRO) on table's partitions. 
+    // By default, there is: 
+    // - no more than one BRO on the table; 
+    // - BRO is started no more than once an hour on the same partition. 
+    // Use options below to change that behavior. 
+ 
+    // How often to run BRO on the same partition. 
+    // BRO will not be started more often, but may be started less often. 
+    uint32 run_interval_seconds = 3; 
+} 
+ 
 message StorageSettings {
     // This specifies internal channel 0 commit log storage pool
     // Fastest available storage recommended, negligible amounts of short-lived data
@@ -408,13 +408,13 @@ message CreateTableRequest {
     // List of secondary indexes
     repeated TableIndex indexes = 7;
     // Table rows time to live settings
-    TtlSettings ttl_settings = 8;
+    TtlSettings ttl_settings = 8; 
     // Storage settings for table
     StorageSettings storage_settings = 9;
     // Column families
     repeated ColumnFamily column_families = 10;
-    // Attributes. Total size is limited to 10 KB.
-    map<string, string> attributes = 11 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
+    // Attributes. Total size is limited to 10 KB. 
+    map<string, string> attributes = 11 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}]; 
     // Predefined named set of settings for table compaction ["default", "small_table", "log_table"].
     string compaction_policy = 12;
     // Either one of the following partitions options can be specified
@@ -465,10 +465,10 @@ message AlterTableRequest {
     // Columns to alter
     repeated ColumnMeta alter_columns = 6;
     // Setup or remove time to live settings
-    oneof ttl_action {
-        TtlSettings set_ttl_settings = 7;
-        google.protobuf.Empty drop_ttl_settings = 8;
-    }
+    oneof ttl_action { 
+        TtlSettings set_ttl_settings = 7; 
+        google.protobuf.Empty drop_ttl_settings = 8; 
+    } 
     // Add secondary indexes
     repeated TableIndex add_indexes = 9;
     // Remove secondary indexes
@@ -478,9 +478,9 @@ message AlterTableRequest {
     // Add/alter column families
     repeated ColumnFamily add_column_families = 12;
     repeated ColumnFamily alter_column_families = 13;
-    // Alter attributes. Leave the value blank to drop an attribute.
-    // Cannot be used in combination with other fields (except session_id and path) at the moment.
-    map<string, string> alter_attributes = 14 [(map_key).length.range = {min: 1, max: 100}, (length).le = 4096];
+    // Alter attributes. Leave the value blank to drop an attribute. 
+    // Cannot be used in combination with other fields (except session_id and path) at the moment. 
+    map<string, string> alter_attributes = 14 [(map_key).length.range = {min: 1, max: 100}, (length).le = 4096]; 
     // Set predefined named set of settings for table compaction ["default", "small_table", "log_table"].
     // Set "default" to use default preset.
     string set_compaction_policy = 15;
@@ -588,14 +588,14 @@ message DescribeTableResult {
     repeated TableIndexDescription indexes = 5;
     // Statistics of table
     TableStats table_stats = 6;
-    // TTL params
-    TtlSettings ttl_settings = 7;
+    // TTL params 
+    TtlSettings ttl_settings = 7; 
     // Storage settings for table
     StorageSettings storage_settings = 8;
     // Column families
     repeated ColumnFamily column_families = 9;
-    // Attributes
-    map<string, string> attributes = 10;
+    // Attributes 
+    map<string, string> attributes = 10; 
     // Predefined named set of settings for table compaction
     reserved 11; // compaction_policy
     // Partitioning settings for table

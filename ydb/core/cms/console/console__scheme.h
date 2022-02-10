@@ -31,19 +31,19 @@ struct Schema : NIceDb::Schema {
         struct TimeCastBucketsPerMediator : Column<12, NScheme::NTypeIds::Uint32> {};
         struct Attributes : Column<13, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TAlterUserAttributes; };
         struct Generation : Column<14, NScheme::NTypeIds::Uint64> {};
-        // DomainId {
+        // DomainId { 
         struct SchemeShardId : Column<15, NScheme::NTypeIds::Uint64> {};
         struct PathId : Column<16, NScheme::NTypeIds::Uint64> {};
-        // } // DomainId
+        // } // DomainId 
         struct ErrorCode : Column<17, NScheme::NTypeIds::Uint32> {};
         struct IsExternalSubDomain : Column<18, NScheme::NTypeIds::Bool> {};
         struct IsExternalHive : Column<19, NScheme::NTypeIds::Bool> {};
-        struct AreResourcesShared : Column<20, NScheme::NTypeIds::Bool> {};
-        // SharedDomainId {
-        struct SharedDomainSchemeShardId : Column<21, NScheme::NTypeIds::Uint64> {};
-        struct SharedDomainPathId : Column<22, NScheme::NTypeIds::Uint64> {};
+        struct AreResourcesShared : Column<20, NScheme::NTypeIds::Bool> {}; 
+        // SharedDomainId { 
+        struct SharedDomainSchemeShardId : Column<21, NScheme::NTypeIds::Uint64> {}; 
+        struct SharedDomainPathId : Column<22, NScheme::NTypeIds::Uint64> {}; 
         struct IsExternalSysViewProcessor : Column<23, NScheme::NTypeIds::Bool> {};
-        // } // SharedDomainId
+        // } // SharedDomainId 
         struct SchemaOperationQuotas : Column<24, NScheme::NTypeIds::String> {};
         struct CreateIdempotencyKey : Column<25, NScheme::NTypeIds::Utf8> {};
         struct AlterIdempotencyKey : Column<26, NScheme::NTypeIds::Utf8> {};
@@ -52,7 +52,7 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<Path>;
         using TColumns = TableColumns<Path, State, Coordinators, Mediators, PlanResolution,
             Issue, TxId, UserToken, SubdomainVersion, ConfirmedSubdomain, TimeCastBucketsPerMediator,
-            Attributes, Generation, SchemeShardId, PathId, ErrorCode, IsExternalSubDomain, IsExternalHive,
+            Attributes, Generation, SchemeShardId, PathId, ErrorCode, IsExternalSubDomain, IsExternalHive, 
             AreResourcesShared, SharedDomainSchemeShardId, SharedDomainPathId, IsExternalSysViewProcessor,
             SchemaOperationQuotas, CreateIdempotencyKey, AlterIdempotencyKey, DatabaseQuotas>;
     };

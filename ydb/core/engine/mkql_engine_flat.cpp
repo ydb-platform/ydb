@@ -1069,14 +1069,14 @@ public:
             const auto& myKeysStruct = static_cast<const TStructLiteral&>(*myKeys.GetNode());
             MKQL_ENSURE(myKeysStruct.GetValuesCount() == 2, "Expected 2 members");
 
-            // 0 - reads, 1 - writes
-            for (ui32 opId = 0; opId <= 1; ++opId) {
-                auto myOps = myKeysStruct.GetValue(opId);
-                MKQL_ENSURE(myOps.IsImmediate() && myOps.GetNode()->GetType()->IsStruct(), "Expected immediate struct");
-
-                auto myOpsStruct = static_cast<TStructLiteral*>(myOps.GetNode());
-                for (ui32 i = 0, e = myOpsStruct->GetValuesCount(); i < e; ++i) {
-                    TRuntimeNode item = myOpsStruct->GetValue(i);
+            // 0 - reads, 1 - writes 
+            for (ui32 opId = 0; opId <= 1; ++opId) { 
+                auto myOps = myKeysStruct.GetValue(opId); 
+                MKQL_ENSURE(myOps.IsImmediate() && myOps.GetNode()->GetType()->IsStruct(), "Expected immediate struct"); 
+ 
+                auto myOpsStruct = static_cast<TStructLiteral*>(myOps.GetNode()); 
+                for (ui32 i = 0, e = myOpsStruct->GetValuesCount(); i < e; ++i) { 
+                    TRuntimeNode item = myOpsStruct->GetValue(i); 
                     Y_VERIFY(item.GetNode()->GetType()->IsCallable(), "Bad shard program");
                     THolder<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env);
                     Y_VERIFY(desc);

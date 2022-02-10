@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             AsyncMkDir(runtime, ++t.TxId, "/MyRoot", "x/y/z");
-            TestForceDropUnsafe(runtime, ++t.TxId, 4, TVector<NKikimrScheme::EStatus>{NKikimrScheme::StatusMultipleModifications});
+            TestForceDropUnsafe(runtime, ++t.TxId, 4, TVector<NKikimrScheme::EStatus>{NKikimrScheme::StatusMultipleModifications}); 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
             {
@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                                                  {NLs::PathVersionEqual(7)});
             }
 
-            t.TestEnv->ReliablePropose(runtime, ConsistentCopyTablesRequest(++t.TxId, "/", R"(
+            t.TestEnv->ReliablePropose(runtime, ConsistentCopyTablesRequest(++t.TxId, "/", R"( 
                            CopyTableDescriptions {
                              SrcPath: "/MyRoot/DirB/src1"
                              DstPath: "/MyRoot/DirB/dst1"
@@ -296,7 +296,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 };
                 fnWriteRow(TTestTxConfig::FakeHiveTablets);
 
-                TestConsistentCopyTables(runtime, ++t.TxId, "/", R"(
+                TestConsistentCopyTables(runtime, ++t.TxId, "/", R"( 
                            CopyTableDescriptions {
                              SrcPath: "/MyRoot/DirB/src1"
                              DstPath: "/MyRoot/DirB/dst1"
@@ -373,27 +373,27 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                                    { NLs::Finished,
                                     NLs::PathVersionEqual(3),
                                     NLs::IndexesCount(3)});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0"),
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0"), 
                                    {NLs::Finished,
                                     NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
                                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                                     NLs::IndexKeys({"value0"})});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0/indexImplTable"),
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0/indexImplTable"), 
                                    {NLs::Finished});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValues"),
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValues"), 
                                    {NLs::Finished,
                                     NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
                                     NLs::IndexState(NKikimrSchemeOp::EIndexStateNotReady),
                                     NLs::IndexKeys({"value0", "value1"})});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValues/indexImplTable"),
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValues/indexImplTable"), 
                                    {NLs::Finished});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0CoveringValue1"),
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0CoveringValue1"), 
                                    {NLs::Finished,
                                     NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
                                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                                     NLs::IndexKeys({"value0"}),
                                     NLs::IndexDataColumns({"value1"})});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0CoveringValue1/indexImplTable"),
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0CoveringValue1/indexImplTable"), 
                                    {NLs::Finished});
 
             }

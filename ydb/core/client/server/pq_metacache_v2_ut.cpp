@@ -71,10 +71,10 @@ class TPqMetaCacheV2Test: public TTestBase {
         EdgeActorId = runtime->AllocateEdgeActor();
         auto config = MakeIntrusive<TSchemeCacheConfig>();
         config->Counters = new NMonitoring::TDynamicCounters;
-        config->Roots.emplace_back(settings.Domain, 8716544, "Root");
+        config->Roots.emplace_back(settings.Domain, 8716544, "Root"); 
         auto& domainsInfo = settings.AppConfig.GetDomainsConfig();
         for (const auto& domain : domainsInfo.GetDomain()) {
-            config->Roots.emplace_back(domain.GetDomainId(), domain.GetSchemeRoot(), domain.GetName());
+            config->Roots.emplace_back(domain.GetDomainId(), domain.GetSchemeRoot(), domain.GetName()); 
         }
         SchemeCacheId = runtime->Register(CreateSchemeBoardSchemeCache(config.Get()));
         MetaCacheId = runtime->Register(

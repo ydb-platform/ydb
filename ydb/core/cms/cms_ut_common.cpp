@@ -54,7 +54,7 @@ void TFakeNodeWhiteboardService::Handle(TEvBlobStorage::TEvControllerConfigReque
         driveStatus.SetStatus(NKikimrBlobStorage::ACTIVE);
     } else if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasUpdateDriveStatus()) {
         resp->Record.MutableResponse()->AddStatus()->SetSuccess(true);
-        resp->Record.MutableResponse()->SetSuccess(true);
+        resp->Record.MutableResponse()->SetSuccess(true); 
     }
     ctx.Send(ev->Sender, resp, 0, ev->Cookie);
 }
@@ -212,7 +212,7 @@ public:
 };
 
 void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseConfig *config,
-        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {})
+        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}) 
 {
     TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
     ui32 numNodes = runtime.GetNodeCount();
@@ -244,17 +244,17 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         node.SystemStateInfo.SetStartTime(now.GetValue());
         node.SystemStateInfo.SetChangeTime(now.GetValue());
 
-        if (tenants.contains(nodeIndex)) {
-            node.SystemStateInfo.AddRoles("Tenant");
-            continue;
-        } else {
-            node.SystemStateInfo.AddRoles("Storage");
-        }
-
-        ui32 groupShift = (nodeIndex / 8) * pdisks * vdiskPerPdisk;
-        if (numNodes < 8)
-            groupShift = nodeIndex * numNodeGroups;
-
+        if (tenants.contains(nodeIndex)) { 
+            node.SystemStateInfo.AddRoles("Tenant"); 
+            continue; 
+        } else { 
+            node.SystemStateInfo.AddRoles("Storage"); 
+        } 
+ 
+        ui32 groupShift = (nodeIndex / 8) * pdisks * vdiskPerPdisk; 
+        if (numNodes < 8) 
+            groupShift = nodeIndex * numNodeGroups; 
+ 
         for (ui32 pdiskIndex = 0; pdiskIndex < pdisks; ++pdiskIndex) {
             auto pdiskId = nodeId * pdisks + pdiskIndex;
             auto &pdisk = node.PDiskStateInfo[pdiskId];
@@ -272,7 +272,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             pdiskConfig.SetPDiskId(pdiskId);
             pdiskConfig.SetPath("/pdisk.data");
             pdiskConfig.SetGuid(1);
-            pdiskConfig.SetDriveStatus(NKikimrBlobStorage::ACTIVE);
+            pdiskConfig.SetDriveStatus(NKikimrBlobStorage::ACTIVE); 
 
             for (ui8 vdiskIndex = 0; vdiskIndex < vdiskPerPdisk; ++vdiskIndex) {
                 ui32 vdiskId = pdiskIndex * vdiskPerPdisk + vdiskIndex;
@@ -416,11 +416,11 @@ static void SetupServices(TTestActorRuntime &runtime,
 
     runtime.Initialize(app.Unwrap());
 
-    auto dnsConfig = new TDynamicNameserviceConfig();
-    dnsConfig->MaxStaticNodeId = 1000;
-    dnsConfig->MaxDynamicNodeId = 2000;
-    runtime.GetAppData().DynamicNameserviceConfig = dnsConfig;
-
+    auto dnsConfig = new TDynamicNameserviceConfig(); 
+    dnsConfig->MaxStaticNodeId = 1000; 
+    dnsConfig->MaxDynamicNodeId = 2000; 
+    runtime.GetAppData().DynamicNameserviceConfig = dnsConfig; 
+ 
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvLocalRecoveryDone,
@@ -449,7 +449,7 @@ TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
     status.SetSuccess(true);
     auto *config = status.MutableBaseConfig();
 
-    GenerateExtendedInfo(*this, config, pdisks, 4, tenants);
+    GenerateExtendedInfo(*this, config, pdisks, 4, tenants); 
 
     // Set observer to pass fake base blobstorage config.
     auto redirectConfigRequest = [](TTestActorRuntimeBase&,
@@ -479,7 +479,7 @@ TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
 
 TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
                          const TNodeTenantsMap &tenants)
-    : TCmsTestEnv(nodeCount, 0, tenants)
+    : TCmsTestEnv(nodeCount, 0, tenants) 
 {
 }
 

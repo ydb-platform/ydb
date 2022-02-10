@@ -91,10 +91,10 @@ public:
         context.SS->ClearDescribePathCaches(parentDir);
         context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
-        for (const TPathId pathId : pathes) {
-            context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-        }
-
+        for (const TPathId pathId : pathes) { 
+            context.OnComplete.PublishToSchemeBoard(OperationId, pathId); 
+        } 
+ 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedDeleteParts);
         return true;
     }
@@ -122,9 +122,9 @@ public:
 
 
 class TDropForceUnsafe: public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-
+    const TOperationId OperationId; 
+    const TTxTransaction Transaction; 
+ 
     TTxState::ETxState State = TTxState::Invalid;
     TPathElement::EPathType ExpectedType = TPathElement::EPathType::EPathTypeInvalid;
 
@@ -164,9 +164,9 @@ class TDropForceUnsafe: public TSubOperation {
     }
 
 public:
-    TDropForceUnsafe(TOperationId id, const TTxTransaction& tx, TPathElement::EPathType expectedType)
+    TDropForceUnsafe(TOperationId id, const TTxTransaction& tx, TPathElement::EPathType expectedType) 
         : OperationId(id)
-        , Transaction(tx)
+        , Transaction(tx) 
         , ExpectedType(expectedType)
     {}
 
@@ -180,10 +180,10 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& drop = Transaction.GetDrop();
+        const auto& drop = Transaction.GetDrop(); 
 
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = drop.GetName();
+        const TString& parentPathStr = Transaction.GetWorkingDir(); 
+        const TString& name = drop.GetName(); 
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropForceUnsafe Propose"
@@ -216,8 +216,8 @@ public:
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks 
+                .NotEmpty() 
                 .IsResolved()
                 .NotRoot()
                 .NotDeleted()
@@ -232,23 +232,23 @@ public:
             }
         }
 
-        if (path.IsUnderCreating()) {
-            TPath parent = path.Parent();
-            if (parent.IsUnderCreating()) {
-                TPath::TChecker checks = parent.Check();
-                checks
+        if (path.IsUnderCreating()) { 
+            TPath parent = path.Parent(); 
+            if (parent.IsUnderCreating()) { 
+                TPath::TChecker checks = parent.Check(); 
+                checks 
                     .NotUnderTheSameOperation(path.ActiveOperation(), NKikimrScheme::StatusMultipleModifications);
-
-                if (!checks) {
-                    TString explain = TStringBuilder() << "parent path fail checks"
-                                                       << ", path: " << parent.PathString();
-                    auto status = checks.GetStatus(&explain);
-                    result->SetError(status, explain);
-                    return result;
-                }
-            }
-        }
-
+ 
+                if (!checks) { 
+                    TString explain = TStringBuilder() << "parent path fail checks" 
+                                                       << ", path: " << parent.PathString(); 
+                    auto status = checks.GetStatus(&explain); 
+                    result->SetError(status, explain); 
+                    return result; 
+                } 
+            } 
+        } 
+ 
         if (ExpectedType != TPathElement::EPathType::EPathTypeInvalid) {
             if (path.Base()->PathType != ExpectedType) {
                 result->SetError(NKikimrScheme::StatusNameConflict, "Drop on mismatch item");
@@ -256,8 +256,8 @@ public:
             }
         }
 
-        TString errStr;
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+        TString errStr; 
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -314,16 +314,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TDropForceUnsafe");
-    }
-
+    void AbortPropose(TOperationContext&) override { 
+        Y_FAIL("no AbortPropose for TDropForceUnsafe"); 
+    } 
+ 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropForceUnsafe AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->TabletID()); 
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
@@ -348,21 +348,21 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateFroceDropUnsafe(TOperationId id, const TTxTransaction& tx) {
-    return new TDropForceUnsafe(id, tx, TPathElement::EPathType::EPathTypeInvalid);
-}
-
+ISubOperationBase::TPtr CreateFroceDropUnsafe(TOperationId id, const TTxTransaction& tx) { 
+    return new TDropForceUnsafe(id, tx, TPathElement::EPathType::EPathTypeInvalid); 
+} 
+ 
 ISubOperationBase::TPtr CreateFroceDropUnsafe(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_VERIFY(state != TTxState::Invalid); 
     return new TDropForceUnsafe(id, state);
 }
 
 ISubOperationBase::TPtr CreateFroceDropSubDomain(TOperationId id, const TTxTransaction& tx) {
     return new TDropForceUnsafe(id, tx, TPathElement::EPathType::EPathTypeSubDomain);
-}
-
+} 
+ 
 ISubOperationBase::TPtr CreateFroceDropSubDomain(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_VERIFY(state != TTxState::Invalid); 
     return new TDropForceUnsafe(id, state);
 }
 

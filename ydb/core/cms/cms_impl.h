@@ -1,10 +1,10 @@
 #pragma once
 
-#include "audit_log.h"
+#include "audit_log.h" 
 #include "cms.h"
 #include "config.h"
 #include "logger.h"
-#include "services.h"
+#include "services.h" 
 #include "walle.h"
 
 #include <library/cpp/actors/core/hfunc.h>
@@ -31,7 +31,7 @@ public:
     struct TEvPrivate {
         enum EEv {
             EvClusterInfo = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
-            EvUpdateClusterInfo,
+            EvUpdateClusterInfo, 
             EvCleanupExpired,
             EvCleanupWalle,
             EvLogAndSend,
@@ -52,8 +52,8 @@ public:
             }
         };
 
-        struct TEvUpdateClusterInfo : public TEventLocal<TEvUpdateClusterInfo, EvUpdateClusterInfo> {};
-
+        struct TEvUpdateClusterInfo : public TEventLocal<TEvUpdateClusterInfo, EvUpdateClusterInfo> {}; 
+ 
         struct TEvCleanupExpired : public TEventLocal<TEvCleanupExpired, EvCleanupExpired> {};
 
         struct TEvCleanupWalle : public TEventLocal<TEvCleanupWalle, EvCleanupWalle> {};
@@ -151,44 +151,44 @@ private:
     ITransaction *CreateTxProcessNotification(TEvCms::TEvNotification::TPtr &ev);
     ITransaction *CreateTxRejectNotification(TEvCms::TEvManageNotificationRequest::TPtr &ev);
     ITransaction *CreateTxRemoveExpiredNotifications();
-    ITransaction *CreateTxRemoveRequest(const TString &id, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp);
-    ITransaction *CreateTxRemovePermissions(TVector<TString> ids, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp, bool expired = false);
-    ITransaction *CreateTxRemoveWalleTask(const TString &id);
-    ITransaction *CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
-                                           const TString &owner, TAutoPtr<TRequestInfo> scheduled);
-    ITransaction *CreateTxStoreWalleTask(const TWalleTaskInfo &task, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp);
+    ITransaction *CreateTxRemoveRequest(const TString &id, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp); 
+    ITransaction *CreateTxRemovePermissions(TVector<TString> ids, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp, bool expired = false); 
+    ITransaction *CreateTxRemoveWalleTask(const TString &id); 
+    ITransaction *CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp, 
+                                           const TString &owner, TAutoPtr<TRequestInfo> scheduled); 
+    ITransaction *CreateTxStoreWalleTask(const TWalleTaskInfo &task, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp); 
     ITransaction *CreateTxUpdateConfig(TEvCms::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateDowntimes();
 
-    static void AuditLog(const TActorContext& ctx, const TString& message) {
-        NCms::AuditLog("CMS tablet", message, ctx);
+    static void AuditLog(const TActorContext& ctx, const TString& message) { 
+        NCms::AuditLog("CMS tablet", message, ctx); 
+    } 
+
+    static void AuditLog(const IEventBase* request, const IEventBase* response, const TActorContext& ctx) { 
+        return AuditLog(ctx, TStringBuilder() << "Reply" 
+            << ": request# " << request->ToString() 
+            << ", response# " << response->ToString()); 
+    } 
+
+    static void Reply(const IEventBase* request, TAutoPtr<IEventHandle> response, const TActorContext& ctx) { 
+        AuditLog(request, response->GetBase(), ctx); 
+        ctx.Send(response); 
     }
 
-    static void AuditLog(const IEventBase* request, const IEventBase* response, const TActorContext& ctx) {
-        return AuditLog(ctx, TStringBuilder() << "Reply"
-            << ": request# " << request->ToString()
-            << ", response# " << response->ToString());
-    }
+    template <typename TEvRequestPtr> 
+    static void Reply(TEvRequestPtr& request, THolder<IEventBase> response, const TActorContext& ctx) { 
+        AuditLog(request->Get(), response.Get(), ctx); 
+        ctx.Send(request->Sender, response.Release(), 0, request->Cookie); 
+    } 
 
-    static void Reply(const IEventBase* request, TAutoPtr<IEventHandle> response, const TActorContext& ctx) {
-        AuditLog(request, response->GetBase(), ctx);
-        ctx.Send(response);
-    }
+    template <typename TEvResponse, typename TEvRequestPtr> 
+    static void ReplyWithError(TEvRequestPtr& ev, EStatusCode code, const TString& reason, const TActorContext& ctx) { 
+        auto response = MakeHolder<TEvResponse>(); 
+        response->Record.MutableStatus()->SetCode(code); 
+        response->Record.MutableStatus()->SetReason(reason); 
 
-    template <typename TEvRequestPtr>
-    static void Reply(TEvRequestPtr& request, THolder<IEventBase> response, const TActorContext& ctx) {
-        AuditLog(request->Get(), response.Get(), ctx);
-        ctx.Send(request->Sender, response.Release(), 0, request->Cookie);
-    }
-
-    template <typename TEvResponse, typename TEvRequestPtr>
-    static void ReplyWithError(TEvRequestPtr& ev, EStatusCode code, const TString& reason, const TActorContext& ctx) {
-        auto response = MakeHolder<TEvResponse>();
-        response->Record.MutableStatus()->SetCode(code);
-        response->Record.MutableStatus()->SetReason(reason);
-
-        Reply<TEvRequestPtr>(ev, std::move(response), ctx);
+        Reply<TEvRequestPtr>(ev, std::move(response), ctx); 
     }
 
     STFUNC(StateInit)
@@ -198,9 +198,9 @@ private:
         StateInitImpl(ev, ctx);
     }
 
-    template <typename TEvRequest, typename TEvResponse>
-    void HandleNotSupported(typename TEvRequest::TPtr& ev, const TActorContext& ctx) {
-        ReplyWithError<TEvResponse, typename TEvRequest::TPtr>(ev, NKikimrCms::TStatus::ERROR, NotSupportedReason, ctx);
+    template <typename TEvRequest, typename TEvResponse> 
+    void HandleNotSupported(typename TEvRequest::TPtr& ev, const TActorContext& ctx) { 
+        ReplyWithError<TEvResponse, typename TEvRequest::TPtr>(ev, NKikimrCms::TStatus::ERROR, NotSupportedReason, ctx); 
     }
 
     STFUNC(StateNotSupported)
@@ -238,7 +238,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPrivate::TEvClusterInfo, Handle);
             HFunc(TEvPrivate::TEvLogAndSend, Handle);
-            FFunc(TEvPrivate::EvUpdateClusterInfo, EnqueueRequest);
+            FFunc(TEvPrivate::EvUpdateClusterInfo, EnqueueRequest); 
             CFunc(TEvPrivate::EvCleanupExpired, CleanupExpired);
             CFunc(TEvPrivate::EvCleanupLog, CleanupLog);
             CFunc(TEvPrivate::EvCleanupWalle, CleanupWalleTasks);
@@ -258,8 +258,8 @@ private:
             HFunc(TEvCms::TEvRemoveWalleTask, Handle);
             HFunc(TEvCms::TEvGetConfigRequest, Handle);
             HFunc(TEvCms::TEvSetConfigRequest, Handle);
-            HFunc(TEvCms::TEvResetMarkerRequest, Handle);
-            HFunc(TEvCms::TEvSetMarkerRequest, Handle);
+            HFunc(TEvCms::TEvResetMarkerRequest, Handle); 
+            HFunc(TEvCms::TEvSetMarkerRequest, Handle); 
             HFunc(TEvCms::TEvGetLogTailRequest, Handle);
             HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
@@ -299,40 +299,40 @@ private:
                      NKikimrCms::TStatus::ECode &code,
                      TString &error,
                      const TActorContext &ctx);
-    bool CheckAction(const NKikimrCms::TAction &action, const TActionOptions &options,
+    bool CheckAction(const NKikimrCms::TAction &action, const TActionOptions &options, 
                      TErrorInfo &error) const;
-    bool CheckActionShutdownNode(const NKikimrCms::TAction &action,
-                                 const TActionOptions &options,
-                                 const TNodeInfo &node,
-                                 TErrorInfo &error) const;
+    bool CheckActionShutdownNode(const NKikimrCms::TAction &action, 
+                                 const TActionOptions &options, 
+                                 const TNodeInfo &node, 
+                                 TErrorInfo &error) const; 
     bool CheckActionRestartServices(const NKikimrCms::TAction &action,
-                                    const TActionOptions &options,
+                                    const TActionOptions &options, 
                                     TErrorInfo &error) const;
     bool CheckActionShutdownHost(const NKikimrCms::TAction &action,
-                                 const TActionOptions &options,
+                                 const TActionOptions &options, 
                                  TErrorInfo &error) const;
     bool CheckActionReplaceDevices(const NKikimrCms::TAction &action,
-                                   const TActionOptions &options,
+                                   const TActionOptions &options, 
                                    TErrorInfo &error) const;
-    bool TryToLockNode(const NKikimrCms::TAction &action,
-                       const TActionOptions &options,
-                       const TNodeInfo &node,
+    bool TryToLockNode(const NKikimrCms::TAction &action, 
+                       const TActionOptions &options, 
+                       const TNodeInfo &node, 
                        TErrorInfo& error) const;
     bool TryToLockPDisk(const NKikimrCms::TAction &action,
-                        const TActionOptions &options,
+                        const TActionOptions &options, 
                         const TPDiskInfo &pdisk,
                         TErrorInfo &error) const;
     bool TryToLockVDisks(const NKikimrCms::TAction &action,
-                         const TActionOptions &options,
+                         const TActionOptions &options, 
                          const TSet<TVDiskID> &vdisks,
                          TErrorInfo &error) const;
-    bool TryToLockVDisk(const TActionOptions &options,
+    bool TryToLockVDisk(const TActionOptions &options, 
                         const TVDiskInfo &vdisk,
                         TDuration duration,
                         TErrorInfo &error) const;
     void AcceptPermissions(NKikimrCms::TPermissionResponse &resp, const TString &requestId,
-                           const TString &owner, const TActorContext &ctx, bool check = false);
-    void ScheduleUpdateClusterInfo(const TActorContext &ctx, bool now = false);
+                           const TString &owner, const TActorContext &ctx, bool check = false); 
+    void ScheduleUpdateClusterInfo(const TActorContext &ctx, bool now = false); 
     void ScheduleCleanup(TInstant time, const TActorContext &ctx);
     void SchedulePermissionsCleanup(const TActorContext &ctx);
     void ScheduleNotificationsCleanup(const TActorContext &ctx);
@@ -385,7 +385,7 @@ private:
 
     void Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvPrivate::TEvUpdateClusterInfo::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvUpdateClusterInfo::TPtr &ev, const TActorContext &ctx); 
     void Handle(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvManagePermissionRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvClusterStateRequest::TPtr &ev, const TActorContext &ctx);

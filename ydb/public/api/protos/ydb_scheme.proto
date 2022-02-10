@@ -56,7 +56,7 @@ message Entry {
         BLOCK_STORE_VOLUME = 6;
         COORDINATION_NODE = 7;
         SEQUENCE = 15;
-        REPLICATION = 16;
+        REPLICATION = 16; 
     }
     
     // Name of scheme entry (dir2 of /dir1/dir2)
@@ -65,13 +65,13 @@ message Entry {
     string owner = 2;
     Type type = 5;
     repeated Permissions effective_permissions = 6; 
-    repeated Permissions permissions = 7;
-
-    // Size of entry in bytes. Currently filled for:
-    // - TABLE;
-    // - DATABASE.
-    // Empty (zero) in other cases.
-    uint64 size_bytes = 8;
+    repeated Permissions permissions = 7; 
+ 
+    // Size of entry in bytes. Currently filled for: 
+    // - TABLE; 
+    // - DATABASE. 
+    // Empty (zero) in other cases. 
+    uint64 size_bytes = 8; 
 }
 
 message ListDirectoryResult {

@@ -147,15 +147,15 @@ void TSnapshotManager::SetCompleteEdge(NIceDb::TNiceDb& db, const TRowVersion& v
     CompleteEdge = version;
 }
 
-bool TSnapshotManager::PromoteCompleteEdge(const TRowVersion& version, TTransactionContext& txc) {
+bool TSnapshotManager::PromoteCompleteEdge(const TRowVersion& version, TTransactionContext& txc) { 
     if (!IsMvccEnabled())
         return false;
 
-    if (CompleteEdge >= version)
+    if (CompleteEdge >= version) 
         return false;
 
     NIceDb::TNiceDb db(txc.DB);
-    SetCompleteEdge(db, version);
+    SetCompleteEdge(db, version); 
     txc.OnCommitted([this, edge = CompleteEdge] {
         this->CommittedCompleteEdge = edge;
     });
@@ -163,23 +163,23 @@ bool TSnapshotManager::PromoteCompleteEdge(const TRowVersion& version, TTransact
     return true;
 }
 
-bool TSnapshotManager::PromoteCompleteEdge(TOperation* op, TTransactionContext& txc) {
-    if (!IsMvccEnabled())
-        return false;
-
-    Y_ASSERT(op && (op->IsMvccSnapshotRead() || op->GetStep()));
-
-    const TRowVersion version = op->IsMvccSnapshotRead()
-        ? op->GetMvccSnapshot()
-        : TRowVersion(op->GetStep(), op->GetTxId());
-
-    return PromoteCompleteEdge(version, txc);
-}
-
-bool TSnapshotManager::PromoteCompleteEdge(ui64 writeStep, TTransactionContext& txc) {
-    return PromoteCompleteEdge(TRowVersion(writeStep, 0), txc);
-}
-
+bool TSnapshotManager::PromoteCompleteEdge(TOperation* op, TTransactionContext& txc) { 
+    if (!IsMvccEnabled()) 
+        return false; 
+ 
+    Y_ASSERT(op && (op->IsMvccSnapshotRead() || op->GetStep())); 
+ 
+    const TRowVersion version = op->IsMvccSnapshotRead() 
+        ? op->GetMvccSnapshot() 
+        : TRowVersion(op->GetStep(), op->GetTxId()); 
+ 
+    return PromoteCompleteEdge(version, txc); 
+} 
+ 
+bool TSnapshotManager::PromoteCompleteEdge(ui64 writeStep, TTransactionContext& txc) { 
+    return PromoteCompleteEdge(TRowVersion(writeStep, 0), txc); 
+} 
+ 
 TRowVersion TSnapshotManager::GetIncompleteEdge() const {
     return IncompleteEdge;
 }

@@ -52,45 +52,45 @@ public:
         Y_VERIFY(txState->TxType == TTxState::TxInitializeBuildIndex);
 
         TPathId pathId = txState->TargetPathId;
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
-        TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-
-        Y_VERIFY(context.SS->Tables.contains(pathId));
+        Y_VERIFY(context.SS->PathsById.contains(pathId)); 
+        TPathElement::TPtr path = context.SS->PathsById.at(pathId); 
+ 
+        Y_VERIFY(context.SS->Tables.contains(pathId)); 
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
 
-        NKikimrTxDataShard::TFlatSchemeTransaction txTemplate;
-        auto initiate = txTemplate.MutableInitiateBuildIndex();
-        PathIdFromPathId(pathId, initiate->MutablePathId());
-        initiate->SetSnapshotName("Snapshot0");
-        initiate->SetTableSchemaVersion(tableInfo->AlterVersion + 1);
-
-        bool found = false;
-        for (const auto& [childName, childPathId] : path->GetChildren()) {
-            Y_VERIFY(context.SS->PathsById.contains(childPathId));
-            auto childPath = context.SS->PathsById.at(childPathId);
-
-            if (!childPath->IsTableIndex() || childPath->Dropped() || childPath->PlannedToDrop()) {
-                continue;
-            }
-
-            Y_VERIFY(context.SS->Indexes.contains(childPathId));
-            auto index = context.SS->Indexes.at(childPathId);
-
-            if (index->State != TTableIndexInfo::EState::EIndexStateInvalid) {
-                // doesn't exist yet so its state is invalid
-                continue;
-            }
-
-            Y_VERIFY_S(!found, "Too many indexes are planned to create"
-                << ": found# " << TPathId(initiate->GetIndexDescription().GetPathOwnerId(),
-                    initiate->GetIndexDescription().GetLocalPathId())
-                << ", another# " << childPathId);
-            found = true;
-
-            Y_VERIFY(index->AlterData);
-            context.SS->DescribeTableIndex(childPathId, childName, index->AlterData, *initiate->MutableIndexDescription());
-        }
-
+        NKikimrTxDataShard::TFlatSchemeTransaction txTemplate; 
+        auto initiate = txTemplate.MutableInitiateBuildIndex(); 
+        PathIdFromPathId(pathId, initiate->MutablePathId()); 
+        initiate->SetSnapshotName("Snapshot0"); 
+        initiate->SetTableSchemaVersion(tableInfo->AlterVersion + 1); 
+ 
+        bool found = false; 
+        for (const auto& [childName, childPathId] : path->GetChildren()) { 
+            Y_VERIFY(context.SS->PathsById.contains(childPathId)); 
+            auto childPath = context.SS->PathsById.at(childPathId); 
+ 
+            if (!childPath->IsTableIndex() || childPath->Dropped() || childPath->PlannedToDrop()) { 
+                continue; 
+            } 
+ 
+            Y_VERIFY(context.SS->Indexes.contains(childPathId)); 
+            auto index = context.SS->Indexes.at(childPathId); 
+ 
+            if (index->State != TTableIndexInfo::EState::EIndexStateInvalid) { 
+                // doesn't exist yet so its state is invalid 
+                continue; 
+            } 
+ 
+            Y_VERIFY_S(!found, "Too many indexes are planned to create" 
+                << ": found# " << TPathId(initiate->GetIndexDescription().GetPathOwnerId(), 
+                    initiate->GetIndexDescription().GetLocalPathId()) 
+                << ", another# " << childPathId); 
+            found = true; 
+ 
+            Y_VERIFY(index->AlterData); 
+            context.SS->DescribeTableIndex(childPathId, childName, index->AlterData, *initiate->MutableIndexDescription()); 
+        } 
+ 
         txState->ClearShardsInProgress();
 
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
@@ -99,7 +99,7 @@ public:
 
             auto seqNo = context.SS->StartRound(*txState);
 
-            NKikimrTxDataShard::TFlatSchemeTransaction tx(txTemplate);
+            NKikimrTxDataShard::TFlatSchemeTransaction tx(txTemplate); 
             context.SS->FillSeqNo(tx, seqNo);
 
             TString txBody;

@@ -76,7 +76,7 @@ TIpHost TDnsCache::Get(const TString& hostname) {
 
     const THost& addr = Resolve(hostname, AF_INET);
 
-    TGuard<TMutex> lock(CacheMtx);
+    TGuard<TMutex> lock(CacheMtx); 
     if (addr.AddrsV4.empty()) {
         return TIpHost(-1);
     }
@@ -91,7 +91,7 @@ NAddr::IRemoteAddrPtr TDnsCache::GetAddr(
     if (family != AF_INET && AllowIpV6) {
         const THost& addr = Resolve(hostname, AF_INET6, cacheOnly);
 
-        TGuard<TMutex> lock(CacheMtx);
+        TGuard<TMutex> lock(CacheMtx); 
         if (!addr.AddrsV6.empty()) {
             struct sockaddr_in6 sin6;
             Zero(sin6);
@@ -106,7 +106,7 @@ NAddr::IRemoteAddrPtr TDnsCache::GetAddr(
     if (family != AF_INET6 && AllowIpV4) {
         const THost& addr = Resolve(hostname, AF_INET, cacheOnly);
 
-        TGuard<TMutex> lock(CacheMtx);
+        TGuard<TMutex> lock(CacheMtx); 
         if (!addr.AddrsV4.empty()) {
             return MakeHolder<NAddr::TIPv4Addr>(TIpAddress(addr.AddrsV4.front(), port));
         }
@@ -121,8 +121,8 @@ void TDnsCache::GetAllAddresses(
     TVector<NAddr::IRemoteAddrPtr>& addrs) {
     if (AllowIpV4) {
         const THost& addr4 = Resolve(hostname, AF_INET);
-
-        TGuard<TMutex> lock(CacheMtx);
+ 
+        TGuard<TMutex> lock(CacheMtx); 
         for (size_t i = 0; i < addr4.AddrsV4.size(); i++) {
             addrs.push_back(MakeHolder<NAddr::TIPv4Addr>(TIpAddress(addr4.AddrsV4[i], 0)));
         }
@@ -130,12 +130,12 @@ void TDnsCache::GetAllAddresses(
 
     if (AllowIpV6) {
         const THost& addr6 = Resolve(hostname, AF_INET6);
-
+ 
         struct sockaddr_in6 sin6;
         Zero(sin6);
         sin6.sin6_family = AF_INET6;
-
-        TGuard<TMutex> lock(CacheMtx);
+ 
+        TGuard<TMutex> lock(CacheMtx); 
         for (size_t i = 0; i < addr6.AddrsV6.size(); i++) {
             sin6.sin6_addr = addr6.AddrsV6[i];
 

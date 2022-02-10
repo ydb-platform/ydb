@@ -61,8 +61,8 @@ struct TEvSysView {
         EvSendDbCountersResponse,
         EvWatchDatabase,
 
-        EvUpdateTtlStats,
-
+        EvUpdateTtlStats, 
+ 
         EvGetStorageStatsRequest,
         EvGetStorageStatsResponse,
 
@@ -336,23 +336,23 @@ struct TEvSysView {
             : PathId(pathId)
         {}
     };
-
-    struct TEvUpdateTtlStats : public TEventLocal<
-        TEvUpdateTtlStats,
-        EvUpdateTtlStats>
-    {
-        TPathId DomainKey;
-        TPathId PathId;
-        TShardIdx ShardIdx;
-
-        NKikimrSysView::TTtlStats Stats;
-
-        TEvUpdateTtlStats(TPathId domainKey, TPathId pathId, TShardIdx shardIdx)
-            : DomainKey(domainKey)
-            , PathId(pathId)
-            , ShardIdx(shardIdx)
-        {}
-    };
+ 
+    struct TEvUpdateTtlStats : public TEventLocal< 
+        TEvUpdateTtlStats, 
+        EvUpdateTtlStats> 
+    { 
+        TPathId DomainKey; 
+        TPathId PathId; 
+        TShardIdx ShardIdx; 
+ 
+        NKikimrSysView::TTtlStats Stats; 
+ 
+        TEvUpdateTtlStats(TPathId domainKey, TPathId pathId, TShardIdx shardIdx) 
+            : DomainKey(domainKey) 
+            , PathId(pathId) 
+            , ShardIdx(shardIdx) 
+        {} 
+    }; 
 
     struct TEvGetStorageStatsRequest
         : TEventPB<TEvGetStorageStatsRequest, NKikimrSysView::TEvGetStorageStatsRequest, EvGetStorageStatsRequest>

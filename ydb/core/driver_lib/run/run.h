@@ -43,7 +43,7 @@ protected:
     bool GracefulShutdownSupported = false;
     THolder<NSQS::TAsyncHttpServer> SqsHttp;
 
-    THolder<NYdb::TDriver> YdbDriver;
+    THolder<NYdb::TDriver> YdbDriver; 
 
     THolder<NKqp::TKqpShutdownController> KqpShutdownController;
 

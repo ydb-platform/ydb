@@ -17,13 +17,13 @@ class TCpuTimer {
     }
 public:
     TCpuTimer()
-        : UseClockGettime(AppData()->FeatureFlags.GetEnableClockGettimeForUserCpuAccounting())
+        : UseClockGettime(AppData()->FeatureFlags.GetEnableClockGettimeForUserCpuAccounting()) 
         , StartTime(GetCpuTime())
         , Counter(nullptr)
     {}
 
     TCpuTimer(TDuration& counter)
-        : UseClockGettime(AppData()->FeatureFlags.GetEnableClockGettimeForUserCpuAccounting())
+        : UseClockGettime(AppData()->FeatureFlags.GetEnableClockGettimeForUserCpuAccounting()) 
         , StartTime(GetCpuTime())
         , Counter(&counter)
     {}

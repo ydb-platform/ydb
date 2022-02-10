@@ -1,20 +1,20 @@
-#pragma once
-#include "defs.h"
-
+#pragma once 
+#include "defs.h" 
+ 
 #include "schemeshard_identificators.h"
 
-namespace NKikimr {
+namespace NKikimr { 
 namespace NSchemeShard {
-
-struct TEvPrivate {
-    enum EEv {
-        EvProgressOperation = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
-        EvOperationPlanStep,
+ 
+struct TEvPrivate { 
+    enum EEv { 
+        EvProgressOperation = EventSpaceBegin(TKikimrEvents::ES_PRIVATE), 
+        EvOperationPlanStep, 
         EvCommitTenantUpdate,
         EvUndoTenantUpdate,
-        EvRunConditionalErase,
+        EvRunConditionalErase, 
         EvIndexBuildBilling,
-        EvImportSchemeReady,
+        EvImportSchemeReady, 
         EvServerlessStorageBilling,
         EvCleanDroppedPaths,
         EvCleanDroppedSubDomains,
@@ -23,33 +23,33 @@ struct TEvPrivate {
         EvRunBackgroundCompaction,
         EvCompletePublication,
         EvCompleteBarrier,
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
-
-    // This event is sent by a schemeshard to itself to signal that some tx state has changed
-    // and it should run all the actions associated with this state
-    struct TEvProgressOperation: public TEventLocal<TEvProgressOperation, EvProgressOperation> {
-        const ui64 TxId;
+        EvEnd 
+    }; 
+ 
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)"); 
+ 
+    // This event is sent by a schemeshard to itself to signal that some tx state has changed 
+    // and it should run all the actions associated with this state 
+    struct TEvProgressOperation: public TEventLocal<TEvProgressOperation, EvProgressOperation> { 
+        const ui64 TxId; 
         const ui32 TxPartId;
-
-        TEvProgressOperation(ui64 txId, ui32 part)
-            : TxId(txId)
-            , TxPartId(part)
-        {}
-    };
-
-    struct TEvOperationPlan: public TEventLocal<TEvOperationPlan, EvOperationPlanStep> {
-        const ui64 StepId;
-        const ui64 TxId;
-
-        TEvOperationPlan(ui64 step, ui64 txId)
-            : StepId(step)
-            , TxId(txId)
-        {}
-    };
-
+ 
+        TEvProgressOperation(ui64 txId, ui32 part) 
+            : TxId(txId) 
+            , TxPartId(part) 
+        {} 
+    }; 
+ 
+    struct TEvOperationPlan: public TEventLocal<TEvOperationPlan, EvOperationPlanStep> { 
+        const ui64 StepId; 
+        const ui64 TxId; 
+ 
+        TEvOperationPlan(ui64 step, ui64 txId) 
+            : StepId(step) 
+            , TxId(txId) 
+        {} 
+    }; 
+ 
     struct TEvCommitTenantUpdate: public TEventLocal<TEvCommitTenantUpdate, EvCommitTenantUpdate> {
         TEvCommitTenantUpdate()
         {}
@@ -60,9 +60,9 @@ struct TEvPrivate {
         {}
     };
 
-    struct TEvRunConditionalErase: public TEventLocal<TEvRunConditionalErase, EvRunConditionalErase> {
-    };
-
+    struct TEvRunConditionalErase: public TEventLocal<TEvRunConditionalErase, EvRunConditionalErase> { 
+    }; 
+ 
     struct TEvIndexBuildingMakeABill: public TEventLocal<TEvIndexBuildingMakeABill, EvIndexBuildBilling> {
         const ui64 BuildId;
         const TInstant SendAt;
@@ -73,20 +73,20 @@ struct TEvPrivate {
         {}
     };
 
-    struct TEvImportSchemeReady: public TEventLocal<TEvImportSchemeReady, EvImportSchemeReady> {
-        const ui64 ImportId;
-        const ui32 ItemIdx;
-        const bool Success;
-        const TString Error;
-
-        TEvImportSchemeReady(ui64 id, ui32 itemIdx, bool success, const TString& error)
-            : ImportId(id)
-            , ItemIdx(itemIdx)
-            , Success(success)
-            , Error(error)
-        {}
-    };
-
+    struct TEvImportSchemeReady: public TEventLocal<TEvImportSchemeReady, EvImportSchemeReady> { 
+        const ui64 ImportId; 
+        const ui32 ItemIdx; 
+        const bool Success; 
+        const TString Error; 
+ 
+        TEvImportSchemeReady(ui64 id, ui32 itemIdx, bool success, const TString& error) 
+            : ImportId(id) 
+            , ItemIdx(itemIdx) 
+            , Success(success) 
+            , Error(error) 
+        {} 
+    }; 
+ 
     struct TEvServerlessStorageBilling: public TEventLocal<TEvServerlessStorageBilling, EvServerlessStorageBilling> {
         TEvServerlessStorageBilling()
         {}
@@ -156,7 +156,7 @@ struct TEvPrivate {
     };
 
 
-}; // TEvPrivate
-
+}; // TEvPrivate 
+ 
 } // NSchemeShard
-} // NKikimr
+} // NKikimr 

@@ -2222,12 +2222,12 @@ TMaybe<TStringContent> StringContentOrIdContent(TContext& ctx, TPosition pos, co
         (ctx.AnsiQuotedIdentifiers && input.StartsWith('"'))? EStringContentMode::AnsiIdent : EStringContentMode::Default);
 }
 
-TTtlSettings::TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr)
-    : ColumnName(columnName)
-    , Expr(expr)
-{
-}
-
+TTtlSettings::TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr) 
+    : ColumnName(columnName) 
+    , Expr(expr) 
+{ 
+} 
+ 
 TString IdContent(TContext& ctx, const TString& s) {
     YQL_ENSURE(!s.empty(), "Empty identifier not expected");
     if (!s.StartsWith('`')) {

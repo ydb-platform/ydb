@@ -1504,8 +1504,8 @@ function tabletTypeToSymbol(type) {
         return "CS";
     case "SequenceShard":
         return "S";
-    case "ReplicationController":
-        return "RC";
+    case "ReplicationController": 
+        return "RC"; 
     }
     return "XX";
 }
@@ -2500,20 +2500,20 @@ function onTreeDataComplete(result, obj, cb) {
                 }
                 obj.describe = result;
             }
-            if (result.PathDescription.Table.CdcStreams) {
-                var ilen = result.PathDescription.Table.CdcStreams.length;
-                for (var i = 0; i < ilen; i++) {
-                    var child = {};
-                    child.id = concatPaths(result.Path, result.PathDescription.Table.CdcStreams[i].Name);
-                    child.parent = result.Path;
-                    child.text = result.PathDescription.Table.CdcStreams[i].Name;
-                    child.children = true;
-                    child.icon = "glyphicon glyphicon-book schema-good";
-                    child.data = function(obj1, cb1) { onTreeData(obj1, cb1); };
-                    children.push(child);
-                }
-                obj.describe = result;
-            }
+            if (result.PathDescription.Table.CdcStreams) { 
+                var ilen = result.PathDescription.Table.CdcStreams.length; 
+                for (var i = 0; i < ilen; i++) { 
+                    var child = {}; 
+                    child.id = concatPaths(result.Path, result.PathDescription.Table.CdcStreams[i].Name); 
+                    child.parent = result.Path; 
+                    child.text = result.PathDescription.Table.CdcStreams[i].Name; 
+                    child.children = true; 
+                    child.icon = "glyphicon glyphicon-book schema-good"; 
+                    child.data = function(obj1, cb1) { onTreeData(obj1, cb1); }; 
+                    children.push(child); 
+                } 
+                obj.describe = result; 
+            } 
         }
         cb.call(this, children);
     } else {
@@ -2594,8 +2594,8 @@ function schemaPathTypeToString(pathType) {
         return "Tenant";
     case 15:
         return "Sequence";
-    case 16:
-        return "Replication";
+    case 16: 
+        return "Replication"; 
     }
 }
 
@@ -2732,7 +2732,7 @@ function onTreeNodeComplete(result, obj) {
             schemaHtml += "</table>";
             panelSchema.innerHTML = schemaHtml;
 
-            var indexes = table.TableIndexes;
+            var indexes = table.TableIndexes; 
             if (indexes !== undefined) {
                 var ilen = indexes.length;
                 var schemaHtml = "<br><table class='schema-table'><tr><th>IndexName</th><th>Columns</th></tr>";
@@ -2750,20 +2750,20 @@ function onTreeNodeComplete(result, obj) {
                 schemaHtml += "</table>";
                 panelSchema.innerHTML += schemaHtml;
             }
-
-            var cdcStreams = table.CdcStreams;
-            if (cdcStreams !== undefined) {
-                var ilen = cdcStreams.length;
-                var schemaHtml = "<br><table class='schema-table'><tr><th>StreamName</th><th>Mode</th></tr>";
-                for (var i = 0; i < ilen; i++) {
-                    schemaHtml += "<tr>";
-                    schemaHtml += "<td>" + cdcStreams[i].Name + "</td>";
-                    schemaHtml += "<td>" + cdcStreams[i].Mode + "</td>";
-                    schemaHtml += "</tr>"
-                }
-                schemaHtml += "</table>";
-                panelSchema.innerHTML += schemaHtml;
-            }
+ 
+            var cdcStreams = table.CdcStreams; 
+            if (cdcStreams !== undefined) { 
+                var ilen = cdcStreams.length; 
+                var schemaHtml = "<br><table class='schema-table'><tr><th>StreamName</th><th>Mode</th></tr>"; 
+                for (var i = 0; i < ilen; i++) { 
+                    schemaHtml += "<tr>"; 
+                    schemaHtml += "<td>" + cdcStreams[i].Name + "</td>"; 
+                    schemaHtml += "<td>" + cdcStreams[i].Mode + "</td>"; 
+                    schemaHtml += "</tr>" 
+                } 
+                schemaHtml += "</table>"; 
+                panelSchema.innerHTML += schemaHtml; 
+            } 
         }
 
         var tabLen;
@@ -3095,11 +3095,11 @@ function onTreeNodeComplete(result, obj) {
             row.insertCell(-1).innerHTML = "DomainKey";
             row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.DomainKey.SchemeShard + " : " + result.PathDescription.DomainDescription.DomainKey.PathId;
         }
-        if (result.PathDescription.DomainDescription.ResourcesDomainKey !== undefined) {
-            row = tab.insertRow();
-            row.insertCell(-1).innerHTML = "ResourcesDomainKey";
-            row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.ResourcesDomainKey.SchemeShard + " : " + result.PathDescription.DomainDescription.ResourcesDomainKey.PathId;
-        }
+        if (result.PathDescription.DomainDescription.ResourcesDomainKey !== undefined) { 
+            row = tab.insertRow(); 
+            row.insertCell(-1).innerHTML = "ResourcesDomainKey"; 
+            row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.ResourcesDomainKey.SchemeShard + " : " + result.PathDescription.DomainDescription.ResourcesDomainKey.PathId; 
+        } 
         if (result.PathDescription.DomainDescription.PathsInside !== undefined) {
             row = tab.insertRow();
             row.insertCell(-1).innerHTML = "Pathes inside";

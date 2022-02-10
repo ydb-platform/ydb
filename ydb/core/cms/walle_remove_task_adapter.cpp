@@ -27,7 +27,7 @@ public:
         TAutoPtr<TEvCms::TEvWalleRemoveTaskResponse> response = new TEvCms::TEvWalleRemoveTaskResponse;
         TString id = RequestEvent->Get()->Record.GetTaskId();
 
-        LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s",
+        LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s", 
                   RequestEvent->Get()->Record.ShortDebugString().data());
 
         if (!State->WalleTasks.contains(id)) {
@@ -64,7 +64,7 @@ private:
 
     void ReplyAndDie(TAutoPtr<TEvCms::TEvWalleRemoveTaskResponse> resp, const TActorContext &ctx)
     {
-        WalleAuditLog(RequestEvent->Get(), resp.Get(), ctx);
+        WalleAuditLog(RequestEvent->Get(), resp.Get(), ctx); 
         ctx.Send(RequestEvent->Sender, resp.Release());
         Die(ctx);
     }

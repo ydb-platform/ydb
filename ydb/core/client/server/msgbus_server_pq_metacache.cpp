@@ -18,8 +18,8 @@ namespace NPqMetaCacheV2 {
 
 IActor* CreateSchemeCache(NActors::TActorSystem* ActorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
     auto appData = ActorSystem->AppData<TAppData>();
-    auto cacheCounters = GetServiceCounters(counters, "pqproxy|schemecache");
-    auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, cacheCounters);
+    auto cacheCounters = GetServiceCounters(counters, "pqproxy|schemecache"); 
+    auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, cacheCounters); 
     return CreateSchemeBoardSchemeCache(cacheConfig.Get());
 }
 
@@ -49,7 +49,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         if (ClientWrapper == nullptr) {
-            auto* driver = AppData(ctx)->YdbDriver;
+            auto* driver = AppData(ctx)->YdbDriver; 
             if (driver == nullptr) {
                 LOG_WARN_S(
                         ctx, NKikimrServices::PQ_METACACHE,
@@ -329,19 +329,19 @@ private:
         auto& waiter = waiterIter->second;
 
         if (waiter.Type == EWaiterType::DescribeAllTopics) {
-            for (const auto& entry : result->ResultSet) {
-                if (!entry.PQGroupInfo) {
-                    continue;
-                }
-
-                const auto& desc = entry.PQGroupInfo->Description;
-                if (desc.HasBalancerTabletID() && desc.GetBalancerTabletID() != 0) {
-                    continue;
-                }
-
-                FullTopicsCacheOutdated = true;
-            }
-
+            for (const auto& entry : result->ResultSet) { 
+                if (!entry.PQGroupInfo) { 
+                    continue; 
+                } 
+ 
+                const auto& desc = entry.PQGroupInfo->Description; 
+                if (desc.HasBalancerTabletID() && desc.GetBalancerTabletID() != 0) { 
+                    continue; 
+                } 
+ 
+                FullTopicsCacheOutdated = true; 
+            } 
+ 
             FullTopicsCache.Reset(result);
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Updated topics cache with " << FullTopicsCache->ResultSet.size());
             SendDescribeAllTopicsResponse(waiter.WaiterId, ctx);

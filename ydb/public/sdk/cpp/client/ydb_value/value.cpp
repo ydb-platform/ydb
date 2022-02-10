@@ -91,14 +91,14 @@ TType::TType(const Ydb::Type& typeProto)
 TType::TType(Ydb::Type&& typeProto)
     : Impl_(new TImpl(std::move(typeProto))) {}
 
-TString TType::ToString() const {
-    return FormatType(*this);
-}
-
-void TType::Out(IOutputStream& o) const {
-    o << FormatType(*this);
-}
-
+TString TType::ToString() const { 
+    return FormatType(*this); 
+} 
+ 
+void TType::Out(IOutputStream& o) const { 
+    o << FormatType(*this); 
+} 
+ 
 const Ydb::Type& TType::GetProto() const {
     return Impl_->ProtoType_;
 }

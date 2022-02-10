@@ -1,8 +1,8 @@
 #include "grpc_request_proxy.h"
-#include "operation_helpers.h"
-#include "rpc_export_base.h"
-#include "rpc_import_base.h"
-#include "rpc_operation_request_base.h"
+#include "operation_helpers.h" 
+#include "rpc_export_base.h" 
+#include "rpc_import_base.h" 
+#include "rpc_operation_request_base.h" 
 
 #include <google/protobuf/text_format.h>
 
@@ -17,79 +17,79 @@
 #include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <library/cpp/actors/core/hfunc.h>
-
+ 
 #include <util/string/cast.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
-using namespace NOperationId;
+using namespace NOperationId; 
 using namespace Ydb;
 
-class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvGetOperationRequest, true>,
-                         public TExportConv {
+class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvGetOperationRequest, true>, 
+                         public TExportConv { 
 
-    TStringBuf GetLogPrefix() const override {
-        switch (OperationId_.GetKind()) {
-        case TOperationId::EXPORT:
-            return "[GetExport]";
-        case TOperationId::IMPORT:
-            return "[GetImport]";
-        case TOperationId::BUILD_INDEX:
-            return "[GetIndexBuild]";
-        default:
-            return "[Untagged]";
+    TStringBuf GetLogPrefix() const override { 
+        switch (OperationId_.GetKind()) { 
+        case TOperationId::EXPORT: 
+            return "[GetExport]"; 
+        case TOperationId::IMPORT: 
+            return "[GetImport]"; 
+        case TOperationId::BUILD_INDEX: 
+            return "[GetIndexBuild]"; 
+        default: 
+            return "[Untagged]"; 
         }
-    }
+    } 
 
-    IEventBase* MakeRequest() override {
-        switch (OperationId_.GetKind()) {
-        case TOperationId::EXPORT:
+    IEventBase* MakeRequest() override { 
+        switch (OperationId_.GetKind()) { 
+        case TOperationId::EXPORT: 
             return new NSchemeShard::TEvExport::TEvGetExportRequest(DatabaseName, RawOperationId_);
-        case TOperationId::IMPORT:
+        case TOperationId::IMPORT: 
             return new NSchemeShard::TEvImport::TEvGetImportRequest(DatabaseName, RawOperationId_);
-        case TOperationId::BUILD_INDEX:
+        case TOperationId::BUILD_INDEX: 
             return new NSchemeShard::TEvIndexBuilder::TEvGetRequest(DatabaseName, RawOperationId_);
-        default:
-            Y_FAIL("unreachable");
-        }
-    }
-
-    void PassAway() override {
+        default: 
+            Y_FAIL("unreachable"); 
+        } 
+    } 
+ 
+    void PassAway() override { 
         if (PipeActorId_) {
             NTabletPipe::CloseClient(SelfId(), PipeActorId_);
             PipeActorId_ = TActorId();
         }
 
-        TRpcOperationRequestActor::PassAway();
+        TRpcOperationRequestActor::PassAway(); 
     }
 
 public:
-    using TRpcOperationRequestActor::TRpcOperationRequestActor;
+    using TRpcOperationRequestActor::TRpcOperationRequestActor; 
 
     void Bootstrap(const TActorContext &ctx) {
-        const auto req = Request->GetProtoRequest();
+        const auto req = Request->GetProtoRequest(); 
 
         try {
             OperationId_ = TOperationId(req->id());
-
+ 
             switch (OperationId_.GetKind()) {
-            case TOperationId::CMS_REQUEST:
+            case TOperationId::CMS_REQUEST: 
                 SendCheckCmsOperation(ctx);
-                break;
-            case TOperationId::EXPORT:
-            case TOperationId::IMPORT:
-            case TOperationId::BUILD_INDEX:
-                if (!TryGetId(OperationId_, RawOperationId_)) {
-                    return ReplyWithStatus(StatusIds::BAD_REQUEST);
-                }
-                ResolveDatabase();
-                break;
-            default:
+                break; 
+            case TOperationId::EXPORT: 
+            case TOperationId::IMPORT: 
+            case TOperationId::BUILD_INDEX: 
+                if (!TryGetId(OperationId_, RawOperationId_)) { 
+                    return ReplyWithStatus(StatusIds::BAD_REQUEST); 
+                } 
+                ResolveDatabase(); 
+                break; 
+            default: 
                 SendNotifyTxCompletion(ctx);
-                break;
-            }
+                break; 
+            } 
         } catch (const yexception& ex) {
             return ReplyWithStatus(StatusIds::BAD_REQUEST);
         }
@@ -107,7 +107,7 @@ public:
             HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
 
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev, TlsActivationContext->AsActorContext()); 
         }
     }
 private:
@@ -144,7 +144,7 @@ private:
                 return ReplyWithStatus(StatusIds::BAD_REQUEST);
             }
         } catch (const yexception& ex) {
-            Request->RaiseIssue(NYql::ExceptionToIssue(ex));
+            Request->RaiseIssue(NYql::ExceptionToIssue(ex)); 
             return ReplyWithStatus(StatusIds::BAD_REQUEST);
         }
 
@@ -153,8 +153,8 @@ private:
         PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
 
         auto request = MakeHolder<NConsole::TEvConsole::TEvGetOperationRequest>();
-        request->Record.MutableRequest()->set_id(Request->GetProtoRequest()->id());
-        request->Record.SetUserToken(Request->GetInternalToken());
+        request->Record.MutableRequest()->set_id(Request->GetProtoRequest()->id()); 
+        request->Record.SetUserToken(Request->GetInternalToken()); 
         NTabletPipe::SendData(ctx, PipeActorId_, request.Release());
     }
 
@@ -185,33 +185,33 @@ private:
     }
 
     void Handle(NSchemeShard::TEvExport::TEvGetExportResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record.GetResponse();
-
-        LOG_D("Handle TEvExport::TEvGetExportResponse"
-            << ": record# " << record.ShortDebugString());
-
-        TEvGetOperationRequest::TResponse resp;
-        *resp.mutable_operation() = TExportConv::ToOperation(record.GetEntry());
-        Reply(resp, ctx);
-    }
-
+        const auto& record = ev->Get()->Record.GetResponse(); 
+ 
+        LOG_D("Handle TEvExport::TEvGetExportResponse" 
+            << ": record# " << record.ShortDebugString()); 
+ 
+        TEvGetOperationRequest::TResponse resp; 
+        *resp.mutable_operation() = TExportConv::ToOperation(record.GetEntry()); 
+        Reply(resp, ctx); 
+    } 
+ 
     void Handle(NSchemeShard::TEvImport::TEvGetImportResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record.GetResponse();
+        const auto& record = ev->Get()->Record.GetResponse(); 
 
-        LOG_D("Handle TEvImport::TEvGetImportResponse"
-            << ": record# " << record.ShortDebugString());
+        LOG_D("Handle TEvImport::TEvGetImportResponse" 
+            << ": record# " << record.ShortDebugString()); 
 
-        TEvGetOperationRequest::TResponse resp;
-        *resp.mutable_operation() = TImportConv::ToOperation(record.GetEntry());
-        Reply(resp, ctx);
+        TEvGetOperationRequest::TResponse resp; 
+        *resp.mutable_operation() = TImportConv::ToOperation(record.GetEntry()); 
+        Reply(resp, ctx); 
     }
 
     void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvIndexBuilder::TEvGetResponse"
-            << ": record# " << record.ShortDebugString());
-
+        LOG_D("Handle TEvIndexBuilder::TEvGetResponse" 
+            << ": record# " << record.ShortDebugString()); 
+ 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             ReplyGetOperationResponse(true, ctx, record.GetStatus());
         } else {
@@ -227,32 +227,32 @@ private:
                         const TActorContext &ctx) {
         TEvGetOperationRequest::TResponse resp;
         auto deferred = resp.mutable_operation();
-        deferred->set_id(Request->GetProtoRequest()->id());
+        deferred->set_id(Request->GetProtoRequest()->id()); 
         deferred->set_ready(true);
         deferred->set_status(status);
         if (issues.size())
             deferred->mutable_issues()->CopyFrom(issues);
-        Reply(resp, ctx);
+        Reply(resp, ctx); 
     }
 
     void ReplyGetOperationResponse(bool ready, const TActorContext& ctx, StatusIds::StatusCode status = StatusIds::SUCCESS) {
         TEvGetOperationRequest::TResponse resp;
         auto deferred = resp.mutable_operation();
-        deferred->set_id(Request->GetProtoRequest()->id());
+        deferred->set_id(Request->GetProtoRequest()->id()); 
         deferred->set_ready(ready);
         if (ready) {
             deferred->set_status(status);
         }
-        Reply(resp, ctx);
-    }
-
+        Reply(resp, ctx); 
+    } 
+ 
     template<typename TMessage>
     void ReplyGetOperationResponse(bool ready, const TActorContext& ctx,
         const TMessage& metadata, StatusIds::StatusCode status = StatusIds::SUCCESS)
     {
         TEvGetOperationRequest::TResponse resp;
         auto deferred = resp.mutable_operation();
-        deferred->set_id(Request->GetProtoRequest()->id());
+        deferred->set_id(Request->GetProtoRequest()->id()); 
         deferred->set_ready(ready);
         if (ready) {
             deferred->set_status(status);
@@ -263,7 +263,7 @@ private:
     }
 
 
-    void Reply(const TEvGetOperationRequest::TResponse& response, const TActorContext& ctx) {
+    void Reply(const TEvGetOperationRequest::TResponse& response, const TActorContext& ctx) { 
         TProtoResponseHelper::SendProtoResponse(response, response.operation().status(), Request);
         this->Die(ctx);
     }

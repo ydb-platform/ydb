@@ -1,5 +1,5 @@
 #include "schemeshard_impl.h"
-#include "schemeshard_path_describer.h"
+#include "schemeshard_path_describer.h" 
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -54,7 +54,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Self->RootPathElemets = std::move(rootPathElemets);
 
 
-        TSubDomainInfo::TPtr newDomain = new TSubDomainInfo(0, Self->RootPathId());
+        TSubDomainInfo::TPtr newDomain = new TSubDomainInfo(0, Self->RootPathId()); 
         newDomain->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
         Self->SubDomains[Self->RootPathId()] = newDomain;
 
@@ -294,20 +294,20 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
 
         newPath->CachedEffectiveACL.Update(Self->ParentDomainCachedEffectiveACL, newPath->ACL, newPath->IsContainer());
 
-        TPathId resourcesDomainId = Self->ParentDomainId;
-        if (record.HasResourcesDomainOwnerId() && record.HasResourcesDomainPathId()) {
-            resourcesDomainId = TPathId(record.GetResourcesDomainOwnerId(), record.GetResourcesDomainPathId());
-        }
-
+        TPathId resourcesDomainId = Self->ParentDomainId; 
+        if (record.HasResourcesDomainOwnerId() && record.HasResourcesDomainPathId()) { 
+            resourcesDomainId = TPathId(record.GetResourcesDomainOwnerId(), record.GetResourcesDomainPathId()); 
+        } 
+ 
         TSubDomainInfo::TPtr subdomain = new TSubDomainInfo(processingParams.GetVersion(),
                                                             processingParams.GetPlanResolution(),
-                                                            processingParams.GetTimeCastBucketsPerMediator(),
-                                                            resourcesDomainId);
+                                                            processingParams.GetTimeCastBucketsPerMediator(), 
+                                                            resourcesDomainId); 
 
-        if (record.HasSharedHive()) {
-            subdomain->SetSharedHive(TTabletId(record.GetSharedHive()));
-        }
-
+        if (record.HasSharedHive()) { 
+            subdomain->SetSharedHive(TTabletId(record.GetSharedHive())); 
+        } 
+ 
         for (auto& x: storagePools) {
             subdomain->AddStoragePool(x);
         }

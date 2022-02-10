@@ -2,7 +2,7 @@
 import os
 import string
 
-from hamcrest import assert_that, raises
+from hamcrest import assert_that, raises 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
@@ -42,68 +42,68 @@ class TestSchemeShardLimitsCase0(Base):
     erasure = Erasure.BLOCK_4_2
 
     def test_effective_acls_are_too_large(self):
-        # Arrange
-        directory_name = "/Root/test_effective_acls_are_too_large"
-        self.driver.scheme_client.make_directory(directory_name)
-
-        # Act
-        def callee():
-            for idx in string.ascii_lowercase:
-                current_directory = os.path.join(directory_name, idx)
-                self.driver.scheme_client.make_directory(current_directory)
-                subject = idx * (6 * 10 ** 6) + '@staff'
-                self.driver.scheme_client.modify_permissions(
-                    current_directory,
-                    ydb.ModifyPermissionsSettings()
-                    .grant_permissions(
-                        subject, (
-                            'ydb.generic.read',
-                        )
+        # Arrange 
+        directory_name = "/Root/test_effective_acls_are_too_large" 
+        self.driver.scheme_client.make_directory(directory_name) 
+ 
+        # Act 
+        def callee(): 
+            for idx in string.ascii_lowercase: 
+                current_directory = os.path.join(directory_name, idx) 
+                self.driver.scheme_client.make_directory(current_directory) 
+                subject = idx * (6 * 10 ** 6) + '@staff' 
+                self.driver.scheme_client.modify_permissions( 
+                    current_directory, 
+                    ydb.ModifyPermissionsSettings() 
+                    .grant_permissions( 
+                        subject, ( 
+                            'ydb.generic.read', 
+                        ) 
                     )
                 )
-            self.driver.scheme_client.describe_path(current_directory)
-
-        # Assert
-        assert_that(
-            callee,
-            raises(
-                ydb.GenericError,
-                "ACL is too long"
+            self.driver.scheme_client.describe_path(current_directory) 
+ 
+        # Assert 
+        assert_that( 
+            callee, 
+            raises( 
+                ydb.GenericError, 
+                "ACL is too long" 
             )
-        )
+        ) 
 
 
 class TestSchemeShardLimitsCase1(Base):
     erasure = Erasure.NONE
 
     def test_too_large_acls(self):
-        # Arrange
+        # Arrange 
         directory_name = "/Root/test_too_large_acls"
-        self.driver.scheme_client.make_directory(directory_name)
-
-        # Act
-        def callee():
-            for chr_val in string.ascii_lowercase:
-                self.driver.scheme_client.modify_permissions(
-                    directory_name,
-                    ydb.ModifyPermissionsSettings()
-                    .grant_permissions(
-                        'gvit@staff', (
-                            'ydb.generic.read',
-                        )
+        self.driver.scheme_client.make_directory(directory_name) 
+ 
+        # Act 
+        def callee(): 
+            for chr_val in string.ascii_lowercase: 
+                self.driver.scheme_client.modify_permissions( 
+                    directory_name, 
+                    ydb.ModifyPermissionsSettings() 
+                    .grant_permissions( 
+                        'gvit@staff', ( 
+                            'ydb.generic.read', 
+                        ) 
                     )
-                    .grant_permissions(
-                        chr_val * 50 * 10 ** 6 + '@staff', (
-                            'ydb.generic.read',
-                        )
+                    .grant_permissions( 
+                        chr_val * 50 * 10 ** 6 + '@staff', ( 
+                            'ydb.generic.read', 
+                        ) 
                     )
                 )
-
-        # Assert
-        assert_that(
-            callee,
-            raises(
-                ydb.GenericError,
-                "ACL is too long"
+ 
+        # Assert 
+        assert_that( 
+            callee, 
+            raises( 
+                ydb.GenericError, 
+                "ACL is too long" 
             )
-        )
+        ) 

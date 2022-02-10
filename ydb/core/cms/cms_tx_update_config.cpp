@@ -1,6 +1,6 @@
 #include "cms_impl.h"
 #include "scheme.h"
-#include "sentinel.h"
+#include "sentinel.h" 
 
 namespace NKikimr {
 namespace NCms {
@@ -53,16 +53,16 @@ public:
             ctx.Send(Response.Release());
         }
 
-        if (Self->State->Config.SentinelConfig.Enable) {
-            if (!Self->State->Sentinel) {
+        if (Self->State->Config.SentinelConfig.Enable) { 
+            if (!Self->State->Sentinel) { 
                 Self->State->Sentinel = Self->RegisterWithSameMailbox(CreateSentinel(Self->State));
-            }
-        } else {
-            if (Self->State->Sentinel) {
-                ctx.Send(Self->State->Sentinel, new TEvents::TEvPoisonPill());
+            } 
+        } else { 
+            if (Self->State->Sentinel) { 
+                ctx.Send(Self->State->Sentinel, new TEvents::TEvPoisonPill()); 
                 Self->State->Sentinel = TActorId();
-            }
-        }
+            } 
+        } 
     }
 
 private:

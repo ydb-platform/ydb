@@ -7,27 +7,27 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TRmDir: public ISubOperationBase {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
+    const TOperationId OperationId; 
+    const TTxTransaction Transaction; 
 
 public:
-    TRmDir(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
+    TRmDir(TOperationId id, const TTxTransaction& tx) 
+        : OperationId(id) 
+        , Transaction(tx) 
+    { 
+    } 
+ 
     TRmDir(TOperationId id)
         : OperationId(id)
-    {
-    }
+    { 
+    } 
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& drop = Transaction.GetDrop();
+        const auto& drop = Transaction.GetDrop(); 
 
-        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const TString& parentPathStr = Transaction.GetWorkingDir(); 
         const TString& name = drop.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -44,8 +44,8 @@ public:
             : TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks 
+                .NotEmpty() 
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -62,17 +62,17 @@ public:
                                                    << ", path: " << path.PathString();
                 auto status = checks.GetStatus(&explain);
                 result->SetError(status, explain);
-                if (path.IsResolved() && path.Base()->IsDirectory() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
-                    result->SetPathDropTxId(ui64(path.Base()->DropTxId));
-                    result->SetPathId(path.Base()->PathId.LocalPathId);
-                }
+                if (path.IsResolved() && path.Base()->IsDirectory() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) { 
+                    result->SetPathDropTxId(ui64(path.Base()->DropTxId)); 
+                    result->SetPathId(path.Base()->PathId.LocalPathId); 
+                } 
                 return result;
             }
         }
 
-        TString errStr;
+        TString errStr; 
 
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -104,10 +104,10 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TRmDir");
-    }
-
+    void AbortPropose(TOperationContext&) override { 
+        Y_FAIL("no AbortPropose for TRmDir"); 
+    } 
+ 
     void ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "TRmDir ProgressState"
@@ -186,7 +186,7 @@ public:
                      "RmDir AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->TabletID()); 
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -197,10 +197,10 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateRmDir(TOperationId id, const TTxTransaction& tx) {
-    return new TRmDir(id, tx);
-}
-
+ISubOperationBase::TPtr CreateRmDir(TOperationId id, const TTxTransaction& tx) { 
+    return new TRmDir(id, tx); 
+} 
+ 
 ISubOperationBase::TPtr CreateRmDir(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
     return new TRmDir(id);

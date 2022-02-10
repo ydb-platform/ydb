@@ -116,9 +116,9 @@ void TSchemaObject::Drop() {
     case EPathType::Sequence:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
         break;
-    case EPathType::Replication:
-        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication);
-        break;
+    case EPathType::Replication: 
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication); 
+        break; 
     case EPathType::Unknown:
     case EPathType::SubDomain:
     case EPathType::RtmrVolume:
@@ -200,8 +200,8 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
         return TSchemaObject::EPathType::OlapTable;
     case NKikimrSchemeOp::EPathTypeSequence:
         return TSchemaObject::EPathType::Sequence;
-    case NKikimrSchemeOp::EPathTypeReplication:
-        return TSchemaObject::EPathType::Replication;
+    case NKikimrSchemeOp::EPathTypeReplication: 
+        return TSchemaObject::EPathType::Replication; 
     case NKikimrSchemeOp::EPathTypeTableIndex:
     case NKikimrSchemeOp::EPathTypeExtSubDomain:
     case NKikimrSchemeOp::EPathTypeCdcStream:

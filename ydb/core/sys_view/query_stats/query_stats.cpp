@@ -179,7 +179,7 @@ private:
     }
 
     void StartScan() {
-        if (AppData()->FeatureFlags.GetEnablePersistentQueryStats() && this->SysViewProcessorId) {
+        if (AppData()->FeatureFlags.GetEnablePersistentQueryStats() && this->SysViewProcessorId) { 
             RequestBatch();
         } else {
             StartOldScan();

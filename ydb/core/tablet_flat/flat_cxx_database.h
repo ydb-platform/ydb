@@ -617,12 +617,12 @@ struct TNull {
     }
 };
 
-enum class EMaterializationMode {
-    All,
-    Existing,
-    NonExisting,
-};
-
+enum class EMaterializationMode { 
+    All, 
+    Existing, 
+    NonExisting, 
+}; 
+ 
 struct Schema {
     template <typename T>
     struct Precharger {
@@ -1850,10 +1850,10 @@ struct Schema {
         static bool Precharge(TToughDb& database) {
             return SchemaTables<Type>::Precharge(database) & SchemaTables<Types...>::Precharge(database);
         }
-
-        static void Materialize(TToughDb& database, EMaterializationMode mode = EMaterializationMode::All) {
-            SchemaTables<Type>::Materialize(database, mode);
-            SchemaTables<Types...>::Materialize(database, mode);
+ 
+        static void Materialize(TToughDb& database, EMaterializationMode mode = EMaterializationMode::All) { 
+            SchemaTables<Type>::Materialize(database, mode); 
+            SchemaTables<Types...>::Materialize(database, mode); 
         }
 
         static void Cleanup(TToughDb& database) {
@@ -1876,22 +1876,22 @@ struct Schema {
             return typename Type::TKey::template Selector<Type>(database).Precharge();
         }
 
-        static void Materialize(TToughDb& database, EMaterializationMode mode = EMaterializationMode::All) {
-            switch (mode) {
-            case EMaterializationMode::All:
-                break;
-            case EMaterializationMode::Existing:
-                if (!database.GetScheme().GetTableInfo(Type::TableId)) {
-                    return;
-                }
-                break;
-            case EMaterializationMode::NonExisting:
-                if (database.GetScheme().GetTableInfo(Type::TableId)) {
-                    return;
-                }
-                break;
-            }
-
+        static void Materialize(TToughDb& database, EMaterializationMode mode = EMaterializationMode::All) { 
+            switch (mode) { 
+            case EMaterializationMode::All: 
+                break; 
+            case EMaterializationMode::Existing: 
+                if (!database.GetScheme().GetTableInfo(Type::TableId)) { 
+                    return; 
+                } 
+                break; 
+            case EMaterializationMode::NonExisting: 
+                if (database.GetScheme().GetTableInfo(Type::TableId)) { 
+                    return; 
+                } 
+                break; 
+            } 
+ 
             database.Alter().AddTable(GetTableName(TypeName<Type>()), Type::TableId);
             Type::TColumns::Materialize(database);
             Type::TKey::Materialize(database);
@@ -1942,11 +1942,11 @@ public:
 
     template <typename TableType> typename TableType::TKey::template Selector<TableType> Table() { return Database; }
 
-    template <typename TableType>
-    bool HaveTable() {
-        return Database.GetScheme().GetTableInfo(TableType::TableId);
-    }
-
+    template <typename TableType> 
+    bool HaveTable() { 
+        return Database.GetScheme().GetTableInfo(TableType::TableId); 
+    } 
+ 
     template <typename SchemaType>
     bool Precharge() {
         return SchemaType::TTables::Precharge(Database);
@@ -1955,20 +1955,20 @@ public:
     template <typename SchemaType>
     void Materialize() {
         SchemaType::TSettings::Materialize(Database);
-        SchemaType::TTables::Materialize(Database, EMaterializationMode::All);
+        SchemaType::TTables::Materialize(Database, EMaterializationMode::All); 
     }
 
     template <typename SchemaType>
-    void MaterializeExisting() {
-        SchemaType::TTables::Materialize(Database, EMaterializationMode::Existing);
-    }
-
-    template <typename SchemaType>
-    void MaterializeNonExisting() {
-        SchemaType::TTables::Materialize(Database, EMaterializationMode::NonExisting);
-    }
-
-    template <typename SchemaType>
+    void MaterializeExisting() { 
+        SchemaType::TTables::Materialize(Database, EMaterializationMode::Existing); 
+    } 
+ 
+    template <typename SchemaType> 
+    void MaterializeNonExisting() { 
+        SchemaType::TTables::Materialize(Database, EMaterializationMode::NonExisting); 
+    } 
+ 
+    template <typename SchemaType> 
     void Cleanup() {
         SchemaType::TTables::Cleanup(Database);
 

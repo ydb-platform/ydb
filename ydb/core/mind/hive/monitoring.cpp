@@ -1092,8 +1092,8 @@ public:
             return "TS";
         case TTabletTypes::SequenceShard:
             return "S";
-        case TTabletTypes::ReplicationController:
-            return "RC";
+        case TTabletTypes::ReplicationController: 
+            return "RC"; 
         default:
             return Sprintf("%d", (int)type);
         }

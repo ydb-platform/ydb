@@ -5,12 +5,12 @@ import time
 import functools
 
 import pytest
-from hamcrest import (
-    assert_that,
-    contains_inanyorder,
-    not_none,
-)
-
+from hamcrest import ( 
+    assert_that, 
+    contains_inanyorder, 
+    not_none, 
+) 
+ 
 import ydb
 
 from tornado import gen
@@ -78,8 +78,8 @@ def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, metering_f
             )
 
         pool.retry_operation_sync(drop_table, None, os.path.join(database, "dirA1", "dirB1", "table"))
-
-
+ 
+ 
 def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, metering_file_path, ydb_private_client):
     logger.debug(
         "test for serverless db %s over hostel db %s", ydb_serverless_db, ydb_hostel_db
@@ -412,18 +412,18 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         IOLoop.current().run_sync(lambda: async_write_key(path, 0, 'test', ignore_out_of_space=False))
 
 
-def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
-    def list_endpoints(database):
-        logger.debug("List endpoints of %s", database)
-        resolver = ydb.DiscoveryEndpointsResolver(ydb.DriverConfig(ydb_endpoint, database))
-        result = resolver.resolve()
-        if result is not None:
-            return result.endpoints
-        return result
-
-    hostel_db_endpoints = list_endpoints(ydb_hostel_db)
-    serverless_db_endpoints = list_endpoints(ydb_serverless_db)
-
-    assert_that(hostel_db_endpoints, not_none())
-    assert_that(serverless_db_endpoints, not_none())
-    assert_that(serverless_db_endpoints, contains_inanyorder(*hostel_db_endpoints))
+def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint): 
+    def list_endpoints(database): 
+        logger.debug("List endpoints of %s", database) 
+        resolver = ydb.DiscoveryEndpointsResolver(ydb.DriverConfig(ydb_endpoint, database)) 
+        result = resolver.resolve() 
+        if result is not None: 
+            return result.endpoints 
+        return result 
+ 
+    hostel_db_endpoints = list_endpoints(ydb_hostel_db) 
+    serverless_db_endpoints = list_endpoints(ydb_serverless_db) 
+ 
+    assert_that(hostel_db_endpoints, not_none()) 
+    assert_that(serverless_db_endpoints, not_none()) 
+    assert_that(serverless_db_endpoints, contains_inanyorder(*hostel_db_endpoints)) 

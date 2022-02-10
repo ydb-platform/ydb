@@ -2,16 +2,16 @@
 #include "statestorage_guardian_impl.h"
 #include "tabletid.h"
 #include "tablet.h"
-
+ 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/protos/services.pb.h>
-
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+ 
+#include <library/cpp/actors/core/actor_bootstrapped.h> 
+#include <library/cpp/actors/core/hfunc.h> 
 #include <library/cpp/actors/core/interconnect.h>
-
-#include <util/generic/algorithm.h>
+ 
+#include <util/generic/algorithm.h> 
 #include <util/generic/xrange.h>
 
 namespace NKikimr {

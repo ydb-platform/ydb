@@ -1,6 +1,6 @@
 #pragma once
 
-#include "datashard_common_upload.h"
+#include "datashard_common_upload.h" 
 #include "datashard_impl.h"
 #include "execution_unit_kind.h"
 
@@ -46,8 +46,8 @@ public:
 private:
     bool CreateScheme(TTransactionContext &txc);
     bool ReadEverything(TTransactionContext &txc);
-private:
-    TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> ChangeRecords;
+private: 
+    TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> ChangeRecords; 
 };
 
 class TDataShard::TTxPlanStep : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -219,71 +219,71 @@ private:
 };
 
 class TDataShard::TTxGetS3Upload: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
+public: 
     TTxGetS3Upload(TDataShard* ds, TEvDataShard::TEvGetS3Upload::TPtr ev);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_GET_S3_UPLOAD_ID; }
-private:
-    TEvDataShard::TEvGetS3Upload::TPtr Ev;
-    THolder<TEvDataShard::TEvS3Upload> Reply;
-};
-
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
+    void Complete(const TActorContext& ctx) override; 
+    TTxType GetTxType() const override { return TXTYPE_GET_S3_UPLOAD_ID; } 
+private: 
+    TEvDataShard::TEvGetS3Upload::TPtr Ev; 
+    THolder<TEvDataShard::TEvS3Upload> Reply; 
+}; 
+ 
 class TDataShard::TTxStoreS3UploadId: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
+public: 
     TTxStoreS3UploadId(TDataShard* ds, TEvDataShard::TEvStoreS3UploadId::TPtr ev);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_STORE_S3_UPLOAD_ID; }
-private:
-    TEvDataShard::TEvStoreS3UploadId::TPtr Ev;
-    THolder<TEvDataShard::TEvS3Upload> Reply;
-};
-
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
+    void Complete(const TActorContext& ctx) override; 
+    TTxType GetTxType() const override { return TXTYPE_STORE_S3_UPLOAD_ID; } 
+private: 
+    TEvDataShard::TEvStoreS3UploadId::TPtr Ev; 
+    THolder<TEvDataShard::TEvS3Upload> Reply; 
+}; 
+ 
 class TDataShard::TTxChangeS3UploadStatus: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
+public: 
     TTxChangeS3UploadStatus(TDataShard* ds, TEvDataShard::TEvChangeS3UploadStatus::TPtr ev);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_CHANGE_S3_UPLOAD_STATUS; }
-private:
-    TEvDataShard::TEvChangeS3UploadStatus::TPtr Ev;
-    THolder<TEvDataShard::TEvS3Upload> Reply;
-};
-
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
+    void Complete(const TActorContext& ctx) override; 
+    TTxType GetTxType() const override { return TXTYPE_CHANGE_S3_UPLOAD_STATUS; } 
+private: 
+    TEvDataShard::TEvChangeS3UploadStatus::TPtr Ev; 
+    THolder<TEvDataShard::TEvS3Upload> Reply; 
+}; 
+ 
 class TDataShard::TTxGetS3DownloadInfo: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
+public: 
     TTxGetS3DownloadInfo(TDataShard* ds, TEvDataShard::TEvGetS3DownloadInfo::TPtr ev);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_GET_S3_DOWNLOAD_INFO; }
-private:
-    TEvDataShard::TEvGetS3DownloadInfo::TPtr Ev;
-    THolder<TEvDataShard::TEvS3DownloadInfo> Reply;
-};
-
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
+    void Complete(const TActorContext& ctx) override; 
+    TTxType GetTxType() const override { return TXTYPE_GET_S3_DOWNLOAD_INFO; } 
+private: 
+    TEvDataShard::TEvGetS3DownloadInfo::TPtr Ev; 
+    THolder<TEvDataShard::TEvS3DownloadInfo> Reply; 
+}; 
+ 
 class TDataShard::TTxStoreS3DownloadInfo: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
+public: 
     TTxStoreS3DownloadInfo(TDataShard* ds, TEvDataShard::TEvStoreS3DownloadInfo::TPtr ev);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_STORE_S3_DOWNLOAD_INFO; }
-private:
-    TEvDataShard::TEvStoreS3DownloadInfo::TPtr Ev;
-    THolder<TEvDataShard::TEvS3DownloadInfo> Reply;
-};
-
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
+    void Complete(const TActorContext& ctx) override; 
+    TTxType GetTxType() const override { return TXTYPE_STORE_S3_DOWNLOAD_INFO; } 
+private: 
+    TEvDataShard::TEvStoreS3DownloadInfo::TPtr Ev; 
+    THolder<TEvDataShard::TEvS3DownloadInfo> Reply; 
+}; 
+ 
 class TDataShard::TTxUnsafeUploadRows: public NTabletFlatExecutor::TTransactionBase<TDataShard>,
-                                              public TCommonUploadOps<
-                                                  TEvDataShard::TEvUnsafeUploadRowsRequest,
-                                                  TEvDataShard::TEvUnsafeUploadRowsResponse> {
-public:
+                                              public TCommonUploadOps< 
+                                                  TEvDataShard::TEvUnsafeUploadRowsRequest, 
+                                                  TEvDataShard::TEvUnsafeUploadRowsResponse> { 
+public: 
     TTxUnsafeUploadRows(TDataShard* ds, TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_UNSAFE_UPLOAD_ROWS; }
-};
-
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
+    void Complete(const TActorContext& ctx) override; 
+    TTxType GetTxType() const override { return TXTYPE_UNSAFE_UPLOAD_ROWS; } 
+}; 
+ 
 class TDataShard::TTxExecuteMvccStateChange: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxExecuteMvccStateChange(TDataShard* ds);

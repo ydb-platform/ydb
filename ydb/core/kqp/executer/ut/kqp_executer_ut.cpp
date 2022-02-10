@@ -57,8 +57,8 @@ TKikimrParamsMap GetParamsMap(const NYdb::TParams& params) {
         protoParam.mutable_value()->CopyFrom(NYdb::TProtoAccessor::GetProto(pair.second));
 
         NKikimrMiniKQL::TParams mkqlParam;
-        ConvertYdbTypeToMiniKQLType(protoParam.type(), *mkqlParam.MutableType());
-        ConvertYdbValueToMiniKQLValue(protoParam.type(), protoParam.value(), *mkqlParam.MutableValue());
+        ConvertYdbTypeToMiniKQLType(protoParam.type(), *mkqlParam.MutableType()); 
+        ConvertYdbValueToMiniKQLValue(protoParam.type(), protoParam.value(), *mkqlParam.MutableValue()); 
 
         paramsMap.insert(std::make_pair(pair.first, mkqlParam));
     }

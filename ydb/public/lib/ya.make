@@ -7,7 +7,7 @@ RECURSE(
     idx_test
     json_value
     jwt
-    operation_id
+    operation_id 
     scheme_types
     value
     ydb_cli

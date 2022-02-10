@@ -46,15 +46,15 @@ struct TEvTenantPool {
 
     struct TEvConfigureSlotResult : public TEventPB<TEvConfigureSlotResult, NKikimrTenantPool::TConfigureSlotResult, EvConfigureSlotResult> {};
 
-    struct TEvTakeOwnership : public TEventPB<TEvTakeOwnership, NKikimrTenantPool::TTakeOwnership, EvTakeOwnership> {
-        TEvTakeOwnership() = default;
+    struct TEvTakeOwnership : public TEventPB<TEvTakeOwnership, NKikimrTenantPool::TTakeOwnership, EvTakeOwnership> { 
+        TEvTakeOwnership() = default; 
 
-        TEvTakeOwnership(ui64 generation, ui64 seqNo = Max<ui64>()) {
-            Record.SetGeneration(generation);
-            Record.SetSeqNo(seqNo);
-        }
-    };
-
+        TEvTakeOwnership(ui64 generation, ui64 seqNo = Max<ui64>()) { 
+            Record.SetGeneration(generation); 
+            Record.SetSeqNo(seqNo); 
+        } 
+    }; 
+ 
     struct TEvLostOwnership : public TEventPB<TEvLostOwnership, NKikimrTenantPool::TLostOwnership, EvLostOwnership> {};
 };
 

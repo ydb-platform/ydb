@@ -1,7 +1,7 @@
 #pragma once
 
-#include "pdisk_state.h"
-
+#include "pdisk_state.h" 
+ 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/mon/mon.h>
 
@@ -14,7 +14,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
-#include <util/generic/serialized_enum.h>
+#include <util/generic/serialized_enum.h> 
 #include <iostream>
 
 namespace NKikimr {
@@ -56,12 +56,12 @@ protected:
             else if (name == "NKikimrConsole::TConfigItem::EMergeStrategy")
                 return ReplyWithEnumDescription(*NKikimrConsole::TConfigItem::EMergeStrategy_descriptor(), ctx);
             else if (name == "NKikimrServices::EServiceKikimr")
-                return ReplyWithLogComponents(ctx.LoggerSettings(), ctx);
+                return ReplyWithLogComponents(ctx.LoggerSettings(), ctx); 
             else if (name == "NKikimrCms::TCmsConfig::TLogConfig::ELevel")
                 return ReplyWithEnumDescription(*NKikimrCms::TCmsConfig::TLogConfig::ELevel_descriptor(), ctx);
             else if (name == "NKikimrCms::TLogRecordData::EType")
                 return ReplyWithEnumDescription(*NKikimrCms::TLogRecordData::EType_descriptor(), ctx);
-            else if (name == "NCms::EPDiskState")
+            else if (name == "NCms::EPDiskState") 
                 return ReplyWithEnumDescription(*NKikimrBlobStorage::TPDiskState::E_descriptor(), ctx);
         } else if (cgi.Has("type")) {
             TString name = cgi.Get("type");
@@ -81,27 +81,27 @@ protected:
                                           NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 
-    void ReplyWithLogComponents(NLog::TSettings *settings, const TActorContext &ctx)
-    {
-        NJson::TJsonValue json;
-
-        if (settings) {
-            for (NLog::EComponent i = settings->MinVal; i < settings->MaxVal; i++) {
-                auto name = settings->ComponentName(i);
-                if (!*name) {
-                    continue;
-                }
-
-                NJson::TJsonValue value;
-                value["name"] = name;
-                value["number"] = static_cast<ui32>(i);
-                json["value"].AppendValue(value);
-            }
-        }
-
-        Reply(WriteJson(json), ctx);
-    }
-
+    void ReplyWithLogComponents(NLog::TSettings *settings, const TActorContext &ctx) 
+    { 
+        NJson::TJsonValue json; 
+ 
+        if (settings) { 
+            for (NLog::EComponent i = settings->MinVal; i < settings->MaxVal; i++) { 
+                auto name = settings->ComponentName(i); 
+                if (!*name) { 
+                    continue; 
+                } 
+ 
+                NJson::TJsonValue value; 
+                value["name"] = name; 
+                value["number"] = static_cast<ui32>(i); 
+                json["value"].AppendValue(value); 
+            } 
+        } 
+ 
+        Reply(WriteJson(json), ctx); 
+    } 
+ 
     void ReplyWithEnumDescription(const ::google::protobuf::EnumDescriptor &descriptor,
                                   const TActorContext &ctx)
     {

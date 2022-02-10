@@ -12,8 +12,8 @@
 
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 
-#include <util/generic/algorithm.h>
-
+#include <util/generic/algorithm.h> 
+ 
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -21,8 +21,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     TPtr source,
     NKikimrSchemeOp::TTableDescription& op,
     const NScheme::TTypeRegistry& typeRegistry,
-    const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
-    TString& errStr, const THashSet<TString>& localSequences)
+    const TSchemeLimits& limits, const TSubDomainInfo& subDomain, 
+    TString& errStr, const THashSet<TString>& localSequences) 
 {
     TAlterDataPtr alterData = new TTableInfo::TAlterTableInfo();
     alterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
@@ -53,14 +53,14 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
     for (auto& col : *op.MutableColumns()) {
         TString colName = col.GetName();
-
-        if (colName.size() > limits.MaxTableColumnNameLength) {
-            errStr = TStringBuilder()
-                << "Column name too long '" << colName << "'. "
-                << "Limit: " << limits.MaxTableColumnNameLength;
-            return nullptr;
-        }
-
+ 
+        if (colName.size() > limits.MaxTableColumnNameLength) { 
+            errStr = TStringBuilder() 
+                << "Column name too long '" << colName << "'. " 
+                << "Limit: " << limits.MaxTableColumnNameLength; 
+            return nullptr; 
+        } 
+ 
         if (!IsValidColumnName(colName)) {
             errStr = Sprintf("Invalid name for column '%s'", colName.data());
             return nullptr;
@@ -183,42 +183,42 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 errStr = Sprintf("Can't drop key column: '%s'", colName.data());
                 return nullptr;
             }
-            if (alterData->Columns[colId].DeleteVersion == alterData->AlterVersion) {
-                errStr = Sprintf("Duplicate drop column: %s", colName.data());
-                return nullptr;
-            }
-            if (source->TTLSettings().HasEnabled() && source->TTLSettings().GetEnabled().GetColumnName() == colName) {
-                errStr = Sprintf("Can't drop TTL column: '%s', disable TTL first ", colName.data());
-                return nullptr;
-            }
-
+            if (alterData->Columns[colId].DeleteVersion == alterData->AlterVersion) { 
+                errStr = Sprintf("Duplicate drop column: %s", colName.data()); 
+                return nullptr; 
+            } 
+            if (source->TTLSettings().HasEnabled() && source->TTLSettings().GetEnabled().GetColumnName() == colName) { 
+                errStr = Sprintf("Can't drop TTL column: '%s', disable TTL first ", colName.data()); 
+                return nullptr; 
+            } 
+ 
             alterData->Columns[colId] = source->Columns[colId];
             alterData->Columns[colId].DeleteVersion = alterData->AlterVersion;
         }
     }
 
-    if ((colName2Id.size() - op.DropColumnsSize()) > limits.MaxTableColumns) {
-        errStr = TStringBuilder()
-            << "Too many columns"
-            << ": current: " << (source ? source->Columns.size() : 0)
-            << ", new: " << (source ? colName2Id.size() - source->Columns.size() : op.ColumnsSize())
-            << ", dropping: " << op.DropColumnsSize()
-            << ". Limit: " << limits.MaxTableColumns;
-        return nullptr;
-    }
-
-    if (op.HasTTLSettings()) {
-        const auto& ttl = op.GetTTLSettings();
-
-        if (!ValidateTtlSettings(ttl, source ? source->Columns : THashMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, errStr)) {
+    if ((colName2Id.size() - op.DropColumnsSize()) > limits.MaxTableColumns) { 
+        errStr = TStringBuilder() 
+            << "Too many columns" 
+            << ": current: " << (source ? source->Columns.size() : 0) 
+            << ", new: " << (source ? colName2Id.size() - source->Columns.size() : op.ColumnsSize()) 
+            << ", dropping: " << op.DropColumnsSize() 
+            << ". Limit: " << limits.MaxTableColumns; 
+        return nullptr; 
+    } 
+ 
+    if (op.HasTTLSettings()) { 
+        const auto& ttl = op.GetTTLSettings(); 
+ 
+        if (!ValidateTtlSettings(ttl, source ? source->Columns : THashMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, errStr)) { 
             return nullptr;
-        }
-
-        alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(ttl);
-    }
-
-    alterData->IsBackup = op.GetIsBackup();
-
+        } 
+ 
+        alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(ttl); 
+    } 
+ 
+    alterData->IsBackup = op.GetIsBackup(); 
+ 
     if (source && op.KeyColumnNamesSize() == 0)
         return alterData;
 
@@ -249,15 +249,15 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         ++keyOrder;
     }
 
-    if (keyColIds.size() > limits.MaxTableKeyColumns) {
-        errStr = TStringBuilder()
-            << "Too many key columns"
-            << ": current: " << (source ? source->KeyColumnIds.size() : 0)
-            << ", new: " << keyColIds.size()
-            << ". Limit: " << limits.MaxTableKeyColumns;
-        return nullptr;
-    }
-
+    if (keyColIds.size() > limits.MaxTableKeyColumns) { 
+        errStr = TStringBuilder() 
+            << "Too many key columns" 
+            << ": current: " << (source ? source->KeyColumnIds.size() : 0) 
+            << ", new: " << keyColIds.size() 
+            << ". Limit: " << limits.MaxTableKeyColumns; 
+        return nullptr; 
+    } 
+ 
     if (source) {
         // key columns reorder or deletion is not supported
         const TVector<ui32>& oldColIds = source->KeyColumnIds;
@@ -292,7 +292,7 @@ TVector<ui32> TTableInfo::FillDescription(TPathElement::TPtr pathInfo) {
     if (!TableDescription.HasPathId()) {
         TableDescription.SetName(pathInfo->Name);
         TableDescription.SetId_Deprecated(pathInfo->PathId.LocalPathId);
-        PathIdFromPathId(pathInfo->PathId, TableDescription.MutablePathId());
+        PathIdFromPathId(pathInfo->PathId, TableDescription.MutablePathId()); 
 
         for (auto& c : Columns) {
             const TColumn& column = c.second;
@@ -1191,11 +1191,11 @@ void TTableInfo::FinishAlter() {
         partitionConfig.ClearShadowData();
     }
 
-    // Apply TTL params
-    if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasTTLSettings()) {
-        MutableTTLSettings().Swap(AlterData->TableDescriptionFull->MutableTTLSettings());
-    }
-
+    // Apply TTL params 
+    if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasTTLSettings()) { 
+        MutableTTLSettings().Swap(AlterData->TableDescriptionFull->MutableTTLSettings()); 
+    } 
+ 
     // Force FillDescription to regenerate TableDescription
     TableDescription.ClearId_Deprecated();
     TableDescription.ClearPathId();
@@ -1274,13 +1274,13 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     Stats.Aggregated = newAggregatedStats;
     Partitions.swap(newPartitioning);
     PreSerializedPathDescription.clear();
-
-    CondEraseSchedule.clear();
-    InFlightCondErase.clear();
+ 
+    CondEraseSchedule.clear(); 
+    InFlightCondErase.clear(); 
     Shard2PartitionIdx.clear();
     for (ui32 i = 0; i < Partitions.size(); ++i) {
         Shard2PartitionIdx[Partitions[i].ShardIdx] = i;
-        CondEraseSchedule.push(Partitions.begin() + i);
+        CondEraseSchedule.push(Partitions.begin() + i); 
     }
 }
 
@@ -1639,90 +1639,90 @@ TChannelsMapping GetPoolsMapping(const TChannelsBindings& bindings) {
     return mapping;
 }
 
-TString TExportInfo::ToString() const {
-    return TStringBuilder() << "{"
-        << " Id: " << Id
-        << " Uid: '" << Uid << "'"
-        << " Kind: " << Kind
-        << " DomainPathId: " << DomainPathId
-        << " ExportPathId: " << ExportPathId
-        << " UserSID: '" << UserSID << "'"
-        << " State: " << State
-        << " WaitTxId: " << WaitTxId
-        << " Issue: '" << Issue << "'"
-        << " Items: " << Items.size()
-        << " PendingItems: " << PendingItems.size()
-        << " PendingDropItems: " << PendingDropItems.size()
-    << " }";
-}
-
-TString TExportInfo::TItem::ToString(ui32 idx) const {
-    return TStringBuilder() << "{"
-        << " Idx: " << idx
-        << " SourcePathName: '" << SourcePathName << "'"
-        << " SourcePathId: " << SourcePathId
-        << " State: " << State
-        << " SubState: " << SubState
-        << " WaitTxId: " << WaitTxId
-        << " Issue: '" << Issue << "'"
-    << " }";
-}
-
-bool TExportInfo::TItem::IsDone(const TExportInfo::TItem& item) {
-    return item.State == EState::Done;
-}
-
-bool TExportInfo::TItem::IsDropped(const TExportInfo::TItem& item) {
-    return item.State == EState::Dropped;
-}
-
-bool TExportInfo::AllItemsAreDropped() const {
-    return AllOf(Items, &TExportInfo::TItem::IsDropped);
-}
-
+TString TExportInfo::ToString() const { 
+    return TStringBuilder() << "{" 
+        << " Id: " << Id 
+        << " Uid: '" << Uid << "'" 
+        << " Kind: " << Kind 
+        << " DomainPathId: " << DomainPathId 
+        << " ExportPathId: " << ExportPathId 
+        << " UserSID: '" << UserSID << "'" 
+        << " State: " << State 
+        << " WaitTxId: " << WaitTxId 
+        << " Issue: '" << Issue << "'" 
+        << " Items: " << Items.size() 
+        << " PendingItems: " << PendingItems.size() 
+        << " PendingDropItems: " << PendingDropItems.size() 
+    << " }"; 
+} 
+ 
+TString TExportInfo::TItem::ToString(ui32 idx) const { 
+    return TStringBuilder() << "{" 
+        << " Idx: " << idx 
+        << " SourcePathName: '" << SourcePathName << "'" 
+        << " SourcePathId: " << SourcePathId 
+        << " State: " << State 
+        << " SubState: " << SubState 
+        << " WaitTxId: " << WaitTxId 
+        << " Issue: '" << Issue << "'" 
+    << " }"; 
+} 
+ 
+bool TExportInfo::TItem::IsDone(const TExportInfo::TItem& item) { 
+    return item.State == EState::Done; 
+} 
+ 
+bool TExportInfo::TItem::IsDropped(const TExportInfo::TItem& item) { 
+    return item.State == EState::Dropped; 
+} 
+ 
+bool TExportInfo::AllItemsAreDropped() const { 
+    return AllOf(Items, &TExportInfo::TItem::IsDropped); 
+} 
+ 
 void TExportInfo::AddNotifySubscriber(const TActorId &actorId) {
     Y_VERIFY(!IsFinished());
     Subscribers.insert(actorId);
 }
 
-TString TImportInfo::ToString() const {
-    return TStringBuilder() << "{"
-        << " Id: " << Id
-        << " Uid: '" << Uid << "'"
-        << " Kind: " << Kind
-        << " DomainPathId: " << DomainPathId
-        << " UserSID: '" << UserSID << "'"
-        << " State: " << State
-        << " Issue: '" << Issue << "'"
-        << " Items: " << Items.size()
-    << " }";
-}
-
-TString TImportInfo::TItem::ToString(ui32 idx) const {
-    return TStringBuilder() << "{"
-        << " Idx: " << idx
-        << " DstPathName: '" << DstPathName << "'"
-        << " DstPathId: " << DstPathId
-        << " State: " << State
-        << " SubState: " << SubState
-        << " WaitTxId: " << WaitTxId
-        << " Issue: '" << Issue << "'"
-    << " }";
-}
-
-bool TImportInfo::TItem::IsDone(const TImportInfo::TItem& item) {
-    return item.State == EState::Done;
-}
-
-bool TImportInfo::IsFinished() const {
-    return State == EState::Done || State == EState::Cancelled;
-}
-
-void TImportInfo::AddNotifySubscriber(const TActorId &actorId) {
-    Y_VERIFY(!IsFinished());
-    Subscribers.insert(actorId);
-}
-
+TString TImportInfo::ToString() const { 
+    return TStringBuilder() << "{" 
+        << " Id: " << Id 
+        << " Uid: '" << Uid << "'" 
+        << " Kind: " << Kind 
+        << " DomainPathId: " << DomainPathId 
+        << " UserSID: '" << UserSID << "'" 
+        << " State: " << State 
+        << " Issue: '" << Issue << "'" 
+        << " Items: " << Items.size() 
+    << " }"; 
+} 
+ 
+TString TImportInfo::TItem::ToString(ui32 idx) const { 
+    return TStringBuilder() << "{" 
+        << " Idx: " << idx 
+        << " DstPathName: '" << DstPathName << "'" 
+        << " DstPathId: " << DstPathId 
+        << " State: " << State 
+        << " SubState: " << SubState 
+        << " WaitTxId: " << WaitTxId 
+        << " Issue: '" << Issue << "'" 
+    << " }"; 
+} 
+ 
+bool TImportInfo::TItem::IsDone(const TImportInfo::TItem& item) { 
+    return item.State == EState::Done; 
+} 
+ 
+bool TImportInfo::IsFinished() const { 
+    return State == EState::Done || State == EState::Cancelled; 
+} 
+ 
+void TImportInfo::AddNotifySubscriber(const TActorId &actorId) { 
+    Y_VERIFY(!IsFinished()); 
+    Subscribers.insert(actorId); 
+} 
+ 
 TIndexBuildInfo::TShardStatus::TShardStatus() {
     TCell cell;
     TVector<TCell> vec = {cell};
@@ -1850,44 +1850,44 @@ const TString &TColumnFamiliesMerger::CanonizeName(const TString &familyName) {
     return familyName;
 }
 
-void TPQShardInfo::TKeyRange::SerializeToProto(NKikimrPQ::TPartitionKeyRange& proto) const {
-    if (FromBound) {
-        proto.SetFromBound(*FromBound);
-    }
-
-    if (ToBound) {
-        proto.SetToBound(*ToBound);
-    }
-}
-
-bool TPersQueueGroupInfo::FillKeySchema(const NKikimrPQ::TPQTabletConfig& tabletConfig, TString& error) {
-    KeySchema.clear();
-    KeySchema.reserve(tabletConfig.PartitionKeySchemaSize());
-
-    for (const auto& component : tabletConfig.GetPartitionKeySchema()) {
-        if (!NScheme::NTypeIds::IsYqlType(component.GetTypeId())) {
-            error = TStringBuilder() << "TypeId is not supported"
-                << ": typeId# " << component.GetTypeId()
-                << ", component# " << component.GetName();
-            return false;
-        }
-
-        KeySchema.push_back(component.GetTypeId());
-    }
-
-    return true;
-}
-
-bool TPersQueueGroupInfo::FillKeySchema(const TString& tabletConfig) {
-    NKikimrPQ::TPQTabletConfig proto;
-    if (!proto.ParseFromString(tabletConfig)) {
-        return false;
-    }
-
-    TString unused;
-    return FillKeySchema(proto, unused);
-}
-
+void TPQShardInfo::TKeyRange::SerializeToProto(NKikimrPQ::TPartitionKeyRange& proto) const { 
+    if (FromBound) { 
+        proto.SetFromBound(*FromBound); 
+    } 
+ 
+    if (ToBound) { 
+        proto.SetToBound(*ToBound); 
+    } 
+} 
+ 
+bool TPersQueueGroupInfo::FillKeySchema(const NKikimrPQ::TPQTabletConfig& tabletConfig, TString& error) { 
+    KeySchema.clear(); 
+    KeySchema.reserve(tabletConfig.PartitionKeySchemaSize()); 
+ 
+    for (const auto& component : tabletConfig.GetPartitionKeySchema()) { 
+        if (!NScheme::NTypeIds::IsYqlType(component.GetTypeId())) { 
+            error = TStringBuilder() << "TypeId is not supported" 
+                << ": typeId# " << component.GetTypeId() 
+                << ", component# " << component.GetName(); 
+            return false; 
+        } 
+ 
+        KeySchema.push_back(component.GetTypeId()); 
+    } 
+ 
+    return true; 
+} 
+ 
+bool TPersQueueGroupInfo::FillKeySchema(const TString& tabletConfig) { 
+    NKikimrPQ::TPQTabletConfig proto; 
+    if (!proto.ParseFromString(tabletConfig)) { 
+        return false; 
+    } 
+ 
+    TString unused; 
+    return FillKeySchema(proto, unused); 
+} 
+ 
 TBillingStats::TBillingStats(ui64 rows, ui64 bytes)
     : Rows(rows)
     , Bytes(bytes)

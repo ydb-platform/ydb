@@ -122,7 +122,7 @@ public:
 
     void DeactivateOp(TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx);
     void RemoveTx(TStepOrder stepTxId);
-    const TSchemaOperation* FindSchemaTx(ui64 txId) const;
+    const TSchemaOperation* FindSchemaTx(ui64 txId) const; 
     void CompleteSchemaTx(NIceDb::TNiceDb& db, ui64 txId);
     void MarkOpAsUsingSnapshot(TOperation::TPtr op);
 
@@ -155,7 +155,7 @@ public:
     bool HasAlter() const { return SchemaTx && SchemaTx->IsAlter(); }
     bool HasDrop() const { return SchemaTx && SchemaTx->IsDrop(); }
     bool HasBackup() const { return SchemaTx && SchemaTx->IsBackup(); }
-    bool HasRestore() const { return SchemaTx && SchemaTx->IsRestore(); }
+    bool HasRestore() const { return SchemaTx && SchemaTx->IsRestore(); } 
     bool HasCopy() const { return SchemaTx && SchemaTx->IsCopy(); }
     bool HasCreatePersistentSnapshot() const { return SchemaTx && SchemaTx->IsCreatePersistentSnapshot(); }
     bool HasDropPersistentSnapshot() const { return SchemaTx && SchemaTx->IsDropPersistentSnapshot(); }
@@ -163,9 +163,9 @@ public:
     bool HasFinalizeBuilIndex() const { return SchemaTx && SchemaTx->IsFinalizeBuildIndex(); }
     bool HasDropIndexNotice() const { return SchemaTx && SchemaTx->IsDropIndexNotice(); }
     bool HasMove() const { return SchemaTx && SchemaTx->IsMove(); }
-    bool HasCreateCdcStream() const { return SchemaTx && SchemaTx->IsCreateCdcStream(); }
-    bool HasAlterCdcStream() const { return SchemaTx && SchemaTx->IsAlterCdcStream(); }
-    bool HasDropCdcStream() const { return SchemaTx && SchemaTx->IsDropCdcStream(); }
+    bool HasCreateCdcStream() const { return SchemaTx && SchemaTx->IsCreateCdcStream(); } 
+    bool HasAlterCdcStream() const { return SchemaTx && SchemaTx->IsAlterCdcStream(); } 
+    bool HasDropCdcStream() const { return SchemaTx && SchemaTx->IsDropCdcStream(); } 
 
     ui64 CurrentSchemaTxId() const {
         if (SchemaTx)
@@ -173,11 +173,11 @@ public:
         return 0;
     }
 
-    const TSchemaOperation* GetSchemaOp() const {
+    const TSchemaOperation* GetSchemaOp() const { 
         return SchemaTx;
     }
 
-    void SetSchemaOp(TSchemaOperation * op) {
+    void SetSchemaOp(TSchemaOperation * op) { 
         Y_VERIFY(!SchemaTx || SchemaTx->TxId == op->TxId);
         SchemaTx = op;
     }
@@ -188,7 +188,7 @@ public:
     void ProposeComplete(const TOperation::TPtr &op, const TActorContext &ctx);
     void PersistTxFlags(TOperation::TPtr op, TTransactionContext &txc);
     void UpdateSchemeTxBody(ui64 txId, const TStringBuf &txBody, TTransactionContext &txc);
-    void ProposeSchemeTx(const TSchemaOperation &op, TTransactionContext &txc);
+    void ProposeSchemeTx(const TSchemaOperation &op, TTransactionContext &txc); 
     bool CancelPropose(NIceDb::TNiceDb& db, const TActorContext& ctx, ui64 txId);
     ECleanupStatus CleanupOutdated(NIceDb::TNiceDb& db, const TActorContext& ctx, ui64 outdatedStep);
     ui64 PlannedTxInFly() const;
@@ -437,7 +437,7 @@ private:
     TStepOrder UtmostCompleteTx;
     ui64 KeepSchemaStep;
     ui64 LastCleanupTime;
-    TSchemaOperation * SchemaTx;
+    TSchemaOperation * SchemaTx; 
     std::array<THolder<TExecutionUnit>, (ui32)EExecutionUnitKind::Count> ExecutionUnits;
     THashSet<TOperation::TPtr> ExecuteBlockers;
     // Candidates for execution.

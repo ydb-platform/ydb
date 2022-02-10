@@ -1,110 +1,110 @@
-syntax = "proto3";
-option cc_enable_arenas = true;
-
+syntax = "proto3"; 
+option cc_enable_arenas = true; 
+ 
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
-
-import "google/protobuf/timestamp.proto";
-
-package Ydb.Import;
-option java_package = "com.yandex.ydb.import_";
-
-/// Common
-message ImportProgress {
-    enum Progress {
-        PROGRESS_UNSPECIFIED = 0;
-        PROGRESS_PREPARING = 1;
-        PROGRESS_TRANSFER_DATA = 2;
-        PROGRESS_BUILD_INDEXES = 3;
-        PROGRESS_DONE = 4;
-        PROGRESS_CANCELLATION = 5;
-        PROGRESS_CANCELLED = 6;
-    }
-}
-
-message ImportItemProgress {
-    uint32 parts_total = 1;
-    uint32 parts_completed = 2;
-    google.protobuf.Timestamp start_time = 3;
-    google.protobuf.Timestamp end_time = 4;
-}
-
-/// S3
-message ImportFromS3Settings {
-    enum Scheme {
-        UNSPECIFIED = 0;
-        HTTP = 1;
-        HTTPS = 2;
-    }
-
-    message Item {
-        /* YDB tables in S3 are stored in one or more objects (see ydb_export.proto).
-           The object name begins with 'source_prefix'.
-           This prefix is followed by:
-             * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
-             * '/scheme.pb' - object with information about scheme, indexes, etc.
-        */
-        string source_prefix = 1 [(required) = true];
-
-        // Database path to a table to import to.
-        string destination_path = 2 [(required) = true];
-    }
-
-    string endpoint = 1 [(required) = true];
-    Scheme scheme = 2; // HTTPS if not specified
-    string bucket = 3 [(required) = true];
-    string access_key = 4 [(required) = true];
-    string secret_key = 5 [(required) = true];
-    repeated Item items = 6 [(size).ge = 1];
-    string description = 7 [(length).le = 128];
-    uint32 number_of_retries = 8;
-}
-
-message ImportFromS3Result {
-}
-
-message ImportFromS3Metadata {
-    ImportFromS3Settings settings = 1;
-    ImportProgress.Progress progress = 2;
-    repeated ImportItemProgress items_progress = 3;
-}
-
-message ImportFromS3Request {
-    Ydb.Operations.OperationParams operation_params = 1;
-    ImportFromS3Settings settings = 2 [(required) = true];
-}
-
-message ImportFromS3Response {
-    // operation.result = ImportFromS3Result
-    // operation.metadata = ImportFromS3Metadata
-    Ydb.Operations.Operation operation = 1;
-}
-
-/// Data
-message YdbDumpFormat {
-    repeated string columns = 1;
-}
-
-message ImportDataResult {
-}
-
-message ImportDataRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    // Full path to table
-    string path = 2;
-    // Data serialized in the selected format. Restrictions:
-    // - sorted by primary key;
-    // - all keys must be from the same partition;
-    // - table has no global secondary indexes;
-    // - size of serialized data is limited to 8 MB.
-    bytes data = 3 [(length).le = 8388608];
-    oneof format {
-        // Result of `ydb tools dump`
-        YdbDumpFormat ydb_dump = 4;
-    }
-}
-
-message ImportDataResponse {
-    // operation.result = ImportDataResult
-    Ydb.Operations.Operation operation = 1;
-}
+ 
+import "google/protobuf/timestamp.proto"; 
+ 
+package Ydb.Import; 
+option java_package = "com.yandex.ydb.import_"; 
+ 
+/// Common 
+message ImportProgress { 
+    enum Progress { 
+        PROGRESS_UNSPECIFIED = 0; 
+        PROGRESS_PREPARING = 1; 
+        PROGRESS_TRANSFER_DATA = 2; 
+        PROGRESS_BUILD_INDEXES = 3; 
+        PROGRESS_DONE = 4; 
+        PROGRESS_CANCELLATION = 5; 
+        PROGRESS_CANCELLED = 6; 
+    } 
+} 
+ 
+message ImportItemProgress { 
+    uint32 parts_total = 1; 
+    uint32 parts_completed = 2; 
+    google.protobuf.Timestamp start_time = 3; 
+    google.protobuf.Timestamp end_time = 4; 
+} 
+ 
+/// S3 
+message ImportFromS3Settings { 
+    enum Scheme { 
+        UNSPECIFIED = 0; 
+        HTTP = 1; 
+        HTTPS = 2; 
+    } 
+ 
+    message Item { 
+        /* YDB tables in S3 are stored in one or more objects (see ydb_export.proto). 
+           The object name begins with 'source_prefix'. 
+           This prefix is followed by: 
+             * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero; 
+             * '/scheme.pb' - object with information about scheme, indexes, etc. 
+        */ 
+        string source_prefix = 1 [(required) = true]; 
+ 
+        // Database path to a table to import to. 
+        string destination_path = 2 [(required) = true]; 
+    } 
+ 
+    string endpoint = 1 [(required) = true]; 
+    Scheme scheme = 2; // HTTPS if not specified 
+    string bucket = 3 [(required) = true]; 
+    string access_key = 4 [(required) = true]; 
+    string secret_key = 5 [(required) = true]; 
+    repeated Item items = 6 [(size).ge = 1]; 
+    string description = 7 [(length).le = 128]; 
+    uint32 number_of_retries = 8; 
+} 
+ 
+message ImportFromS3Result { 
+} 
+ 
+message ImportFromS3Metadata { 
+    ImportFromS3Settings settings = 1; 
+    ImportProgress.Progress progress = 2; 
+    repeated ImportItemProgress items_progress = 3; 
+} 
+ 
+message ImportFromS3Request { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    ImportFromS3Settings settings = 2 [(required) = true]; 
+} 
+ 
+message ImportFromS3Response { 
+    // operation.result = ImportFromS3Result 
+    // operation.metadata = ImportFromS3Metadata 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+/// Data 
+message YdbDumpFormat { 
+    repeated string columns = 1; 
+} 
+ 
+message ImportDataResult { 
+} 
+ 
+message ImportDataRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    // Full path to table 
+    string path = 2; 
+    // Data serialized in the selected format. Restrictions: 
+    // - sorted by primary key; 
+    // - all keys must be from the same partition; 
+    // - table has no global secondary indexes; 
+    // - size of serialized data is limited to 8 MB. 
+    bytes data = 3 [(length).le = 8388608]; 
+    oneof format { 
+        // Result of `ydb tools dump` 
+        YdbDumpFormat ydb_dump = 4; 
+    } 
+} 
+ 
+message ImportDataResponse { 
+    // operation.result = ImportDataResult 
+    Ydb.Operations.Operation operation = 1; 
+} 

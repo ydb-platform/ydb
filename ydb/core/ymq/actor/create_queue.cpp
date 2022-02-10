@@ -41,12 +41,12 @@ private:
     bool DoValidate() override {
         auto* result = Response_.MutableCreateQueue();
 
-        if (!IsCloud() && !UserExists_) {
-            MakeError(result, NErrors::OPT_IN_REQUIRED, "The specified account does not exist.");
-            return false;
-        }
-
-        TAttribute fifo;
+        if (!IsCloud() && !UserExists_) { 
+            MakeError(result, NErrors::OPT_IN_REQUIRED, "The specified account does not exist."); 
+            return false; 
+        } 
+ 
+        TAttribute fifo; 
         for (const auto& attr : Request().attributes()) {
             if (attr.GetName() == "FifoQueue") {
                 fifo = attr;

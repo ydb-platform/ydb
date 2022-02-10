@@ -148,14 +148,14 @@ bool NTableState::CollectSchemaChanged(
 
     if (evRecord.HasOpResult()) {
         // TODO: remove TxBackup handling
-        Y_VERIFY_DEBUG(txState.TxType == TTxState::TxBackup || txState.TxType == TTxState::TxRestore);
+        Y_VERIFY_DEBUG(txState.TxType == TTxState::TxBackup || txState.TxType == TTxState::TxRestore); 
     }
 
     if (!txState.ReadyForNotifications) {
         return false;
     }
-    if (txState.TxType == TTxState::TxBackup || txState.TxType == TTxState::TxRestore) {
-        Y_VERIFY(txState.State == TTxState::ProposedWaitParts || txState.State == TTxState::Aborting);
+    if (txState.TxType == TTxState::TxBackup || txState.TxType == TTxState::TxRestore) { 
+        Y_VERIFY(txState.State == TTxState::ProposedWaitParts || txState.State == TTxState::Aborting); 
     } else {
         Y_VERIFY(txState.State == TTxState::ProposedWaitParts);
     }
@@ -260,20 +260,20 @@ void NTableState::UpdatePartitioningForTableModification(TOperationId operationI
         commonShardOp = TTxState::DropParts;
     } else if (txState.TxType == TTxState::TxBackup) {
         commonShardOp = TTxState::ConfigureParts;
-    } else if (txState.TxType == TTxState::TxRestore) {
-        commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxRestore) { 
+        commonShardOp = TTxState::ConfigureParts; 
     } else if (txState.TxType == TTxState::TxInitializeBuildIndex) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxFinalizeBuildIndex) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropTableIndexAtMainTable) {
         commonShardOp = TTxState::ConfigureParts;
-    } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTable) {
-        commonShardOp = TTxState::ConfigureParts;
-    } else if (txState.TxType == TTxState::TxAlterCdcStreamAtTable) {
-        commonShardOp = TTxState::ConfigureParts;
-    } else if (txState.TxType == TTxState::TxDropCdcStreamAtTable) {
-        commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTable) { 
+        commonShardOp = TTxState::ConfigureParts; 
+    } else if (txState.TxType == TTxState::TxAlterCdcStreamAtTable) { 
+        commonShardOp = TTxState::ConfigureParts; 
+    } else if (txState.TxType == TTxState::TxDropCdcStreamAtTable) { 
+        commonShardOp = TTxState::ConfigureParts; 
     } else {
         Y_FAIL("UNREACHABLE");
     }

@@ -45,7 +45,7 @@ message TTabletTypes {
         ColumnShard = 35;
         TestShard = 36;
         SequenceShard = 37;
-        ReplicationController = 38;
+        ReplicationController = 38; 
 
         // when adding a new tablet type and keeping parse compatibility with the old version
         // rename existing reserved item to desired one, and add new reserved item to
@@ -53,7 +53,7 @@ message TTabletTypes {
         Reserved39 = 39;
         Reserved40 = 40;
         Reserved41 = 41;
-        Reserved42 = 42;
+        Reserved42 = 42; 
 
         UserTypeStart = 255;
         TypeInvalid = -1;

@@ -365,10 +365,10 @@ STATEFN(TSqsService::StateFunc) {
 }
 
 void TSqsService::InitSchemeCache() {
-    LOG_SQS_DEBUG("Enable scheme board scheme cache");
-    auto cacheCounters = GetServiceCounters(AppData()->Counters, "sqs")->GetSubgroup("subsystem", "schemecache");
-    auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(), cacheCounters);
-    SchemeCache_ = Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
+    LOG_SQS_DEBUG("Enable scheme board scheme cache"); 
+    auto cacheCounters = GetServiceCounters(AppData()->Counters, "sqs")->GetSubgroup("subsystem", "schemecache"); 
+    auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(), cacheCounters); 
+    SchemeCache_ = Register(CreateSchemeBoardSchemeCache(cacheConfig.Get())); 
 }
 
 void TSqsService::ScheduleRequestSqsUsersList() {

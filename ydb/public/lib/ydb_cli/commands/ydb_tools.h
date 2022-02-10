@@ -7,8 +7,8 @@
 #include <ydb/public/lib/ydb_cli/common/examples.h>
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
 
-#include <library/cpp/regex/pcre/regexp.h>
-
+#include <library/cpp/regex/pcre/regexp.h> 
+ 
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -36,13 +36,13 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
-    TVector<TRegExMatch> ExclusionPatterns;
+    TVector<TRegExMatch> ExclusionPatterns; 
     TString FilePath;
     bool IsSchemeOnly;
-    bool AvoidCopy = false;
+    bool AvoidCopy = false; 
     bool SavePartialResult = false;
     TString ConsistencyLevel;
-    bool PreservePoolKinds = false;
+    bool PreservePoolKinds = false; 
 };
 
 class TCommandRestore : public TToolsCommand, public TCommandWithPath {
@@ -55,18 +55,18 @@ public:
 private:
     TString FilePath;
     bool IsDryRun = false;
-    bool RestoreData = true;
-    bool RestoreIndexes = true;
-    bool SkipDocumentTables = false;
+    bool RestoreData = true; 
+    bool RestoreIndexes = true; 
+    bool SkipDocumentTables = false; 
     bool SavePartialResult = false;
     TString UploadBandwidth;
-    TString UploadRps;
-    TString RowsPerRequest;
-    TString BytesPerRequest;
-    TString RequestUnitsPerRequest;
-    ui32 InFly;
+    TString UploadRps; 
+    TString RowsPerRequest; 
+    TString BytesPerRequest; 
+    TString RequestUnitsPerRequest; 
+    ui32 InFly; 
     bool UseBulkUpsert = false;
-    bool UseImportData = false;
+    bool UseImportData = false; 
 };
 
 class TCommandCopy : public TTableCommand {

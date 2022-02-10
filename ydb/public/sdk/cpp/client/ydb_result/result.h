@@ -20,9 +20,9 @@ struct TColumn {
     TColumn(const TString& name, const TType& type)
         : Name(name)
         , Type(type) {}
-
-    TString ToString() const;
-    void Out(IOutputStream& o) const;
+ 
+    TString ToString() const; 
+    void Out(IOutputStream& o) const; 
 };
 
 bool operator==(const TColumn& col1, const TColumn& col2);
@@ -107,7 +107,7 @@ private:
 using TResultSets = TVector<TResultSet>;
 
 } // namespace NYdb
-
-Y_DECLARE_OUT_SPEC(inline, NYdb::TColumn, o, x) {
-    return x.Out(o);
-}
+ 
+Y_DECLARE_OUT_SPEC(inline, NYdb::TColumn, o, x) { 
+    return x.Out(o); 
+} 

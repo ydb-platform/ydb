@@ -115,8 +115,8 @@ void TCompleteOperationUnit::Complete(TOperation::TPtr op,
     DataShard.SendDelayedAcks(ctx, op->DelayedAcks());
     if (op->IsSchemeTx())
         DataShard.NotifySchemeshard(ctx, op->GetTxId());
-
-    DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
+ 
+    DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords())); 
 }
 
 THolder<TExecutionUnit> CreateCompleteOperationUnit(TDataShard &dataShard,

@@ -5,10 +5,10 @@ RECURSE_FOR_TESTS(
     ut_bsvolume
     ut_bsvolume_reboots
     ut_cdc_stream
-    ut_cdc_stream_reboots
+    ut_cdc_stream_reboots 
     ut_compaction
     ut_export
-    ut_export_reboots_s3
+    ut_export_reboots_s3 
     ut_extsubdomain
     ut_extsubdomain_reboots
     ut_filestore_reboots
@@ -22,8 +22,8 @@ RECURSE_FOR_TESTS(
     ut_pq
     ut_pq_reboots
     ut_reboots
-    ut_replication
-    ut_replication_reboots
+    ut_replication 
+    ut_replication_reboots 
     ut_restore
     ut_rtmr
     ut_rtmr_reboots
@@ -61,13 +61,13 @@ SRCS(
     schemeshard.cpp
     schemeshard__compaction.cpp
     schemeshard__clean_pathes.cpp
-    schemeshard__conditional_erase.cpp
+    schemeshard__conditional_erase.cpp 
     schemeshard__describe_scheme.cpp
     schemeshard__delete_tablet_reply.cpp
     schemeshard__find_subdomain_path_id.cpp
-    schemeshard__fix_bad_paths.cpp
+    schemeshard__fix_bad_paths.cpp 
     schemeshard__init.cpp
-    schemeshard__init_populator.cpp
+    schemeshard__init_populator.cpp 
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp
     schemeshard__serverless_storage_billing.cpp
@@ -95,7 +95,7 @@ SRCS(
     schemeshard__operation_alter_table.cpp
     schemeshard__operation_alter_user_attrs.cpp
     schemeshard__operation_assign_bsv.cpp
-    schemeshard__operation_cancel_tx.cpp
+    schemeshard__operation_cancel_tx.cpp 
     schemeshard__operation_common.cpp
     schemeshard__operation_common.h
     schemeshard__operation_consistent_copy_tables.cpp
@@ -105,14 +105,14 @@ SRCS(
     schemeshard__operation_create_extsubdomain.cpp
     schemeshard__operation_create_fs.cpp
     schemeshard__operation_create_index.cpp
-    schemeshard__operation_create_indexed_table.cpp
+    schemeshard__operation_create_indexed_table.cpp 
     schemeshard__operation_create_kesus.cpp
     schemeshard__operation_create_lock.cpp
     schemeshard__operation_create_olap_store.cpp
     schemeshard__operation_create_olap_table.cpp
     schemeshard__operation_create_pq.cpp
-    schemeshard__operation_create_replication.cpp
-    schemeshard__operation_create_restore.cpp
+    schemeshard__operation_create_replication.cpp 
+    schemeshard__operation_create_restore.cpp 
     schemeshard__operation_create_rtmr.cpp
     schemeshard__operation_create_sequence.cpp
     schemeshard__operation_create_solomon.cpp
@@ -126,8 +126,8 @@ SRCS(
     schemeshard__operation_drop_lock.cpp
     schemeshard__operation_drop_olap_store.cpp
     schemeshard__operation_drop_olap_table.cpp
-    schemeshard__operation_drop_pq.cpp
-    schemeshard__operation_drop_replication.cpp
+    schemeshard__operation_drop_pq.cpp 
+    schemeshard__operation_drop_replication.cpp 
     schemeshard__operation_drop_sequence.cpp
     schemeshard__operation_drop_solomon.cpp
     schemeshard__operation_drop_subdomain.cpp
@@ -150,10 +150,10 @@ SRCS(
     schemeshard__operation_apply_build_index.cpp
     schemeshard__operation_cansel_build_index.cpp
     schemeshard__operation_drop_index.cpp
-    schemeshard__operation_create_cdc_stream.cpp
-    schemeshard__operation_alter_cdc_stream.cpp
-    schemeshard__operation_drop_cdc_stream.cpp
-    schemeshard__publish_to_scheme_board.cpp
+    schemeshard__operation_create_cdc_stream.cpp 
+    schemeshard__operation_alter_cdc_stream.cpp 
+    schemeshard__operation_drop_cdc_stream.cpp 
+    schemeshard__publish_to_scheme_board.cpp 
     schemeshard__state_changed_reply.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
@@ -162,7 +162,7 @@ SRCS(
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard_impl.cpp
     schemeshard_impl.h
-    schemeshard_billing_helpers.cpp
+    schemeshard_billing_helpers.cpp 
     schemeshard_domain_links.h
     schemeshard_domain_links.cpp
     schemeshard_effective_acl.h
@@ -170,7 +170,7 @@ SRCS(
     schemeshard_identificators.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
-    schemeshard_path_describer.cpp
+    schemeshard_path_describer.cpp 
     schemeshard_path_element.h
     schemeshard_path.cpp
     schemeshard_path.h
@@ -182,20 +182,20 @@ SRCS(
     schemeshard_user_attr_limits.h
     schemeshard_utils.cpp
     schemeshard_utils.h
-    schemeshard_export__cancel.cpp
-    schemeshard_export__create.cpp
-    schemeshard_export__forget.cpp
-    schemeshard_export__get.cpp
-    schemeshard_export__list.cpp
-    schemeshard_export_flow_proposals.cpp
-    schemeshard_export.cpp
-    schemeshard_import__cancel.cpp
-    schemeshard_import__create.cpp
-    schemeshard_import__forget.cpp
-    schemeshard_import__get.cpp
-    schemeshard_import__list.cpp
-    schemeshard_import_flow_proposals.cpp
-    schemeshard_import.cpp
+    schemeshard_export__cancel.cpp 
+    schemeshard_export__create.cpp 
+    schemeshard_export__forget.cpp 
+    schemeshard_export__get.cpp 
+    schemeshard_export__list.cpp 
+    schemeshard_export_flow_proposals.cpp 
+    schemeshard_export.cpp 
+    schemeshard_import__cancel.cpp 
+    schemeshard_import__create.cpp 
+    schemeshard_import__forget.cpp 
+    schemeshard_import__get.cpp 
+    schemeshard_import__list.cpp 
+    schemeshard_import_flow_proposals.cpp 
+    schemeshard_import.cpp 
     schemeshard_build_index.cpp
     schemeshard_build_index__cancel.cpp
     schemeshard_build_index__forget.cpp
@@ -207,10 +207,10 @@ SRCS(
     operation_queue_timer.h
 )
 
-GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h) 
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
-
+ 
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/deprecated/enum_codegen
@@ -248,13 +248,13 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
-    SRCS(
-        schemeshard_import_scheme_getter_fallback.cpp
-    )
-ELSE()
-    SRCS(
-        schemeshard_import_scheme_getter.cpp
-    )
-ENDIF()
-
+    SRCS( 
+        schemeshard_import_scheme_getter_fallback.cpp 
+    ) 
+ELSE() 
+    SRCS( 
+        schemeshard_import_scheme_getter.cpp 
+    ) 
+ENDIF() 
+ 
 END()

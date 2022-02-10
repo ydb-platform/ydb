@@ -101,7 +101,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetDomainName(settings.DomainRoot);
     ServerSettings->SetKqpSettings(effectiveKqpSettings);
     ServerSettings->SetAppConfig(settings.AppConfig);
-    ServerSettings->SetFeatureFlags(settings.FeatureFlags);
+    ServerSettings->SetFeatureFlags(settings.FeatureFlags); 
     ServerSettings->SetNodeCount(settings.NodeCount);
     ServerSettings->SetEnableKqpSpilling(enableSpilling);
     ServerSettings->SetEnableDataColumnForIndexTable(true);

@@ -34,11 +34,11 @@ private:
         return Factory->GetReadVersion(tableId);
     }
 
-    IChangeCollector* GetChangeCollector(const TTableId& tableId) const override
-    {
-        return Factory->GetChangeCollector(tableId);
-    }
-
+    IChangeCollector* GetChangeCollector(const TTableId& tableId) const override 
+    { 
+        return Factory->GetChangeCollector(tableId); 
+    } 
+ 
 private:
     const TMiniKQLFactory* const Factory;
 };

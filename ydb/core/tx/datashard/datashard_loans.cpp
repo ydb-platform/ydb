@@ -2,8 +2,8 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
-#include <util/string/join.h>
-
+#include <util/string/join.h> 
+ 
 namespace NKikimr {
 namespace NDataShard {
 
@@ -208,22 +208,22 @@ void TDataShard::CheckStateChange(const TActorContext& ctx) {
             return str.Str();
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " in PreOffline state"
-                    << " HasSharedBobs: " << HasSharedBlobs()
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " in PreOffline state" 
+                    << " HasSharedBobs: " << HasSharedBlobs() 
                     << " SchemaOperations: " << fnListTxIds(TransQueue.GetSchemaOperations())
-                    << " OutReadSets count: " << OutReadSets.CountReadSets()
-                    << " ChangesQueue size: " << ChangesQueue.size()
-                    << " ChangeExchangeSplit: " << ChangeExchangeSplitter.Done()
-                    << " siblings to be activated: " << ChangeSenderActivator.Dump()
-                    << " wait to activation from: " << JoinSeq(", ", ReceiveActivationsFrom));
+                    << " OutReadSets count: " << OutReadSets.CountReadSets() 
+                    << " ChangesQueue size: " << ChangesQueue.size() 
+                    << " ChangeExchangeSplit: " << ChangeExchangeSplitter.Done() 
+                    << " siblings to be activated: " << ChangeSenderActivator.Dump() 
+                    << " wait to activation from: " << JoinSeq(", ", ReceiveActivationsFrom)); 
 
-        const bool hasSharedBlobs = HasSharedBlobs();
-        const bool hasSchemaOps = !TransQueue.GetSchemaOperations().empty();
-        const bool hasOutRs = !OutReadSets.Empty();
-        const bool hasChangeRecords = !ChangesQueue.empty();
-        const bool mustActivateOthers = !ChangeSenderActivator.AllAcked();
-
-        if (!hasSharedBlobs && !hasSchemaOps && !hasOutRs && !hasChangeRecords && !mustActivateOthers) {
+        const bool hasSharedBlobs = HasSharedBlobs(); 
+        const bool hasSchemaOps = !TransQueue.GetSchemaOperations().empty(); 
+        const bool hasOutRs = !OutReadSets.Empty(); 
+        const bool hasChangeRecords = !ChangesQueue.empty(); 
+        const bool mustActivateOthers = !ChangeSenderActivator.AllAcked(); 
+ 
+        if (!hasSharedBlobs && !hasSchemaOps && !hasOutRs && !hasChangeRecords && !mustActivateOthers) { 
             Y_VERIFY(!TxInFly());
             Execute(new TTxGoOffline(this), ctx);
         }

@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "config.h"
 #include "downtime.h"
-#include "services.h"
+#include "services.h" 
 
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <ydb/core/base/blobstorage.h>
@@ -237,10 +237,10 @@ public:
     }
 
     virtual TString ItemName() const = 0;
-    virtual TString PrettyItemName() const
-    {
-        return ItemName();
-    }
+    virtual TString PrettyItemName() const 
+    { 
+        return ItemName(); 
+    } 
 
     void AddLock(const TPermissionInfo &permission)
     {
@@ -276,7 +276,7 @@ public:
     void RemoveScheduledLocks(const TString &requestId);
 
     // Fill some item info (e.g. Downtime) basing on previous item state.
-    virtual void MigrateOldInfo(const TLockableItem &old);
+    virtual void MigrateOldInfo(const TLockableItem &old); 
 
     void DebugLocksDump(IOutputStream &ss, const TString &prefix = "") const;
 
@@ -309,10 +309,10 @@ public:
 
     TString ItemName() const override
     {
-        return Sprintf("Host %s:%" PRIu16 " (%" PRIu32 ")", Host.data(), IcPort, NodeId);
+        return Sprintf("Host %s:%" PRIu16 " (%" PRIu32 ")", Host.data(), IcPort, NodeId); 
     }
 
-    void MigrateOldInfo(const TLockableItem &old) override;
+    void MigrateOldInfo(const TLockableItem &old) override; 
 
     ui32 NodeId = 0;
     TString Host;
@@ -326,7 +326,7 @@ public:
     bool HasTenantInfo = false;
     TString Tenant;
     TString PreviousTenant;
-    TServices Services;
+    TServices Services; 
 };
 using TNodeInfoPtr = TIntrusivePtr<TNodeInfo>;
 
@@ -372,16 +372,16 @@ public:
     TPDiskInfo &operator=(TPDiskInfo &&other) = default;
 
     TString ItemName() const override;
-    TString PrettyItemName() const override;
+    TString PrettyItemName() const override; 
     TString GetDeviceName() const;
     static bool IsDeviceName(const TString &name);
     static TPDiskID NameToId(const TString &name);
 
-    void MigrateOldInfo(const TLockableItem &old) override;
+    void MigrateOldInfo(const TLockableItem &old) override; 
 
     TPDiskID PDiskId;
     ui32 NodeId;
-    TString Host;
+    TString Host; 
     TString Path;
     TSet<TVDiskID> VDisks;
     // SlotIdx -> VDiskID
@@ -414,18 +414,18 @@ public:
     TVDiskInfo &operator=(TVDiskInfo &&other) = default;
 
     TString ItemName() const override;
-    TString PrettyItemName() const override;
+    TString PrettyItemName() const override; 
     TString GetDeviceName() const;
     static bool IsDeviceName(const TString &name);
     static TVDiskID NameToId(const TString &name);
 
-    void MigrateOldInfo(const TLockableItem &old) override;
+    void MigrateOldInfo(const TLockableItem &old) override; 
 
     TVDiskID VDiskId;
     TPDiskID PDiskId;
-    TString Path;
+    TString Path; 
     ui32 NodeId;
-    TString Host;
+    TString Host; 
     ui32 SlotId;
     TSet<ui32> BSGroups;
 
@@ -514,20 +514,20 @@ public:
         return nodes;
     }
 
-    TVector<const TNodeInfo *> TenantNodes(const TString &tenant) const
-    {
-        TVector<const TNodeInfo *> nodes;
-
-        auto pr = TenantToNodeId.equal_range(tenant);
-        for (auto it = pr.first; it != pr.second; ++it) {
-            const ui32 nodeId = it->second;
-            Y_VERIFY(HasNode(nodeId));
-            nodes.push_back(Nodes.find(nodeId)->second.Get());
-        }
-
-        return nodes;
-    }
-
+    TVector<const TNodeInfo *> TenantNodes(const TString &tenant) const 
+    { 
+        TVector<const TNodeInfo *> nodes; 
+ 
+        auto pr = TenantToNodeId.equal_range(tenant); 
+        for (auto it = pr.first; it != pr.second; ++it) { 
+            const ui32 nodeId = it->second; 
+            Y_VERIFY(HasNode(nodeId)); 
+            nodes.push_back(Nodes.find(nodeId)->second.Get()); 
+        } 
+ 
+        return nodes; 
+    } 
+ 
     size_t NodesCount() const
     {
         return Nodes.size();
@@ -576,11 +576,11 @@ public:
         return PDisks.contains(id);
     }
 
-    bool HasPDisk(const TString &hostName, const TString &path) const
-    {
-        return !!HostNamePathToPDiskId(hostName, path);
-    }
-
+    bool HasPDisk(const TString &hostName, const TString &path) const 
+    { 
+        return !!HostNamePathToPDiskId(hostName, path); 
+    } 
+ 
     const TPDiskInfo &PDisk(TPDiskID pdId) const
     {
         Y_VERIFY(HasPDisk(pdId));
@@ -593,11 +593,11 @@ public:
         return PDisk(id);
     }
 
-    const TPDiskInfo &PDisk(const TString &hostName, const TString &path) const
-    {
-        return PDisk(HostNamePathToPDiskId(hostName, path));
-    }
-
+    const TPDiskInfo &PDisk(const TString &hostName, const TString &path) const 
+    { 
+        return PDisk(HostNamePathToPDiskId(hostName, path)); 
+    } 
+ 
     size_t PDisksCount() const
     {
         return PDisks.size();
@@ -671,8 +671,8 @@ public:
 
     void SetTimestamp(TInstant timestamp);
 
-    void AddNode(const TEvInterconnect::TNodeInfo &info, const TActorContext *ctx);
-    void SetNodeState(ui32 nodeId, NKikimrCms::EState state, const NKikimrWhiteboard::TSystemStateInfo &info);
+    void AddNode(const TEvInterconnect::TNodeInfo &info, const TActorContext *ctx); 
+    void SetNodeState(ui32 nodeId, NKikimrCms::EState state, const NKikimrWhiteboard::TSystemStateInfo &info); 
     void ClearNode(ui32 nodeId);
     void AddTablet(ui32 nodeId, const NKikimrWhiteboard::TTabletStateInfo &info);
     void AddPDisk(const NKikimrBlobStorage::TBaseConfig::TPDisk &info);
@@ -697,7 +697,7 @@ public:
     ui64 AddExternalLocks(const TNotificationInfo &notification, const TActorContext *ctx);
 
     void ApplyDowntimes(const TDowntimes &downtimes);
-    void UpdateDowntimes(TDowntimes &downtimes, const TActorContext &ctx);
+    void UpdateDowntimes(TDowntimes &downtimes, const TActorContext &ctx); 
 
     ui64 AddTempLocks(const NKikimrCms::TAction &action, const TActorContext *ctx);
     ui64 ScheduleActions(const TRequestInfo &request, const TActorContext *ctx);
@@ -711,7 +711,7 @@ public:
         return ++RollbackPoint;
     }
 
-    void MigrateOldInfo(TClusterInfoPtr old);
+    void MigrateOldInfo(TClusterInfoPtr old); 
     void ApplyInitialNodeTenants(const TActorContext& ctx, const THashMap<ui32, TString>& nodeTenants);
 
     void DebugDump(const TActorContext &ctx) const;
@@ -721,13 +721,13 @@ public:
     bool IsOutdated() const { return Outdated; }
     void SetOutdated(bool val) { Outdated = val; }
 
-    static EGroupConfigurationType VDiskConfigurationType(const TVDiskID &vdId) {
-        return TGroupID(vdId.GroupID).ConfigurationType();
-    }
-
-    static bool IsStaticGroupVDisk(const TVDiskID &vdId) { return GroupConfigurationTypeStatic == VDiskConfigurationType(vdId); }
-    static bool IsDynamicGroupVDisk(const TVDiskID &vdId) { return GroupConfigurationTypeDynamic == VDiskConfigurationType(vdId); }
-
+    static EGroupConfigurationType VDiskConfigurationType(const TVDiskID &vdId) { 
+        return TGroupID(vdId.GroupID).ConfigurationType(); 
+    } 
+ 
+    static bool IsStaticGroupVDisk(const TVDiskID &vdId) { return GroupConfigurationTypeStatic == VDiskConfigurationType(vdId); } 
+    static bool IsDynamicGroupVDisk(const TVDiskID &vdId) { return GroupConfigurationTypeDynamic == VDiskConfigurationType(vdId); } 
+ 
 private:
     TNodeInfo &NodeRef(ui32 nodeId) const
     {
@@ -735,7 +735,7 @@ private:
         return *Nodes.find(nodeId)->second;
     }
 
-    TVector<TNodeInfo *> NodePtrs(const TString &hostName, const TServices &filterByServices = {})
+    TVector<TNodeInfo *> NodePtrs(const TString &hostName, const TServices &filterByServices = {}) 
     {
         TVector<TNodeInfo *> nodes;
 
@@ -746,18 +746,18 @@ private:
             return nodes;
         }
 
-        auto range = HostNameToNodeId.equal_range(hostName);
-        for (auto it = range.first; it != range.second; ++it) {
+        auto range = HostNameToNodeId.equal_range(hostName); 
+        for (auto it = range.first; it != range.second; ++it) { 
             nodeId = it->second;
-
+ 
             Y_VERIFY(HasNode(nodeId));
-            auto &node = NodeRef(nodeId);
-
-            if (filterByServices && !(node.Services & filterByServices)) {
-                continue;
-            }
-
-            nodes.push_back(&node);
+            auto &node = NodeRef(nodeId); 
+ 
+            if (filterByServices && !(node.Services & filterByServices)) { 
+                continue; 
+            } 
+ 
+            nodes.push_back(&node); 
         }
 
         return nodes;
@@ -793,22 +793,22 @@ private:
         return BSGroups.find(groupId)->second;
     }
 
-    TPDiskID HostNamePathToPDiskId(const TString &hostName, const TString &path) const {
-        auto pr = HostNameToNodeId.equal_range(hostName);
-        for (auto it = pr.first; it != pr.second; ++it) {
-            const ui32 nodeId = it->second;
-            Y_VERIFY(HasNode(nodeId));
-            const auto &node = Node(nodeId);
-            for (const auto &id : node.PDisks) {
-                Y_VERIFY(HasPDisk(id));
-                if (PDisk(id).Path == path) {
-                    return id;
-                }
-            }
-        }
-        return TPDiskID();
-    }
-
+    TPDiskID HostNamePathToPDiskId(const TString &hostName, const TString &path) const { 
+        auto pr = HostNameToNodeId.equal_range(hostName); 
+        for (auto it = pr.first; it != pr.second; ++it) { 
+            const ui32 nodeId = it->second; 
+            Y_VERIFY(HasNode(nodeId)); 
+            const auto &node = Node(nodeId); 
+            for (const auto &id : node.PDisks) { 
+                Y_VERIFY(HasPDisk(id)); 
+                if (PDisk(id).Path == path) { 
+                    return id; 
+                } 
+            } 
+        } 
+        return TPDiskID(); 
+    } 
+ 
     TSet<TLockableItem *> FindLockedItems(const NKikimrCms::TAction &action, const TActorContext *ctx);
 
     TNodes Nodes;
@@ -823,7 +823,7 @@ private:
 
     // Fast access structures.
     TMultiMap<TString, ui32> HostNameToNodeId;
-    TMultiMap<TString, ui32> TenantToNodeId;
+    TMultiMap<TString, ui32> TenantToNodeId; 
     THashMap<TString, TLockableItemPtr> LockableItems;
 };
 

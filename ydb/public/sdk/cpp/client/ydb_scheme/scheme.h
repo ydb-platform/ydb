@@ -29,7 +29,7 @@ enum class ESchemeEntryType : i32 {
     BlockStoreVolume = 6,
     CoordinationNode = 7,
     Sequence = 15,
-    Replication = 16,
+    Replication = 16, 
 };
 
 struct TSchemeEntry {
@@ -38,7 +38,7 @@ struct TSchemeEntry {
     ESchemeEntryType Type;
     TVector<TPermissions> EffectivePermissions;
     TVector<TPermissions> Permissions;
-    ui64 SizeBytes = 0;
+    ui64 SizeBytes = 0; 
 };
 
 ////////////////////////////////////////////////////////////////////////////////

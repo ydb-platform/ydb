@@ -18,7 +18,7 @@ message TStatus {
         UNAUTHORIZED  = 9;
         NO_SUCH_HOST   = 10;
         NO_SUCH_DEVICE = 11;
-        NO_SUCH_SERVICE = 12;
+        NO_SUCH_SERVICE = 12; 
     }
 
     optional ECode   Code   = 1;
@@ -111,8 +111,8 @@ message TAction {
   repeated string    Services    = 3;
   repeated string    Devices     = 4;
   optional uint64    Duration    = 5;
-  // If specified will be expanded to list of hosts.
-  optional string    Tenant      = 6;
+  // If specified will be expanded to list of hosts. 
+  optional string    Tenant      = 6; 
 }
 
 enum ETenantPolicy {
@@ -398,33 +398,33 @@ message TCmsConfig {
         optional uint64 FaultyPrepTimeout  = 6 [default = 3600000000];
     }
 
-    message TSentinelConfig {
-        message TStateLimit {
-            optional uint32 State = 1; // EPDiskState
-            optional uint32 Limit = 2;
-        }
-
-        optional bool Enable = 1;
-        // Updater's config
-        optional uint64 UpdateConfigInterval = 2 [default = 3600000000];
-        optional uint64 RetryUpdateConfig = 3 [default = 60000000];
-        optional uint64 UpdateStateInterval = 4 [default = 60000000];
-        optional uint64 UpdateStateTimeout = 5 [default = 45000000];
-        // Status changer's config
-        optional uint64 RetryChangeStatus = 6 [default = 10000000];
-        optional uint32 ChangeStatusRetries = 7 [default = 5];
-        // Status computer's config
-        optional uint32 DefaultStateLimit = 8 [default = 5];
-        optional uint32 BrokenLimit = 9 [default = 60]; // unused
-        // Guardian's config
-        optional uint32 DataCenterRatio = 10 [default = 50];
-        optional uint32 RoomRatio = 11 [default = 70];
-        optional uint32 RackRatio = 12 [default = 90];
-
-        optional bool DryRun = 13;
-        repeated TStateLimit StateLimits = 14;
-    }
-
+    message TSentinelConfig { 
+        message TStateLimit { 
+            optional uint32 State = 1; // EPDiskState 
+            optional uint32 Limit = 2; 
+        } 
+ 
+        optional bool Enable = 1; 
+        // Updater's config 
+        optional uint64 UpdateConfigInterval = 2 [default = 3600000000]; 
+        optional uint64 RetryUpdateConfig = 3 [default = 60000000]; 
+        optional uint64 UpdateStateInterval = 4 [default = 60000000]; 
+        optional uint64 UpdateStateTimeout = 5 [default = 45000000]; 
+        // Status changer's config 
+        optional uint64 RetryChangeStatus = 6 [default = 10000000]; 
+        optional uint32 ChangeStatusRetries = 7 [default = 5]; 
+        // Status computer's config 
+        optional uint32 DefaultStateLimit = 8 [default = 5]; 
+        optional uint32 BrokenLimit = 9 [default = 60]; // unused 
+        // Guardian's config 
+        optional uint32 DataCenterRatio = 10 [default = 50]; 
+        optional uint32 RoomRatio = 11 [default = 70]; 
+        optional uint32 RackRatio = 12 [default = 90]; 
+ 
+        optional bool DryRun = 13; 
+        repeated TStateLimit StateLimits = 14; 
+    } 
+ 
     message TLogConfig {
         enum ELevel {
             ENABLED = 0;
@@ -441,14 +441,14 @@ message TCmsConfig {
         optional uint64 TTL = 3 [default = 1209600000000]; // 14 days
     }
 
-    optional uint64 DefaultRetryTime = 1 [default = 300000000];
-    optional uint64 DefaultPermissionDuration = 2 [default = 300000000];
-    optional TMonitorConfig MonitorConfig = 3;
-    optional TLimits TenantLimits = 4;
-    optional TLimits ClusterLimits = 5;
-    optional uint64 InfoCollectionTimeout = 6 [default = 15000000];
-    optional TLogConfig LogConfig = 7;
-    optional TSentinelConfig SentinelConfig = 8;
+    optional uint64 DefaultRetryTime = 1 [default = 300000000]; 
+    optional uint64 DefaultPermissionDuration = 2 [default = 300000000]; 
+    optional TMonitorConfig MonitorConfig = 3; 
+    optional TLimits TenantLimits = 4; 
+    optional TLimits ClusterLimits = 5; 
+    optional uint64 InfoCollectionTimeout = 6 [default = 15000000]; 
+    optional TLogConfig LogConfig = 7; 
+    optional TSentinelConfig SentinelConfig = 8; 
 }
 
 message TPDiskID {
@@ -532,8 +532,8 @@ message TLogRecordData {
         repeated EMarker NodeMarkers = 5;
         optional TAvailabilityStats DiskAvailabilityStats = 6;
         optional TAvailabilityStats NodeAvailabilityStats = 7;
-        optional string Host = 8;
-        optional string Reason = 9;
+        optional string Host = 8; 
+        optional string Reason = 9; 
     }
 
     message TMarkersModification {

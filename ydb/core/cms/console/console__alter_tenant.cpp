@@ -119,12 +119,12 @@ public:
         // Check added storage resource units.
         ui64 newGroups = 0;
         for (auto &unit : rec.storage_units_to_add()) {
-            auto &kind = unit.unit_kind();
-
-            if (Tenant->AreResourcesShared && !Tenant->StoragePools.contains(kind))
-                return Error(Ydb::StatusIds::UNSUPPORTED,
-                            Sprintf("Database '%s' is shared, cannot add new storage units", path.data()), ctx);
-
+            auto &kind = unit.unit_kind(); 
+ 
+            if (Tenant->AreResourcesShared && !Tenant->StoragePools.contains(kind)) 
+                return Error(Ydb::StatusIds::UNSUPPORTED, 
+                            Sprintf("Database '%s' is shared, cannot add new storage units", path.data()), ctx); 
+ 
             if (Tenant->SharedDomainId)
                 return Error(Ydb::StatusIds::BAD_REQUEST,
                             Sprintf("Database '%s' is serverless, cannot add storage units", path.data()), ctx);
@@ -239,7 +239,7 @@ public:
                 pool->AddRequiredGroups(size);
                 pool->State = TStoragePool::NOT_UPDATED;
             } else {
-                Y_VERIFY(!Tenant->AreResourcesShared);
+                Y_VERIFY(!Tenant->AreResourcesShared); 
                 pool = Self->MakeStoragePool(Tenant, kind, size);
             }
 

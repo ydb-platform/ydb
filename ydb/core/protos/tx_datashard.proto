@@ -55,8 +55,8 @@ message TEvGetShardStateResult {
 message TShardOpResult {
     optional bool Success = 1;
     optional string Explain = 2;
-    optional uint64 BytesProcessed = 3;
-    optional uint64 RowsProcessed = 4;
+    optional uint64 BytesProcessed = 3; 
+    optional uint64 RowsProcessed = 4; 
 }
 
 message TEvSchemaChanged {
@@ -325,15 +325,15 @@ message TDropPersistentSnapshot {
 }
 
 message TInitiateBuildIndex {
-    optional NKikimrProto.TPathID PathId = 1;
+    optional NKikimrProto.TPathID PathId = 1; 
     optional string SnapshotName = 2;
-    optional uint64 TableSchemaVersion = 3;
+    optional uint64 TableSchemaVersion = 3; 
 
     optional NKikimrSchemeOp.TIndexDescription IndexDescription = 4;
 }
 
 message TFinalizeBuildIndex {
-    optional NKikimrProto.TPathID PathId = 1;
+    optional NKikimrProto.TPathID PathId = 1; 
 
     optional uint64 SnapshotStep = 2;
     optional uint64 SnapshotTxId = 3;
@@ -344,45 +344,45 @@ message TFinalizeBuildIndex {
 }
 
 message TDropIndexNotice {
-    // Path id of the table that the index is being dropped from
-    optional NKikimrProto.TPathID PathId = 1;
-    optional uint64 TableSchemaVersion = 2;
+    // Path id of the table that the index is being dropped from 
+    optional NKikimrProto.TPathID PathId = 1; 
+    optional uint64 TableSchemaVersion = 2; 
 
-    // Path id of the index being dropped
-    optional NKikimrProto.TPathID IndexPathId = 3;
+    // Path id of the index being dropped 
+    optional NKikimrProto.TPathID IndexPathId = 3; 
 }
 
-message TCreateCdcStreamNotice {
-    optional NKikimrProto.TPathID PathId = 1;
-    optional uint64 TableSchemaVersion = 2;
+message TCreateCdcStreamNotice { 
+    optional NKikimrProto.TPathID PathId = 1; 
+    optional uint64 TableSchemaVersion = 2; 
     optional NKikimrSchemeOp.TCdcStreamDescription StreamDescription = 3;
-}
-
-message TAlterCdcStreamNotice {
-    optional NKikimrProto.TPathID PathId = 1;
-    optional uint64 TableSchemaVersion = 2;
+} 
+ 
+message TAlterCdcStreamNotice { 
+    optional NKikimrProto.TPathID PathId = 1; 
+    optional uint64 TableSchemaVersion = 2; 
     optional NKikimrSchemeOp.TCdcStreamDescription StreamDescription = 3;
-}
-
-message TDropCdcStreamNotice {
-    optional NKikimrProto.TPathID PathId = 1;
-    optional uint64 TableSchemaVersion = 2;
-    optional NKikimrProto.TPathID StreamPathId = 3;
-}
-
-message TAsyncIndexInfo {
-}
-
+} 
+ 
+message TDropCdcStreamNotice { 
+    optional NKikimrProto.TPathID PathId = 1; 
+    optional uint64 TableSchemaVersion = 2; 
+    optional NKikimrProto.TPathID StreamPathId = 3; 
+} 
+ 
+message TAsyncIndexInfo { 
+} 
+ 
 message TMoveTable {
-    optional NKikimrProto.TPathID PathId = 1;
+    optional NKikimrProto.TPathID PathId = 1; 
     optional uint64 TableSchemaVersion = 2;
 
-    optional NKikimrProto.TPathID DstPathId = 3;
+    optional NKikimrProto.TPathID DstPathId = 3; 
     optional string DstPath = 4;
 
     message TRemapIndexPathId {
-        optional NKikimrProto.TPathID PathId = 1;
-        optional NKikimrProto.TPathID DstPathId = 2;
+        optional NKikimrProto.TPathID PathId = 1; 
+        optional NKikimrProto.TPathID DstPathId = 2; 
     }
 
     repeated TRemapIndexPathId ReMapIndexes = 5;
@@ -406,41 +406,41 @@ message TFlatSchemeTransaction {
     optional TInitiateBuildIndex InitiateBuildIndex = 12;
     optional TFinalizeBuildIndex FinalizeBuildIndex = 13;
     optional TDropIndexNotice DropIndexNotice = 14;
-
+ 
     optional NKikimrSchemeOp.TRestoreTask Restore = 15;
-
-    optional TAsyncIndexInfo AsyncIndexInfo = 16;
+ 
+    optional TAsyncIndexInfo AsyncIndexInfo = 16; 
 
     optional TMoveTable MoveTable = 17;
-
-    optional TCreateCdcStreamNotice CreateCdcStreamNotice = 18;
-    optional TAlterCdcStreamNotice AlterCdcStreamNotice = 19;
-    optional TDropCdcStreamNotice DropCdcStreamNotice = 20;
+ 
+    optional TCreateCdcStreamNotice CreateCdcStreamNotice = 18; 
+    optional TAlterCdcStreamNotice AlterCdcStreamNotice = 19; 
+    optional TDropCdcStreamNotice DropCdcStreamNotice = 20; 
 }
 
-message TDistributedEraseTransaction {
-    message TDependent {
-        optional uint64 ShardId = 1;
-    }
-
-    message TDependency {
-        optional uint64 ShardId = 1;
-        optional bytes PresentRows = 2; // bitmap
-    }
-
-    optional TEvEraseRowsRequest EraseRowsRequest = 1;
-    repeated TDependent Dependents = 2;
-    repeated TDependency Dependencies = 3;
-
-    // Identifiers (in term of main table) & values of indexed columns
-    repeated uint32 IndexColumnIds = 4;
-    repeated bytes IndexColumns = 5; // SerilializedCellVector
-}
-
-message TDistributedEraseRS {
-    optional bytes ConfirmedRows = 1; // bitmap
-}
-
+message TDistributedEraseTransaction { 
+    message TDependent { 
+        optional uint64 ShardId = 1; 
+    } 
+ 
+    message TDependency { 
+        optional uint64 ShardId = 1; 
+        optional bytes PresentRows = 2; // bitmap 
+    } 
+ 
+    optional TEvEraseRowsRequest EraseRowsRequest = 1; 
+    repeated TDependent Dependents = 2; 
+    repeated TDependency Dependencies = 3; 
+ 
+    // Identifiers (in term of main table) & values of indexed columns 
+    repeated uint32 IndexColumnIds = 4; 
+    repeated bytes IndexColumns = 5; // SerilializedCellVector 
+} 
+ 
+message TDistributedEraseRS { 
+    optional bytes ConfirmedRows = 1; // bitmap 
+} 
+ 
 // This transaction commits all changes previously written using some WriteTxId
 message TCommitWritesTransaction {
     // TODO: add lock checking in the future
@@ -457,7 +457,7 @@ enum ETransactionKind {
     DEPRECATED_4 = 4; //TX_KIND_SNAPSHOT_POLICY
     TX_KIND_SCAN = 5;
     TX_KIND_SNAPSHOT = 6;
-    TX_KIND_DISTRIBUTED_ERASE = 7;
+    TX_KIND_DISTRIBUTED_ERASE = 7; 
     TX_KIND_COMMIT_WRITES = 8;
 
     // Values [100, inf) are used for internal datashard operation
@@ -682,7 +682,7 @@ message TEvSplitTransferSnapshot {
     optional uint64 MvccIncompleteEdgeTxId = 11;
     optional uint64 MvccLowWatermarkStep = 12;
     optional uint64 MvccLowWatermarkTxId = 13;
-    optional bool WaitForActivation = 14;
+    optional bool WaitForActivation = 14; 
 
     // Generation of the sender tablet
     optional uint64 SrcTabletGeneration = 15;
@@ -712,11 +712,11 @@ message TEvCancelBackup {
     optional uint64 TableId = 2;
 }
 
-message TEvCancelRestore {
-    optional uint64 RestoreTxId = 1;
-    optional uint64 TableId = 2;
-}
-
+message TEvCancelRestore { 
+    optional uint64 RestoreTxId = 1; 
+    optional uint64 TableId = 2; 
+} 
+ 
 message TEvGetTableStats {
     optional uint64 TableId = 1;
     optional uint64 DataSizeResolution = 2;
@@ -1218,102 +1218,102 @@ message TEvMigrateSchemeShardResponse {
     optional fixed64 TabletId = 2;
 }
 
-message TExpirationCondition {
-    // erase if valueof(ColumnId) < WallClockTimestamp
-    optional uint32 ColumnId = 1; // Must contain date type
-    optional uint64 WallClockTimestamp = 2;
+message TExpirationCondition { 
+    // erase if valueof(ColumnId) < WallClockTimestamp 
+    optional uint32 ColumnId = 1; // Must contain date type 
+    optional uint64 WallClockTimestamp = 2; 
     optional NKikimrSchemeOp.TTTLSettings.EUnit ColumnUnit = 3;
-}
-
-message TEvEraseRowsRequest {
-    optional uint64 TableId = 1;
-    repeated uint32 KeyColumnIds = 2;
-    repeated bytes KeyColumns = 3; // SerilializedCellVector
-    optional uint64 SchemaVersion = 5;
-
-    oneof Condition {
-        TExpirationCondition Expiration = 4;
-    }
-}
-
-message TEvEraseRowsResponse {
-    enum EStatus {
-        OK = 0;
-        BAD_REQUEST = 1;
-        SCHEME_ERROR = 2;
-        EXEC_ERROR = 3;
-        WRONG_SHARD_STATE = 4;
-        UNKNOWN = 5;
-        // coordinator
-        COORDINATOR_DECLINED = 10;
-        COORDINATOR_UNKNOWN = 11;
-        // shard
-        SHARD_NOT_AVAILABLE = 20;
-        SHARD_ABORTED = 21;
-        SHARD_CANCELLED = 22;
-        SHARD_RESULT_UNAVAILABLE = 23;
-        SHARD_OVERLOADED = 24;
-        SHARD_TRY_LATER = 25;
-        SHARD_EXEC_ERROR = 26;
-        SHARD_UNKNOWN = 27;
-    }
-
-    optional uint64 TabletID = 1;
-    optional EStatus Status = 2;
-    optional string ErrorDescription = 3;
-}
-
-message TEvConditionalEraseRowsRequest {
-    message TIndexDescription {
-        message TKeyMap {
-            optional uint32 IndexColumnId = 1;
-            optional uint32 MainColumnId = 2;
-        }
-
-        optional uint64 OwnerId = 1;
-        optional uint64 PathId = 2;
-        optional uint64 SchemaVersion = 3;
-        repeated TKeyMap KeyMap = 4; // sorted
-    };
-
-    message TLimits {
-        optional uint32 BatchMaxBytes = 1 [default = 512000];
-        optional uint32 BatchMinKeys = 2 [default = 1000];
-        optional uint32 BatchMaxKeys = 3 [default = 50000];
-    };
-
-    optional uint64 TableId = 1;
-    optional uint64 SchemaVersion = 3;
-    repeated TIndexDescription Indexes = 4;
-    optional TLimits Limits = 5;
-
-    oneof Condition {
-        TExpirationCondition Expiration = 2;
-    }
-}
-
-message TEvConditionalEraseRowsResponse {
-    enum EStatus {
-        ACCEPTED = 0;
-        PARTIAL = 1;
-        OK = 2;
-        BAD_REQUEST = 3;
-        ABORTED = 4;
-        ERASE_ERROR = 5; // error during underlying erase execution
-        OVERLOADED = 6; // another conditional erase in flight
-        SCHEME_ERROR = 7;
-    }
-
-    message TStats {
-        optional uint64 RowsProcessed = 1;
-        optional uint64 RowsErased = 2;
-    }
-
-    optional uint64 TabletID = 1;
-    optional EStatus Status = 2;
-    optional string ErrorDescription = 3;
-    optional TStats Stats = 4;
-}
+} 
+ 
+message TEvEraseRowsRequest { 
+    optional uint64 TableId = 1; 
+    repeated uint32 KeyColumnIds = 2; 
+    repeated bytes KeyColumns = 3; // SerilializedCellVector 
+    optional uint64 SchemaVersion = 5; 
+ 
+    oneof Condition { 
+        TExpirationCondition Expiration = 4; 
+    } 
+} 
+ 
+message TEvEraseRowsResponse { 
+    enum EStatus { 
+        OK = 0; 
+        BAD_REQUEST = 1; 
+        SCHEME_ERROR = 2; 
+        EXEC_ERROR = 3; 
+        WRONG_SHARD_STATE = 4; 
+        UNKNOWN = 5; 
+        // coordinator 
+        COORDINATOR_DECLINED = 10; 
+        COORDINATOR_UNKNOWN = 11; 
+        // shard 
+        SHARD_NOT_AVAILABLE = 20; 
+        SHARD_ABORTED = 21; 
+        SHARD_CANCELLED = 22; 
+        SHARD_RESULT_UNAVAILABLE = 23; 
+        SHARD_OVERLOADED = 24; 
+        SHARD_TRY_LATER = 25; 
+        SHARD_EXEC_ERROR = 26; 
+        SHARD_UNKNOWN = 27; 
+    } 
+ 
+    optional uint64 TabletID = 1; 
+    optional EStatus Status = 2; 
+    optional string ErrorDescription = 3; 
+} 
+ 
+message TEvConditionalEraseRowsRequest { 
+    message TIndexDescription { 
+        message TKeyMap { 
+            optional uint32 IndexColumnId = 1; 
+            optional uint32 MainColumnId = 2; 
+        } 
+ 
+        optional uint64 OwnerId = 1; 
+        optional uint64 PathId = 2; 
+        optional uint64 SchemaVersion = 3; 
+        repeated TKeyMap KeyMap = 4; // sorted 
+    }; 
+ 
+    message TLimits { 
+        optional uint32 BatchMaxBytes = 1 [default = 512000]; 
+        optional uint32 BatchMinKeys = 2 [default = 1000]; 
+        optional uint32 BatchMaxKeys = 3 [default = 50000]; 
+    }; 
+ 
+    optional uint64 TableId = 1; 
+    optional uint64 SchemaVersion = 3; 
+    repeated TIndexDescription Indexes = 4; 
+    optional TLimits Limits = 5; 
+ 
+    oneof Condition { 
+        TExpirationCondition Expiration = 2; 
+    } 
+} 
+ 
+message TEvConditionalEraseRowsResponse { 
+    enum EStatus { 
+        ACCEPTED = 0; 
+        PARTIAL = 1; 
+        OK = 2; 
+        BAD_REQUEST = 3; 
+        ABORTED = 4; 
+        ERASE_ERROR = 5; // error during underlying erase execution 
+        OVERLOADED = 6; // another conditional erase in flight 
+        SCHEME_ERROR = 7; 
+    } 
+ 
+    message TStats { 
+        optional uint64 RowsProcessed = 1; 
+        optional uint64 RowsErased = 2; 
+    } 
+ 
+    optional uint64 TabletID = 1; 
+    optional EStatus Status = 2; 
+    optional string ErrorDescription = 3; 
+    optional TStats Stats = 4; 
+} 
 
 message TEvBuildIndexCreateRequest {
     optional uint64 BuildIndexId = 1;          // unique id of build index proccess
@@ -1399,7 +1399,7 @@ message TEvKqpScan {
 }
 
 message TEvCompactTable {
-    optional NKikimrProto.TPathID PathId = 1;
+    optional NKikimrProto.TPathID PathId = 1; 
     optional bool CompactBorrowed = 2;
 }
 
@@ -1411,16 +1411,16 @@ message TEvCompactTableResult {
     };
 
     optional uint64 TabletId = 1;
-    optional NKikimrProto.TPathID PathId = 2;
+    optional NKikimrProto.TPathID PathId = 2; 
     optional EStatus Status = 3;
 }
 
 message TEvCompactBorrowed {
-    optional NKikimrProto.TPathID PathId = 1;
+    optional NKikimrProto.TPathID PathId = 1; 
 }
 
 message TEvGetCompactTableStats {
-    optional NKikimrProto.TPathID PathId = 1;
+    optional NKikimrProto.TPathID PathId = 1; 
 }
 
 message TEvGetCompactTableStatsResult {

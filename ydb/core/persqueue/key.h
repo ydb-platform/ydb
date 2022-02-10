@@ -22,7 +22,7 @@ public:
     enum EMark : char {
         MarkUserDeprecated = 'u',
         MarkSourceId = 's',
-        MarkProtoSourceId = 'p',
+        MarkProtoSourceId = 'p', 
         MarkUser = 'c'
     };
 

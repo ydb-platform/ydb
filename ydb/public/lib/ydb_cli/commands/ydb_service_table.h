@@ -28,16 +28,16 @@ public:
     TCommandIndex();
 };
 
-class TCommandAttribute : public TClientCommandTree {
-public:
-    TCommandAttribute();
-};
-
-class TCommandTtl: public TClientCommandTree {
-public:
-    TCommandTtl();
-};
-
+class TCommandAttribute : public TClientCommandTree { 
+public: 
+    TCommandAttribute(); 
+}; 
+ 
+class TCommandTtl: public TClientCommandTree { 
+public: 
+    TCommandTtl(); 
+}; 
+ 
 class TTableCommand : public TYdbOperationCommand {
 public:
     TTableCommand(
@@ -158,33 +158,33 @@ public:
 
 class TCommandIndexAddGlobal : public TYdbCommand, public TCommandWithPath, public TCommandWithFormat {
 public:
-    TCommandIndexAddGlobal(
-        NTable::EIndexType type,
-        const TString& name,
-        const std::initializer_list<TString>& aliases = std::initializer_list<TString>(),
-        const TString& description = TString()
-    );
+    TCommandIndexAddGlobal( 
+        NTable::EIndexType type, 
+        const TString& name, 
+        const std::initializer_list<TString>& aliases = std::initializer_list<TString>(), 
+        const TString& description = TString() 
+    ); 
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
-protected:
+protected: 
     TString IndexName;
     TString Columns;
     TString DataColumns;
-private:
-    const NTable::EIndexType IndexType;
+private: 
+    const NTable::EIndexType IndexType; 
 };
 
-class TCommandIndexAddGlobalSync : public TCommandIndexAddGlobal {
-public:
-    TCommandIndexAddGlobalSync();
-};
-
-class TCommandIndexAddGlobalAsync : public TCommandIndexAddGlobal {
-public:
-    TCommandIndexAddGlobalAsync();
-};
-
+class TCommandIndexAddGlobalSync : public TCommandIndexAddGlobal { 
+public: 
+    TCommandIndexAddGlobalSync(); 
+}; 
+ 
+class TCommandIndexAddGlobalAsync : public TCommandIndexAddGlobal { 
+public: 
+    TCommandIndexAddGlobalAsync(); 
+}; 
+ 
 class TCommandIndexDrop : public TYdbCommand, public TCommandWithPath {
 public:
     TCommandIndexDrop();
@@ -195,46 +195,46 @@ private:
     TString IndexName;
 };
 
-class TCommandAttributeAdd : public TYdbCommand, public TCommandWithPath {
-public:
-    TCommandAttributeAdd();
-    virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
-private:
-    THashMap<TString, TString> Attributes;
-};
-
-class TCommandAttributeDrop : public TYdbCommand, public TCommandWithPath {
-public:
-    TCommandAttributeDrop();
-    virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
-private:
-    TVector<TString> AttributeKeys;
-};
-
-class TCommandTtlSet : public TYdbCommand, public TCommandWithPath {
-public:
-    TCommandTtlSet();
-    virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
-private:
-    TString ColumnName;
-    TMaybe<NTable::TTtlSettings::EUnit> ColumnUnit;
-    TDuration ExpireAfter;
-    TDuration RunInterval = TDuration::Zero();
-};
-
-class TCommandTtlDrop : public TYdbCommand, public TCommandWithPath {
-public:
-    TCommandTtlDrop();
-    virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
-};
-
+class TCommandAttributeAdd : public TYdbCommand, public TCommandWithPath { 
+public: 
+    TCommandAttributeAdd(); 
+    virtual void Config(TConfig& config) override; 
+    virtual void Parse(TConfig& config) override; 
+    virtual int Run(TConfig& config) override; 
+private: 
+    THashMap<TString, TString> Attributes; 
+}; 
+ 
+class TCommandAttributeDrop : public TYdbCommand, public TCommandWithPath { 
+public: 
+    TCommandAttributeDrop(); 
+    virtual void Config(TConfig& config) override; 
+    virtual void Parse(TConfig& config) override; 
+    virtual int Run(TConfig& config) override; 
+private: 
+    TVector<TString> AttributeKeys; 
+}; 
+ 
+class TCommandTtlSet : public TYdbCommand, public TCommandWithPath { 
+public: 
+    TCommandTtlSet(); 
+    virtual void Config(TConfig& config) override; 
+    virtual void Parse(TConfig& config) override; 
+    virtual int Run(TConfig& config) override; 
+private: 
+    TString ColumnName; 
+    TMaybe<NTable::TTtlSettings::EUnit> ColumnUnit; 
+    TDuration ExpireAfter; 
+    TDuration RunInterval = TDuration::Zero(); 
+}; 
+ 
+class TCommandTtlDrop : public TYdbCommand, public TCommandWithPath { 
+public: 
+    TCommandTtlDrop(); 
+    virtual void Config(TConfig& config) override; 
+    virtual void Parse(TConfig& config) override; 
+    virtual int Run(TConfig& config) override; 
+}; 
+ 
 }
 }

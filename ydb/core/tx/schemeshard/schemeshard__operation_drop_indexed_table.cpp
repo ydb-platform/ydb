@@ -250,7 +250,7 @@ public:
 
 class TDropTableIndex: public TSubOperation {
     const TOperationId OperationId;
-    const TTxTransaction Transaction;
+    const TTxTransaction Transaction; 
     TTxState::ETxState State = TTxState::Invalid;
     TTxState::ETxState AfterPropose = TTxState::Invalid;
 
@@ -298,12 +298,12 @@ class TDropTableIndex: public TSubOperation {
     }
 
 public:
-    TDropTableIndex(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
+    TDropTableIndex(TOperationId id, const TTxTransaction& tx) 
+        : OperationId(id) 
+        , Transaction(tx) 
+    { 
+    } 
+ 
     TDropTableIndex(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
         , State(state)
@@ -314,31 +314,31 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = Transaction.GetDrop().GetName();
+        const TString& parentPathStr = Transaction.GetWorkingDir(); 
+        const TString& name = Transaction.GetDrop().GetName(); 
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropTableIndex Propose"
                          << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << Transaction.GetDrop().GetId()
+                         << ", pathId: " << Transaction.GetDrop().GetId() 
                          << ", operationId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        if (!Transaction.HasDrop()) {
+        if (!Transaction.HasDrop()) { 
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Drop is not present");
             return result;
         }
 
-        TPath index = Transaction.GetDrop().HasId()
+        TPath index = Transaction.GetDrop().HasId() 
             ? TPath::Init(context.SS->MakeLocalId(Transaction.GetDrop().GetId()), context.SS)
             : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = index.Check();
-            checks
-                .NotEmpty()
+            checks 
+                .NotEmpty() 
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -359,8 +359,8 @@ public:
         TPath parentTable = index.Parent();
         {
             TPath::TChecker checks = parentTable.Check();
-            checks
-                .NotEmpty()
+            checks 
+                .NotEmpty() 
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
@@ -404,14 +404,14 @@ public:
                      "TDropTableIndex AbortPropose"
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << context.SS->TabletID());
-    }
-
+    } 
+ 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropTableIndex AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->TabletID()); 
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -422,8 +422,8 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropTableIndex(TOperationId id, const TTxTransaction& tx) {
-    return new TDropTableIndex(id, tx);
+ISubOperationBase::TPtr CreateDropTableIndex(TOperationId id, const TTxTransaction& tx) { 
+    return new TDropTableIndex(id, tx); 
 }
 
 ISubOperationBase::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState state) {
@@ -445,8 +445,8 @@ TVector<ISubOperationBase::TPtr> CreateDropIndexedTable(TOperationId nextId, con
 
     {
         TPath::TChecker checks = table.Check();
-        checks
-            .NotEmpty()
+        checks 
+            .NotEmpty() 
             .IsResolved()
             .NotDeleted()
             .IsTable()
@@ -464,7 +464,7 @@ TVector<ISubOperationBase::TPtr> CreateDropIndexedTable(TOperationId nextId, con
 
             result->SetError(status, explain);
 
-            if (table.IsResolved() && table.Base()->IsTable() && (table.Base()->PlannedToDrop() || table.Base()->Dropped())) {
+            if (table.IsResolved() && table.Base()->IsTable() && (table.Base()->PlannedToDrop() || table.Base()->Dropped())) { 
                 result->SetPathDropTxId(ui64(table.Base()->DropTxId));
                 result->SetPathId(table.Base()->PathId.LocalPathId);
             }
@@ -474,107 +474,107 @@ TVector<ISubOperationBase::TPtr> CreateDropIndexedTable(TOperationId nextId, con
     }
 
     TVector<ISubOperationBase::TPtr> result;
-    result.push_back(CreateDropTable(NextPartId(nextId, result), tx));
+    result.push_back(CreateDropTable(NextPartId(nextId, result), tx)); 
 
-    for (const auto& [childName, childPathId] : table.Base()->GetChildren()) {
-        TPath child = table.Child(childName);
+    for (const auto& [childName, childPathId] : table.Base()->GetChildren()) { 
+        TPath child = table.Child(childName); 
         {
-            TPath::TChecker checks = child.Check();
-            checks
-                .NotEmpty()
+            TPath::TChecker checks = child.Check(); 
+            checks 
+                .NotEmpty() 
                 .IsResolved();
 
             if (checks) {
-                if (child.IsDeleted()) {
+                if (child.IsDeleted()) { 
                     continue;
                 }
             }
 
-            if (child.IsTableIndex()) {
-                checks.IsTableIndex();
-            } else if (child.IsCdcStream()) {
-                checks.IsCdcStream();
+            if (child.IsTableIndex()) { 
+                checks.IsTableIndex(); 
+            } else if (child.IsCdcStream()) { 
+                checks.IsCdcStream(); 
             } else if (child.IsSequence()) {
                 checks.IsSequence();
-            }
-
+            } 
+ 
             checks.NotDeleted()
                 .NotUnderDeleting()
                 .NotUnderOperation();
 
             if (!checks) {
                 TString explain = TStringBuilder() << "path index fail checks"
-                                                   << ", index path: " << child.PathString();
+                                                   << ", index path: " << child.PathString(); 
                 auto status = checks.GetStatus(&explain);
                 return {CreateReject(nextId, status, explain)};
             }
         }
-        Y_VERIFY(child.Base()->PathId == childPathId);
+        Y_VERIFY(child.Base()->PathId == childPathId); 
 
         if (child.IsSequence()) {
             auto dropSequence = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
-            dropSequence.MutableDrop()->SetName(ToString(child->Name));
+            dropSequence.MutableDrop()->SetName(ToString(child->Name)); 
 
             result.push_back(CreateDropSequence(NextPartId(nextId, result), dropSequence));
             continue;
-        } else if (child.IsTableIndex()) {
-            auto dropIndex = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
-            dropIndex.MutableDrop()->SetName(ToString(child.Base()->Name));
+        } else if (child.IsTableIndex()) { 
+            auto dropIndex = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex); 
+            dropIndex.MutableDrop()->SetName(ToString(child.Base()->Name)); 
 
-            result.push_back(CreateDropTableIndex(NextPartId(nextId, result), dropIndex));
-        } else if (child.IsCdcStream()) {
-            auto dropStream = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl);
-            dropStream.MutableDrop()->SetName(ToString(child.Base()->Name));
-
-            result.push_back(CreateDropCdcStreamImpl(NextPartId(nextId, result), dropStream));
+            result.push_back(CreateDropTableIndex(NextPartId(nextId, result), dropIndex)); 
+        } else if (child.IsCdcStream()) { 
+            auto dropStream = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl); 
+            dropStream.MutableDrop()->SetName(ToString(child.Base()->Name)); 
+ 
+            result.push_back(CreateDropCdcStreamImpl(NextPartId(nextId, result), dropStream)); 
         }
 
-        Y_VERIFY(child.Base()->GetChildren().size() == 1);
-        for (auto& [implName, implPathId] : child.Base()->GetChildren()) {
-            Y_VERIFY(implName == "indexImplTable" || implName == "streamImpl",
-                "unexpected name %s", implName.c_str());
+        Y_VERIFY(child.Base()->GetChildren().size() == 1); 
+        for (auto& [implName, implPathId] : child.Base()->GetChildren()) { 
+            Y_VERIFY(implName == "indexImplTable" || implName == "streamImpl", 
+                "unexpected name %s", implName.c_str()); 
 
-            TPath implPath = child.Child(implName);
+            TPath implPath = child.Child(implName); 
             {
-                TPath::TChecker checks = implPath.Check();
-                checks
-                    .NotEmpty()
+                TPath::TChecker checks = implPath.Check(); 
+                checks 
+                    .NotEmpty() 
                     .IsResolved()
                     .NotDeleted()
                     .NotUnderDeleting()
                     .NotUnderOperation();
 
-                if (checks) {
-                    if (implPath.Base()->IsTable()) {
-                        checks
-                            .IsTable()
-                            .IsInsideTableIndexPath();
-                    } else if (implPath.Base()->IsPQGroup()) {
-                        checks
-                            .IsPQGroup()
-                            .IsInsideCdcStreamPath();
-                    }
-                }
-
+                if (checks) { 
+                    if (implPath.Base()->IsTable()) { 
+                        checks 
+                            .IsTable() 
+                            .IsInsideTableIndexPath(); 
+                    } else if (implPath.Base()->IsPQGroup()) { 
+                        checks 
+                            .IsPQGroup() 
+                            .IsInsideCdcStreamPath(); 
+                    } 
+                } 
+ 
                 if (!checks) {
                     TString explain = TStringBuilder() << "path impl table fail checks"
-                                                       << ", index path: " << implPath.PathString();
+                                                       << ", index path: " << implPath.PathString(); 
                     auto status = checks.GetStatus(&explain);
                     return {CreateReject(nextId, status, explain)};
                 }
             }
-            Y_VERIFY(implPath.Base()->PathId == implPathId);
+            Y_VERIFY(implPath.Base()->PathId == implPathId); 
 
-            if (implPath.Base()->IsTable()) {
-                auto dropIndexTable = TransactionTemplate(child.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
-                dropIndexTable.MutableDrop()->SetName(ToString(implPath.Base()->Name));
-
-                result.push_back(CreateDropTable(NextPartId(nextId, result), dropIndexTable));
-            } else if (implPath.Base()->IsPQGroup()) {
-                auto dropPQGroup = TransactionTemplate(child.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
-                dropPQGroup.MutableDrop()->SetName(ToString(implPath.Base()->Name));
-
-                result.push_back(CreateDropPQ(NextPartId(nextId, result), dropPQGroup));
+            if (implPath.Base()->IsTable()) { 
+                auto dropIndexTable = TransactionTemplate(child.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable); 
+                dropIndexTable.MutableDrop()->SetName(ToString(implPath.Base()->Name)); 
+ 
+                result.push_back(CreateDropTable(NextPartId(nextId, result), dropIndexTable)); 
+            } else if (implPath.Base()->IsPQGroup()) { 
+                auto dropPQGroup = TransactionTemplate(child.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup); 
+                dropPQGroup.MutableDrop()->SetName(ToString(implPath.Base()->Name)); 
+ 
+                result.push_back(CreateDropPQ(NextPartId(nextId, result), dropPQGroup)); 
             }
         }
     }

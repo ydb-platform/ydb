@@ -230,29 +230,29 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                                    {NLs::Finished,
                                     NLs::PathVersionEqual(3),
                                     NLs::IndexesCount(1)});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"),
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"), 
                                    {NLs::Finished,
                                     NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
                                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                                     NLs::IndexKeys({"value0"})});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"),
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"), 
                                    {NLs::Finished,
                                     NLs::PathVersionEqual(3)});
             }
 
-        TestDropTableIndex(runtime, ++t.TxId, "/MyRoot", R"(
-            TableName: "Table"
-            IndexName: "UserDefinedIndexByValue0"
-        )");
+        TestDropTableIndex(runtime, ++t.TxId, "/MyRoot", R"( 
+            TableName: "Table" 
+            IndexName: "UserDefinedIndexByValue0" 
+        )"); 
         t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::Finished,
                             NLs::PathVersionEqual(5),
                             NLs::IndexesCount(0)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"), 
                            {NLs::PathNotExist});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"), 
                            {NLs::PathNotExist});
         });
     }
@@ -283,29 +283,29 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                                    {NLs::Finished,
                                     NLs::PathVersionEqual(3),
                                     NLs::IndexesCount(1)});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"),
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"), 
                                    {NLs::Finished,
                                     NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
                                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                                     NLs::IndexKeys({"value0"})});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"),
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"), 
                                    {NLs::Finished,
                                     NLs::PathVersionEqual(3)});
             }
 
-        TestDropTableIndex(runtime, ++t.TxId, "/MyRoot", R"(
-            TableName: "Table"
-            IndexName: "UserDefinedIndexByValue0"
-        )");
+        TestDropTableIndex(runtime, ++t.TxId, "/MyRoot", R"( 
+            TableName: "Table" 
+            IndexName: "UserDefinedIndexByValue0" 
+        )"); 
         t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::Finished,
                             NLs::PathVersionEqual(5),
                             NLs::IndexesCount(0)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"), 
                            {NLs::PathNotExist});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"),
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"), 
                            {NLs::PathNotExist});
         });
     }

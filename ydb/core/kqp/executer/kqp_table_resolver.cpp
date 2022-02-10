@@ -241,7 +241,7 @@ private:
             entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
             entry.TableId = tableId;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-            entry.ShowPrivatePath = true;
+            entry.ShowPrivatePath = true; 
 
             request->ResultSet.emplace_back(std::move(entry));
         }

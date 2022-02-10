@@ -52,20 +52,20 @@ TMap<TStringBuf, ui64> SizeSuffix {
     {"G", Power<ui64>(1000, 3)},
     {"T", Power<ui64>(1000, 4)},
     {"Ki", Power<ui64>(1024, 1)},
-    {"KiB", Power<ui64>(1024, 1)},
+    {"KiB", Power<ui64>(1024, 1)}, 
     {"Mi", Power<ui64>(1024, 2)},
-    {"MiB", Power<ui64>(1024, 2)},
+    {"MiB", Power<ui64>(1024, 2)}, 
     {"Gi", Power<ui64>(1024, 3)},
-    {"GiB", Power<ui64>(1024, 3)},
+    {"GiB", Power<ui64>(1024, 3)}, 
     {"Ti", Power<ui64>(1024, 4)},
-    {"TiB", Power<ui64>(1024, 4)},
+    {"TiB", Power<ui64>(1024, 4)}, 
 };
 
 }
 
 ui64 SizeFromString(TStringBuf s) {
     size_t pos = s.Size();
-    while (pos > 0 && !isdigit(s[pos - 1])) {
+    while (pos > 0 && !isdigit(s[pos - 1])) { 
         --pos;
     }
 

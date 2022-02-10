@@ -85,11 +85,11 @@ public:
         case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:
             return NKikimrViewer::EObjectType::SolomonVolume;
         case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
-            return NKikimrViewer::EObjectType::CdcStream;
+            return NKikimrViewer::EObjectType::CdcStream; 
         case NKikimrSchemeOp::EPathType::EPathTypeSequence:
             return NKikimrViewer::EObjectType::Sequence;
-        case NKikimrSchemeOp::EPathType::EPathTypeReplication:
-            return NKikimrViewer::EObjectType::Replication;
+        case NKikimrSchemeOp::EPathType::EPathTypeReplication: 
+            return NKikimrViewer::EObjectType::Replication; 
         case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
         case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
         case NKikimrSchemeOp::EPathType::EPathTypeInvalid:

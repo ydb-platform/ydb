@@ -6,34 +6,34 @@ OWNER(
 )
 
 SRCS(
-    alter_cdc_stream_unit.cpp
+    alter_cdc_stream_unit.cpp 
     alter_table_unit.cpp
     backup_unit.cpp
     build_and_wait_dependencies_unit.cpp
     build_data_tx_out_rs_unit.cpp
-    build_distributed_erase_tx_out_rs_unit.cpp
+    build_distributed_erase_tx_out_rs_unit.cpp 
     build_kqp_data_tx_out_rs_unit.cpp
     build_scheme_tx_out_rs_unit.cpp
-    change_collector_async_index.cpp
-    change_collector_base.cpp
-    change_collector_cdc_stream.cpp
-    change_collector_helpers.cpp
-    change_collector.cpp
-    change_exchange.cpp
-    change_exchange_split.cpp
-    change_record.cpp
-    change_sender.cpp
-    change_sender_async_index.cpp
-    change_sender_cdc_stream.cpp
-    change_sender_common_ops.cpp
+    change_collector_async_index.cpp 
+    change_collector_base.cpp 
+    change_collector_cdc_stream.cpp 
+    change_collector_helpers.cpp 
+    change_collector.cpp 
+    change_exchange.cpp 
+    change_exchange_split.cpp 
+    change_record.cpp 
+    change_sender.cpp 
+    change_sender_async_index.cpp 
+    change_sender_cdc_stream.cpp 
+    change_sender_common_ops.cpp 
     check_commit_writes_tx_unit.cpp
     check_data_tx_unit.cpp
-    check_distributed_erase_tx_unit.cpp
+    check_distributed_erase_tx_unit.cpp 
     check_scheme_tx_unit.cpp
     check_snapshot_tx_unit.cpp
     complete_data_tx_unit.cpp
     completed_operations_unit.cpp
-    create_cdc_stream_unit.cpp
+    create_cdc_stream_unit.cpp 
     create_persistent_snapshot_unit.cpp
     create_table_unit.cpp
     create_volatile_snapshot_unit.cpp
@@ -44,16 +44,16 @@ SRCS(
     datashard__cleanup_borrowed.cpp
     datashard__cleanup_in_rs.cpp
     datashard__cleanup_tx.cpp
-    datashard__conditional_erase_rows.cpp
+    datashard__conditional_erase_rows.cpp 
     datashard__engine_host.cpp
     datashard__engine_host.h
     datashard__get_state_tx.cpp
     datashard__schema_changed.cpp
     datashard__migrate_schemeshard.cpp
     datashard__init.cpp
-    datashard__monitoring.cpp
+    datashard__monitoring.cpp 
     datashard__mon_reset_schema_version.cpp
-    datashard__op_rows.cpp
+    datashard__op_rows.cpp 
     datashard__plan_step.cpp
     datashard__progress_resend_rs.cpp
     datashard__progress_tx.cpp
@@ -62,16 +62,16 @@ SRCS(
     datashard__read_iterator.cpp
     datashard__read_columns.cpp
     datashard__s3.cpp
-    datashard__s3_download_txs.cpp
-    datashard__s3_upload_txs.cpp
+    datashard__s3_download_txs.cpp 
+    datashard__s3_upload_txs.cpp 
     datashard__kqp_scan.cpp
     datashard__snapshot_txs.cpp
     datashard__stats.cpp
     datashard__store_table_path.cpp
     datashard__store_scan_state.cpp
-    datashard_change_receiving.cpp
-    datashard_change_sender_activation.cpp
-    datashard_change_sending.cpp
+    datashard_change_receiving.cpp 
+    datashard_change_sender_activation.cpp 
+    datashard_change_sending.cpp 
     datashard_counters.cpp
     datashard_loans.cpp
     datashard_locks.h
@@ -85,23 +85,23 @@ SRCS(
     datashard_outreadset.h
     datashard_active_transaction.cpp
     datashard_active_transaction.h
-    datashard_common_upload.cpp
+    datashard_common_upload.cpp 
     datashard_direct_transaction.cpp
     datashard_direct_transaction.h
-    datashard_direct_erase.cpp
-    datashard_direct_upload.cpp
-    datashard_distributed_erase.cpp
+    datashard_direct_erase.cpp 
+    datashard_direct_upload.cpp 
+    datashard_distributed_erase.cpp 
     datashard_failpoints.cpp
     datashard_failpoints.h
     datashard_dep_tracker.cpp
     datashard_dep_tracker.h
     datashard_pipeline.cpp
     datashard_pipeline.h
-    datashard_s3_downloads.cpp
-    datashard_s3_uploads.cpp
-    datashard_schema_snapshots.cpp
+    datashard_s3_downloads.cpp 
+    datashard_s3_uploads.cpp 
+    datashard_schema_snapshots.cpp 
     datashard_snapshots.cpp
-    datashard_unsafe_upload.cpp
+    datashard_unsafe_upload.cpp 
     datashard_user_table.cpp
     datashard_user_table.h
     datashard_impl.h
@@ -123,29 +123,29 @@ SRCS(
     datashard.cpp
     datashard.h
     defs.h
-    direct_tx_unit.cpp
-    drop_cdc_stream_unit.cpp
+    direct_tx_unit.cpp 
+    drop_cdc_stream_unit.cpp 
     drop_index_notice_unit.cpp
     drop_persistent_snapshot_unit.cpp
     drop_table_unit.cpp
     drop_volatile_snapshot_unit.cpp
-    erase_rows_condition.cpp
+    erase_rows_condition.cpp 
     execute_commit_writes_tx_unit.cpp
     execute_data_tx_unit.cpp
-    execute_distributed_erase_tx_unit.cpp
+    execute_distributed_erase_tx_unit.cpp 
     execute_kqp_data_tx_unit.cpp
     execute_kqp_scan_tx_unit.cpp
     execution_unit.cpp
     execution_unit.h
     execution_unit_ctors.h
     execution_unit_kind.h
-    export_common.cpp
+    export_common.cpp 
     export_iface.cpp
     export_iface.h
-    export_scan.cpp
-    finalize_build_index_unit.cpp
+    export_scan.cpp 
+    finalize_build_index_unit.cpp 
     finish_propose_unit.cpp
-    initiate_build_index_unit.cpp
+    initiate_build_index_unit.cpp 
     key_conflicts.cpp
     key_conflicts.h
     load_and_wait_in_rs_unit.cpp
@@ -157,7 +157,7 @@ SRCS(
     operation.h
     plan_queue_unit.cpp
     prepare_data_tx_in_rs_unit.cpp
-    prepare_distributed_erase_tx_in_rs_unit.cpp
+    prepare_distributed_erase_tx_in_rs_unit.cpp 
     prepare_kqp_data_tx_in_rs_unit.cpp
     prepare_scheme_tx_in_rs_unit.cpp
     progress_queue.h
@@ -170,12 +170,12 @@ SRCS(
     range_ops.cpp
     range_treap.cpp
     read_iterator.h
-    restore_unit.cpp
+    restore_unit.cpp 
     setup_sys_locks.h
     store_and_send_out_rs_unit.cpp
     store_commit_writes_tx_unit.cpp
     store_data_tx_unit.cpp
-    store_distributed_erase_tx_unit.cpp
+    store_distributed_erase_tx_unit.cpp 
     store_scheme_tx_unit.cpp
     store_snapshot_tx_unit.cpp
     wait_for_plan_unit.cpp
@@ -183,15 +183,15 @@ SRCS(
     upload_stats.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(change_exchange.h)
+GENERATE_ENUM_SERIALIZATION(change_exchange.h) 
 
-GENERATE_ENUM_SERIALIZATION(change_record.h)
+GENERATE_ENUM_SERIALIZATION(change_record.h) 
 
 GENERATE_ENUM_SERIALIZATION(datashard.h)
 
 GENERATE_ENUM_SERIALIZATION(datashard_active_transaction.h)
 
-GENERATE_ENUM_SERIALIZATION(datashard_s3_upload.h)
+GENERATE_ENUM_SERIALIZATION(datashard_s3_upload.h) 
 
 GENERATE_ENUM_SERIALIZATION(execution_unit.h)
 
@@ -237,14 +237,14 @@ IF (OS_WINDOWS)
     CFLAGS(
         -DKIKIMR_DISABLE_S3_OPS
     )
-ELSE()
+ELSE() 
     SRCS(
-        export_s3_buffer.cpp
-        export_s3_uploader.cpp
+        export_s3_buffer.cpp 
+        export_s3_uploader.cpp 
         import_s3.cpp
     )
-ENDIF()
-
+ENDIF() 
+ 
 END()
 
 RECURSE_FOR_TESTS(

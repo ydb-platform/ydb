@@ -23,11 +23,11 @@ public:
 
     void Bootstrap(const TActorContext &ctx)
     {
-        auto &rec = RequestEvent->Get()->Record;
-
-        LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s",
-                  rec.ShortDebugString().data());
-
+        auto &rec = RequestEvent->Get()->Record; 
+ 
+        LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s", 
+                  rec.ShortDebugString().data()); 
+ 
         TAutoPtr<TEvCms::TEvWalleListTasksResponse> response = new TEvCms::TEvWalleListTasksResponse;
 
         for (auto &entry : State->WalleTasks) {
@@ -55,7 +55,7 @@ public:
 private:
     void ReplyAndDie(TAutoPtr<TEvCms::TEvWalleListTasksResponse> resp, const TActorContext &ctx)
     {
-        WalleAuditLog(RequestEvent->Get(), resp.Get(), ctx);
+        WalleAuditLog(RequestEvent->Get(), resp.Get(), ctx); 
         ctx.Send(RequestEvent->Sender, resp.Release());
         Die(ctx);
     }

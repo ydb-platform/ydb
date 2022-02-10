@@ -328,6 +328,6 @@ function initConfigsTab() {
         .add('ServiceKikimr', 'NKikimrServices::EServiceKikimr')
         .add('CmsLogConfigLevel', 'NKikimrCms::TCmsConfig::TLogConfig::ELevel')
         .add('CmsLogRecordType', 'NKikimrCms::TLogRecordData::EType')
-        .add('PDiskStates', 'NCms::EPDiskState')
+        .add('PDiskStates', 'NCms::EPDiskState') 
         .done(loadTypes);
 }

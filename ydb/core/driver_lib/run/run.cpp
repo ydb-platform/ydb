@@ -503,8 +503,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["discovery"] = &hasDiscovery;
         bool hasTableService = services.empty();
         names["table_service"] = &hasTableService;
-        bool hasSchemeService = false;
-        bool hasOperationService = false;
+        bool hasSchemeService = false; 
+        bool hasOperationService = false; 
         bool hasYql = false;
         names["yql"] = &hasYql;
         bool hasYqlInternal = services.empty();
@@ -525,9 +525,9 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["rate_limiter"] = &hasRateLimiter;
         bool hasLongTx = false;
         names["long_tx"] = &hasLongTx;
-        bool hasExport = services.empty();
+        bool hasExport = services.empty(); 
         names["export"] = &hasExport;
-        bool hasImport = services.empty();
+        bool hasImport = services.empty(); 
         names["import"] = &hasImport;
         bool hasAnalytics = false;
         names["analytics"] = &hasAnalytics;
@@ -571,28 +571,28 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             }
         }
 
-        // dependencies
-        if (hasRateLimiter) {
-            hasKesus = true;
-        }
-
+        // dependencies 
+        if (hasRateLimiter) { 
+            hasKesus = true; 
+        } 
+ 
         if (hasYql) {
             hasTableService = true;
             hasYqlInternal = true;
         }
 
-        if (hasTableService || hasYqlInternal || hasPQ || hasKesus || hasPQv1 || hasExport || hasImport) {
-            hasSchemeService = true;
-            hasOperationService = true;
-            // backward compatability
-            hasExport = true;
-        }
-
-        if (hasExport || hasImport) {
-            hasExport = true;
-            hasImport = true;
-        }
-
+        if (hasTableService || hasYqlInternal || hasPQ || hasKesus || hasPQv1 || hasExport || hasImport) { 
+            hasSchemeService = true; 
+            hasOperationService = true; 
+            // backward compatability 
+            hasExport = true; 
+        } 
+ 
+        if (hasExport || hasImport) { 
+            hasExport = true; 
+            hasImport = true; 
+        } 
+ 
         for (const auto& [name, isEnabled] : names) {
             if (*isEnabled) {
                 enabled.insert(name);
@@ -653,20 +653,20 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NGRpcService::TGRpcYdbLongTxService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
 
-        if (hasSchemeService) {
+        if (hasSchemeService) { 
             server.AddService(new NGRpcService::TGRpcYdbSchemeService(ActorSystem.Get(), Counters, grpcRequestProxyId));
-        }
-
-        if (hasOperationService) {
-            server.AddService(new NGRpcService::TGRpcOperationService(ActorSystem.Get(), Counters, grpcRequestProxyId));
-        }
-
-        if (hasExport) {
-            server.AddService(new NGRpcService::TGRpcYdbExportService(ActorSystem.Get(), Counters, grpcRequestProxyId));
-        }
-
-        if (hasImport) {
-            server.AddService(new NGRpcService::TGRpcYdbImportService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+        } 
+ 
+        if (hasOperationService) { 
+            server.AddService(new NGRpcService::TGRpcOperationService(ActorSystem.Get(), Counters, grpcRequestProxyId)); 
+        } 
+ 
+        if (hasExport) { 
+            server.AddService(new NGRpcService::TGRpcYdbExportService(ActorSystem.Get(), Counters, grpcRequestProxyId)); 
+        } 
+ 
+        if (hasImport) { 
+            server.AddService(new NGRpcService::TGRpcYdbImportService(ActorSystem.Get(), Counters, grpcRequestProxyId)); 
         }
 
         if (hasKesus) {
@@ -910,10 +910,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->DataShardConfig = runConfig.AppConfig.GetDataShardConfig();
     }
 
-    if (runConfig.AppConfig.HasMeteringConfig()) {
-        AppData->MeteringConfig = runConfig.AppConfig.GetMeteringConfig();
-    }
-
+    if (runConfig.AppConfig.HasMeteringConfig()) { 
+        AppData->MeteringConfig = runConfig.AppConfig.GetMeteringConfig(); 
+    } 
+ 
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
@@ -1114,11 +1114,11 @@ void TKikimrRunner::InitializeActorSystem(
         }
     }
 
-    if (runConfig.AppConfig.HasGRpcConfig()) {
-        if (const ui32 grpcPort = runConfig.AppConfig.GetGRpcConfig().GetPort()) {
+    if (runConfig.AppConfig.HasGRpcConfig()) { 
+        if (const ui32 grpcPort = runConfig.AppConfig.GetGRpcConfig().GetPort()) { 
             auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << grpcPort);
-            YdbDriver.Reset(new NYdb::TDriver(driverConfig));
-            AppData->YdbDriver = YdbDriver.Get();
+            YdbDriver.Reset(new NYdb::TDriver(driverConfig)); 
+            AppData->YdbDriver = YdbDriver.Get(); 
         }
     }
 
@@ -1153,9 +1153,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableBSNodeWarden) {
         sil->AddServiceInitializer(new TBSNodeWardenInitializer(runConfig));
     }
-    if (serviceMask.EnableSchemeBoardMonitoring) {
-        sil->AddServiceInitializer(new TSchemeBoardMonitoringInitializer(runConfig));
-    }
+    if (serviceMask.EnableSchemeBoardMonitoring) { 
+        sil->AddServiceInitializer(new TSchemeBoardMonitoringInitializer(runConfig)); 
+    } 
     if (serviceMask.EnableStateStorageService) {
         sil->AddServiceInitializer(new TStateStorageServiceInitializer(runConfig));
     }
@@ -1437,8 +1437,8 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         SqsHttp->Shutdown();
     }
 
-    if (YdbDriver) {
-        YdbDriver->Stop(true);
+    if (YdbDriver) { 
+        YdbDriver->Stop(true); 
     }
 
     if (Monitoring) {

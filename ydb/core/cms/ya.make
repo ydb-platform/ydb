@@ -6,7 +6,7 @@ OWNER(
 )
 
 SRCS(
-    audit_log.cpp
+    audit_log.cpp 
     base_handler.h
     cluster_info.cpp
     cluster_info.h
@@ -49,8 +49,8 @@ SRCS(
     log_formatter.h
     pdiskid.h
     scheme.h
-    sentinel.cpp
-    services.cpp
+    sentinel.cpp 
+    services.cpp 
     walle.h
     walle_api_handler.cpp
     walle_check_task_adapter.cpp
@@ -105,8 +105,8 @@ PEERDIR(
     ydb/library/aclib
 )
 
-GENERATE_ENUM_SERIALIZATION(services.h)
-
+GENERATE_ENUM_SERIALIZATION(services.h) 
+ 
 END()
 
 RECURSE(

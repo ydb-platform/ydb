@@ -14,8 +14,8 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/interconnect.h>
 
-#include <util/datetime/base.h>
-#include <util/generic/map.h>
+#include <util/datetime/base.h> 
+#include <util/generic/map.h> 
 #include <util/generic/set.h>
 
 namespace NKikimr {
@@ -502,14 +502,14 @@ private:
     struct TPinnedSlotInfo {
         TString TenantName;
         TString Label;
-        TInstant Deadline;
+        TInstant Deadline; 
     };
 
-    struct TEnqueuedUnpin {
-        TSlotId SlotId;
-        bool Scheduled;
-    };
-
+    struct TEnqueuedUnpin { 
+        TSlotId SlotId; 
+        bool Scheduled; 
+    }; 
+ 
     using TSlotSet = THashSet<TSlot::TPtr, TPtrHash>;
 
     class TCollocationGroup : public TThrRefBase {
@@ -912,7 +912,7 @@ public:
 
             ui64 RequestId;
         };
-
+ 
     };
 
 private:
@@ -924,7 +924,7 @@ private:
     class TTxLoadState;
     class TTxPinSlot;
     class TTxUnbanSlot;
-    class TTxUnpinSlotImpl;
+    class TTxUnpinSlotImpl; 
     class TTxUnpinSlot;
     class TTxUpdateConfig;
     class TTxUpdateNodeLocation;
@@ -942,8 +942,8 @@ private:
     ITransaction *CreateTxUpdatePoolStatus(TEvTenantPool::TEvTenantPoolStatus::TPtr &ev);
     ITransaction *CreateTxUpdateSlotStatus(TEvTenantPool::TEvConfigureSlotResult::TPtr &ev);
 
-
-    ui64 Generation() const;
+ 
+    ui64 Generation() const; 
     void OnActivateExecutor(const TActorContext &ctx) override;
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev,
@@ -1163,7 +1163,7 @@ private:
     THashMap<TSlotId, TSlot::TPtr> Slots;
     THashSet<TSlotId> BannedSlots;
     THashMap<TSlotId, TPinnedSlotInfo> PinnedSlots;
-    TMap<TInstant, TEnqueuedUnpin> EnqueuedUnpins;
+    TMap<TInstant, TEnqueuedUnpin> EnqueuedUnpins; 
     // NodeId -> {Slots}
     THashMap<ui32, TSlotSet> SlotsByNodeId;
     TFreeSlotsIndex FreeSlots;

@@ -205,29 +205,29 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
         const TKeyDesc& key = *ki;
         if (TSysTables::IsSystemTable(key.TableId))
             continue;
-
-        TSet<TKeyDesc::EColumnOperation> columnOpFilter;
-        switch (key.RowOperation) {
-            case TKeyDesc::ERowOperation::Read:
-                columnOpFilter.insert(TKeyDesc::EColumnOperation::Read);
-                break;
-            case TKeyDesc::ERowOperation::Update:
-            case TKeyDesc::ERowOperation::Erase: {
-                const auto collector = GetChangeCollector(key.TableId);
-                if (collector && collector->NeedToReadKeys()) {
-                    columnOpFilter.insert(TKeyDesc::EColumnOperation::Set);
-                    columnOpFilter.insert(TKeyDesc::EColumnOperation::InplaceUpdate);
-                }
-                break;
-            }
-            default:
-                break;
-        }
-
-        if (columnOpFilter.empty()) {
+ 
+        TSet<TKeyDesc::EColumnOperation> columnOpFilter; 
+        switch (key.RowOperation) { 
+            case TKeyDesc::ERowOperation::Read: 
+                columnOpFilter.insert(TKeyDesc::EColumnOperation::Read); 
+                break; 
+            case TKeyDesc::ERowOperation::Update: 
+            case TKeyDesc::ERowOperation::Erase: { 
+                const auto collector = GetChangeCollector(key.TableId); 
+                if (collector && collector->NeedToReadKeys()) { 
+                    columnOpFilter.insert(TKeyDesc::EColumnOperation::Set); 
+                    columnOpFilter.insert(TKeyDesc::EColumnOperation::InplaceUpdate); 
+                } 
+                break; 
+            } 
+            default: 
+                break; 
+        } 
+ 
+        if (columnOpFilter.empty()) { 
             continue;
-        }
-
+        } 
+ 
         ui64 localTid = LocalTableId(key.TableId);
         Y_VERIFY(localTid, "table not exist");
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
@@ -238,7 +238,7 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
 
         TSmallVec<NTable::TTag> tags;
         for (const auto& column : key.Columns) {
-            if (columnOpFilter.contains(column.Operation)) {
+            if (columnOpFilter.contains(column.Operation)) { 
                 tags.push_back(column.Column);
             }
         }
@@ -301,16 +301,16 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
 
     Counters.InvisibleRowSkips += stats.Invisible;
 
-    if (NTable::EReady::Page == ready) {
-        if (auto collector = GetChangeCollector(tableId)) {
-            collector->Reset();
-        }
+    if (NTable::EReady::Page == ready) { 
+        if (auto collector = GetChangeCollector(tableId)) { 
+            collector->Reset(); 
+        } 
         throw TNotReadyTabletException();
-    }
-
-    if (NTable::EReady::Gone == ready) {
+    } 
+ 
+    if (NTable::EReady::Gone == ready) { 
         return NUdf::TUnboxedValue();
-    }
+    } 
 
     NUdf::TUnboxedValue* rowItems = nullptr;
     auto rowResult = holderFactory.CreateDirectArrayHolder(tags.size(), rowItems);
@@ -571,12 +571,12 @@ public:
             List.EngineHost.GetCounters().SelectRangeDeletedRowSkips += std::exchange(Iter->Stats.DeletedRowSkips, 0);
             List.EngineHost.GetCounters().InvisibleRowSkips += std::exchange(Iter->Stats.InvisibleRowSkips, 0);
 
-            if (Iter->Last() ==  NTable::EReady::Page) {
-                if (auto collector = List.EngineHost.GetChangeCollector(List.TableId)) {
-                    collector->Reset();
-                }
+            if (Iter->Last() ==  NTable::EReady::Page) { 
+                if (auto collector = List.EngineHost.GetChangeCollector(List.TableId)) { 
+                    collector->Reset(); 
+                } 
                 throw TNotReadyTabletException();
-            }
+            } 
 
             if (List.Truncated || List.SizeBytes) {
                 Y_VERIFY_DEBUG(List.Truncated && *List.Truncated == truncated);
@@ -869,18 +869,18 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
         valueBytes += upd.Value.IsNull() ? 1 : upd.Value.Size();
     }
 
-    if (auto collector = GetChangeCollector(tableId)) {
-        collector->SetWriteVersion(GetWriteVersion(tableId));
-        if (collector->NeedToReadKeys()) {
-            collector->SetReadVersion(GetReadVersion(tableId));
-        }
-
+    if (auto collector = GetChangeCollector(tableId)) { 
+        collector->SetWriteVersion(GetWriteVersion(tableId)); 
+        if (collector->NeedToReadKeys()) { 
+            collector->SetReadVersion(GetReadVersion(tableId)); 
+        } 
+ 
         if (!collector->Collect(tableId, NTable::ERowOp::Upsert, key, ops)) {
-            collector->Reset();
-            throw TNotReadyTabletException();
-        }
-    }
-
+            collector->Reset(); 
+            throw TNotReadyTabletException(); 
+        } 
+    } 
+ 
     Db.Update(localTid, NTable::ERowOp::Upsert, key, ops, GetWriteVersion(tableId));
 
     Settings.KeyAccessSampler->AddSample(tableId, row);
@@ -897,18 +897,18 @@ void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>
     ui64 keyBytes = 0;
     ConvertTableKeys(Scheme, tableInfo, row, key, &keyBytes);
 
-    if (auto collector = GetChangeCollector(tableId)) {
-        collector->SetWriteVersion(GetWriteVersion(tableId));
-        if (collector->NeedToReadKeys()) {
-            collector->SetReadVersion(GetReadVersion(tableId));
-        }
-
+    if (auto collector = GetChangeCollector(tableId)) { 
+        collector->SetWriteVersion(GetWriteVersion(tableId)); 
+        if (collector->NeedToReadKeys()) { 
+            collector->SetReadVersion(GetReadVersion(tableId)); 
+        } 
+ 
         if (!collector->Collect(tableId, NTable::ERowOp::Erase, key, {})) {
-            collector->Reset();
-            throw TNotReadyTabletException();
-        }
-    }
-
+            collector->Reset(); 
+            throw TNotReadyTabletException(); 
+        } 
+    } 
+ 
     Db.Update(localTid, NTable::ERowOp::Erase, key, { }, GetWriteVersion(tableId));
 
     Settings.KeyAccessSampler->AddSample(tableId, row);

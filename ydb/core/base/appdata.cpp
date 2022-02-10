@@ -46,7 +46,7 @@ TAppData::TDefaultTabletTypes::TDefaultTabletTypes()
     , ColumnShard(TTabletTypes::COLUMNSHARD)
     , TestShard(TTabletTypes::TestShard)
     , SequenceShard(TTabletTypes::SequenceShard)
-    , ReplicationController(TTabletTypes::ReplicationController)
+    , ReplicationController(TTabletTypes::ReplicationController) 
 {
 }
 

@@ -115,7 +115,7 @@ PEERDIR(
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/mediator
-    ydb/core/tx/replication/controller
+    ydb/core/tx/replication/controller 
     ydb/core/tx/scheme_board
     ydb/core/tx/schemeshard
     ydb/core/tx/sequenceproxy

@@ -1,11 +1,11 @@
-LIBRARY()
-
-OWNER(
-    ilnaz
-    g:kikimr
-)
-
-PEERDIR(
+LIBRARY() 
+ 
+OWNER( 
+    ilnaz 
+    g:kikimr 
+) 
+ 
+PEERDIR( 
     library/cpp/actors/core
     ydb/core/base
     ydb/core/mon
@@ -14,22 +14,22 @@ PEERDIR(
     ydb/core/tx/scheme_cache
     ydb/core/util
     ydb/library/aclib
-)
-
-SRCS(
-    cache.cpp
-    helpers.cpp
-    load_test.cpp
-    monitoring.cpp
-    populator.cpp
-    replica.cpp
-    subscriber.cpp
-    two_part_description.cpp
-)
-
-GENERATE_ENUM_SERIALIZATION(subscriber.h)
-
-END()
+) 
+ 
+SRCS( 
+    cache.cpp 
+    helpers.cpp 
+    load_test.cpp 
+    monitoring.cpp 
+    populator.cpp 
+    replica.cpp 
+    subscriber.cpp 
+    two_part_description.cpp 
+) 
+ 
+GENERATE_ENUM_SERIALIZATION(subscriber.h) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(
     ut_cache

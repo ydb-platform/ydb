@@ -2,7 +2,7 @@
 #include "cli_cmds.h"
 
 #include <ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h>
-
+ 
 #include <ydb/library/aclib/aclib.h>
 
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
@@ -13,7 +13,7 @@
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
-#include <util/generic/hash.h>
+#include <util/generic/hash.h> 
 #include <util/string/split.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
@@ -268,9 +268,9 @@ public:
         case NKikimrSchemeOp::EPathTypeSequence:
             type = "<sequence>";
             break;
-        case NKikimrSchemeOp::EPathTypeReplication:
-            type = "<replication>";
-            break;
+        case NKikimrSchemeOp::EPathTypeReplication: 
+            type = "<replication>"; 
+            break; 
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
             type = "<pq group>";
             break;
@@ -483,9 +483,9 @@ public:
         case NKikimrSchemeOp::EPathTypeSequence:
             type = "<sequence>";
             break;
-        case NKikimrSchemeOp::EPathTypeReplication:
-            type = "<replication>";
-            break;
+        case NKikimrSchemeOp::EPathTypeReplication: 
+            type = "<replication>"; 
+            break; 
         default:
             type = "<unknown>";
             break;
@@ -1019,58 +1019,58 @@ public:
     }
 };
 
-class TClientCommandSchemaUserAttributeGet: public TClientCommand {
-public:
-    TClientCommandSchemaUserAttributeGet()
-        : TClientCommand("get", {}, "Get user attributes")
-    {}
-
-    virtual void Config(TConfig& config) override {
-        TClientCommand::Config(config);
-        config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n"
-            "            Or short pathname if profile path is set (e.g. test1/test2).");
-    }
-
-    TString Path;
-
-    virtual void Parse(TConfig& config) override {
-        TClientCommand::Parse(config);
-        TString pathname = config.ParseResult->GetFreeArgs()[0];
-        if (config.Path) {
-            // Profile path is set
-            if (!pathname.StartsWith('/')) {
-                Path = config.Path + '/' + pathname;
-            } else {
-                WarnProfilePathSet();
-                Path = pathname;
-            }
-        } else {
-            Path = pathname;
-        }
-    }
-
+class TClientCommandSchemaUserAttributeGet: public TClientCommand { 
+public: 
+    TClientCommandSchemaUserAttributeGet() 
+        : TClientCommand("get", {}, "Get user attributes") 
+    {} 
+ 
+    virtual void Config(TConfig& config) override { 
+        TClientCommand::Config(config); 
+        config.SetFreeArgsNum(1); 
+        SetFreeArgTitle(0, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n" 
+            "            Or short pathname if profile path is set (e.g. test1/test2)."); 
+    } 
+ 
+    TString Path; 
+ 
+    virtual void Parse(TConfig& config) override { 
+        TClientCommand::Parse(config); 
+        TString pathname = config.ParseResult->GetFreeArgs()[0]; 
+        if (config.Path) { 
+            // Profile path is set 
+            if (!pathname.StartsWith('/')) { 
+                Path = config.Path + '/' + pathname; 
+            } else { 
+                WarnProfilePathSet(); 
+                Path = pathname; 
+            } 
+        } else { 
+            Path = pathname; 
+        } 
+    } 
+ 
     static void Print(const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TUserAttribute>& items) {
-        for (const auto& item : items) {
-            Cout << item.GetKey() << ": " << item.GetValue() << Endl;
-        }
-    }
-
-    virtual int Run(TConfig& config) override {
-        TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe());
-        NKikimrClient::TSchemeDescribe& record(request->Record);
-
-        record.SetPath(Path);
-
-        return MessageBusCall<NMsgBusProxy::TBusSchemeDescribe, NMsgBusProxy::TBusResponse>(config, request,
-            [](const NMsgBusProxy::TBusResponse& response) -> int {
-                Print(response.Record.GetPathDescription().GetUserAttributes());
-                return 0;
-            }
-        );
-    }
-};
-
+        for (const auto& item : items) { 
+            Cout << item.GetKey() << ": " << item.GetValue() << Endl; 
+        } 
+    } 
+ 
+    virtual int Run(TConfig& config) override { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe()); 
+        NKikimrClient::TSchemeDescribe& record(request->Record); 
+ 
+        record.SetPath(Path); 
+ 
+        return MessageBusCall<NMsgBusProxy::TBusSchemeDescribe, NMsgBusProxy::TBusResponse>(config, request, 
+            [](const NMsgBusProxy::TBusResponse& response) -> int { 
+                Print(response.Record.GetPathDescription().GetUserAttributes()); 
+                return 0; 
+            } 
+        ); 
+    } 
+}; 
+ 
 std::pair<TString, TString> SplitPath(const TClientCommand::TConfig& config, const TString& pathname) {
     std::pair<TString, TString> result;
 
@@ -1093,93 +1093,93 @@ std::pair<TString, TString> SplitPath(const TClientCommand::TConfig& config, con
     return result;
 }
 
-class TClientCommandSchemaUserAttributeSet: public TClientCommand {
+class TClientCommandSchemaUserAttributeSet: public TClientCommand { 
     using TUserAttributesLimits = NSchemeShard::TUserAttributesLimits;
-
-public:
-    TClientCommandSchemaUserAttributeSet()
-        : TClientCommand("set", {}, "Set user attribute(s)")
-    {}
-
-    virtual void Config(TConfig& config) override {
-        TClientCommand::Config(config);
-        config.SetFreeArgsMin(2);
-        SetFreeArgTitle(0, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n"
-            "            Or short pathname if profile path is set (e.g. test1/test2).");
-        SetFreeArgTitle(1, "<ATTRIBUTE>", "NAME=VALUE");
-    }
-
-    TString Base;
-    TString Name;
-    THashMap<TString, TString> Attributes;
-
-    virtual void Parse(TConfig& config) override {
-        TClientCommand::Parse(config);
-
+ 
+public: 
+    TClientCommandSchemaUserAttributeSet() 
+        : TClientCommand("set", {}, "Set user attribute(s)") 
+    {} 
+ 
+    virtual void Config(TConfig& config) override { 
+        TClientCommand::Config(config); 
+        config.SetFreeArgsMin(2); 
+        SetFreeArgTitle(0, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n" 
+            "            Or short pathname if profile path is set (e.g. test1/test2)."); 
+        SetFreeArgTitle(1, "<ATTRIBUTE>", "NAME=VALUE"); 
+    } 
+ 
+    TString Base; 
+    TString Name; 
+    THashMap<TString, TString> Attributes; 
+ 
+    virtual void Parse(TConfig& config) override { 
+        TClientCommand::Parse(config); 
+ 
         std::tie(Base, Name) = SplitPath(config, config.ParseResult->GetFreeArgs()[0]);
-
-        for (ui32 i = 1; i < config.ParseResult->GetFreeArgCount(); ++i) {
-            TString attr = config.ParseResult->GetFreeArgs()[i];
-            TVector<TString> items = StringSplitter(attr).Split('=').ToList<TString>();
-            if (items.size() != 2) {
-                Cerr << "Bad format in attribute '" + attr + "'";
-                exit(1);
-            }
-
-            const TString& key = items.at(0);
+ 
+        for (ui32 i = 1; i < config.ParseResult->GetFreeArgCount(); ++i) { 
+            TString attr = config.ParseResult->GetFreeArgs()[i]; 
+            TVector<TString> items = StringSplitter(attr).Split('=').ToList<TString>(); 
+            if (items.size() != 2) { 
+                Cerr << "Bad format in attribute '" + attr + "'"; 
+                exit(1); 
+            } 
+ 
+            const TString& key = items.at(0); 
             if (key.size() > TUserAttributesLimits::MaxNameLen) {
-                Cerr << "Key '" << key << "' too long"
+                Cerr << "Key '" << key << "' too long" 
                      << ", max: " << TUserAttributesLimits::MaxNameLen
-                     << ", actual: " << key.size() << Endl;
-                exit(1);
-            }
-
-            const TString& value = items.at(1);
+                     << ", actual: " << key.size() << Endl; 
+                exit(1); 
+            } 
+ 
+            const TString& value = items.at(1); 
             if (value.size() > TUserAttributesLimits::MaxValueLen) {
-                Cerr << "Value '" << value << "' too long"
+                Cerr << "Value '" << value << "' too long" 
                      << ", max: " << TUserAttributesLimits::MaxValueLen
-                     << ", actual: " << value.size() << Endl;
-                exit(1);
-            }
-
-            if (Attributes.contains(key)) {
-                Cerr << "Duplicate value for key: " << key << Endl;
-            }
-
-            Attributes[key] = value;
-        }
-    }
-
-    virtual int Run(TConfig& config) override {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        NKikimrClient::TSchemeOperation& record(request->Record);
-
-        auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
+                     << ", actual: " << value.size() << Endl; 
+                exit(1); 
+            } 
+ 
+            if (Attributes.contains(key)) { 
+                Cerr << "Duplicate value for key: " << key << Endl; 
+            } 
+ 
+            Attributes[key] = value; 
+        } 
+    } 
+ 
+    virtual int Run(TConfig& config) override { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        NKikimrClient::TSchemeOperation& record(request->Record); 
+ 
+        auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme(); 
         modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
-        modifyScheme.SetWorkingDir(Base);
-
-        auto& alter = *modifyScheme.MutableAlterUserAttributes();
-        alter.SetPathName(Name);
-        auto& attributes = *alter.MutableUserAttributes();
-        attributes.Reserve(Attributes.size());
-        for (const auto& kv : Attributes) {
-            auto& attribute = *attributes.Add();
-            attribute.SetKey(kv.first);
-            attribute.SetValue(kv.second);
-        }
-
-        return MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request,
-            [](const NMsgBusProxy::TBusResponse& response) -> int {
-                if (response.Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-                    Cerr << ToCString(static_cast<NMsgBusProxy::EResponseStatus>(response.Record.GetStatus())) << " " << response.Record.GetErrorReason() << Endl;
-                    return 1;
-                }
-                return 0;
-            }
-        );
-    }
-};
-
+        modifyScheme.SetWorkingDir(Base); 
+ 
+        auto& alter = *modifyScheme.MutableAlterUserAttributes(); 
+        alter.SetPathName(Name); 
+        auto& attributes = *alter.MutableUserAttributes(); 
+        attributes.Reserve(Attributes.size()); 
+        for (const auto& kv : Attributes) { 
+            auto& attribute = *attributes.Add(); 
+            attribute.SetKey(kv.first); 
+            attribute.SetValue(kv.second); 
+        } 
+ 
+        return MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request, 
+            [](const NMsgBusProxy::TBusResponse& response) -> int { 
+                if (response.Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) { 
+                    Cerr << ToCString(static_cast<NMsgBusProxy::EResponseStatus>(response.Record.GetStatus())) << " " << response.Record.GetErrorReason() << Endl; 
+                    return 1; 
+                } 
+                return 0; 
+            } 
+        ); 
+    } 
+}; 
+ 
 class TClientCommandSchemaUserAttributeDel: public TClientCommand {
     using TUserAttributesLimits = NSchemeShard::TUserAttributesLimits;
 
@@ -1245,17 +1245,17 @@ public:
     }
 };
 
-class TClientCommandSchemaUserAttribute: public TClientCommandTree {
-public:
-    TClientCommandSchemaUserAttribute()
-        : TClientCommandTree("user-attribute", { "ua" }, "User attribute operations")
-    {
+class TClientCommandSchemaUserAttribute: public TClientCommandTree { 
+public: 
+    TClientCommandSchemaUserAttribute() 
+        : TClientCommandTree("user-attribute", { "ua" }, "User attribute operations") 
+    { 
         AddCommand(std::make_unique<TClientCommandSchemaUserAttributeGet>());
         AddCommand(std::make_unique<TClientCommandSchemaUserAttributeSet>());
         AddCommand(std::make_unique<TClientCommandSchemaUserAttributeDel>());
-    }
-};
-
+    } 
+}; 
+ 
 TClientCommandSchemaLite::TClientCommandSchemaLite()
     : TClientCommandTree("schema", {}, "Schema operations")
 {

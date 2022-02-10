@@ -1,15 +1,15 @@
 #include "operation_id.h"
 
 #include <google/protobuf/message.h>
-
+ 
 #include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/uri/uri.h>
-
+ 
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>
 
 namespace NKikimr {
-namespace NOperationId {
+namespace NOperationId { 
 
 using namespace NUri;
 
@@ -33,12 +33,12 @@ TString ProtoToString(const Ydb::TOperationId& proto) {
         case Ydb::TOperationId::CMS_REQUEST:
             res << "ydb://cmsrequest";
             break;
-        case Ydb::TOperationId::EXPORT:
-            res << "ydb://export";
-            break;
-        case Ydb::TOperationId::IMPORT:
-            res << "ydb://import";
-            break;
+        case Ydb::TOperationId::EXPORT: 
+            res << "ydb://export"; 
+            break; 
+        case Ydb::TOperationId::IMPORT: 
+            res << "ydb://import"; 
+            break; 
         case Ydb::TOperationId::BUILD_INDEX:
             res << "ydb://buildindex";
             break;
@@ -83,16 +83,16 @@ TString ProtoToString(const Ydb::TOperationId& proto) {
     return res.Str();
 }
 
-TOperationId::TOperationId() {
-    SetKind(Ydb::TOperationId::UNUSED);
-}
-
-TOperationId::TOperationId(const TString &string, bool allowEmpty) {
-    if (allowEmpty && string.empty()) {
-        SetKind(Ydb::TOperationId::UNUSED);
-        return;
-    }
-
+TOperationId::TOperationId() { 
+    SetKind(Ydb::TOperationId::UNUSED); 
+} 
+ 
+TOperationId::TOperationId(const TString &string, bool allowEmpty) { 
+    if (allowEmpty && string.empty()) { 
+        SetKind(Ydb::TOperationId::UNUSED); 
+        return; 
+    } 
+ 
     TUri uri;
     TState::EParsed er = uri.Parse(string, TFeature::FeaturesDefault | TFeature::FeatureSchemeFlexible);
     if (er != TState::ParsedOK) {
@@ -104,15 +104,15 @@ TOperationId::TOperationId(const TString &string, bool allowEmpty) {
         ythrow yexception() << "Invalid path length";
     }
 
-    int kind;
+    int kind; 
     if (!TryFromString(path, kind)) {
         ythrow yexception() << "Unable to cast \"kind\" field: " << path;
     }
 
-    if (!EKind_IsValid(kind)) {
-        ythrow yexception() << "Invalid operation kind: " << kind;
-    }
-
+    if (!EKind_IsValid(kind)) { 
+        ythrow yexception() << "Invalid operation kind: " << kind; 
+    } 
+ 
     SetKind(static_cast<Ydb::TOperationId::EKind>(kind));
 
     const TString& query = uri.PrintS(TField::FlagQuery);
@@ -136,40 +136,40 @@ const TVector<const TString*>& TOperationId::GetValue(const TString &key) const 
     ythrow yexception() << "Unable to find key: " << key;
 }
 
-TString TOperationId::GetSubKind() const {
-    auto it = Index_.find("kind");
-    if (it == Index_.end()) {
-        return TString();
-    }
-
-    if (it->second.size() != 1) {
-        ythrow yexception() << "Unable to retreive sub-kind";
-    }
-
-    return *it->second.at(0);
-}
-
+TString TOperationId::GetSubKind() const { 
+    auto it = Index_.find("kind"); 
+    if (it == Index_.end()) { 
+        return TString(); 
+    } 
+ 
+    if (it->second.size() != 1) { 
+        ythrow yexception() << "Unable to retreive sub-kind"; 
+    } 
+ 
+    return *it->second.at(0); 
+} 
+ 
 void AddOptionalValue(Ydb::TOperationId& proto, const TString& key, const TString& value) {
     auto data = proto.AddData();
     data->SetKey(key);
     data->SetValue(value);
 }
 
-Ydb::TOperationId::EKind ParseKind(const TStringBuf value) {
-    if (value.StartsWith("export")) {
-        return Ydb::TOperationId::EXPORT;
-    }
-
-    if (value.StartsWith("import")) {
-        return Ydb::TOperationId::IMPORT;
-    }
-
+Ydb::TOperationId::EKind ParseKind(const TStringBuf value) { 
+    if (value.StartsWith("export")) { 
+        return Ydb::TOperationId::EXPORT; 
+    } 
+ 
+    if (value.StartsWith("import")) { 
+        return Ydb::TOperationId::IMPORT; 
+    } 
+ 
     if (value.StartsWith("buildindex")) {
         return Ydb::TOperationId::BUILD_INDEX;
     }
 
-    return Ydb::TOperationId::UNUSED;
-}
-
-} // namespace NOperationId
+    return Ydb::TOperationId::UNUSED; 
+} 
+ 
+} // namespace NOperationId 
 } // namespace NKikimr

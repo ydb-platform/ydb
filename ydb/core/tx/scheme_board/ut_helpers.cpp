@@ -1,45 +1,45 @@
-#include "ut_helpers.h"
-
-namespace NKikimr {
-namespace NSchemeBoard {
-
+#include "ut_helpers.h" 
+ 
+namespace NKikimr { 
+namespace NSchemeBoard { 
+ 
 NKikimrScheme::TEvDescribeSchemeResult GenerateDescribe(
-    const TString& path,
+    const TString& path, 
     TPathId pathId,
     ui64 version,
     TDomainId domainId
-) {
+) { 
     NKikimrScheme::TEvDescribeSchemeResult describeSchemeResult;
-
-    describeSchemeResult.SetPath(path);
+ 
+    describeSchemeResult.SetPath(path); 
     describeSchemeResult.SetPathId(pathId.LocalPathId);
     describeSchemeResult.SetPathOwnerId(pathId.OwnerId);
-    describeSchemeResult.MutablePathDescription()->MutableSelf()->SetPathVersion(version);
-
+    describeSchemeResult.MutablePathDescription()->MutableSelf()->SetPathVersion(version); 
+ 
     if (domainId) {
         auto domainKey = describeSchemeResult.MutablePathDescription()->MutableDomainDescription()->MutableDomainKey();
         domainKey->SetSchemeShard(domainId.OwnerId);
         domainKey->SetPathId(domainId.LocalPathId);
     }
 
-    return describeSchemeResult;
-}
-
-TSchemeBoardEvents::TEvUpdate* GenerateUpdate(
+    return describeSchemeResult; 
+} 
+ 
+TSchemeBoardEvents::TEvUpdate* GenerateUpdate( 
     const NKikimrScheme::TEvDescribeSchemeResult& describe,
-    ui64 owner,
-    ui64 generation,
-    bool isDeletion
-) {
-    auto* update = new TSchemeBoardEvents::TEvUpdateBuilder(owner, generation, describe, isDeletion);
-
-    if (!isDeletion) {
-        update->SetDescribeSchemeResult(describe);
-    }
-
-    return update;
-}
-
+    ui64 owner, 
+    ui64 generation, 
+    bool isDeletion 
+) { 
+    auto* update = new TSchemeBoardEvents::TEvUpdateBuilder(owner, generation, describe, isDeletion); 
+ 
+    if (!isDeletion) { 
+        update->SetDescribeSchemeResult(describe); 
+    } 
+ 
+    return update; 
+} 
+ 
 TVector<TCombinationsArgs> GenerateCombinationsDomainRoot(TString path, ui64 gssOwnerID, TVector<ui64> tenantsOwners) {
     TVector<TCombinationsArgs> combinations;
 
@@ -144,5 +144,5 @@ TVector<TCombinationsArgs> GenerateCombinationsMigratedPath(TString path,
     return combinations;
 }
 
-} // NSchemeBoard
-} // NKikimr
+} // NSchemeBoard 
+} // NKikimr 

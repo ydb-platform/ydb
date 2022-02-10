@@ -1931,7 +1931,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.InitRoot();
         annoyingClient.MkDir("/dc-1", "Dir");
 
-        for (int colCount = 1; colCount < 100; ++colCount) {
+        for (int colCount = 1; colCount < 100; ++colCount) { 
             NKikimrSchemeOp::TTableDescription schema;
             TString name = "Table_" + ToString(colCount);
             schema.SetName(name);
@@ -1943,8 +1943,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             }
             schema.AddKeyColumnNames("col_0");
 
-            while (annoyingClient.CreateTable("/dc-1/Dir", schema) != NMsgBusProxy::MSTATUS_OK) {}
-            while (annoyingClient.CreateTable("/dc-1/Dir", " Name: '" + name + "_Copy' CopyFromTable: '/dc-1/Dir/" + name + "'") != NMsgBusProxy::MSTATUS_OK) {}
+            while (annoyingClient.CreateTable("/dc-1/Dir", schema) != NMsgBusProxy::MSTATUS_OK) {} 
+            while (annoyingClient.CreateTable("/dc-1/Dir", " Name: '" + name + "_Copy' CopyFromTable: '/dc-1/Dir/" + name + "'") != NMsgBusProxy::MSTATUS_OK) {} 
 
             auto fnGetColumns = [](const NMsgBusProxy::TBusResponse* lsRes) {
                 UNIT_ASSERT(lsRes);
@@ -3161,7 +3161,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(AutoSplitMergeQueue) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port).SetEnableMvcc(false));
+        TServer cleverServer = TServer(TServerSettings(port).SetEnableMvcc(false)); 
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_ERROR);

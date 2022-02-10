@@ -2,7 +2,7 @@
 #include "kqp_ic_gateway_actors.h"
 
 #include <ydb/core/base/path.h>
-
+ 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 
@@ -25,7 +25,7 @@ std::pair<TNavigate::TEntry, TString> CreateNavigateEntry(const TString& path, c
     entry.Path = SplitPath(path);
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
     entry.SyncVersion = true;
-    entry.ShowPrivatePath = settings.WithPrivateTables_;
+    entry.ShowPrivatePath = settings.WithPrivateTables_; 
     return {entry, path};
 }
 
@@ -39,7 +39,7 @@ std::pair<TNavigate::TEntry, TString> CreateNavigateEntry(const std::pair<TIndex
     entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpList;
     entry.SyncVersion = true;
-    entry.ShowPrivatePath = settings.WithPrivateTables_;
+    entry.ShowPrivatePath = settings.WithPrivateTables_; 
     return {entry, pair.second};
 }
 
@@ -87,7 +87,7 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
     using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
     using EKind = NSchemeCache::TSchemeCacheNavigate::EKind;
 
-    auto message = ToString(entry.Status);
+    auto message = ToString(entry.Status); 
 
     switch (entry.Status) {
         case EStatus::Ok:
@@ -106,7 +106,7 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
         case EStatus::RedirectLookupError:
             return ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, message));
         default:
-            return ResultFromError<TResult>(ToString(entry.Status));
+            return ResultFromError<TResult>(ToString(entry.Status)); 
     }
 
     YQL_ENSURE(entry.Kind == EKind::KindTable || entry.Kind == EKind::KindOlapTable);

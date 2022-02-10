@@ -62,8 +62,8 @@ struct TPDiskIDHash {
 
 } // NCms
 } // NKikimr
-
-template<>
-inline void Out<NKikimr::NCms::TPDiskID>(IOutputStream& o, const NKikimr::NCms::TPDiskID& x) {
-    o << x.ToString();
-}
+ 
+template<> 
+inline void Out<NKikimr::NCms::TPDiskID>(IOutputStream& o, const NKikimr::NCms::TPDiskID& x) { 
+    o << x.ToString(); 
+} 

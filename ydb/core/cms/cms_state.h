@@ -5,8 +5,8 @@
 
 #include <util/generic/set.h>
 #include <util/generic/string.h>
-#include <util/string/builder.h>
-#include <util/string/join.h>
+#include <util/string/builder.h> 
+#include <util/string/join.h> 
 
 namespace NKikimr {
 namespace NCms {
@@ -15,14 +15,14 @@ struct TWalleTaskInfo {
     TString TaskId;
     TString RequestId;
     TSet<TString> Permissions;
-
-    TString ToString() const {
-        return TStringBuilder() << "{"
-            << " TaskId: " << TaskId
-            << " RequestId: " << RequestId
-            << " Permissions: [" << JoinSeq(", ", Permissions) << "]"
-            << " }";
-    }
+ 
+    TString ToString() const { 
+        return TStringBuilder() << "{" 
+            << " TaskId: " << TaskId 
+            << " RequestId: " << RequestId 
+            << " Permissions: [" << JoinSeq(", ", Permissions) << "]" 
+            << " }"; 
+    } 
 };
 
 struct TCmsState : public TAtomicRefCount<TCmsState> {

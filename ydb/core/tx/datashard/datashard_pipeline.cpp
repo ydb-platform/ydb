@@ -111,9 +111,9 @@ bool TPipeline::CanRunOp(const TOperation &op) const {
     if (!op.Exists())
         return false;
 
-    const TSchemaOperation *schemaOp = Self->TransQueue.FindSchemaTx(op.GetTxId());
+    const TSchemaOperation *schemaOp = Self->TransQueue.FindSchemaTx(op.GetTxId()); 
     if (schemaOp) {
-        if (schemaOp->Type == TSchemaOperation::ETypeDrop && !Self->CanDrop()) {
+        if (schemaOp->Type == TSchemaOperation::ETypeDrop && !Self->CanDrop()) { 
             return false;
         }
     }
@@ -768,13 +768,13 @@ void TPipeline::RemoveTx(TStepOrder stepTxId) {
     ForgetTx(stepTxId.TxId);
 }
 
-const TSchemaOperation* TPipeline::FindSchemaTx(ui64 txId) const {
+const TSchemaOperation* TPipeline::FindSchemaTx(ui64 txId) const { 
     return Self->TransQueue.FindSchemaTx(txId);
 }
 
 void TPipeline::CompleteSchemaTx(NIceDb::TNiceDb& db, ui64 txId) {
     Y_VERIFY(txId);
-    TSchemaOperation * op = Self->TransQueue.FindSchemaTx(txId);
+    TSchemaOperation * op = Self->TransQueue.FindSchemaTx(txId); 
     if (!op)
         return;
 
@@ -1005,7 +1005,7 @@ void TPipeline::UpdateSchemeTxBody(ui64 txId, const TStringBuf &txBody, TTransac
     Self->TransQueue.UpdateTxBody(db, txId, txBody);
 }
 
-void TPipeline::ProposeSchemeTx(const TSchemaOperation &op,
+void TPipeline::ProposeSchemeTx(const TSchemaOperation &op, 
                                 TTransactionContext &txc)
 {
     NIceDb::TNiceDb db(txc.DB);
@@ -1141,21 +1141,21 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     tx->SetTxBody(rec.GetTxBody());
     tx->SetCookie(ev->Cookie);
 
-    auto malformed = [&](const TStringBuf txType, const TString& txBody) {
-        const TString error = TStringBuilder() << "Malformed " << txType << " tx"
-            << " at tablet " << Self->TabletID()
-            << " txId " << tx->GetTxId()
-            << " ssId " << tx->GetSchemeShardId()
-            << " parsed tx body " << txBody;
-
-        tx->SetAbortedFlag();
+    auto malformed = [&](const TStringBuf txType, const TString& txBody) { 
+        const TString error = TStringBuilder() << "Malformed " << txType << " tx" 
+            << " at tablet " << Self->TabletID() 
+            << " txId " << tx->GetTxId() 
+            << " ssId " << tx->GetSchemeShardId() 
+            << " parsed tx body " << txBody; 
+ 
+        tx->SetAbortedFlag(); 
         tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(
             rec.GetTxKind(), Self->TabletID(), tx->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
-        tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT, error);
-
-        LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
-    };
-
+        tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT, error); 
+ 
+        LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error); 
+    }; 
+ 
     if (tx->IsSchemeTx()) {
         Y_VERIFY(rec.HasSchemeShardId());
         Y_VERIFY(rec.HasProcessingParams());
@@ -1193,16 +1193,16 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             tx->SetReadOnlyFlag();
             tx->SetGlobalReaderFlag();
         }
-    } else if (tx->IsDistributedEraseTx()) {
-        if (!tx->BuildDistributedEraseTx()) {
+    } else if (tx->IsDistributedEraseTx()) { 
+        if (!tx->BuildDistributedEraseTx()) { 
             malformed(TStringBuf("distributed erase"), tx->GetDistributedEraseTx()->GetBody().ShortDebugString());
-            return tx;
-        }
-
-        tx->SetGlobalWriterFlag();
-        if (tx->GetDistributedEraseTx()->HasDependents()) {
-            tx->SetGlobalReaderFlag();
-        }
+            return tx; 
+        } 
+ 
+        tx->SetGlobalWriterFlag(); 
+        if (tx->GetDistributedEraseTx()->HasDependents()) { 
+            tx->SetGlobalReaderFlag(); 
+        } 
     } else if (tx->IsCommitWritesTx()) {
         if (!tx->BuildCommitWritesTx()) {
             malformed(TStringBuf("commit writes"), tx->GetCommitWritesTx()->GetBody().ShortDebugString());

@@ -8,49 +8,49 @@ using namespace NSchemeShard;
 
 class TModifyACL: public ISubOperationBase {
 private:
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
+    const TOperationId OperationId; 
+    const TTxTransaction Transaction; 
 
 public:
-    TModifyACL(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
+    TModifyACL(TOperationId id, const TTxTransaction& tx) 
+        : OperationId(id) 
+        , Transaction(tx) 
+    { 
+    } 
+ 
     TModifyACL(TOperationId id)
         : OperationId(id)
-    {
-    }
+    { 
+    } 
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = Transaction.GetModifyACL().GetName();
+        const TString& parentPathStr = Transaction.GetWorkingDir(); 
+        const TString& name = Transaction.GetModifyACL().GetName(); 
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TModifyACL Propose"
-                         << ", path: " << parentPathStr << "/" << name
+                         << ", path: " << parentPathStr << "/" << name 
                          << ", operationId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        const TString acl = Transaction.GetModifyACL().GetDiffACL();
-
+        const TString acl = Transaction.GetModifyACL().GetDiffACL(); 
+ 
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks 
+                .NotEmpty() 
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsValidACL(acl);
+                .IsCommonSensePath() 
+                .IsValidACL(acl); 
 
             if (!checks) {
                 TString explain = TStringBuilder() << "path table fail checks"
@@ -61,9 +61,9 @@ public:
             }
         }
 
-        TString errStr;
-
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+        TString errStr; 
+ 
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -107,7 +107,7 @@ public:
             context.SS->PersistPathDirAlterVersion(db, path.Base());
 
             context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
-
+ 
             TPath parent = path.Parent(); // we show owner in children listing, so we have to update it
             ++parent.Base()->DirAlterVersion;
             context.SS->PersistPathDirAlterVersion(db, parent.Base());
@@ -115,16 +115,16 @@ public:
             context.OnComplete.PublishToSchemeBoard(OperationId, parent.Base()->PathId);
 
             context.OnComplete.UpdateTenants({path.Base()->PathId});
-        }
+        } 
 
         context.OnComplete.DoneOperation(OperationId);
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TModifyACL");
-    }
-
+    void AbortPropose(TOperationContext&) override { 
+        Y_FAIL("no AbortPropose for TModifyACL"); 
+    } 
+ 
     void ProgressState(TOperationContext&) override {
         Y_FAIL("no progress state for modify acl");
     }
@@ -139,10 +139,10 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateModifyACL(TOperationId id, const TTxTransaction& tx) {
-    return new TModifyACL(id, tx);
-}
-
+ISubOperationBase::TPtr CreateModifyACL(TOperationId id, const TTxTransaction& tx) { 
+    return new TModifyACL(id, tx); 
+} 
+ 
 ISubOperationBase::TPtr CreateModifyACL(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid);
     return new TModifyACL(id);

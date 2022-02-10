@@ -1,8 +1,8 @@
-LIBRARY()
-
-OWNER(g:kikimr)
-
-PEERDIR(
+LIBRARY() 
+ 
+OWNER(g:kikimr) 
+ 
+PEERDIR( 
     library/cpp/testing/unittest
     ydb/core/base
     ydb/core/blockstore/core
@@ -20,10 +20,10 @@ PEERDIR(
     ydb/core/tx/tx_allocator
     ydb/core/tx/tx_proxy
     ydb/public/lib/scheme_types
-)
-
-SRCS(
-    export_reboots_common.cpp
+) 
+ 
+SRCS( 
+    export_reboots_common.cpp 
     failing_mtpq.cpp
     test_env.cpp
     test_env.h
@@ -31,8 +31,8 @@ SRCS(
     ls_checks.h
     helpers.cpp
     helpers.h
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-END()
+END() 

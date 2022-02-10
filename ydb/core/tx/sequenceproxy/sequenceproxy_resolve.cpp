@@ -59,7 +59,7 @@ namespace NSequenceProxy {
                     InitPath(entry, path);
                 },
                 Path);
-            entry.ShowPrivatePath = true;
+            entry.ShowPrivatePath = true; 
             entry.SyncVersion = SyncVersion;
             Send(schemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(req.Release()));
             Become(&TThis::StateWork);

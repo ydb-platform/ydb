@@ -2,7 +2,7 @@
 
 #include <grpc++/support/byte_buffer.h>
 #include <grpc++/support/slice.h>
-
+ 
 #include <library/cpp/grpc/server/grpc_request_base.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -44,7 +44,7 @@ namespace NGRpcService {
 
 using TYdbIssueMessageType = Ydb::Issue::IssueMessage;
 
-std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
+std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path); 
 std::pair<TString, TString> SplitPath(const TString& path);
 void RefreshToken(const TString& token, const TString& database, const TActorContext& ctx, TActorId id);
 
@@ -57,7 +57,7 @@ struct TRpcServices {
         EvDropTable,
         EvCopyTable,
         EvCopyTables,
-        EvListDirectory,
+        EvListDirectory, 
         EvRenameTables,
         EvDescribeTable,
         EvDescribePath,
@@ -101,9 +101,9 @@ struct TRpcServices {
         EvExperimentalStreamQuery,
         EvStreamPQWrite,
         EvStreamPQRead,
-        EvPQReadInfo,
-        EvListOperations,
-        EvExportToYt,
+        EvPQReadInfo, 
+        EvListOperations, 
+        EvExportToYt, 
         EvDiscoverPQClusters,
         EvBulkUpsert,
         EvWhoAmI,
@@ -117,7 +117,7 @@ struct TRpcServices {
         EvKikhouseCreateSnapshot,
         EvKikhouseRefreshSnapshot,
         EvKikhouseDiscardSnapshot,
-        EvExportToS3,
+        EvExportToS3, 
         EvSelfCheck,
         EvStreamExecuteScanQuery,
         EvPQDropTopic,
@@ -126,17 +126,17 @@ struct TRpcServices {
         EvPQDescribeTopic,
         EvPQAddReadRule,
         EvPQRemoveReadRule,
-        EvGetDiskSpaceUsage,
+        EvGetDiskSpaceUsage, 
         EvStopServingDatabase,
         EvCoordinationSession,
-        EvImportFromS3,
+        EvImportFromS3, 
         EvLongTxBegin,
         EvLongTxCommit,
         EvLongTxRollback,
         EvLongTxWrite,
         EvLongTxRead,
         EvExplainYqlScript,
-        EvImportData,
+        EvImportData, 
         EvAnalyticsReserved,
         EvDataStreamsCreateStream,
         EvDataStreamsDeleteStream,
@@ -328,8 +328,8 @@ public:
     virtual const NGrpc::TAuthState& GetAuthState() const = 0;
     virtual void ReplyUnauthenticated(const TString& msg = "") = 0;
     virtual void ReplyUnavaliable() = 0;
-
-    virtual bool Validate(TString& error) = 0;
+ 
+    virtual bool Validate(TString& error) = 0; 
     virtual void UseDatabase(const TString& database) = 0;
 
     // This method allows to set hook for unary call.
@@ -475,10 +475,10 @@ public:
         IssueManager_.RaiseIssues(issues);
     }
 
-    bool Validate(TString&) override {
-        return true;
-    }
-
+    bool Validate(TString&) override { 
+        return true; 
+    } 
+ 
     void UseDatabase(const TString& database) override {
         Y_UNUSED(database);
     }
@@ -634,10 +634,10 @@ public:
         return Ctx_->GetPeerName();
     }
 
-    bool Validate(TString&) override {
-        return true;
-    }
-
+    bool Validate(TString&) override { 
+        return true; 
+    } 
+ 
     void UseDatabase(const TString& database) override {
         Ctx_->UseDatabase(database);
     }
@@ -786,7 +786,7 @@ public:
 };
 
 template<ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>
-class TGRpcRequestWrapperImpl :
+class TGRpcRequestWrapperImpl : 
     public std::conditional_t<IsOperation,
         TGrpcResponseSenderImpl<TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>,
         IRequestNoOpCtx>,
@@ -859,10 +859,10 @@ public:
         return ToMaybe(Ctx_->GetPeerMetaValues(key));
     }
 
-    bool Validate(TString&) override {
-        return true;
-    }
-
+    bool Validate(TString&) override { 
+        return true; 
+    } 
+ 
     void UseDatabase(const TString& database) override {
         Ctx_->UseDatabase(database);
     }
@@ -871,8 +871,8 @@ public:
         TResponse* resp = CreateResponseMessage();
         TCommonResponseFiller<TResp, TDerived::IsOp>::Fill(*resp, IssueManager.GetIssues(), CostInfo, Ydb::StatusIds::UNAVAILABLE);
         Reply(resp, Ydb::StatusIds::UNAVAILABLE);
-    }
-
+    } 
+ 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         TResponse* resp = CreateResponseMessage();
         TCommonResponseFiller<TResponse, TDerived::IsOp>::Fill(*resp, IssueManager.GetIssues(), CostInfo, status);
@@ -1072,10 +1072,10 @@ template <typename TReq, typename TResp>
 using TGrpcRequestNoOperationCall = TGrpcRequestCall<TReq, TResp, false>;
 
 template<ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, TRateLimiterMode RlMode = TRateLimiterMode::Off>
-class TGRpcRequestWrapper :
+class TGRpcRequestWrapper : 
     public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation,
         TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>> {
-public:
+public: 
     static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
@@ -1083,7 +1083,7 @@ public:
     TGRpcRequestWrapper(NGrpc::IRequestContextBase* ctx)
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation,
               TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx)
-    { }
+    { } 
 
     TRateLimiterMode GetRlMode() const override {
         return RateLimitMode;
@@ -1092,8 +1092,8 @@ public:
     bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
         return false;
     }
-};
-
+}; 
+ 
 template<ui32 TRpcId, typename TReq, typename TResp, bool IsOperation = true, TRateLimiterMode RlMode = TRateLimiterMode::Off>
 class TGRpcRequestWrapperNoAuth :
     public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TGRpcRequestWrapperNoAuth<TRpcId, TReq, TResp, IsOperation, RlMode>> {
@@ -1121,17 +1121,17 @@ public:
 };
 
 template<ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, TRateLimiterMode RlMode = TRateLimiterMode::Off>
-class TGRpcRequestValidationWrapper :
+class TGRpcRequestValidationWrapper : 
     public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TGRpcRequestValidationWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>> {
-
-public:
+ 
+public: 
     static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
     TGRpcRequestValidationWrapper(NGrpc::IRequestContextBase* ctx)
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TGRpcRequestValidationWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx)
-    { }
-
+    { } 
+ 
     TRateLimiterMode GetRlMode() const override {
         return RateLimitMode;
     }
@@ -1140,10 +1140,10 @@ public:
         return false;
     }
 
-    bool Validate(TString& error) override {
-        return this->GetProtoRequest()->validate(error);
-    }
-};
-
+    bool Validate(TString& error) override { 
+        return this->GetProtoRequest()->validate(error); 
+    } 
+}; 
+ 
 } // namespace NGRpcService
 } // namespace NKikimr

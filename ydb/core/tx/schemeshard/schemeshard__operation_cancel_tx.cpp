@@ -6,7 +6,7 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TTxCancelTx: public ISubOperationBase {
+class TTxCancelTx: public ISubOperationBase { 
 private:
     TEvSchemeShard::TEvCancelTx::TPtr Event;
 
@@ -19,37 +19,37 @@ public:
         const auto& evRecord = Event->Get()->Record;
 
         Y_VERIFY(evRecord.HasTxId());
-        Y_VERIFY(evRecord.HasTargetTxId());
+        Y_VERIFY(evRecord.HasTargetTxId()); 
 
         LOG_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                  "Execute cancel tx txid #%" PRIu64,
-                  evRecord.GetTargetTxId());
+                  "Execute cancel tx txid #%" PRIu64, 
+                  evRecord.GetTargetTxId()); 
 
         auto proposeResult = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, evRecord.GetTxId(), context.SS->TabletID());
 
         THolder<TEvSchemeShard::TEvCancelTxResult> result = MakeHolder<TEvSchemeShard::TEvCancelTxResult>(evRecord.GetTargetTxId(), evRecord.GetTxId());
 
-        TOperationId targetOpId = TOperationId(evRecord.GetTargetTxId(), 0);
+        TOperationId targetOpId = TOperationId(evRecord.GetTargetTxId(), 0); 
 
-        auto found = context.SS->FindTx(targetOpId);
+        auto found = context.SS->FindTx(targetOpId); 
         if (!found) {
             result->Record.SetStatus(NKikimrScheme::StatusTxIdNotExists);
-            result->Record.SetResult("Transaction not found");
-            context.OnComplete.Send(Event->Sender, std::move(result), evRecord.GetTxId());
+            result->Record.SetResult("Transaction not found"); 
+            context.OnComplete.Send(Event->Sender, std::move(result), evRecord.GetTxId()); 
             return proposeResult;
         }
 
         TTxState& txState = *found;
-        if (txState.TxType != TTxState::TxBackup && txState.TxType != TTxState::TxRestore) {
+        if (txState.TxType != TTxState::TxBackup && txState.TxType != TTxState::TxRestore) { 
             result->Record.SetStatus(NKikimrScheme::StatusTxIsNotCancellable);
-            result->Record.SetResult("Transaction is not cancellable");
-            context.OnComplete.Send(Event->Sender, std::move(result), evRecord.GetTxId());
+            result->Record.SetResult("Transaction is not cancellable"); 
+            context.OnComplete.Send(Event->Sender, std::move(result), evRecord.GetTxId()); 
             return proposeResult;
         }
 
-        if (txState.State == TTxState::Aborting) {
+        if (txState.State == TTxState::Aborting) { 
             result->Record.SetStatus(NKikimrScheme::StatusAccepted);
-            result->Record.SetResult("Tx is cancelling at SchemeShard already");
+            result->Record.SetResult("Tx is cancelling at SchemeShard already"); 
             context.OnComplete.Send(Event->Sender, std::move(result), evRecord.GetTxId());
             return proposeResult;
         }
@@ -57,28 +57,28 @@ public:
         NIceDb::TNiceDb db(context.Txc.DB);
 
         /* Let's abort at the final stage of the transaction */
-        txState.Cancel = true;
-        context.SS->PersistCancelTx(db, targetOpId, txState);
+        txState.Cancel = true; 
+        context.SS->PersistCancelTx(db, targetOpId, txState); 
 
         result->Record.SetStatus(NKikimrScheme::StatusAccepted);
         result->Record.SetResult("Cancelled at SchemeShard");
-        context.OnComplete.Send(Event->Sender, std::move(result), evRecord.GetTxId());
+        context.OnComplete.Send(Event->Sender, std::move(result), evRecord.GetTxId()); 
 
-        context.OnComplete.ActivateTx(targetOpId);
+        context.OnComplete.ActivateTx(targetOpId); 
         return proposeResult;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TTxCancelTx");
-    }
-
+    void AbortPropose(TOperationContext&) override { 
+        Y_FAIL("no AbortPropose for TTxCancelTx"); 
+    } 
+ 
     void ProgressState(TOperationContext&) override {
-        Y_FAIL("no progress state for cancel tx");
+        Y_FAIL("no progress state for cancel tx"); 
         return;
     }
 
     void AbortUnsafe(TTxId, TOperationContext&) override {
-        Y_FAIL("no AbortUnsafe for cancel tx");
+        Y_FAIL("no AbortUnsafe for cancel tx"); 
     }
 };
 
@@ -90,7 +90,7 @@ namespace NSchemeShard {
 
 ISubOperationBase::TPtr CreateTxCancelTx(TEvSchemeShard::TEvCancelTx::TPtr ev)
 {
-    return new TTxCancelTx(ev);
+    return new TTxCancelTx(ev); 
 }
 
 }

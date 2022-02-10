@@ -4,7 +4,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
-namespace NOperationId {
+namespace NOperationId { 
 
 Y_UNIT_TEST_SUITE(OperationIdTest) {
     Y_UNIT_TEST(ConvertKindOnly) {
@@ -48,5 +48,5 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
     }
 }
 
-} // namespace NOperationId
+} // namespace NOperationId 
 } // namespace NKikimr

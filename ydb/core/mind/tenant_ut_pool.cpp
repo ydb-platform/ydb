@@ -1196,71 +1196,71 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
 
         CheckLabels(counters, TENANT1_1_NAME, "slot-1", attrs, monCfg);
     }
-
-    void TestState(
-            const TTenantTestConfig::TStaticSlotConfig& staticSlot,
-            const TTenantTestConfig::TDynamicSlotConfig& dynamicSlot,
-            NKikimrTenantPool::EState expected) {
-
-        TTenantTestConfig config = {
-            // Domains {name, schemeshard {{ subdomain_names }}}
-            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME }}} }},
-            HIVE_ID, // HiveId
-            true, // FakeTenantSlotBroker
-            true, // FakeSchemeShard
-            false, // CreateConsole
-            {{{ {}, {}, "node-type" }}}, // Nodes
-            1 // DataCenterCount
-        };
-
-        if (staticSlot.Tenant) {
-            config.Nodes.back().TenantPoolConfig.StaticSlots.push_back(staticSlot);
-        } else if (dynamicSlot.Tenant) {
-            config.Nodes.back().TenantPoolConfig.DynamicSlots.push_back(dynamicSlot);
-        }
-
+ 
+    void TestState( 
+            const TTenantTestConfig::TStaticSlotConfig& staticSlot, 
+            const TTenantTestConfig::TDynamicSlotConfig& dynamicSlot, 
+            NKikimrTenantPool::EState expected) { 
+ 
+        TTenantTestConfig config = { 
+            // Domains {name, schemeshard {{ subdomain_names }}} 
+            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME }}} }}, 
+            HIVE_ID, // HiveId 
+            true, // FakeTenantSlotBroker 
+            true, // FakeSchemeShard 
+            false, // CreateConsole 
+            {{{ {}, {}, "node-type" }}}, // Nodes 
+            1 // DataCenterCount 
+        }; 
+ 
+        if (staticSlot.Tenant) { 
+            config.Nodes.back().TenantPoolConfig.StaticSlots.push_back(staticSlot); 
+        } else if (dynamicSlot.Tenant) { 
+            config.Nodes.back().TenantPoolConfig.DynamicSlots.push_back(dynamicSlot); 
+        } 
+ 
         TTenantTestRuntime runtime(config, {}, false);
-
+ 
         const TActorId& sender = runtime.Sender;
         const TActorId tenantPoolRoot = MakeTenantPoolRootID();
         const TActorId tenantPool = MakeTenantPoolID(runtime.GetNodeId(0), 0);
-
-        using TEvStatus = TEvTenantPool::TEvTenantPoolStatus;
-        using EState = NKikimrTenantPool::EState;
-
-        auto checker = [](auto ev, EState expectedState) {
-            UNIT_ASSERT(ev->Get());
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetSlots(0).GetState(), expectedState);
-        };
-
-        runtime.CreateTenantPool(0);
-
-        // Subscribe on root pool and wait until domain pool started
-        runtime.Send(new IEventHandle(tenantPoolRoot, sender, new TEvents::TEvSubscribe()));
-        checker(runtime.GrabEdgeEvent<TEvStatus>(sender), EState::TENANT_ASSIGNED);
-
-        // Get status from domain pool
-        runtime.Send(new IEventHandle(tenantPool, sender, new TEvTenantPool::TEvGetStatus(true)));
-        checker(runtime.GrabEdgeEvent<TEvStatus>(sender), expected);
-    }
-
-    Y_UNIT_TEST(TestStateStatic) {
-        TestState({TENANT1_1_NAME, {1, 1, 1}}, {}, NKikimrTenantPool::EState::TENANT_OK);
-    }
-
-    Y_UNIT_TEST(TestStateDynamic) {
-        TestState({}, {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_1_NAME, {1, 1, 1}}, NKikimrTenantPool::EState::TENANT_OK);
-    }
-
-    Y_UNIT_TEST(TestStateDynamicTenantUnknown) {
-        // After unsuccessful resolve on SS, tenant will be detached from slot, so state is unknown
-        TestState({}, {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_U_NAME, {1, 1, 1}}, NKikimrTenantPool::EState::STATE_UNKNOWN);
-    }
+ 
+        using TEvStatus = TEvTenantPool::TEvTenantPoolStatus; 
+        using EState = NKikimrTenantPool::EState; 
+ 
+        auto checker = [](auto ev, EState expectedState) { 
+            UNIT_ASSERT(ev->Get()); 
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetSlots(0).GetState(), expectedState); 
+        }; 
+ 
+        runtime.CreateTenantPool(0); 
+ 
+        // Subscribe on root pool and wait until domain pool started 
+        runtime.Send(new IEventHandle(tenantPoolRoot, sender, new TEvents::TEvSubscribe())); 
+        checker(runtime.GrabEdgeEvent<TEvStatus>(sender), EState::TENANT_ASSIGNED); 
+ 
+        // Get status from domain pool 
+        runtime.Send(new IEventHandle(tenantPool, sender, new TEvTenantPool::TEvGetStatus(true))); 
+        checker(runtime.GrabEdgeEvent<TEvStatus>(sender), expected); 
+    } 
+ 
+    Y_UNIT_TEST(TestStateStatic) { 
+        TestState({TENANT1_1_NAME, {1, 1, 1}}, {}, NKikimrTenantPool::EState::TENANT_OK); 
+    } 
+ 
+    Y_UNIT_TEST(TestStateDynamic) { 
+        TestState({}, {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_1_NAME, {1, 1, 1}}, NKikimrTenantPool::EState::TENANT_OK); 
+    } 
+ 
+    Y_UNIT_TEST(TestStateDynamicTenantUnknown) { 
+        // After unsuccessful resolve on SS, tenant will be detached from slot, so state is unknown 
+        TestState({}, {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_U_NAME, {1, 1, 1}}, NKikimrTenantPool::EState::STATE_UNKNOWN); 
+    } 
 }
 
 } //namespace NKikimr
-
-template <>
-void Out<NKikimrTenantPool::EState>(IOutputStream& o, NKikimrTenantPool::EState x) {
-    o << NKikimrTenantPool::EState_Name(x);
-}
+ 
+template <> 
+void Out<NKikimrTenantPool::EState>(IOutputStream& o, NKikimrTenantPool::EState x) { 
+    o << NKikimrTenantPool::EState_Name(x); 
+} 

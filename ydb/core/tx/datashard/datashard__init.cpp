@@ -21,18 +21,18 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->State = TShardState::Unknown;
         Self->LastLocalTid = Schema::MinLocalTid;
         Self->LastSeqno = 1;
-        Self->NextChangeRecordOrder = 1;
-        Self->LastChangeRecordGroup = 1;
+        Self->NextChangeRecordOrder = 1; 
+        Self->LastChangeRecordGroup = 1; 
         Self->TransQueue.Reset();
         Self->SnapshotManager.Reset();
-        Self->SchemaSnapshotManager.Reset();
-        Self->S3Uploads.Reset();
-        Self->S3Downloads.Reset();
+        Self->SchemaSnapshotManager.Reset(); 
+        Self->S3Uploads.Reset(); 
+        Self->S3Downloads.Reset(); 
 
-        Self->KillChangeSender(ctx);
-        Self->ChangesQueue.clear();
-        ChangeRecords.clear();
-
+        Self->KillChangeSender(ctx); 
+        Self->ChangesQueue.clear(); 
+        ChangeRecords.clear(); 
+ 
         bool done = ReadEverything(txc);
 
         if (done && Self->State != TShardState::Offline) {
@@ -102,22 +102,22 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
         }
     }
 
-    Self->CreateChangeSender(ctx);
-    Self->EnqueueChangeRecords(std::move(ChangeRecords));
-    Self->MaybeActivateChangeSender(ctx);
-
-    if (!Self->ChangesQueue) {
-        if (!Self->ChangeExchangeSplitter.Done()) {
-            Self->ChangeExchangeSplitter.DoSplit(ctx);
-        } else {
-            for (const auto dstTabletId : Self->ChangeSenderActivator.GetDstSet()) {
-                if (Self->SplitSrcSnapshotSender.Acked(dstTabletId)) {
-                    Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
-                }
-            }
-        }
-    }
-
+    Self->CreateChangeSender(ctx); 
+    Self->EnqueueChangeRecords(std::move(ChangeRecords)); 
+    Self->MaybeActivateChangeSender(ctx); 
+ 
+    if (!Self->ChangesQueue) { 
+        if (!Self->ChangeExchangeSplitter.Done()) { 
+            Self->ChangeExchangeSplitter.DoSplit(ctx); 
+        } else { 
+            for (const auto dstTabletId : Self->ChangeSenderActivator.GetDstSet()) { 
+                if (Self->SplitSrcSnapshotSender.Acked(dstTabletId)) { 
+                    Self->ChangeSenderActivator.DoSend(dstTabletId, ctx); 
+                } 
+            } 
+        } 
+    } 
+ 
     // Switch mvcc state if needed
     Self->CheckMvccStateChangeCanStart(ctx);
 }
@@ -153,17 +153,17 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::SplitSrcSnapshots);
         PRECHARGE_SYS_TABLE(Schema::SplitDstReceivedSnapshots);
         PRECHARGE_SYS_TABLE(Schema::Snapshots);
-        PRECHARGE_SYS_TABLE(Schema::S3Uploads);
-        PRECHARGE_SYS_TABLE(Schema::S3UploadedParts);
-        PRECHARGE_SYS_TABLE(Schema::S3Downloads);
-        PRECHARGE_SYS_TABLE(Schema::ChangeRecords);
-        PRECHARGE_SYS_TABLE(Schema::SrcChangeSenderActivations);
-        PRECHARGE_SYS_TABLE(Schema::DstChangeSenderActivations);
+        PRECHARGE_SYS_TABLE(Schema::S3Uploads); 
+        PRECHARGE_SYS_TABLE(Schema::S3UploadedParts); 
+        PRECHARGE_SYS_TABLE(Schema::S3Downloads); 
+        PRECHARGE_SYS_TABLE(Schema::ChangeRecords); 
+        PRECHARGE_SYS_TABLE(Schema::SrcChangeSenderActivations); 
+        PRECHARGE_SYS_TABLE(Schema::DstChangeSenderActivations); 
         PRECHARGE_SYS_TABLE(Schema::ReplicationSources);
         PRECHARGE_SYS_TABLE(Schema::ReplicationSourceOffsets);
         PRECHARGE_SYS_TABLE(Schema::DstReplicationSourceOffsetsReceived);
         PRECHARGE_SYS_TABLE(Schema::UserTablesStats);
-        PRECHARGE_SYS_TABLE(Schema::SchemaSnapshots);
+        PRECHARGE_SYS_TABLE(Schema::SchemaSnapshots); 
 
         if (!ready)
             return false;
@@ -175,8 +175,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     LOAD_SYS_UI64(db, Schema::Sys_State, Self->State);
     LOAD_SYS_UI64(db, Schema::Sys_LastLocalTid, Self->LastLocalTid);
     LOAD_SYS_UI64(db, Schema::Sys_LastSeqno, Self->LastSeqno);
-    LOAD_SYS_UI64(db, Schema::Sys_NextChangeRecordOrder, Self->NextChangeRecordOrder);
-    LOAD_SYS_UI64(db, Schema::Sys_LastChangeRecordGroup, Self->LastChangeRecordGroup);
+    LOAD_SYS_UI64(db, Schema::Sys_NextChangeRecordOrder, Self->NextChangeRecordOrder); 
+    LOAD_SYS_UI64(db, Schema::Sys_LastChangeRecordGroup, Self->LastChangeRecordGroup); 
     LOAD_SYS_UI64(db, Schema::Sys_TxReadSizeLimit, Self->TxReadSizeLimit);
     LOAD_SYS_UI64(db, Schema::Sys_PathOwnerId, Self->PathOwnerId);
     LOAD_SYS_UI64(db, Schema::Sys_CurrentSchemeShardId, Self->CurrentSchemeShardId);
@@ -267,21 +267,21 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         Self->SplitSnapshotStarted = false;
     }
 
-    if (db.HaveTable<Schema::SrcChangeSenderActivations>()) {
-        // Read change sender activations on src tablet
-        auto rowset = db.Table<Schema::SrcChangeSenderActivations>().GreaterOrEqual(0).Select();
-        if (!rowset.IsReady())
-            return false;
-
-        while (!rowset.EndOfSet()) {
-            ui64 dstTabletId = rowset.GetValue<Schema::SrcChangeSenderActivations::DstTabletId>();
-            Self->ChangeSenderActivator.AddDst(dstTabletId);
-
-            if (!rowset.Next())
-                return false;
-        }
-    }
-
+    if (db.HaveTable<Schema::SrcChangeSenderActivations>()) { 
+        // Read change sender activations on src tablet 
+        auto rowset = db.Table<Schema::SrcChangeSenderActivations>().GreaterOrEqual(0).Select(); 
+        if (!rowset.IsReady()) 
+            return false; 
+ 
+        while (!rowset.EndOfSet()) { 
+            ui64 dstTabletId = rowset.GetValue<Schema::SrcChangeSenderActivations::DstTabletId>(); 
+            Self->ChangeSenderActivator.AddDst(dstTabletId); 
+ 
+            if (!rowset.Next()) 
+                return false; 
+        } 
+    } 
+ 
     // Split/Merge description on DST
     LOAD_SYS_UI64(db, Schema::Sys_DstSplitOpId, Self->DstSplitOpId);
     {
@@ -297,8 +297,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
         // Add all SRC datashards to the list
         Self->ReceiveSnapshotsFrom.clear();
-        Self->ReceiveActivationsFrom.clear();
-
+        Self->ReceiveActivationsFrom.clear(); 
+ 
         if (Self->DstSplitDescription) {
             for (ui32 i = 0; i < Self->DstSplitDescription->SourceRangesSize(); ++i) {
                 ui64 srcTabletId = Self->DstSplitDescription->GetSourceRanges(i).GetTabletID();
@@ -306,33 +306,33 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             }
         }
 
-        {
-            auto rowset = db.Table<Schema::SplitDstReceivedSnapshots>().GreaterOrEqual(0).Select();
-            if (!rowset.IsReady())
+        { 
+            auto rowset = db.Table<Schema::SplitDstReceivedSnapshots>().GreaterOrEqual(0).Select(); 
+            if (!rowset.IsReady()) 
+                return false; 
+
+            // Exclude SRC datashards from which the snapshots have already been received 
+            while (!rowset.EndOfSet()) { 
+                ui64 srcTabletId = rowset.GetValue<Schema::SplitDstReceivedSnapshots::SrcTabletId>(); 
+                Self->ReceiveSnapshotsFrom.erase(srcTabletId); 
+
+                if (!rowset.Next()) 
+                    return false; 
+            } 
+        } 
+ 
+        if (db.HaveTable<Schema::DstChangeSenderActivations>()) { 
+            auto rowset = db.Table<Schema::DstChangeSenderActivations>().GreaterOrEqual(0).Select(); 
+            if (!rowset.IsReady()) 
                 return false;
-
-            // Exclude SRC datashards from which the snapshots have already been received
-            while (!rowset.EndOfSet()) {
-                ui64 srcTabletId = rowset.GetValue<Schema::SplitDstReceivedSnapshots::SrcTabletId>();
-                Self->ReceiveSnapshotsFrom.erase(srcTabletId);
-
-                if (!rowset.Next())
-                    return false;
-            }
-        }
-
-        if (db.HaveTable<Schema::DstChangeSenderActivations>()) {
-            auto rowset = db.Table<Schema::DstChangeSenderActivations>().GreaterOrEqual(0).Select();
-            if (!rowset.IsReady())
-                return false;
-
-            while (!rowset.EndOfSet()) {
-                ui64 srcTabletId = rowset.GetValue<Schema::DstChangeSenderActivations::SrcTabletId>();
-                Self->ReceiveActivationsFrom.insert(srcTabletId);
-
-                if (!rowset.Next())
-                    return false;
-            }
+ 
+            while (!rowset.EndOfSet()) { 
+                ui64 srcTabletId = rowset.GetValue<Schema::DstChangeSenderActivations::SrcTabletId>(); 
+                Self->ReceiveActivationsFrom.insert(srcTabletId); 
+ 
+                if (!rowset.Next()) 
+                    return false; 
+            } 
         }
     }
 
@@ -345,11 +345,11 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
             bool parseOk = ParseFromStringNoSizeLimit(*Self->SrcSplitDescription, splitDescr);
             Y_VERIFY(parseOk);
-
-            for (ui32 i = 0; i < Self->SrcSplitDescription->DestinationRangesSize(); ++i) {
-                ui64 dstTablet = Self->SrcSplitDescription->GetDestinationRanges(i).GetTabletID();
-                Self->ChangeExchangeSplitter.AddDst(dstTablet);
-            }
+ 
+            for (ui32 i = 0; i < Self->SrcSplitDescription->DestinationRangesSize(); ++i) { 
+                ui64 dstTablet = Self->SrcSplitDescription->GetDestinationRanges(i).GetTabletID(); 
+                Self->ChangeExchangeSplitter.AddDst(dstTablet); 
+            } 
         }
     }
 
@@ -388,22 +388,22 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             return false;
     }
 
-    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::S3Uploads::TableId)) {
-        if (!Self->S3Uploads.Load(db))
-            return false;
-    }
-
-    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::S3Downloads::TableId)) {
-        if (!Self->S3Downloads.Load(db))
-            return false;
-    }
-
-    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ChangeRecords::TableId)) {
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::S3Uploads::TableId)) { 
+        if (!Self->S3Uploads.Load(db)) 
+            return false; 
+    } 
+ 
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::S3Downloads::TableId)) { 
+        if (!Self->S3Downloads.Load(db)) 
+            return false; 
+    } 
+ 
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ChangeRecords::TableId)) { 
         if (!Self->LoadChangeRecords(db, ChangeRecords)) {
-            return false;
-        }
-    }
-
+            return false; 
+        } 
+    } 
+ 
     Self->ReplicatedTables.clear();
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ReplicationSources::TableId)) {
         auto rowset = db.Table<Schema::ReplicationSources>().Select();
@@ -473,12 +473,12 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
-    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::SchemaSnapshots::TableId)) {
-        if (!Self->SchemaSnapshotManager.Load(db)) {
-            return false;
-        }
-    }
-
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::SchemaSnapshots::TableId)) { 
+        if (!Self->SchemaSnapshotManager.Load(db)) { 
+            return false; 
+        } 
+    } 
+ 
     return true;
 }
 
@@ -508,9 +508,9 @@ public:
         // Skip full schema migration (and dropped system table recreation)
         // if the datashard is in the process of drop.
         if (Self->State == TShardState::PreOffline || Self->State == TShardState::Offline) {
-            db.MaterializeExisting<Schema>();
-            Schema::SchemaTables<Schema::SchemaOperations>::Materialize(txc.DB, NIceDb::EMaterializationMode::NonExisting);
-            Schema::SchemaTables<Schema::ScanProgress>::Materialize(txc.DB, NIceDb::EMaterializationMode::NonExisting);
+            db.MaterializeExisting<Schema>(); 
+            Schema::SchemaTables<Schema::SchemaOperations>::Materialize(txc.DB, NIceDb::EMaterializationMode::NonExisting); 
+            Schema::SchemaTables<Schema::ScanProgress>::Materialize(txc.DB, NIceDb::EMaterializationMode::NonExisting); 
         } else {
             db.Materialize<Schema>();
         }
@@ -521,12 +521,12 @@ public:
 
             Self->PersistSys(db, Schema::Sys_State, Self->State);
 
-            if (AppData(ctx)->FeatureFlags.GetEnableMvcc()) {
-                auto state = *AppData(ctx)->FeatureFlags.GetEnableMvcc() ? EMvccState::MvccEnabled : EMvccState::MvccDisabled;
+            if (AppData(ctx)->FeatureFlags.GetEnableMvcc()) { 
+                auto state = *AppData(ctx)->FeatureFlags.GetEnableMvcc() ? EMvccState::MvccEnabled : EMvccState::MvccDisabled; 
                 Self->PersistSys(db, Schema::SysMvcc_State, (ui32)state);
 
                 LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, TStringBuilder() << "TxInitSchema.Execute"
-                    << " MVCC state switched to" << (*AppData(ctx)->FeatureFlags.GetEnableMvcc() ? " enabled" : " disabled") << " state");
+                    << " MVCC state switched to" << (*AppData(ctx)->FeatureFlags.GetEnableMvcc() ? " enabled" : " disabled") << " state"); 
             }
 
             Self->MvccSwitchState = TSwitchState::DONE;

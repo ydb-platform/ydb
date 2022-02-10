@@ -231,11 +231,11 @@ void CheckListConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::S
 inline bool CompareState(THashMap<std::pair<TString, TString>, TSlotState> slots,
                          THashMap<TString, TPoolAllocation> pools,
                          THashMap<std::pair<TString, ui32>, TUnitRegistration> registrations,
-                         const Ydb::Cms::GetDatabaseStatusResult &status, bool shared = false)
+                         const Ydb::Cms::GetDatabaseStatusResult &status, bool shared = false) 
 {
-    const auto& resources = shared ? status.required_shared_resources() : status.required_resources();
-
-    for (auto &unit : resources.computational_units()) {
+    const auto& resources = shared ? status.required_shared_resources() : status.required_resources(); 
+ 
+    for (auto &unit : resources.computational_units()) { 
         auto key = std::make_pair(unit.unit_kind(), unit.availability_zone());
         auto count = unit.count();
         if (!slots.contains(key))
@@ -245,7 +245,7 @@ inline bool CompareState(THashMap<std::pair<TString, TString>, TSlotState> slots
         slots[key].Required = 0;
     }
 
-    for (auto &unit : resources.storage_units()) {
+    for (auto &unit : resources.storage_units()) { 
         auto key = unit.unit_kind();
         auto size = unit.count();
         if (!pools.contains(key))
@@ -301,7 +301,7 @@ inline bool CompareState(THashMap<std::pair<TString, TString>, TSlotState> slots
 }
 
 template <typename ...Ts>
-void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path, bool shared,
+void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path, bool shared, 
                        Ydb::StatusIds::StatusCode code,
                        Ydb::Cms::GetDatabaseStatusResult::State state,
                        TVector<TPoolAllocation> poolTypes,
@@ -337,7 +337,7 @@ void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path, bool sh
 
         UNIT_ASSERT_VALUES_EQUAL(status.path(), CanonizePath(path));
 
-        ok = status.state() == state && CompareState(slots, pools, registrations, status, shared);
+        ok = status.state() == state && CompareState(slots, pools, registrations, status, shared); 
         if (!ok) {
             TDispatchOptions options;
             options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvRetryAllocateResources);
@@ -353,17 +353,17 @@ void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path, bool sh
     }
 }
 
-template <typename ...Ts>
-void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path,
-                       Ydb::StatusIds::StatusCode code,
-                       Ydb::Cms::GetDatabaseStatusResult::State state,
-                       TVector<TPoolAllocation> poolTypes,
-                       TVector<TUnitRegistration> unitRegistrations,
-                       Ts... args)
-{
-    CheckTenantStatus(runtime, path, false, code, state, poolTypes, unitRegistrations, args...);
-}
-
+template <typename ...Ts> 
+void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path, 
+                       Ydb::StatusIds::StatusCode code, 
+                       Ydb::Cms::GetDatabaseStatusResult::State state, 
+                       TVector<TPoolAllocation> poolTypes, 
+                       TVector<TUnitRegistration> unitRegistrations, 
+                       Ts... args) 
+{ 
+    CheckTenantStatus(runtime, path, false, code, state, poolTypes, unitRegistrations, args...); 
+} 
+ 
 inline void WaitForTenantStatus(TTenantTestRuntime &runtime,
                                 const TString &path,
                                 Ydb::StatusIds::StatusCode code)

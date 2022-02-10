@@ -598,8 +598,8 @@ NThreading::TFuture<TResult> TKikimr::GetNodeConfig(ui32 nodeId,
                                                     const TString &host,
                                                     const TString &tenant,
                                                     const TString &nodeType,
-                                                    const TString& domain,
-                                                    const TString& token)
+                                                    const TString& domain, 
+                                                    const TString& token) 
 {
     TAutoPtr<NMsgBusProxy::TBusConsoleRequest> request = new NMsgBusProxy::TBusConsoleRequest;
     auto &node = *request->Record.MutableGetNodeConfigRequest()->MutableNode();
@@ -609,8 +609,8 @@ NThreading::TFuture<TResult> TKikimr::GetNodeConfig(ui32 nodeId,
     node.SetNodeType(nodeType);
     if (domain)
         request->Record.SetDomainName(domain);
-    if (token)
-        request->Record.SetSecurityToken(token);
+    if (token) 
+        request->Record.SetSecurityToken(token); 
     return ExecuteRequest(request.Release());
 }
 

@@ -2,7 +2,7 @@
 
 #include "schemeshard_impl.h"
 #include "schemeshard_identificators.h"
-#include "schemeshard_billing_helpers.h"
+#include "schemeshard_billing_helpers.h" 
 #include "schemeshard_build_index_helpers.h"
 
 #include "schemeshard__operation_part.h" // TSideEffects, make separate file
@@ -62,8 +62,8 @@ private:
     }
 
     ui64 RequestUnits(const TBillingStats& stats) {
-        return TRUCalculator::ReadTable(stats.GetBytes())
-             + TRUCalculator::BulkUpsert(stats.GetBytes(), stats.GetRows());
+        return TRUCalculator::ReadTable(stats.GetBytes()) 
+             + TRUCalculator::BulkUpsert(stats.GetBytes(), stats.GetRows()); 
     }
 
     void RoundPeriod(TInstant& start, TInstant& end) {
@@ -134,14 +134,14 @@ private:
                 continue;
             }
 
-            if (!Self->IsServerlessDomain(domain)) {
+            if (!Self->IsServerlessDomain(domain)) { 
                 LOG_N("ApplyBill: unable to make a bill, domain is not a serverless db"
                       << ", build index operation: " << buildId
                       << ", domain: " << domain.PathString()
                       << ", domainId: " << buildInfo->DomainPathId
-                      << ", IsDomainSchemeShard: " << Self->IsDomainSchemeShard
-                      << ", ParentDomainId: " << Self->ParentDomainId
-                      << ", ResourcesDomainId: " << domain.DomainInfo()->GetResourcesDomainId()
+                      << ", IsDomainSchemeShard: " << Self->IsDomainSchemeShard 
+                      << ", ParentDomainId: " << Self->ParentDomainId 
+                      << ", ResourcesDomainId: " << domain.DomainInfo()->GetResourcesDomainId() 
                       << ", not billed usage: " << toBill);
                 continue;
             }
@@ -159,14 +159,14 @@ private:
                 << buildInfo->Billed.GetRows() << "-" << buildInfo->Billed.GetBytes() << "-"
                 << buildInfo->Processed.GetRows() << "-" << buildInfo->Processed.GetBytes();
 
-            const TString billRecord = TBillRecord()
-                .Id(id)
-                .CloudId(cloud_id)
-                .FolderId(folder_id)
-                .ResourceId(database_id)
-                .SourceWt(ctx.Now())
-                .Usage(TBillRecord::RequestUnits(requestUnits, startPeriod, endPeriod))
-                .ToString();
+            const TString billRecord = TBillRecord() 
+                .Id(id) 
+                .CloudId(cloud_id) 
+                .FolderId(folder_id) 
+                .ResourceId(database_id) 
+                .SourceWt(ctx.Now()) 
+                .Usage(TBillRecord::RequestUnits(requestUnits, startPeriod, endPeriod)) 
+                .ToString(); 
 
             LOG_D("ApplyBill: made a bill"
                   << ", buildInfo: " << *buildInfo
@@ -179,7 +179,7 @@ private:
     }
 
 protected:
-    void Send(TActorId dst, THolder<IEventBase> message, ui32 flags = 0, ui64 cookie = 0) {
+    void Send(TActorId dst, THolder<IEventBase> message, ui32 flags = 0, ui64 cookie = 0) { 
         SideEffects.Send(dst, message.Release(), cookie, flags);
     }
 
@@ -282,7 +282,7 @@ protected:
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
             *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
-            break;
+            break; 
         case NKikimrSchemeOp::EIndexType::EIndexTypeInvalid:
             Y_FAIL("Unreachable");
         };

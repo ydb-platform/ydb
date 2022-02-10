@@ -1,554 +1,554 @@
-#include "events.h"
-#include "replica.h"
-#include "ut_helpers.h"
-
+#include "events.h" 
+#include "replica.h" 
+#include "ut_helpers.h" 
+ 
 #include <ydb/core/base/pathid.h>
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
-
+ 
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/testing/unittest/registar.h>
-
-namespace NKikimr {
-namespace NSchemeBoard {
-
-namespace {
-
-    TActorId CreateReplica(TTestActorRuntimeBase& runtime) {
-        const auto replica = runtime.Register(CreateSchemeBoardReplica(TIntrusivePtr<TStateStorageInfo>(), 0));
-        runtime.EnableScheduleForActor(replica, true);
-
-        // wait until replica is ready
-        TDispatchOptions opts;
-        opts.FinalEvents.emplace_back([&replica](IEventHandle& ev) {
-            return ev.Recipient == replica && ev.GetTypeRewrite() == TEvents::TSystem::Bootstrap;
-        });
-        runtime.DispatchEvents(opts);
-
-        return replica;
-    }
-
-} // anonymous
-
-class TReplicaTest: public NUnitTest::TTestBase {
-public:
-    void SetUp() override {
-        Context = MakeHolder<TTestContext>();
-        Context->Initialize(TAppPrepare().Unwrap());
-        Context->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
-
-        Replica = CreateReplica(*Context);
-    }
-
-    void TearDown() override {
-        Context.Reset();
-    }
-
-    UNIT_TEST_SUITE(TReplicaTest);
-    UNIT_TEST(Handshake);
-    UNIT_TEST(HandshakeWithStaleGeneration);
-    UNIT_TEST(Commit);
-    UNIT_TEST(CommitWithoutHandshake);
-    UNIT_TEST(CommitWithStaleGeneration);
-    UNIT_TEST(Update);
-    UNIT_TEST(Delete);
-    UNIT_TEST(UpdateWithoutHandshake);
-    UNIT_TEST(UpdateWithStaleGeneration);
-    UNIT_TEST(Subscribe);
-    UNIT_TEST(SubscribeUnknownPath);
-    UNIT_TEST(Unsubscribe);
-    UNIT_TEST(UnsubscribeUnknownPath);
-    UNIT_TEST(DoubleUnsubscribe);
-    UNIT_TEST(UnsubscribeWithoutSubscribe);
-    UNIT_TEST(Merge);
-    UNIT_TEST(DoubleDelete);
-    UNIT_TEST(SyncVersion);
-    UNIT_TEST(IdempotencyUpdatesAliveSubscriber);
-    UNIT_TEST(IdempotencyUpdatesWithoutSubscribers);
-    UNIT_TEST(IdempotencyUpdatesVariant2);
-    UNIT_TEST(AckNotifications);
-    UNIT_TEST(AckNotificationsUponPathRecreation);
-    UNIT_TEST(StrongNotificationAfterCommit);
-    UNIT_TEST_SUITE_END();
-
-    void Handshake();
-    void HandshakeWithStaleGeneration();
-    void Commit();
-    void CommitWithoutHandshake();
-    void CommitWithStaleGeneration();
-    void Update();
-    void Delete();
-    void UpdateWithoutHandshake();
-    void UpdateWithStaleGeneration();
-    void Subscribe();
-    void SubscribeUnknownPath();
-    void Unsubscribe();
-    void UnsubscribeUnknownPath();
-    void DoubleUnsubscribe();
-    void UnsubscribeWithoutSubscribe();
-    void Merge();
-    void DoubleDelete();
-    void SyncVersion();
-    void IdempotencyUpdates(bool aliveSubscriber);
-    void IdempotencyUpdatesAliveSubscriber();
-    void IdempotencyUpdatesWithoutSubscribers();
-    void IdempotencyUpdatesVariant2();
-    void AckNotifications();
-    void AckNotificationsUponPathRecreation();
-    void StrongNotificationAfterCommit();
-
-private:
-    THolder<TTestContext> Context;
+ 
+namespace NKikimr { 
+namespace NSchemeBoard { 
+ 
+namespace { 
+ 
+    TActorId CreateReplica(TTestActorRuntimeBase& runtime) { 
+        const auto replica = runtime.Register(CreateSchemeBoardReplica(TIntrusivePtr<TStateStorageInfo>(), 0)); 
+        runtime.EnableScheduleForActor(replica, true); 
+ 
+        // wait until replica is ready 
+        TDispatchOptions opts; 
+        opts.FinalEvents.emplace_back([&replica](IEventHandle& ev) { 
+            return ev.Recipient == replica && ev.GetTypeRewrite() == TEvents::TSystem::Bootstrap; 
+        }); 
+        runtime.DispatchEvents(opts); 
+ 
+        return replica; 
+    } 
+ 
+} // anonymous 
+ 
+class TReplicaTest: public NUnitTest::TTestBase { 
+public: 
+    void SetUp() override { 
+        Context = MakeHolder<TTestContext>(); 
+        Context->Initialize(TAppPrepare().Unwrap()); 
+        Context->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG); 
+ 
+        Replica = CreateReplica(*Context); 
+    } 
+ 
+    void TearDown() override { 
+        Context.Reset(); 
+    } 
+ 
+    UNIT_TEST_SUITE(TReplicaTest); 
+    UNIT_TEST(Handshake); 
+    UNIT_TEST(HandshakeWithStaleGeneration); 
+    UNIT_TEST(Commit); 
+    UNIT_TEST(CommitWithoutHandshake); 
+    UNIT_TEST(CommitWithStaleGeneration); 
+    UNIT_TEST(Update); 
+    UNIT_TEST(Delete); 
+    UNIT_TEST(UpdateWithoutHandshake); 
+    UNIT_TEST(UpdateWithStaleGeneration); 
+    UNIT_TEST(Subscribe); 
+    UNIT_TEST(SubscribeUnknownPath); 
+    UNIT_TEST(Unsubscribe); 
+    UNIT_TEST(UnsubscribeUnknownPath); 
+    UNIT_TEST(DoubleUnsubscribe); 
+    UNIT_TEST(UnsubscribeWithoutSubscribe); 
+    UNIT_TEST(Merge); 
+    UNIT_TEST(DoubleDelete); 
+    UNIT_TEST(SyncVersion); 
+    UNIT_TEST(IdempotencyUpdatesAliveSubscriber); 
+    UNIT_TEST(IdempotencyUpdatesWithoutSubscribers); 
+    UNIT_TEST(IdempotencyUpdatesVariant2); 
+    UNIT_TEST(AckNotifications); 
+    UNIT_TEST(AckNotificationsUponPathRecreation); 
+    UNIT_TEST(StrongNotificationAfterCommit); 
+    UNIT_TEST_SUITE_END(); 
+ 
+    void Handshake(); 
+    void HandshakeWithStaleGeneration(); 
+    void Commit(); 
+    void CommitWithoutHandshake(); 
+    void CommitWithStaleGeneration(); 
+    void Update(); 
+    void Delete(); 
+    void UpdateWithoutHandshake(); 
+    void UpdateWithStaleGeneration(); 
+    void Subscribe(); 
+    void SubscribeUnknownPath(); 
+    void Unsubscribe(); 
+    void UnsubscribeUnknownPath(); 
+    void DoubleUnsubscribe(); 
+    void UnsubscribeWithoutSubscribe(); 
+    void Merge(); 
+    void DoubleDelete(); 
+    void SyncVersion(); 
+    void IdempotencyUpdates(bool aliveSubscriber); 
+    void IdempotencyUpdatesAliveSubscriber(); 
+    void IdempotencyUpdatesWithoutSubscribers(); 
+    void IdempotencyUpdatesVariant2(); 
+    void AckNotifications(); 
+    void AckNotificationsUponPathRecreation(); 
+    void StrongNotificationAfterCommit(); 
+ 
+private: 
+    THolder<TTestContext> Context; 
     TActorId Replica;
-
-}; // TReplicaTest
-
-UNIT_TEST_SUITE_REGISTRATION(TReplicaTest);
-
-void TReplicaTest::Handshake() {
-    auto ev = Context->HandshakeReplica(Replica, Context->AllocateEdgeActor(), 1, 1);
-
-    UNIT_ASSERT(ev->Get());
-    UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->Record.GetOwner());
-    UNIT_ASSERT_VALUES_EQUAL(0, ev->Get()->Record.GetGeneration());
-}
-
-void TReplicaTest::HandshakeWithStaleGeneration() {
+ 
+}; // TReplicaTest 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TReplicaTest); 
+ 
+void TReplicaTest::Handshake() { 
+    auto ev = Context->HandshakeReplica(Replica, Context->AllocateEdgeActor(), 1, 1); 
+ 
+    UNIT_ASSERT(ev->Get()); 
+    UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->Record.GetOwner()); 
+    UNIT_ASSERT_VALUES_EQUAL(0, ev->Get()->Record.GetGeneration()); 
+} 
+ 
+void TReplicaTest::HandshakeWithStaleGeneration() { 
     const TActorId edge = Context->AllocateEdgeActor();
-
-    Context->HandshakeReplica(Replica, edge, 1, 2);
-    Context->HandshakeReplica(Replica, edge, 1, 1, false);
-
-    ui64 counter = Context->CountEdgeEvents<TSchemeBoardEvents::TEvHandshakeResponse>();
-    UNIT_ASSERT_VALUES_EQUAL(0, counter);
-}
-
-void TReplicaTest::Commit() {
+ 
+    Context->HandshakeReplica(Replica, edge, 1, 2); 
+    Context->HandshakeReplica(Replica, edge, 1, 1, false); 
+ 
+    ui64 counter = Context->CountEdgeEvents<TSchemeBoardEvents::TEvHandshakeResponse>(); 
+    UNIT_ASSERT_VALUES_EQUAL(0, counter); 
+} 
+ 
+void TReplicaTest::Commit() { 
     const TActorId edge = Context->AllocateEdgeActor();
-
-    Context->HandshakeReplica(Replica, edge, 1, 1);
-    Context->CommitReplica(Replica, edge, 1, 1);
-
-    auto ev = Context->HandshakeReplica(Replica, edge, 1, 2);
-
-    UNIT_ASSERT(ev->Get());
-    UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->Record.GetOwner());
-    UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->Record.GetGeneration());
-}
-
-void TReplicaTest::CommitWithoutHandshake() {
+ 
+    Context->HandshakeReplica(Replica, edge, 1, 1); 
+    Context->CommitReplica(Replica, edge, 1, 1); 
+ 
+    auto ev = Context->HandshakeReplica(Replica, edge, 1, 2); 
+ 
+    UNIT_ASSERT(ev->Get()); 
+    UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->Record.GetOwner()); 
+    UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->Record.GetGeneration()); 
+} 
+ 
+void TReplicaTest::CommitWithoutHandshake() { 
     const TActorId edge = Context->AllocateEdgeActor();
-
-    Context->CommitReplica(Replica, edge, 1, 1);
-    auto ev = Context->HandshakeReplica(Replica, edge, 1, 1);
-
-    UNIT_ASSERT(ev->Get());
-    UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->Record.GetOwner());
-    UNIT_ASSERT_VALUES_EQUAL(0, ev->Get()->Record.GetGeneration());
-}
-
-void TReplicaTest::CommitWithStaleGeneration() {
+ 
+    Context->CommitReplica(Replica, edge, 1, 1); 
+    auto ev = Context->HandshakeReplica(Replica, edge, 1, 1); 
+ 
+    UNIT_ASSERT(ev->Get()); 
+    UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->Record.GetOwner()); 
+    UNIT_ASSERT_VALUES_EQUAL(0, ev->Get()->Record.GetGeneration()); 
+} 
+ 
+void TReplicaTest::CommitWithStaleGeneration() { 
     const TActorId edgeA = Context->AllocateEdgeActor();
     const TActorId edgeB = Context->AllocateEdgeActor();
-
-    Context->HandshakeReplica(Replica, edgeA, 1, 0);
-    Context->HandshakeReplica(Replica, edgeB, 1, 1);
-
-    Context->CommitReplica(Replica, edgeB, 1, 1);
-    Context->CommitReplica(Replica, edgeA, 1, 0);
-
-    auto ev = Context->HandshakeReplica(Replica, edgeA, 1, 2);
-
-    UNIT_ASSERT(ev->Get());
-    UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->Record.GetOwner());
-    UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->Record.GetGeneration());
-}
-
-void TReplicaTest::Update() {
+ 
+    Context->HandshakeReplica(Replica, edgeA, 1, 0); 
+    Context->HandshakeReplica(Replica, edgeB, 1, 1); 
+ 
+    Context->CommitReplica(Replica, edgeB, 1, 1); 
+    Context->CommitReplica(Replica, edgeA, 1, 0); 
+ 
+    auto ev = Context->HandshakeReplica(Replica, edgeA, 1, 2); 
+ 
+    UNIT_ASSERT(ev->Get()); 
+    UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->Record.GetOwner()); 
+    UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->Record.GetGeneration()); 
+} 
+ 
+void TReplicaTest::Update() { 
     const TActorId edge = Context->AllocateEdgeActor();
-
-    Context->HandshakeReplica(Replica, edge, 1, 1);
+ 
+    Context->HandshakeReplica(Replica, edge, 1, 1); 
     Context->Send(Replica, edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1)), 1, 1));
-
-    auto checks = [](const auto& record) {
-        UNIT_ASSERT_VALUES_EQUAL(1, record.GetPathOwnerId());
-        UNIT_ASSERT_VALUES_EQUAL("path", record.GetPath());
-        UNIT_ASSERT_VALUES_EQUAL(1, record.GetLocalPathId());
-        UNIT_ASSERT_VALUES_EQUAL(false, record.GetIsDeletion());
-        UNIT_ASSERT_VALUES_EQUAL(1, record.GetVersion());
-    };
-
-    {
-        auto ev = Context->SubscribeReplica(Replica, edge, "path");
-        checks(ev->Get()->GetRecord());
-        Context->UnsubscribeReplica(Replica, edge, "path");
-    }
-
-    {
-        auto ev = Context->SubscribeReplica(Replica, edge, TPathId(1, 1));
-        checks(ev->Get()->GetRecord());
-        Context->UnsubscribeReplica(Replica, edge, TPathId(1, 1));
-    }
-}
-
-void TReplicaTest::Delete() {
+ 
+    auto checks = [](const auto& record) { 
+        UNIT_ASSERT_VALUES_EQUAL(1, record.GetPathOwnerId()); 
+        UNIT_ASSERT_VALUES_EQUAL("path", record.GetPath()); 
+        UNIT_ASSERT_VALUES_EQUAL(1, record.GetLocalPathId()); 
+        UNIT_ASSERT_VALUES_EQUAL(false, record.GetIsDeletion()); 
+        UNIT_ASSERT_VALUES_EQUAL(1, record.GetVersion()); 
+    }; 
+ 
+    { 
+        auto ev = Context->SubscribeReplica(Replica, edge, "path"); 
+        checks(ev->Get()->GetRecord()); 
+        Context->UnsubscribeReplica(Replica, edge, "path"); 
+    } 
+ 
+    { 
+        auto ev = Context->SubscribeReplica(Replica, edge, TPathId(1, 1)); 
+        checks(ev->Get()->GetRecord()); 
+        Context->UnsubscribeReplica(Replica, edge, TPathId(1, 1)); 
+    } 
+} 
+ 
+void TReplicaTest::Delete() { 
     auto describe = GenerateDescribe("path", TPathId(42, 1));
 
     const TActorId edge = Context->AllocateEdgeActor();
-
-    Context->HandshakeReplica(Replica, edge, 1, 1);
-    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1));
-
-    {
+ 
+    Context->HandshakeReplica(Replica, edge, 1, 1); 
+    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1)); 
+ 
+    { 
         auto ev = Context->SubscribeReplica(Replica, Context->AllocateEdgeActor(), "path");
-        UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath());
-        UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion());
+        UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath()); 
+        UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion()); 
+    } 
+ 
+    { 
+        auto ev = Context->SubscribeReplica(Replica, Context->AllocateEdgeActor(), TPathId(42, 1));
+        UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->GetRecord().GetLocalPathId()); 
+        UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion()); 
+    } 
+ 
+    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1, true)); 
+ 
+    { 
+        auto ev = Context->SubscribeReplica(Replica, Context->AllocateEdgeActor(), "path");
+        UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath()); 
+        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion()); 
+        UNIT_ASSERT_VALUES_EQUAL(Max<ui64>(), ev->Get()->GetRecord().GetVersion()); 
     }
 
     {
         auto ev = Context->SubscribeReplica(Replica, Context->AllocateEdgeActor(), TPathId(42, 1));
-        UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->GetRecord().GetLocalPathId());
-        UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion());
-    }
-
-    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1, true));
-
-    {
+        UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->GetRecord().GetLocalPathId()); 
+        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion()); 
+        UNIT_ASSERT_VALUES_EQUAL(Max<ui64>(), ev->Get()->GetRecord().GetVersion()); 
+    } 
+ 
+    { 
         auto ev = Context->SubscribeReplica(Replica, Context->AllocateEdgeActor(), "path");
-        UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath());
-        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
-        UNIT_ASSERT_VALUES_EQUAL(Max<ui64>(), ev->Get()->GetRecord().GetVersion());
-    }
+        UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath()); 
+        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion()); 
+        UNIT_ASSERT_VALUES_EQUAL(Max<ui64>(), ev->Get()->GetRecord().GetVersion()); 
+    } 
 
-    {
-        auto ev = Context->SubscribeReplica(Replica, Context->AllocateEdgeActor(), TPathId(42, 1));
-        UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->GetRecord().GetLocalPathId());
-        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
-        UNIT_ASSERT_VALUES_EQUAL(Max<ui64>(), ev->Get()->GetRecord().GetVersion());
-    }
-
-    {
-        auto ev = Context->SubscribeReplica(Replica, Context->AllocateEdgeActor(), "path");
-        UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath());
-        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
-        UNIT_ASSERT_VALUES_EQUAL(Max<ui64>(), ev->Get()->GetRecord().GetVersion());
-    }
-
-}
-
-void TReplicaTest::UpdateWithoutHandshake() {
+} 
+ 
+void TReplicaTest::UpdateWithoutHandshake() { 
     const TActorId edge = Context->AllocateEdgeActor();
-
+ 
     Context->Send(Replica, edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1)), 1, 1));
-
-    {
-        auto ev = Context->SubscribeReplica(Replica, edge, "path");
-        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
-        Context->UnsubscribeReplica(Replica, edge, "path");
-    }
-
-    {
-        auto ev = Context->SubscribeReplica(Replica, edge, TPathId(1, 1));
-        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
-        Context->UnsubscribeReplica(Replica, edge, TPathId(1, 1));
-    }
-}
-
-void TReplicaTest::UpdateWithStaleGeneration() {
+ 
+    { 
+        auto ev = Context->SubscribeReplica(Replica, edge, "path"); 
+        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion()); 
+        Context->UnsubscribeReplica(Replica, edge, "path"); 
+    } 
+ 
+    { 
+        auto ev = Context->SubscribeReplica(Replica, edge, TPathId(1, 1)); 
+        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion()); 
+        Context->UnsubscribeReplica(Replica, edge, TPathId(1, 1)); 
+    } 
+} 
+ 
+void TReplicaTest::UpdateWithStaleGeneration() { 
     const TActorId edge = Context->AllocateEdgeActor();
-
-    Context->HandshakeReplica(Replica, edge, 1, 1);
+ 
+    Context->HandshakeReplica(Replica, edge, 1, 1); 
     Context->Send(Replica, edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1)), 1, 0));
-
-    {
-        auto ev = Context->SubscribeReplica(Replica, edge, "path");
-        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
-        Context->UnsubscribeReplica(Replica, edge, "path");
-    }
-
-    {
-        auto ev = Context->SubscribeReplica(Replica, edge, TPathId(1, 1));
-        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
-        Context->UnsubscribeReplica(Replica, edge, TPathId(1, 1));
-    }
-}
-
-void TReplicaTest::Subscribe() {
+ 
+    { 
+        auto ev = Context->SubscribeReplica(Replica, edge, "path"); 
+        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion()); 
+        Context->UnsubscribeReplica(Replica, edge, "path"); 
+    } 
+ 
+    { 
+        auto ev = Context->SubscribeReplica(Replica, edge, TPathId(1, 1)); 
+        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion()); 
+        Context->UnsubscribeReplica(Replica, edge, TPathId(1, 1)); 
+    } 
+} 
+ 
+void TReplicaTest::Subscribe() { 
     auto describe = GenerateDescribe("path", TPathId(1, 1));
-
+ 
     const TActorId edge = Context->AllocateEdgeActor();
-
-    Context->HandshakeReplica(Replica, edge, 1, 1);
-    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1));
-
-    Context->SubscribeReplica(Replica, edge, "path", false);
-    {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(edge);
-        UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath());
-        UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion());
-    }
-
-    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1, true));
-    {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(edge);
-        UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath());
-        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
-    }
-}
-
-void TReplicaTest::SubscribeUnknownPath() {
+ 
+    Context->HandshakeReplica(Replica, edge, 1, 1); 
+    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1)); 
+ 
+    Context->SubscribeReplica(Replica, edge, "path", false); 
+    { 
+        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(edge); 
+        UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath()); 
+        UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion()); 
+    } 
+ 
+    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1, true)); 
+    { 
+        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(edge); 
+        UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath()); 
+        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion()); 
+    } 
+} 
+ 
+void TReplicaTest::SubscribeUnknownPath() { 
     const TActorId edge = Context->AllocateEdgeActor();
-
-    Context->SubscribeReplica(Replica, edge, "path", false);
-    {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(edge);
-        UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath());
-        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
-    }
-}
-
-void TReplicaTest::Unsubscribe() {
+ 
+    Context->SubscribeReplica(Replica, edge, "path", false); 
+    { 
+        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(edge); 
+        UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath()); 
+        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion()); 
+    } 
+} 
+ 
+void TReplicaTest::Unsubscribe() { 
     auto describe = GenerateDescribe("path", TPathId(1, 1));
-
+ 
     const TActorId edge = Context->AllocateEdgeActor();
-
+ 
     const TActorId subscriberA = Context->AllocateEdgeActor();
     const TActorId subscriberB = Context->AllocateEdgeActor();
-
-    Context->HandshakeReplica(Replica, edge, 1, 1);
-
-    Context->SubscribeReplica(Replica, subscriberA, "path");
-    Context->SubscribeReplica(Replica, subscriberB, "path");
-
-    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1));
-    ui64 counter = Context->CountEdgeEvents<TSchemeBoardEvents::TEvNotify>();
-    UNIT_ASSERT_VALUES_EQUAL(2, counter);
-
-    Context->UnsubscribeReplica(Replica, subscriberA, "path");
-
-    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1, true));
-    counter = Context->CountEdgeEvents<TSchemeBoardEvents::TEvNotify>();
-    UNIT_ASSERT_VALUES_EQUAL(1, counter);
-}
-
-void TReplicaTest::UnsubscribeUnknownPath() {
+ 
+    Context->HandshakeReplica(Replica, edge, 1, 1); 
+ 
+    Context->SubscribeReplica(Replica, subscriberA, "path"); 
+    Context->SubscribeReplica(Replica, subscriberB, "path"); 
+ 
+    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1)); 
+    ui64 counter = Context->CountEdgeEvents<TSchemeBoardEvents::TEvNotify>(); 
+    UNIT_ASSERT_VALUES_EQUAL(2, counter); 
+ 
+    Context->UnsubscribeReplica(Replica, subscriberA, "path"); 
+ 
+    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1, true)); 
+    counter = Context->CountEdgeEvents<TSchemeBoardEvents::TEvNotify>(); 
+    UNIT_ASSERT_VALUES_EQUAL(1, counter); 
+} 
+ 
+void TReplicaTest::UnsubscribeUnknownPath() { 
     const TActorId edge = Context->AllocateEdgeActor();
-
-    Context->UnsubscribeReplica(Replica, edge, "path");
-}
-
-void TReplicaTest::DoubleUnsubscribe() {
+ 
+    Context->UnsubscribeReplica(Replica, edge, "path"); 
+} 
+ 
+void TReplicaTest::DoubleUnsubscribe() { 
     auto describe = GenerateDescribe("path", TPathId(1, 1));
-
+ 
     const TActorId edge = Context->AllocateEdgeActor();
-
-    Context->HandshakeReplica(Replica, edge, 1, 1);
-    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1));
-
-    auto ev = Context->SubscribeReplica(Replica, edge, "path", true);
-    UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath());
-    UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion());
-
-    Context->UnsubscribeReplica(Replica, edge, "path");
-    Context->UnsubscribeReplica(Replica, edge, "path");
-}
-
-void TReplicaTest::UnsubscribeWithoutSubscribe() {
+ 
+    Context->HandshakeReplica(Replica, edge, 1, 1); 
+    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1)); 
+ 
+    auto ev = Context->SubscribeReplica(Replica, edge, "path", true); 
+    UNIT_ASSERT_VALUES_EQUAL("path", ev->Get()->GetRecord().GetPath()); 
+    UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion()); 
+ 
+    Context->UnsubscribeReplica(Replica, edge, "path"); 
+    Context->UnsubscribeReplica(Replica, edge, "path"); 
+} 
+ 
+void TReplicaTest::UnsubscribeWithoutSubscribe() { 
     auto describe = GenerateDescribe("path", TPathId(1, 1));
-
+ 
     const TActorId edge = Context->AllocateEdgeActor();
-
-    Context->HandshakeReplica(Replica, edge, 1, 1);
-    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1));
-
-    Context->UnsubscribeReplica(Replica, edge, "path");
-}
-
-void TReplicaTest::Merge() {
+ 
+    Context->HandshakeReplica(Replica, edge, 1, 1); 
+    Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1)); 
+ 
+    Context->UnsubscribeReplica(Replica, edge, "path"); 
+} 
+ 
+void TReplicaTest::Merge() { 
     auto describe = GenerateDescribe("path", TPathId(1, 1));
-
+ 
     const TActorId populator = Context->AllocateEdgeActor();
     const TActorId subscriberA = Context->AllocateEdgeActor();
     const TActorId subscriberB = Context->AllocateEdgeActor();
-
-    Context->SubscribeReplica(Replica, subscriberA, "path");
-    Context->SubscribeReplica(Replica, subscriberB, TPathId(1, 1));
-
-    Context->HandshakeReplica(Replica, populator);
-
-    Context->Send(Replica, populator, GenerateUpdate(describe));
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberA);
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberB);
-
-    Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1, true));
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberA);
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberB);
-}
-
-void TReplicaTest::DoubleDelete() {
+ 
+    Context->SubscribeReplica(Replica, subscriberA, "path"); 
+    Context->SubscribeReplica(Replica, subscriberB, TPathId(1, 1)); 
+ 
+    Context->HandshakeReplica(Replica, populator); 
+ 
+    Context->Send(Replica, populator, GenerateUpdate(describe)); 
+    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberA); 
+    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberB); 
+ 
+    Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1, true)); 
+    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberA); 
+    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberB); 
+} 
+ 
+void TReplicaTest::DoubleDelete() { 
     auto describe = GenerateDescribe("path", TPathId(1, 1));
-
+ 
     const TActorId populator = Context->AllocateEdgeActor();
-    Context->HandshakeReplica(Replica, populator);
-
+    Context->HandshakeReplica(Replica, populator); 
+ 
     const TActorId subscriberA = Context->AllocateEdgeActor();
-    Context->SubscribeReplica(Replica, subscriberA, "path");
-
-    Context->Send(Replica, populator, GenerateUpdate(describe));
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberA);
-
-    Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1, true));
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberA);
-
+    Context->SubscribeReplica(Replica, subscriberA, "path"); 
+ 
+    Context->Send(Replica, populator, GenerateUpdate(describe)); 
+    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberA); 
+ 
+    Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1, true)); 
+    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberA); 
+ 
     const TActorId subscriberB = Context->AllocateEdgeActor();
-    Context->SubscribeReplica(Replica, subscriberB, "path");
-
-    Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1, true));
-}
-
-void TReplicaTest::SyncVersion() {
+    Context->SubscribeReplica(Replica, subscriberB, "path"); 
+ 
+    Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1, true)); 
+} 
+ 
+void TReplicaTest::SyncVersion() { 
     const TActorId edge = Context->AllocateEdgeActor();
-    const ui64 version = 100500;
-
-    Context->HandshakeReplica(Replica, edge);
+    const ui64 version = 100500; 
+ 
+    Context->HandshakeReplica(Replica, edge); 
     Context->Send(Replica, edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1), version)));
-
-    Context->SubscribeReplica(Replica, edge, "path");
-    Context->Send(Replica, edge, new TSchemeBoardEvents::TEvSyncVersionRequest("path"), 0, 1);
-    auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvSyncVersionResponse>(edge);
-
-    UNIT_ASSERT_VALUES_EQUAL(version, ev->Get()->Record.GetVersion());
-    UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->Record.GetPartial());
-}
-
-void TReplicaTest::IdempotencyUpdates(bool aliveSubscriber) {
-    auto describeA = GenerateDescribe("path", TPathId(1, 1));
-    auto describeB = GenerateDescribe("path", TPathId(1, 2)); // same path but another path id
-
+ 
+    Context->SubscribeReplica(Replica, edge, "path"); 
+    Context->Send(Replica, edge, new TSchemeBoardEvents::TEvSyncVersionRequest("path"), 0, 1); 
+    auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvSyncVersionResponse>(edge); 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(version, ev->Get()->Record.GetVersion()); 
+    UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->Record.GetPartial()); 
+} 
+ 
+void TReplicaTest::IdempotencyUpdates(bool aliveSubscriber) { 
+    auto describeA = GenerateDescribe("path", TPathId(1, 1)); 
+    auto describeB = GenerateDescribe("path", TPathId(1, 2)); // same path but another path id 
+ 
     const TActorId populator = Context->AllocateEdgeActor();
-    Context->HandshakeReplica(Replica, populator);
-
+    Context->HandshakeReplica(Replica, populator); 
+ 
     const TActorId subscriberA = Context->AllocateEdgeActor();
-    Context->SubscribeReplica(Replica, subscriberA, TPathId(1, 1));
-
-    Context->Send(Replica, populator, GenerateUpdate(describeA));
-    Context->Send(Replica, populator, GenerateUpdate(describeA, 1, 1, true));
-
-    if (!aliveSubscriber) {
-        Context->UnsubscribeReplica(Replica, subscriberA, TPathId(1, 1));
-    }
-
-    Context->Send(Replica, populator, GenerateUpdate(describeA));
-    Context->Send(Replica, populator, GenerateUpdate(describeB));
-
+    Context->SubscribeReplica(Replica, subscriberA, TPathId(1, 1)); 
+ 
+    Context->Send(Replica, populator, GenerateUpdate(describeA)); 
+    Context->Send(Replica, populator, GenerateUpdate(describeA, 1, 1, true)); 
+ 
+    if (!aliveSubscriber) { 
+        Context->UnsubscribeReplica(Replica, subscriberA, TPathId(1, 1)); 
+    } 
+ 
+    Context->Send(Replica, populator, GenerateUpdate(describeA)); 
+    Context->Send(Replica, populator, GenerateUpdate(describeB)); 
+ 
     const TActorId subscriberB = Context->AllocateEdgeActor();
-    Context->SubscribeReplica(Replica, subscriberB, TPathId(1, 2));
-}
-
-void TReplicaTest::IdempotencyUpdatesAliveSubscriber() {
-    IdempotencyUpdates(true);
-}
-
-void TReplicaTest::IdempotencyUpdatesWithoutSubscribers() {
-    IdempotencyUpdates(false);
-}
-
-void TReplicaTest::IdempotencyUpdatesVariant2() {
-    auto describeA = GenerateDescribe("path", TPathId(1, 1));
-    auto describeB = GenerateDescribe("path", TPathId(1, 2)); // same path but another path id
-
+    Context->SubscribeReplica(Replica, subscriberB, TPathId(1, 2)); 
+} 
+ 
+void TReplicaTest::IdempotencyUpdatesAliveSubscriber() { 
+    IdempotencyUpdates(true); 
+} 
+ 
+void TReplicaTest::IdempotencyUpdatesWithoutSubscribers() { 
+    IdempotencyUpdates(false); 
+} 
+ 
+void TReplicaTest::IdempotencyUpdatesVariant2() { 
+    auto describeA = GenerateDescribe("path", TPathId(1, 1)); 
+    auto describeB = GenerateDescribe("path", TPathId(1, 2)); // same path but another path id 
+ 
     const TActorId populator = Context->AllocateEdgeActor();
-    Context->HandshakeReplica(Replica, populator);
-
-    Context->Send(Replica, populator, GenerateUpdate(describeA));
-    Context->Send(Replica, populator, GenerateUpdate(describeB));
-    Context->Send(Replica, populator, GenerateUpdate(describeB, 1, 1, true));
-    Context->Send(Replica, populator, GenerateUpdate(describeA));
-    Context->Send(Replica, populator, GenerateUpdate(describeB));
-}
-
-void TReplicaTest::AckNotifications() {
-    auto describe = GenerateDescribe("path", TPathId(1, 1));
-
-    const TActorId populator = Context->AllocateEdgeActor();
-    const TActorId subscriber = Context->AllocateEdgeActor();
-
-    NKikimrSchemeBoard::TEvSubscribe::TCapabilities capabilities;
-    capabilities.SetAckNotifications(true);
-    Context->SubscribeReplica(Replica, subscriber, "path", true, 0, capabilities);
-
-    Context->HandshakeReplica(Replica, populator);
-
-    Context->Send(Replica, populator, GenerateUpdate(describe));
-    Context->Send(Replica, subscriber, new TSchemeBoardEvents::TEvNotifyAck(0));
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber);
-
-    Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1, true));
-    Context->Send(Replica, subscriber, new TSchemeBoardEvents::TEvNotifyAck(1));
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber);
-}
-
-void TReplicaTest::AckNotificationsUponPathRecreation() {
-    const TActorId populator = Context->AllocateEdgeActor();
-    Context->HandshakeReplica(Replica, populator);
-
-    // initial path version is 2
-    Context->Send(Replica, populator, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1), 2)));
-
-    const TActorId subscriber = Context->AllocateEdgeActor();
-    NKikimrSchemeBoard::TEvSubscribe::TCapabilities capabilities;
-    capabilities.SetAckNotifications(true);
-    Context->SubscribeReplica(Replica, subscriber, "path", true, 0, capabilities);
-
-    // update to version 3 & omit ack
-    Context->Send(Replica, populator, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1), 3)));
-    {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber);
-        UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->GetRecord().GetLocalPathId());
-        UNIT_ASSERT_VALUES_EQUAL(3, ev->Get()->GetRecord().GetVersion());
-    }
-
-    // recreate path with version 1
-    Context->Send(Replica, populator, GenerateUpdate(GenerateDescribe("path", TPathId(1, 2), 1)));
-    // ack previous version
-    Context->Send(Replica, subscriber, new TSchemeBoardEvents::TEvNotifyAck(3));
-    // should receive notification about recreated path
-    while (true) {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber);
-
-        if (ev->Get()->GetRecord().GetIsDeletion()) {
-            // deletion of previous version
-            UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->GetRecord().GetLocalPathId());
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(2, ev->Get()->GetRecord().GetLocalPathId());
-            UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->GetRecord().GetVersion());
-            break;
-        }
-
-        Context->Send(Replica, subscriber, new TSchemeBoardEvents::TEvNotifyAck(ev->Get()->GetRecord().GetVersion()));
-    }
-}
-
-void TReplicaTest::StrongNotificationAfterCommit() {
+    Context->HandshakeReplica(Replica, populator); 
+ 
+    Context->Send(Replica, populator, GenerateUpdate(describeA)); 
+    Context->Send(Replica, populator, GenerateUpdate(describeB)); 
+    Context->Send(Replica, populator, GenerateUpdate(describeB, 1, 1, true)); 
+    Context->Send(Replica, populator, GenerateUpdate(describeA)); 
+    Context->Send(Replica, populator, GenerateUpdate(describeB)); 
+} 
+ 
+void TReplicaTest::AckNotifications() { 
+    auto describe = GenerateDescribe("path", TPathId(1, 1)); 
+ 
     const TActorId populator = Context->AllocateEdgeActor();
     const TActorId subscriber = Context->AllocateEdgeActor();
-
-    Context->SubscribeReplica(Replica, subscriber, "path", false, 1);
-    {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber);
-        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
-        UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetStrong());
-    }
-
-    Context->HandshakeReplica(Replica, populator);
-    Context->CommitReplica(Replica, populator, 1, 1);
-    {
-        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber);
-        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
-        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetStrong());
-    }
-}
-
+ 
+    NKikimrSchemeBoard::TEvSubscribe::TCapabilities capabilities; 
+    capabilities.SetAckNotifications(true); 
+    Context->SubscribeReplica(Replica, subscriber, "path", true, 0, capabilities); 
+ 
+    Context->HandshakeReplica(Replica, populator); 
+ 
+    Context->Send(Replica, populator, GenerateUpdate(describe)); 
+    Context->Send(Replica, subscriber, new TSchemeBoardEvents::TEvNotifyAck(0)); 
+    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber); 
+ 
+    Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1, true)); 
+    Context->Send(Replica, subscriber, new TSchemeBoardEvents::TEvNotifyAck(1)); 
+    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber); 
+} 
+ 
+void TReplicaTest::AckNotificationsUponPathRecreation() { 
+    const TActorId populator = Context->AllocateEdgeActor(); 
+    Context->HandshakeReplica(Replica, populator); 
+ 
+    // initial path version is 2 
+    Context->Send(Replica, populator, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1), 2))); 
+ 
+    const TActorId subscriber = Context->AllocateEdgeActor(); 
+    NKikimrSchemeBoard::TEvSubscribe::TCapabilities capabilities; 
+    capabilities.SetAckNotifications(true); 
+    Context->SubscribeReplica(Replica, subscriber, "path", true, 0, capabilities); 
+ 
+    // update to version 3 & omit ack 
+    Context->Send(Replica, populator, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1), 3))); 
+    { 
+        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber); 
+        UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->GetRecord().GetLocalPathId()); 
+        UNIT_ASSERT_VALUES_EQUAL(3, ev->Get()->GetRecord().GetVersion()); 
+    } 
+ 
+    // recreate path with version 1 
+    Context->Send(Replica, populator, GenerateUpdate(GenerateDescribe("path", TPathId(1, 2), 1))); 
+    // ack previous version 
+    Context->Send(Replica, subscriber, new TSchemeBoardEvents::TEvNotifyAck(3)); 
+    // should receive notification about recreated path 
+    while (true) { 
+        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber); 
+ 
+        if (ev->Get()->GetRecord().GetIsDeletion()) { 
+            // deletion of previous version 
+            UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->GetRecord().GetLocalPathId()); 
+        } else { 
+            UNIT_ASSERT_VALUES_EQUAL(2, ev->Get()->GetRecord().GetLocalPathId()); 
+            UNIT_ASSERT_VALUES_EQUAL(1, ev->Get()->GetRecord().GetVersion()); 
+            break; 
+        } 
+ 
+        Context->Send(Replica, subscriber, new TSchemeBoardEvents::TEvNotifyAck(ev->Get()->GetRecord().GetVersion())); 
+    } 
+} 
+ 
+void TReplicaTest::StrongNotificationAfterCommit() { 
+    const TActorId populator = Context->AllocateEdgeActor();
+    const TActorId subscriber = Context->AllocateEdgeActor();
+ 
+    Context->SubscribeReplica(Replica, subscriber, "path", false, 1); 
+    { 
+        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber); 
+        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion()); 
+        UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetStrong()); 
+    } 
+ 
+    Context->HandshakeReplica(Replica, populator); 
+    Context->CommitReplica(Replica, populator, 1, 1); 
+    { 
+        auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriber); 
+        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion()); 
+        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetStrong()); 
+    } 
+} 
+ 
 class TReplicaCombinationTest: public NUnitTest::TTestBase {
 public:
     void SetUp() override {
@@ -559,7 +559,7 @@ public:
     }
 
     TActorId GetReplica() {
-        return CreateReplica(*Context);
+        return CreateReplica(*Context); 
     }
 
     void TearDown() override {
@@ -671,14 +671,14 @@ void TReplicaCombinationTest::UpdatesCombinationsDomainRoot() {
 
 
 
-            UNIT_ASSERT_VALUES_EQUAL("/Root/Tenant", ev->Get()->GetRecord().GetPath());
-            UNIT_ASSERT_VALUES_EQUAL(std::get<1>(winId), ev->Get()->GetRecord().GetIsDeletion());
+            UNIT_ASSERT_VALUES_EQUAL("/Root/Tenant", ev->Get()->GetRecord().GetPath()); 
+            UNIT_ASSERT_VALUES_EQUAL(std::get<1>(winId), ev->Get()->GetRecord().GetIsDeletion()); 
 
-            if (!ev->Get()->GetRecord().GetIsDeletion()) {
-                UNIT_ASSERT_VALUES_EQUAL(std::get<2>(winId), TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId()));
-                UNIT_ASSERT_VALUES_EQUAL(std::get<3>(winId), ev->Get()->GetRecord().GetVersion());
+            if (!ev->Get()->GetRecord().GetIsDeletion()) { 
+                UNIT_ASSERT_VALUES_EQUAL(std::get<2>(winId), TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId())); 
+                UNIT_ASSERT_VALUES_EQUAL(std::get<3>(winId), ev->Get()->GetRecord().GetVersion()); 
 
-                UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResult());
+                UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResult()); 
                 const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->GetRecord().GetDescribeSchemeResult();
                 auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
                 UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
@@ -891,5 +891,5 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
     }
 }
 
-} // NSchemeBoard
-} // NKikimr
+} // NSchemeBoard 
+} // NKikimr 

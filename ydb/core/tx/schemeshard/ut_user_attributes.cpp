@@ -77,21 +77,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardUserAttrsTest) {
         auto dirVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
             {NLs::UserAttrsEqual({{"AttrA1", "ValA1"}}), NLs::PathVersionEqual(3)});
 
-        TestUserAttrs(runtime, txId++, "/MyRoot", "DirA", {NKikimrScheme::StatusAccepted},
-                      AlterUserAttrs({}, {"AttrA1"}), {dirVer});
+        TestUserAttrs(runtime, txId++, "/MyRoot", "DirA", {NKikimrScheme::StatusAccepted}, 
+                      AlterUserAttrs({}, {"AttrA1"}), {dirVer}); 
         env.TestWaitNotification(runtime, txId-1);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                     {NLs::UserAttrsEqual({}), NLs::PathVersionEqual(4)});
 
-        TestUserAttrs(runtime, txId++, "/MyRoot", "DirA", {NKikimrScheme::StatusPreconditionFailed},
-                      AlterUserAttrs({{"AttrA2", "ValA2"}}), {dirVer});
+        TestUserAttrs(runtime, txId++, "/MyRoot", "DirA", {NKikimrScheme::StatusPreconditionFailed}, 
+                      AlterUserAttrs({{"AttrA2", "ValA2"}}), {dirVer}); 
         env.TestWaitNotification(runtime, txId-1);
         dirVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                     {NLs::UserAttrsEqual({}), NLs::PathVersionEqual(4)});
 
-        TestUserAttrs(runtime, txId++, "/MyRoot", "DirA", {NKikimrScheme::StatusAccepted},
-                      AlterUserAttrs({{"AttrA2", "ValA2"}}), {dirVer});
+        TestUserAttrs(runtime, txId++, "/MyRoot", "DirA", {NKikimrScheme::StatusAccepted}, 
+                      AlterUserAttrs({{"AttrA2", "ValA2"}}), {dirVer}); 
         env.TestWaitNotification(runtime, txId-1);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                             {NLs::UserAttrsEqual({{"AttrA2", "ValA2"}}), NLs::PathVersionEqual(5)});
@@ -130,10 +130,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardUserAttrsTest) {
         auto dirCVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirC"),
             {NLs::Finished, NLs::PathVersionEqual(3)});
 
-        TestRmDir(runtime, txId++, "/MyRoot", "DirC", {NKikimrScheme::StatusPreconditionFailed}, {dirCVer, dirBVer, dirAVer, rootVer});
+        TestRmDir(runtime, txId++, "/MyRoot", "DirC", {NKikimrScheme::StatusPreconditionFailed}, {dirCVer, dirBVer, dirAVer, rootVer}); 
         rootVer = TestDescribeResult(DescribePath(runtime, "/MyRoot"),
             {NLs::Finished});
-        TestRmDir(runtime, txId++, "/MyRoot", "DirC", {NKikimrScheme::StatusAccepted}, {dirCVer, dirBVer, dirAVer, rootVer});
+        TestRmDir(runtime, txId++, "/MyRoot", "DirC", {NKikimrScheme::StatusAccepted}, {dirCVer, dirBVer, dirAVer, rootVer}); 
         env.TestWaitNotification(runtime, txId-1);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirC"),
                     {NLs::PathNotExist});
@@ -170,20 +170,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardUserAttrsTest) {
         auto dirAVer =TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                           {NLs::UserAttrsEqual({}), NLs::PathVersionEqual(6)});
 
-        TestUserAttrs(runtime, txId++, "/MyRoot", "DirA", {NKikimrScheme::StatusAccepted},
+        TestUserAttrs(runtime, txId++, "/MyRoot", "DirA", {NKikimrScheme::StatusAccepted}, 
                       AlterUserAttrs({{"AttrA6", "ValA6"}}), {dirAVer});
         env.TestWaitNotification(runtime, txId-1);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                     {NLs::Finished, NLs::UserAttrsEqual({{"AttrA6", "ValA6"}}), NLs::PathVersionEqual(7)});
 
-        TestUserAttrs(runtime, txId++, "/MyRoot", "DirA", {NKikimrScheme::StatusPreconditionFailed},
-                      AlterUserAttrs({}, {"AttrA6"}), {dirAVer});
+        TestUserAttrs(runtime, txId++, "/MyRoot", "DirA", {NKikimrScheme::StatusPreconditionFailed}, 
+                      AlterUserAttrs({}, {"AttrA6"}), {dirAVer}); 
 
         dirAVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                     {NLs::Finished, NLs::UserAttrsEqual({{"AttrA6", "ValA6"}}), NLs::PathVersionEqual(7)});
 
-        TestUserAttrs(runtime, txId++, "/MyRoot", "DirA", {NKikimrScheme::StatusAccepted},
+        TestUserAttrs(runtime, txId++, "/MyRoot", "DirA", {NKikimrScheme::StatusAccepted}, 
                       AlterUserAttrs({}, {"AttrA6"}), {dirAVer});
         env.TestWaitNotification(runtime, txId-1);
 
@@ -207,15 +207,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardUserAttrsTest) {
         auto dirBBVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/DirBB"),
                             {NLs::Finished, NLs::PathVersionEqual(3)});
 
-        TestRmDir(runtime, txId++, "/MyRoot/DirB", "DirBB", {NKikimrScheme::StatusPreconditionFailed}, {dirAVer, dirBVer});
+        TestRmDir(runtime, txId++, "/MyRoot/DirB", "DirBB", {NKikimrScheme::StatusPreconditionFailed}, {dirAVer, dirBVer}); 
         dirBVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                             {NLs::Finished, NLs::PathVersionEqual(5)});
-        TestRmDir(runtime, txId++, "/MyRoot/DirB", "DirBB", {NKikimrScheme::StatusAccepted}, {dirAVer, dirBVer});
+        TestRmDir(runtime, txId++, "/MyRoot/DirB", "DirBB", {NKikimrScheme::StatusAccepted}, {dirAVer, dirBVer}); 
         env.TestWaitNotification(runtime, txId-1);
         dirBVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                                     {NLs::Finished, NLs::NoChildren, NLs::PathVersionEqual(7)});
 
-        TestRmDir(runtime, txId++, "/MyRoot", "DirB", {NKikimrScheme::StatusPreconditionFailed}, {dirAVer, dirBVer, dirBBVer});
+        TestRmDir(runtime, txId++, "/MyRoot", "DirB", {NKikimrScheme::StatusPreconditionFailed}, {dirAVer, dirBVer, dirBBVer}); 
     }
 
     Y_UNIT_TEST(SpecialAttributes) {

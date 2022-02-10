@@ -115,8 +115,8 @@ void TFinishProposeUnit::Complete(TOperation::TPtr op,
     if (op->IsImmediate()) {
         Pipeline.RemoveCommittingOp(op);
         Pipeline.RemoveActiveOp(op);
-
-        DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
+ 
+        DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords())); 
     }
 
     DataShard.SendRegistrationRequestTimeCast(ctx);

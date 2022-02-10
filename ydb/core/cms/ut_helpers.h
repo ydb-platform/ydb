@@ -369,16 +369,16 @@ private:
     NKikimrBlobStorage::EDriveStatus Status;
 };
 
-inline NKikimrWhiteboard::TSystemStateInfo MakeSystemStateInfo(const TString& version, const TVector<TString>& roles = {}) {
-    NKikimrWhiteboard::TSystemStateInfo result;
-
-    result.SetVersion(version);
-    for (const auto& role : roles) {
-        result.AddRoles(role);
-    }
-
-    return result;
-}
-
+inline NKikimrWhiteboard::TSystemStateInfo MakeSystemStateInfo(const TString& version, const TVector<TString>& roles = {}) { 
+    NKikimrWhiteboard::TSystemStateInfo result; 
+ 
+    result.SetVersion(version); 
+    for (const auto& role : roles) { 
+        result.AddRoles(role); 
+    } 
+ 
+    return result; 
+} 
+ 
 } // NCmsTest
 } // NKikimr

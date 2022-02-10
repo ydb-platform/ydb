@@ -4,8 +4,8 @@
 #include <ydb/core/kqp/kqp_impl.h>
 #include <ydb/core/kqp/kqp_metadata_loader.h>
 
-#include <util/generic/maybe.h>
-
+#include <util/generic/maybe.h> 
+ 
 namespace NYql {
 
 using namespace NKikimr;
@@ -218,7 +218,7 @@ void TestCreateTableCommon(TIntrusivePtr<IKikimrGateway> gateway, Tests::TClient
             TString("Column2Index"),
             TVector<TString>{"Column2"},
             dataColumns,
-            TIndexDescription::EType::GlobalSync,
+            TIndexDescription::EType::GlobalSync, 
             TIndexDescription::EIndexState::Ready,
             0,
             0,
@@ -244,7 +244,7 @@ void TestCreateTableCommon(TIntrusivePtr<IKikimrGateway> gateway, Tests::TClient
     responseFuture.Wait();
     auto response = responseFuture.GetValue();
     response.Issues().PrintTo(Cerr);
-    if ((!shouldCreate && !createFolders) || (shouldCreate && !*shouldCreate)) {
+    if ((!shouldCreate && !createFolders) || (shouldCreate && !*shouldCreate)) { 
         UNIT_ASSERT(!response.Success());
         UNIT_ASSERT(HasIssue(response.Issues(), TIssuesIds::KIKIMR_SCHEME_ERROR));
     } else {

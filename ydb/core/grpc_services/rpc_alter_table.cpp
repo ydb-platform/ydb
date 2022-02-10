@@ -12,8 +12,8 @@
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/table_description.h>
 
-#include <util/generic/hash_set.h>
-
+#include <util/generic/hash_set.h> 
+ 
 #define TXLOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
 #define TXLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
 #define TXLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
@@ -49,32 +49,32 @@ static bool CheckAccess(const NACLib::TUserToken& userToken, const NSchemeCache:
     return true;
 }
 
-static std::pair<StatusIds::StatusCode, TString> CheckAddIndexDesc(const Ydb::Table::TableIndex& desc) {
-    if (!desc.name()) {
-        return {StatusIds::BAD_REQUEST, "Index must have a name"};
-    }
-
+static std::pair<StatusIds::StatusCode, TString> CheckAddIndexDesc(const Ydb::Table::TableIndex& desc) { 
+    if (!desc.name()) { 
+        return {StatusIds::BAD_REQUEST, "Index must have a name"}; 
+    } 
+ 
     if (!desc.index_columns_size()) {
-        return {StatusIds::BAD_REQUEST, "At least one column must be specified"};
+        return {StatusIds::BAD_REQUEST, "At least one column must be specified"}; 
     }
-
-    if (!desc.data_columns().empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
-        return {StatusIds::UNSUPPORTED, "Data column feature is not supported yet"};
+ 
+    if (!desc.data_columns().empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) { 
+        return {StatusIds::UNSUPPORTED, "Data column feature is not supported yet"}; 
     }
-
-    switch (desc.type_case()) {
-    case Table::TableIndex::kGlobalIndex:
-        break;
-    case Table::TableIndex::kGlobalAsyncIndex:
-        if (!AppData()->FeatureFlags.GetEnableAsyncIndexes()) {
-            return {StatusIds::UNSUPPORTED, "Async indexes are not supported yet"};
-        }
-        break;
-    default:
-        break;
-    }
-
-    return {StatusIds::SUCCESS, ""};
+ 
+    switch (desc.type_case()) { 
+    case Table::TableIndex::kGlobalIndex: 
+        break; 
+    case Table::TableIndex::kGlobalAsyncIndex: 
+        if (!AppData()->FeatureFlags.GetEnableAsyncIndexes()) { 
+            return {StatusIds::UNSUPPORTED, "Async indexes are not supported yet"}; 
+        } 
+        break; 
+    default: 
+        break; 
+    } 
+ 
+    return {StatusIds::SUCCESS, ""}; 
 }
 
 class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTableRequest> {
@@ -87,47 +87,47 @@ class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTab
         }
         IActor::PassAway();
     }
-
-    enum class EOp {
-        // columns, column families, storage, ttl
-        Common,
+ 
+    enum class EOp { 
+        // columns, column families, storage, ttl 
+        Common, 
         // add indices
         AddIndex,
         // drop indices
         DropIndex,
-        // add/alter/drop attributes
-        Attribute,
-    };
-
-    THashSet<EOp> GetOps() const {
+        // add/alter/drop attributes 
+        Attribute, 
+    }; 
+ 
+    THashSet<EOp> GetOps() const { 
         const auto& req = GetProtoRequest();
-        THashSet<EOp> ops;
-
-        if (req->add_columns_size() || req->drop_columns_size() || req->alter_columns_size()
-            || req->ttl_action_case() != Ydb::Table::AlterTableRequest::TTL_ACTION_NOT_SET
-            || req->has_alter_storage_settings()
+        THashSet<EOp> ops; 
+ 
+        if (req->add_columns_size() || req->drop_columns_size() || req->alter_columns_size() 
+            || req->ttl_action_case() != Ydb::Table::AlterTableRequest::TTL_ACTION_NOT_SET 
+            || req->has_alter_storage_settings() 
             || req->add_column_families_size() || req->alter_column_families_size()
             || req->set_compaction_policy() || req->has_alter_partitioning_settings()
             || req->set_key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED
             || req->has_set_read_replicas_settings()) {
-            ops.emplace(EOp::Common);
-        }
-
+            ops.emplace(EOp::Common); 
+        } 
+ 
         if (req->add_indexes_size()) {
             ops.emplace(EOp::AddIndex);
-        }
-
+        } 
+ 
         if (req->drop_indexes_size()) {
             ops.emplace(EOp::DropIndex);
         }
 
-        if (req->alter_attributes_size()) {
-            ops.emplace(EOp::Attribute);
-        }
-
-        return ops;
-    }
-
+        if (req->alter_attributes_size()) { 
+            ops.emplace(EOp::Attribute); 
+        } 
+ 
+        return ops; 
+    } 
+ 
 public:
     TAlterTableRPC(IRequestOpCtx* msg)
         : TBase(msg) {}
@@ -139,40 +139,40 @@ public:
         if (!Request_->GetInternalToken().empty()) {
             UserToken = MakeHolder<NACLib::TUserToken>(Request_->GetInternalToken());
         }
-
-        auto ops = GetOps();
-        if (!ops) {
-            return Reply(StatusIds::BAD_REQUEST, "Empty alter",
-                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+ 
+        auto ops = GetOps(); 
+        if (!ops) { 
+            return Reply(StatusIds::BAD_REQUEST, "Empty alter", 
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx); 
         }
-        if (ops.size() != 1) {
-            return Reply(StatusIds::UNSUPPORTED, "Mixed alter is unsupported",
-                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-        }
-
-        switch (*ops.begin()) {
-        case EOp::Common:
+        if (ops.size() != 1) { 
+            return Reply(StatusIds::UNSUPPORTED, "Mixed alter is unsupported", 
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx); 
+        } 
+ 
+        switch (*ops.begin()) { 
+        case EOp::Common: 
             // Altering table settings will need table profiles
             SendConfigRequest(ctx);
             ctx.Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup(WakeupTagGetConfig));
             Become(&TAlterTableRPC::AlterStateGetConfig);
             return;
-
+ 
         case EOp::AddIndex:
             if (req->add_indexes_size() == 1) {
                 const auto& index = req->add_indexes(0);
-                auto [status, issues] = CheckAddIndexDesc(index);
-                if (status == StatusIds::SUCCESS) {
+                auto [status, issues] = CheckAddIndexDesc(index); 
+                if (status == StatusIds::SUCCESS) { 
                     PrepareAlterTableAddIndex();
                 } else {
-                    return Reply(status, issues, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                    return Reply(status, issues, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx); 
                 }
-            } else {
+            } else { 
                 return Reply(StatusIds::UNSUPPORTED, "Only one index can be added by one operation",
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-            }
-            break;
-
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx); 
+            } 
+            break; 
+ 
         case EOp::DropIndex:
             if (req->drop_indexes_size() == 1) {
                 DropIndex(ctx);
@@ -182,11 +182,11 @@ public:
             }
             break;
 
-        case EOp::Attribute:
-            AlterUserAttributes(ctx);
-            break;
-        }
-
+        case EOp::Attribute: 
+            AlterUserAttributes(ctx); 
+            break; 
+        } 
+ 
         Become(&TAlterTableRPC::AlterStateWork);
     }
 
@@ -397,7 +397,7 @@ private:
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 
-    void AlterTable(const TActorContext &ctx) {
+    void AlterTable(const TActorContext &ctx) { 
         const auto req = GetProtoRequest();
         std::pair<TString, TString> pathPair;
         try {
@@ -478,7 +478,7 @@ private:
             desc->ClearPartitionConfig();
         }
 
-        if (!FillAlterTableSettingsDesc(*desc, *req, Profiles, code, error, AppData())) {
+        if (!FillAlterTableSettingsDesc(*desc, *req, Profiles, code, error, AppData())) { 
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);
@@ -487,40 +487,40 @@ private:
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 
-    void AlterUserAttributes(const TActorContext &ctx) {
+    void AlterUserAttributes(const TActorContext &ctx) { 
         const auto req = GetProtoRequest();
-
-        std::pair<TString, TString> pathPair;
-        try {
-            pathPair = SplitPath(req->path());
-        } catch (const std::exception&) {
-            return ReplyWithStatus(StatusIds::BAD_REQUEST, ctx);
-        }
-
-        const auto& workingDir = pathPair.first;
-        const auto& name = pathPair.second;
-
-        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
-        auto& record = proposeRequest->Record;
-        auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
-
-        modifyScheme.SetWorkingDir(workingDir);
+ 
+        std::pair<TString, TString> pathPair; 
+        try { 
+            pathPair = SplitPath(req->path()); 
+        } catch (const std::exception&) { 
+            return ReplyWithStatus(StatusIds::BAD_REQUEST, ctx); 
+        } 
+ 
+        const auto& workingDir = pathPair.first; 
+        const auto& name = pathPair.second; 
+ 
+        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction(); 
+        auto& record = proposeRequest->Record; 
+        auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme(); 
+ 
+        modifyScheme.SetWorkingDir(workingDir); 
         modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
-
-        auto& alter = *modifyScheme.MutableAlterUserAttributes();
-        alter.SetPathName(name);
-
-        for (auto [key, value] : req->alter_attributes()) {
-            auto& attr = *alter.AddUserAttributes();
-            attr.SetKey(key);
-            if (value) {
-                attr.SetValue(value);
-            }
-        }
-
-        ctx.Send(MakeTxProxyID(), proposeRequest.release());
-    }
-
+ 
+        auto& alter = *modifyScheme.MutableAlterUserAttributes(); 
+        alter.SetPathName(name); 
+ 
+        for (auto [key, value] : req->alter_attributes()) { 
+            auto& attr = *alter.AddUserAttributes(); 
+            attr.SetKey(key); 
+            if (value) { 
+                attr.SetValue(value); 
+            } 
+        } 
+ 
+        ctx.Send(MakeTxProxyID(), proposeRequest.release()); 
+    } 
+ 
     void ReplyWithStatus(StatusIds::StatusCode status,
                          const TActorContext &ctx) {
         Request_->ReplyWithYdbStatus(status);

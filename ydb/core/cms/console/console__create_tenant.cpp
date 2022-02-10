@@ -3,20 +3,20 @@
 namespace NKikimr {
 namespace NConsole {
 
-using namespace NOperationId;
+using namespace NOperationId; 
 
 class TTenantsManager::TTxCreateTenant : public TTransactionBase<TTenantsManager> {
-    static const Ydb::Cms::Resources& GetResources(const Ydb::Cms::CreateDatabaseRequest& request) {
-        switch (request.resources_kind_case()) {
-        case Ydb::Cms::CreateDatabaseRequest::kResources:
-            return request.resources();
-        case Ydb::Cms::CreateDatabaseRequest::kSharedResources:
-            return request.shared_resources();
-        default:
-            Y_FAIL_S("There is no resources: " << static_cast<ui32>(request.resources_kind_case()));
-        }
-    }
-
+    static const Ydb::Cms::Resources& GetResources(const Ydb::Cms::CreateDatabaseRequest& request) { 
+        switch (request.resources_kind_case()) { 
+        case Ydb::Cms::CreateDatabaseRequest::kResources: 
+            return request.resources(); 
+        case Ydb::Cms::CreateDatabaseRequest::kSharedResources: 
+            return request.shared_resources(); 
+        default: 
+            Y_FAIL_S("There is no resources: " << static_cast<ui32>(request.resources_kind_case())); 
+        } 
+    } 
+ 
 public:
     TTxCreateTenant(TEvConsole::TEvCreateTenantRequest::TPtr ev, TTenantsManager *self)
         : TBase(self)
@@ -79,17 +79,17 @@ public:
             return Error(Ydb::StatusIds::BAD_REQUEST, error, ctx);
         path = CanonizePath(path);
 
-        if (auto tenant = Self->GetTenant(path)) {
+        if (auto tenant = Self->GetTenant(path)) { 
             if (rec.idempotency_key() && tenant->CreateIdempotencyKey == rec.idempotency_key()) {
                 return Pending(tenant);
             } else if (tenant->IsRemoving()) {
-                return Error(Ydb::StatusIds::PRECONDITION_FAILED,
-                             Sprintf("Database '%s' is removing", path.data()), ctx);
-            } else {
-                return Error(Ydb::StatusIds::ALREADY_EXISTS,
-                             Sprintf("Database '%s' already exists", path.data()), ctx);
-            }
-        }
+                return Error(Ydb::StatusIds::PRECONDITION_FAILED, 
+                             Sprintf("Database '%s' is removing", path.data()), ctx); 
+            } else { 
+                return Error(Ydb::StatusIds::ALREADY_EXISTS, 
+                             Sprintf("Database '%s' already exists", path.data()), ctx); 
+            } 
+        } 
 
         if (auto it = Self->RemovedTenants.find(path); it != Self->RemovedTenants.end()) {
             if (rec.idempotency_key() && it->second.CreateIdempotencyKey == rec.idempotency_key()) {
@@ -123,7 +123,7 @@ public:
         }
 
         Tenant = new TTenant(path, TTenant::CREATING_POOLS, token);
-
+ 
         Tenant->IsExternalSubdomain = Self->FeatureFlags.GetEnableExternalSubdomains();
         Tenant->IsExternalHive = Self->FeatureFlags.GetEnableExternalHive();
         Tenant->IsExternalSysViewProcessor = Self->FeatureFlags.GetEnablePersistentQueryStats();
@@ -145,118 +145,118 @@ public:
             Tenant->IsExternalHive = false;
             Tenant->IsExternalSysViewProcessor = false;
         }
-
+ 
         Tenant->IsExternalHive &= Tenant->IsExternalSubdomain; // external hive without external sub domain is pointless
         Tenant->IsExternalSysViewProcessor &= Tenant->IsExternalSubdomain;
-
+ 
         Tenant->StorageUnitsQuota = Self->Config.DefaultStorageUnitsQuota;
         Tenant->ComputationalUnitsQuota = Self->Config.DefaultComputationalUnitsQuota;
-
+ 
         for (const auto& [key, value] : rec.attributes()) {
             auto &r = *Tenant->Attributes.AddUserAttributes();
             r.SetKey(key);
             r.SetValue(value);
         }
 
-        switch (rec.resources_kind_case()) {
-        case Ydb::Cms::CreateDatabaseRequest::kSharedResources:
-            if (rec.options().disable_tx_service()) {
-                return Error(Ydb::StatusIds::BAD_REQUEST,
-                    "Cannot create shared database with no tx service enabled", ctx);
-            }
+        switch (rec.resources_kind_case()) { 
+        case Ydb::Cms::CreateDatabaseRequest::kSharedResources: 
+            if (rec.options().disable_tx_service()) { 
+                return Error(Ydb::StatusIds::BAD_REQUEST, 
+                    "Cannot create shared database with no tx service enabled", ctx); 
+            } 
 
-            Tenant->AreResourcesShared = true;
+            Tenant->AreResourcesShared = true; 
             // fallthrough to normal resources handling
             [[fallthrough]];
 
-        case Ydb::Cms::CreateDatabaseRequest::kResources:
-            for (auto &unit : GetResources(rec).storage_units()) {
-                auto &kind = unit.unit_kind();
-                auto size = unit.count();
-
-                if (Tenant->StoragePools.contains(kind)) {
-                    auto pool = Tenant->StoragePools.at(kind);
-                    pool->AddRequiredGroups(size);
-                } else {
-                    if (!Self->MakeBasicPoolCheck(kind, size, code, error))
-                        return Error(code, error, ctx);
-
-                    auto poolName = Tenant->MakeStoragePoolName(kind);
-                    auto &config = Self->Domain->StoragePoolTypes.at(kind);
-                    TStoragePool::TPtr pool = new TStoragePool(poolName, kind, size, config);
-                    Tenant->StoragePools.emplace(std::make_pair(kind, pool));
-                }
+        case Ydb::Cms::CreateDatabaseRequest::kResources: 
+            for (auto &unit : GetResources(rec).storage_units()) { 
+                auto &kind = unit.unit_kind(); 
+                auto size = unit.count(); 
+ 
+                if (Tenant->StoragePools.contains(kind)) { 
+                    auto pool = Tenant->StoragePools.at(kind); 
+                    pool->AddRequiredGroups(size); 
+                } else { 
+                    if (!Self->MakeBasicPoolCheck(kind, size, code, error)) 
+                        return Error(code, error, ctx); 
+ 
+                    auto poolName = Tenant->MakeStoragePoolName(kind); 
+                    auto &config = Self->Domain->StoragePoolTypes.at(kind); 
+                    TStoragePool::TPtr pool = new TStoragePool(poolName, kind, size, config); 
+                    Tenant->StoragePools.emplace(std::make_pair(kind, pool)); 
+                } 
             }
 
-            if (Tenant->StoragePools.empty())
-                return Error(Ydb::StatusIds::BAD_REQUEST,
-                             "No storage units specified.", ctx);
+            if (Tenant->StoragePools.empty()) 
+                return Error(Ydb::StatusIds::BAD_REQUEST, 
+                             "No storage units specified.", ctx); 
 
-            for (auto &unit : GetResources(rec).computational_units()) {
-                auto &kind = unit.unit_kind();
-                auto &zone = unit.availability_zone();
-                ui64 count = unit.count();
+            for (auto &unit : GetResources(rec).computational_units()) { 
+                auto &kind = unit.unit_kind(); 
+                auto &zone = unit.availability_zone(); 
+                ui64 count = unit.count(); 
 
-                if (!Self->MakeBasicComputationalUnitCheck(kind, zone, code, error))
-                    return Error(code, error, ctx);
-
-                Tenant->ComputationalUnits[std::make_pair(kind, zone)] += count;
-            }
-
-            // Check tenant quotas.
-            if (!Tenant->CheckQuota(code, error))
+                if (!Self->MakeBasicComputationalUnitCheck(kind, zone, code, error)) 
+                    return Error(code, error, ctx); 
+ 
+                Tenant->ComputationalUnits[std::make_pair(kind, zone)] += count; 
+            } 
+ 
+            // Check tenant quotas. 
+            if (!Tenant->CheckQuota(code, error)) 
                 return Error(code, error, ctx);
 
-            // Check cluster quotas.
-            if (!Self->CheckComputationalUnitsQuota(Tenant->ComputationalUnits, code, error))
-                return Error(code, error, ctx);
+            // Check cluster quotas. 
+            if (!Self->CheckComputationalUnitsQuota(Tenant->ComputationalUnits, code, error)) 
+                return Error(code, error, ctx); 
 
-            Tenant->ParseComputationalUnits(Self->Config);
-            break;
+            Tenant->ParseComputationalUnits(Self->Config); 
+            break; 
 
-        case Ydb::Cms::CreateDatabaseRequest::kServerlessResources:
-            if (!Tenant->IsExternalSubdomain) {
-                return Error(Ydb::StatusIds::PRECONDITION_FAILED,
-                    "Cannot create serverless database unless external subdomain is enabled", ctx);
-            }
+        case Ydb::Cms::CreateDatabaseRequest::kServerlessResources: 
+            if (!Tenant->IsExternalSubdomain) { 
+                return Error(Ydb::StatusIds::PRECONDITION_FAILED, 
+                    "Cannot create serverless database unless external subdomain is enabled", ctx); 
+            } 
 
-            if (rec.options().disable_tx_service()) {
-                return Error(Ydb::StatusIds::BAD_REQUEST,
-                    "Cannot create serverless database with no tx service enabled", ctx);
-            }
-
-            if (const TString& sharedDbPath = rec.serverless_resources().shared_database_path()) {
-                if (auto tenant = Self->GetTenant(CanonizePath(sharedDbPath))) {
-                    if (!tenant->AreResourcesShared) {
-                        return Error(Ydb::StatusIds::PRECONDITION_FAILED,
-                            TStringBuilder() << "Database is not shared: " << sharedDbPath, ctx);
-                    }
-
-                    if (!tenant->IsRunning()) {
-                        return Error(Ydb::StatusIds::PRECONDITION_FAILED,
-                            TStringBuilder() << "Database is not running: " << sharedDbPath, ctx);
-                    }
-
-                    Y_VERIFY(tenant->DomainId);
-                    Tenant->SharedDomainId = tenant->DomainId;
-                    tenant->HostedTenants.emplace(Tenant);
-
-                    Tenant->IsExternalHive = false;
-                    Tenant->Coordinators = 1;
-                    Tenant->SlotsAllocationConfirmed = true;
-                } else {
-                    return Error(Ydb::StatusIds::BAD_REQUEST,
-                        TStringBuilder() << "Database not exists: " << sharedDbPath, ctx);
-                }
-            } else {
-                return Error(Ydb::StatusIds::BAD_REQUEST, "Empty database name", ctx);
-            }
-            break;
-
-        default:
-            return Error(Ydb::StatusIds::BAD_REQUEST, "Unknown resources kind", ctx);
-        }
-
+            if (rec.options().disable_tx_service()) { 
+                return Error(Ydb::StatusIds::BAD_REQUEST, 
+                    "Cannot create serverless database with no tx service enabled", ctx); 
+            } 
+ 
+            if (const TString& sharedDbPath = rec.serverless_resources().shared_database_path()) { 
+                if (auto tenant = Self->GetTenant(CanonizePath(sharedDbPath))) { 
+                    if (!tenant->AreResourcesShared) { 
+                        return Error(Ydb::StatusIds::PRECONDITION_FAILED, 
+                            TStringBuilder() << "Database is not shared: " << sharedDbPath, ctx); 
+                    } 
+ 
+                    if (!tenant->IsRunning()) { 
+                        return Error(Ydb::StatusIds::PRECONDITION_FAILED, 
+                            TStringBuilder() << "Database is not running: " << sharedDbPath, ctx); 
+                    } 
+ 
+                    Y_VERIFY(tenant->DomainId); 
+                    Tenant->SharedDomainId = tenant->DomainId; 
+                    tenant->HostedTenants.emplace(Tenant); 
+ 
+                    Tenant->IsExternalHive = false; 
+                    Tenant->Coordinators = 1; 
+                    Tenant->SlotsAllocationConfirmed = true; 
+                } else { 
+                    return Error(Ydb::StatusIds::BAD_REQUEST, 
+                        TStringBuilder() << "Database not exists: " << sharedDbPath, ctx); 
+                } 
+            } else { 
+                return Error(Ydb::StatusIds::BAD_REQUEST, "Empty database name", ctx); 
+            } 
+            break; 
+ 
+        default: 
+            return Error(Ydb::StatusIds::BAD_REQUEST, "Unknown resources kind", ctx); 
+        } 
+ 
         if (rec.has_schema_operation_quotas()) {
             Tenant->SchemaOperationQuotas.ConstructInPlace(rec.schema_operation_quotas());
         }

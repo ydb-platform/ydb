@@ -71,23 +71,23 @@ class TestSchemeShardSimpleOps(object):
                 )
             )
 
-    def test_create_path_with_long_name_failed(self):
+    def test_create_path_with_long_name_failed(self): 
         # Act
-        def callee():
-            name = 'test_create_path_with_long_name_success' * 500
-            self.ydb_client.scheme_client.make_directory(
-                os.path.join(
-                    '/', self.root_dir, name,
-                )
+        def callee(): 
+            name = 'test_create_path_with_long_name_success' * 500 
+            self.ydb_client.scheme_client.make_directory( 
+                os.path.join( 
+                    '/', self.root_dir, name, 
+                ) 
             )
-
-        # Assert
-        assert_that(
-            callee,
-            raises(
-                ydb.SchemeError,
-                "path part is too long"
-            )
+ 
+        # Assert 
+        assert_that( 
+            callee, 
+            raises( 
+                ydb.SchemeError, 
+                "path part is too long" 
+            ) 
         )
 
     def test_delete_directory_from_leaf_success(self):

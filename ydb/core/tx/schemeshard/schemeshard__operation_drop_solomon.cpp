@@ -96,8 +96,8 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
         context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-
+        context.OnComplete.PublishToSchemeBoard(OperationId, pathId); 
+ 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedDeleteParts);
         return true;
     }
@@ -120,8 +120,8 @@ public:
 
 
 class TDropSolomon: public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
+    const TOperationId OperationId; 
+    const TTxTransaction Transaction; 
     TTxState::ETxState State = TTxState::Invalid;
 
     TTxState::ETxState NextState() {
@@ -161,11 +161,11 @@ class TDropSolomon: public TSubOperation {
     }
 
 public:
-    TDropSolomon(TOperationId id, const TTxTransaction& tx)
+    TDropSolomon(TOperationId id, const TTxTransaction& tx) 
         : OperationId(id)
-        , Transaction(tx)
-    {
-    }
+        , Transaction(tx) 
+    { 
+    } 
 
     TDropSolomon(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
@@ -177,14 +177,14 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& drop = Transaction.GetDrop();
+        const auto& drop = Transaction.GetDrop(); 
 
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = drop.GetName();
+        const TString& parentPathStr = Transaction.GetWorkingDir(); 
+        const TString& name = drop.GetName(); 
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropSolomon Propose"
-                         << ", path: " << parentPathStr << "/" << name
+                         << ", path: " << parentPathStr << "/" << name 
                          << ", pathId: " << drop.GetId()
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
@@ -197,8 +197,8 @@ public:
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks 
+                .NotEmpty() 
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -221,8 +221,8 @@ public:
             }
         }
 
-        TString errStr;
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+        TString errStr; 
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -268,16 +268,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TDropSolomon");
-    }
-
+    void AbortPropose(TOperationContext&) override { 
+        Y_FAIL("no AbortPropose for TDropSolomon"); 
+    } 
+ 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropSolomon AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->TabletID()); 
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
@@ -302,12 +302,12 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropSolomon(TOperationId id, const TTxTransaction& tx) {
-    return new TDropSolomon(id, tx);
-}
-
+ISubOperationBase::TPtr CreateDropSolomon(TOperationId id, const TTxTransaction& tx) { 
+    return new TDropSolomon(id, tx); 
+} 
+ 
 ISubOperationBase::TPtr CreateDropSolomon(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_VERIFY(state != TTxState::Invalid); 
     return new TDropSolomon(id, state);
 }
 

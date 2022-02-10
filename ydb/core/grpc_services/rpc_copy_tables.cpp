@@ -26,7 +26,7 @@ public:
 
 private:
     void SendProposeRequest(const TActorContext &ctx) {
-        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
+        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction(); 
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
         NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);

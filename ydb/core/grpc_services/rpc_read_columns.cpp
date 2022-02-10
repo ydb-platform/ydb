@@ -198,7 +198,7 @@ private:
         Y_VERIFY(ResolveNamesResult->ResultSet.size() == 1);
         const auto& entry = ResolveNamesResult->ResultSet.front();
         if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, ToString(entry.Status), ctx);
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, ToString(entry.Status), ctx); 
         }
 
         TString errorMessage;

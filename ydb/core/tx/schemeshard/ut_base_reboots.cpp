@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), 
                                    {NLs::Finished,
                                     NLs::IsTable,
                                     NLs::PartitionCount(2)});
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                    {NLs::ChildrenCount(3)});
 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/NewTable", true),
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/NewTable", true), 
                                    {NLs::Finished,
                                     NLs::IsTable,
                                     NLs::PartitionCount(2),
@@ -438,7 +438,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "MyRoot/Table", true),
+                TestDescribeResult(DescribePath(runtime, "MyRoot/Table", true), 
                                    {NLs::Finished,
                                     NLs::FreezeStateEqual(NKikimrSchemeOp::EFreezeState::Freeze)});
             }
@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "MyRoot/Table", true),
+                TestDescribeResult(DescribePath(runtime, "MyRoot/Table", true), 
                                    {NLs::Finished,
                                     NLs::FreezeStateEqual(NKikimrSchemeOp::EFreezeState::Unfreeze)});
             }

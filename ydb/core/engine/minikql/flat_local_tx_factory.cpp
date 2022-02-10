@@ -39,11 +39,11 @@ TRowVersion TMiniKQLFactory::GetReadVersion(const TTableId& tableId) const
     return TRowVersion::Max();
 }
 
-IChangeCollector* TMiniKQLFactory::GetChangeCollector(const TTableId& tableId) const
-{
-    Y_UNUSED(tableId);
-    return nullptr;
+IChangeCollector* TMiniKQLFactory::GetChangeCollector(const TTableId& tableId) const 
+{ 
+    Y_UNUSED(tableId); 
+    return nullptr; 
 }
-
+ 
 }
-}
+} 

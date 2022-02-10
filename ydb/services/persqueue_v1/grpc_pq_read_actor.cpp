@@ -1928,11 +1928,11 @@ bool FillBatchedData(MigrationStreamingReadServerMessage::DataBatch * data, cons
 
         TString sourceId;
         if (!r.GetSourceId().empty()) {
-            if (!NPQ::NSourceIdEncoding::IsValidEncoded(r.GetSourceId())) {
+            if (!NPQ::NSourceIdEncoding::IsValidEncoded(r.GetSourceId())) { 
                 LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_PROXY, "read bad sourceId from " << Partition
                                                                                            << " offset " << r.GetOffset() << " seqNo " << r.GetSeqNo() << " sourceId '" << r.GetSourceId() << "'");
             }
-            sourceId = NPQ::NSourceIdEncoding::Decode(r.GetSourceId());
+            sourceId = NPQ::NSourceIdEncoding::Decode(r.GetSourceId()); 
         }
 
         if (!currentBatch || currentBatch->write_timestamp_ms() != r.GetWriteTimestampMS() || currentBatch->source_id() != sourceId) {

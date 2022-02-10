@@ -47,12 +47,12 @@ namespace NPDisk {
 
     void SetupSchemeCache(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& root)
     {
-        auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>();
+        auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(); 
         cacheConfig->Roots.emplace_back(1, TTestTxConfig::SchemeShard, root);
         cacheConfig->Counters = new NMonitoring::TDynamicCounters();
 
-        runtime.AddLocalService(MakeSchemeCacheID(),
-            TActorSetupCmd(CreateSchemeBoardSchemeCache(cacheConfig.Get()), TMailboxType::Revolving, 0), nodeIndex);
+        runtime.AddLocalService(MakeSchemeCacheID(), 
+            TActorSetupCmd(CreateSchemeBoardSchemeCache(cacheConfig.Get()), TMailboxType::Revolving, 0), nodeIndex); 
     }
 
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex)
@@ -150,20 +150,20 @@ namespace NPDisk {
             nodeIndex);
     }
 
-    template<size_t N>
+    template<size_t N> 
     static TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TActorId (&replicas)[N], ui64 stateStorageGroup)
-    {
-        TIntrusivePtr<TStateStorageInfo> info(new TStateStorageInfo());
-        info->StateStorageGroup = stateStorageGroup;
+    { 
+        TIntrusivePtr<TStateStorageInfo> info(new TStateStorageInfo()); 
+        info->StateStorageGroup = stateStorageGroup; 
         info->NToSelect = N;
         info->Rings.resize(N);
-        for (size_t i = 0; i < N; ++i) {
+        for (size_t i = 0; i < N; ++i) { 
             info->Rings[i].Replicas.push_back(replicas[i]);
-        }
-
-        return info;
-    }
-
+        } 
+ 
+        return info; 
+    } 
+ 
     static TActorId MakeBoardReplicaID(
         const ui32 node,
         const ui64 stateStorageGroup,
@@ -190,23 +190,23 @@ namespace NPDisk {
         };
 
         const TActorId sbreplicas[3] = {
-            MakeSchemeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 0),
-            MakeSchemeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 1),
-            MakeSchemeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 2),
-        };
-
+            MakeSchemeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 0), 
+            MakeSchemeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 1), 
+            MakeSchemeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 2), 
+        }; 
+ 
         const TActorId ssproxy = MakeStateStorageProxyID(stateStorageGroup);
 
-        auto ssInfo = GenerateStateStorageInfo(ssreplicas, stateStorageGroup);
-        auto sbInfo = GenerateStateStorageInfo(sbreplicas, stateStorageGroup);
+        auto ssInfo = GenerateStateStorageInfo(ssreplicas, stateStorageGroup); 
+        auto sbInfo = GenerateStateStorageInfo(sbreplicas, stateStorageGroup); 
         auto bInfo = GenerateStateStorageInfo(breplicas, stateStorageGroup);
 
         if (!firstNode || nodeIndex == 0) {
             for (ui32 i = 0; i < 3; ++i) {
                 runtime.AddLocalService(ssreplicas[i],
                     TActorSetupCmd(CreateStateStorageReplica(ssInfo.Get(), i), TMailboxType::Revolving, 0), nodeIndex);
-                runtime.AddLocalService(sbreplicas[i],
-                    TActorSetupCmd(CreateSchemeBoardReplica(sbInfo.Get(), i), TMailboxType::Revolving, 0), nodeIndex);
+                runtime.AddLocalService(sbreplicas[i], 
+                    TActorSetupCmd(CreateSchemeBoardReplica(sbInfo.Get(), i), TMailboxType::Revolving, 0), nodeIndex); 
                 runtime.AddLocalService(breplicas[i],
                     TActorSetupCmd(CreateStateStorageBoardReplica(bInfo.Get(), i), TMailboxType::Revolving, 0), nodeIndex);
             }

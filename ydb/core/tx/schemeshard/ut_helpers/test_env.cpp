@@ -337,15 +337,15 @@ private:
 
             HFunc(TEvSchemeShard::TEvCancelTx, Handle);
             HFunc(TEvSchemeShard::TEvCancelTxResult, Handle);
-
-            HFunc(TEvExport::TEvCancelExportRequest, Handle);
-            HFunc(TEvExport::TEvCancelExportResponse, Handle);
-
-            HFunc(TEvExport::TEvForgetExportRequest, Handle);
-            HFunc(TEvExport::TEvForgetExportResponse, Handle);
-
-            HFunc(TEvImport::TEvCancelImportRequest, Handle);
-            HFunc(TEvImport::TEvCancelImportResponse, Handle);
+ 
+            HFunc(TEvExport::TEvCancelExportRequest, Handle); 
+            HFunc(TEvExport::TEvCancelExportResponse, Handle); 
+ 
+            HFunc(TEvExport::TEvForgetExportRequest, Handle); 
+            HFunc(TEvExport::TEvForgetExportResponse, Handle); 
+ 
+            HFunc(TEvImport::TEvCancelImportRequest, Handle); 
+            HFunc(TEvImport::TEvCancelImportResponse, Handle); 
         };
     }
 
@@ -391,18 +391,18 @@ private:
         HandleRequest(ev, ctx);
     }
 
-    void Handle(TEvExport::TEvCancelExportRequest::TPtr &ev, const TActorContext &ctx) {
-        HandleRequest(ev, ctx);
-    }
-
-    void Handle(TEvExport::TEvForgetExportRequest::TPtr &ev, const TActorContext &ctx) {
-        HandleRequest(ev, ctx);
-    }
-
-    void Handle(TEvImport::TEvCancelImportRequest::TPtr &ev, const TActorContext &ctx) {
-        HandleRequest(ev, ctx);
-    }
-
+    void Handle(TEvExport::TEvCancelExportRequest::TPtr &ev, const TActorContext &ctx) { 
+        HandleRequest(ev, ctx); 
+    } 
+ 
+    void Handle(TEvExport::TEvForgetExportRequest::TPtr &ev, const TActorContext &ctx) { 
+        HandleRequest(ev, ctx); 
+    } 
+ 
+    void Handle(TEvImport::TEvCancelImportRequest::TPtr &ev, const TActorContext &ctx) { 
+        HandleRequest(ev, ctx); 
+    } 
+ 
     template<class TEventPtr>
     void HandleResponse(TEventPtr &ev, const TActorContext &ctx) {
         ui64 txId = ev->Get()->Record.GetTxId();
@@ -423,18 +423,18 @@ private:
         HandleResponse(ev, ctx);
     }
 
-    void Handle(TEvExport::TEvCancelExportResponse::TPtr &ev, const TActorContext &ctx) {
-        HandleResponse(ev, ctx);
-    }
-
-    void Handle(TEvExport::TEvForgetExportResponse::TPtr &ev, const TActorContext &ctx) {
-        HandleResponse(ev, ctx);
-    }
-
-    void Handle(TEvImport::TEvCancelImportResponse::TPtr &ev, const TActorContext &ctx) {
-        HandleResponse(ev, ctx);
-    }
-
+    void Handle(TEvExport::TEvCancelExportResponse::TPtr &ev, const TActorContext &ctx) { 
+        HandleResponse(ev, ctx); 
+    } 
+ 
+    void Handle(TEvExport::TEvForgetExportResponse::TPtr &ev, const TActorContext &ctx) { 
+        HandleResponse(ev, ctx); 
+    } 
+ 
+    void Handle(TEvImport::TEvCancelImportResponse::TPtr &ev, const TActorContext &ctx) { 
+        HandleResponse(ev, ctx); 
+    } 
+ 
     void SendToSchemeshard(ui64 txId, const TActorContext &ctx) {
         if (!SchemeShardPipe) {
             SchemeShardPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, SchemeshardTabletId, GetPipeConfigWithRetries()));
@@ -485,7 +485,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     : SchemeShardFactory(ssFactory)
     , HiveState(new TFakeHiveState)
     , CoordinatorState(new TFakeCoordinator::TState)
-    , ChannelsCount(opts.NChannels_)
+    , ChannelsCount(opts.NChannels_) 
 {
     ui64 hive = TTestTxConfig::Hive;
     ui64 schemeRoot = TTestTxConfig::SchemeShard;
@@ -495,22 +495,22 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     TAppPrepare app(dsExportFactory ? dsExportFactory : static_cast<std::shared_ptr<NKikimr::NDataShard::IExportFactory>>(std::make_shared<TDataShardExportFactory>()));
 
     app.SetEnableDataColumnForIndexTable(true);
-    app.SetEnableSystemViews(opts.EnableSystemViews_);
-    app.SetEnablePersistentPartitionStats(opts.EnablePersistentPartitionStats_);
-    app.SetEnableTtlOnAsyncIndexedTables(opts.EnableTtlOnAsyncIndexedTables_);
-    app.SetAllowUpdateChannelsBindingOfSolomonPartitions(opts.AllowUpdateChannelsBindingOfSolomonPartitions_);
-    app.SetEnableAsyncIndexes(opts.EnableAsyncIndexes_);
+    app.SetEnableSystemViews(opts.EnableSystemViews_); 
+    app.SetEnablePersistentPartitionStats(opts.EnablePersistentPartitionStats_); 
+    app.SetEnableTtlOnAsyncIndexedTables(opts.EnableTtlOnAsyncIndexedTables_); 
+    app.SetAllowUpdateChannelsBindingOfSolomonPartitions(opts.AllowUpdateChannelsBindingOfSolomonPartitions_); 
+    app.SetEnableAsyncIndexes(opts.EnableAsyncIndexes_); 
     app.SetEnableNotNullColumns(opts.EnableNotNullColumns_);
     app.SetEnableSchemeTransactionsAtSchemeShard(opts.EnableSchemeTransactionsAtSchemeShard_);
     app.SetEnableOlapSchemaOperations(opts.EnableOlapSchemaOperations_);
-    app.SetEnableProtoSourceIdInfo(opts.EnableProtoSourceIdInfo_);
+    app.SetEnableProtoSourceIdInfo(opts.EnableProtoSourceIdInfo_); 
     app.SetEnableBackgroundCompaction(opts.EnableBackgroundCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
 
-    for (const auto& sid : opts.SystemBackupSIDs_) {
-        app.AddSystemBackupSID(sid);
-    }
-
+    for (const auto& sid : opts.SystemBackupSIDs_) { 
+        app.AddSystemBackupSID(sid); 
+    } 
+ 
     AddDomain(runtime, app, TTestTxConfig::DomainUid, 0, hive, schemeRoot);
 
     SetupLogging(runtime);
@@ -521,7 +521,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     }
 
     SetupTabletServices(runtime, &app);
-    if (opts.EnablePipeRetries_) {
+    if (opts.EnablePipeRetries_) { 
         EnableSchemeshardPipeRetriesGuard = EnableSchemeshardPipeRetries(runtime);
     }
 
@@ -548,15 +548,15 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     SetSplitMergePartCountLimit(&runtime, -1);
 }
 
-NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime &runtime, ui32 nchannels, bool enablePipeRetries,
-        NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory, bool enableSystemViews)
-    : TTestEnv(runtime, TTestEnvOptions()
-        .NChannels(nchannels)
-        .EnablePipeRetries(enablePipeRetries)
-        .EnableSystemViews(enableSystemViews), ssFactory)
-{
-}
-
+NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime &runtime, ui32 nchannels, bool enablePipeRetries, 
+        NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory, bool enableSystemViews) 
+    : TTestEnv(runtime, TTestEnvOptions() 
+        .NChannels(nchannels) 
+        .EnablePipeRetries(enablePipeRetries) 
+        .EnableSystemViews(enableSystemViews), ssFactory) 
+{ 
+} 
+ 
 void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) {
     runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, NActors::NLog::PRI_ERROR);

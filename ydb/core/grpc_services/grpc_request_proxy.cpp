@@ -298,7 +298,7 @@ private:
 
 void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
     ctx.Send(MakeTenantPoolRootID(), new TEvents::TEvSubscribe());
-    AllowYdbRequestsWithoutDatabase = AppData(ctx)->FeatureFlags.GetAllowYdbRequestsWithoutDatabase();
+    AllowYdbRequestsWithoutDatabase = AppData(ctx)->FeatureFlags.GetAllowYdbRequestsWithoutDatabase(); 
 
     // Subscribe for TableService config changes
     ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;

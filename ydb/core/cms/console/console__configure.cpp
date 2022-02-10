@@ -405,25 +405,25 @@ public:
         return true;
     }
 
-    TDynBitMap GetAffectedKinds(const ::google::protobuf::RepeatedPtrField<NKikimrConsole::TConfigureAction>& actions) {
-        TDynBitMap kinds;
-
-        for (auto &action : actions) {
-            switch (action.GetActionCase()) {
-            case NKikimrConsole::TConfigureAction::kAddConfigItem:
-                kinds.Set(action.GetAddConfigItem().GetConfigItem().GetKind());
-                break;
-            case NKikimrConsole::TConfigureAction::kModifyConfigItem:
-                kinds.Set(action.GetModifyConfigItem().GetConfigItem().GetKind());
-                break;
-            default:
-                return TDynBitMap();
-            }
-        }
-
-        return kinds;
-    }
-
+    TDynBitMap GetAffectedKinds(const ::google::protobuf::RepeatedPtrField<NKikimrConsole::TConfigureAction>& actions) { 
+        TDynBitMap kinds; 
+ 
+        for (auto &action : actions) { 
+            switch (action.GetActionCase()) { 
+            case NKikimrConsole::TConfigureAction::kAddConfigItem: 
+                kinds.Set(action.GetAddConfigItem().GetConfigItem().GetKind()); 
+                break; 
+            case NKikimrConsole::TConfigureAction::kModifyConfigItem: 
+                kinds.Set(action.GetModifyConfigItem().GetConfigItem().GetKind()); 
+                break; 
+            default: 
+                return TDynBitMap(); 
+            } 
+        } 
+ 
+        return kinds; 
+    } 
+ 
     bool ProcessAutoOrdering(const TActorContext &ctx)
     {
         for (auto &item : OrderingQueue)
@@ -492,7 +492,7 @@ public:
         TModificationsValidator affectedChecker(Self->ConfigIndex,
                                                 Self->PendingConfigModifications,
                                                 config);
-        auto affected = affectedChecker.ComputeAffectedConfigs(GetAffectedKinds(rec.GetActions()), false);
+        auto affected = affectedChecker.ComputeAffectedConfigs(GetAffectedKinds(rec.GetActions()), false); 
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
                     "affected.size() = " << affected.size());
         for (auto &item : affected) {

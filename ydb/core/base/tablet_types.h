@@ -40,7 +40,7 @@ public:
     static constexpr EType FILESTORE = FileStore;
     static constexpr EType TESTSHARD = TestShard;
     static constexpr EType SEQUENCESHARD = SequenceShard;
-    static constexpr EType REPLICATION_CONTROLLER = ReplicationController;
+    static constexpr EType REPLICATION_CONTROLLER = ReplicationController; 
 
     static const char* TypeToStr(EType t) {
         return EType_Name(t).c_str();
@@ -58,6 +58,6 @@ public:
 
 } // end of NKikimr
 
-Y_DECLARE_OUT_SPEC(inline, NKikimrTabletBase::TTabletTypes::EType, os, type) {
+Y_DECLARE_OUT_SPEC(inline, NKikimrTabletBase::TTabletTypes::EType, os, type) { 
     os << NKikimrTabletBase::TTabletTypes::EType_Name(type);
 }

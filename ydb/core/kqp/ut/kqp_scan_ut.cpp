@@ -1771,10 +1771,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(LMapFunction) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true);
-        TKikimrRunner kikimr(settings);
+        auto settings = TKikimrSettings() 
+            .SetWithSampleTables(false) 
+            .SetEnableOlapSchemaOperations(true); 
+        TKikimrRunner kikimr(settings); 
         auto tableClient = kikimr.GetTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
 

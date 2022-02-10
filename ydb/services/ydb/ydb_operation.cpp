@@ -1,4 +1,4 @@
-#include "ydb_operation.h"
+#include "ydb_operation.h" 
 
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
@@ -22,11 +22,11 @@ void TGRpcOperationService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter *limite
     Limiter_ = limiter;
 }
 
-bool TGRpcOperationService::IncRequest() {
+bool TGRpcOperationService::IncRequest() { 
     return Limiter_->Inc();
 }
 
-void TGRpcOperationService::DecRequest() {
+void TGRpcOperationService::DecRequest() { 
     Limiter_->Dec();
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
@@ -37,7 +37,7 @@ void TGRpcOperationService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-    MakeIntrusive<TGRpcRequest<Ydb::Operations::IN, Ydb::Operations::OUT, TGRpcOperationService>>(this, &Service_, CQ_, \
+    MakeIntrusive<TGRpcRequest<Ydb::Operations::IN, Ydb::Operations::OUT, TGRpcOperationService>>(this, &Service_, CQ_, \ 
         [this](NGrpc::IRequestContextBase *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
@@ -47,15 +47,15 @@ void TGRpcOperationService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     ADD_REQUEST(GetOperation, GetOperationRequest, GetOperationResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvGetOperationRequest(ctx));
     })
-    ADD_REQUEST(CancelOperation, CancelOperationRequest, CancelOperationResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvCancelOperationRequest(ctx));
-    })
-    ADD_REQUEST(ForgetOperation, ForgetOperationRequest, ForgetOperationResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvForgetOperationRequest(ctx));
-    })
-    ADD_REQUEST(ListOperations, ListOperationsRequest, ListOperationsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvListOperationsRequest(ctx));
-    })
+    ADD_REQUEST(CancelOperation, CancelOperationRequest, CancelOperationResponse, { 
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvCancelOperationRequest(ctx)); 
+    }) 
+    ADD_REQUEST(ForgetOperation, ForgetOperationRequest, ForgetOperationResponse, { 
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvForgetOperationRequest(ctx)); 
+    }) 
+    ADD_REQUEST(ListOperations, ListOperationsRequest, ListOperationsResponse, { 
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvListOperationsRequest(ctx)); 
+    }) 
 #undef ADD_REQUEST
 }
 

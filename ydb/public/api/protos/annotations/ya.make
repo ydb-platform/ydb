@@ -1,15 +1,15 @@
-PROTO_LIBRARY()
-
-OWNER(
-    ilnaz
-    g:kikimr
-)
-
-SRCS(
+PROTO_LIBRARY() 
+ 
+OWNER( 
+    ilnaz 
+    g:kikimr 
+) 
+ 
+SRCS( 
     sensitive.proto
-    validation.proto
-)
-
+    validation.proto 
+) 
+ 
 EXCLUDE_TAGS(GO_PROTO)
 
-END()
+END() 

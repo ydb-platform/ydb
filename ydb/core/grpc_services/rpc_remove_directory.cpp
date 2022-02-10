@@ -42,7 +42,7 @@ private:
         const auto& workingDir = pathPair.first;
         const auto& name = pathPair.second;
 
-        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
+        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction(); 
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
         NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetWorkingDir(workingDir);

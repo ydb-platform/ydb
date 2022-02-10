@@ -253,13 +253,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         logger.debug("Executing command = {}".format(full_command))
         try:
             return yatest_common.execute(full_command)
-        except yatest_common.ExecutionError as e:
-            logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
-                cmd=" ".join(str(x) for x in full_command),
-                e=str(e),
-                out=e.execution_result.std_out,
-                err=e.execution_result.std_err
-            ))
+        except yatest_common.ExecutionError as e: 
+            logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format( 
+                cmd=" ".join(str(x) for x in full_command), 
+                e=str(e), 
+                out=e.execution_result.std_out, 
+                err=e.execution_result.std_err 
+            )) 
             raise
 
     def start(self):
@@ -456,9 +456,9 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
 
     def _bs_config_invoke(self, request):
-        timeout = yatest_common.plain_or_under_sanitizer(120, 240)
-        sleep = 5
-        retries, success = timeout / sleep, False
+        timeout = yatest_common.plain_or_under_sanitizer(120, 240) 
+        sleep = 5 
+        retries, success = timeout / sleep, False 
         while retries > 0 and not success:
             try:
                 self.__call_kikimr_new_cli(
@@ -475,7 +475,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             except Exception as e:
                 logger.error("Failed to execute, %s", str(e))
                 retries -= 1
-                time.sleep(sleep)
+                time.sleep(sleep) 
 
                 if retries == 0:
                     raise

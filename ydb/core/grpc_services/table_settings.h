@@ -8,11 +8,11 @@ namespace NKikimr {
 namespace NGRpcService {
 
 bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
-    const Ydb::Table::CreateTableRequest& in, const NGRpcService::TTableProfiles& profiles,
+    const Ydb::Table::CreateTableRequest& in, const NGRpcService::TTableProfiles& profiles, 
     Ydb::StatusIds::StatusCode& code, TString& error, TList<TString>& warnings);
 
 bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
-    const Ydb::Table::AlterTableRequest& in, const NGRpcService::TTableProfiles& profiles,
+    const Ydb::Table::AlterTableRequest& in, const NGRpcService::TTableProfiles& profiles, 
     Ydb::StatusIds::StatusCode& code, TString& error, const TAppData* appData);
 
 } // namespace NGRpcService

@@ -102,7 +102,7 @@ private:
         const auto req = GetProtoRequest();
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->GetDatabaseName(), req->path());
+            pathPair = SplitPath(Request_->GetDatabaseName(), req->path()); 
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -122,7 +122,7 @@ private:
             return Reply(StatusIds::BAD_REQUEST, ctx);
         }
 
-        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
+        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction(); 
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
         NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetWorkingDir(workingDir);
@@ -137,21 +137,21 @@ private:
 
         tableDesc->SetName(name);
 
-        StatusIds::StatusCode code = StatusIds::SUCCESS;
-        TString error;
+        StatusIds::StatusCode code = StatusIds::SUCCESS; 
+        TString error; 
 
         if (!FillColumnDescription(*tableDesc, req->columns(), code, error)) {
-            NYql::TIssues issues;
-            issues.AddIssue(NYql::TIssue(error));
-            return Reply(code, issues, ctx);
+            NYql::TIssues issues; 
+            issues.AddIssue(NYql::TIssue(error)); 
+            return Reply(code, issues, ctx); 
         }
 
-        tableDesc->MutableKeyColumnNames()->CopyFrom(req->primary_key());
+        tableDesc->MutableKeyColumnNames()->CopyFrom(req->primary_key()); 
 
-        if (!FillIndexDescription(*modifyScheme->MutableCreateIndexedTable(), *req, code, error)) {
-            NYql::TIssues issues;
-            issues.AddIssue(NYql::TIssue(error));
-            return Reply(code, issues, ctx);
+        if (!FillIndexDescription(*modifyScheme->MutableCreateIndexedTable(), *req, code, error)) { 
+            NYql::TIssues issues; 
+            issues.AddIssue(NYql::TIssue(error)); 
+            return Reply(code, issues, ctx); 
         }
 
         bool tableProfileSet = false;
@@ -161,7 +161,7 @@ private:
                 || profile.has_partitioning_policy() || profile.has_storage_policy() || profile.has_replication_policy()
                 || profile.has_caching_policy();
         }
-
+ 
         if (!Profiles.ApplyTableProfile(req->profile(), *tableDesc, code, error)) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
@@ -199,15 +199,15 @@ private:
             return Reply(code, issues, ctx);
         }
 
-        // Attributes
-        for (auto [key, value] : req->attributes()) {
-            auto& attr = *modifyScheme->MutableAlterUserAttributes()->AddUserAttributes();
-            attr.SetKey(key);
-            attr.SetValue(value);
-        }
-
+        // Attributes 
+        for (auto [key, value] : req->attributes()) { 
+            auto& attr = *modifyScheme->MutableAlterUserAttributes()->AddUserAttributes(); 
+            attr.SetKey(key); 
+            attr.SetValue(value); 
+        } 
+ 
         TList<TString> warnings;
-        if (!FillCreateTableSettingsDesc(*tableDesc, *req, Profiles, code, error, warnings)) {
+        if (!FillCreateTableSettingsDesc(*tableDesc, *req, Profiles, code, error, warnings)) { 
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);

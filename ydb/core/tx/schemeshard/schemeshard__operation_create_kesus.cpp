@@ -227,9 +227,9 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
         context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        context.OnComplete.PublishToSchemeBoard(OperationId, pathId); 
+ 
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done); 
         return true;
     }
 
@@ -251,8 +251,8 @@ public:
 
 
 class TCreateKesus: public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
+    const TOperationId OperationId; 
+    const TTxTransaction Transaction; 
     TTxState::ETxState State = TTxState::Invalid;
 
     TTxState::ETxState NextState() {
@@ -266,8 +266,8 @@ class TCreateKesus: public TSubOperation {
             return TTxState::ConfigureParts;
         case TTxState::ConfigureParts:
             return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::Done;
+        case TTxState::Propose: 
+            return TTxState::Done; 
         default:
             return TTxState::Invalid;
         }
@@ -283,7 +283,7 @@ class TCreateKesus: public TSubOperation {
             return THolder(new TConfigureParts(OperationId));
         case TTxState::Propose:
             return THolder(new TPropose(OperationId));
-        case TTxState::Done:
+        case TTxState::Done: 
             return THolder(new TDone(OperationId));
         default:
             return nullptr;
@@ -300,11 +300,11 @@ class TCreateKesus: public TSubOperation {
     }
 
 public:
-    TCreateKesus(TOperationId id, const TTxTransaction& tx)
+    TCreateKesus(TOperationId id, const TTxTransaction& tx) 
         : OperationId(id)
-        , Transaction(tx)
-    {
-    }
+        , Transaction(tx) 
+    { 
+    } 
 
     TCreateKesus(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
@@ -317,10 +317,10 @@ public:
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
-        const auto& config = Transaction.GetKesus().GetConfig();
+        const auto& config = Transaction.GetKesus().GetConfig(); 
 
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = Transaction.GetKesus().GetName();
+        const TString& parentPathStr = Transaction.GetWorkingDir(); 
+        const TString& name = Transaction.GetKesus().GetName(); 
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateKesus Propose"
@@ -331,7 +331,7 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TString errStr;
+        TString errStr; 
         if (!ValidateConfig(config, status, errStr)) {
             result->SetError(status, errStr);
             return result;
@@ -358,20 +358,20 @@ public:
             }
         }
 
-        const TString acl = Transaction.GetModifyACL().GetDiffACL();
-
+        const TString acl = Transaction.GetModifyACL().GetDiffACL(); 
+ 
         NSchemeShard::TPath dstPath = parentPath.Child(name);
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
+                checks 
+                    .IsResolved() 
                     .NotUnderDeleting()
                     .FailOnExist(TPathElement::EPathType::EPathTypeKesus, acceptExisted);
             } else {
-                checks
-                    .NotEmpty()
+                checks 
+                    .NotEmpty() 
                     .NotResolved();
             }
 
@@ -382,8 +382,8 @@ public:
                     .PathsLimit()
                     .DirChildrenLimit()
                     .ShardsLimit()
-                    .PathShardsLimit()
-                    .IsValidACL(acl);
+                    .PathShardsLimit() 
+                    .IsValidACL(acl); 
             }
 
             if (!checks) {
@@ -407,7 +407,7 @@ public:
             return result;
         }
 
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -442,16 +442,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TCreateKesus");
-    }
-
+    void AbortPropose(TOperationContext&) override { 
+        Y_FAIL("no AbortPropose for TCreateKesus"); 
+    } 
+ 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateKesus AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->TabletID()); 
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -462,12 +462,12 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateNewKesus(TOperationId id, const TTxTransaction& tx) {
-    return new TCreateKesus(id, tx);
-}
-
+ISubOperationBase::TPtr CreateNewKesus(TOperationId id, const TTxTransaction& tx) { 
+    return new TCreateKesus(id, tx); 
+} 
+ 
 ISubOperationBase::TPtr CreateNewKesus(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_VERIFY(state != TTxState::Invalid); 
     return new TCreateKesus(id, state);
 }
 

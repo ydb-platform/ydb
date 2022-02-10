@@ -38,7 +38,7 @@ struct TSysViewProcessor::TTxInitSchema : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         SVLOG_D("[" << Self->TabletID() << "] TTxInitSchema::Complete");
 
-        if (!AppData()->FeatureFlags.GetEnablePersistentQueryStats()) {
+        if (!AppData()->FeatureFlags.GetEnablePersistentQueryStats()) { 
             SVLOG_D("[" << Self->TabletID() << "] tablet is offline");
             Self->SignalTabletActive(ctx);
             Self->Become(&TThis::StateOffline);

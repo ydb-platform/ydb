@@ -21,7 +21,7 @@ public:
         auto &rec = Event->Get()->Record;
         Response = new TEvCms::TEvNotificationResponse;
 
-        LOG_INFO(ctx, NKikimrServices::CMS, "Processing notification from %s (time=%s reason='%s')",
+        LOG_INFO(ctx, NKikimrServices::CMS, "Processing notification from %s (time=%s reason='%s')", 
                   rec.GetUser().data(), TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds().data(),
                   rec.GetReason().data());
 
@@ -39,10 +39,10 @@ public:
             auto row = db.Table<Schema::Notification>().Key(id);
             row.Update(NIceDb::TUpdate<Schema::Notification::Owner>(rec.GetUser()),
                        NIceDb::TUpdate<Schema::Notification::NotificationProto>(notificationStr));
-
-            Self->AuditLog(ctx, TStringBuilder() << "Store notification"
-                << ": id# " << id
-                << ", body# " << notificationStr);
+ 
+            Self->AuditLog(ctx, TStringBuilder() << "Store notification" 
+                << ": id# " << id 
+                << ", body# " << notificationStr); 
         }
 
         return true;

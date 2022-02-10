@@ -488,10 +488,10 @@ private:
 
             HFunc(TEvDescribeTopicsResponse, Handle)
 
-            HFunc(NPQ::TEvPartitionWriter::TEvInitResult, Handle);
-            HFunc(NPQ::TEvPartitionWriter::TEvWriteAccepted, Handle);
-            HFunc(NPQ::TEvPartitionWriter::TEvWriteResponse, Handle);
-            HFunc(NPQ::TEvPartitionWriter::TEvDisconnected, Handle);
+            HFunc(NPQ::TEvPartitionWriter::TEvInitResult, Handle); 
+            HFunc(NPQ::TEvPartitionWriter::TEvWriteAccepted, Handle); 
+            HFunc(NPQ::TEvPartitionWriter::TEvWriteResponse, Handle); 
+            HFunc(NPQ::TEvPartitionWriter::TEvDisconnected, Handle); 
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
 
@@ -533,10 +533,10 @@ private:
     THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateSourceIdMetadataRequest(const NActors::TActorContext& ctx);
     void InitCheckACL(const TActorContext& ctx);
 
-    void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx);
-    void Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx);
+    void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx); 
+    void Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx); 
+    void Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx); 
+    void Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx); 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const NActors::TActorContext& ctx);
@@ -564,15 +564,15 @@ private:
         ES_WAIT_NEXT_PARTITION = 5,
         ES_WAIT_TABLE_REQUEST_2 = 6,
         ES_WAIT_TABLE_REQUEST_3 = 7,
-        ES_WAIT_WRITER_INIT = 8,
-        ES_INITED = 9
+        ES_WAIT_WRITER_INIT = 8, 
+        ES_INITED = 9 
         //TODO: filter
     };
 
     EState State;
     TActorId SchemeCache;
     TActorId NewSchemeCache;
-    TActorId Writer;
+    TActorId Writer; 
 
     TString PeerName;
     ui64 Cookie;
@@ -599,10 +599,10 @@ private:
         // Source requests from user (grpc session object)
         std::deque<THolder<TEvPQProxy::TEvWrite>> UserWriteRequests;
 
-        // Formed write request's size
+        // Formed write request's size 
         ui64 ByteSize = 0;
 
-        // Formed write request's cookie
+        // Formed write request's cookie 
         ui64 Cookie = 0;
     };
 

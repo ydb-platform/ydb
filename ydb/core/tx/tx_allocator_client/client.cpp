@@ -1,4 +1,4 @@
-#include "client.h"
+#include "client.h" 
 
 void NKikimr::TTxAllocatorClient::AddAllocationRange(const NKikimr::TTxAllocatorClient::TTabletId &from, const NKikimrTx::TEvTxAllocateResult &allocation) {
     ReservedRanges.emplace_back(from, allocation.GetRangeBegin(), allocation.GetRangeEnd());

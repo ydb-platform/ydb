@@ -84,26 +84,26 @@ public:
             context.SS->FillSeqNo(tx, seqNo);
 
             auto notice = tx.MutableDropIndexNotice();
-            PathIdFromPathId(pathId, notice->MutablePathId());
+            PathIdFromPathId(pathId, notice->MutablePathId()); 
             notice->SetTableSchemaVersion(table->AlterVersion + 1);
 
-            bool found = false;
-            for (const auto& [_, childPathId] : path->GetChildren()) {
-                Y_VERIFY(context.SS->PathsById.contains(childPathId));
-                auto childPath = context.SS->PathsById.at(childPathId);
-
-                if (!childPath->IsTableIndex() || !childPath->PlannedToDrop()) {
-                    continue;
-                }
-
-                Y_VERIFY_S(!found, "Too many indexes are planned to drop"
-                    << ": found# " << PathIdFromPathId(notice->GetIndexPathId())
-                    << ", another# " << childPathId);
-                found = true;
-
-                PathIdFromPathId(childPathId, notice->MutableIndexPathId());
-            }
-
+            bool found = false; 
+            for (const auto& [_, childPathId] : path->GetChildren()) { 
+                Y_VERIFY(context.SS->PathsById.contains(childPathId)); 
+                auto childPath = context.SS->PathsById.at(childPathId); 
+ 
+                if (!childPath->IsTableIndex() || !childPath->PlannedToDrop()) { 
+                    continue; 
+                } 
+ 
+                Y_VERIFY_S(!found, "Too many indexes are planned to drop" 
+                    << ": found# " << PathIdFromPathId(notice->GetIndexPathId()) 
+                    << ", another# " << childPathId); 
+                found = true; 
+ 
+                PathIdFromPathId(childPathId, notice->MutableIndexPathId()); 
+            } 
+ 
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
         }
 
@@ -507,19 +507,19 @@ TVector<ISubOperationBase::TPtr> CreateDropIndex(TOperationId nextId, const TTxT
 
     {
         auto mainTableIndexDropping = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndexAtMainTable);
-        auto operation = mainTableIndexDropping.MutableDropIndex();
+        auto operation = mainTableIndexDropping.MutableDropIndex(); 
         operation->SetTableName(mainTablePath.LeafName());
         operation->SetIndexName(indexPath.LeafName());
 
-        result.push_back(CreateDropTableIndexAtMainTable(NextPartId(nextId, result), mainTableIndexDropping));
+        result.push_back(CreateDropTableIndexAtMainTable(NextPartId(nextId, result), mainTableIndexDropping)); 
     }
 
     {
         auto indexDropping = TransactionTemplate(mainTablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
         auto operation = indexDropping.MutableDrop();
         operation->SetName(ToString(indexPath.Base()->Name));
-
-        result.push_back(CreateDropTableIndex(NextPartId(nextId, result), indexDropping));
+ 
+        result.push_back(CreateDropTableIndex(NextPartId(nextId, result), indexDropping)); 
     }
 
     for (const auto& items: indexPath.Base()->GetChildren()) {
@@ -535,8 +535,8 @@ TVector<ISubOperationBase::TPtr> CreateDropIndex(TOperationId nextId, const TTxT
         auto implTableDropping = TransactionTemplate(indexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
         auto operation = implTableDropping.MutableDrop();
         operation->SetName(items.first);
-
-        result.push_back(CreateDropTable(NextPartId(nextId, result), implTableDropping));
+ 
+        result.push_back(CreateDropTable(NextPartId(nextId, result), implTableDropping)); 
     }
 
     return result;

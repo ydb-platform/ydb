@@ -1131,7 +1131,7 @@ RECURSE(
     visitor
     voluptuous
     w3lib
-    waitress 
+    waitress
     walrus
     Wand
     wasabi
@@ -1146,7 +1146,7 @@ RECURSE(
     websocket-client
     websockets
     webstruct
-    WebTest 
+    WebTest
     webvtt-py
     weighted-levenshtein
     Werkzeug

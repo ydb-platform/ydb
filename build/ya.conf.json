@@ -3847,36 +3847,36 @@
                 }
             ]
         },
-        "gpt": {
-            "tools": {
-                "gpt_perf": {
-                    "bottle": "gpt"
+        "gpt": { 
+            "tools": { 
+                "gpt_perf": { 
+                    "bottle": "gpt" 
+                }, 
+                "gpt_heap": { 
+                    "bottle": "gpt" 
+                } 
+            }, 
+            "params": { 
+                "gpt_perf": { 
+                    "LD_PRELOAD": [ 
+                        "$(GPT_PERF)/gpt/lib/libprofiler.so" 
+                    ], 
+                    "HEAPCHECK": [ 
+                        "normal" 
+                    ], 
+                    "PPROF_PATH": [ 
+                        "$(GPT_PERF)/gpt/bin/pprof" 
+                    ] 
                 },
-                "gpt_heap": {
-                    "bottle": "gpt"
+                "gpt_heap": { 
+                    "LD_PRELOAD": [ 
+                        "$(GPT_HEAP)/gpt/lib/libtcmalloc.so" 
+                    ], 
+                    "PPROF_PATH": [ 
+                        "$(GPT_HEAP)/gpt/bin/pprof" 
+                    ] 
                 }
-            },
-            "params": {
-                "gpt_perf": {
-                    "LD_PRELOAD": [
-                        "$(GPT_PERF)/gpt/lib/libprofiler.so"
-                    ],
-                    "HEAPCHECK": [
-                        "normal"
-                    ],
-                    "PPROF_PATH": [
-                        "$(GPT_PERF)/gpt/bin/pprof"
-                    ]
-                },
-                "gpt_heap": {
-                    "LD_PRELOAD": [
-                        "$(GPT_HEAP)/gpt/lib/libtcmalloc.so"
-                    ],
-                    "PPROF_PATH": [
-                        "$(GPT_HEAP)/gpt/bin/pprof"
-                    ]
-                }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -7093,11 +7093,11 @@
                 ]
             }
         },
-        "gpt": {
-            "formula": {
+        "gpt": { 
+            "formula": { 
                 "sandbox_id": 21836503,
                 "match": "GooglePerformanceTools"
-            }
+            } 
         },
         "ant": {
             "formula": {

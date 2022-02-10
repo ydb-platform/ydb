@@ -383,8 +383,8 @@ inline void Delete(THolder<IThreadPool> q) {
     }
 }
 
-/**
+/** 
  * Creates and starts TThreadPool if threadsCount > 1, or TFakeThreadPool otherwise
  * You could specify blocking and catching modes for TThreadPool only
- */
+ */ 
 THolder<IThreadPool> CreateThreadPool(size_t threadCount, size_t queueSizeLimit = 0, const IThreadPool::TParams& params = {});

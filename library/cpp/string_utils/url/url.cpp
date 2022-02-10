@@ -182,18 +182,18 @@ TStringBuf GetSchemeHostAndPort(const TStringBuf url, bool trimHttp, bool trimDe
     }
 }
 
-void SplitUrlToHostAndPath(const TStringBuf url, TStringBuf& host, TStringBuf& path) {
+void SplitUrlToHostAndPath(const TStringBuf url, TStringBuf& host, TStringBuf& path) { 
     auto [hostBuf, pathBuf] = NUrl::SplitUrlToHostAndPath(url);
     host = hostBuf;
     path = pathBuf;
-}
-
-void SplitUrlToHostAndPath(const TStringBuf url, TString& host, TString& path) {
+} 
+ 
+void SplitUrlToHostAndPath(const TStringBuf url, TString& host, TString& path) { 
     auto [hostBuf, pathBuf] = NUrl::SplitUrlToHostAndPath(url);
     host = hostBuf;
     path = pathBuf;
-}
-
+} 
+ 
 void SeparateUrlFromQueryAndFragment(const TStringBuf url, TStringBuf& sanitizedUrl, TStringBuf& query, TStringBuf& fragment) {
     TStringBuf urlWithoutFragment;
     if (!url.TrySplit('#', urlWithoutFragment, fragment)) {

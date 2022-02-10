@@ -128,29 +128,29 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
     }
 
     Y_UNIT_TEST(TestSplitUrlToHostAndPath) {
-        TStringBuf host, path;
-
-        SplitUrlToHostAndPath("https://yandex.ru/yandsearch", host, path);
-        UNIT_ASSERT_STRINGS_EQUAL(host, "https://yandex.ru");
-        UNIT_ASSERT_STRINGS_EQUAL(path, "/yandsearch");
-
-        SplitUrlToHostAndPath("yandex.ru/yandsearch", host, path);
-        UNIT_ASSERT_STRINGS_EQUAL(host, "yandex.ru");
-        UNIT_ASSERT_STRINGS_EQUAL(path, "/yandsearch");
-
-        SplitUrlToHostAndPath("https://yandex.ru", host, path);
-        UNIT_ASSERT_STRINGS_EQUAL(host, "https://yandex.ru");
-        UNIT_ASSERT_STRINGS_EQUAL(path, "");
-
-        SplitUrlToHostAndPath("invalid url /", host, path);
-        UNIT_ASSERT_STRINGS_EQUAL(host, "invalid url ");
-        UNIT_ASSERT_STRINGS_EQUAL(path, "/");
+        TStringBuf host, path; 
+ 
+        SplitUrlToHostAndPath("https://yandex.ru/yandsearch", host, path); 
+        UNIT_ASSERT_STRINGS_EQUAL(host, "https://yandex.ru"); 
+        UNIT_ASSERT_STRINGS_EQUAL(path, "/yandsearch"); 
+ 
+        SplitUrlToHostAndPath("yandex.ru/yandsearch", host, path); 
+        UNIT_ASSERT_STRINGS_EQUAL(host, "yandex.ru"); 
+        UNIT_ASSERT_STRINGS_EQUAL(path, "/yandsearch"); 
+ 
+        SplitUrlToHostAndPath("https://yandex.ru", host, path); 
+        UNIT_ASSERT_STRINGS_EQUAL(host, "https://yandex.ru"); 
+        UNIT_ASSERT_STRINGS_EQUAL(path, ""); 
+ 
+        SplitUrlToHostAndPath("invalid url /", host, path); 
+        UNIT_ASSERT_STRINGS_EQUAL(host, "invalid url "); 
+        UNIT_ASSERT_STRINGS_EQUAL(path, "/"); 
 
         SplitUrlToHostAndPath("some_blender_url", host, path);
         UNIT_ASSERT_STRINGS_EQUAL(host, "some_blender_url");
         UNIT_ASSERT_STRINGS_EQUAL(path, "");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestSeparateUrlFromQueryAndFragment) {
         TStringBuf sanitizedUrl, query, fragment;
 

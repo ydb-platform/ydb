@@ -2,8 +2,8 @@
 
 #include "metric.h"
 
-#include <util/generic/typetraits.h> 
- 
+#include <util/generic/typetraits.h>
+
 #include <chrono>
 
 
@@ -57,7 +57,7 @@ namespace NMonitoring {
             } else if constexpr (std::is_same<TMetric, THistogram>::value) {
                 Metric_->Record(duration);
             } else {
-                static_assert(TDependentFalse<TMetric>, "Not supported metric type"); 
+                static_assert(TDependentFalse<TMetric>, "Not supported metric type");
             }
 
             Metric_ = nullptr;

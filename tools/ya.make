@@ -174,7 +174,7 @@ RECURSE(
     urlseq_print
     voice
     webxmltest
-    wizard_yt
+    wizard_yt 
     ygetparam
     ylzocat
     yson_pp

@@ -947,7 +947,7 @@ RECURSE(
     requests-toolbelt
     requests-unixsocket
     responses
-    respx 
+    respx
     retry
     retrying
     rfc3986

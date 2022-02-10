@@ -17,18 +17,18 @@
 #include "kmp_wrapper_malloc.h"
 #include "kmp_io.h"
 
-#ifdef __clang__ 
-#if __has_feature(address_sanitizer) 
-extern "C" { // sanitizers API 
-void __lsan_ignore_object(const void* p); 
-} 
-#else 
-#define __lsan_ignore_object(p) 
-#endif 
-#else 
-#define __lsan_ignore_object(p) 
-#endif 
- 
+#ifdef __clang__
+#if __has_feature(address_sanitizer)
+extern "C" { // sanitizers API
+void __lsan_ignore_object(const void* p);
+}
+#else
+#define __lsan_ignore_object(p)
+#endif
+#else
+#define __lsan_ignore_object(p)
+#endif
+
 // Disable bget when it is not used
 #if KMP_USE_BGET
 
@@ -1619,9 +1619,9 @@ ___kmp_allocate_align( size_t size, size_t alignment KMP_SRC_LOC_DECL )
     #else
     descr.ptr_allocated = malloc_src_loc( descr.size_allocated KMP_SRC_LOC_PARM );
     #endif
- 
-    __lsan_ignore_object(descr.ptr_allocated); // espetrov@yandex-team.ru: asan considers descr.ptr_allocated leaked because of address alignment arithmetics 
- 
+
+    __lsan_ignore_object(descr.ptr_allocated); // espetrov@yandex-team.ru: asan considers descr.ptr_allocated leaked because of address alignment arithmetics
+
     KE_TRACE( 10, (
         "   malloc( %d ) returned %p\n",
         (int) descr.size_allocated,

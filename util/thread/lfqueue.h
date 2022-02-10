@@ -69,7 +69,7 @@ class TLockFreeQueue: public TNonCopyable {
             n = keepNext;
         }
     }
- 
+
     alignas(64) TRootNode* volatile JobQueue;
     alignas(64) volatile TAtomic FreememCounter;
     alignas(64) volatile TAtomic FreeingTaskCounter;

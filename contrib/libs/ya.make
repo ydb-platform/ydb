@@ -73,7 +73,7 @@ RECURSE(
     flatbuffers64
     flatbuffers64/flatc
     flatbuffers64/samples
-    fmath 
+    fmath
     fmt
     fontconfig
     fp16

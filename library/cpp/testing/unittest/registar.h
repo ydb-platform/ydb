@@ -364,7 +364,7 @@ public:                       \
 #define UNIT_FAIL_IMPL(R, M)                                                                                                                     \
     do {                                                                                                                                         \
         ::NUnitTest::NPrivate::RaiseError(R, ::TStringBuilder() << R << " at " << __LOCATION__ << ", " << __PRETTY_FUNCTION__ << ": " << M, true); \
-    } while (false) 
+    } while (false)
 
 #define UNIT_FAIL_NONFATAL_IMPL(R, M)                                                                                                             \
     do {                                                                                                                                          \
@@ -1027,4 +1027,4 @@ public:                       \
     TString RandomString(size_t len, ui32 seed = 0);
 }
 
-using ::NUnitTest::TTestBase; 
+using ::NUnitTest::TTestBase;

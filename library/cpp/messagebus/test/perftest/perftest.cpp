@@ -212,7 +212,7 @@ struct TTestStats {
         return AtomicGet(Replies);
     }
 
-    double GetThroughput() { 
+    double GetThroughput() {
         return NumReplies() * 1000000.0 / (TInstant::Now() - Start).MicroSeconds();
     }
 
@@ -491,7 +491,7 @@ TPerftestConfig::TPerftestConfig() {
 
     ServerPort = DEFAULT_PORT;
     Delay = 0; // artificial delay inside server OnMessage()
-    MessageSize = 200; 
+    MessageSize = 200;
     Failure = 0.00;
     Run = 60; // in seconds
     Nodes = "localhost";

@@ -6,7 +6,7 @@
 #include <util/generic/map.h>
 #include <util/generic/set.h>
 #include <util/generic/string.h>
-#include <util/network/interface.h> 
+#include <util/network/interface.h>
 #include <util/system/mutex.h>
 
 namespace NBus {

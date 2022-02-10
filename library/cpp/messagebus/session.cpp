@@ -61,16 +61,16 @@ namespace NBus {
             }
 
             *hostName = host.substr(1, pos - 1);
- 
+
             pos++;
             if (pos != host.length()) {
                 if (host[pos] != ':') {
                     // Do not allow '[...]a' but '[...]:' is ok (as for ipv4 before
                     return false;
                 }
- 
+
                 *portNum = host.substr(pos + 1);
-            } 
+            }
         } else {
             size_t pos = host.find(':');
             if (pos != TString::npos) {
@@ -78,22 +78,22 @@ namespace NBus {
                     // Treat ':<port>' as errors but allow or '<host>:' for compatibility.
                     return false;
                 }
- 
+
                 *portNum = host.substr(pos + 1);
-            } 
- 
+            }
+
             *hostName = host.substr(0, pos);
-        } 
- 
+        }
+
         return true;
-    } 
- 
+    }
+
     /// registers external session on host:port with locator service
     int TBusSession::RegisterService(const char* host, TBusKey start /*= YBUS_KEYMIN*/, TBusKey end /*= YBUS_KEYMAX*/, EIpVersion ipVersion) {
         TString hostName;
         TString port;
         int portNum;
- 
+
         if (!SplitHost(host, &hostName, &port)) {
             hostName = host;
         }
@@ -113,8 +113,8 @@ namespace NBus {
     }
 
     TBusSession::~TBusSession() {
-    } 
- 
+    }
+
 }
 
 TBusClientSessionPtr TBusClientSession::Create(TBusProtocol* proto, IBusClientHandler* handler, const TBusClientSessionConfig& config, TBusMessageQueuePtr queue) {

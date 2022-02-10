@@ -6,11 +6,11 @@
 
 #include <library/cpp/int128/int128.h>
 
-#if defined(_freebsd_) 
+#if defined(_freebsd_)
 // #include required to avoid problem with undefined 'socklen_t' on FreeBSD
 #include <sys/socket.h>
-#endif 
- 
+#endif
+
 #if defined(_win_)
 // #include required to avoid problem with undefined 'socklen_t' on Windows
 #include <util/network/socket.h>

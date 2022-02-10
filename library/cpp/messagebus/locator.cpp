@@ -93,7 +93,7 @@ namespace NBus {
             } else {
                 return memcmp(&SockAddrIpV6(a1)->sin6_addr, &SockAddrIpV6(a2)->sin6_addr, sizeof(in6_addr)) == 0;
             }
-        } 
+        }
         return false;
     }
 
@@ -104,13 +104,13 @@ namespace NBus {
 
     bool TBusLocator::TItem::operator<(const TItem& y) const {
         const TItem& x = *this;
- 
+
         if (x.ServiceId == y.ServiceId) {
             return (x.End < y.End) || ((x.End == y.End) && CompareByHost(x.Addr, y.Addr) < 0);
-        } 
+        }
         return x.ServiceId < y.ServiceId;
-    } 
- 
+    }
+
     bool TBusLocator::TItem::operator==(const TItem& y) const {
         return ServiceId == y.ServiceId && Start == y.Start && End == y.End && Addr == y.Addr;
     }

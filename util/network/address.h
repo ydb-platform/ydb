@@ -40,13 +40,13 @@ namespace NAddr {
         }
 
         inline TOpaqueAddr(const IRemoteAddr* addr) noexcept {
-            Assign(addr->Addr(), addr->Len()); 
+            Assign(addr->Addr(), addr->Len());
         }
 
-        inline TOpaqueAddr(const sockaddr* addr) { 
+        inline TOpaqueAddr(const sockaddr* addr) {
             Assign(addr, SockAddrLength(addr));
-        } 
- 
+        }
+
         const sockaddr* Addr() const override {
             return MutableAddr();
         }
@@ -65,11 +65,11 @@ namespace NAddr {
 
     private:
         inline void Assign(const sockaddr* addr, socklen_t len) noexcept {
-            L_ = len; 
-            memcpy(MutableAddr(), addr, L_); 
-        } 
- 
-    private: 
+            L_ = len;
+            memcpy(MutableAddr(), addr, L_);
+        }
+
+    private:
         sockaddr_storage S_;
         socklen_t L_;
     };

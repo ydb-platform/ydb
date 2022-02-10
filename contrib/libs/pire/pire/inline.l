@@ -137,7 +137,7 @@ void eatComment(void (*action)(char));
 		Pire::Lexer lexer(i->c_str(), i->c_str() + i->size());
 		bool surround = false;
 		bool greedy = false;
-		bool reverse = false; 
+		bool reverse = false;
 		for (const char* option = (i+1)->c_str(); *option; ++option) {
 			if (*option == 'i')
 				lexer.AddFeature(Pire::Features::CaseInsensitive());
@@ -149,8 +149,8 @@ void eatComment(void (*action)(char));
 				lexer.AddFeature(Pire::Features::AndNotSupport());
 			else if (*option == 'g')
 				greedy = true;
-			else if (*option == 'r') 
-				reverse = true; 
+			else if (*option == 'r')
+				reverse = true;
 			else
 				Die() << "unknown option " <<  *option << "";
 		}
@@ -162,8 +162,8 @@ void eatComment(void (*action)(char));
 		catch (std::exception& e) {
 			Die() << "" << filename << ":" <<  line << ": " <<  e.what() << "";
 		}
-		if (reverse) 
-			fsm.Reverse(); 
+		if (reverse)
+			fsm.Reverse();
 		if (greedy && surround)
 			Die() << "greedy and surround options are incompatible";
 		if (greedy)

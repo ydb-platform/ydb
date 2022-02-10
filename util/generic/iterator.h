@@ -127,13 +127,13 @@ public:
         return TIterator();
     }
 };
- 
+
 /**
  * Transform given reverse iterator into forward iterator pointing to the same element.
  *
  * @see http://stackoverflow.com/a/1830240
  */
-template <class TIterator> 
+template <class TIterator>
 auto ToForwardIterator(TIterator iter) {
     return std::next(iter).base();
-} 
+}

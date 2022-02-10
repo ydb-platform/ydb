@@ -193,7 +193,7 @@ public:
 // if class needs special destructor, use CFundament
 #define OBJECT_METHODS(classname)                                 \
 public:                                                           \
-    virtual const char* GetClassName() const override {           \ 
+    virtual const char* GetClassName() const override {           \
         return #classname;                                        \
     }                                                             \
     static IObjectBase* NewSaveLoadNullItem() {                   \
@@ -201,7 +201,7 @@ public:                                                           \
     }                                                             \
                                                                   \
 protected:                                                        \
-    virtual void DestroyContents() override {                     \ 
+    virtual void DestroyContents() override {                     \
         this->~classname();                                       \
         int nHoldRefs = this->RefData, nHoldObjs = this->ObjData; \
         new (this) classname();                                   \

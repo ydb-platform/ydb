@@ -51,7 +51,7 @@ RECURSE(
     go_fake_xcrun
     groupgen
     hilite
-    host_canonizer 
+    host_canonizer
     hostdump
     hostpire
     html2cpp
@@ -66,11 +66,11 @@ RECURSE(
     lemmas_merger_builder
     lemmer-test
     lemmer-test/tests
-    lenval_debug 
+    lenval_debug
     lua
     memcheck
     mirrorsWrapper
-    misc_index_print 
+    misc_index_print
     mkdocs_builder
     mkdocs_builder/arcadium_helper_plugin
     mkdocs_builder/mkdocs_yandex
@@ -172,7 +172,7 @@ RECURSE(
     url
     urlmenuindexer
     urlseq_print
-    voice 
+    voice
     webxmltest
     wizard_yt
     ygetparam

@@ -2,8 +2,8 @@
 
 #include "engine.h"
 #include "dumpers.h"
-#include "auto.h" 
-#include "colorscheme.h" 
+#include "auto.h"
+#include "colorscheme.h"
 
 #include <util/stream/format.h>
 #include <util/system/type_name.h>
@@ -21,7 +21,7 @@
 namespace NPrivate {
     template <class TColorScheme>
     struct TTraitsShallow {
-        struct TDump: public TDumpBase, public TColorSchemeContainer<TColorScheme> { 
+        struct TDump: public TDumpBase, public TColorSchemeContainer<TColorScheme> {
             template <typename... Args>
             inline TDump(Args&&... args)
                 : TDumpBase(std::forward<Args>(args)...)
@@ -41,7 +41,7 @@ namespace NPrivate {
 
     template <class TColorScheme>
     struct TTraitsDeep {
-        struct TDump: public TDumpBase, public TColorSchemeContainer<TColorScheme> { 
+        struct TDump: public TDumpBase, public TColorSchemeContainer<TColorScheme> {
             template <typename... Args>
             inline TDump(Args&&... args)
                 : TDumpBase(std::forward<Args>(args)...)
@@ -95,12 +95,12 @@ namespace NPrivate {
     }
 }
 
-template <class T, class TColorScheme = DBG_OUTPUT_DEFAULT_COLOR_SCHEME> 
-static inline ::NPrivate::TDbgDump<T, ::NPrivate::TTraitsShallow<TColorScheme>> DbgDump(const T& t) { 
+template <class T, class TColorScheme = DBG_OUTPUT_DEFAULT_COLOR_SCHEME>
+static inline ::NPrivate::TDbgDump<T, ::NPrivate::TTraitsShallow<TColorScheme>> DbgDump(const T& t) {
     return {std::addressof(t)};
 }
 
-template <class T, class TColorScheme = DBG_OUTPUT_DEFAULT_COLOR_SCHEME> 
-static inline ::NPrivate::TDbgDump<T, ::NPrivate::TTraitsDeep<TColorScheme>> DbgDumpDeep(const T& t) { 
+template <class T, class TColorScheme = DBG_OUTPUT_DEFAULT_COLOR_SCHEME>
+static inline ::NPrivate::TDbgDump<T, ::NPrivate::TTraitsDeep<TColorScheme>> DbgDumpDeep(const T& t) {
     return {std::addressof(t)};
 }

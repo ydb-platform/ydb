@@ -63,15 +63,15 @@ public:
         (void)p;
         return VFT2TypeID(&typeid(TT));
     }
- 
+
     void GetAllTypeIDs(TVector<int>& typeIds) const {
-        typeIds.clear(); 
+        typeIds.clear();
         for (typename CTypeNewHash::const_iterator iter = typeInfo.begin();
              iter != typeInfo.end();
              ++iter) {
             typeIds.push_back(iter->first);
-        } 
-    } 
+        }
+    }
 };
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 template <class T>

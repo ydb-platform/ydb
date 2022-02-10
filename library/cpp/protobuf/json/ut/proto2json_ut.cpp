@@ -201,7 +201,7 @@ Y_UNIT_TEST(TestFlatRepeated) {
             UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
         } // streamed
     }
- 
+
     TProto2JsonConfig config;
     config.SetMissingRepeatedKeyMode(TProto2JsonConfig::MissingKeySkip);
 
@@ -358,7 +358,7 @@ Y_UNIT_TEST(TestCompositeRepeated) {
         {
             NJson::TJsonValue json;
             UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json));
-            UNIT_ASSERT_JSONS_EQUAL(json, modelJson); 
+            UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
         }
 
         {
@@ -366,7 +366,7 @@ Y_UNIT_TEST(TestCompositeRepeated) {
             NJson::TJsonValue json;
             UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStream));
             UNIT_ASSERT(ReadJsonTree(&jsonStream, &json));
-            UNIT_ASSERT_JSONS_EQUAL(json, modelJson); 
+            UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
         } // streamed
     }
 } // TestCompositeRepeated
@@ -518,12 +518,12 @@ Y_UNIT_TEST(TestMissingRepeatedKeyNoConfig) {
         TFlatRepeated proto;
         NJson::TJsonValue modelJson(NJson::JSON_MAP);
         NJson::TJsonValue json;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json));
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     }
 } // TestMissingRepeatedKeyNoConfig
- 
+
 Y_UNIT_TEST(TestMissingRepeatedKeyConfig) {
     {
         TFlatRepeated proto;

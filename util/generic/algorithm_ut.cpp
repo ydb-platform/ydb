@@ -430,7 +430,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT_VALUES_EQUAL(IsSorted(v2.begin(), v2.end(), TLess<int>()), false);
         UNIT_ASSERT_VALUES_EQUAL(IsSorted(v2.begin(), v2.end(), TGreater<int>()), false);
     }
- 
+
     Y_UNIT_TEST(IsSortedByTest) {
         TVector<int> v0;
         UNIT_ASSERT_VALUES_EQUAL(IsSortedBy(v0.begin(), v0.end(), std::negate<int>()), true);
@@ -505,8 +505,8 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         TVector<int> collection = {10, 2, 7};
         SortBy(collection, [](int x) { return -x; });
         TVector<int> expected = {10, 7, 2};
-        UNIT_ASSERT_VALUES_EQUAL(collection, expected); 
-    } 
+        UNIT_ASSERT_VALUES_EQUAL(collection, expected);
+    }
 
     Y_UNIT_TEST(StableSortByTest) {
         TVector<int> collection = {404, 101, 106, 203, 102, 205, 401};

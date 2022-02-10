@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/generic/yexception.h> 
- 
+#include <util/generic/yexception.h>
+
 class TIOStatus {
 public:
     TIOStatus(int status) noexcept

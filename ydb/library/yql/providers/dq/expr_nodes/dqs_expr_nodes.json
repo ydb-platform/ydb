@@ -25,16 +25,16 @@
       "Name": "TDqReadWideWrap",
       "Base": "TDqReadWrapBase",
       "Match": {"Type": "Callable", "Name": "DqReadWideWrap"}
-    },
-    {
-      "Name": "TDqWrite",
-      "Base": "TCallable",
-      "Match": {"Type": "Callable", "Name": "DqWrite"},
-      "Children": [
-        {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-        {"Index": 1, "Name": "Provider", "Type": "TCoAtom"},
-        {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
-      ]
+    }, 
+    { 
+      "Name": "TDqWrite", 
+      "Base": "TCallable", 
+      "Match": {"Type": "Callable", "Name": "DqWrite"}, 
+      "Children": [ 
+        {"Index": 0, "Name": "Input", "Type": "TExprBase"}, 
+        {"Index": 1, "Name": "Provider", "Type": "TCoAtom"}, 
+        {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true} 
+      ] 
     },
     {
       "Name": "TDqSourceWrapBase",

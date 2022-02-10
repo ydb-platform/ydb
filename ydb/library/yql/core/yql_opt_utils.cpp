@@ -1003,11 +1003,11 @@ void ExtractSimpleSortTraits(const TExprNode& sortDirections, const TExprNode& k
 }
 
 const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_list<std::string_view>& skipCallables) {
-    const TExprNode* p = &node;
-    while (p->IsCallable(skipCallables)) {
-        p = &p->Head();
-    }
-    return *p;
+    const TExprNode* p = &node; 
+    while (p->IsCallable(skipCallables)) { 
+        p = &p->Head(); 
+    } 
+    return *p; 
 }
 
 namespace {
@@ -1029,7 +1029,7 @@ TExprNode::TPtr ApplyWithCastStructForFirstArg(const TExprNode::TPtr& node, cons
 
     auto result = ctx.NewLambda(pos, ctx.NewArguments(pos, std::move(args)), std::move(body));
     return ctx.DeepCopyLambda(*result);
-}
+} 
 
 }
 

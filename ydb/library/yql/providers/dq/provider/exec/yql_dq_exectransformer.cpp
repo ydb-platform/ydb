@@ -576,7 +576,7 @@ private:
             // TODO: change result provider to remove this if
             ui32 inMemoryIndex;
             for (inMemoryIndex = 0; inMemoryIndex < resFill->ChildrenSize(); ++inMemoryIndex) {
-                if (resFill->ChildPtr(inMemoryIndex)->IsAtom(DqProviderName)) {
+                if (resFill->ChildPtr(inMemoryIndex)->IsAtom(DqProviderName)) { 
                     break;
                 }
             }
@@ -658,22 +658,22 @@ private:
 
             THashMap<ui32, ui32> allPublicIds;
             bool hasStageError = false;
-            VisitExpr(result.Ptr(), [&](const TExprNode::TPtr& node) {
+            VisitExpr(result.Ptr(), [&](const TExprNode::TPtr& node) { 
                 const TExprBase expr(node);
                 if (expr.Maybe<TResFill>()) {
-                    if (auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) {
+                    if (auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) { 
                         allPublicIds.emplace(*publicId, 0U);
-                    }
-                }
-                return true;
-            });
-
+                    } 
+                } 
+                return true; 
+            }); 
+ 
             if (hasStageError) {
                 return SyncError();
             }
 
-            IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(allPublicIds);
-
+            IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(allPublicIds); 
+ 
             auto executionPlanner = THolder<IDqsExecutionPlanner>(new TDqsSingleExecutionPlanner(lambda, NActors::TActorId(), NActors::TActorId(1, 0, 1, 0), State->FunctionRegistry, result.Input().Ref().GetTypeAnn()));
             auto& tasks = executionPlanner->GetTasks();
             Yql::DqsProto::TTaskMeta taskMeta;
@@ -856,7 +856,7 @@ private:
             if (const TExprBase expr(node); expr.Maybe<TDqConnection>()) {
                 if (const auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) {
                     allPublicIds.emplace(*publicId, 0U);
-                }
+                } 
             } else if (const auto& maybeStage = expr.Maybe<TDqStage>()) {
                 const auto& stage = maybeStage.Cast();
                 if (!(stage.Ref().StartsExecution() || stage.Ref().HasResult())) {
@@ -881,13 +881,13 @@ private:
         }
 
         auto optimizedInput = pull.Input().Ptr();
-        THashMap<TString, TString> secureParams;
-        NCommon::FillSecureParams(optimizedInput, *State->TypeCtx, secureParams);
-
-        optimizedInput = ctx.ShallowCopy(*optimizedInput);
+        THashMap<TString, TString> secureParams; 
+        NCommon::FillSecureParams(optimizedInput, *State->TypeCtx, secureParams); 
+ 
+        optimizedInput = ctx.ShallowCopy(*optimizedInput); 
         optimizedInput->SetTypeAnn(pull.Input().Ref().GetTypeAnn());
         optimizedInput->CopyConstraints(pull.Input().Ref());
-
+ 
         TDqsPipelineConfigurator peepholeConfig;
         TPeepholeSettings peepholeSettings;
         peepholeSettings.CommonConfig = &peepholeConfig;
@@ -991,9 +991,9 @@ private:
 
                 Yql::DqsProto::TTaskMeta taskMeta;
                 t.MutableMeta()->UnpackTo(&taskMeta);
-                for (const auto& file : uploadList) {
+                for (const auto& file : uploadList) { 
                     *taskMeta.AddFiles() = file;
-                }
+                } 
                 t.MutableMeta()->PackFrom(taskMeta);
                 if (const auto it = allPublicIds.find(taskMeta.GetStageId()); allPublicIds.cend() != it)
                     ++it->second;
@@ -1001,7 +1001,7 @@ private:
         }
 
         MarkProgressStarted(allPublicIds, State->ProgressWriter);
-
+ 
         if (fallbackFlag) {
             return FallbackWithMessage(pull.Ref(), "Too big attachment", ctx);
         }
@@ -1039,17 +1039,17 @@ private:
             settings->_RowsLimitPerWrite = 0;
         }
 
-        IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(allPublicIds);
+        IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(allPublicIds); 
 
         auto future = State->DqGateway->ExecutePlan(State->SessionId, *executionPlanner.Get(), columns, secureParams, graphParams,
             settings, progressWriter, ModulesMapping, fillSettings.Discard);
-
+ 
         future.Subscribe([allPublicIds, progressWriter = State->ProgressWriter](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) {
-            YQL_ENSURE(!completedFuture.HasException());
+            YQL_ENSURE(!completedFuture.HasException()); 
             MarkProgressFinished(allPublicIds, completedFuture.GetValueSync().Success(), progressWriter);
-        });
+        }); 
         executionPlanner.Destroy();
-
+ 
         int level = 0;
 
         // TODO: remove copy-paste
@@ -1173,18 +1173,18 @@ private:
 
     IDqGateway::TDqProgressWriter MakeDqProgressWriter(const THashMap<ui32, ui32>& allPublicIds) const {
         IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, allPublicIds](const TString& stage) {
-            for (const auto& publicId : allPublicIds) {
+            for (const auto& publicId : allPublicIds) { 
                 auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress, stage);
                 if (publicId.second) {
                     p.Counters.ConstructInPlace();
                     p.Counters->Running = p.Counters->Total = publicId.second;
                 }
                 progressWriter(p);
-            }
-        };
-        return dqProgressWriter;
-    }
-
+            } 
+        }; 
+        return dqProgressWriter; 
+    } 
+ 
     static void MarkProgressStarted(const THashMap<ui32, ui32>& allPublicIds, const TOperationProgressWriter& progressWriter) {
         for(const auto& publicId : allPublicIds) {
             auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress);
@@ -1193,21 +1193,21 @@ private:
                 p.Counters->Running = p.Counters->Total = publicId.second;
             }
             progressWriter(p);
-        }
-    }
-
+        } 
+    } 
+ 
     static void MarkProgressFinished(const THashMap<ui32, ui32>& allPublicIds, bool success, const TOperationProgressWriter& progressWriter) {
         for(const auto& publicId : allPublicIds) {
-            auto state = success ? TOperationProgress::EState::Finished : TOperationProgress::EState::Failed;
+            auto state = success ? TOperationProgress::EState::Finished : TOperationProgress::EState::Failed; 
             auto p = TOperationProgress(TString(DqProviderName), publicId.first, state);
             if (publicId.second) {
                 p.Counters.ConstructInPlace();
                 (success ? p.Counters->Completed : p.Counters->Failed) = p.Counters->Total = publicId.second;
             }
             progressWriter(p);
-        }
-    }
-
+        } 
+    } 
+ 
     void FlushStatisticsToState() {
         TOperationStatistics statistics;
         FlushCounters(statistics);

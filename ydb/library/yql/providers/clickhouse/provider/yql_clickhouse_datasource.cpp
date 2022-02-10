@@ -76,33 +76,33 @@ public:
         return &State_->Configuration->Tokens;
     }
 
-    bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
-        Y_UNUSED(compact);
-
-        for (auto& child : node.Children()) {
-            children.push_back(child.Get());
-        }
-
-        if (TMaybeNode<TClReadTable>(&node)) {
-            return true;
-        }
-        return false;
-    }
-
-    void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override {
-        if (auto maybeRead = TMaybeNode<TClReadTable>(&node)) {
-            if (auto maybeTable = maybeRead.Table()) {
-                TStringBuilder tableNameBuilder;
-                if (auto dataSource = maybeRead.DataSource().Maybe<TClDataSource>()) {
-                    auto cluster = dataSource.Cast().Cluster();
-                    tableNameBuilder << cluster.Value() << ".";
-                }
-                tableNameBuilder  << '`' << maybeTable.Cast().Value() << '`';
-                inputs.push_back(TPinInfo(maybeRead.DataSource().Raw(), nullptr, maybeTable.Cast().Raw(), tableNameBuilder, false));
-            }
-        }
-    }
-
+    bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override { 
+        Y_UNUSED(compact); 
+ 
+        for (auto& child : node.Children()) { 
+            children.push_back(child.Get()); 
+        } 
+ 
+        if (TMaybeNode<TClReadTable>(&node)) { 
+            return true; 
+        } 
+        return false; 
+    } 
+ 
+    void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override { 
+        if (auto maybeRead = TMaybeNode<TClReadTable>(&node)) { 
+            if (auto maybeTable = maybeRead.Table()) { 
+                TStringBuilder tableNameBuilder; 
+                if (auto dataSource = maybeRead.DataSource().Maybe<TClDataSource>()) { 
+                    auto cluster = dataSource.Cast().Cluster(); 
+                    tableNameBuilder << cluster.Value() << "."; 
+                } 
+                tableNameBuilder  << '`' << maybeTable.Cast().Value() << '`'; 
+                inputs.push_back(TPinInfo(maybeRead.DataSource().Raw(), nullptr, maybeTable.Cast().Raw(), tableNameBuilder, false)); 
+            } 
+        } 
+    } 
+ 
     IDqIntegration* GetDqIntegration() override {
         return DqIntegration_.Get();
     }

@@ -109,7 +109,7 @@ namespace NYql::NDqs {
         *Record.MutableRequest() = request;
     }
 
-    TEvQueryStatus::TEvQueryStatus(const Yql::DqsProto::QueryStatusRequest& request) {
-        *Record.MutableRequest() = request;
-    }
+    TEvQueryStatus::TEvQueryStatus(const Yql::DqsProto::QueryStatusRequest& request) { 
+        *Record.MutableRequest() = request; 
+    } 
 } // namespace NYql::NDqs

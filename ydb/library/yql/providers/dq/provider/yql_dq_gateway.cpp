@@ -13,10 +13,10 @@
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/threading/task_scheduler/task_scheduler.h>
 
-#include <util/system/thread.h>
+#include <util/system/thread.h> 
 
-#include <utility>
-
+#include <utility> 
+ 
 namespace NYql {
 
 class TDqGateway: public IDqGateway
@@ -36,10 +36,10 @@ public:
         , TaskScheduler(threads)
         , RtTaskScheduler(1)
         , OpenSessionTimeout(timeout)
-    {
-        TaskScheduler.Start();
+    { 
+        TaskScheduler.Start(); 
         RtTaskScheduler.Start();
-    }
+    } 
 
     TString GetVanillaJobPath() override {
         return VanillaJobPath;
@@ -54,12 +54,12 @@ public:
     {
         YQL_LOG_CTX_SCOPE(sessionId);
         YQL_CLOG(TRACE, ProviderDq) << "TDqGateway::callback";
-
-        {
-            TGuard<TMutex> lock(ProgressMutex);
-            RunningQueries.erase(sessionId);
-        }
-
+ 
+        { 
+            TGuard<TMutex> lock(ProgressMutex); 
+            RunningQueries.erase(sessionId); 
+        } 
+ 
         TResult result;
 
         bool error = false;
@@ -176,15 +176,15 @@ public:
         Y_VERIFY(TaskScheduler.Add(MakeIntrusive<TDelay>(promise), TInstant()));
     }
 
-    template <typename TResponse, typename TRequest, typename TStub>
-    NThreading::TFuture<TResult> WithRetry(
-        const TString& sessionId,
-        const TRequest& queryPB,
-        TStub stub,
-        int retry,
+    template <typename TResponse, typename TRequest, typename TStub> 
+    NThreading::TFuture<TResult> WithRetry( 
+        const TString& sessionId, 
+        const TRequest& queryPB, 
+        TStub stub, 
+        int retry, 
         const TDqSettings::TPtr& settings,
         const THashMap<TString, TString>& modulesMapping
-    ) {
+    ) { 
         auto backoff = TDuration::MilliSeconds(settings->RetryBackoffMs.Get().GetOrElse(1000));
         auto promise = NThreading::NewPromise<TResult>();
         auto fallbackPolicy = settings->FallbackPolicy.Get().GetOrElse("default");
@@ -193,7 +193,7 @@ public:
             return OnResponse(std::move(promise), std::move(sessionId), std::move(status), std::move(resp), modulesMapping, alwaysFallback);
         };
 
-        Service->DoRequest<TRequest, TResponse>(queryPB, callback, stub);
+        Service->DoRequest<TRequest, TResponse>(queryPB, callback, stub); 
 
         {
             TGuard<TMutex> lock(ProgressMutex);
@@ -204,9 +204,9 @@ public:
                 }
             } else {
                 return NThreading::MakeFuture(TResult());
-            }
-        }
-
+            } 
+        } 
+ 
         return promise.GetFuture().Apply([=](const NThreading::TFuture<TResult>& result) {
             if (result.HasException()) {
                 return result;
@@ -288,7 +288,7 @@ public:
             queryPB,
             &Yql::DqsProto::DqService::Stub::AsyncExecuteGraph,
             retry,
-            settings,
+            settings, 
             modulesMapping);
     }
 
@@ -339,14 +339,14 @@ public:
             request, callback, &Yql::DqsProto::DqService::Stub::AsyncCloseSession);
     }
 
-    void RequestQueryStatus(const TString& sessionId) {
-        Yql::DqsProto::QueryStatusRequest request;
-        request.SetSession(sessionId);
+    void RequestQueryStatus(const TString& sessionId) { 
+        Yql::DqsProto::QueryStatusRequest request; 
+        request.SetSession(sessionId); 
         IDqGateway::TPtr self = this;
         auto callback = [this, self, sessionId](NGrpc::TGrpcStatus&& status, Yql::DqsProto::QueryStatusResponse&& resp) {
-            if (status.Ok()) {
+            if (status.Ok()) { 
                 TGuard<TMutex> lock(ProgressMutex);
-                TString stage;
+                TString stage; 
                 TDqProgressWriter* dqProgressWriter = nullptr;
                 auto it = RunningQueries.find(sessionId);
                 if (it != RunningQueries.end()) {
@@ -356,38 +356,38 @@ public:
                         stage = resp.GetStatus();
                         it->second.second = stage;
                     }
-
+ 
                     ScheduleQueryStatusRequest(sessionId);
-                }
+                } 
 
-                if (!stage.empty() && dqProgressWriter) {
-                    (*dqProgressWriter)(stage);
-                }
-            } else {
-                TGuard<TMutex> lock(ProgressMutex);
-                RunningQueries.erase(sessionId);
-            }
-        };
-
-        Service->DoRequest<Yql::DqsProto::QueryStatusRequest, Yql::DqsProto::QueryStatusResponse>(
-            request, callback, &Yql::DqsProto::DqService::Stub::AsyncQueryStatus, {}, nullptr);
-    }
-
-    void ScheduleQueryStatusRequest(const TString& sessionId) {
+                if (!stage.empty() && dqProgressWriter) { 
+                    (*dqProgressWriter)(stage); 
+                } 
+            } else { 
+                TGuard<TMutex> lock(ProgressMutex); 
+                RunningQueries.erase(sessionId); 
+            } 
+        }; 
+ 
+        Service->DoRequest<Yql::DqsProto::QueryStatusRequest, Yql::DqsProto::QueryStatusResponse>( 
+            request, callback, &Yql::DqsProto::DqService::Stub::AsyncQueryStatus, {}, nullptr); 
+    } 
+ 
+    void ScheduleQueryStatusRequest(const TString& sessionId) { 
         Delay(TDuration::MilliSeconds(1000)).Subscribe([this, sessionId](NThreading::TFuture<void> fut) {
-            if (fut.HasException()) {
-                TGuard<TMutex> lock(ProgressMutex);
-                RunningQueries.erase(sessionId);
-            } else {
-                TGuard<TMutex> lock(ProgressMutex);
-                auto it = RunningQueries.find(sessionId);
-                if (it != RunningQueries.end()) {
-                    RequestQueryStatus(sessionId);
-                }
-            }
-        });
-    }
-
+            if (fut.HasException()) { 
+                TGuard<TMutex> lock(ProgressMutex); 
+                RunningQueries.erase(sessionId); 
+            } else { 
+                TGuard<TMutex> lock(ProgressMutex); 
+                auto it = RunningQueries.find(sessionId); 
+                if (it != RunningQueries.end()) { 
+                    RequestQueryStatus(sessionId); 
+                } 
+            } 
+        }); 
+    } 
+ 
     void SchedulePingSessionRequest(const TString& sessionId) {
         auto callback = [this, sessionId](
             NGrpc::TGrpcStatus&& status,
@@ -409,19 +409,19 @@ public:
         });
     }
 
-    struct TDelay: public TTaskScheduler::ITask {
-        TDelay(NThreading::TPromise<void> p)
-            : Promise(std::move(p))
-        { }
-
-        TInstant Process() override {
-            Promise.SetValue();
-            return TInstant::Max();
-        }
-
-        NThreading::TPromise<void> Promise;
-    };
-
+    struct TDelay: public TTaskScheduler::ITask { 
+        TDelay(NThreading::TPromise<void> p) 
+            : Promise(std::move(p)) 
+        { } 
+ 
+        TInstant Process() override { 
+            Promise.SetValue(); 
+            return TInstant::Max(); 
+        } 
+ 
+        NThreading::TPromise<void> Promise; 
+    }; 
+ 
 private:
     NGrpc::TGRpcClientConfig GrpcConf;
     NGrpc::TGRpcClientLow GrpcClient;
@@ -429,7 +429,7 @@ private:
 
     TMutex ProgressMutex;
     TMutex Mutex;
-    THashMap<TString, std::pair<TDqProgressWriter, TString>> RunningQueries;
+    THashMap<TString, std::pair<TDqProgressWriter, TString>> RunningQueries; 
     TString VanillaJobPath;
     TString VanillaJobMd5;
 

@@ -208,10 +208,10 @@ protected:
     }
 
     template <bool IsGlobal>
-    TMaybeNode<TExprBase> PushLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+    TMaybeNode<TExprBase> PushLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) { 
         return DqPushLMapToStage(node, ctx, optCtx, *getParents(), IsGlobal);
-    }
-
+    } 
+ 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildExtFunctionStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqBuildExtFunctionStage(node, ctx, optCtx, *getParents(), IsGlobal);

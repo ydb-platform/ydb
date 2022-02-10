@@ -673,10 +673,10 @@ namespace {
                 if (Find(Types.AvailablePureResultDataSources, DqProviderName) == Types.AvailablePureResultDataSources.end() || arg == "disable") {
                     ; // reserved
                 } else if (arg == "auto") {
-                    Types.PureResultDataSource = DqProviderName;
+                    Types.PureResultDataSource = DqProviderName; 
                     Types.ForceDq = false;
                 } else if (arg == "force") {
-                    Types.PureResultDataSource = DqProviderName;
+                    Types.PureResultDataSource = DqProviderName; 
                     Types.ForceDq = true;
                 } else {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|auto|force', but got: " << args[0]));

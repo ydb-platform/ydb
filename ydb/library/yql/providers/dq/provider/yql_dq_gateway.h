@@ -26,7 +26,7 @@ class IDqGateway : public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IDqGateway>;
     using TFileResource = Yql::DqsProto::TFile;
-    using TDqProgressWriter = std::function<void(const TString&)>;
+    using TDqProgressWriter = std::function<void(const TString&)>; 
 
     struct TFileResourceHash {
         std::size_t operator()(const TFileResource& f) const {

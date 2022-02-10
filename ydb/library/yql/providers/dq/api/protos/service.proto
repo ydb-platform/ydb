@@ -68,8 +68,8 @@ message TWorkerFilter {
     repeated string Address = 5;
     repeated uint64 NodeId = 6;
     repeated uint64 NodeIdHint = 7;
-}
-
+} 
+ 
 message ExecuteGraphRequest {
     Ydb.Operations.OperationParams Params = 1;
     repeated NYql.NDqProto.TDqTask Task = 3;
@@ -118,14 +118,14 @@ message PingSessionRequest {
 message PingSessionResponse {
 }
 
-message QueryStatusRequest {
-  string Session = 1;
-}
-
-message QueryStatusResponse {
-  string Status = 1;
-}
-
+message QueryStatusRequest { 
+  string Session = 1; 
+} 
+ 
+message QueryStatusResponse { 
+  string Status = 1; 
+} 
+ 
 message TAttribute {
     string Key = 1;
     string Value = 2;

@@ -29,11 +29,11 @@ TExprNode::TPtr TDqIntegrationBase::WrapRead(const TDqSettings&, const TExprNode
 }
 
 TMaybe<bool> TDqIntegrationBase::CanWrite(const TDqSettings&, const TExprNode& write, TExprContext& ctx) {
-    Y_UNUSED(write);
+    Y_UNUSED(write); 
     Y_UNUSED(ctx);
-    return Nothing();
-}
-
+    return Nothing(); 
+} 
+ 
 void TDqIntegrationBase::RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler)  {
     Y_UNUSED(compiler);
 }

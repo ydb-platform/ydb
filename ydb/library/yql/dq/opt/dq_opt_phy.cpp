@@ -382,15 +382,15 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
         .Done();
 }
 
-template <typename BaseLMap>
-TExprBase DqPushBaseLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+template <typename BaseLMap> 
+TExprBase DqPushBaseLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, 
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true)
 {
-    if (!node.Maybe<BaseLMap>().Input().template Maybe<TDqCnUnionAll>()) {
+    if (!node.Maybe<BaseLMap>().Input().template Maybe<TDqCnUnionAll>()) { 
         return node;
     }
 
-    auto lmap = node.Cast<BaseLMap>();
+    auto lmap = node.Cast<BaseLMap>(); 
     auto dqUnion = lmap.Input().template Cast<TDqCnUnionAll>();
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
         return node;
@@ -402,11 +402,11 @@ TExprBase DqPushBaseLMapToStage(TExprBase node, TExprContext& ctx, IOptimization
 
     auto lambda = Build<TCoLambda>(ctx, lmap.Lambda().Pos())
         .Args({"stream"})
-        .template Body<TCoToStream>()
-            .template Input<TExprApplier>()
-                .Apply(lmap.Lambda())
-                .With(lmap.Lambda().Args().Arg(0), "stream")
-                .Build()
+        .template Body<TCoToStream>() 
+            .template Input<TExprApplier>() 
+                .Apply(lmap.Lambda()) 
+                .With(lmap.Lambda().Args().Arg(0), "stream") 
+                .Build() 
             .Build()
         .Done();
 
@@ -418,18 +418,18 @@ TExprBase DqPushBaseLMapToStage(TExprBase node, TExprContext& ctx, IOptimization
     return result.Cast();
 }
 
-TExprBase DqPushOrderedLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+TExprBase DqPushOrderedLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, 
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
-{
+{ 
     return DqPushBaseLMapToStage<TCoOrderedLMap>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
-}
-
-TExprBase DqPushLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+} 
+ 
+TExprBase DqPushLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, 
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
-{
+{ 
     return DqPushBaseLMapToStage<TCoLMap>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
-}
-
+} 
+ 
 TExprBase DqBuildExtFunctionStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
                             const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {

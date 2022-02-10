@@ -160,7 +160,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
 }
 
 THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>>
-ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprContext& ctx, bool optional) {
+ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprContext& ctx, bool optional) { 
     THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>> result;
     for (auto member : rowType.GetItems()) {
         TStringBuf label, column;
@@ -174,14 +174,14 @@ ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprC
             result.clear();
             return result;
         }
-        auto memberType = member->GetItemType();
-        if (optional && !memberType->IsOptionalOrNull()) {
-            memberType = ctx.MakeType<TOptionalExprType>(memberType);
-        }
+        auto memberType = member->GetItemType(); 
+        if (optional && !memberType->IsOptionalOrNull()) { 
+            memberType = ctx.MakeType<TOptionalExprType>(memberType); 
+        } 
         if (!tableLabel.empty()) {
-            result[tableLabel][member->GetName()] = memberType;
+            result[tableLabel][member->GetName()] = memberType; 
         } else {
-            result[label][column] = memberType;
+            result[label][column] = memberType; 
         }
     }
     return result;
@@ -193,8 +193,8 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
     const TStringBuf& joinType, const TDqJoinKeyTupleList& joinKeys, TExprContext& ctx)
 {
     // check left
-    bool isLeftOptional = IsLeftJoinSideOptional(joinType);
-    auto leftType = ParseJoinInputType(leftRowType, leftLabel, ctx, isLeftOptional);
+    bool isLeftOptional = IsLeftJoinSideOptional(joinType); 
+    auto leftType = ParseJoinInputType(leftRowType, leftLabel, ctx, isLeftOptional); 
     if (leftType.empty() && joinType != "Cross") {
         TStringStream str; str << "Cannot parse left join input type: ";
         leftRowType.Out(str);
@@ -203,8 +203,8 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
     }
 
     // check right
-    bool isRightOptional = IsRightJoinSideOptional(joinType);
-    auto rightType = ParseJoinInputType(rightRowType, rightLabel, ctx, isRightOptional);
+    bool isRightOptional = IsRightJoinSideOptional(joinType); 
+    auto rightType = ParseJoinInputType(rightRowType, rightLabel, ctx, isRightOptional); 
     if (rightType.empty() && joinType != "Cross") {
         TStringStream str; str << "Cannot parse right join input type: ";
         rightRowType.Out(str);

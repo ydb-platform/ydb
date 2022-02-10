@@ -15,7 +15,7 @@ using TDqStatePtr = TIntrusivePtr<TDqState>;
 
 using TExecTransformerFactory = std::function<IGraphTransformer*(const TDqStatePtr& state)>;
 
-TDataProviderInitializer GetDqDataProviderInitializer(
+TDataProviderInitializer GetDqDataProviderInitializer( 
     TExecTransformerFactory execTransformerFactory,
     const IDqGateway::TPtr& dqGateway,
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory,

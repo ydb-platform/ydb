@@ -13,8 +13,8 @@ namespace {
 
 class TDqsDataSinkTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
-    TDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx)
-        : TVisitorTransformerBase(true), TypeCtx(typeCtx)
+    TDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx) 
+        : TVisitorTransformerBase(true), TypeCtx(typeCtx) 
     {
         AddHandler({TDqStage::CallableName()}, Hndl(&NDq::AnnotateDqStage));
         AddHandler({TDqPhyStage::CallableName()}, Hndl(&NDq::AnnotateDqPhyStage));
@@ -32,47 +32,47 @@ public:
         AddHandler({TDqPhyCrossJoin::CallableName()}, Hndl(&NDq::AnnotateDqCrossJoin));
         AddHandler({TDqPhyJoinDict::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));
         AddHandler({TDqSink::CallableName()}, Hndl(&NDq::AnnotateDqSink));
-        AddHandler({TDqWrite::CallableName()}, Hndl(&TDqsDataSinkTypeAnnotationTransformer::AnnotateDqWrite));
+        AddHandler({TDqWrite::CallableName()}, Hndl(&TDqsDataSinkTypeAnnotationTransformer::AnnotateDqWrite)); 
         AddHandler({TDqQuery::CallableName()}, Hndl(&NDq::AnnotateDqQuery));
     }
-
-private:
+ 
+private: 
     TStatus AnnotateDqWrite(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        if (!EnsureMinArgsCount(*input, 2, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!EnsureMaxArgsCount(*input, 3, ctx)) {
-            return TStatus::Error;
-        }
-
+        if (!EnsureMinArgsCount(*input, 2, ctx)) { 
+            return TStatus::Error; 
+        } 
+ 
+        if (!EnsureMaxArgsCount(*input, 3, ctx)) { 
+            return TStatus::Error; 
+        } 
+ 
         if (!EnsureNewSeqType<false, false, true>(input->Head(), ctx)){
-            return TStatus::Error;
-        }
-
-        if (!EnsureAtom(*input->Child(1), ctx)) {
-            return TStatus::Error;
-        }
-
+            return TStatus::Error; 
+        } 
+ 
+        if (!EnsureAtom(*input->Child(1), ctx)) { 
+            return TStatus::Error; 
+        } 
+ 
         auto providerName = TString(input->Child(1)->Content());
-
+ 
         if (!TypeCtx->DataSinkMap.FindPtr(providerName)) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "No datasink defined for provider name " << providerName));
-            return TStatus::Error;
-        }
-
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "No datasink defined for provider name " << providerName)); 
+            return TStatus::Error; 
+        } 
+ 
         providerName.front() = std::toupper(providerName.front());
         output = ctx.NewCallable(input->Pos(), providerName += TDqWrite::CallableName(), {input->HeadPtr(), input->TailPtr()});
         return TStatus::Repeat;
-    }
-
-    TTypeAnnotationContext* TypeCtx;
+    } 
+ 
+    TTypeAnnotationContext* TypeCtx; 
 };
 
 } // unnamed
 
-THolder<TVisitorTransformerBase> CreateDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx) {
-    return THolder(new TDqsDataSinkTypeAnnotationTransformer(typeCtx));
+THolder<TVisitorTransformerBase> CreateDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx) { 
+    return THolder(new TDqsDataSinkTypeAnnotationTransformer(typeCtx)); 
 }
 
 } // NYql

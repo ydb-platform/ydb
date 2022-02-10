@@ -143,14 +143,14 @@ private:
         int workerCount = ev->Get()->Record.GetRequest().GetTask().size();
         YQL_LOG(INFO) << (TStringBuilder() << "Trying to allocate " << workerCount << " workers");
 
-        THashMap<TString, Yql::DqsProto::TFile> files;
+        THashMap<TString, Yql::DqsProto::TFile> files; 
         TVector<NDqProto::TDqTask> tasks;
         for (auto& task : *ev->Get()->Record.MutableRequest()->MutableTask()) {
             Yql::DqsProto::TTaskMeta taskMeta;
             task.GetMeta().UnpackTo(&taskMeta);
 
             for (const auto& f : taskMeta.GetFiles()) {
-                files.emplace(f.GetObjectId(), f);
+                files.emplace(f.GetObjectId(), f); 
             }
 
             if (ev->Get()->Record.GetRequest().GetSecureParams().size() > 0) {
@@ -189,7 +189,7 @@ private:
         if (enableComputeActor) {
             ActorIdToProto(ControlId, allocateRequest->Record.MutableResultActorId());
         }
-        for (const auto& [_, f] : files) {
+        for (const auto& [_, f] : files) { 
             *allocateRequest->Record.AddFiles() = f;
         }
 
@@ -199,7 +199,7 @@ private:
 
         Yql::DqsProto::TWorkerFilter pragmaFilter = GetPragmaFilter();
 
-        for (const auto& task : tasks) {
+        for (const auto& task : tasks) { 
             Yql::DqsProto::TTaskMeta taskMeta;
             task.GetMeta().UnpackTo(&taskMeta);
 
@@ -212,8 +212,8 @@ private:
             }
 
             MergeFilter(filter, pragmaFilter);
-        }
-
+        } 
+ 
         StartCounter("AllocateWorkers");
 
         TActivationContext::Send(new IEventHandle(

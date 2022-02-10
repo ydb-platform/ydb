@@ -117,28 +117,28 @@ public: \
         name##_ = value; \
     } \
 
-//! Defines a trivial public read-write property that is passed by value. 
-//! All arguments after name are used as default value (via braced-init-list). 
-#define DEFINE_BYVAL_RW_PROPERTY_WITH_FLUENT_SETTER(declaringType, type, name, ...) \ 
-protected: \ 
-    type name##_ { __VA_ARGS__ }; \ 
-    \ 
-public: \ 
-    Y_FORCE_INLINE type Get##name() const \ 
-    { \ 
-        return name##_; \ 
-    } \ 
-    \ 
-    Y_FORCE_INLINE void Set##name(type value) &\ 
-    { \ 
-        name##_ = value; \ 
-    } \ 
-    \ 
-    Y_FORCE_INLINE declaringType&& Set##name(type value) &&\ 
-    { \ 
-        name##_ = value; \ 
-        return std::move(*this); \ 
-    } \ 
+//! Defines a trivial public read-write property that is passed by value.
+//! All arguments after name are used as default value (via braced-init-list).
+#define DEFINE_BYVAL_RW_PROPERTY_WITH_FLUENT_SETTER(declaringType, type, name, ...) \
+protected: \
+    type name##_ { __VA_ARGS__ }; \
+    \
+public: \
+    Y_FORCE_INLINE type Get##name() const \
+    { \
+        return name##_; \
+    } \
+    \
+    Y_FORCE_INLINE void Set##name(type value) &\
+    { \
+        name##_ = value; \
+    } \
+    \
+    Y_FORCE_INLINE declaringType&& Set##name(type value) &&\
+    { \
+        name##_ = value; \
+        return std::move(*this); \
+    } \
 
 //! Defines a trivial public read-write property that is passed by value
 //! and is not inline-initialized.
@@ -210,7 +210,7 @@ public: \
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Below are macro helpers for extra properties. 
+//! Below are macro helpers for extra properties.
 //! Extra properties should be used for lazy memory allocation for properties that
 //! hold default values for the majority of objects.
 

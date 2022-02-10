@@ -941,7 +941,7 @@ RECURSE(
     repoze.lru
     repr
     requests
-    requests-file 
+    requests-file
     requests-mock
     requests-oauthlib
     requests-toolbelt
@@ -1069,7 +1069,7 @@ RECURSE(
     timeout-decorator
     tinycss2
     tinyrpc
-    tldextract 
+    tldextract
     toml
     tomli
     toolz
@@ -1145,7 +1145,7 @@ RECURSE(
     WebOb
     websocket-client
     websockets
-    webstruct 
+    webstruct
     WebTest
     webvtt-py
     weighted-levenshtein

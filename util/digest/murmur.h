@@ -35,21 +35,21 @@ static inline T MurmurHash(const void* buf, size_t len, T init) noexcept {
 }
 
 template <class T>
-static inline T MurmurHash(const void* buf, size_t len) noexcept { 
+static inline T MurmurHash(const void* buf, size_t len) noexcept {
     return MurmurHash<T>(buf, len, (T)0);
 }
 
 //non-inline version
-size_t MurmurHashSizeT(const char* buf, size_t len) noexcept; 
+size_t MurmurHashSizeT(const char* buf, size_t len) noexcept;
 
 template <typename TOut = size_t>
 struct TMurmurHash {
-    TOut operator()(const void* buf, size_t len) const noexcept { 
+    TOut operator()(const void* buf, size_t len) const noexcept {
         return MurmurHash<TOut>(buf, len);
     }
 
     template <typename ElementType>
-    TOut operator()(const TArrayRef<ElementType>& data) const noexcept { 
+    TOut operator()(const TArrayRef<ElementType>& data) const noexcept {
         return operator()(data.data(), data.size() * sizeof(ElementType));
     }
 };

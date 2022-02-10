@@ -73,16 +73,16 @@ Y_PURE_FUNCTION
 TStringBuf GetSchemeHostAndPort(const TStringBuf url, bool trimHttp = true, bool trimDefaultPort = true) noexcept;
 
 /**
- * Splits URL to host and path 
- * 
- * @param[in] url       any URL 
- * @param[out] host     parsed host 
- * @param[out] path     parsed path 
- */ 
-void SplitUrlToHostAndPath(const TStringBuf url, TStringBuf& host, TStringBuf& path); 
-void SplitUrlToHostAndPath(const TStringBuf url, TString& host, TString& path); 
- 
-/** 
+ * Splits URL to host and path
+ *
+ * @param[in] url       any URL
+ * @param[out] host     parsed host
+ * @param[out] path     parsed path
+ */
+void SplitUrlToHostAndPath(const TStringBuf url, TStringBuf& host, TStringBuf& path);
+void SplitUrlToHostAndPath(const TStringBuf url, TString& host, TString& path);
+
+/**
  * Separates URL into url prefix, query (aka cgi params list), and fragment (aka part after #)
  *
  * @param[in] url               any URL

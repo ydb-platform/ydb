@@ -16,7 +16,7 @@ It doesn't contains definitions. To generate them you have to add
 or
     GENERATE_ENUM_SERIALIZATION(your_header_with_your_enum.h)
 
-in your ya.make 
+in your ya.make
 
 @see https://st.yandex-team.ru/IGNIETFERRO-333
 @see https://wiki.yandex-team.ru/PoiskovajaPlatforma/Build/WritingCmakefiles/#generate-enum-with-header

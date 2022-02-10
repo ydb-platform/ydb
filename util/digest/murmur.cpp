@@ -126,6 +126,6 @@ namespace NMurmurPrivate {
     }
 }
 
-size_t MurmurHashSizeT(const char* buf, size_t len) noexcept { 
+size_t MurmurHashSizeT(const char* buf, size_t len) noexcept {
     return MurmurHash<size_t>(buf, len);
 }

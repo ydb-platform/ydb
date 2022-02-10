@@ -578,9 +578,9 @@ ALLOW .* -> vendor/github.com/dustin/go-humanize
 # CONTRIB-1615 Go pretty table formatter similar to python PrettyTable
 ALLOW .* -> vendor/github.com/olekukonko/tablewriter
 
-# CONTRIB-1596 embedded key/value database 
-ALLOW .* -> vendor/go.etcd.io/bbolt 
- 
+# CONTRIB-1596 embedded key/value database
+ALLOW .* -> vendor/go.etcd.io/bbolt
+
 # CONTRIB-1616 Gountries provides structured countries data
 ALLOW .* -> vendor/github.com/pariz/gountries
 
@@ -622,9 +622,9 @@ ALLOW .* -> vendor/github.com/mennanov/fieldmask-utils
 # CONTRIB-1810 Fast directory traversal for Golang
 ALLOW .* -> vendor/github.com/karrick/godirwalk
 
-# CONTRIB-1864 Zstandard (zstd) data compression algorithm 
-ALLOW .* -> vendor/github.com/klauspost/compress/zstd 
- 
+# CONTRIB-1864 Zstandard (zstd) data compression algorithm
+ALLOW .* -> vendor/github.com/klauspost/compress/zstd
+
 # CONTRIB-1865 Decorated Syntax Tree for Go AST
 ALLOW .* -> vendor/github.com/dave/dst
 

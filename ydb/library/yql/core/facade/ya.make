@@ -12,8 +12,8 @@ PEERDIR(
     library/cpp/string_utils/base64
     library/cpp/threading/future
     library/cpp/time_provider
-    library/cpp/yson 
-    library/cpp/yson/node 
+    library/cpp/yson
+    library/cpp/yson/node
     ydb/library/yql/core/extract_predicate
     ydb/library/yql/core/file_storage
     ydb/library/yql/core/services

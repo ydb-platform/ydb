@@ -23,8 +23,8 @@ class TPointerTest: public TTestBase {
     UNIT_TEST(TestAutoToHolder);
     UNIT_TEST(TestCopyPtr);
     UNIT_TEST(TestIntrPtr);
-    UNIT_TEST(TestIntrusiveConvertion); 
-    UNIT_TEST(TestIntrusiveConstConvertion); 
+    UNIT_TEST(TestIntrusiveConvertion);
+    UNIT_TEST(TestIntrusiveConstConvertion);
     UNIT_TEST(TestIntrusiveConstConstruction);
     UNIT_TEST(TestMakeIntrusive);
     UNIT_TEST(TestCopyOnWritePtr1);
@@ -75,8 +75,8 @@ private:
     void TestAutoToHolder();
     void TestCopyPtr();
     void TestIntrPtr();
-    void TestIntrusiveConvertion(); 
-    void TestIntrusiveConstConvertion(); 
+    void TestIntrusiveConvertion();
+    void TestIntrusiveConstConvertion();
     void TestIntrusiveConstConstruction();
     void TestMakeIntrusive();
     void TestCopyOnWritePtr1();
@@ -364,59 +364,59 @@ void TPointerTest::TestIntrPtr() {
     UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 0);
 }
 
-namespace NTestIntrusiveConvertion { 
+namespace NTestIntrusiveConvertion {
     struct TA: public TSimpleRefCount<TA> {
-    }; 
+    };
     struct TAA: public TA {
-    }; 
+    };
     struct TB: public TSimpleRefCount<TB> {
-    }; 
- 
-    void Func(TIntrusivePtr<TA>) { 
-    } 
- 
-    void Func(TIntrusivePtr<TB>) { 
-    } 
- 
-    void Func(TIntrusiveConstPtr<TA>) { 
-    } 
- 
-    void Func(TIntrusiveConstPtr<TB>) { 
-    } 
-} 
- 
+    };
+
+    void Func(TIntrusivePtr<TA>) {
+    }
+
+    void Func(TIntrusivePtr<TB>) {
+    }
+
+    void Func(TIntrusiveConstPtr<TA>) {
+    }
+
+    void Func(TIntrusiveConstPtr<TB>) {
+    }
+}
+
 void TPointerTest::TestIntrusiveConvertion() {
-    using namespace NTestIntrusiveConvertion; 
- 
-    TIntrusivePtr<TAA> aa = new TAA; 
- 
-    UNIT_ASSERT_VALUES_EQUAL(aa->RefCount(), 1); 
-    TIntrusivePtr<TA> a = aa; 
-    UNIT_ASSERT_VALUES_EQUAL(aa->RefCount(), 2); 
-    UNIT_ASSERT_VALUES_EQUAL(a->RefCount(), 2); 
-    aa.Reset(); 
-    UNIT_ASSERT_VALUES_EQUAL(a->RefCount(), 1); 
- 
-    // test that Func(TIntrusivePtr<TB>) doesn't participate in overload resolution 
-    Func(aa); 
-} 
- 
+    using namespace NTestIntrusiveConvertion;
+
+    TIntrusivePtr<TAA> aa = new TAA;
+
+    UNIT_ASSERT_VALUES_EQUAL(aa->RefCount(), 1);
+    TIntrusivePtr<TA> a = aa;
+    UNIT_ASSERT_VALUES_EQUAL(aa->RefCount(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(a->RefCount(), 2);
+    aa.Reset();
+    UNIT_ASSERT_VALUES_EQUAL(a->RefCount(), 1);
+
+    // test that Func(TIntrusivePtr<TB>) doesn't participate in overload resolution
+    Func(aa);
+}
+
 void TPointerTest::TestIntrusiveConstConvertion() {
-    using namespace NTestIntrusiveConvertion; 
- 
-    TIntrusiveConstPtr<TAA> aa = new TAA; 
- 
-    UNIT_ASSERT_VALUES_EQUAL(aa->RefCount(), 1); 
-    TIntrusiveConstPtr<TA> a = aa; 
-    UNIT_ASSERT_VALUES_EQUAL(aa->RefCount(), 2); 
-    UNIT_ASSERT_VALUES_EQUAL(a->RefCount(), 2); 
-    aa.Reset(); 
-    UNIT_ASSERT_VALUES_EQUAL(a->RefCount(), 1); 
- 
-    // test that Func(TIntrusiveConstPtr<TB>) doesn't participate in overload resolution 
-    Func(aa); 
-} 
- 
+    using namespace NTestIntrusiveConvertion;
+
+    TIntrusiveConstPtr<TAA> aa = new TAA;
+
+    UNIT_ASSERT_VALUES_EQUAL(aa->RefCount(), 1);
+    TIntrusiveConstPtr<TA> a = aa;
+    UNIT_ASSERT_VALUES_EQUAL(aa->RefCount(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(a->RefCount(), 2);
+    aa.Reset();
+    UNIT_ASSERT_VALUES_EQUAL(a->RefCount(), 1);
+
+    // test that Func(TIntrusiveConstPtr<TB>) doesn't participate in overload resolution
+    Func(aa);
+}
+
 void TPointerTest::TestMakeIntrusive() {
     {
         UNIT_ASSERT_VALUES_EQUAL(0, TOp::Cnt);

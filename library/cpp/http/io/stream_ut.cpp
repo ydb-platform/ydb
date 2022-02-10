@@ -488,82 +488,82 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     }
 
     Y_UNIT_TEST(HasTrailers) {
-        TMemoryInput response( 
-            "HTTP/1.1 200 OK\r\n" 
-            "Transfer-Encoding: chunked\r\n" 
-            "\r\n" 
-            "3\r\n" 
-            "foo" 
-            "0\r\n" 
-            "Bar: baz\r\n" 
-            "\r\n"); 
-        THttpInput i(&response); 
-        TMaybe<THttpHeaders> trailers = i.Trailers(); 
-        UNIT_ASSERT(!trailers.Defined()); 
-        i.ReadAll(); 
-        trailers = i.Trailers(); 
-        UNIT_ASSERT_VALUES_EQUAL(trailers.GetRef().Count(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(trailers.GetRef().Begin()->ToString(), "Bar: baz"); 
-    } 
- 
+        TMemoryInput response(
+            "HTTP/1.1 200 OK\r\n"
+            "Transfer-Encoding: chunked\r\n"
+            "\r\n"
+            "3\r\n"
+            "foo"
+            "0\r\n"
+            "Bar: baz\r\n"
+            "\r\n");
+        THttpInput i(&response);
+        TMaybe<THttpHeaders> trailers = i.Trailers();
+        UNIT_ASSERT(!trailers.Defined());
+        i.ReadAll();
+        trailers = i.Trailers();
+        UNIT_ASSERT_VALUES_EQUAL(trailers.GetRef().Count(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(trailers.GetRef().Begin()->ToString(), "Bar: baz");
+    }
+
     Y_UNIT_TEST(NoTrailersWithChunks) {
-        TMemoryInput response( 
-            "HTTP/1.1 200 OK\r\n" 
-            "Transfer-Encoding: chunked\r\n" 
-            "\r\n" 
-            "3\r\n" 
-            "foo" 
-            "0\r\n" 
-            "\r\n"); 
-        THttpInput i(&response); 
-        TMaybe<THttpHeaders> trailers = i.Trailers(); 
-        UNIT_ASSERT(!trailers.Defined()); 
-        i.ReadAll(); 
-        trailers = i.Trailers(); 
-        UNIT_ASSERT_VALUES_EQUAL(trailers.GetRef().Count(), 0); 
-    } 
- 
+        TMemoryInput response(
+            "HTTP/1.1 200 OK\r\n"
+            "Transfer-Encoding: chunked\r\n"
+            "\r\n"
+            "3\r\n"
+            "foo"
+            "0\r\n"
+            "\r\n");
+        THttpInput i(&response);
+        TMaybe<THttpHeaders> trailers = i.Trailers();
+        UNIT_ASSERT(!trailers.Defined());
+        i.ReadAll();
+        trailers = i.Trailers();
+        UNIT_ASSERT_VALUES_EQUAL(trailers.GetRef().Count(), 0);
+    }
+
     Y_UNIT_TEST(NoTrailersNoChunks) {
-        TMemoryInput response( 
-            "HTTP/1.1 200 OK\r\n" 
-            "Content-Length: 3\r\n" 
-            "\r\n" 
-            "bar"); 
-        THttpInput i(&response); 
-        TMaybe<THttpHeaders> trailers = i.Trailers(); 
-        UNIT_ASSERT(!trailers.Defined()); 
-        i.ReadAll(); 
-        trailers = i.Trailers(); 
-        UNIT_ASSERT_VALUES_EQUAL(trailers.GetRef().Count(), 0); 
-    } 
- 
+        TMemoryInput response(
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Length: 3\r\n"
+            "\r\n"
+            "bar");
+        THttpInput i(&response);
+        TMaybe<THttpHeaders> trailers = i.Trailers();
+        UNIT_ASSERT(!trailers.Defined());
+        i.ReadAll();
+        trailers = i.Trailers();
+        UNIT_ASSERT_VALUES_EQUAL(trailers.GetRef().Count(), 0);
+    }
+
     Y_UNIT_TEST(RequestWithoutContentLength) {
-        TStringStream request; 
-        { 
-            THttpOutput httpOutput(&request); 
+        TStringStream request;
+        {
+            THttpOutput httpOutput(&request);
             httpOutput << "POST / HTTP/1.1\r\n"
                           "Host: yandex.ru\r\n"
                           "\r\n";
-            httpOutput << "GGLOL"; 
-        } 
-        { 
-            TStringInput input(request.Str()); 
-            THttpInput httpInput(&input); 
-            bool chunkedOrHasContentLength = false; 
-            for (const auto& header : httpInput.Headers()) { 
-                if (header.Name() == "Transfer-Encoding" && header.Value() == "chunked" || header.Name() == "Content-Length") { 
-                    chunkedOrHasContentLength = true; 
-                } 
-            } 
- 
-            // If request doesn't contain neither Content-Length header nor Transfer-Encoding header 
-            // then server considers message body length to be zero. 
-            // (See https://tools.ietf.org/html/rfc7230#section-3.3.3) 
-            UNIT_ASSERT(chunkedOrHasContentLength); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(httpInput.ReadAll(), "GGLOL"); 
-        } 
-    } 
+            httpOutput << "GGLOL";
+        }
+        {
+            TStringInput input(request.Str());
+            THttpInput httpInput(&input);
+            bool chunkedOrHasContentLength = false;
+            for (const auto& header : httpInput.Headers()) {
+                if (header.Name() == "Transfer-Encoding" && header.Value() == "chunked" || header.Name() == "Content-Length") {
+                    chunkedOrHasContentLength = true;
+                }
+            }
+
+            // If request doesn't contain neither Content-Length header nor Transfer-Encoding header
+            // then server considers message body length to be zero.
+            // (See https://tools.ietf.org/html/rfc7230#section-3.3.3)
+            UNIT_ASSERT(chunkedOrHasContentLength);
+
+            UNIT_ASSERT_VALUES_EQUAL(httpInput.ReadAll(), "GGLOL");
+        }
+    }
 
     Y_UNIT_TEST(TestInputHasContent) {
         {

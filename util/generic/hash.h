@@ -12,9 +12,9 @@
 #include "utility.h"
 
 #include <algorithm>
-#include <initializer_list> 
-#include <memory> 
-#include <tuple> 
+#include <initializer_list>
+#include <memory>
+#include <tuple>
 #include <utility>
 
 #include <cstdlib>
@@ -1834,13 +1834,13 @@ public:
     }
 
     THashMultiMap(std::initializer_list<std::pair<Key, T>> list)
-        : rep(list.size(), hasher(), key_equal()) 
-    { 
-        for (const auto& v : list) { 
-            rep.emplace_equal_noresize(v); 
-        } 
-    } 
- 
+        : rep(list.size(), hasher(), key_equal())
+    {
+        for (const auto& v : list) {
+            rep.emplace_equal_noresize(v);
+        }
+    }
+
     // THashMultiMap has implicit copy/move constructors and copy-/move-assignment operators
     // because its implementation is backed by THashTable.
     // See hash_ut.cpp
@@ -1996,25 +1996,25 @@ public:
 
 template <class Key, class T, class HF, class EqKey, class Alloc>
 inline bool operator==(const THashMultiMap<Key, T, HF, EqKey, Alloc>& hm1, const THashMultiMap<Key, T, HF, EqKey, Alloc>& hm2) {
-    // NOTE: copy-pasted from 
-    // contrib/libs/cxxsupp/libcxx/include/unordered_map 
+    // NOTE: copy-pasted from
+    // contrib/libs/cxxsupp/libcxx/include/unordered_map
     // and adapted to THashMultiMap
-    if (hm1.size() != hm2.size()) { 
-        return false; 
-    } 
+    if (hm1.size() != hm2.size()) {
+        return false;
+    }
     using const_iterator = typename THashMultiMap<Key, T, HF, EqKey, Alloc>::const_iterator;
-    using TEqualRange = std::pair<const_iterator, const_iterator>; 
-    for (const_iterator it = hm1.begin(), end = hm1.end(); it != end;) { 
-        TEqualRange eq1 = hm1.equal_range(it->first); 
-        TEqualRange eq2 = hm2.equal_range(it->first); 
-        if (std::distance(eq1.first, eq1.second) != std::distance(eq2.first, eq2.second) || 
+    using TEqualRange = std::pair<const_iterator, const_iterator>;
+    for (const_iterator it = hm1.begin(), end = hm1.end(); it != end;) {
+        TEqualRange eq1 = hm1.equal_range(it->first);
+        TEqualRange eq2 = hm2.equal_range(it->first);
+        if (std::distance(eq1.first, eq1.second) != std::distance(eq2.first, eq2.second) ||
             !std::is_permutation(eq1.first, eq1.second, eq2.first))
         {
-            return false; 
-        } 
-        it = eq1.second; 
-    } 
-    return true; 
+            return false;
+        }
+        it = eq1.second;
+    }
+    return true;
 }
 
 template <class Key, class T, class HF, class EqKey, class Alloc>

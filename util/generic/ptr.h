@@ -4,7 +4,7 @@
 #include "utility.h"
 #include "intrlist.h"
 #include "refcount.h"
-#include "typetraits.h" 
+#include "typetraits.h"
 #include "singleton.h"
 
 #include <utility>
@@ -508,22 +508,22 @@ public:
         Ref();
     }
 
-    // NOTE: 
+    // NOTE:
     // without std::enable_if_t compiler sometimes tries to use this constructor inappropriately
-    // e.g. 
-    //     struct A {}; 
-    //     struct B {}; 
-    //     void Func(TIntrusivePtr<A>); 
-    //     void Func(TIntrusivePtr<B>); 
-    //     ... 
-    //     Func(TIntrusivePtr<A>(new A)); // <--- compiler can't decide which version of Func to use 
+    // e.g.
+    //     struct A {};
+    //     struct B {};
+    //     void Func(TIntrusivePtr<A>);
+    //     void Func(TIntrusivePtr<B>);
+    //     ...
+    //     Func(TIntrusivePtr<A>(new A)); // <--- compiler can't decide which version of Func to use
     template <class U, class = TGuardConversion<T, U>>
     inline TIntrusivePtr(const TIntrusivePtr<U>& p) noexcept
-        : T_(p.Get()) 
-    { 
-        Ref(); 
-    } 
- 
+        : T_(p.Get())
+    {
+        Ref();
+    }
+
     template <class U, class = TGuardConversion<T, U>>
     inline TIntrusivePtr(TIntrusivePtr<U>&& p) noexcept
         : T_(p.T_)
@@ -645,11 +645,11 @@ public:
 
     template <class U, class = TGuardConversion<T, U>>
     inline TIntrusiveConstPtr(const TIntrusiveConstPtr<U>& p) noexcept
-        : T_(p.T_) 
-    { 
-        Ref(); 
-    } 
- 
+        : T_(p.T_)
+    {
+        Ref();
+    }
+
     template <class U, class = TGuardConversion<T, U>>
     inline TIntrusiveConstPtr(TIntrusiveConstPtr<U>&& p) noexcept
         : T_(p.T_)
@@ -711,9 +711,9 @@ private:
 
 private:
     T* T_;
- 
-    template <class U, class O> 
-    friend class TIntrusiveConstPtr; 
+
+    template <class U, class O>
+    friend class TIntrusiveConstPtr;
 };
 
 template <class T, class Ops>

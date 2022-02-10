@@ -12,7 +12,7 @@ namespace NYT {
 
 inline char* TStringBuilderBase::Preallocate(size_t size)
 {
-    if (Y_UNLIKELY(End_ - Current_ < static_cast<ssize_t>(size))) { 
+    if (Y_UNLIKELY(End_ - Current_ < static_cast<ssize_t>(size))) {
         size_t length = GetLength();
         auto newLength = std::max(length + size, MinBufferLength);
         DoPreallocate(newLength);
@@ -69,7 +69,7 @@ inline void TStringBuilderBase::AppendString(const char* str)
 
 inline void TStringBuilderBase::Reset()
 {
-    Begin_ = Current_ = End_ = nullptr; 
+    Begin_ = Current_ = End_ = nullptr;
     DoReset();
 }
 

@@ -67,7 +67,7 @@ class TInputStreamProxy: public io::CopyingInputStream, public TErrorState {
         {
         }
 
-        virtual int Read(void* buffer, int size); 
+        virtual int Read(void* buffer, int size);
 
     private:
         IInputStream* mSlave;
@@ -80,7 +80,7 @@ class TOutputStreamProxy: public io::CopyingOutputStream, public TErrorState {
         {
         }
 
-        virtual bool Write(const void* buffer, int size); 
+        virtual bool Write(const void* buffer, int size);
 
     private:
         IOutputStream* mSlave;

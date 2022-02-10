@@ -74,33 +74,33 @@ bool SerializeToZeroCopyStreamSeq(const Message* msg, io::ZeroCopyOutputStream* 
 }
 
 
-int TInputStreamProxy::Read(void* buffer, int size) { 
-    try { 
-        return (int)mSlave->Read(buffer, (size_t)size); 
-    } catch (const yexception& e) { 
-        GOOGLE_LOG(ERROR) << e.what(); 
-    } catch (...) { 
-        GOOGLE_LOG(ERROR) << "unknown exception caught"; 
-    } 
-    TErrorState::SetError(); 
-    return -1; 
-} 
+int TInputStreamProxy::Read(void* buffer, int size) {
+    try {
+        return (int)mSlave->Read(buffer, (size_t)size);
+    } catch (const yexception& e) {
+        GOOGLE_LOG(ERROR) << e.what();
+    } catch (...) {
+        GOOGLE_LOG(ERROR) << "unknown exception caught";
+    }
+    TErrorState::SetError();
+    return -1;
+}
 
- 
-bool TOutputStreamProxy::Write(const void* buffer, int size) { 
-    try { 
-        mSlave->Write(buffer, (size_t)size); 
-        return true; 
-    } catch (const yexception& e) { 
-        GOOGLE_LOG(ERROR) << e.what(); 
-    } catch (...) { 
-        GOOGLE_LOG(ERROR) << "unknown exception caught"; 
-    } 
-    TErrorState::SetError(); 
-    return false; 
-} 
- 
- 
+
+bool TOutputStreamProxy::Write(const void* buffer, int size) {
+    try {
+        mSlave->Write(buffer, (size_t)size);
+        return true;
+    } catch (const yexception& e) {
+        GOOGLE_LOG(ERROR) << e.what();
+    } catch (...) {
+        GOOGLE_LOG(ERROR) << "unknown exception caught";
+    }
+    TErrorState::SetError();
+    return false;
+}
+
+
 void TProtoSerializer::Save(IOutputStream* out, const Message& msg) {
     int size = msg.ByteSize();
     if (size > MaxSizeBytes) {

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/yson/public.h> 
-#include <library/cpp/yson/consumer.h> 
+#include <library/cpp/yson/public.h>
+#include <library/cpp/yson/consumer.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -27,7 +27,7 @@ namespace NYT {
     };
 
     class TJsonWriter
-       : public ::NYson::TYsonConsumerBase { 
+       : public ::NYson::TYsonConsumerBase {
     public:
         TJsonWriter(
             IOutputStream* output,

@@ -186,12 +186,12 @@ void TBusMessageQueue::DestroyAllSessions() {
 
     for (auto& session : sessions) {
         Y_VERIFY(session->IsDown(), "Session must be shut down prior to queue shutdown");
-    } 
+    }
 }
- 
+
 void TBusMessageQueue::Schedule(IScheduleItemAutoPtr i) {
     Scheduler.Schedule(i);
-} 
+}
 
 TString TBusMessageQueue::GetNameInternal() const {
     return Config.Name;

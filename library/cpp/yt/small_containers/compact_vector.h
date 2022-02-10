@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/system/defaults.h> 
- 
+#include <util/system/defaults.h>
+
 #include <cstdint>
 #include <iterator>
 #include <limits>
@@ -162,13 +162,13 @@ private:
         //  > 0 indicates inline storage
         // == 0 indicates on-heap storage
         uint8_t SizePlusOne;
-    } alias_hack; 
+    } alias_hack;
 
     struct TOnHeapMeta
     {
         char Padding[ByteSize - sizeof(uintptr_t)];
         TOnHeapStorage* Storage;
-    } alias_hack; 
+    } alias_hack;
 
     union
     {

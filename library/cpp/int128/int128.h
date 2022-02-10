@@ -204,7 +204,7 @@ public:
     }
 
     constexpr TInteger128& operator^=(const TInteger128 other) noexcept {
-        return *this = *this ^ other; 
+        return *this = *this ^ other;
     }
 
     constexpr TInteger128& operator|=(const TInteger128 other) noexcept {

@@ -2,9 +2,9 @@ GTEST(unittester-library-memory)
 
 OWNER(g:yt)
 
-IF (NOT OS_WINDOWS) 
-    ALLOCATOR(YT) 
-ENDIF() 
+IF (NOT OS_WINDOWS)
+    ALLOCATOR(YT)
+ENDIF()
 
 SRCS(
     intrusive_ptr_ut.cpp

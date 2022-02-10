@@ -1,10 +1,10 @@
 #pragma once
 
-#include "node.h" 
+#include "node.h"
 
 #include <library/cpp/json/json_reader.h>
 
-#include <library/cpp/yson/consumer.h> 
+#include <library/cpp/yson/consumer.h>
 
 #include <util/generic/stack.h>
 
@@ -13,7 +13,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TNodeBuilder
-    : public ::NYson::TYsonConsumerBase 
+    : public ::NYson::TYsonConsumerBase
 {
 public:
     TNodeBuilder(TNode* node);

@@ -20,7 +20,7 @@
 #include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
 #include <library/cpp/actors/interconnect/poller_actor.h>
-#include <library/cpp/yson/node/node_io.h> 
+#include <library/cpp/yson/node/node_io.h>
 
 #include <util/stream/file.h>
 #include <util/system/env.h>

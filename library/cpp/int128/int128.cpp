@@ -50,13 +50,13 @@ void TSerializer<ui128>::Load(IInputStream* in, ui128& Number) {
     ::Load(in, Low);
     Number = ui128(High, Low);
 }
- 
-IOutputStream& operator<<(IOutputStream& out, const i128& other) 
-{ 
-    if (other >= 0) { 
-        out << ui128{other}; 
-    } else { 
-        out << '-' << ui128{-other}; 
-    } 
-    return out; 
-} 
+
+IOutputStream& operator<<(IOutputStream& out, const i128& other)
+{
+    if (other >= 0) {
+        out << ui128{other};
+    } else {
+        out << '-' << ui128{-other};
+    }
+    return out;
+}

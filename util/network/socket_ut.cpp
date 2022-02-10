@@ -1,7 +1,7 @@
 #include "socket.h"
 
-#include "pair.h" 
- 
+#include "pair.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/builder.h>
@@ -23,7 +23,7 @@ class TSockTest: public TTestBase {
 #endif
     UNIT_TEST(TestNetworkResolutionError);
     UNIT_TEST(TestNetworkResolutionErrorMessage);
-    UNIT_TEST(TestBrokenPipe); 
+    UNIT_TEST(TestBrokenPipe);
     UNIT_TEST(TestClose);
     UNIT_TEST(TestReusePortAvailCheck);
     UNIT_TEST_SUITE_END();
@@ -34,7 +34,7 @@ public:
     void TestConnectionRefused();
     void TestNetworkResolutionError();
     void TestNetworkResolutionErrorMessage();
-    void TestBrokenPipe(); 
+    void TestBrokenPipe();
     void TestClose();
     void TestReusePortAvailCheck();
 };
@@ -129,43 +129,43 @@ void TSockTest::TestNetworkResolutionErrorMessage() {
 }
 
 class TTempEnableSigPipe {
-public: 
-    TTempEnableSigPipe() { 
+public:
+    TTempEnableSigPipe() {
         OriginalSigHandler_ = signal(SIGPIPE, SIG_DFL);
         Y_VERIFY(OriginalSigHandler_ != SIG_ERR);
-    } 
- 
-    ~TTempEnableSigPipe() { 
+    }
+
+    ~TTempEnableSigPipe() {
         auto ret = signal(SIGPIPE, OriginalSigHandler_);
-        Y_VERIFY(ret != SIG_ERR); 
-    } 
- 
-private: 
+        Y_VERIFY(ret != SIG_ERR);
+    }
+
+private:
     void (*OriginalSigHandler_)(int);
-}; 
- 
+};
+
 void TSockTest::TestBrokenPipe() {
-    TTempEnableSigPipe guard; 
- 
-    SOCKET socks[2]; 
- 
-    int ret = SocketPair(socks); 
-    UNIT_ASSERT_VALUES_EQUAL(ret, 0); 
- 
-    TSocket sender(socks[0]); 
-    TSocket receiver(socks[1]); 
-    receiver.ShutDown(SHUT_RDWR); 
-    int sent = sender.Send("FOO", 3); 
-    UNIT_ASSERT(sent < 0); 
- 
-    IOutputStream::TPart parts[] = { 
-        {"foo", 3}, 
-        {"bar", 3}, 
-    }; 
-    sent = sender.SendV(parts, 2); 
-    UNIT_ASSERT(sent < 0); 
-} 
- 
+    TTempEnableSigPipe guard;
+
+    SOCKET socks[2];
+
+    int ret = SocketPair(socks);
+    UNIT_ASSERT_VALUES_EQUAL(ret, 0);
+
+    TSocket sender(socks[0]);
+    TSocket receiver(socks[1]);
+    receiver.ShutDown(SHUT_RDWR);
+    int sent = sender.Send("FOO", 3);
+    UNIT_ASSERT(sent < 0);
+
+    IOutputStream::TPart parts[] = {
+        {"foo", 3},
+        {"bar", 3},
+    };
+    sent = sender.SendV(parts, 2);
+    UNIT_ASSERT(sent < 0);
+}
+
 void TSockTest::TestClose() {
     SOCKET socks[2];
 

@@ -176,10 +176,10 @@ public:
         return Headers_;
     }
 
-    inline const TMaybe<THttpHeaders>& Trailers() const noexcept { 
-        return Trailers_; 
-    } 
- 
+    inline const TMaybe<THttpHeaders>& Trailers() const noexcept {
+        return Trailers_;
+    }
+
     inline bool IsKeepAlive() const noexcept {
         return KeepAlive_;
     }
@@ -212,16 +212,16 @@ private:
     template <class Operation>
     inline size_t Perform(size_t len, const Operation& operation) {
         size_t processed = operation(len);
-        if (processed == 0 && len > 0) { 
-            if (!ChunkedInput_) { 
-                Trailers_.ConstructInPlace(); 
-            } else { 
-                // Read the header of the trailing chunk. It remains in 
-                // the TChunkedInput stream if the HTTP response is compressed. 
-                char symbol; 
-                if (ChunkedInput_->Read(&symbol, 1) != 0) { 
-                    ythrow THttpParseException() << "some data remaining in TChunkedInput"; 
-                } 
+        if (processed == 0 && len > 0) {
+            if (!ChunkedInput_) {
+                Trailers_.ConstructInPlace();
+            } else {
+                // Read the header of the trailing chunk. It remains in
+                // the TChunkedInput stream if the HTTP response is compressed.
+                char symbol;
+                if (ChunkedInput_->Read(&symbol, 1) != 0) {
+                    ythrow THttpParseException() << "some data remaining in TChunkedInput";
+                }
             }
         }
         return processed;
@@ -337,10 +337,10 @@ private:
         }
 
         if (p.Chunked) {
-            ChunkedInput_ = Streams_.Add(new TChunkedInput(&Buffered_, &Trailers_)); 
-            Input_ = ChunkedInput_; 
+            ChunkedInput_ = Streams_.Add(new TChunkedInput(&Buffered_, &Trailers_));
+            Input_ = ChunkedInput_;
         } else {
-            // disable buffering 
+            // disable buffering
             Buffered_.Reset(&Cnull);
             Input_ = Streams_.Add(new TMultiInput(&Buffered_, Slave_));
 
@@ -377,7 +377,7 @@ private:
 
     TString FirstLine_;
     THttpHeaders Headers_;
-    TMaybe<THttpHeaders> Trailers_; 
+    TMaybe<THttpHeaders> Trailers_;
     bool KeepAlive_;
 
     TAcceptCodings Codings_;
@@ -411,10 +411,10 @@ const THttpHeaders& THttpInput::Headers() const noexcept {
     return Impl_->Headers();
 }
 
-const TMaybe<THttpHeaders>& THttpInput::Trailers() const noexcept { 
-    return Impl_->Trailers(); 
-} 
- 
+const TMaybe<THttpHeaders>& THttpInput::Trailers() const noexcept {
+    return Impl_->Trailers();
+}
+
 const TString& THttpInput::FirstLine() const noexcept {
     return Impl_->FirstLine();
 }

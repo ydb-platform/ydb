@@ -49,7 +49,7 @@ JOIN_SRCS(
     digest/multi.cpp
     digest/murmur.cpp
     digest/numeric.cpp
-    digest/sequence.cpp 
+    digest/sequence.cpp
 )
 
 JOIN_SRCS(

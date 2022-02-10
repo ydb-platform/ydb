@@ -8,7 +8,7 @@
 
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 
-#include <library/cpp/yson/node/node_io.h> 
+#include <library/cpp/yson/node/node_io.h>
 
 namespace NKikimr {
 namespace NSysView {

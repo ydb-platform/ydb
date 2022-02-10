@@ -11,7 +11,7 @@ namespace NYT::NYson {
 struct IYsonConsumer;
 } // namespace NYT::NYson
 
-namespace NYson { 
+namespace NYson {
     ////////////////////////////////////////////////////////////////////////////////
 
     class TYsonParser {
@@ -80,4 +80,4 @@ namespace NYson {
 
     ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYson 
+} // namespace NYson

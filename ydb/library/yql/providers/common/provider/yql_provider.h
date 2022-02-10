@@ -7,7 +7,7 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 
-#include <library/cpp/yson/writer.h> 
+#include <library/cpp/yson/writer.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
@@ -15,7 +15,7 @@
 
 #include <utility>
 
-namespace NYson { 
+namespace NYson {
     class TYsonWriter;
 }
 
@@ -98,7 +98,7 @@ NYson::EYsonFormat GetYsonFormat(const IDataProvider::TFillSettings& fillSetting
 
 TVector<TString> GetStructFields(const TTypeAnnotationNode* type);
 
-void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStatistics& stats, NYson::TYsonWriter& writer); 
+void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStatistics& stats, NYson::TYsonWriter& writer);
 
 void FillSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& types, THashMap<TString, TString>& secureParams);
 
@@ -108,17 +108,17 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedF
 
 bool FreezeUsedFilesSync(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter);
 
-void WriteColumns(NYson::TYsonWriter& writer, const NNodes::TExprBase& columns); 
+void WriteColumns(NYson::TYsonWriter& writer, const NNodes::TExprBase& columns);
 
 TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes = false);
 TString ExprToPrettyString(TExprContext& ctx, const TExprNode& expr);
 
-void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprNode* source); 
-void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCoLambda& lambda); 
+void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprNode* source);
+void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCoLambda& lambda);
 
 double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx);
 
-void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics); 
+void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics);
 
 } // namespace NCommon
 } // namespace NYql

@@ -538,19 +538,19 @@ ESocketReadStatus HasSocketDataToRead(SOCKET s) {
 }
 
 #if defined(_win_)
-static ssize_t DoSendMsg(SOCKET sock, const struct iovec* iov, int iovcnt) { 
+static ssize_t DoSendMsg(SOCKET sock, const struct iovec* iov, int iovcnt) {
     return writev(sock, iov, iovcnt);
-} 
-#else 
-static ssize_t DoSendMsg(SOCKET sock, const struct iovec* iov, int iovcnt) { 
-    struct msghdr message; 
- 
-    Zero(message); 
-    message.msg_iov = const_cast<struct iovec*>(iov); 
-    message.msg_iovlen = iovcnt; 
- 
-    return sendmsg(sock, &message, MSG_NOSIGNAL); 
-} 
+}
+#else
+static ssize_t DoSendMsg(SOCKET sock, const struct iovec* iov, int iovcnt) {
+    struct msghdr message;
+
+    Zero(message);
+    message.msg_iov = const_cast<struct iovec*>(iov);
+    message.msg_iovlen = iovcnt;
+
+    return sendmsg(sock, &message, MSG_NOSIGNAL);
+}
 #endif
 
 void TSocketHolder::Close() noexcept {
@@ -709,7 +709,7 @@ static inline SOCKET DoConnect(const struct addrinfo* res, const TInstant& deadL
 static inline ssize_t DoSendV(SOCKET fd, const struct iovec* iov, size_t count) {
     ssize_t ret = -1;
     do {
-        ret = DoSendMsg(fd, iov, (int)count); 
+        ret = DoSendMsg(fd, iov, (int)count);
     } while (ret == -1 && errno == EINTR);
 
     if (ret < 0) {
@@ -760,7 +760,7 @@ public:
     ssize_t Send(SOCKET fd, const void* data, size_t len) override {
         ssize_t ret = -1;
         do {
-            ret = send(fd, (const char*)data, (int)len, MSG_NOSIGNAL); 
+            ret = send(fd, (const char*)data, (int)len, MSG_NOSIGNAL);
         } while (ret == -1 && errno == EINTR);
 
         if (ret < 0) {

@@ -187,7 +187,7 @@ namespace NBus {
 
     public:
         void Schedule(NPrivate::IScheduleItemAutoPtr i);
- 
+
     private:
         void DestroyAllSessions();
         void Add(TIntrusivePtr< ::NBus::NPrivate::TBusSessionImpl> session);

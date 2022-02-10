@@ -61,7 +61,7 @@ PEERDIR(
     library/cpp/monlib/dynamic_counters
     library/cpp/packedtypes
     library/cpp/resource
-    library/cpp/yson 
+    library/cpp/yson
     ydb/library/binary_json
     ydb/library/dynumber
     ydb/library/yql/minikql/dom

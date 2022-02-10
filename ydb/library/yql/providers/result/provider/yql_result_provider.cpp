@@ -14,7 +14,7 @@
 #include <ydb/library/yql/ast/yql_gc_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <library/cpp/yson/node/node_io.h> 
+#include <library/cpp/yson/node/node_io.h>
 
 #include <util/string/cast.h>
 

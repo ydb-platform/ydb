@@ -1,10 +1,10 @@
-#include "varint.h" 
- 
+#include "varint.h"
+
 #include "zigzag.h"
 
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 
-namespace NYson { 
+namespace NYson {
     ////////////////////////////////////////////////////////////////////////////////
 
     int WriteVarUInt64(IOutputStream* output, ui64 value) {
@@ -55,7 +55,7 @@ namespace NYson {
         ui64 varInt;
         int bytesRead = ReadVarUInt64(input, &varInt);
         if (varInt > Max<ui32>()) {
-            ythrow yexception() << "The data is too long to read ui64"; 
+            ythrow yexception() << "The data is too long to read ui64";
         }
         *value = ZigZagDecode32(static_cast<ui32>(varInt));
         return bytesRead;
@@ -68,4 +68,4 @@ namespace NYson {
         return bytesRead;
     }
 
-} // namespace NYson 
+} // namespace NYson

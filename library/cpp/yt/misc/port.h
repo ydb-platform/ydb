@@ -1,9 +1,9 @@
 #pragma once
 
-#include <util/system/platform.h> 
- 
+#include <util/system/platform.h>
+
 // Check platform bitness.
-#if !defined(_64_) 
+#if !defined(_64_)
     #error YT requires 64-bit platform
 #endif
 

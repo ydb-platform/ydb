@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    ermolovd 
+OWNER(
+    ermolovd
     g:yt
-) 
+)
 
 PEERDIR(
     library/cpp/yt/misc
@@ -11,12 +11,12 @@ PEERDIR(
 )
 
 SRCS(
-    consumer.cpp 
+    consumer.cpp
     lexer.cpp
-    parser.cpp 
+    parser.cpp
     token.cpp
     tokenizer.cpp
-    varint.cpp 
+    varint.cpp
     writer.cpp
 )
 

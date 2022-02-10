@@ -59,8 +59,8 @@ class TMutableRef
 {
 public:
     //! Creates a null TMutableRef.
-    //! Note empty TMutableRef is not the same as null TMutableRef. 
-    //! `operator bool` can be used to check if ref is nonnull. 
+    //! Note empty TMutableRef is not the same as null TMutableRef.
+    //! `operator bool` can be used to check if ref is nonnull.
     TMutableRef() = default;
 
     //! Creates a TMutableRef for a given block of memory.

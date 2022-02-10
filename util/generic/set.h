@@ -5,7 +5,7 @@
 #include <util/str_stl.h>
 #include <util/memory/alloc.h>
 
-#include <initializer_list> 
+#include <initializer_list>
 #include <memory>
 #include <set>
 

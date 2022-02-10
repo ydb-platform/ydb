@@ -18,7 +18,7 @@
 
 #include <utility>
 #include <stlfwd>
- 
+
 // NOTE: Check StringSplitter below to get more convenient split string interface.
 
 namespace NStringSplitPrivate {

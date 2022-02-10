@@ -1,16 +1,16 @@
 UNITTEST_FOR(library/cpp/digest/md5)
 
-SIZE(MEDIUM) 
+SIZE(MEDIUM)
 
-TIMEOUT(120) 
- 
+TIMEOUT(120)
+
 OWNER(
     pg
     g:util
 )
 
 SRCS(
-    md5_medium_ut.cpp 
+    md5_medium_ut.cpp
 )
 
 REQUIREMENTS(ram:10)

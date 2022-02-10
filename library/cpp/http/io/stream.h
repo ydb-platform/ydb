@@ -3,7 +3,7 @@
 #include "headers.h"
 
 #include <util/stream/output.h>
-#include <util/generic/maybe.h> 
+#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
@@ -35,15 +35,15 @@ public:
     const THttpHeaders& Headers() const noexcept;
 
     /*
-     * parsed http trailers 
-     */ 
-    /// Возвращает контейнер (возможно пустой) с trailer'ами ответа HTTP-сервера. 
-    /// Поток должен быть вычитан полностью прежде чем trailer'ы будут доступны. 
-    /// Пока поток не вычитан до конца возвращается Nothing. 
-    /// https://tools.ietf.org/html/rfc7230#section-4.1.2 
-    const TMaybe<THttpHeaders>& Trailers() const noexcept; 
- 
-    /* 
+     * parsed http trailers
+     */
+    /// Возвращает контейнер (возможно пустой) с trailer'ами ответа HTTP-сервера.
+    /// Поток должен быть вычитан полностью прежде чем trailer'ы будут доступны.
+    /// Пока поток не вычитан до конца возвращается Nothing.
+    /// https://tools.ietf.org/html/rfc7230#section-4.1.2
+    const TMaybe<THttpHeaders>& Trailers() const noexcept;
+
+    /*
      * first line - response or request
      */
     /// Возвращает первую строку ответа HTTP-сервера.

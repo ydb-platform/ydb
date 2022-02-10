@@ -1,55 +1,55 @@
-#include "node.h" 
-#include "node_io.h" 
- 
+#include "node.h"
+#include "node_io.h"
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include <util/ysaveload.h> 
- 
-using namespace NYT; 
- 
-template<> 
+
+#include <util/ysaveload.h>
+
+using namespace NYT;
+
+template<>
 void Out<NYT::TNode>(IOutputStream& s, const NYT::TNode& node)
-{ 
-    s << "TNode:" << NodeToYsonString(node); 
-} 
- 
+{
+    s << "TNode:" << NodeToYsonString(node);
+}
+
 Y_UNIT_TEST_SUITE(YtNodeTest) {
     Y_UNIT_TEST(TestConstsructors) {
-        TNode nodeEmpty; 
-        UNIT_ASSERT_EQUAL(nodeEmpty.GetType(), TNode::Undefined); 
- 
-        TNode nodeString("foobar"); 
-        UNIT_ASSERT_EQUAL(nodeString.GetType(), TNode::String); 
-        UNIT_ASSERT(nodeString.IsString()); 
-        UNIT_ASSERT_VALUES_EQUAL(nodeString.AsString(), "foobar"); 
- 
-        TNode nodeInt(int(54)); 
-        UNIT_ASSERT_EQUAL(nodeInt.GetType(), TNode::Int64); 
-        UNIT_ASSERT(nodeInt.IsInt64()); 
-        UNIT_ASSERT(!nodeInt.IsUint64()); 
-        UNIT_ASSERT_VALUES_EQUAL(nodeInt.AsInt64(), 54ull); 
- 
-        TNode nodeUint(ui64(42)); 
-        UNIT_ASSERT_EQUAL(nodeUint.GetType(), TNode::Uint64); 
-        UNIT_ASSERT(nodeUint.IsUint64()); 
-        UNIT_ASSERT(!nodeUint.IsInt64()); 
-        UNIT_ASSERT_VALUES_EQUAL(nodeUint.AsUint64(), 42ull); 
- 
-        TNode nodeDouble(double(2.3)); 
-        UNIT_ASSERT_EQUAL(nodeDouble.GetType(), TNode::Double); 
-        UNIT_ASSERT(nodeDouble.IsDouble()); 
-        UNIT_ASSERT_VALUES_EQUAL(nodeDouble.AsDouble(), double(2.3)); 
- 
-        TNode nodeBool(true); 
-        UNIT_ASSERT_EQUAL(nodeBool.GetType(), TNode::Bool); 
-        UNIT_ASSERT(nodeBool.IsBool()); 
-        UNIT_ASSERT_VALUES_EQUAL(nodeBool.AsBool(), true); 
- 
-        TNode nodeEntity = TNode::CreateEntity(); 
-        UNIT_ASSERT_EQUAL(nodeEntity.GetType(), TNode::Null); 
-        UNIT_ASSERT(nodeEntity.IsEntity()); 
-    } 
- 
+        TNode nodeEmpty;
+        UNIT_ASSERT_EQUAL(nodeEmpty.GetType(), TNode::Undefined);
+
+        TNode nodeString("foobar");
+        UNIT_ASSERT_EQUAL(nodeString.GetType(), TNode::String);
+        UNIT_ASSERT(nodeString.IsString());
+        UNIT_ASSERT_VALUES_EQUAL(nodeString.AsString(), "foobar");
+
+        TNode nodeInt(int(54));
+        UNIT_ASSERT_EQUAL(nodeInt.GetType(), TNode::Int64);
+        UNIT_ASSERT(nodeInt.IsInt64());
+        UNIT_ASSERT(!nodeInt.IsUint64());
+        UNIT_ASSERT_VALUES_EQUAL(nodeInt.AsInt64(), 54ull);
+
+        TNode nodeUint(ui64(42));
+        UNIT_ASSERT_EQUAL(nodeUint.GetType(), TNode::Uint64);
+        UNIT_ASSERT(nodeUint.IsUint64());
+        UNIT_ASSERT(!nodeUint.IsInt64());
+        UNIT_ASSERT_VALUES_EQUAL(nodeUint.AsUint64(), 42ull);
+
+        TNode nodeDouble(double(2.3));
+        UNIT_ASSERT_EQUAL(nodeDouble.GetType(), TNode::Double);
+        UNIT_ASSERT(nodeDouble.IsDouble());
+        UNIT_ASSERT_VALUES_EQUAL(nodeDouble.AsDouble(), double(2.3));
+
+        TNode nodeBool(true);
+        UNIT_ASSERT_EQUAL(nodeBool.GetType(), TNode::Bool);
+        UNIT_ASSERT(nodeBool.IsBool());
+        UNIT_ASSERT_VALUES_EQUAL(nodeBool.AsBool(), true);
+
+        TNode nodeEntity = TNode::CreateEntity();
+        UNIT_ASSERT_EQUAL(nodeEntity.GetType(), TNode::Null);
+        UNIT_ASSERT(nodeEntity.IsEntity());
+    }
+
     Y_UNIT_TEST(TestPredicates) {
         const TNode undefinedNode;
         UNIT_ASSERT(undefinedNode.IsUndefined());
@@ -72,62 +72,62 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
         UNIT_ASSERT(stringNode.HasValue());
     }
 
-    Y_UNIT_TEST(TestComplexConstructors) { 
-        const TNode listNode = TNode::CreateList({"one", 2, "tree"}); 
-        const auto expectedListValue = std::vector<TNode>({"one", 2, "tree"}); 
-        UNIT_ASSERT_VALUES_EQUAL(listNode.AsList(), expectedListValue); 
- 
-        const TNode mapNode = TNode::CreateMap({{"one", 1}, {"two", 2u}}); 
-        const auto expectedMapValue = THashMap<TString, TNode>({{"one", 1}, {"two", 2u}}); 
-        UNIT_ASSERT_VALUES_EQUAL(mapNode.AsMap(), expectedMapValue); 
-    } 
- 
+    Y_UNIT_TEST(TestComplexConstructors) {
+        const TNode listNode = TNode::CreateList({"one", 2, "tree"});
+        const auto expectedListValue = std::vector<TNode>({"one", 2, "tree"});
+        UNIT_ASSERT_VALUES_EQUAL(listNode.AsList(), expectedListValue);
+
+        const TNode mapNode = TNode::CreateMap({{"one", 1}, {"two", 2u}});
+        const auto expectedMapValue = THashMap<TString, TNode>({{"one", 1}, {"two", 2u}});
+        UNIT_ASSERT_VALUES_EQUAL(mapNode.AsMap(), expectedMapValue);
+    }
+
     Y_UNIT_TEST(TestNodeMap) {
-        TNode nodeMap = TNode()("foo", "bar")("bar", "baz"); 
-        UNIT_ASSERT(nodeMap.IsMap()); 
-        UNIT_ASSERT_EQUAL(nodeMap.GetType(), TNode::Map); 
-        UNIT_ASSERT_VALUES_EQUAL(nodeMap.Size(), 2); 
- 
-        UNIT_ASSERT(nodeMap.HasKey("foo")); 
-        UNIT_ASSERT(!nodeMap.HasKey("42")); 
-        UNIT_ASSERT_EQUAL(nodeMap["foo"], TNode("bar")); 
-        UNIT_ASSERT_EQUAL(nodeMap["bar"], TNode("baz")); 
- 
-        // const version of operator[] 
-        UNIT_ASSERT_EQUAL(static_cast<const TNode&>(nodeMap)["42"].GetType(), TNode::Undefined); 
-        UNIT_ASSERT(!nodeMap.HasKey("42")); 
- 
-        // nonconst version of operator[] 
-        UNIT_ASSERT_EQUAL(nodeMap["42"].GetType(), TNode::Undefined); 
-        UNIT_ASSERT(nodeMap.HasKey("42")); 
- 
-        nodeMap("rock!!!", TNode() 
-            ("Pink", "Floyd") 
-            ("Purple", "Deep")); 
- 
-        TNode copyNode; 
-        copyNode = nodeMap; 
-        UNIT_ASSERT_EQUAL(copyNode["foo"], TNode("bar")); 
-        UNIT_ASSERT_EQUAL(copyNode["bar"], TNode("baz")); 
-        UNIT_ASSERT(copyNode["42"].GetType() == TNode::Undefined); 
-        UNIT_ASSERT_EQUAL(copyNode["rock!!!"]["Purple"], TNode("Deep")); 
-    } 
- 
+        TNode nodeMap = TNode()("foo", "bar")("bar", "baz");
+        UNIT_ASSERT(nodeMap.IsMap());
+        UNIT_ASSERT_EQUAL(nodeMap.GetType(), TNode::Map);
+        UNIT_ASSERT_VALUES_EQUAL(nodeMap.Size(), 2);
+
+        UNIT_ASSERT(nodeMap.HasKey("foo"));
+        UNIT_ASSERT(!nodeMap.HasKey("42"));
+        UNIT_ASSERT_EQUAL(nodeMap["foo"], TNode("bar"));
+        UNIT_ASSERT_EQUAL(nodeMap["bar"], TNode("baz"));
+
+        // const version of operator[]
+        UNIT_ASSERT_EQUAL(static_cast<const TNode&>(nodeMap)["42"].GetType(), TNode::Undefined);
+        UNIT_ASSERT(!nodeMap.HasKey("42"));
+
+        // nonconst version of operator[]
+        UNIT_ASSERT_EQUAL(nodeMap["42"].GetType(), TNode::Undefined);
+        UNIT_ASSERT(nodeMap.HasKey("42"));
+
+        nodeMap("rock!!!", TNode()
+            ("Pink", "Floyd")
+            ("Purple", "Deep"));
+
+        TNode copyNode;
+        copyNode = nodeMap;
+        UNIT_ASSERT_EQUAL(copyNode["foo"], TNode("bar"));
+        UNIT_ASSERT_EQUAL(copyNode["bar"], TNode("baz"));
+        UNIT_ASSERT(copyNode["42"].GetType() == TNode::Undefined);
+        UNIT_ASSERT_EQUAL(copyNode["rock!!!"]["Purple"], TNode("Deep"));
+    }
+
     Y_UNIT_TEST(TestNodeList) {
-        TNode nodeList = TNode().Add("foo").Add(42).Add(3.14); 
-        UNIT_ASSERT(nodeList.IsList()); 
-        UNIT_ASSERT_EQUAL(nodeList.GetType(), TNode::List); 
-        UNIT_ASSERT_VALUES_EQUAL(nodeList.Size(), 3); 
- 
-        UNIT_ASSERT_EQUAL(nodeList[1], TNode(42)); 
-        nodeList.Add(TNode().Add("ls").Add("pwd")); 
- 
-        TNode copyNode; 
-        copyNode = nodeList; 
-        UNIT_ASSERT_EQUAL(copyNode[0], TNode("foo")); 
-        UNIT_ASSERT_EQUAL(copyNode[3][1], TNode("pwd")); 
-    } 
- 
+        TNode nodeList = TNode().Add("foo").Add(42).Add(3.14);
+        UNIT_ASSERT(nodeList.IsList());
+        UNIT_ASSERT_EQUAL(nodeList.GetType(), TNode::List);
+        UNIT_ASSERT_VALUES_EQUAL(nodeList.Size(), 3);
+
+        UNIT_ASSERT_EQUAL(nodeList[1], TNode(42));
+        nodeList.Add(TNode().Add("ls").Add("pwd"));
+
+        TNode copyNode;
+        copyNode = nodeList;
+        UNIT_ASSERT_EQUAL(copyNode[0], TNode("foo"));
+        UNIT_ASSERT_EQUAL(copyNode[3][1], TNode("pwd"));
+    }
+
     Y_UNIT_TEST(TestInsertingMethodsFromTemporaryObjects) {
         // check that .Add(...) doesn't return lvalue reference to temporary object
         {
@@ -143,59 +143,59 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
     }
 
     Y_UNIT_TEST(TestAttributes) {
-        TNode node = TNode()("lee", 42)("faa", 54); 
-        UNIT_ASSERT(!node.HasAttributes()); 
-        node.Attributes()("foo", true)("bar", false); 
-        UNIT_ASSERT(node.HasAttributes()); 
- 
-        { 
-            TNode copyNode; 
-            UNIT_ASSERT(!copyNode.HasAttributes()); 
-            copyNode = node; 
-            UNIT_ASSERT(copyNode.HasAttributes()); 
-            UNIT_ASSERT_EQUAL(copyNode.GetAttributes()["foo"], TNode(true)); 
-        } 
- 
-        { 
-            TNode movedWithoutAttributes(42); 
-            movedWithoutAttributes.Attributes()("one", 1)("two", 2); 
-            movedWithoutAttributes.MoveWithoutAttributes(TNode(node)); 
-            UNIT_ASSERT(movedWithoutAttributes.IsMap()); 
-            UNIT_ASSERT_EQUAL(movedWithoutAttributes["lee"], TNode(42)); 
-            UNIT_ASSERT_EQUAL(movedWithoutAttributes.GetAttributes()["one"], TNode(1)); 
-            UNIT_ASSERT(!movedWithoutAttributes.GetAttributes().HasKey("foo")); 
-        } 
- 
-        { 
-            TNode copyNode = node; 
-            UNIT_ASSERT(copyNode.HasAttributes()); 
-            UNIT_ASSERT(copyNode.GetAttributes().HasKey("foo")); 
-            copyNode.ClearAttributes(); 
-            UNIT_ASSERT(!copyNode.HasAttributes()); 
-            UNIT_ASSERT(!copyNode.GetAttributes().HasKey("foo")); 
-        } 
- 
-        { 
-            TNode copyNode = node; 
-            UNIT_ASSERT(copyNode.HasAttributes()); 
-            UNIT_ASSERT(copyNode.GetAttributes().HasKey("foo")); 
-            copyNode.Clear(); 
-            UNIT_ASSERT(!copyNode.HasAttributes()); 
-            UNIT_ASSERT(!copyNode.GetAttributes().HasKey("foo")); 
-        } 
-    } 
- 
+        TNode node = TNode()("lee", 42)("faa", 54);
+        UNIT_ASSERT(!node.HasAttributes());
+        node.Attributes()("foo", true)("bar", false);
+        UNIT_ASSERT(node.HasAttributes());
+
+        {
+            TNode copyNode;
+            UNIT_ASSERT(!copyNode.HasAttributes());
+            copyNode = node;
+            UNIT_ASSERT(copyNode.HasAttributes());
+            UNIT_ASSERT_EQUAL(copyNode.GetAttributes()["foo"], TNode(true));
+        }
+
+        {
+            TNode movedWithoutAttributes(42);
+            movedWithoutAttributes.Attributes()("one", 1)("two", 2);
+            movedWithoutAttributes.MoveWithoutAttributes(TNode(node));
+            UNIT_ASSERT(movedWithoutAttributes.IsMap());
+            UNIT_ASSERT_EQUAL(movedWithoutAttributes["lee"], TNode(42));
+            UNIT_ASSERT_EQUAL(movedWithoutAttributes.GetAttributes()["one"], TNode(1));
+            UNIT_ASSERT(!movedWithoutAttributes.GetAttributes().HasKey("foo"));
+        }
+
+        {
+            TNode copyNode = node;
+            UNIT_ASSERT(copyNode.HasAttributes());
+            UNIT_ASSERT(copyNode.GetAttributes().HasKey("foo"));
+            copyNode.ClearAttributes();
+            UNIT_ASSERT(!copyNode.HasAttributes());
+            UNIT_ASSERT(!copyNode.GetAttributes().HasKey("foo"));
+        }
+
+        {
+            TNode copyNode = node;
+            UNIT_ASSERT(copyNode.HasAttributes());
+            UNIT_ASSERT(copyNode.GetAttributes().HasKey("foo"));
+            copyNode.Clear();
+            UNIT_ASSERT(!copyNode.HasAttributes());
+            UNIT_ASSERT(!copyNode.GetAttributes().HasKey("foo"));
+        }
+    }
+
     Y_UNIT_TEST(TestEq) {
-        TNode nodeNoAttributes = TNode()("lee", 42)("faa", 54); 
-        TNode node = nodeNoAttributes; 
-        node.Attributes()("foo", true)("bar", false); 
-        UNIT_ASSERT(node != nodeNoAttributes); 
-        UNIT_ASSERT(nodeNoAttributes != node); 
-        TNode copyNode = node; 
-        UNIT_ASSERT(copyNode == node); 
-        UNIT_ASSERT(node == copyNode); 
-    } 
- 
+        TNode nodeNoAttributes = TNode()("lee", 42)("faa", 54);
+        TNode node = nodeNoAttributes;
+        node.Attributes()("foo", true)("bar", false);
+        UNIT_ASSERT(node != nodeNoAttributes);
+        UNIT_ASSERT(nodeNoAttributes != node);
+        TNode copyNode = node;
+        UNIT_ASSERT(copyNode == node);
+        UNIT_ASSERT(node == copyNode);
+    }
+
     Y_UNIT_TEST(TestComparison) {
         using namespace NYT::NNodeCmp;
         {
@@ -261,23 +261,23 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
     }
 
     Y_UNIT_TEST(TestSaveLoad) {
-        TNode node = TNode()("foo", "bar")("baz", 42); 
-        node.Attributes()["attr_name"] = "attr_value"; 
- 
-        TString bytes; 
-        { 
-            TStringOutput s(bytes); 
-            ::Save(&s, node); 
-        } 
- 
-        TNode nodeCopy; 
-        { 
-            TStringInput s(bytes); 
-            ::Load(&s, nodeCopy); 
-        } 
- 
-        UNIT_ASSERT_VALUES_EQUAL(node, nodeCopy); 
-    } 
+        TNode node = TNode()("foo", "bar")("baz", 42);
+        node.Attributes()["attr_name"] = "attr_value";
+
+        TString bytes;
+        {
+            TStringOutput s(bytes);
+            ::Save(&s, node);
+        }
+
+        TNode nodeCopy;
+        {
+            TStringInput s(bytes);
+            ::Load(&s, nodeCopy);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(node, nodeCopy);
+    }
 
     Y_UNIT_TEST(TestIntCast) {
         TNode node = 1ull << 31;
@@ -381,7 +381,7 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(TNode(0).ConvertTo<bool>(), false);
         UNIT_ASSERT_EXCEPTION(TNode("random").ConvertTo<bool>(), TFromStringException);
         UNIT_ASSERT_EXCEPTION(TNode("").ConvertTo<bool>(), TFromStringException);
-    } 
+    }
 
     Y_UNIT_TEST(TestCanonicalSerialization) {
         auto node = TNode()
@@ -396,16 +396,16 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
             "\"c\"=\"c\";\"ca\"=\"ca\"}");
     }
 
-    Y_UNIT_TEST(OperatorEqualSubnode) { 
-        TNode node; 
-        node["a"]["b"] = "c"; 
- 
-        node = node["a"]; 
-        node = node["b"]; 
- 
-        UNIT_ASSERT_VALUES_EQUAL(node.AsString(), "c"); 
-    } 
- 
+    Y_UNIT_TEST(OperatorEqualSubnode) {
+        TNode node;
+        node["a"]["b"] = "c";
+
+        node = node["a"];
+        node = node["b"];
+
+        UNIT_ASSERT_VALUES_EQUAL(node.AsString(), "c");
+    }
+
     Y_UNIT_TEST(TestMapGetters) {
         auto node = TNode::CreateMap()
             ("string", "7")
@@ -481,4 +481,4 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
         childString = "yaddayadda";
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>(0), "yaddayadda");
     }
-} 
+}

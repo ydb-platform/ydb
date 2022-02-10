@@ -11,10 +11,10 @@ namespace NYT {
 
 namespace NDetail {
 
-// N.B. We would prefer these arrays to be zero sized 
-// but zero sized arrays are not supported in MSVC. 
-const char EmptyRefData[1] = {0}; 
-char MutableEmptyRefData[1] = {0}; 
+// N.B. We would prefer these arrays to be zero sized
+// but zero sized arrays are not supported in MSVC.
+const char EmptyRefData[1] = {0};
+char MutableEmptyRefData[1] = {0};
 
 } // namespace NDetail
 

@@ -60,7 +60,7 @@ PEERDIR(
     library/cpp/actors/util
     library/cpp/blockcodecs
     library/cpp/deprecated/enum_codegen
-    library/cpp/yson 
+    library/cpp/yson
     ydb/core/base
     ydb/core/mon
     ydb/core/mon_alloc

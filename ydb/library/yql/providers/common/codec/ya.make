@@ -19,8 +19,8 @@ PEERDIR(
     ydb/library/yql/minikql
     ydb/library/yql/minikql/computation
     ydb/library/yql/providers/common/mkql
-    library/cpp/yson/node 
-    library/cpp/yson 
+    library/cpp/yson/node
+    library/cpp/yson
 )
 
 YQL_LAST_ABI_VERSION()

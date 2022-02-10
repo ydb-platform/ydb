@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 
-#include <library/cpp/yson/writer.h> 
+#include <library/cpp/yson/writer.h>
 
 namespace NYql {
 

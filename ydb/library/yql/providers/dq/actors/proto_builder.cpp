@@ -9,8 +9,8 @@
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
-#include <library/cpp/yson/node/node_io.h> 
-#include <library/cpp/yson/writer.h> 
+#include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/yson/writer.h>
 
 namespace NYql::NDqs {
 

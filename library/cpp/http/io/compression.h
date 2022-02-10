@@ -15,7 +15,7 @@ public:
     static inline TCompressionCodecFactory& Instance() noexcept {
         return *SingletonWithPriority<TCompressionCodecFactory, 0>();
     }
- 
+
     inline const TDecoderConstructor* FindDecoder(TStringBuf name) const {
         if (auto codec = Codecs_.FindPtr(name)) {
             return &codec->Decoder;

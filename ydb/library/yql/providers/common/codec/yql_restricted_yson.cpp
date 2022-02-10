@@ -3,11 +3,11 @@
 #include <ydb/library/yql/utils/parse_double.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <library/cpp/yson/detail.h> 
-#include <library/cpp/yson/parser.h> 
+#include <library/cpp/yson/detail.h>
+#include <library/cpp/yson/parser.h>
 
-#include <library/cpp/yson/node/node_io.h> 
-#include <library/cpp/yson/node/node_visitor.h> 
+#include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/yson/node/node_visitor.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/stack.h>

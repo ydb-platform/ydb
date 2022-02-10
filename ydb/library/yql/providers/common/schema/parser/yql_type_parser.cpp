@@ -1,6 +1,6 @@
 #include "yql_type_parser.h"
 
-#include <library/cpp/yson/node/node_io.h> 
+#include <library/cpp/yson/node/node_io.h>
 
 namespace NYql {
 namespace NCommon {

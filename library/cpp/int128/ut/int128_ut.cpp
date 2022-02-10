@@ -51,33 +51,33 @@ Y_UNIT_TEST_SUITE(Uint128Suite) {
         UNIT_ASSERT(!std::signbit(i128{0}));
         UNIT_ASSERT(std::signbit(i128{-1}));
     }
- 
-    Y_UNIT_TEST(ToStringTest) { 
-        // int128 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(i128(0)), "0"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(i128(42)), "42"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(i128(-142)), "-142"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(std::numeric_limits<i128>::min()), "-170141183460469231731687303715884105728"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(std::numeric_limits<i128>::max()), "170141183460469231731687303715884105727"); 
- 
-        // Just random number 
-        UNIT_ASSERT_VALUES_EQUAL( 
-            ToString( 
-                - ((i128(8741349088318632894ul) << 64) | i128(1258331728153556511ul)) 
-            ), 
-            "-161249429491168133245752281683002013215"); 
- 
-        // uint128 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(ui128(0)), "0"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(ui128(42)), "42"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(std::numeric_limits<ui128>::min()), "0"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(std::numeric_limits<ui128>::max()), "340282366920938463463374607431768211455"); 
- 
-        // Just random number 
-        UNIT_ASSERT_VALUES_EQUAL( 
-            ToString( 
-                ((ui128(12745260439834612983ul) << 64) | ui128(10970669179777569799ul)) 
-            ), 
-            "235108557486403940296800289353599800327"); 
-    } 
+
+    Y_UNIT_TEST(ToStringTest) {
+        // int128
+        UNIT_ASSERT_VALUES_EQUAL(ToString(i128(0)), "0");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(i128(42)), "42");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(i128(-142)), "-142");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(std::numeric_limits<i128>::min()), "-170141183460469231731687303715884105728");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(std::numeric_limits<i128>::max()), "170141183460469231731687303715884105727");
+
+        // Just random number
+        UNIT_ASSERT_VALUES_EQUAL(
+            ToString(
+                - ((i128(8741349088318632894ul) << 64) | i128(1258331728153556511ul))
+            ),
+            "-161249429491168133245752281683002013215");
+
+        // uint128
+        UNIT_ASSERT_VALUES_EQUAL(ToString(ui128(0)), "0");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(ui128(42)), "42");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(std::numeric_limits<ui128>::min()), "0");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(std::numeric_limits<ui128>::max()), "340282366920938463463374607431768211455");
+
+        // Just random number
+        UNIT_ASSERT_VALUES_EQUAL(
+            ToString(
+                ((ui128(12745260439834612983ul) << 64) | ui128(10970669179777569799ul))
+            ),
+            "235108557486403940296800289353599800327");
+    }
 }

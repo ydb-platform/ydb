@@ -483,9 +483,9 @@ ALLOW .* -> vendor/github.com/twmb/murmur3
 # gopsutil: psutil for golang
 ALLOW .* -> vendor/github.com/shirou/gopsutil/v3
 
-# Go Imagick is a Go bind to ImageMagick's MagickWand C API 
-ALLOW .* -> vendor/gopkg.in/gographics/imagick.v2 
- 
+# Go Imagick is a Go bind to ImageMagick's MagickWand C API
+ALLOW .* -> vendor/gopkg.in/gographics/imagick.v2
+
 # fixed-size thread safe LRU cache
 ALLOW .* -> vendor/github.com/hashicorp/golang-lru
 
@@ -628,9 +628,9 @@ ALLOW .* -> vendor/github.com/klauspost/compress/zstd
 # CONTRIB-1865 Decorated Syntax Tree for Go AST
 ALLOW .* -> vendor/github.com/dave/dst
 
-# CONTRIB-1874 Parse and demux MPEG Transport Streams 
-ALLOW .* -> vendor/github.com/asticode/go-astits 
- 
+# CONTRIB-1874 Parse and demux MPEG Transport Streams
+ALLOW .* -> vendor/github.com/asticode/go-astits
+
 # CONTRIB-1896 Fast, portable, non-Turing complete expression evaluation with gradual typing
 ALLOW .* -> vendor/github.com/google/cel-go
 
@@ -655,9 +655,9 @@ ALLOW .* -> vendor/github.com/peterh/liner
 # CONTRIB-1999 strongSwan vici client library
 ALLOW .* -> vendor/github.com/strongswan/govici/vici
 
-# CONTRIB-2002 A Go implementation of RTP 
-ALLOW .* -> vendor/github.com/pion/rtp 
- 
+# CONTRIB-2002 A Go implementation of RTP
+ALLOW .* -> vendor/github.com/pion/rtp
+
 # CONTRIB-1959 Добавить casbin
 ALLOW .* -> vendor/github.com/casbin/casbin/v2
 
@@ -785,9 +785,9 @@ ALLOW .* -> vendor/github.com/ThalesIgnite/crypto11
 # CONTRIB-2396: graphql client library
 ALLOW .* -> vendor/github.com/hasura/go-graphql-client
 
-# CONTRIB-2301: RTSP 1.0 client and server library 
-ALLOW .* -> vendor/github.com/aler9/gortsplib 
- 
+# CONTRIB-2301: RTSP 1.0 client and server library
+ALLOW .* -> vendor/github.com/aler9/gortsplib
+
 # CONTRIB-2305: graph algorithms
 ALLOW .* -> vendor/github.com/yourbasic/graph
 
@@ -814,9 +814,9 @@ ALLOW .* -> vendor/github.com/ydb-platform/ydb-go-sdk-opentracing
 ALLOW .* -> vendor/github.com/ydb-platform/ydb-go-sdk-opentracing/internal/cmd/bench
 ALLOW .* -> vendor/github.com/ydb-platform/ydb-go-yc-metadata
 
-# CONTRIB-2099 
-ALLOW .* -> vendor/github.com/haivision/srtgo 
- 
+# CONTRIB-2099
+ALLOW .* -> vendor/github.com/haivision/srtgo
+
 # CONTRIB-2307
 ALLOW .* -> vendor/github.com/airbusgeo/godal
 ALLOW .* -> vendor/github.com/airbusgeo/osio

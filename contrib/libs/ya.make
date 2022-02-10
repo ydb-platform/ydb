@@ -310,7 +310,7 @@ RECURSE(
     spirv_headers
     spirv_tools
     sqlite3
-    srt 
+    srt
     stan
     stan-math
     stan/stan/command

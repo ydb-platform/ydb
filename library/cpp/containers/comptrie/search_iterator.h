@@ -41,17 +41,17 @@ public:
     {
     }
 
-    bool operator==(const TSearchIterator& other) const { 
+    bool operator==(const TSearchIterator& other) const {
         Y_ASSERT(Trie && other.Trie);
-        return Trie == other.Trie && 
-            DataPos == other.DataPos && 
-            DataEnd == other.DataEnd && 
-            ValuePos == other.ValuePos; 
-    } 
-    bool operator!=(const TSearchIterator& other) const { 
-        return !(*this == other); 
-    } 
- 
+        return Trie == other.Trie &&
+            DataPos == other.DataPos &&
+            DataEnd == other.DataEnd &&
+            ValuePos == other.ValuePos;
+    }
+    bool operator!=(const TSearchIterator& other) const {
+        return !(*this == other);
+    }
+
     inline bool Advance(TSymbol label) {
         Y_ASSERT(Trie);
         if (DataPos == nullptr || DataPos >= DataEnd) {
@@ -132,9 +132,9 @@ bool TSearchIterator<TTrie>::HasValue() const {
 template <class TTrie>
 inline size_t TSearchIterator<TTrie>::GetHash() const {
     Y_ASSERT(Trie);
-    return MultiHash( 
-        static_cast<const void*>(Trie), 
-        static_cast<const void*>(DataPos), 
-        static_cast<const void*>(DataEnd), 
-        static_cast<const void*>(ValuePos)); 
+    return MultiHash(
+        static_cast<const void*>(Trie),
+        static_cast<const void*>(DataPos),
+        static_cast<const void*>(DataEnd),
+        static_cast<const void*>(ValuePos));
 }

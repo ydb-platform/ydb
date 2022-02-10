@@ -270,7 +270,7 @@ ALLOW .* -> vendor/gorm.io/plugin/dbresolver
 ALLOW .* -> vendor/github.com/jonboulle/clockwork
 
 # LRU Cache with TTL
-ALLOW .* -> vendor/github.com/karlseguin/ccache/v2
+ALLOW .* -> vendor/github.com/karlseguin/ccache/v2 
 
 # Garbage collector-sensitive patricia tree for IP/CIDR tagging
 ALLOW .* -> vendor/github.com/kentik/patricia
@@ -687,7 +687,7 @@ ALLOW .* -> vendor/github.com/coredns/coredns/plugin/loadbalance
 ALLOW .* -> vendor/github.com/shopspring/decimal
 
 # CONTRIB-2050
-ALLOW .* -> vendor/github.com/brianvoe/gofakeit/v6
+ALLOW .* -> vendor/github.com/brianvoe/gofakeit/v6 
 
 # CONTRIB-2051
 ALLOW .* -> vendor/github.com/envoyproxy/go-control-plane

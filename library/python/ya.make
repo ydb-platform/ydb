@@ -187,7 +187,7 @@ RECURSE(
     testing
     tmp
     toloka_client
-    toloka-kit
+    toloka-kit 
     toloka-airflow
     toloka-prefect
     tools_structured_logs

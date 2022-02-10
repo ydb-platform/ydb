@@ -98,18 +98,18 @@ public:
 
     void Print() const {
         printf("content_length: %" PRIi64 "\n", content_length);
-        printf("http_time: %" PRIi64 "\n", http_time);
-        printf("http_minor: %" PRIi8 "\n", http_minor);
-        printf("mime_type: %" PRIi8 "\n", mime_type);
-        printf("charset: %" PRIi8 "\n", charset);
-        printf("compression_method: %" PRIi8 "\n", compression_method);
-        printf("transfer_chunked: %" PRIi8 "\n", transfer_chunked);
-        printf("connection_closed: %" PRIi8 "\n", connection_closed);
+        printf("http_time: %" PRIi64 "\n", http_time); 
+        printf("http_minor: %" PRIi8 "\n", http_minor); 
+        printf("mime_type: %" PRIi8 "\n", mime_type); 
+        printf("charset: %" PRIi8 "\n", charset); 
+        printf("compression_method: %" PRIi8 "\n", compression_method); 
+        printf("transfer_chunked: %" PRIi8 "\n", transfer_chunked); 
+        printf("connection_closed: %" PRIi8 "\n", connection_closed); 
         printf("content_range_start: %" PRIi64 "\n", content_range_start);
         printf("content_range_end: %" PRIi64 "\n", content_range_end);
         printf("content_range_entity_length: %" PRIi64 "\n", content_range_entity_length);
         printf("base: \"%s\"\n", base.c_str());
-        printf("error: %" PRIi16 "\n", error);
+        printf("error: %" PRIi16 "\n", error); 
     }
 
     int SetBase(const char* path,
@@ -156,9 +156,9 @@ public:
 
     void Print() const {
         THttpBaseHeader::Print();
-        printf("http_status: %" PRIi16 "\n", http_status);
-        printf("squid_error: %" PRIi8 "\n", squid_error);
-        printf("accept_ranges: %" PRIi8 "\n", accept_ranges);
+        printf("http_status: %" PRIi16 "\n", http_status); 
+        printf("squid_error: %" PRIi8 "\n", squid_error); 
+        printf("accept_ranges: %" PRIi8 "\n", accept_ranges); 
         printf("location: \"%s\"\n", location.c_str());
         printf("retry_after: %" PRIi64 "\n", retry_after);
     }
@@ -208,10 +208,10 @@ public:
         printf("host: \"%s\"\n", host);
         printf("from: \"%s\"\n", from);
         printf("user_agent: \"%s\"\n", user_agent);
-        printf("http_method: %" PRIi8 "\n", http_method);
-        printf("response_timeout: %" PRIi32 "\n", x_yandex_response_timeout);
-        printf("max_age: %" PRIi32 "\n", max_age);
-        printf("if_modified_since: %" PRIi64 "\n", if_modified_since);
+        printf("http_method: %" PRIi8 "\n", http_method); 
+        printf("response_timeout: %" PRIi32 "\n", x_yandex_response_timeout); 
+        printf("max_age: %" PRIi32 "\n", max_age); 
+        printf("if_modified_since: %" PRIi64 "\n", if_modified_since); 
     }
 
     /// It doesn't care about errors in request or headers, where

@@ -93,7 +93,7 @@ public:
             Waiters_.PopFront()->Wake();
         }
     }
-
+ 
     void BroadCast() noexcept {
         while (!Waiters_.Empty()) {
             Waiters_.PopFront()->Wake();

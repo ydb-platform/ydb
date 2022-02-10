@@ -11,9 +11,9 @@ public:
         const int ret = WaitQueue_.WaitD(current, deadline);
 
         if (ret != EWAKEDUP) {
-            return ret;
-        }
-
+            return ret; 
+        } 
+ 
         return mutex->LockD(current, deadline);
     }
 

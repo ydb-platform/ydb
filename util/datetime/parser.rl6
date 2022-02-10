@@ -659,10 +659,10 @@ bool ParseX509ValidityDateTimeDeprecated(const char* input, size_t inputLen, tim
     return true;
 }
 
-bool ParseRFC822DateTime(const char* input, time_t& utcTime) {
-    return ParseRFC822DateTime(input, strlen(input), utcTime);
-}
-
+bool ParseRFC822DateTime(const char* input, time_t& utcTime) { 
+    return ParseRFC822DateTime(input, strlen(input), utcTime); 
+} 
+ 
 bool ParseISO8601DateTime(const char* input, time_t& utcTime) {
     return ParseISO8601DateTime(input, strlen(input), utcTime);
 }
@@ -675,7 +675,7 @@ bool ParseX509ValidityDateTime(const char* input, time_t& utcTime) {
     return ParseX509ValidityDateTime(input, strlen(input), utcTime);
 }
 
-bool ParseRFC822DateTime(const char* input, size_t inputLen, time_t& utcTime) {
+bool ParseRFC822DateTime(const char* input, size_t inputLen, time_t& utcTime) { 
     try {
         utcTime = ParseUnsafe<TRfc822DateTimeParser, TInstant>(input, inputLen).TimeT();
         return true;
@@ -684,7 +684,7 @@ bool ParseRFC822DateTime(const char* input, size_t inputLen, time_t& utcTime) {
     }
 }
 
-bool ParseISO8601DateTime(const char* input, size_t inputLen, time_t& utcTime) {
+bool ParseISO8601DateTime(const char* input, size_t inputLen, time_t& utcTime) { 
     try {
         utcTime = ParseUnsafe<TIso8601DateTimeParser, TInstant>(input, inputLen).TimeT();
         return true;

@@ -1,5 +1,5 @@
-#include "tablet_monitoring_proxy.h" 
- 
+#include "tablet_monitoring_proxy.h"
+
 #include <library/cpp/actors/core/log.h>
 #include <ydb/core/mon/mon.h>
 #include <library/cpp/actors/core/mon.h>
@@ -12,10 +12,10 @@
 #include <ydb/core/tx/tx.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/builder.h>
- 
-//////////////////////////////////////////// 
-namespace NKikimr { namespace NTabletMonitoringProxy { 
- 
+
+////////////////////////////////////////////
+namespace NKikimr { namespace NTabletMonitoringProxy {
+
 namespace {
 
 class TForwardingActor : public TActorBootstrapped<TForwardingActor> {
@@ -121,54 +121,54 @@ private:
 
 }
 
-//////////////////////////////////////////// 
-class TTabletMonitoringProxyActor : public TActorBootstrapped<TTabletMonitoringProxyActor> { 
-public: 
+////////////////////////////////////////////
+class TTabletMonitoringProxyActor : public TActorBootstrapped<TTabletMonitoringProxyActor> {
+public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_MONITORING_PROXY;
     }
 
-    // 
+    //
     TTabletMonitoringProxyActor(TTabletMonitoringProxyConfig config);
-    virtual ~TTabletMonitoringProxyActor(); 
- 
-    // 
-    void Bootstrap(const TActorContext &ctx); 
- 
-    // 
-    STFUNC(StateWork); 
- 
-private: 
-    // 
-    void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx); 
+    virtual ~TTabletMonitoringProxyActor();
+
+    //
+    void Bootstrap(const TActorContext &ctx);
+
+    //
+    STFUNC(StateWork);
+
+private:
+    //
+    void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx);
 
 private:
     TTabletMonitoringProxyConfig Config;
-}; 
- 
-//////////////////////////////////////////// 
-/// The TTabletMonitoringProxyActor class 
-//////////////////////////////////////////// 
+};
+
+////////////////////////////////////////////
+/// The TTabletMonitoringProxyActor class
+////////////////////////////////////////////
 TTabletMonitoringProxyActor::TTabletMonitoringProxyActor(TTabletMonitoringProxyConfig config)
     : Config(std::move(config))
 {}
- 
-//////////////////////////////////////////// 
-TTabletMonitoringProxyActor::~TTabletMonitoringProxyActor() 
-{} 
- 
-//////////////////////////////////////////// 
-void 
-TTabletMonitoringProxyActor::Bootstrap(const TActorContext &ctx) { 
-    Become(&TThis::StateWork); 
- 
-    NActors::TMon* mon = AppData(ctx)->Mon; 
- 
-    if (mon) { 
-        mon->RegisterActorPage(nullptr, "tablets", "Tablets", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID); 
-    } 
-} 
- 
+
+////////////////////////////////////////////
+TTabletMonitoringProxyActor::~TTabletMonitoringProxyActor()
+{}
+
+////////////////////////////////////////////
+void
+TTabletMonitoringProxyActor::Bootstrap(const TActorContext &ctx) {
+    Become(&TThis::StateWork);
+
+    NActors::TMon* mon = AppData(ctx)->Mon;
+
+    if (mon) {
+        mon->RegisterActorPage(nullptr, "tablets", "Tablets", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+    }
+}
+
 static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
     if (tabletIdParam.StartsWith("0x")) {
         ui64 result = 0;
@@ -179,13 +179,13 @@ static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
     }
 }
 
-//////////////////////////////////////////// 
-void 
-TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) { 
-    // 
-    NMon::TEvHttpInfo* msg = ev->Get(); 
+////////////////////////////////////////////
+void
+TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
+    //
+    NMon::TEvHttpInfo* msg = ev->Get();
     const TCgiParameters* cgi;
- 
+
     if (msg->Request.GetMethod() == HTTP_METHOD_POST)  {
         cgi = &msg->Request.GetPostParams();
     } else {
@@ -213,7 +213,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
     }
 
     bool hasIdParam = cgi->Has("TabletID");
-    if (hasIdParam) { 
+    if (hasIdParam) {
         const TString &tabletIdParam = cgi->Get("TabletID");
         const ui64 tabletId = TryParseTabletId(tabletIdParam);
         if (tabletId) {
@@ -221,7 +221,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
             ctx.ExecutorThread.RegisterActor(new TForwardingActor(Config, tabletId, false, ev->Sender, std::move(url), msg->Request.GetMethod()));
             return;
         }
-    } 
+    }
 
     if (cgi->Has("SsId")) {
         const TString &ssIdParam = cgi->Get("SsId");
@@ -382,24 +382,24 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         str << "</form>" << Endl;
     }
     ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
-} 
- 
-//////////////////////////////////////////// 
-/// public state functions 
-//////////////////////////////////////////// 
-STFUNC(TTabletMonitoringProxyActor::StateWork) { 
-    switch (ev->GetTypeRewrite()) { 
-        HFunc(NMon::TEvHttpInfo, Handle); 
- 
-        // HFunc(TEvents::TEvPoisonPill, Handle); // we do not need PoisonPill for the actor 
-    } 
-} 
- 
-//////////////////////////////////////////// 
-/// actor make function 
-//////////////////////////////////////////// 
+}
+
+////////////////////////////////////////////
+/// public state functions
+////////////////////////////////////////////
+STFUNC(TTabletMonitoringProxyActor::StateWork) {
+    switch (ev->GetTypeRewrite()) {
+        HFunc(NMon::TEvHttpInfo, Handle);
+
+        // HFunc(TEvents::TEvPoisonPill, Handle); // we do not need PoisonPill for the actor
+    }
+}
+
+////////////////////////////////////////////
+/// actor make function
+////////////////////////////////////////////
 IActor* CreateTabletMonitoringProxy(TTabletMonitoringProxyConfig config) {
     return new TTabletMonitoringProxyActor(std::move(config));
-} 
- 
-} } // end of the NKikimr::NCompactionService namespace 
+}
+
+} } // end of the NKikimr::NCompactionService namespace

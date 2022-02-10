@@ -4,12 +4,12 @@
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 
 #include <library/cpp/actors/core/log.h>
 #include <ydb/core/protos/services.pb.h>
 #include <google/protobuf/text_format.h>
- 
+
 #include "tablet_tracing_signals.h"
 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
@@ -333,7 +333,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::TABLET_MAIN, [&](){
             TStringBuilder sb;
-            sb << "TTabletReqRebuildHistoryGraph::ProcessLogEntry - TabletID: " << id.TabletID() << ", id " << id 
+            sb << "TTabletReqRebuildHistoryGraph::ProcessLogEntry - TabletID: " << id.TabletID() << ", id " << id
                 << ", refs: [";
 
             for (auto&& t : logEntry.GetReferences())
@@ -651,16 +651,16 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
                             if (satisfied) {
                                 entry.Status = TLogEntry::StatusOk;
- 
+
                                 LOG_DEBUG(*TlsActivationContext, NKikimrServices::TABLET_MAIN, [&](){
-                                    TStringBuilder sb; 
+                                    TStringBuilder sb;
                                     sb << "TTabletReqRebuildHistoryGraph::BuildHistory - THE TAIL - ";
- 
-                                    sb << "References: ["; 
+
+                                    sb << "References: [";
                                     for (auto&& t : entry.References)
                                         sb << t.ToString() << ",";
                                     sb << "] for " << Info->TabletID;
- 
+
                                     if (entry.GcDiscovered) {
                                         sb << ", Gc+: [";
                                         for (auto&& t : entry.GcDiscovered)
@@ -676,8 +676,8 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                                     }
 
                                     return (TString) sb;
-                                }()); 
- 
+                                }());
+
                                 if (entry.EmbeddedLogBody)
                                     graph->AddEntry(id, entry.EmbeddedLogBody, entry.GcDiscovered, entry.GcLeft);
                                 else
@@ -702,20 +702,20 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                     if (step <= gx.Cutoff) {
                         switch (entry.Status) {
                         case TLogEntry::StatusOk:
- 
+
                             LOG_DEBUG(*TlsActivationContext, NKikimrServices::TABLET_MAIN, [&](){
-                                TStringBuilder sb; 
+                                TStringBuilder sb;
                                 sb << "TTabletReqRebuildHistoryGraph::BuildHistory - NOT A TAIL - ";
-                                sb << "References: ["; 
-                                for (auto&& t : entry.References) { 
-                                    sb << t.ToString(); 
-                                    sb << ","; 
-                                } 
+                                sb << "References: [";
+                                for (auto&& t : entry.References) {
+                                    sb << t.ToString();
+                                    sb << ",";
+                                }
                                 sb << "] for " << Info->TabletID;
- 
+
                                 return (TString) sb;
-                            }()); 
- 
+                            }());
+
                             if (entry.EmbeddedLogBody)
                                 graph->AddEntry(id, entry.EmbeddedLogBody, entry.GcDiscovered, entry.GcLeft);
                             else

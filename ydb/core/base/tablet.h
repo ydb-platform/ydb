@@ -265,7 +265,7 @@ struct TEvTablet {
 
         TVector<TLogoBlobID> GcDiscovered;
         TVector<TLogoBlobID> GcLeft;
- 
+
         TString EmbeddedLogBody;
         TString FollowerAux;
 

@@ -30,66 +30,66 @@ struct TCacheStatistics {
     }
 };
 
-class TDefaultStatisticsPolicy { 
-public: 
-    TDefaultStatisticsPolicy() {} 
-    ~TDefaultStatisticsPolicy() {} 
- 
-    const TCacheStatistics& GetStatistics() const { 
-        return Statistics; 
-    } 
- 
-    void IncFindCount() { ++Statistics.FindCount; } 
-    void IncFindHitCount() { ++Statistics.FindHitCount; } 
-    void IncFindWithoutPromoteCount() { ++Statistics.FindWithoutPromoteCount; } 
-    void IncFindWithoutPromoteHitCount() { ++Statistics.FindWithoutPromoteHitCount; } 
-    void IncInsertCount() { ++Statistics.InsertCount; } 
-    void IncInsertExistingCount() { ++Statistics.InsertExistingCount; } 
-    void IncEraseCount() { ++Statistics.EraseCount; } 
-    void IncEraseMissingCount() { ++Statistics.EraseMissingCount; } 
-    void IncPopCount() { ++Statistics.PopCount; } 
-    void IncPopEmptyCount() { ++Statistics.PopEmptyCount; } 
-    void IncPopWhileOverflowCount() { ++Statistics.PopWhileOverflowCount; } 
-    void IncClearCount() { ++Statistics.ClearCount; } 
-    void IncEvictionCount() { ++Statistics.EvictionCount; } 
-    void IncKeyEvictionCount() { ++Statistics.KeyEvictionCount; } 
-    void ClearStatistics() { 
-        Zero(Statistics); 
-    } 
- 
-private: 
-    TCacheStatistics Statistics; 
-}; 
- 
-class TNullStatisticsPolicy { 
-public: 
-    TNullStatisticsPolicy() {} 
-    ~TNullStatisticsPolicy() {} 
- 
-    const TCacheStatistics& GetStatistics() const { 
-        return Statistics; 
-    } 
- 
-    void IncFindCount() {} 
-    void IncFindHitCount() {} 
-    void IncFindWithoutPromoteCount() {} 
-    void IncFindWithoutPromoteHitCount() {} 
-    void IncInsertCount() {} 
-    void IncInsertExistingCount() {} 
-    void IncEraseCount() {} 
-    void IncEraseMissingCount() {} 
-    void IncPopCount() {} 
-    void IncPopEmptyCount() {} 
-    void IncPopWhileOverflowCount() {} 
-    void IncClearCount() {} 
-    void IncEvictionCount() {} 
-    void IncKeyEvictionCount() {} 
-    void ClearStatistics() {} 
- 
-private: 
-    const static TCacheStatistics Statistics; 
-}; 
- 
+class TDefaultStatisticsPolicy {
+public:
+    TDefaultStatisticsPolicy() {}
+    ~TDefaultStatisticsPolicy() {}
+
+    const TCacheStatistics& GetStatistics() const {
+        return Statistics;
+    }
+
+    void IncFindCount() { ++Statistics.FindCount; }
+    void IncFindHitCount() { ++Statistics.FindHitCount; }
+    void IncFindWithoutPromoteCount() { ++Statistics.FindWithoutPromoteCount; }
+    void IncFindWithoutPromoteHitCount() { ++Statistics.FindWithoutPromoteHitCount; }
+    void IncInsertCount() { ++Statistics.InsertCount; }
+    void IncInsertExistingCount() { ++Statistics.InsertExistingCount; }
+    void IncEraseCount() { ++Statistics.EraseCount; }
+    void IncEraseMissingCount() { ++Statistics.EraseMissingCount; }
+    void IncPopCount() { ++Statistics.PopCount; }
+    void IncPopEmptyCount() { ++Statistics.PopEmptyCount; }
+    void IncPopWhileOverflowCount() { ++Statistics.PopWhileOverflowCount; }
+    void IncClearCount() { ++Statistics.ClearCount; }
+    void IncEvictionCount() { ++Statistics.EvictionCount; }
+    void IncKeyEvictionCount() { ++Statistics.KeyEvictionCount; }
+    void ClearStatistics() {
+        Zero(Statistics);
+    }
+
+private:
+    TCacheStatistics Statistics;
+};
+
+class TNullStatisticsPolicy {
+public:
+    TNullStatisticsPolicy() {}
+    ~TNullStatisticsPolicy() {}
+
+    const TCacheStatistics& GetStatistics() const {
+        return Statistics;
+    }
+
+    void IncFindCount() {}
+    void IncFindHitCount() {}
+    void IncFindWithoutPromoteCount() {}
+    void IncFindWithoutPromoteHitCount() {}
+    void IncInsertCount() {}
+    void IncInsertExistingCount() {}
+    void IncEraseCount() {}
+    void IncEraseMissingCount() {}
+    void IncPopCount() {}
+    void IncPopEmptyCount() {}
+    void IncPopWhileOverflowCount() {}
+    void IncClearCount() {}
+    void IncEvictionCount() {}
+    void IncKeyEvictionCount() {}
+    void ClearStatistics() {}
+
+private:
+    const static TCacheStatistics Statistics;
+};
+
 template <typename TKey, typename TValue>
 class ICache {
 public:
@@ -151,10 +151,10 @@ public:
     }
 };
 
-template <typename TKey, typename TValue, typename TDerived, typename TStatisticsPolicy> 
+template <typename TKey, typename TValue, typename TDerived, typename TStatisticsPolicy>
 class TCacheBase : public ICache<TKey, TValue>, private TNonCopyable {
 public:
-    typedef TCacheBase<TKey, TValue, TDerived, TStatisticsPolicy> TSelf; 
+    typedef TCacheBase<TKey, TValue, TDerived, TStatisticsPolicy> TSelf;
     typedef ICache<TKey, TValue> TInterface;
     typedef typename TInterface::TEvictionCallback TEvictionCallback;
     typedef typename TInterface::TKeyEvictionCallback TKeyEvictionCallback;
@@ -186,10 +186,10 @@ public:
 
     bool Find(const TKey& key, TValue*& value) override final {
         value = nullptr;
-        Statistics.IncFindCount(); 
+        Statistics.IncFindCount();
         bool result = static_cast<TDerived*>(this)->DoFind(key, value);
         if (result) {
-            Statistics.IncFindHitCount(); 
+            Statistics.IncFindHitCount();
         }
 
         return result;
@@ -197,10 +197,10 @@ public:
 
     bool FindWithoutPromote(const TKey& key, TValue*& value) const override final {
         value = nullptr;
-        Statistics.IncFindWithoutPromoteCount(); 
+        Statistics.IncFindWithoutPromoteCount();
         bool result = static_cast<const TDerived*>(this)->DoFindWithoutPromote(key, value);
         if (result) {
-            Statistics.IncFindWithoutPromoteHitCount(); 
+            Statistics.IncFindWithoutPromoteHitCount();
         }
 
         return result;
@@ -208,37 +208,37 @@ public:
 
     bool Insert(const TKey& key, const TValue& value, TValue*& currentValue) override final {
         currentValue = nullptr;
-        Statistics.IncInsertCount(); 
+        Statistics.IncInsertCount();
         bool result = static_cast<TDerived*>(this)->DoInsert(key, value, currentValue);
         if (!result) {
-            Statistics.IncInsertExistingCount(); 
+            Statistics.IncInsertExistingCount();
         }
 
         return result;
     }
 
     bool Erase(const TKey& key) override final {
-        Statistics.IncEraseCount(); 
+        Statistics.IncEraseCount();
         bool result = static_cast<TDerived*>(this)->DoErase(key);
         if (!result) {
-            Statistics.IncEraseMissingCount(); 
+            Statistics.IncEraseMissingCount();
         }
 
         return result;
     }
 
     bool Pop() override final {
-        Statistics.IncPopCount(); 
+        Statistics.IncPopCount();
         bool result = static_cast<TDerived*>(this)->DoPop();
         if (!result) {
-            Statistics.IncPopEmptyCount(); 
+            Statistics.IncPopEmptyCount();
         }
 
         return result;
     }
 
     void PopWhileOverflow() override final {
-        Statistics.IncPopWhileOverflowCount(); 
+        Statistics.IncPopWhileOverflowCount();
         while (IsOverflow()) {
             bool result = static_cast<TDerived*>(this)->DoPop();
             if (!result)
@@ -251,7 +251,7 @@ public:
     }
 
     void Clear() override final {
-        Statistics.IncClearCount(); 
+        Statistics.IncClearCount();
         for (;;) {
             bool result = static_cast<TDerived*>(this)->DoPop();
             if (!result)
@@ -268,22 +268,22 @@ public:
 
     void OnEvict(const TKey& key, TValue& value, ui64 size) override {
         EvictionCallback(key, value, size);
-        Statistics.IncEvictionCount(); 
+        Statistics.IncEvictionCount();
         UsedSize -= size;
         --Count;
     }
 
     void OnKeyEvict(const TKey& key) override {
         KeyEvictionCallback(key);
-        Statistics.IncKeyEvictionCount(); 
+        Statistics.IncKeyEvictionCount();
     }
 
     const TCacheStatistics& GetStatistics() const override final {
-        return Statistics.GetStatistics(); 
+        return Statistics.GetStatistics();
     }
 
     void ClearStatistics() override final {
-        Statistics.ClearStatistics(); 
+        Statistics.ClearStatistics();
     }
 
     void SetEvictionCallback(const TEvictionCallback& callback) override final {
@@ -319,24 +319,24 @@ private:
     TEvictionCallback EvictionCallback;
     TKeyEvictionCallback KeyEvictionCallback;
     TOverflowCallback OverflowCallback;
-    mutable TStatisticsPolicy Statistics; 
+    mutable TStatisticsPolicy Statistics;
     ui64 Count;
     ui64 UsedSize;
 };
 
-template <typename TKey, typename TValue, typename TContainer, typename TStatisticsPolicy = TDefaultStatisticsPolicy> 
-class TUnboundedCacheBase : public TCacheBase<TKey, TValue, TUnboundedCacheBase<TKey, TValue, TContainer, TStatisticsPolicy>, TStatisticsPolicy> { 
+template <typename TKey, typename TValue, typename TContainer, typename TStatisticsPolicy = TDefaultStatisticsPolicy>
+class TUnboundedCacheBase : public TCacheBase<TKey, TValue, TUnboundedCacheBase<TKey, TValue, TContainer, TStatisticsPolicy>, TStatisticsPolicy> {
 public:
-    typedef TCacheBase<TKey, TValue, TUnboundedCacheBase<TKey, TValue, TContainer, TStatisticsPolicy>, TStatisticsPolicy> TBase; 
-    typedef TUnboundedCacheBase<TKey, TValue, TContainer, TStatisticsPolicy> TSelf; 
+    typedef TCacheBase<TKey, TValue, TUnboundedCacheBase<TKey, TValue, TContainer, TStatisticsPolicy>, TStatisticsPolicy> TBase;
+    typedef TUnboundedCacheBase<TKey, TValue, TContainer, TStatisticsPolicy> TSelf;
     typedef typename TBase::TMeasureCallback TMeasureCallback;
 
-    TUnboundedCacheBase() 
-        : TUnboundedCacheBase(&TBase::DefaultMeasureCallback) 
+    TUnboundedCacheBase()
+        : TUnboundedCacheBase(&TBase::DefaultMeasureCallback)
     {
     }
 
-    explicit TUnboundedCacheBase(const TMeasureCallback& measureCallback) 
+    explicit TUnboundedCacheBase(const TMeasureCallback& measureCallback)
         : TBase(measureCallback)
     {
     }
@@ -397,35 +397,35 @@ public:
     }
 
 private:
-    TContainer Items; 
+    TContainer Items;
 };
 
-template <typename TKey, typename TValue, typename TStatisticsPolicy = TDefaultStatisticsPolicy> 
+template <typename TKey, typename TValue, typename TStatisticsPolicy = TDefaultStatisticsPolicy>
 class TUnboundedCacheOnMap : public TUnboundedCacheBase<TKey, TValue, TMap<TKey, TValue>, TStatisticsPolicy> {
-public: 
+public:
     using TBase = TUnboundedCacheBase<TKey, TValue, TMap<TKey, TValue>, TStatisticsPolicy>;
-    using TMeasureCallback = typename TBase::TMeasureCallback; 
-    TUnboundedCacheOnMap() 
-    {} 
- 
-    explicit TUnboundedCacheOnMap(const TMeasureCallback& measureCallback) 
-        : TBase(measureCallback) 
-    {} 
-}; 
- 
-template <typename TKey, typename TValue, typename TKeyHash = ::THash<TKey>, typename TStatisticsPolicy = TDefaultStatisticsPolicy> 
+    using TMeasureCallback = typename TBase::TMeasureCallback;
+    TUnboundedCacheOnMap()
+    {}
+
+    explicit TUnboundedCacheOnMap(const TMeasureCallback& measureCallback)
+        : TBase(measureCallback)
+    {}
+};
+
+template <typename TKey, typename TValue, typename TKeyHash = ::THash<TKey>, typename TStatisticsPolicy = TDefaultStatisticsPolicy>
 class TUnboundedCacheOnHash : public TUnboundedCacheBase<TKey, TValue, THashMap<TKey, TValue, TKeyHash>, TStatisticsPolicy> {
-public: 
+public:
     using TBase = TUnboundedCacheBase<TKey, TValue, THashMap<TKey, TValue, TKeyHash>, TStatisticsPolicy>;
-    using TMeasureCallback = typename TBase::TMeasureCallback; 
-    TUnboundedCacheOnHash() 
-    {} 
- 
-    explicit TUnboundedCacheOnHash(const TMeasureCallback& measureCallback) 
-        : TBase(measureCallback) 
-    {} 
-}; 
- 
+    using TMeasureCallback = typename TBase::TMeasureCallback;
+    TUnboundedCacheOnHash()
+    {}
+
+    explicit TUnboundedCacheOnHash(const TMeasureCallback& measureCallback)
+        : TBase(measureCallback)
+    {}
+};
+
 template <typename TKey, typename TValue>
 class TSizeBasedOverflowCallback : private TNonCopyable {
 public:
@@ -446,11 +446,11 @@ private:
     ui64 MaxSize;
 };
 
-template <typename TKey, typename TValue, typename TKeyHash = ::THash<TKey>, typename TStatisticsPolicy = TDefaultStatisticsPolicy> 
-class TLruCache : public TCacheBase<TKey, TValue, TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy>, TStatisticsPolicy> { 
+template <typename TKey, typename TValue, typename TKeyHash = ::THash<TKey>, typename TStatisticsPolicy = TDefaultStatisticsPolicy>
+class TLruCache : public TCacheBase<TKey, TValue, TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy>, TStatisticsPolicy> {
 public:
-    typedef TCacheBase<TKey, TValue, TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy>, TStatisticsPolicy> TBase; 
-    typedef TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy> TSelf; 
+    typedef TCacheBase<TKey, TValue, TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy>, TStatisticsPolicy> TBase;
+    typedef TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy> TSelf;
     typedef typename TBase::TMeasureCallback TMeasureCallback;
 
     TLruCache()
@@ -585,15 +585,15 @@ struct T2QCacheConfig : public TThrRefBase {
     }
 };
 
-template <typename TKey, typename TValue, typename TKeyHash = ::THash<TKey>, typename TStatisticsPolicy = TDefaultStatisticsPolicy> 
-class T2QCache : public TCacheBase<TKey, TValue, T2QCache<TKey, TValue, TKeyHash, TStatisticsPolicy>, TStatisticsPolicy> { 
+template <typename TKey, typename TValue, typename TKeyHash = ::THash<TKey>, typename TStatisticsPolicy = TDefaultStatisticsPolicy>
+class T2QCache : public TCacheBase<TKey, TValue, T2QCache<TKey, TValue, TKeyHash, TStatisticsPolicy>, TStatisticsPolicy> {
 public:
-    typedef TCacheBase<TKey, TValue, T2QCache<TKey, TValue, TKeyHash, TStatisticsPolicy>, TStatisticsPolicy> TBase; 
-    typedef T2QCache<TKey, TValue, TKeyHash, TStatisticsPolicy> TSelf; 
+    typedef TCacheBase<TKey, TValue, T2QCache<TKey, TValue, TKeyHash, TStatisticsPolicy>, TStatisticsPolicy> TBase;
+    typedef T2QCache<TKey, TValue, TKeyHash, TStatisticsPolicy> TSelf;
     typedef typename TBase::TMeasureCallback TMeasureCallback;
-    typedef typename TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy>::TItem TItem; 
+    typedef typename TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy>::TItem TItem;
     typedef typename TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy>::TListType TListType;
-    typedef typename TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy>::TIndex TIndex; 
+    typedef typename TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy>::TIndex TIndex;
 
     struct TItemKey : public TIntrusiveListItem <TItemKey> {
         typedef TIntrusiveListItem<TItemKey> TBase;

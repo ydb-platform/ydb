@@ -1,5 +1,5 @@
 UNITTEST_FOR(ydb/core/tablet)
- 
+
 OWNER(
     vvvv
     g:kikimr
@@ -13,16 +13,16 @@ TIMEOUT(600)
 
 SPLIT_FACTOR(50)
 
-PEERDIR( 
+PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/testlib
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
-SRCS( 
+SRCS(
     pipe_tracker_ut.cpp
     resource_broker_ut.cpp
     tablet_counters_aggregator_ut.cpp
@@ -31,6 +31,6 @@ SRCS(
     tablet_pipecache_ut.cpp
     tablet_req_blockbs_ut.cpp
     tablet_resolver_ut.cpp
-) 
- 
-END() 
+)
+
+END()

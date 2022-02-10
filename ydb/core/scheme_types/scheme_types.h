@@ -1,8 +1,8 @@
 #pragma once
- 
+
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
- 
-#include <util/string/hex.h> 
+
+#include <util/string/hex.h>
 #include <util/string/cast.h>
 
 #include <typeinfo>
@@ -11,7 +11,7 @@
 namespace NKikimr {
 namespace NScheme {
 
-//////////////////////////////////////////////////////// 
+////////////////////////////////////////////////////////
 class ITypeMetadata {
 public:
     enum class EFlags {
@@ -37,33 +37,33 @@ friend class ITypeSP;
 friend class TTypeRegistry;
 };
 
-//////////////////////////////////////////////////////// 
+////////////////////////////////////////////////////////
 class ITypeSP {
-public: 
-    // 
+public:
+    //
     ITypeSP(const IType* t = nullptr)
-        : Type(t) 
+        : Type(t)
         , TypeId(t ? t->GetTypeId() : 0)
     {}
 
     ITypeSP(TTypeId typeId)
-        : Type(nullptr) 
-        , TypeId(typeId) 
+        : Type(nullptr)
+        , TypeId(typeId)
     {}
 
-    // 
+    //
     const IType* operator->() const noexcept { return Type; }
     explicit operator bool() const noexcept { return TypeId != 0; }
- 
+
     bool IsKnownType() const noexcept { return Type != nullptr; }
- 
+
     TTypeId GetTypeId() const noexcept { return TypeId; }
     const IType* GetType() const noexcept { return Type; }
- 
-private: 
+
+private:
     const IType* Type;
     TTypeId TypeId;
-}; 
- 
+};
+
 } // namspace NScheme
 } // namespace NKikimr

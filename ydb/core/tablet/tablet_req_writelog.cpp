@@ -43,7 +43,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
         switch (msg->Status) {
         case NKikimrProto::OK:
             LOG_DEBUG_S(ctx, NKikimrServices::TABLET_MAIN, "Put Result: " << msg->Print(false));
- 
+
             GroupWrittenBytes[std::make_pair(msg->Id.Channel(), msg->GroupId)] += msg->Id.BlobSize();
             GroupWrittenOps[std::make_pair(msg->Id.Channel(), msg->GroupId)] += 1;
 
@@ -121,11 +121,11 @@ public:
 
         // todo: adaptive save-with-retry and timeouts
         // todo: cancelation
- 
+
         const auto handleClass = NKikimrBlobStorage::TabletLog;
         for (const auto &ref : References)
             SendToBS(ref.Id, ref.Buffer, ctx, handleClass);
- 
+
         const TLogoBlobID actualLogEntryId = TLogoBlobID(
             LogEntryID.TabletID(),
             LogEntryID.Generation(),

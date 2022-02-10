@@ -40,7 +40,7 @@ struct TKikimrEvents : TEvents {
         ES_TX_PROXY_REQ,
         ES_TABLET_PIPE,
         ES_DEPRECATED_4118,
-        ES_TABLET_COUNTERS_AGGREGATOR, 
+        ES_TABLET_COUNTERS_AGGREGATOR,
         ES_DEPRECATED_4121,
         ES_PROXY_BUS, //4122
         ES_BOOTSTRAPPER,

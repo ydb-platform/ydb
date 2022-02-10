@@ -310,20 +310,20 @@ struct TTabletChannelInfo {
     }
 };
 
-class TTabletStorageInfo : public TThrRefBase { 
-public: 
-    // 
-    TTabletStorageInfo() 
-        : TabletID(Max<ui64>()) 
-        , TabletType(TTabletTypes::TYPE_INVALID) 
+class TTabletStorageInfo : public TThrRefBase {
+public:
+    //
+    TTabletStorageInfo()
+        : TabletID(Max<ui64>())
+        , TabletType(TTabletTypes::TYPE_INVALID)
         , Version(0)
-    {} 
+    {}
     TTabletStorageInfo(ui64 tabletId, TTabletTypes::EType tabletType)
         : TabletID(tabletId)
         , TabletType(tabletType)
         , Version(0)
     {}
-    virtual ~TTabletStorageInfo() {} 
+    virtual ~TTabletStorageInfo() {}
 
     const TTabletChannelInfo* ChannelInfo(ui32 channel) const {
         if (Channels.size() <= channel) {
@@ -335,7 +335,7 @@ public:
         }
         return &info;
     }
- 
+
     ui32 GroupFor(ui32 channel, ui32 recordGen) const {
         if (const TTabletChannelInfo *channelInfo = ChannelInfo(channel))
             return channelInfo->GroupForGeneration(recordGen);
@@ -383,8 +383,8 @@ public:
         return false;
     }
 
-    // 
-    ui64 TabletID; 
+    //
+    ui64 TabletID;
     TVector<TTabletChannelInfo> Channels;
     TTabletTypes::EType TabletType;
     ui32 Version;
@@ -877,7 +877,7 @@ struct TEvBlobStorage {
                     return "unknown";
             }
         };
- 
+
         const TLogoBlobID Id;
         const TString Buffer;
         const TInstant Deadline;

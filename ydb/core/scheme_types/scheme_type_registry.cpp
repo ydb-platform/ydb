@@ -1,18 +1,18 @@
-#include "scheme_type_registry.h" 
-#include "scheme_types.h" 
+#include "scheme_type_registry.h"
+#include "scheme_types.h"
 #include "scheme_types_defs.h"
 
 #include <util/digest/murmur.h>
 #include <util/generic/algorithm.h>
- 
+
 
 #define REGISTER_TYPE(name, size, ...) RegisterType<T##name>();
- 
+
 namespace NKikimr {
 namespace NScheme {
 
-TTypeRegistry::TTypeRegistry() 
-{ 
+TTypeRegistry::TTypeRegistry()
+{
     // move to 'init defaults?'
     RegisterType<TInt32>();
     RegisterType<TUint32>();
@@ -36,8 +36,8 @@ TTypeRegistry::TTypeRegistry()
     RegisterType<TTimestamp>();
     RegisterType<TInterval>();
     RegisterType<TDyNumber>();
-} 
- 
+}
+
 void TTypeRegistry::CalculateMetadataEtag() {
 }
 

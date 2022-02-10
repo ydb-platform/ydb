@@ -51,7 +51,7 @@ SRCS(
     resource_profile.h
     row_version.cpp
     row_version.h
-    services_assert.cpp 
+    services_assert.cpp
     shared_data.cpp
     shared_quota.h
     statestorage.cpp
@@ -78,7 +78,7 @@ SRCS(
     tablet_resolver.h
     tablet_status_checker.cpp
     tabletid.h
-    tablet_types.h 
+    tablet_types.h
     traceid.cpp
     traceid.h
     tracing.h

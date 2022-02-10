@@ -1200,7 +1200,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             TString binQuery;
             NKikimrMiniKQL::TResult readRes;
- 
+
             const TString readQuery = R"___(
                 (
                     (let from (Parameter 'FROM (DataType 'Uint64)))

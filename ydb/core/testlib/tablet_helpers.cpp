@@ -26,7 +26,7 @@
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/persqueue/pq_l2_service.h>
 #include <ydb/core/util/console.h>
- 
+
 #include <google/protobuf/text_format.h>
 
 #include <util/folder/dirut.h>

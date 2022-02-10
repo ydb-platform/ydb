@@ -1,67 +1,67 @@
-#pragma once 
- 
-//////////////////////////////////////////// 
-#include "defs.h" 
+#pragma once
+
+////////////////////////////////////////////
+#include "defs.h"
 #include "tablet_counters.h"
- 
+
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event.h>
- 
+
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/tablet_counters_aggregator.pb.h>
 #include <ydb/core/sys_view/common/events.h>
- 
-//////////////////////////////////////////// 
-namespace NKikimr { 
- 
-//////////////////////////////////////////// 
+
+////////////////////////////////////////////
+namespace NKikimr {
+
+////////////////////////////////////////////
 TActorId MakeTabletCountersAggregatorID(ui32 node, bool follower = false);
- 
+
 
 static const ui32 WORKERS_COUNT = 0;
 
-//////////////////////////////////////////// 
-struct TEvTabletCounters { 
-    // 
-    enum EEv { 
-        EvTabletAddCounters = EventSpaceBegin(TKikimrEvents::ES_TABLET_COUNTERS_AGGREGATOR), 
+////////////////////////////////////////////
+struct TEvTabletCounters {
+    //
+    enum EEv {
+        EvTabletAddCounters = EventSpaceBegin(TKikimrEvents::ES_TABLET_COUNTERS_AGGREGATOR),
         EvDeprecated1,
-        EvTabletCountersForgetTablet, 
+        EvTabletCountersForgetTablet,
         EvTabletCountersRequest,
         EvTabletCountersResponse,
         EvTabletAddLabeledCounters,
         EvTabletLabeledCountersRequest,
         EvTabletLabeledCountersResponse,
         EvRemoveDatabase,
-        EvEnd 
-    }; 
- 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLET_COUNTERS_AGGREGATOR), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLET_COUNTERS)"); 
- 
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLET_COUNTERS_AGGREGATOR), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLET_COUNTERS)");
+
     // Used just as an atomic counter
     struct TInFlightCookie : TThrRefBase {};
 
-    struct TEvTabletAddCounters : public TEventLocal<TEvTabletAddCounters, EvTabletAddCounters> { 
-        // 
+    struct TEvTabletAddCounters : public TEventLocal<TEvTabletAddCounters, EvTabletAddCounters> {
+        //
         const ui64 TabletID;
         const TTabletTypes::EType TabletType;
         const TPathId TenantPathId;
-        TAutoPtr<TTabletCountersBase> ExecutorCounters; 
-        TAutoPtr<TTabletCountersBase> AppCounters; 
+        TAutoPtr<TTabletCountersBase> ExecutorCounters;
+        TAutoPtr<TTabletCountersBase> AppCounters;
         TIntrusivePtr<TInFlightCookie> InFlightCounter;     // Used to detect when previous event has been consumed by the aggregator
- 
+
         TEvTabletAddCounters(TIntrusivePtr<TInFlightCookie> inFlightCounter, ui64 tabletID, TTabletTypes::EType tabletType, TPathId tenantPathId,
             TAutoPtr<TTabletCountersBase> executorCounters, TAutoPtr<TTabletCountersBase> appCounters)
-            : TabletID(tabletID) 
-            , TabletType(tabletType) 
+            : TabletID(tabletID)
+            , TabletType(tabletType)
             , TenantPathId(tenantPathId)
-            , ExecutorCounters(executorCounters) 
-            , AppCounters(appCounters) 
+            , ExecutorCounters(executorCounters)
+            , AppCounters(appCounters)
             , InFlightCounter(inFlightCounter)
-        {} 
-    }; 
- 
+        {}
+    };
+
     struct TEvTabletAddLabeledCounters : public TEventLocal<TEvTabletAddLabeledCounters, EvTabletAddLabeledCounters> {
         //
         const ui64 TabletID;
@@ -76,20 +76,20 @@ struct TEvTabletCounters {
         {}
     };
 
-    // 
-    struct TEvTabletCountersForgetTablet : public TEventLocal<TEvTabletCountersForgetTablet, EvTabletCountersForgetTablet> { 
-        // 
+    //
+    struct TEvTabletCountersForgetTablet : public TEventLocal<TEvTabletCountersForgetTablet, EvTabletCountersForgetTablet> {
+        //
         const ui64 TabletID;
         const TTabletTypes::EType TabletType;
         const TPathId TenantPathId;
- 
+
         TEvTabletCountersForgetTablet(ui64 tabletID, TTabletTypes::EType tabletType, TPathId tenantPathId)
-            : TabletID(tabletID) 
+            : TabletID(tabletID)
             , TabletType(tabletType)
             , TenantPathId(tenantPathId)
-        {} 
-    }; 
- 
+        {}
+    };
+
     //
     struct TEvTabletCountersRequest : public TEventPB<TEvTabletCountersRequest, NKikimrTabletCountersAggregator::TEvTabletCountersRequest, EvTabletCountersRequest> {
     };
@@ -112,15 +112,15 @@ struct TEvTabletCounters {
         {}
     };
 
-}; 
- 
-//////////////////////////////////////////// 
+};
+
+////////////////////////////////////////////
 void TabletCountersForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity);
 
 TStringBuf GetHistogramAggregateSimpleName(TStringBuf name);
 bool IsHistogramAggregateSimpleName(TStringBuf name);
- 
-//////////////////////////////////////////// 
+
+////////////////////////////////////////////
 TIntrusivePtr<NSysView::IDbCounters> CreateTabletDbCounters(
     NMonitoring::TDynamicCounterPtr externalGroup,
     NMonitoring::TDynamicCounterPtr internalGroup,
@@ -128,7 +128,7 @@ TIntrusivePtr<NSysView::IDbCounters> CreateTabletDbCounters(
 
 ////////////////////////////////////////////
 IActor* CreateTabletCountersAggregator(bool follower);
- 
+
 
 ////////////////////////////////////////////
 //will create actor that aggregate LabeledCounters from all nodes and reports them as TEvTabletLabeledCountersResponse to parentActor
@@ -145,5 +145,5 @@ IActor* CreateClusterLabeledCountersAggregatorActor(
         ui32 version = 1,
         const TString& group = TString(), const ui32 TotalWorkersCount = WORKERS_COUNT);
 
-} // end of the NKikimr namespace 
- 
+} // end of the NKikimr namespace
+

@@ -1613,7 +1613,7 @@ void TTablet::HandleStopped() {
 void TTablet::HandlePoisonPill() {
     return CancelTablet(TEvTablet::TEvTabletDead::ReasonPill);
 }
- 
+
 void TTablet::HandleDemoted() {
     StopTablet(TEvTablet::TEvTabletStop::ReasonDemoted, TEvTablet::TEvTabletDead::ReasonDemotedByStateStorage);
 }

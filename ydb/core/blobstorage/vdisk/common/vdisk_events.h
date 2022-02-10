@@ -673,7 +673,7 @@ namespace NKikimr {
             }
             if (record.HasHandleClass()) {
                 str << " HandleClass# " << record.GetHandleClass();
-            } 
+            }
             if (record.HasMsgQoS()) {
                 str << " ";
                 TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);

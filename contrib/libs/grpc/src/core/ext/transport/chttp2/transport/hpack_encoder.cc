@@ -259,7 +259,7 @@ static bool CanAddToHashtable(grpc_chttp2_hpack_compressor* hpack_compressor,
 }
 } /* namespace */
 
-struct framer_state {
+struct framer_state { 
   int is_first_frame;
   /* number of bytes in 'output' when we started the frame - used to calculate
      frame length */
@@ -278,7 +278,7 @@ struct framer_state {
   size_t max_frame_size;
   bool use_true_binary_metadata;
   bool is_end_of_stream;
-};
+}; 
 /* fills p (which is expected to be kDataFrameHeaderSize bytes long)
  * with a data frame header */
 static void fill_header(uint8_t* p, uint8_t type, uint32_t id, size_t len,

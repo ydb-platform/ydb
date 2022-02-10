@@ -4,7 +4,7 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 
-#include <library/cpp/string_utils/levenshtein_diff/levenshtein_diff.h>
+#include <library/cpp/string_utils/levenshtein_diff/levenshtein_diff.h> 
 
 #include <util/string/split.h>
 #include <util/random/random.h>
@@ -100,7 +100,7 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
             if (!ValidClusters.contains(cluster)) {
                 TStringBuilder nearClusterMsg;
                 for (auto& item: ValidClusters) {
-                    if (NLevenshtein::Distance(cluster, item) < DefaultMistypeDistance) {
+                    if (NLevenshtein::Distance(cluster, item) < DefaultMistypeDistance) { 
                         nearClusterMsg << ", did you mean " << item.Quote() << '?';
                         break;
                     }
@@ -136,7 +136,7 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
 
         TStringBuilder nearHandlerMsg;
         for (auto& item: Handlers) {
-            if (NLevenshtein::Distance(normalizedName, item.first) < DefaultMistypeDistance) {
+            if (NLevenshtein::Distance(normalizedName, item.first) < DefaultMistypeDistance) { 
                 nearHandlerMsg << ", did you mean " << item.second->GetDisplayName().Quote() << '?';
                 break;
             }

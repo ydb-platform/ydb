@@ -125,7 +125,7 @@ class Chttp2ServerListener : public Server::ListenerInterface {
   grpc_closure* on_destroy_done_ = nullptr;
   HandshakeManager* pending_handshake_mgrs_ = nullptr;
   RefCountedPtr<channelz::ListenSocketNode> channelz_listen_socket_;
-};
+}; 
 
 //
 // Chttp2ServerListener::ConnectionState

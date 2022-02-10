@@ -1023,4 +1023,4 @@ DEFENCODING(( "ISO-2022-KR",            /* IANA, RFC 1557 */
             ),
             iso2022_kr,
             { iso2022_kr_mbtowc, NULL },  { iso2022_kr_wctomb, iso2022_kr_reset })
-#endif
+#endif 

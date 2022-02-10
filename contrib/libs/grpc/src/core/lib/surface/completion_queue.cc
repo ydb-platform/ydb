@@ -61,11 +61,11 @@ namespace {
 GPR_TLS_DECL(g_cached_event);
 GPR_TLS_DECL(g_cached_cq);
 
-struct plucker {
+struct plucker { 
   grpc_pollset_worker** worker;
   void* tag;
-};
-struct cq_poller_vtable {
+}; 
+struct cq_poller_vtable { 
   bool can_get_pollset;
   bool can_listen;
   size_t (*size)(void);
@@ -76,7 +76,7 @@ struct cq_poller_vtable {
                       grpc_millis deadline);
   void (*shutdown)(grpc_pollset* pollset, grpc_closure* closure);
   void (*destroy)(grpc_pollset* pollset);
-};
+}; 
 typedef struct non_polling_worker {
   gpr_cv cv;
   bool kicked;
@@ -84,12 +84,12 @@ typedef struct non_polling_worker {
   struct non_polling_worker* prev;
 } non_polling_worker;
 
-struct non_polling_poller {
+struct non_polling_poller { 
   gpr_mu mu;
   bool kicked_without_poller;
   non_polling_worker* root;
   grpc_closure* shutdown;
-};
+}; 
 size_t non_polling_poller_size(void) { return sizeof(non_polling_poller); }
 
 void non_polling_poller_init(grpc_pollset* pollset, gpr_mu** mu) {
@@ -899,14 +899,14 @@ void grpc_cq_end_op(grpc_completion_queue* cq, void* tag, grpc_error* error,
   cq->vtable->end_op(cq, tag, error, done, done_arg, storage, internal);
 }
 
-struct cq_is_finished_arg {
+struct cq_is_finished_arg { 
   gpr_atm last_seen_things_queued_ever;
   grpc_completion_queue* cq;
   grpc_millis deadline;
   grpc_cq_completion* stolen_completion;
   void* tag; /* for pluck */
   bool first_loop;
-};
+}; 
 class ExecCtxNext : public grpc_core::ExecCtx {
  public:
   ExecCtxNext(void* arg) : ExecCtx(0), check_ready_to_finish_arg_(arg) {}

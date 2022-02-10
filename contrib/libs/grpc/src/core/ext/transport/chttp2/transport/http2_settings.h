@@ -26,7 +26,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-enum grpc_chttp2_setting_id {
+enum grpc_chttp2_setting_id { 
   GRPC_CHTTP2_SETTINGS_HEADER_TABLE_SIZE = 0,               /* wire id 1 */
   GRPC_CHTTP2_SETTINGS_ENABLE_PUSH = 1,                     /* wire id 2 */
   GRPC_CHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS = 2,          /* wire id 3 */
@@ -34,7 +34,7 @@ enum grpc_chttp2_setting_id {
   GRPC_CHTTP2_SETTINGS_MAX_FRAME_SIZE = 4,                  /* wire id 5 */
   GRPC_CHTTP2_SETTINGS_MAX_HEADER_LIST_SIZE = 5,            /* wire id 6 */
   GRPC_CHTTP2_SETTINGS_GRPC_ALLOW_TRUE_BINARY_METADATA = 6, /* wire id 65027 */
-};
+}; 
 
 #define GRPC_CHTTP2_NUM_SETTINGS 7
 
@@ -47,14 +47,14 @@ typedef enum {
   GRPC_CHTTP2_DISCONNECT_ON_INVALID_VALUE
 } grpc_chttp2_invalid_value_behavior;
 
-struct grpc_chttp2_setting_parameters {
+struct grpc_chttp2_setting_parameters { 
   const char* name;
   uint32_t default_value;
   uint32_t min_value;
   uint32_t max_value;
   grpc_chttp2_invalid_value_behavior invalid_value_behavior;
   uint32_t error_value;
-};
+}; 
 extern const grpc_chttp2_setting_parameters
     grpc_chttp2_settings_parameters[GRPC_CHTTP2_NUM_SETTINGS];
 

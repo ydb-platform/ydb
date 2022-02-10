@@ -42,10 +42,10 @@ grpc_core::TraceFlag grpc_resource_quota_trace(false, "resource_quota");
 #define MEMORY_USAGE_ESTIMATION_MAX 65536
 
 /* Internal linked list pointers for a resource user */
-struct grpc_resource_user_link {
+struct grpc_resource_user_link { 
   grpc_resource_user* next;
   grpc_resource_user* prev;
-};
+}; 
 /* Resource users are kept in (potentially) several intrusive linked lists
    at once. These are the list names. */
 typedef enum {
@@ -614,11 +614,11 @@ static void ru_allocated_slices(void* arg, grpc_error* error) {
  * combiner
  */
 
-struct rq_resize_args {
+struct rq_resize_args { 
   int64_t size;
   grpc_resource_quota* resource_quota;
   grpc_closure closure;
-};
+}; 
 static void rq_resize(void* args, grpc_error* /*error*/) {
   rq_resize_args* a = static_cast<rq_resize_args*>(args);
   int64_t delta = a->size - a->resource_quota->size;

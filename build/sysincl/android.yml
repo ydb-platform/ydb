@@ -1,7 +1,7 @@
 - includes:
   - android/asset_manager.h
   - android/asset_manager_jni.h
-  - android/dlext.h
+  - android/dlext.h 
   - android/log.h
   - android/native_window_jni.h
   - cpu-features.h: contrib/libs/android_cpufeatures/cpu-features.h
@@ -19,7 +19,7 @@
   - SLES/OpenSLES_AndroidConfiguration.h
   - SLES/OpenSLES_AndroidMetadata.h
   - SLES/OpenSLES_Platform.h
-  - linux/ashmem.h
+  - linux/ashmem.h 
 
 - source_filter: "^contrib/libs/breakpad/src"
   includes:

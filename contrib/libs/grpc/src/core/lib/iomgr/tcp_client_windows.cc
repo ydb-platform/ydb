@@ -41,7 +41,7 @@
 #include "src/core/lib/iomgr/timer.h"
 #include "src/core/lib/slice/slice_internal.h"
 
-struct async_connect {
+struct async_connect { 
   grpc_closure* on_done;
   gpr_mu mu;
   grpc_winsocket* socket;
@@ -52,7 +52,7 @@ struct async_connect {
   grpc_closure on_connect;
   grpc_endpoint** endpoint;
   grpc_channel_args* channel_args;
-};
+}; 
 
 static void async_connect_unlock_and_cleanup(async_connect* ac,
                                              grpc_winsocket* socket) {

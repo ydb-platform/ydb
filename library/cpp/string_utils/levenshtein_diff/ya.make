@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(g:mt)
 
 SRCS(
-    levenshtein_diff.cpp
+    levenshtein_diff.cpp 
 )
 
 PEERDIR(

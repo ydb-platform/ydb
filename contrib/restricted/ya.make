@@ -66,7 +66,7 @@ IF(OS_LINUX OR OS_DARWIN)
         boost/libs/python/arcadia_test
     )
 ENDIF()
-
-IF(OS_ANDROID)
-    RECURSE(ashmem)
-ENDIF()
+ 
+IF(OS_ANDROID) 
+    RECURSE(ashmem) 
+ENDIF() 

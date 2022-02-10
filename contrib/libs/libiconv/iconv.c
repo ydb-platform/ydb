@@ -147,7 +147,7 @@ static struct encoding const all_encodings[] = {
 #elif defined __sun
 # include "aliases_syssolaris.h"
 #elif defined(ARCADIA_ICONV_NOCJK)
-# include "aliases_nocjk.h"
+# include "aliases_nocjk.h" 
 #else
 # include "aliases.h"
 #endif
@@ -444,7 +444,7 @@ static const unsigned short all_canonical[] = {
 #elif defined __sun
 # include "canonical_syssolaris.h"
 #elif defined(ARCADIA_ICONV_NOCJK)
-# include "canonical_nocjk.h"
+# include "canonical_nocjk.h" 
 #else
 # include "canonical.h"
 #endif
@@ -477,7 +477,7 @@ static const unsigned short all_canonical[] = {
 #elif defined __sun
 # include "canonical_local_syssolaris.h"
 #elif defined(ARCADIA_ICONV_NOCJK)
-# include "canonical_local_nocjk.h"
+# include "canonical_local_nocjk.h" 
 #else
 # include "canonical_local.h"
 #endif

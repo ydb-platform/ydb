@@ -109,7 +109,7 @@ struct tsi_ssl_server_handshaker_factory {
   size_t alpn_protocol_list_length;
 };
 
-struct tsi_ssl_handshaker {
+struct tsi_ssl_handshaker { 
   tsi_handshaker base;
   SSL* ssl;
   BIO* network_io;
@@ -117,22 +117,22 @@ struct tsi_ssl_handshaker {
   unsigned char* outgoing_bytes_buffer;
   size_t outgoing_bytes_buffer_size;
   tsi_ssl_handshaker_factory* factory_ref;
-};
-struct tsi_ssl_handshaker_result {
+}; 
+struct tsi_ssl_handshaker_result { 
   tsi_handshaker_result base;
   SSL* ssl;
   BIO* network_io;
   unsigned char* unused_bytes;
   size_t unused_bytes_size;
-};
-struct tsi_ssl_frame_protector {
+}; 
+struct tsi_ssl_frame_protector { 
   tsi_frame_protector base;
   SSL* ssl;
   BIO* network_io;
   unsigned char* buffer;
   size_t buffer_size;
   size_t buffer_offset;
-};
+}; 
 /* --- Library Initialization. ---*/
 
 static gpr_once g_init_openssl_once = GPR_ONCE_INIT;

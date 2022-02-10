@@ -47,12 +47,12 @@ namespace {
         const TString MyName;
     };
 
-    struct TZStd06Registrar {
-        TZStd06Registrar() {
-            for (unsigned i = 1; i <= ZSTD_maxCLevel(); ++i) {
+    struct TZStd06Registrar { 
+        TZStd06Registrar() { 
+            for (unsigned i = 1; i <= ZSTD_maxCLevel(); ++i) { 
                 RegisterCodec(MakeHolder<TZStd06Codec>(i));
-            }
+            } 
         }
-    };
+    }; 
     const TZStd06Registrar Registrar{};
 }

@@ -28,7 +28,7 @@ class TYVectorTest: public TTestBase {
     //UNIT_TEST(TestEbo)
     UNIT_TEST(TestFillInConstructor)
     UNIT_TEST(TestYResize)
-    UNIT_TEST(TestCrop)
+    UNIT_TEST(TestCrop) 
     UNIT_TEST(TestInitializeList)
     UNIT_TEST_SUITE_END();
 
@@ -535,29 +535,29 @@ private:
         }
     }
 
-    struct TNoDefaultConstructor {
-        TNoDefaultConstructor() = delete;
+    struct TNoDefaultConstructor { 
+        TNoDefaultConstructor() = delete; 
         explicit TNoDefaultConstructor(int val)
             : Val(val)
         {
         }
-
-        int Val;
-    };
-
-    void TestCrop() {
-        TVector<TNoDefaultConstructor> vec;
-        vec.emplace_back(42);
-        vec.emplace_back(1337);
-        vec.emplace_back(8888);
-        vec.crop(1); // Should not require default constructor
-        UNIT_ASSERT(vec.size() == 1);
-        UNIT_ASSERT(vec[0].Val == 42);
+ 
+        int Val; 
+    }; 
+ 
+    void TestCrop() { 
+        TVector<TNoDefaultConstructor> vec; 
+        vec.emplace_back(42); 
+        vec.emplace_back(1337); 
+        vec.emplace_back(8888); 
+        vec.crop(1); // Should not require default constructor 
+        UNIT_ASSERT(vec.size() == 1); 
+        UNIT_ASSERT(vec[0].Val == 42); 
         vec.crop(50); // Does nothing if new size is greater than the current size()
         UNIT_ASSERT(vec.size() == 1);
         UNIT_ASSERT(vec[0].Val == 42);
-    }
-
+    } 
+ 
     void TestYResize() {
         TestYResize<int>();
         TestYResize<TPod>();

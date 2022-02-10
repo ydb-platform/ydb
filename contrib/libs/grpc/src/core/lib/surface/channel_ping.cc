@@ -28,12 +28,12 @@
 #include "src/core/lib/surface/api_trace.h"
 #include "src/core/lib/surface/completion_queue.h"
 
-struct ping_result {
+struct ping_result { 
   grpc_closure closure;
   void* tag;
   grpc_completion_queue* cq;
   grpc_cq_completion completion_storage;
-};
+}; 
 static void ping_destroy(void* arg, grpc_cq_completion* /*storage*/) {
   gpr_free(arg);
 }

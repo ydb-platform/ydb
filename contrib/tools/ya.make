@@ -44,7 +44,7 @@ RECURSE(
     unbound
     unbound/build
     vowpal_wabbit
-    wapiti
+    wapiti 
     word2vec
     xdelta3
     xsltproc

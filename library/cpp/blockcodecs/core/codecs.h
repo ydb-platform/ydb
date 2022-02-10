@@ -73,8 +73,8 @@ namespace NBlockCodecs {
         size_t GetDecompressedLength(const TData& in) const;
     };
 
-    using TCodecPtr = THolder<ICodec>;
-
+    using TCodecPtr = THolder<ICodec>; 
+ 
     const ICodec* Codec(const TStringBuf& name);
 
     // some aux methods

@@ -52,10 +52,10 @@ typedef struct slice_shard {
 
 static slice_shard g_shards[SHARD_COUNT];
 
-struct static_metadata_hash_ent {
+struct static_metadata_hash_ent { 
   uint32_t hash;
   uint32_t idx;
-};
+}; 
 static static_metadata_hash_ent
     static_metadata_hash[4 * GRPC_STATIC_MDSTR_COUNT];
 static uint32_t max_static_metadata_hash_probe;

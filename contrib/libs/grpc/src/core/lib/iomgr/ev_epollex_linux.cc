@@ -260,10 +260,10 @@ static void fd_global_shutdown(void);
  * Pollset Declarations
  */
 
-struct pwlink {
+struct pwlink { 
   grpc_pollset_worker* next;
   grpc_pollset_worker* prev;
-};
+}; 
 typedef enum { PWLINK_POLLABLE = 0, PWLINK_POLLSET, PWLINK_COUNT } pwlinks;
 
 struct grpc_pollset_worker {

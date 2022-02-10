@@ -1,8 +1,8 @@
-LIBRARY()
-
-OWNER(pg)
-
-PEERDIR(
+LIBRARY() 
+ 
+OWNER(pg) 
+ 
+PEERDIR( 
     library/cpp/blockcodecs/core
     library/cpp/blockcodecs/codecs/brotli
     library/cpp/blockcodecs/codecs/bzip
@@ -13,14 +13,14 @@ PEERDIR(
     library/cpp/blockcodecs/codecs/snappy
     library/cpp/blockcodecs/codecs/zlib
     library/cpp/blockcodecs/codecs/zstd
-)
-
-SRCS(
-    codecs.cpp
-    stream.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    codecs.cpp 
+    stream.cpp 
+) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(
     ut

@@ -1,14 +1,14 @@
-LIBRARY()
-
-OWNER(pg)
-
-PEERDIR(
-    contrib/libs/lzmasdk
+LIBRARY() 
+ 
+OWNER(pg) 
+ 
+PEERDIR( 
+    contrib/libs/lzmasdk 
     library/cpp/blockcodecs/core
-)
-
-SRCS(
-    GLOBAL lzma.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    GLOBAL lzma.cpp 
+) 
+ 
+END() 

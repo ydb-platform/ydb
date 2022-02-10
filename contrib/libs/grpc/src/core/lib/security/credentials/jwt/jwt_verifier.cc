@@ -118,13 +118,13 @@ static gpr_timespec validate_time_field(const Json& json, const char* key) {
 
 /* --- JOSE header. see http://tools.ietf.org/html/rfc7515#section-4 --- */
 
-struct jose_header {
+struct jose_header { 
   const char* alg;
   const char* kid;
   const char* typ;
   /* TODO(jboeuf): Add others as needed (jku, jwk, x5u, x5c and so on...). */
   grpc_core::ManualConstructor<Json> json;
-};
+}; 
 static void jose_header_destroy(jose_header* h) {
   h->json.Destroy();
   gpr_free(h);

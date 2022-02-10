@@ -124,34 +124,34 @@ namespace NMonitoring {
         return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(collector), true);
     }
 
-    void TMetricRegistry::Reset() { 
-        TWriteGuard g{Lock_}; 
-        for (auto& [label, metric] : Metrics_) { 
-            switch (metric->Type()) { 
-            case EMetricType::GAUGE: 
-                static_cast<TGauge*>(metric.Get())->Set(.0); 
-                break; 
-            case EMetricType::IGAUGE: 
-                static_cast<TIntGauge*>(metric.Get())->Set(0); 
-                break; 
-            case EMetricType::COUNTER: 
-                static_cast<TCounter*>(metric.Get())->Reset(); 
-                break; 
-            case EMetricType::RATE: 
-                static_cast<TRate*>(metric.Get())->Reset(); 
-                break; 
-            case EMetricType::HIST: 
-            case EMetricType::HIST_RATE: 
-                static_cast<THistogram*>(metric.Get())->Reset(); 
-                break; 
-            case EMetricType::UNKNOWN: 
-            case EMetricType::DSUMMARY: 
-            case EMetricType::LOGHIST: 
-                break; 
-            } 
-        } 
-    } 
- 
+    void TMetricRegistry::Reset() {
+        TWriteGuard g{Lock_};
+        for (auto& [label, metric] : Metrics_) {
+            switch (metric->Type()) {
+            case EMetricType::GAUGE:
+                static_cast<TGauge*>(metric.Get())->Set(.0);
+                break;
+            case EMetricType::IGAUGE:
+                static_cast<TIntGauge*>(metric.Get())->Set(0);
+                break;
+            case EMetricType::COUNTER:
+                static_cast<TCounter*>(metric.Get())->Reset();
+                break;
+            case EMetricType::RATE:
+                static_cast<TRate*>(metric.Get())->Reset();
+                break;
+            case EMetricType::HIST:
+            case EMetricType::HIST_RATE:
+                static_cast<THistogram*>(metric.Get())->Reset();
+                break;
+            case EMetricType::UNKNOWN:
+            case EMetricType::DSUMMARY:
+            case EMetricType::LOGHIST:
+                break;
+            }
+        }
+    }
+
     void TMetricRegistry::Clear() {
         TWriteGuard g{Lock_};
         Metrics_.clear();

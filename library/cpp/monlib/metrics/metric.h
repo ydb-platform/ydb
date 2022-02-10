@@ -379,8 +379,8 @@ namespace NMonitoring {
         }
 
         void Reset() override {
-            Collector_->Reset(); 
-        } 
+            Collector_->Reset();
+        }
 
     private:
         IHistogramCollectorPtr Collector_;

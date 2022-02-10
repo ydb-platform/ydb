@@ -27,10 +27,10 @@ namespace NMonitoring {
             Values_.Add(index, count);
         }
 
-        void Reset() override { 
-            Values_.Reset(); 
-        } 
- 
+        void Reset() override {
+            Values_.Reset();
+        }
+
         IHistogramSnapshotPtr Snapshot() const override {
             auto values = Values_.Copy();
             return ExplicitHistogramSnapshot(Bounds_, values);

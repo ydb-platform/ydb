@@ -1,13 +1,13 @@
 #pragma once
- 
+
 #include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>
-#include <util/generic/intrlist.h> 
-#include <util/generic/hash_set.h> 
+#include <util/generic/intrlist.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <utility>
- 
+
 template <class TValue>
 struct TUniformSizeProvider {
     size_t operator()(const TValue&) {
@@ -16,54 +16,54 @@ struct TUniformSizeProvider {
 };
 
 template <typename TKey, typename TValue, class TSizeProvider = TUniformSizeProvider<TValue>>
-class TLRUList { 
-public: 
+class TLRUList {
+public:
     TLRUList(size_t maxSize, const TSizeProvider& sizeProvider = TSizeProvider())
-        : List() 
+        : List()
         , SizeProvider(sizeProvider)
         , ItemsAmount(0)
         , TotalSize(0)
-        , MaxSize(maxSize) 
+        , MaxSize(maxSize)
     {
     }
- 
+
 public:
     struct TItem: public TIntrusiveListItem<TItem> {
-        typedef TIntrusiveListItem<TItem> TBase; 
-        TItem(const TKey& key, const TValue& value = TValue()) 
-            : TBase() 
-            , Key(key) 
-            , Value(value) 
+        typedef TIntrusiveListItem<TItem> TBase;
+        TItem(const TKey& key, const TValue& value = TValue())
+            : TBase()
+            , Key(key)
+            , Value(value)
         {
         }
- 
-        TItem(const TItem& rhs) 
-            : TBase() 
-            , Key(rhs.Key) 
-            , Value(rhs.Value) 
+
+        TItem(const TItem& rhs)
+            : TBase()
+            , Key(rhs.Key)
+            , Value(rhs.Value)
         {
         }
- 
+
         bool operator<(const TItem& rhs) const {
-            return Key < rhs.Key; 
-        } 
+            return Key < rhs.Key;
+        }
 
         bool operator==(const TItem& rhs) const {
-            return Key == rhs.Key; 
-        } 
- 
-        TKey Key; 
-        TValue Value; 
- 
-        struct THash { 
+            return Key == rhs.Key;
+        }
+
+        TKey Key;
+        TValue Value;
+
+        struct THash {
             size_t operator()(const TItem& item) const {
                 return ::THash<TKey>()(item.Key);
             }
-        }; 
-    }; 
- 
-public: 
-    TItem* Insert(TItem* item) { 
+        };
+    };
+
+public:
+    TItem* Insert(TItem* item) {
         List.PushBack(item);
         ++ItemsAmount;
         TotalSize += SizeProvider(item->Value);
@@ -76,26 +76,26 @@ public:
         if (TotalSize > MaxSize && ItemsAmount > 1) {
             deleted = GetOldest();
             Erase(deleted);
-        } 
+        }
         return deleted;
-    } 
+    }
 
-    TItem* GetOldest() { 
+    TItem* GetOldest() {
         typename TListType::TIterator it = List.Begin();
         Y_ASSERT(it != List.End());
-        return &*it; 
-    } 
+        return &*it;
+    }
 
-    void Erase(TItem* item) { 
-        item->Unlink(); 
+    void Erase(TItem* item) {
+        item->Unlink();
         --ItemsAmount;
         TotalSize -= SizeProvider(item->Value);
-    } 
+    }
 
-    void Promote(TItem* item) { 
-        item->Unlink(); 
+    void Promote(TItem* item) {
+        item->Unlink();
         List.PushBack(item);
-    } 
+    }
 
     size_t GetSize() const {
         return ItemsAmount;
@@ -115,15 +115,15 @@ public:
         MaxSize = newSize;
     }
 
-private: 
+private:
     typedef TIntrusiveList<TItem> TListType;
     TListType List;
     TSizeProvider SizeProvider;
     size_t ItemsAmount;
     size_t TotalSize;
-    size_t MaxSize; 
-}; 
- 
+    size_t MaxSize;
+};
+
 template <typename TKey, typename TValue>
 class TLFUList {
 public:
@@ -374,36 +374,36 @@ private:
 };
 
 template <typename TKey, typename TValue, typename TListType, typename TDeleter>
-class TCache { 
+class TCache {
     typedef typename TListType::TItem TItem;
-    typedef typename TItem::THash THash; 
+    typedef typename TItem::THash THash;
     typedef THashMultiSet<TItem, THash> TIndex;
-    typedef typename TIndex::iterator TIndexIterator; 
-    typedef typename TIndex::const_iterator TIndexConstIterator; 
+    typedef typename TIndex::iterator TIndexIterator;
+    typedef typename TIndex::const_iterator TIndexConstIterator;
 
-public: 
-    class TIterator { 
-    public: 
-        explicit TIterator(const TIndexConstIterator& iter) 
-            : Iter(iter) 
+public:
+    class TIterator {
+    public:
+        explicit TIterator(const TIndexConstIterator& iter)
+            : Iter(iter)
         {
         }
 
         TValue& operator*() {
-            return const_cast<TValue&>(Iter->Value); 
-        } 
+            return const_cast<TValue&>(Iter->Value);
+        }
 
         TValue* operator->() {
-            return const_cast<TValue*>(&Iter->Value); 
-        } 
- 
+            return const_cast<TValue*>(&Iter->Value);
+        }
+
         bool operator==(const TIterator& rhs) const {
-            return Iter == rhs.Iter; 
-        } 
+            return Iter == rhs.Iter;
+        }
 
         bool operator!=(const TIterator& rhs) const {
-            return Iter != rhs.Iter; 
-        } 
+            return Iter != rhs.Iter;
+        }
 
         TIterator& operator++() {
             ++Iter;
@@ -420,17 +420,17 @@ public:
 
         friend class TCache<TKey, TValue, TListType, TDeleter>;
 
-    private: 
-        TIndexConstIterator Iter; 
-    }; 
- 
+    private:
+        TIndexConstIterator Iter;
+    };
+
     TCache(TListType&& list, bool multiValue = false)
-        : Index() 
+        : Index()
         , List(std::move(list))
         , MultiValue(multiValue)
-    { 
-    } 
- 
+    {
+    }
+
     ~TCache() {
         Clear();
     }
@@ -443,17 +443,17 @@ public:
         return TIterator(Index.begin());
     }
 
-    TIterator End() const { 
-        return TIterator(Index.end()); 
-    } 
- 
-    TIterator Find(const TKey& key) { 
-        TIndexIterator it = Index.find(TItem(key)); 
-        if (it != Index.end()) 
-            List.Promote(const_cast<TItem*>(&*it)); 
-        return TIterator(it); 
-    } 
- 
+    TIterator End() const {
+        return TIterator(Index.end());
+    }
+
+    TIterator Find(const TKey& key) {
+        TIndexIterator it = Index.find(TItem(key));
+        if (it != Index.end())
+            List.Promote(const_cast<TItem*>(&*it));
+        return TIterator(it);
+    }
+
     TIterator FindWithoutPromote(const TKey& key) const {
         return TIterator(Index.find(TItem(key)));
     }
@@ -480,7 +480,7 @@ public:
         if (!MultiValue && Index.find(tmpItem) != Index.end())
             return false;
         TIndexIterator it = Index.insert(tmpItem);
- 
+
         TItem* insertedItem = const_cast<TItem*>(&*it);
         auto removedItem = List.Insert(insertedItem);
         auto insertedWasRemoved = removedItem == insertedItem;
@@ -490,11 +490,11 @@ public:
                 insertedWasRemoved = insertedWasRemoved || insertedItem == removedItem;
                 EraseFromIndex(removedItem);
             }
-        } 
- 
+        }
+
         Y_ASSERT(Index.size() == List.GetSize());
         return !insertedWasRemoved;
-    } 
+    }
 
     void Update(const TKey& key, const TValue& value) {
         if (MultiValue)
@@ -508,18 +508,18 @@ public:
         Y_ASSERT(Index.size() == List.GetSize());
     }
 
-    void Erase(TIterator it) { 
+    void Erase(TIterator it) {
         TItem* item = const_cast<TItem*>(&*it.Iter);
         List.Erase(item);
         TDeleter::Destroy(item->Value);
-        Index.erase(it.Iter); 
+        Index.erase(it.Iter);
 
         Y_ASSERT(Index.size() == List.GetSize());
-    } 
+    }
 
-    bool Empty() const { 
-        return Index.empty(); 
-    } 
+    bool Empty() const {
+        return Index.empty();
+    }
 
     void Clear() {
         for (TIndexIterator it = Index.begin(); it != Index.end(); ++it) {
@@ -545,8 +545,8 @@ public:
         return List.GetMaxSize();
     }
 
-protected: 
-    TIndex Index; 
+protected:
+    TIndex Index;
     TListType List;
     bool MultiValue;
 
@@ -566,14 +566,14 @@ protected:
         Y_ASSERT(it != End());
         Index.erase(it.Iter);
     }
-}; 
- 
-struct TNoopDelete { 
-    template <class T> 
+};
+
+struct TNoopDelete {
+    template <class T>
     static inline void Destroy(const T&) noexcept {
-    } 
-}; 
- 
+    }
+};
+
 template <typename TKey, typename TValue, typename TDeleter = TNoopDelete, class TSizeProvider = TUniformSizeProvider<TValue>>
 class TLRUCache: public TCache<TKey, TValue, TLRUList<TKey, TValue, TSizeProvider>, TDeleter> {
     using TListType = TLRUList<TKey, TValue, TSizeProvider>;
@@ -584,13 +584,13 @@ public:
         : TBase(TListType(maxSize, sizeProvider), multiValue)
     {
     }
- 
+
 public:
     typedef typename TBase::TIterator TIterator;
 
-    TValue& GetOldest() { 
-        return TBase::List.GetOldest()->Value; 
-    } 
+    TValue& GetOldest() {
+        return TBase::List.GetOldest()->Value;
+    }
 
     TIterator FindOldest() {
         return TBase::Empty() ? TBase::End() : this->FindByItem(TBase::List.GetOldest());
@@ -599,7 +599,7 @@ public:
     size_t TotalSize() const {
         return TBase::List.GetTotalSize();
     }
-}; 
+};
 
 template <typename TKey, typename TValue, typename TDeleter = TNoopDelete>
 class TLFUCache: public TCache<TKey, TValue, TLFUList<TKey, TValue>, TDeleter> {

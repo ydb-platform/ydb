@@ -116,31 +116,31 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
 
     Y_UNIT_TEST(SimpleTest) {
         typedef TLRUCache<int, TString> TCache;
-        TCache s(2); // size 2 
-        s.Insert(1, "abcd"); 
-        UNIT_ASSERT(s.Find(1) != s.End()); 
-        UNIT_ASSERT_EQUAL(*s.Find(1), "abcd"); 
-        s.Insert(2, "defg"); 
-        UNIT_ASSERT(s.GetOldest() == "abcd"); 
-        s.Insert(3, "hjkl"); 
-        UNIT_ASSERT(s.GetOldest() == "defg"); 
-        // key 1 will be deleted 
-        UNIT_ASSERT(s.Find(1) == s.End()); 
-        UNIT_ASSERT(s.Find(2) != s.End()); 
-        UNIT_ASSERT(*s.Find(2) == "defg"); 
-        UNIT_ASSERT(s.Find(3) != s.End()); 
-        UNIT_ASSERT(*s.Find(3) == "hjkl"); 
- 
+        TCache s(2); // size 2
+        s.Insert(1, "abcd");
+        UNIT_ASSERT(s.Find(1) != s.End());
+        UNIT_ASSERT_EQUAL(*s.Find(1), "abcd");
+        s.Insert(2, "defg");
+        UNIT_ASSERT(s.GetOldest() == "abcd");
+        s.Insert(3, "hjkl");
+        UNIT_ASSERT(s.GetOldest() == "defg");
+        // key 1 will be deleted
+        UNIT_ASSERT(s.Find(1) == s.End());
+        UNIT_ASSERT(s.Find(2) != s.End());
+        UNIT_ASSERT(*s.Find(2) == "defg");
+        UNIT_ASSERT(s.Find(3) != s.End());
+        UNIT_ASSERT(*s.Find(3) == "hjkl");
+
         UNIT_ASSERT(!s.Insert(3, "abcd"));
         UNIT_ASSERT(*s.Find(3) == "hjkl");
         s.Update(3, "abcd");
         UNIT_ASSERT(*s.Find(3) == "abcd");
 
-        TCache::TIterator it = s.Find(3); 
-        s.Erase(it); 
-        UNIT_ASSERT(s.Find(3) == s.End()); 
+        TCache::TIterator it = s.Find(3);
+        s.Erase(it);
+        UNIT_ASSERT(s.Find(3) == s.End());
     }
- 
+
     Y_UNIT_TEST(LRUWithCustomSizeProviderTest) {
         typedef TLRUCache<int, TString, TNoopDelete, size_t(*)(const TString&)> TCache;
         TCache s(10, false, [](auto& string) { return string.size(); }); // size 10
@@ -355,7 +355,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         s.Insert(3, "789");
         UNIT_ASSERT(s.Find(1) != s.End()); // Key 2 should have been deleted
     }
-} 
+}
 
 Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
     typedef TThreadSafeCache<ui32, TString, ui32> TCache;

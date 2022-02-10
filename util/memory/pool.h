@@ -201,19 +201,19 @@ public:
         for (T *ptr = arr, *end = arr + count; ptr != end; ++ptr) {
             new (ptr) T;
         }
- 
+
         return arr;
     }
- 
+
     template <typename TChar>
     inline TChar* Append(const TChar* str) {
         return Append(str, std::char_traits<TChar>::length(str) + 1); // include terminating zero byte
     }
- 
+
     template <typename TChar>
     inline TChar* Append(const TChar* str, size_t len) {
         TChar* ret = AllocateArray<TChar>(len);
- 
+
         std::char_traits<TChar>::copy(ret, str, len);
         return ret;
     }

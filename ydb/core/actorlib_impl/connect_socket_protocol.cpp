@@ -155,7 +155,7 @@ void TConnectSocketProtocol::TryAgain(const TActorContext& ctx) noexcept {
         return;
 
     IPoller* poller = NKikimr::AppData(ctx)->PollerThreads.Get();
-    poller->StartWrite(Socket,
+    poller->StartWrite(Socket, 
         std::bind(CheckConnectionRoutine, std::placeholders::_1, ctx));
 }
 

@@ -204,7 +204,7 @@ const TMsgBusClientConfig& TMsgBusClient::GetConfig() {
     return Config;
 }
 
-EDataReqStatusExcerpt ExtractDataRequestStatus(const NKikimrClient::TResponse *record) {
+EDataReqStatusExcerpt ExtractDataRequestStatus(const NKikimrClient::TResponse *record) { 
     if (!record)
         return EDataReqStatusExcerpt::Unknown;
 

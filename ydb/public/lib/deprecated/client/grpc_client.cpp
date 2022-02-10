@@ -1,17 +1,17 @@
-#include "grpc_client.h"
+#include "grpc_client.h" 
 
 #include <ydb/core/protos/grpc.grpc.pb.h>
 
-#include <util/system/thread.h>
-#include <util/system/mutex.h>
-#include <util/generic/maybe.h>
-#include <util/generic/queue.h>
+#include <util/system/thread.h> 
+#include <util/system/mutex.h> 
+#include <util/generic/maybe.h> 
+#include <util/generic/queue.h> 
 #include <util/generic/set.h>
-#include <grpc++/grpc++.h>
-
-namespace NKikimr {
-    namespace NGRpcProxy {
-
+#include <grpc++/grpc++.h> 
+ 
+namespace NKikimr { 
+    namespace NGRpcProxy { 
+ 
         class TGRpcClient::TImpl : ISimpleThread {
             struct IProcessorBase {
                 virtual ~IProcessorBase() = default;
@@ -19,80 +19,80 @@ namespace NKikimr {
             };
 
             struct IRequestProcessor : public IProcessorBase
-            {
-                virtual void Finished() = 0;
-            };
-
+            { 
+                virtual void Finished() = 0; 
+            }; 
+ 
             struct IStreamRequestReadProcessor : public IProcessorBase
             {
                 virtual void InvokeProcess() = 0;
                 virtual void InvokeFinish() = 0;
             };
 
-        public:
-            using TStub = NKikimrClient::TGRpcServer::Stub;
-
-        private:
-            template<typename TRequest, typename TResponse>
-            class TRequestProcessor
-                : public IRequestProcessor
-            {
-            public:
-                using TAsyncReaderPtr = std::unique_ptr<grpc::ClientAsyncResponseReader<TResponse>>;
-                using TAsyncRequest = TAsyncReaderPtr (TStub::*)(grpc::ClientContext*, const TRequest&, grpc::CompletionQueue*);
-
-            private:
-                grpc::ClientContext Context;
-                TAsyncReaderPtr Reader;
-                TImpl *Impl;
-                TAsyncRequest AsyncRequest;
-                TRequest Params;
-                const TCallback<TResponse> Callback;
-                TResponse Reply;
-                grpc::Status Status;
-                bool Invoked = false;
-
-            public:
-                TRequestProcessor(TImpl *impl, TAsyncRequest asyncRequest, const TRequest& params,
-                        TCallback<TResponse>&& callback, const TMaybe<TDuration>& timeout)
-                    : Impl(impl)
-                    , AsyncRequest(asyncRequest)
-                    , Params(params)
-                    , Callback(std::move(callback))
-                {
-                    if (timeout) {
-                        Context.set_deadline(std::chrono::system_clock::now() +
-                            std::chrono::microseconds(timeout->MicroSeconds()));
-                    }
-                }
-
-                ~TRequestProcessor() {
-                    if (!Invoked) {
+        public: 
+            using TStub = NKikimrClient::TGRpcServer::Stub; 
+ 
+        private: 
+            template<typename TRequest, typename TResponse> 
+            class TRequestProcessor 
+                : public IRequestProcessor 
+            { 
+            public: 
+                using TAsyncReaderPtr = std::unique_ptr<grpc::ClientAsyncResponseReader<TResponse>>; 
+                using TAsyncRequest = TAsyncReaderPtr (TStub::*)(grpc::ClientContext*, const TRequest&, grpc::CompletionQueue*); 
+ 
+            private: 
+                grpc::ClientContext Context; 
+                TAsyncReaderPtr Reader; 
+                TImpl *Impl; 
+                TAsyncRequest AsyncRequest; 
+                TRequest Params; 
+                const TCallback<TResponse> Callback; 
+                TResponse Reply; 
+                grpc::Status Status; 
+                bool Invoked = false; 
+ 
+            public: 
+                TRequestProcessor(TImpl *impl, TAsyncRequest asyncRequest, const TRequest& params, 
+                        TCallback<TResponse>&& callback, const TMaybe<TDuration>& timeout) 
+                    : Impl(impl) 
+                    , AsyncRequest(asyncRequest) 
+                    , Params(params) 
+                    , Callback(std::move(callback)) 
+                { 
+                    if (timeout) { 
+                        Context.set_deadline(std::chrono::system_clock::now() + 
+                            std::chrono::microseconds(timeout->MicroSeconds())); 
+                    } 
+                } 
+ 
+                ~TRequestProcessor() { 
+                    if (!Invoked) { 
                         TGrpcError error = {"request left unhandled", -1};
-                        Callback(&error, Reply);
-                    }
-                }
-
-            private:
-                void Start() override {
-                    Reader = (Impl->Stub.*AsyncRequest)(&Context, Params, &Impl->CQ);
-                    Reader->Finish(&Reply, &Status, this);
-                }
-
-                void Finished() override {
-                    Y_VERIFY(!Invoked);
-                    Invoked = true;
-
-                    if (Status.ok()) {
-                        Callback(nullptr, Reply);
-                    } else {
-                        const auto& msg = Status.error_message();
+                        Callback(&error, Reply); 
+                    } 
+                } 
+ 
+            private: 
+                void Start() override { 
+                    Reader = (Impl->Stub.*AsyncRequest)(&Context, Params, &Impl->CQ); 
+                    Reader->Finish(&Reply, &Status, this); 
+                } 
+ 
+                void Finished() override { 
+                    Y_VERIFY(!Invoked); 
+                    Invoked = true; 
+ 
+                    if (Status.ok()) { 
+                        Callback(nullptr, Reply); 
+                    } else { 
+                        const auto& msg = Status.error_message(); 
                         TGrpcError error = {TString(msg.data(), msg.length()), Status.error_code()};
-                        Callback(&error, Reply);
-                    }
-                }
-            };
-
+                        Callback(&error, Reply); 
+                    } 
+                } 
+            }; 
+ 
             template<typename TRequest, typename TResponse>
             class TStreamRequestProcessor
                 : public IStreamRequestReadProcessor
@@ -175,52 +175,52 @@ namespace NKikimr {
                 }
             };
 
-        private:
+        private: 
             std::shared_ptr<grpc::ChannelInterface> Channel;
-            TStub Stub;
-            grpc::CompletionQueue CQ;
-            TMaybe<TDuration> Timeout;
-            ui32 MaxInFlight = 0;
-            ui32 InFlight = 0;
+            TStub Stub; 
+            grpc::CompletionQueue CQ; 
+            TMaybe<TDuration> Timeout; 
+            ui32 MaxInFlight = 0; 
+            ui32 InFlight = 0; 
             TQueue<THolder<IProcessorBase>> PendingQ;
-            TMutex Mutex;
+            TMutex Mutex; 
             TSet<void*> StreamTags;
-
-        public:
-            TImpl(const TGRpcClientConfig& config)
+ 
+        public: 
+            TImpl(const TGRpcClientConfig& config) 
                 : Channel(NGrpc::CreateChannelInterface(config))
                 , Stub(Channel)
-                , MaxInFlight(config.MaxInFlight)
-            {
-                if (config.Timeout != TDuration::Max()) {
-                    Timeout = config.Timeout;
-                }
+                , MaxInFlight(config.MaxInFlight) 
+            { 
+                if (config.Timeout != TDuration::Max()) { 
+                    Timeout = config.Timeout; 
+                } 
                 ISimpleThread::Start();
-            }
-
-            ~TImpl() {
-                CQ.Shutdown();
-                Join();
-            }
-
+            } 
+ 
+            ~TImpl() { 
+                CQ.Shutdown(); 
+                Join(); 
+            } 
+ 
             grpc_connectivity_state GetNetworkStatus() const {
                 return Channel->GetState(false);
-            }
-
-            template<typename TRequest, typename TResponse>
-            void Issue(const TRequest& request, TCallback<TResponse>&& callback,
-                    typename TRequestProcessor<TRequest, TResponse>::TAsyncRequest asyncRequest) {
-                auto processor = MakeHolder<TRequestProcessor<TRequest, TResponse>>(this, asyncRequest, request,
-                    std::move(callback), Timeout);
-                with_lock (Mutex) {
-                    if (!MaxInFlight || InFlight < MaxInFlight) {
-                        Start(std::move(processor));
-                    } else {
-                        PendingQ.push(std::move(processor));
-                    }
-                }
-            }
-
+            } 
+ 
+            template<typename TRequest, typename TResponse> 
+            void Issue(const TRequest& request, TCallback<TResponse>&& callback, 
+                    typename TRequestProcessor<TRequest, TResponse>::TAsyncRequest asyncRequest) { 
+                auto processor = MakeHolder<TRequestProcessor<TRequest, TResponse>>(this, asyncRequest, request, 
+                    std::move(callback), Timeout); 
+                with_lock (Mutex) { 
+                    if (!MaxInFlight || InFlight < MaxInFlight) { 
+                        Start(std::move(processor)); 
+                    } else { 
+                        PendingQ.push(std::move(processor)); 
+                    } 
+                } 
+            } 
+ 
             template<typename TRequest, typename TResponse>
             void IssueStream(const TRequest& request,
                              TSimpleCallback<TResponse>&& processCb,
@@ -250,14 +250,14 @@ namespace NKikimr {
                 }
             }
 
-            void *ThreadProc() override {
-                for (;;) {
-                    void *tag;
-                    bool ok = false;
+            void *ThreadProc() override { 
+                for (;;) { 
+                    void *tag; 
+                    bool ok = false; 
                     bool finished = true;
-                    if (!CQ.Next(&tag, &ok)) {
-                        break;
-                    }
+                    if (!CQ.Next(&tag, &ok)) { 
+                        break; 
+                    } 
                     if (IsStreamTag(tag)) {
                         THolder<IStreamRequestReadProcessor> processor(static_cast<IStreamRequestReadProcessor*>(tag));
                         if (ok) {
@@ -276,33 +276,33 @@ namespace NKikimr {
                     }
 
                     if (finished) {
-                        with_lock (Mutex) {
-                            --InFlight;
-                            while (PendingQ && InFlight < MaxInFlight) {
-                                Start(std::move(PendingQ.front()));
-                                PendingQ.pop();
-                            }
-                        }
-                    }
-                }
-                return nullptr;
-            }
-
+                        with_lock (Mutex) { 
+                            --InFlight; 
+                            while (PendingQ && InFlight < MaxInFlight) { 
+                                Start(std::move(PendingQ.front())); 
+                                PendingQ.pop(); 
+                            } 
+                        } 
+                    } 
+                } 
+                return nullptr; 
+            } 
+ 
             void Start(THolder<IProcessorBase> &&processor) {
-                processor->Start();
+                processor->Start(); 
                 Y_UNUSED(processor.Release());
-                ++InFlight;
-            }
-        };
-
-        TGRpcClient::TGRpcClient(const TGRpcClientConfig& config)
+                ++InFlight; 
+            } 
+        }; 
+ 
+        TGRpcClient::TGRpcClient(const TGRpcClientConfig& config) 
             : Config(config)
             , Impl(new TImpl(Config))
-        {}
-
-        TGRpcClient::~TGRpcClient()
-        {}
-
+        {} 
+ 
+        TGRpcClient::~TGRpcClient() 
+        {} 
+ 
         const TGRpcClientConfig& TGRpcClient::GetConfig() const {
             return Config;
         }
@@ -311,42 +311,42 @@ namespace NKikimr {
             return Impl->GetNetworkStatus();
         }
 
-#define IMPL_REQUEST(NAME, REQUEST, RESPONSE) \
-        void TGRpcClient::NAME(const NKikimrClient::REQUEST& request, TCallback<NKikimrClient::RESPONSE> callback) { \
-            Impl->Issue(request, std::move(callback), &TImpl::TStub::Async ## NAME); \
-        }
-
-        IMPL_REQUEST(Request, TRequest, TResponse)
-        IMPL_REQUEST(SchemeOperation, TSchemeOperation, TResponse)
-        IMPL_REQUEST(SchemeOperationStatus, TSchemeOperationStatus, TResponse)
-        IMPL_REQUEST(SchemeDescribe, TSchemeDescribe, TResponse)
-        IMPL_REQUEST(PersQueueRequest, TPersQueueRequest, TResponse)
-        IMPL_REQUEST(SchemeInitRoot, TSchemeInitRoot, TResponse)
-        IMPL_REQUEST(BSAdm, TBSAdm, TResponse)
-        IMPL_REQUEST(BlobStorageConfig, TBlobStorageConfigRequest, TResponse)
+#define IMPL_REQUEST(NAME, REQUEST, RESPONSE) \ 
+        void TGRpcClient::NAME(const NKikimrClient::REQUEST& request, TCallback<NKikimrClient::RESPONSE> callback) { \ 
+            Impl->Issue(request, std::move(callback), &TImpl::TStub::Async ## NAME); \ 
+        } 
+ 
+        IMPL_REQUEST(Request, TRequest, TResponse) 
+        IMPL_REQUEST(SchemeOperation, TSchemeOperation, TResponse) 
+        IMPL_REQUEST(SchemeOperationStatus, TSchemeOperationStatus, TResponse) 
+        IMPL_REQUEST(SchemeDescribe, TSchemeDescribe, TResponse) 
+        IMPL_REQUEST(PersQueueRequest, TPersQueueRequest, TResponse) 
+        IMPL_REQUEST(SchemeInitRoot, TSchemeInitRoot, TResponse) 
+        IMPL_REQUEST(BSAdm, TBSAdm, TResponse) 
+        IMPL_REQUEST(BlobStorageConfig, TBlobStorageConfigRequest, TResponse) 
         IMPL_REQUEST(ResolveNode, TResolveNodeRequest, TResponse)
-        IMPL_REQUEST(HiveCreateTablet, THiveCreateTablet, TResponse)
-        IMPL_REQUEST(LocalEnumerateTablets, TLocalEnumerateTablets, TResponse)
-        IMPL_REQUEST(KeyValue, TKeyValueRequest, TResponse)
+        IMPL_REQUEST(HiveCreateTablet, THiveCreateTablet, TResponse) 
+        IMPL_REQUEST(LocalEnumerateTablets, TLocalEnumerateTablets, TResponse) 
+        IMPL_REQUEST(KeyValue, TKeyValueRequest, TResponse) 
         IMPL_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse)
         IMPL_REQUEST(CmsRequest, TCmsRequest, TCmsResponse)
         IMPL_REQUEST(SqsRequest, TSqsRequest, TSqsResponse)
         IMPL_REQUEST(S3Listing, TS3ListingRequest, TS3ListingResponse)
-        IMPL_REQUEST(LocalMKQL, TLocalMKQL, TResponse)
-        IMPL_REQUEST(LocalSchemeTx, TLocalSchemeTx, TResponse)
-        IMPL_REQUEST(TabletKillRequest, TTabletKillRequest, TResponse)
-        IMPL_REQUEST(InterconnectDebug, TInterconnectDebug, TResponse)
-        IMPL_REQUEST(TabletStateRequest, TTabletStateRequest, TResponse)
-        IMPL_REQUEST(BlobStorageLoadRequest, TBsTestLoadRequest, TResponse)
-        IMPL_REQUEST(BlobStorageGetRequest, TBsGetRequest, TResponse)
-        IMPL_REQUEST(DbSchema, TJSON, TJSON)
-        IMPL_REQUEST(DbOperation, TJSON, TJSON)
-        IMPL_REQUEST(DbBatch, TJSON, TJSON)
+        IMPL_REQUEST(LocalMKQL, TLocalMKQL, TResponse) 
+        IMPL_REQUEST(LocalSchemeTx, TLocalSchemeTx, TResponse) 
+        IMPL_REQUEST(TabletKillRequest, TTabletKillRequest, TResponse) 
+        IMPL_REQUEST(InterconnectDebug, TInterconnectDebug, TResponse) 
+        IMPL_REQUEST(TabletStateRequest, TTabletStateRequest, TResponse) 
+        IMPL_REQUEST(BlobStorageLoadRequest, TBsTestLoadRequest, TResponse) 
+        IMPL_REQUEST(BlobStorageGetRequest, TBsGetRequest, TResponse) 
+        IMPL_REQUEST(DbSchema, TJSON, TJSON) 
+        IMPL_REQUEST(DbOperation, TJSON, TJSON) 
+        IMPL_REQUEST(DbBatch, TJSON, TJSON) 
         IMPL_REQUEST(ChooseProxy, TChooseProxyRequest, TResponse)
         IMPL_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse)
         IMPL_REQUEST(WhoAmI, TWhoAmI, TResponse)
         IMPL_REQUEST(FillNode, TFillNodeRequest, TResponse)
         IMPL_REQUEST(DrainNode, TDrainNodeRequest, TResponse)
-
-        } // NGRpcProxy
-} // NKikimr
+ 
+        } // NGRpcProxy 
+} // NKikimr 

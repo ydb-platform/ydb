@@ -15,8 +15,8 @@ namespace NMsgBusProxy {
 
 class TMessageBusGetTypes : public TActorBootstrapped<TMessageBusGetTypes>, public TMessageBusSessionIdentHolder {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::MSGBUS_COMMON;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::MSGBUS_COMMON; 
     }
 
     TMessageBusGetTypes(TBusMessageContext &msg, TMaybe<ui64> etag)

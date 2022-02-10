@@ -118,7 +118,7 @@ namespace NKikimr {
 
     private:
         THullCtxPtr HullCtx;
-        const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
+        const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top; 
         TIntrusivePtr<THandoffDelegate> HandoffDelegate;
         const bool RunHandoff;
         const TActorId SkeletonId;
@@ -220,9 +220,9 @@ namespace NKikimr {
                     if (memRec->GetType() == TBlobType::HugeBlob) {
                         Y_FAIL("Implement"); // FIXME
                     } else if (memRec->GetType() == TBlobType::DiskBlob) {
-                        const auto& merger = dataMerger->GetDiskBlobMerger();
-                        const TDiskBlob& blob = merger.GetDiskBlob();
-                        ui32 fullDataSize = blob.GetFullDataSize();
+                        const auto& merger = dataMerger->GetDiskBlobMerger(); 
+                        const TDiskBlob& blob = merger.GetDiskBlob(); 
+                        ui32 fullDataSize = blob.GetFullDataSize(); 
 
                         // iterate via parts
                         for (TDiskBlob::TPartIterator it = blob.begin(), e = blob.end(); it != e; ++it) {
@@ -230,11 +230,11 @@ namespace NKikimr {
                             Y_VERIFY_DEBUG(partId > 0);
                             if (moveVec.Get(partId - 1)) {
                                 TLogoBlobID id(key.LogoBlobID(), partId);
-                                TVDiskIdShort vdisk(memRec->GetIngress().GetMainReplica(Top.get(), id));
+                                TVDiskIdShort vdisk(memRec->GetIngress().GetMainReplica(Top.get(), id)); 
                                 // FIXME: for huge blobs we need to implement an actor which makes read, because we don't have
                                 // this blob in memory
-                                TRope temp;
-                                bool res = HandoffDelegate->Restore(ctx, vdisk, id, fullDataSize, it.GetPart());
+                                TRope temp; 
+                                bool res = HandoffDelegate->Restore(ctx, vdisk, id, fullDataSize, it.GetPart()); 
                                 Stat.SuccessfulMoveSend += ui64(res);
                                 Stat.FailedMoveSend += ui64(!res);
                             }
@@ -257,8 +257,8 @@ namespace NKikimr {
                         Y_FAIL("Implement"); // FIXME
                     } else if (memRec->GetType() == TBlobType::DiskBlob) {
                         TIngress ingress = memRec->GetIngress(); // ingress we are going to change
-                        const auto& merger = dataMerger->GetDiskBlobMerger();
-                        const TDiskBlob& blob = merger.GetDiskBlob();
+                        const auto& merger = dataMerger->GetDiskBlobMerger(); 
+                        const TDiskBlob& blob = merger.GetDiskBlob(); 
 
                         // a vector of local parts we have in ingress; we may have some of them missing in actual
                         // data merger as it contains only MemBlob items
@@ -269,16 +269,16 @@ namespace NKikimr {
                             if (delVec.Get(i)) {
                                 const ui8 partId = i + 1;
                                 TLogoBlobID id(key.LogoBlobID(), partId);
-                                ingress.DeleteHandoff(Top.get(), HullCtx->VCtx->ShortSelfVDisk, id);
+                                ingress.DeleteHandoff(Top.get(), HullCtx->VCtx->ShortSelfVDisk, id); 
                                 localParts.Clear(i);
                             }
                         }
 
                         // create new blob from kept parts
                         TDataMerger dataMerger;
-                        for (auto it = blob.begin(); it != blob.end(); ++it) {
-                            if (localParts.Get(it.GetPartId() - 1)) {
-                                dataMerger.AddPart(blob, it);
+                        for (auto it = blob.begin(); it != blob.end(); ++it) { 
+                            if (localParts.Get(it.GetPartId() - 1)) { 
+                                dataMerger.AddPart(blob, it); 
                             }
                         }
                         // SetNewDisk can handle empty dataMerger correctly.
@@ -328,7 +328,7 @@ namespace NKikimr {
                 // check ingress
                 TLogoBlobID id(dbIt.GetCurKey().LogoBlobID());
                 TIngress levelIngress = dbMerger.GetMemRec().GetIngress();
-                TIngress::TPairOfVectors moveDel = levelIngress.HandoffParts(Top.get(), HullCtx->VCtx->ShortSelfVDisk, id);
+                TIngress::TPairOfVectors moveDel = levelIngress.HandoffParts(Top.get(), HullCtx->VCtx->ShortSelfVDisk, id); 
                 MoveMap.push_back(moveDel.first.Raw());
                 DelMap.push_back(moveDel.second.Raw());
 

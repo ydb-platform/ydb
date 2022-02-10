@@ -135,18 +135,18 @@ struct TEvYardInit : public TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit>
     TVDiskID VDisk;
     ui64 PDiskGuid;
     TActorId CutLogID; // ask this actor about log cut
-    TActorId WhiteboardProxyId;
-    ui32 SlotId;
-
+    TActorId WhiteboardProxyId; 
+    ui32 SlotId; 
+ 
     TEvYardInit(TOwnerRound ownerRound, const TVDiskID &vdisk, ui64 pDiskGuid,
-            const TActorId &cutLogID = TActorId(), const TActorId& whiteboardProxyId = {},
-            ui32 slotId = Max<ui32>())
+            const TActorId &cutLogID = TActorId(), const TActorId& whiteboardProxyId = {}, 
+            ui32 slotId = Max<ui32>()) 
         : OwnerRound(ownerRound)
         , VDisk(vdisk)
         , PDiskGuid(pDiskGuid)
         , CutLogID(cutLogID)
-        , WhiteboardProxyId(whiteboardProxyId)
-        , SlotId(slotId)
+        , WhiteboardProxyId(whiteboardProxyId) 
+        , SlotId(slotId) 
     {}
 
     TString ToString() const {
@@ -159,7 +159,7 @@ struct TEvYardInit : public TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit>
         str << " VDisk# " << record.VDisk.ToString();
         str << " PDiskGuid# " << record.PDiskGuid;
         str << " CutLogID# " << record.CutLogID;
-        str << " WhiteboardProxyId# " << record.WhiteboardProxyId;
+        str << " WhiteboardProxyId# " << record.WhiteboardProxyId; 
         str << "}";
         return str.Str();
     }
@@ -248,7 +248,7 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
         virtual void operator ()(TActorSystem *actorSystem, const TEvLogResult &ev) = 0;
     };
 
-    using TCallback = std::unique_ptr<ICallback>;
+    using TCallback = std::unique_ptr<ICallback>; 
 
     explicit TEvLog(TOwner owner, TOwnerRound ownerRound, TLogSignature signature,
                     const TString &data, TLsnSeg seg, void *cookie, TCallback &&cb = TCallback())
@@ -864,33 +864,33 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
         }
     };
 
-    ///////////////////// TAlignedParts //////////////////////////////
-    class TRopeAlignedParts : public IParts {
-        TRope Data; // we shall keep the rope here to prevent it from being freed
-        TVector<TDataRef> Refs;
+    ///////////////////// TAlignedParts ////////////////////////////// 
+    class TRopeAlignedParts : public IParts { 
+        TRope Data; // we shall keep the rope here to prevent it from being freed 
+        TVector<TDataRef> Refs; 
 
-    public:
-        TRopeAlignedParts(TRope&& data, size_t fullSize)
-            : Data(std::move(data))
-        {
-            for (auto iter = Data.Begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
-                Refs.emplace_back(iter.ContiguousData(), iter.ContiguousSize());
-            }
-            if (const size_t padding = fullSize - Data.GetSize()) {
-                Refs.emplace_back(nullptr, padding);
-            }
-        }
-
-        virtual ui32 Size() const override {
-            return Refs.size();
-        }
-
-        virtual TDataRef operator [](ui32 index) const override {
-            return Refs[index];
-        }
-    };
-
-
+    public: 
+        TRopeAlignedParts(TRope&& data, size_t fullSize) 
+            : Data(std::move(data)) 
+        { 
+            for (auto iter = Data.Begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) { 
+                Refs.emplace_back(iter.ContiguousData(), iter.ContiguousSize()); 
+            } 
+            if (const size_t padding = fullSize - Data.GetSize()) { 
+                Refs.emplace_back(nullptr, padding); 
+            } 
+        } 
+ 
+        virtual ui32 Size() const override { 
+            return Refs.size(); 
+        } 
+ 
+        virtual TDataRef operator [](ui32 index) const override { 
+            return Refs[index]; 
+        } 
+    }; 
+ 
+ 
     TEvChunkWrite(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkIdx, ui32 offset, TPartsPtr partsPtr,
             void *cookie, bool doFlush, ui8 priorityClass, bool isSeqWrite = true)
         : ChunkIdx(chunkIdx)
@@ -935,7 +935,7 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
     void Validate() const {
         const ui32 count = PartsPtr ? PartsPtr->Size() : 0;
         for (ui32 idx = 0; idx < count; ++idx) {
-            Y_VERIFY((*PartsPtr)[idx].second);
+            Y_VERIFY((*PartsPtr)[idx].second); 
             if ((*PartsPtr)[idx].first) {
                 REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED((*PartsPtr)[idx].first, (*PartsPtr)[idx].second);
             }

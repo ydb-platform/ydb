@@ -54,10 +54,10 @@ public:
             }
             delete x;
         }
-
-        void operator ()(TQueueInplace<T, TSize> *x) const noexcept {
-            Destroy(x);
-        }
+ 
+        void operator ()(TQueueInplace<T, TSize> *x) const noexcept { 
+            Destroy(x); 
+        } 
     };
 
     void Push(const T &x) noexcept {
@@ -75,19 +75,19 @@ public:
     }
 
     void Push(T &&x) noexcept {
-        ++Size;
-        if (WritePosition != TChunk::EntriesCount) {
-            WriteTo->Entries[WritePosition] = std::move(x);
-            ++WritePosition;
-        } else {
-            TChunk *next = new TChunk();
-            next->Entries[0] = std::move(x);
-            WriteTo->Next = next;
-            WriteTo = next;
-            WritePosition = 1;
-        }
-    }
-
+        ++Size; 
+        if (WritePosition != TChunk::EntriesCount) { 
+            WriteTo->Entries[WritePosition] = std::move(x); 
+            ++WritePosition; 
+        } else { 
+            TChunk *next = new TChunk(); 
+            next->Entries[0] = std::move(x); 
+            WriteTo->Next = next; 
+            WriteTo = next; 
+            WritePosition = 1; 
+        } 
+    } 
+ 
     T *Head() {
         TChunk *head = ReadFrom;
         if (ReadFrom == WriteTo && ReadPosition == WritePosition) {

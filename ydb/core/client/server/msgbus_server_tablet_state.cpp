@@ -21,7 +21,7 @@ protected:
     TMap<ui64, TAutoPtr<TEvWhiteboard::TEvTabletStateResponse>> PerNodeTabletInfo;
     size_t NodesRequested;
     size_t NodesReceived;
-    const NKikimrClient::TTabletStateRequest Record;
+    const NKikimrClient::TTabletStateRequest Record; 
 
 public:
     void SendReplyAndDie(NBus::TBusMessage *reply, const TActorContext &ctx) {
@@ -29,8 +29,8 @@ public:
         Die(ctx);
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR; 
     }
 
     TMessageBusTabletStateRequest(TBusMessageContext &msg)

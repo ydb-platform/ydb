@@ -32,8 +32,8 @@ namespace NKikimr {
                 return Key < rec.Key;
             }
 
-            bool operator ==(const TRecord &rec) const {
-                return Key == rec.Key;
+            bool operator ==(const TRecord &rec) const { 
+                return Key == rec.Key; 
             }
 
             TRecord(const TKey &key, const TMemRec &memRec)
@@ -87,9 +87,9 @@ namespace NKikimr {
             return MemConsumed.GetCounter();
         }
 
-        static std::shared_ptr<TFreshAppendix> Merge(
+        static std::shared_ptr<TFreshAppendix> Merge( 
             const THullCtxPtr &hullCtx,
-            const TVector<std::shared_ptr<TFreshAppendix>> &v);
+            const TVector<std::shared_ptr<TFreshAppendix>> &v); 
 
         class TIterator;
 
@@ -100,10 +100,10 @@ namespace NKikimr {
         using TVecIterator = typename TVec::iterator;
     };
 
-    extern template class TFreshAppendix<TKeyLogoBlob, TMemRecLogoBlob>;
-    extern template class TFreshAppendix<TKeyBarrier, TMemRecBarrier>;
-    extern template class TFreshAppendix<TKeyBlock, TMemRecBlock>;
-
+    extern template class TFreshAppendix<TKeyLogoBlob, TMemRecLogoBlob>; 
+    extern template class TFreshAppendix<TKeyBarrier, TMemRecBarrier>; 
+    extern template class TFreshAppendix<TKeyBlock, TMemRecBlock>; 
+ 
     /////////////////////////////////////////////////////////////////////////////////////////
     // TFreshAppendix::TIterator
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -170,9 +170,9 @@ namespace NKikimr {
     // TFreshAppendix -- merge segments
     /////////////////////////////////////////////////////////////////////////////////////////
     template <class TKey, class TMemRec>
-    std::shared_ptr<TFreshAppendix<TKey, TMemRec>> TFreshAppendix<TKey, TMemRec>::Merge(
+    std::shared_ptr<TFreshAppendix<TKey, TMemRec>> TFreshAppendix<TKey, TMemRec>::Merge( 
             const THullCtxPtr &hullCtx,
-            const TVector<std::shared_ptr<TFreshAppendix<TKey, TMemRec>>> &v)
+            const TVector<std::shared_ptr<TFreshAppendix<TKey, TMemRec>>> &v) 
     {
         using TFreshAppendix = ::NKikimr::TFreshAppendix<TKey, TMemRec>;
         using TAppendixIterator = typename TFreshAppendix::TIterator;
@@ -182,7 +182,7 @@ namespace NKikimr {
         input.reserve(v.size());
         size_t reserve = 0;
         for (auto &x : v) {
-            input.push_back(x.get());
+            input.push_back(x.get()); 
             reserve += x->GetSize();
         }
         typename TFreshAppendix::TVec vec;
@@ -200,7 +200,7 @@ namespace NKikimr {
             merger.Clear();
         }
 
-        return std::make_shared<TFreshAppendix>(std::move(vec), TMemoryConsumer(input[0]->GetCounter()), true);
+        return std::make_shared<TFreshAppendix>(std::move(vec), TMemoryConsumer(input[0]->GetCounter()), true); 
     }
 
 
@@ -214,7 +214,7 @@ namespace NKikimr {
     class TFreshAppendixTreeSnap {
     private:
         using TAppendix = ::NKikimr::TFreshAppendix<TKey, TMemRec>;
-        using TAppendixPtr = std::shared_ptr<TAppendix>;
+        using TAppendixPtr = std::shared_ptr<TAppendix>; 
         using TTree = TSTree<TAppendix, THullCtxPtr>;
         using TTreeSnap = TSTreeSnap<TAppendix, THullCtxPtr>;
         friend class TFreshAppendixTree<TKey, TMemRec>;
@@ -250,10 +250,10 @@ namespace NKikimr {
         };
     };
 
-    extern template class TFreshAppendixTreeSnap<TKeyLogoBlob, TMemRecLogoBlob>;
-    extern template class TFreshAppendixTreeSnap<TKeyBarrier, TMemRecBarrier>;
-    extern template class TFreshAppendixTreeSnap<TKeyBlock, TMemRecBlock>;
-
+    extern template class TFreshAppendixTreeSnap<TKeyLogoBlob, TMemRecLogoBlob>; 
+    extern template class TFreshAppendixTreeSnap<TKeyBarrier, TMemRecBarrier>; 
+    extern template class TFreshAppendixTreeSnap<TKeyBlock, TMemRecBlock>; 
+ 
     /////////////////////////////////////////////////////////////////////////////////////////
     // TFreshAppendixTree -- several TFreshAppendix
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -261,7 +261,7 @@ namespace NKikimr {
     class TFreshAppendixTree {
     private:
         using TAppendix = ::NKikimr::TFreshAppendix<TKey, TMemRec>;
-        using TAppendixPtr = std::shared_ptr<TAppendix>;
+        using TAppendixPtr = std::shared_ptr<TAppendix>; 
         using TTree = TSTree<TAppendix, THullCtxPtr>;
         using TTreeSnap = TSTreeSnap<TAppendix, THullCtxPtr>;
 
@@ -305,11 +305,11 @@ namespace NKikimr {
             return TFreshAppendixTreeSnap<TKey, TMemRec>(Tree.GetSnapshot());
         }
 
-        std::shared_ptr<ISTreeCompaction> Compact() {
+        std::shared_ptr<ISTreeCompaction> Compact() { 
             return Tree.Compact();
         }
 
-        std::shared_ptr<ISTreeCompaction> ApplyCompactionResult(std::shared_ptr<ISTreeCompaction> cjob) {
+        std::shared_ptr<ISTreeCompaction> ApplyCompactionResult(std::shared_ptr<ISTreeCompaction> cjob) { 
             return Tree.ApplyCompactionResult(cjob);
         }
 
@@ -348,10 +348,10 @@ namespace NKikimr {
         }
     };
 
-    extern template class TFreshAppendixTree<TKeyLogoBlob, TMemRecLogoBlob>;
-    extern template class TFreshAppendixTree<TKeyBarrier, TMemRecBarrier>;
-    extern template class TFreshAppendixTree<TKeyBlock, TMemRecBlock>;
-
+    extern template class TFreshAppendixTree<TKeyLogoBlob, TMemRecLogoBlob>; 
+    extern template class TFreshAppendixTree<TKeyBarrier, TMemRecBarrier>; 
+    extern template class TFreshAppendixTree<TKeyBlock, TMemRecBlock>; 
+ 
     /////////////////////////////////////////////////////////////////////////////////////////
     // TFreshAppendixTreeSnap::TPrivateIteratorBase
     // Base class for TFreshAppendixTreeSnap iterators
@@ -379,7 +379,7 @@ namespace NKikimr {
             typename TSnap::TTreeSnap::TIterator it(&snap->Snap);
             it.SeekToFirst();
             while (it.Valid()) {
-                result.push_back(it.Get().get());
+                result.push_back(it.Get().get()); 
                 it.Next();
             }
             return result;

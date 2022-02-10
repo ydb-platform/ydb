@@ -59,19 +59,19 @@ private:
     };
 
     struct TNodeInfo : public TEvInterconnect::TNodeInfo {
-        TNodeInfo() = delete;
-
+        TNodeInfo() = delete; 
+ 
         TNodeInfo(ui32 nodeId,
                   const TString &address,
                   const TString &host,
                   const TString &resolveHost,
                   ui16 port,
-                  const TNodeLocation &location,
-                  bool legacyUpdatePending)
+                  const TNodeLocation &location, 
+                  bool legacyUpdatePending) 
             : TEvInterconnect::TNodeInfo(nodeId, address, host, resolveHost,
                                          port, location)
             , Lease(0)
-            , LegacyUpdatePending(legacyUpdatePending)
+            , LegacyUpdatePending(legacyUpdatePending) 
         {
         }
 
@@ -102,7 +102,7 @@ private:
         // Lease is incremented each time node extends its lifetime.
         ui32 Lease;
         TInstant Expire;
-        bool LegacyUpdatePending = false;
+        bool LegacyUpdatePending = false; 
     };
 
     // State changes to apply while moving to the next epoch.
@@ -123,7 +123,7 @@ private:
     ITransaction *CreateTxExtendLease(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev);
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
-    ITransaction *CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev, const NActors::TScopeId& scopeId);
+    ITransaction *CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev, const NActors::TScopeId& scopeId); 
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfigSubscription(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev);
@@ -326,9 +326,9 @@ public:
     {
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
     {
-        return NKikimrServices::TActivity::NODE_BROKER_ACTOR;
+        return NKikimrServices::TActivity::NODE_BROKER_ACTOR; 
     }
 
     void Execute(ITransaction *transaction, const TActorContext &ctx) override

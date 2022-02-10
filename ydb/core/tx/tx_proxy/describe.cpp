@@ -182,8 +182,8 @@ class TDescribeReq : public TActor<TDescribeReq> {
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx);
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_PROXY_NAVIGATE;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TX_PROXY_NAVIGATE; 
     }
 
     TDescribeReq(const TTxProxyServices &services, const TIntrusivePtr<TTxProxyMon>& txProxyMon)

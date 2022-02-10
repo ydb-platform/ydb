@@ -56,10 +56,10 @@ namespace NKikimr {
         };
 
         const TActorId ParentId;
-        std::shared_ptr<TLocalRecoveryContext> LocRecCtx;
+        std::shared_ptr<TLocalRecoveryContext> LocRecCtx; 
         TActiveActors ActiveActors;
         NPDisk::TLogPosition PrevLogPos = {0, 0};
-        std::unique_ptr<TReadLogResultCtx> ReadLogCtx;
+        std::unique_ptr<TReadLogResultCtx> ReadLogCtx; 
 
         ui64 RecoveredLsn = 0;
         ui64 SyncLogMaxLsnStored = 0;
@@ -101,11 +101,11 @@ namespace NKikimr {
 
         void Finish(const TActorContext &ctx, NKikimrProto::EReplyStatus status, const TString &errorReason) {
             ctx.Send(ParentId, new TEvRecoveryLogReplayDone(status, errorReason, RecoveredLsn));
-            Die(ctx);
+            Die(ctx); 
         }
 
         void Handle(NPDisk::TEvReadLogResult::TPtr &ev, const TActorContext &ctx) {
-            ReadLogCtx = std::make_unique<TReadLogResultCtx>(ev);
+            ReadLogCtx = std::make_unique<TReadLogResultCtx>(ev); 
 
             if (ReadLogCtx->Msg->Status != NKikimrProto::OK) {
                 Finish(ctx, ReadLogCtx->Msg->Status, "Recovery log read failed");
@@ -140,10 +140,10 @@ namespace NKikimr {
                 // continue reading and applying log
                 SendReadLogRequest(ctx, ReadLogCtx->Msg->NextPosition);
                 // dispatching finished
-                ReadLogCtx.reset();
+                ReadLogCtx.reset(); 
             } else {
                 // dispatching finished
-                ReadLogCtx.reset();
+                ReadLogCtx.reset(); 
                 // end
                 LocRecCtx->RecovInfo->FinishDispatching();
                 LocRecCtx->RepairedHuge->FinishRecovery(ctx);
@@ -248,7 +248,7 @@ namespace NKikimr {
             }
         }
 
-        void PutBlockToHull(const TActorContext &ctx, ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid) {
+        void PutBlockToHull(const TActorContext &ctx, ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid) { 
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->Blocks->SkipRecord(lsn)) {
                 LocRecCtx->RecovInfo->FreshSkipBlock();
@@ -262,13 +262,13 @@ namespace NKikimr {
                           VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
                                 "RECORD (BLOCK) ADDED: lsn# %" PRIu64 " tabletId# %" PRIu64
                                 " gen# %" PRIu32, lsn, tabletId, gen));
-                LocRecCtx->HullDbRecovery->ReplayAddBlockCmd(ctx, tabletId, gen, issuerGuid, lsn, THullDbRecovery::RECOVERY);
+                LocRecCtx->HullDbRecovery->ReplayAddBlockCmd(ctx, tabletId, gen, issuerGuid, lsn, THullDbRecovery::RECOVERY); 
             }
         }
 
-        void PutBlockToHullAndSyncLog(const TActorContext &ctx, ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid) {
+        void PutBlockToHullAndSyncLog(const TActorContext &ctx, ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid) { 
             // put block to Hull Db
-            PutBlockToHull(ctx, lsn, tabletId, gen, issuerGuid);
+            PutBlockToHull(ctx, lsn, tabletId, gen, issuerGuid); 
 
             // skip records that already in synclog
             if (lsn <= SyncLogMaxLsnStored) {
@@ -383,7 +383,7 @@ namespace NKikimr {
             const bool fromVPutCommand = true;
             const TLogoBlobID id = LogoBlobIDFromLogoBlobID(PutMsg.GetBlobID());
             const TString &buf = PutMsg.GetBuffer();
-            TIngress ingress = *TIngress::CreateIngressWithLocal(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk, id);
+            TIngress ingress = *TIngress::CreateIngressWithLocal(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk, id); 
 
             PutLogoBlobToHullAndSyncLog(ctx, record.Lsn, id, ingress, buf, fromVPutCommand);
             return EDispatchStatus::Success;
@@ -395,7 +395,7 @@ namespace NKikimr {
                 return EDispatchStatus::Error;
 
             const bool fromVPutCommand = true;
-            TIngress ingress = *TIngress::CreateIngressWithLocal(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk,
+            TIngress ingress = *TIngress::CreateIngressWithLocal(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk, 
                 PutMsgOpt.Id);
 
             PutLogoBlobToHullAndSyncLog(ctx, record.Lsn, PutMsgOpt.Id, ingress, PutMsgOpt.Data, fromVPutCommand);
@@ -409,7 +409,7 @@ namespace NKikimr {
 
             const ui64 tabletId = BlockMsg.GetTabletId();
             const ui32 gen = BlockMsg.GetGeneration();
-            PutBlockToHullAndSyncLog(ctx, record.Lsn, tabletId, gen, BlockMsg.GetIssuerGuid());
+            PutBlockToHullAndSyncLog(ctx, record.Lsn, tabletId, gen, BlockMsg.GetIssuerGuid()); 
             return EDispatchStatus::Success;
         }
 
@@ -428,7 +428,7 @@ namespace NKikimr {
             ui64 recsNum = 0;
             auto count = [&recsNum] (const void *) { recsNum++; };
             NSyncLog::TFragmentReader fragment(LocalSyncDataMsg.Data);
-            fragment.ForEach(count, count, count, count);
+            fragment.ForEach(count, count, count, count); 
 
             // calculate lsn
             Y_VERIFY_DEBUG(recordLsn >= recsNum, "recordLsn# %" PRIu64 " recsNum# %" PRIu64,
@@ -444,7 +444,7 @@ namespace NKikimr {
             };
             auto blockHandler = [&] (const NSyncLog::TBlockRec *rec) {
                 LocRecCtx->RecovInfo->SyncDataTryPutBlock();
-                PutBlockToHull(ctx, lsn, rec->TabletId, rec->Generation, 0);
+                PutBlockToHull(ctx, lsn, rec->TabletId, rec->Generation, 0); 
                 lsn++;
             };
             auto barrierHandler = [&] (const NSyncLog::TBarrierRec *rec) {
@@ -454,19 +454,19 @@ namespace NKikimr {
                                  rec->CollectStep, rec->Hard, rec->Ingress);
                 lsn++;
             };
-            auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) {
-                LocRecCtx->RecovInfo->SyncDataTryPutBlock();
-                PutBlockToHull(ctx, lsn, rec->TabletId, rec->Generation, rec->IssuerGuid);
-                lsn++;
-            };
+            auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) { 
+                LocRecCtx->RecovInfo->SyncDataTryPutBlock(); 
+                PutBlockToHull(ctx, lsn, rec->TabletId, rec->Generation, rec->IssuerGuid); 
+                lsn++; 
+            }; 
 
             // apply local sync data
-            fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2);
+            fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2); 
         }
 
         void PutLogoBlobsBatchToHull(
                 const TActorContext &ctx,
-                std::shared_ptr<TFreshAppendixLogoBlobs> &&logoBlobs,
+                std::shared_ptr<TFreshAppendixLogoBlobs> &&logoBlobs, 
                 TLsnSeg seg)
         {
             // skip records that already in index
@@ -486,7 +486,7 @@ namespace NKikimr {
 
         void PutBlocksBatchToHull(
                 const TActorContext &ctx,
-                std::shared_ptr<TFreshAppendixBlocks> &&blocks,
+                std::shared_ptr<TFreshAppendixBlocks> &&blocks, 
                 TLsnSeg seg)
         {
             // skip records that already in index
@@ -506,7 +506,7 @@ namespace NKikimr {
 
         void PutBarriersBatchToHull(
                 const TActorContext &ctx,
-                std::shared_ptr<TFreshAppendixBarriers> &&barriers,
+                std::shared_ptr<TFreshAppendixBarriers> &&barriers, 
                 TLsnSeg seg)
         {
             // skip records that already in index
@@ -735,7 +735,7 @@ namespace NKikimr {
             ui64 lsn = record.Lsn - PhantomLogoBlobs.GetLogoBlobs().size() + 1;
 
             TIngress ingress;
-            ingress.SetKeep(TIngress::IngressMode(LocRecCtx->VCtx->Top->GType), CollectModeDoNotKeep);
+            ingress.SetKeep(TIngress::IngressMode(LocRecCtx->VCtx->Top->GType), CollectModeDoNotKeep); 
             for (const auto& id : PhantomLogoBlobs.GetLogoBlobs()) {
                 LocRecCtx->RecovInfo->PhantomTryPutLogoBlob();
                 const bool fromVPutCommand = false;
@@ -751,7 +751,7 @@ namespace NKikimr {
             }
 
             TEvAnubisOsirisPut put(AnubisOsirisPutMsg);
-            TEvAnubisOsirisPut::THullDbInsert insert = put.PrepareInsert(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk);
+            TEvAnubisOsirisPut::THullDbInsert insert = put.PrepareInsert(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk); 
             const bool fromVPutCommand = false;
             PutLogoBlobToHullAndSyncLog(ctx, record.Lsn, insert.Id, insert.Ingress, TString(), fromVPutCommand);
             return EDispatchStatus::Success;
@@ -778,10 +778,10 @@ namespace NKikimr {
                 // skip record for all databases
                 return EDispatchStatus::Success;
             }
-        }
+        } 
 
-        EDispatchStatus HandleScrub(const TActorContext& /*ctx*/, const NPDisk::TLogRecord& /*record*/) {
-            return EDispatchStatus::Success;
+        EDispatchStatus HandleScrub(const TActorContext& /*ctx*/, const NPDisk::TLogRecord& /*record*/) { 
+            return EDispatchStatus::Success; 
         }
 
         void Handle(TEvBulkSstEssenceLoaded::TPtr &ev, const TActorContext &ctx) {
@@ -866,9 +866,9 @@ namespace NKikimr {
                 case TLogSignature::SignatureAddBulkSst:
                     LocRecCtx->RecovInfo->DispatchSignatureAddBulkSst(record);
                     return HandleAddBulkSst(ctx, record);
-                case TLogSignature::SignatureScrub:
-                    LocRecCtx->RecovInfo->DispatchSignatureScrub(record);
-                    return HandleScrub(ctx, record);
+                case TLogSignature::SignatureScrub: 
+                    LocRecCtx->RecovInfo->DispatchSignatureScrub(record); 
+                    return HandleScrub(ctx, record); 
                 case TLogSignature::Max:
                     break;
             }
@@ -876,18 +876,18 @@ namespace NKikimr {
         }
 
         void VerifyOwnedChunks(const TActorContext& ctx) {
-            TSet<TChunkIdx> chunks;
-
+            TSet<TChunkIdx> chunks; 
+ 
             // create a set of used chunks as seen from our side
-            LocRecCtx->HullDbRecovery->GetOwnedChunks(chunks);
-            LocRecCtx->RepairedHuge->GetOwnedChunks(chunks);
-            LocRecCtx->SyncLogRecovery->GetOwnedChunks(chunks);
+            LocRecCtx->HullDbRecovery->GetOwnedChunks(chunks); 
+            LocRecCtx->RepairedHuge->GetOwnedChunks(chunks); 
+            LocRecCtx->SyncLogRecovery->GetOwnedChunks(chunks); 
 
             // calculate leaked and unowned chunks
             TVector<TChunkIdx> leaks, misowned;
             std::set_difference(LocRecCtx->ReportedOwnedChunks.begin(), LocRecCtx->ReportedOwnedChunks.end(),
-                    chunks.begin(), chunks.end(), std::back_inserter(leaks));
-            std::set_difference(chunks.begin(), chunks.end(),
+                    chunks.begin(), chunks.end(), std::back_inserter(leaks)); 
+            std::set_difference(chunks.begin(), chunks.end(), 
                     LocRecCtx->ReportedOwnedChunks.begin(), LocRecCtx->ReportedOwnedChunks.end(),
                     std::back_inserter(misowned));
 
@@ -916,11 +916,11 @@ namespace NKikimr {
         )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_DB_LOCAL_RECOVERY;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_DB_LOCAL_RECOVERY; 
         }
 
-        TRecoveryLogReplayer(TActorId parentId, std::shared_ptr<TLocalRecoveryContext> locRecCtx)
+        TRecoveryLogReplayer(TActorId parentId, std::shared_ptr<TLocalRecoveryContext> locRecCtx) 
             : TActorBootstrapped<TRecoveryLogReplayer>()
             , ParentId(parentId)
             , LocRecCtx(std::move(locRecCtx))
@@ -936,7 +936,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // CreateRecoveryLogReplayer
     ////////////////////////////////////////////////////////////////////////////
-    IActor* CreateRecoveryLogReplayer(TActorId parentId, std::shared_ptr<TLocalRecoveryContext> locRecCtx) {
+    IActor* CreateRecoveryLogReplayer(TActorId parentId, std::shared_ptr<TLocalRecoveryContext> locRecCtx) { 
         return new TRecoveryLogReplayer(parentId, std::move(locRecCtx));
     }
 

@@ -18,9 +18,9 @@ namespace NActors {
         }
 
         bool IsSerializable() const override {
-            return false;
-        }
-
+            return false; 
+        } 
+ 
         static IEventBase* Load(TEventSerializedData*) {
             Y_FAIL("Loading of local event %s type %" PRIu32, TypeName<TEv>().data(), TEventType);
         }
@@ -55,14 +55,14 @@ namespace NActors {
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* /*serializer*/) const override {
-            static_assert(sizeof(TEv) == sizeof(TEventSimple<TEv, TEventType>), "Descendant should be an empty class");
-            return true;
+            static_assert(sizeof(TEv) == sizeof(TEventSimple<TEv, TEventType>), "Descendant should be an empty class"); 
+            return true; 
         }
 
-        bool IsSerializable() const override {
-            return true;
-        }
-
+        bool IsSerializable() const override { 
+            return true; 
+        } 
+ 
         static IEventBase* Load(NActors::TEventSerializedData*) {
             return new TEv();
         }

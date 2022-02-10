@@ -5,8 +5,8 @@
 namespace NKikimr {
 namespace NMsgBusProxy {
 
-class TMessageBusResolveNode : public TMessageBusLocalServiceRequest<TMessageBusResolveNode, NKikimrServices::TActivity::MSGBUS_COMMON> {
-    using TBase = TMessageBusLocalServiceRequest<TMessageBusResolveNode, NKikimrServices::TActivity::MSGBUS_COMMON>;
+class TMessageBusResolveNode : public TMessageBusLocalServiceRequest<TMessageBusResolveNode, NKikimrServices::TActivity::MSGBUS_COMMON> { 
+    using TBase = TMessageBusLocalServiceRequest<TMessageBusResolveNode, NKikimrServices::TActivity::MSGBUS_COMMON>; 
     NKikimrClient::TResolveNodeRequest ResolveRequest;
 
 public:

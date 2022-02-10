@@ -41,8 +41,8 @@ public:
         , Context(RequestEvent->GetStreamCtx())
     { }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::KESUS_REQ;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::KESUS_REQ; 
     }
 
     void Bootstrap(const TActorContext& ctx) {

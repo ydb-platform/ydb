@@ -284,10 +284,10 @@ struct TEvKqp {
             return Protobuf_->ParseFromString(data);
         }
 
-        bool ParseFromZeroCopyStream(google::protobuf::io::ZeroCopyInputStream* input) {
-            return Protobuf_->ParseFromZeroCopyStream(input);
-        }
-
+        bool ParseFromZeroCopyStream(google::protobuf::io::ZeroCopyInputStream* input) { 
+            return Protobuf_->ParseFromZeroCopyStream(input); 
+        } 
+ 
         bool SerializeToZeroCopyStream(google::protobuf::io::ZeroCopyOutputStream* output) const {
             return Protobuf_->SerializeToZeroCopyStream(output);
         }
@@ -304,10 +304,10 @@ struct TEvKqp {
             return Protobuf_->DebugString();
         }
 
-        TString ShortDebugString() const {
-            return Protobuf_->ShortDebugString();
-        }
-
+        TString ShortDebugString() const { 
+            return Protobuf_->ShortDebugString(); 
+        } 
+ 
         TString GetTypeName() const {
             return Protobuf_->GetTypeName();
         }

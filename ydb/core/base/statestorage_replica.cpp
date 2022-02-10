@@ -417,8 +417,8 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SS_REPLICA;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::SS_REPLICA; 
     }
 
     TStateStorageReplica(const TIntrusivePtr<TStateStorageInfo> &info, ui32 replicaIndex)

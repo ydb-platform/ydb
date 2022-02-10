@@ -28,7 +28,7 @@ int SchemeInitRoot(TCommandConfig &cmdConf, int argc, char** argv) {
     TCmdSchemeInitShardConfig schemeInitShardConfig;
     schemeInitShardConfig.Parse(argc, argv);
 
-    TAutoPtr<NMsgBusProxy::TBusSchemeInitRoot> request(new NMsgBusProxy::TBusSchemeInitRoot());
+    TAutoPtr<NMsgBusProxy::TBusSchemeInitRoot> request(new NMsgBusProxy::TBusSchemeInitRoot()); 
 
     request->Record.SetTagName(schemeInitShardConfig.TagName);
 
@@ -36,12 +36,12 @@ int SchemeInitRoot(TCommandConfig &cmdConf, int argc, char** argv) {
         request->Record.MutableGlobalConfig()->MergeFrom(*schemeInitShardConfig.GlobalConfig);
 
     TAutoPtr<NBus::TBusMessage> reply;
-    NBus::EMessageStatus status = schemeInitShardConfig.SyncCall(request, reply);
+    NBus::EMessageStatus status = schemeInitShardConfig.SyncCall(request, reply); 
 
     switch (status) {
     case NBus::MESSAGE_OK:
         {
-            const NKikimrClient::TResponse &response = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+            const NKikimrClient::TResponse &response = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
             Cout << "status: " << response.GetStatus() << Endl;
             Cout << "status transcript: " << static_cast<NMsgBusProxy::EResponseStatus>(response.GetStatus()) << Endl;
             if (response.HasTabletId())

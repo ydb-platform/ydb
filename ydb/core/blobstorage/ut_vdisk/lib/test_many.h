@@ -7,7 +7,7 @@
 ///////////////////////////////////////////////////////////////////////////
 struct TManyPutOneGet {
     const bool WaitForCompaction;
-    std::shared_ptr<TVector<TMsgPackInfo>> MsgPacks;
+    std::shared_ptr<TVector<TMsgPackInfo>> MsgPacks; 
     const NKikimrBlobStorage::EPutHandleClass HandleClass;
     const ui64 TabletId;
     const ui64 Shift;
@@ -23,7 +23,7 @@ struct TManyPutOneGet {
         , WithErrorResponse(withErrorResponse)
     {}
 
-    TManyPutOneGet(bool waitForCompaction, std::shared_ptr<TVector<TMsgPackInfo>> msgPacks,
+    TManyPutOneGet(bool waitForCompaction, std::shared_ptr<TVector<TMsgPackInfo>> msgPacks, 
                    NKikimrBlobStorage::EPutHandleClass cls, ui64 tabletId = 0, ui64 shift = 0,
                    bool withErrorResponse = false)
         : WaitForCompaction(waitForCompaction)
@@ -93,9 +93,9 @@ struct TManyPutRangeGet {
         , MsgNum(msgNum)
         , MsgSize(msgSize)
         , HandleClass(cls)
-    {
-        Y_VERIFY(indexOnly);
-    }
+    { 
+        Y_VERIFY(indexOnly); 
+    } 
 
     void operator ()(TConfiguration *conf);
 };
@@ -115,9 +115,9 @@ struct TManyPutRangeGet2Channels {
         , MsgNum(msgNum)
         , MsgSize(msgSize)
         , HandleClass(cls)
-    {
-        Y_VERIFY(indexOnly);
-    }
+    { 
+        Y_VERIFY(indexOnly); 
+    } 
 
     void operator ()(TConfiguration *conf);
 };

@@ -24,7 +24,7 @@ namespace NKikimr {
             ProcessLogoBlobs(str, tabletId, prettyPrint);
 
             Result->SetResult(str.Str());
-            SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, 0);
+            SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, 0); 
             ctx.Send(ParentId, new TEvents::TEvActorDied);
             TThis::Die(ctx);
         }
@@ -34,21 +34,21 @@ namespace NKikimr {
         void ProcessLogoBlobs(IOutputStream &str, ui64 tabletId, bool pretty);
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_LEVEL_INDEX_STAT_QUERY;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_LEVEL_INDEX_STAT_QUERY; 
         }
 
         TTabletStatActor(TIntrusivePtr<THullCtx> hullCtx,
                          const TActorId &parentId,
                          THullDsSnap &&fullSnap,
                          TEvBlobStorage::TEvVDbStat::TPtr &ev,
-                         std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result)
+                         std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result) 
             : TActorBootstrapped<TTabletStatActor>()
             , HullCtx(std::move(hullCtx))
             , ParentId(parentId)
             , FullSnap(std::move(fullSnap))
             , Ev(ev)
-            , Result(std::move(result))
+            , Result(std::move(result)) 
         {}
 
     private:
@@ -59,7 +59,7 @@ namespace NKikimr {
         const TActorId ParentId;
         THullDsSnap FullSnap;
         TEvBlobStorage::TEvVDbStat::TPtr Ev;
-        std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> Result;
+        std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> Result; 
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -106,14 +106,14 @@ namespace NKikimr {
         ui64 TabletId;
         bool Pretty;
         TMapType Map;
-        const TIngress::EMode IngressMode;
+        const TIngress::EMode IngressMode; 
 
     public:
-        TAggr(IOutputStream &str, ui64 tabletId, bool pretty, TIngress::EMode ingressMode)
+        TAggr(IOutputStream &str, ui64 tabletId, bool pretty, TIngress::EMode ingressMode) 
             : Str(str)
             , TabletId(tabletId)
             , Pretty(pretty)
-            , IngressMode(ingressMode)
+            , IngressMode(ingressMode) 
         {}
 
         void UpdateFresh(const char *segName,
@@ -142,7 +142,7 @@ namespace NKikimr {
                 }
 
                 // have some non default flags
-                int flags = memRec.GetIngress().GetCollectMode(IngressMode);
+                int flags = memRec.GetIngress().GetCollectMode(IngressMode); 
                 if (flags & ECollectMode::CollectModeDoNotKeep) {
                     val.RecordsWithDoNotKeepFlags++;
                 } else if (flags & ECollectMode::CollectModeKeep) {
@@ -354,7 +354,7 @@ namespace NKikimr {
     // TTabletStatActor::ProcessLogoBlobs
     ////////////////////////////////////////////////////////////////////////////
     void TTabletStatActor::ProcessLogoBlobs(IOutputStream &str, ui64 tabletId, bool pretty) {
-        TAggr aggr(str, tabletId, pretty, TIngress::IngressMode(HullCtx->VCtx->Top->GType));
+        TAggr aggr(str, tabletId, pretty, TIngress::IngressMode(HullCtx->VCtx->Top->GType)); 
         TraverseDbWithoutMerge(HullCtx, &aggr, FullSnap.LogoBlobsSnap);
     }
 
@@ -365,8 +365,8 @@ namespace NKikimr {
                                   const TActorId &parentId,
                                   THullDsSnap &&fullSnap,
                                   TEvBlobStorage::TEvVDbStat::TPtr &ev,
-                                  std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result) {
-        return new TTabletStatActor(std::move(hullCtx), parentId, std::move(fullSnap), ev, std::move(result));
+                                  std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result) { 
+        return new TTabletStatActor(std::move(hullCtx), parentId, std::move(fullSnap), ev, std::move(result)); 
     }
 
 } // NKikimr

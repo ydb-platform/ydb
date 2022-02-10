@@ -65,7 +65,7 @@ namespace NFake {
             : Runtime(runtime)
         {}
 
-        void Create(const TActorContext &ctx, ui32 pDiskID, const TIntrusivePtr<TPDiskConfig> &cfg,
+        void Create(const TActorContext &ctx, ui32 pDiskID, const TIntrusivePtr<TPDiskConfig> &cfg, 
             const NPDisk::TKey &mainKey, ui32 poolId, ui32 nodeId) override;
 
         virtual ~TStrandedPDiskServiceFactory()

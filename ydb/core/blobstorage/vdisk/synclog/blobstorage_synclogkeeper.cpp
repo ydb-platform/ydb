@@ -31,9 +31,9 @@ namespace NKikimr {
 
             void Bootstrap(const TActorContext &ctx) {
                 KeepState.Init(
-                    std::make_shared<TActorNotify>(ctx.ExecutorThread.ActorSystem, ctx.SelfID),
-                    std::make_shared<TActorSystemLoggerCtx>(ctx.ExecutorThread.ActorSystem));
-                PerformActions(ctx);
+                    std::make_shared<TActorNotify>(ctx.ExecutorThread.ActorSystem, ctx.SelfID), 
+                    std::make_shared<TActorSystemLoggerCtx>(ctx.ExecutorThread.ActorSystem)); 
+                PerformActions(ctx); 
                 Become(&TThis::StateFunc);
             }
 
@@ -68,11 +68,11 @@ namespace NKikimr {
                 return KeepState.PerformDeleteChunkAction();
             }
 
-            bool PerformInitialCommit() {
-                return KeepState.PerformInitialCommit();
-            }
+            bool PerformInitialCommit() { 
+                return KeepState.PerformInitialCommit(); 
+            } 
 
-
+ 
             ////////////////////////////////////////////////////////////////////////
             // PERFORM ACTIONS
             ////////////////////////////////////////////////////////////////////////
@@ -87,7 +87,7 @@ namespace NKikimr {
                 generateCommit |= PerformCutLogAction(ctx);
                 generateCommit |= PerformMemOverflowAction();
                 generateCommit |= PerformDeleteChunkAction();
-                generateCommit |= PerformInitialCommit();
+                generateCommit |= PerformInitialCommit(); 
 
                 if (generateCommit) {
                     Y_VERIFY(!CommitterId);
@@ -240,38 +240,38 @@ namespace NKikimr {
                 PerformActions(ctx);
             }
 
-            STRICT_STFUNC(StateFunc,
-                HFunc(TEvSyncLogPut, Handle)
-                HFunc(TEvSyncLogPutSst, Handle)
+            STRICT_STFUNC(StateFunc, 
+                HFunc(TEvSyncLogPut, Handle) 
+                HFunc(TEvSyncLogPutSst, Handle) 
                 HFunc(TEvSyncLogTrim, Handle)
-                HFunc(TEvSyncLogFreeChunk, Handle)
-                HFunc(TEvSyncLogCommitDone, Handle)
-                HFunc(TEvSyncLogSnapshot, Handle)
+                HFunc(TEvSyncLogFreeChunk, Handle) 
+                HFunc(TEvSyncLogCommitDone, Handle) 
+                HFunc(TEvSyncLogSnapshot, Handle) 
                 HFunc(TEvSyncLogLocalStatus, Handle)
                 HFunc(TEvBlobStorage::TEvVBaldSyncLog, Handle)
-                HFunc(NPDisk::TEvCutLog, Handle)
-                HFunc(TEvents::TEvPoisonPill, Handle)
-            )
+                HFunc(NPDisk::TEvCutLog, Handle) 
+                HFunc(TEvents::TEvPoisonPill, Handle) 
+            ) 
 
         public:
-            static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-                return NKikimrServices::TActivity::BS_SYNCLOG_KEEPER;
+            static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+                return NKikimrServices::TActivity::BS_SYNCLOG_KEEPER; 
             }
 
             TSyncLogKeeperActor(
                     TIntrusivePtr<TSyncLogCtx> slCtx,
-                    std::unique_ptr<TSyncLogRepaired> repaired)
+                    std::unique_ptr<TSyncLogRepaired> repaired) 
                 : TActorBootstrapped<TSyncLogKeeperActor>()
                 , SlCtx(std::move(slCtx))
-                , KeepState(SlCtx->VCtx, std::move(repaired), SlCtx->SyncLogMaxMemAmount, SlCtx->SyncLogMaxDiskAmount,
+                , KeepState(SlCtx->VCtx, std::move(repaired), SlCtx->SyncLogMaxMemAmount, SlCtx->SyncLogMaxDiskAmount, 
                     SlCtx->SyncLogMaxEntryPointSize)
             {}
         };
 
         IActor* CreateSyncLogKeeperActor(
                 TIntrusivePtr<TSyncLogCtx> slCtx,
-                std::unique_ptr<TSyncLogRepaired> repaired) {
-            return new TSyncLogKeeperActor(std::move(slCtx), std::move(repaired));
+                std::unique_ptr<TSyncLogRepaired> repaired) { 
+            return new TSyncLogKeeperActor(std::move(slCtx), std::move(repaired)); 
         }
 
     } // NSyncLog

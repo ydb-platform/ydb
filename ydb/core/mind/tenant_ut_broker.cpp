@@ -19,9 +19,9 @@ using namespace NTenantSlotBroker;
 
 namespace {
 
-static const TString DATA_CENTER1 = ToString(1);
-static const TString DATA_CENTER2 = ToString(2);
-static const TString DATA_CENTER3 = ToString(3);
+static const TString DATA_CENTER1 = ToString(1); 
+static const TString DATA_CENTER2 = ToString(2); 
+static const TString DATA_CENTER3 = ToString(3); 
 
 const TString SLOT1 = "slot-1";
 const TString SLOT2 = "slot-2";
@@ -260,20 +260,20 @@ struct TSlotRequest {
     TSlotCount Count;
 
     TSlotRequest(const TString &type,
-                 TString dc,
+                 TString dc, 
                  ui64 required,
                  ui64 pending,
                  ui64 missing,
                  ui64 misplaced = 0,
                  ui64 split = 0,
                  ui64 pinned = 0)
-        : Description(type, dc)
+        : Description(type, dc) 
         , Count(required, pending, missing, misplaced, split, pinned)
     {
     }
 
     TSlotRequest(const TString &type,
-                 TString dc,
+                 TString dc, 
                  bool forceLocation,
                  ui32 group,
                  bool forceCollocation,
@@ -283,7 +283,7 @@ struct TSlotRequest {
                  ui64 misplaced,
                  ui64 split,
                  ui64 pinned = 0)
-        : Description(type, dc, forceLocation, group, forceCollocation)
+        : Description(type, dc, forceLocation, group, forceCollocation) 
         , Count(required, pending, missing, misplaced, split, pinned)
     {
     }
@@ -293,13 +293,13 @@ void CollectRequests(TVector<TSlotRequest> &)
 {
 }
 
-void CollectRequests(TVector<TSlotRequest> &requests, const TString &type, TString dataCenter, ui64 required, ui64 pending, ui64 missing)
+void CollectRequests(TVector<TSlotRequest> &requests, const TString &type, TString dataCenter, ui64 required, ui64 pending, ui64 missing) 
 {
     requests.push_back({type, dataCenter, required, pending, missing});
 }
 
 template <typename ...Ts>
-void CollectRequests(TVector<TSlotRequest> &requests, const TString &type, TString dataCenter, ui64 required, ui64 pending, ui64 missing,
+void CollectRequests(TVector<TSlotRequest> &requests, const TString &type, TString dataCenter, ui64 required, ui64 pending, ui64 missing, 
                      Ts... args)
 {
     CollectRequests(requests, type, dataCenter, required, pending, missing);
@@ -880,28 +880,28 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
 
             if (tsb) {
                 auto slot = tsb->GetSubgroup("SlotType", SLOT1_TYPE);
-                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER)
+                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER) 
                                              ->GetCounter("FreeSlots")->Val(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER)
+                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER) 
                                              ->GetCounter("AssignedSlots")->Val(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER)
+                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER) 
                                              ->GetCounter("ConnectedSlots")->Val(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER)
+                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER) 
                                              ->GetCounter("DisconnectedSlots")->Val(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER)
+                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER) 
                                              ->GetCounter("RequiredSlots")->Val(), 9);
-                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER)
+                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER) 
                                              ->GetCounter("MissingSlots")->Val(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER)
+                UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", ANY_DATA_CENTER) 
                                              ->GetCounter("PendingSlots")->Val(), 0);
-                for (auto &dc : TVector<TString>({DATA_CENTER1, DATA_CENTER2, DATA_CENTER3})) {
-                    UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", dc)
+                for (auto &dc : TVector<TString>({DATA_CENTER1, DATA_CENTER2, DATA_CENTER3})) { 
+                    UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", dc) 
                                                  ->GetCounter("FreeSlots")->Val(), 0);
-                    UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", dc)
+                    UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", dc) 
                                                  ->GetCounter("AssignedSlots")->Val(), 3);
-                    UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", dc)
+                    UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", dc) 
                                                  ->GetCounter("ConnectedSlots")->Val(), 3);
-                    UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", dc)
+                    UNIT_ASSERT_VALUES_EQUAL(slot->GetSubgroup("SlotDataCenter", dc) 
                                                  ->GetCounter("DisconnectedSlots")->Val(), 0);
                 }
                 break;
@@ -1148,7 +1148,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
 
         TVector<TString> type = {SLOT1_TYPE, SLOT2_TYPE, SLOT3_TYPE};
         TVector<ui64> size = {1, 2, 3};
-        TVector<TString> dc = {DATA_CENTER1, DATA_CENTER2, DATA_CENTER3};
+        TVector<TString> dc = {DATA_CENTER1, DATA_CENTER2, DATA_CENTER3}; 
         TVector<TString> tenants = {TENANT1_1_NAME, TENANT1_2_NAME, TENANT1_3_NAME, TENANT1_4_NAME};
         for (int i = 0; i < NITERS; ++i) {
             TVector<TVector<ui64>> freeSlots = { {{3, 3, 3}}, {{3, 3, 3}}, {{3, 3, 3}} };
@@ -1486,24 +1486,24 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
             slots[std::make_pair(rec.GetType(), rec.GetDataCenter())]
                 = std::make_pair(rec.GetConnected(), rec.GetFree());
         UNIT_ASSERT_VALUES_EQUAL(slots.size(), 9);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT1_TYPE, DATA_CENTER1)].first, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT1_TYPE, DATA_CENTER1)].second, 0);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT1_TYPE, DATA_CENTER2)].first, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT1_TYPE, DATA_CENTER2)].second, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT1_TYPE, DATA_CENTER3)].first, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT1_TYPE, DATA_CENTER3)].second, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT2_TYPE, DATA_CENTER1)].first, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT2_TYPE, DATA_CENTER1)].second, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT2_TYPE, DATA_CENTER2)].first, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT2_TYPE, DATA_CENTER2)].second, 1);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT2_TYPE, DATA_CENTER3)].first, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT2_TYPE, DATA_CENTER3)].second, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT3_TYPE, DATA_CENTER1)].first, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT3_TYPE, DATA_CENTER1)].second, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT3_TYPE, DATA_CENTER2)].first, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT3_TYPE, DATA_CENTER2)].second, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT3_TYPE, DATA_CENTER3)].first, 3);
-        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT3_TYPE, DATA_CENTER3)].second, 2);
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT1_TYPE, DATA_CENTER1)].first, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT1_TYPE, DATA_CENTER1)].second, 0); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT1_TYPE, DATA_CENTER2)].first, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT1_TYPE, DATA_CENTER2)].second, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT1_TYPE, DATA_CENTER3)].first, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT1_TYPE, DATA_CENTER3)].second, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT2_TYPE, DATA_CENTER1)].first, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT2_TYPE, DATA_CENTER1)].second, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT2_TYPE, DATA_CENTER2)].first, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT2_TYPE, DATA_CENTER2)].second, 1); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT2_TYPE, DATA_CENTER3)].first, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT2_TYPE, DATA_CENTER3)].second, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT3_TYPE, DATA_CENTER1)].first, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT3_TYPE, DATA_CENTER1)].second, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT3_TYPE, DATA_CENTER2)].first, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT3_TYPE, DATA_CENTER2)].second, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT3_TYPE, DATA_CENTER3)].first, 3); 
+        UNIT_ASSERT_VALUES_EQUAL(slots[std::make_pair(SLOT3_TYPE, DATA_CENTER3)].second, 2); 
     }
 
     Y_UNIT_TEST(TestRandomActions) {
@@ -1524,7 +1524,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
         TVector<TString> slots = {SLOT1, SLOT2, SLOT3};
         TVector<TString> tenants = {TENANT1_1_NAME, TENANT1_2_NAME, TENANT1_3_NAME};
         TVector<TString> types = {SLOT1_TYPE, SLOT2_TYPE, SLOT3_TYPE, ANY_SLOT_TYPE};
-        TVector<TString> dcs = {DATA_CENTER1, DATA_CENTER2, DATA_CENTER3, ANY_DATA_CENTER};
+        TVector<TString> dcs = {DATA_CENTER1, DATA_CENTER2, DATA_CENTER3, ANY_DATA_CENTER}; 
 
         for (int i = 0; i < 1000; ++i) {
             EAction action = actions[RandomNumber<ui64>(actions.size())];

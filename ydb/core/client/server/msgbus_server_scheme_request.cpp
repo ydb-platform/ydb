@@ -65,7 +65,7 @@ class TMessageBusServerSchemeRequest : public TMessageBusSecureRequest<TMessageB
 
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_SCHEME_REQUEST; }
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_SCHEME_REQUEST; } 
 
     template <TEvBusProxy::EEv EvId>
     TMessageBusServerSchemeRequest(TEvBusProxy::TEvMsgBusRequest<EvId>* msg)
@@ -154,7 +154,7 @@ void TMessageBusServerSchemeRequest<TBusPersQueue>::ReplyWithResult(EResponseSta
 }
 
 template <>
-void TMessageBusServerSchemeRequest<TBusSchemeOperation>::SendProposeRequest(const TActorContext &ctx) {
+void TMessageBusServerSchemeRequest<TBusSchemeOperation>::SendProposeRequest(const TActorContext &ctx) { 
     TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> req(new TEvTxUserProxy::TEvProposeTransaction());
     NKikimrTxUserProxy::TEvProposeTransaction &record = req->Record;
 
@@ -199,7 +199,7 @@ void TMessageBusServerSchemeRequest<TBusSchemeOperation>::SendProposeRequest(con
 }
 
 template <>
-void TMessageBusServerSchemeRequest<TBusSchemeOperation>::ReplyWithResult(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result, const TActorContext &ctx) {
+void TMessageBusServerSchemeRequest<TBusSchemeOperation>::ReplyWithResult(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result, const TActorContext &ctx) { 
     TAutoPtr<TBusResponse> response(new TBusResponse());
 
     FillStatus(status, result, response.Get());

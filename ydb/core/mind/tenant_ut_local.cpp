@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TLocalTests) {
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
                                    {TENANT1_1_NAME, 5, 1, 1},
-                                   {TENANT1_2_NAME, 1, 1, 1}}});
+                                   {TENANT1_2_NAME, 1, 1, 1}}}); 
     }
 
     Y_UNIT_TEST(TestAlterTenant) {
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(TLocalTests) {
         CheckAlterTenant(runtime, TENANT1_U_NAME, TEvLocal::TEvTenantStatus::STOPPED);
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
-                                   {TENANT1_1_NAME, 10, 10, 10}}});
+                                   {TENANT1_1_NAME, 10, 10, 10}}}); 
     }
 
     Y_UNIT_TEST(TestAddTenantWhileResolving) {
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TLocalTests) {
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
                                    {TENANT1_1_NAME, 1, 1, 1},
-                                   {TENANT1_2_NAME, 1, 1, 1}}});
+                                   {TENANT1_2_NAME, 1, 1, 1}}}); 
     }
 
     Y_UNIT_TEST(TestRemoveTenantWhileResolving) {
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(TLocalTests) {
         UNIT_ASSERT(reply3->Status == TEvLocal::TEvTenantStatus::STARTED);
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
-                                   {TENANT1_2_NAME, 1, 1, 1}}});
+                                   {TENANT1_2_NAME, 1, 1, 1}}}); 
     }
 }
 

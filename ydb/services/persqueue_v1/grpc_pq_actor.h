@@ -468,7 +468,7 @@ public:
 
     void Die(const NActors::TActorContext& ctx) override;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_WRITE; }
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_WRITE; } 
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -752,7 +752,7 @@ public:
 
     void Die(const NActors::TActorContext& ctx) override;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_READ; }
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_READ; } 
 
 
     struct TTopicCounters {
@@ -1082,7 +1082,7 @@ public:
 
 
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR; }
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR; } 
 
     bool HasCancelOperation() {
         return false;

@@ -19,21 +19,21 @@ namespace NKikimr {
         TLogCutterCtx LogCutterCtx;
         bool WriteInProgress = false;
 
-        ui64 HullLsnToKeep = 0;
-        ui64 SyncLogLsnToKeep = 0;
-        ui64 SyncerLsnToKeep = 0;
-        ui64 HugeKeeperLsnToKeep = 0;
-        ui64 ScrubLsnToKeep = 0;
+        ui64 HullLsnToKeep = 0; 
+        ui64 SyncLogLsnToKeep = 0; 
+        ui64 SyncerLsnToKeep = 0; 
+        ui64 HugeKeeperLsnToKeep = 0; 
+        ui64 ScrubLsnToKeep = 0; 
         TInstant HullLastTime;
         TInstant SyncLogLastTime;
         TInstant SyncerLastTime;
         TInstant HugeKeeperLastTime;
-        TInstant ScrubLastTime;
+        TInstant ScrubLastTime; 
 
-        TInstant LastCutTime;
+        TInstant LastCutTime; 
         TDeque<ui64> FreeUpToLsn;
-        ui64 FreeUpToLsnLastWritten = 0;
-
+        ui64 FreeUpToLsnLastWritten = 0; 
+ 
         const TDuration FirstDuration;
         const TDuration RegularDuration;
 
@@ -57,41 +57,41 @@ namespace NKikimr {
 
         void Handle(TEvVDiskCutLog::TPtr &ev, const TActorContext &ctx) {
             TEvVDiskCutLog *msg = ev->Get();
-
-            auto update = [&](ui64 &target, TInstant &time, const char *name) {
-                if (msg->LastKeepLsn < target) {
+ 
+            auto update = [&](ui64 &target, TInstant &time, const char *name) { 
+                if (msg->LastKeepLsn < target) { 
                     LOG_CRIT(ctx, NKikimrServices::BS_LOGCUTTER,
                              VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix,
                                 "Log rollback component# %s current# %" PRIu64
                                 " new# %" PRIu64, name, target, msg->LastKeepLsn));
-                } else {
-                    target = msg->LastKeepLsn;
-                    time = msg->GenerationTime;
+                } else { 
+                    target = msg->LastKeepLsn; 
+                    time = msg->GenerationTime; 
 
                     LOG_DEBUG(ctx, NKikimrServices::BS_LOGCUTTER,
                             VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix,
                                 "UPDATED: Component# %s Hull# %" PRIu64 " SyncLog# %" PRIu64
                                 " Syncer# %" PRIu64 " Huge# %" PRIu64 " Db# LogoBlobs Db# Barriers Db# Blocks",
                                 name, HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep));
-                }
-            };
-
+                } 
+            }; 
+ 
             switch (msg->Component) {
                 case TEvVDiskCutLog::Hull:
-                    update(HullLsnToKeep, HullLastTime, "Hull");
+                    update(HullLsnToKeep, HullLastTime, "Hull"); 
                     break;
                 case TEvVDiskCutLog::SyncLog:
-                    update(SyncLogLsnToKeep, SyncLogLastTime, "SyncLog");
+                    update(SyncLogLsnToKeep, SyncLogLastTime, "SyncLog"); 
                     break;
                 case TEvVDiskCutLog::Syncer:
-                    update(SyncerLsnToKeep, SyncerLastTime, "Syncer");
+                    update(SyncerLsnToKeep, SyncerLastTime, "Syncer"); 
                     break;
                 case TEvVDiskCutLog::HugeKeeper:
-                    update(HugeKeeperLsnToKeep, HugeKeeperLastTime, "HugeKeeper");
+                    update(HugeKeeperLsnToKeep, HugeKeeperLastTime, "HugeKeeper"); 
                     break;
-                case TEvVDiskCutLog::Scrub:
-                    update(ScrubLsnToKeep, ScrubLastTime, "Scrub");
-                    break;
+                case TEvVDiskCutLog::Scrub: 
+                    update(ScrubLsnToKeep, ScrubLastTime, "Scrub"); 
+                    break; 
                 default:
                     Y_FAIL("Unexpected case: %d", msg->Component);
             }
@@ -99,11 +99,11 @@ namespace NKikimr {
             Process(ctx);
         }
 
-        void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
-            FreeUpToLsn.push_back(ev->Get()->FreeUpToLsn);
-            Process(ctx);
-        }
-
+        void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) { 
+            FreeUpToLsn.push_back(ev->Get()->FreeUpToLsn); 
+            Process(ctx); 
+        } 
+ 
         void Timeout(const TActorContext &ctx) {
             Process(ctx);
             ScheduleActivity(ctx, RegularDuration);
@@ -113,21 +113,21 @@ namespace NKikimr {
             if (WriteInProgress)
                 return;
 
-            const ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep, ScrubLsnToKeep);
-
-            // find the maximum of requested LSN's to free up to
-            TMaybe<ui64> freeUpToLsn;
-            while (FreeUpToLsn && curLsn >= FreeUpToLsn.front()) {
-                freeUpToLsn = FreeUpToLsn.front();
-                FreeUpToLsn.pop_front();
-            }
-
-            if (freeUpToLsn) {
+            const ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep, ScrubLsnToKeep); 
+ 
+            // find the maximum of requested LSN's to free up to 
+            TMaybe<ui64> freeUpToLsn; 
+            while (FreeUpToLsn && curLsn >= FreeUpToLsn.front()) { 
+                freeUpToLsn = FreeUpToLsn.front(); 
+                FreeUpToLsn.pop_front(); 
+            } 
+ 
+            if (freeUpToLsn) { 
                 LastCutTime = TAppData::TimeProvider->Now();
 
                 // generate clear log message
                 NPDisk::TCommitRecord commitRec;
-                commitRec.FirstLsnToKeep = *freeUpToLsn;
+                commitRec.FirstLsnToKeep = *freeUpToLsn; 
                 commitRec.IsStartingPoint = false;
                 TLsnSeg seg = LogCutterCtx.LsnMngr->AllocLsnForLocalUse();
                 ui8 signature = TLogSignature::SignatureHullCutLog;
@@ -135,7 +135,7 @@ namespace NKikimr {
                     new NPDisk::TEvLog(LogCutterCtx.PDiskCtx->Dsk->Owner,
                         LogCutterCtx.PDiskCtx->Dsk->OwnerRound, signature, commitRec, TString(), seg, nullptr));
                 WriteInProgress = true;
-                FreeUpToLsnLastWritten = *freeUpToLsn;
+                FreeUpToLsnLastWritten = *freeUpToLsn; 
 
                 LOG_DEBUG(ctx, NKikimrServices::BS_LOGCUTTER,
                         VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix,
@@ -162,14 +162,14 @@ namespace NKikimr {
                             << ", LastUpdate=" << ToStringLocalTimeUpToSeconds(SyncerLastTime) << "]<br>";
                         str << "HugeKeeper: [LsnToKeep=" << HugeKeeperLsnToKeep
                             << ", LastUpdate=" << ToStringLocalTimeUpToSeconds(HugeKeeperLastTime) << "]<br>";
-                        str << "Scrub: [LsnToKeep=" << ScrubLsnToKeep
-                            << ", LastUpdate=" << ToStringLocalTimeUpToSeconds(ScrubLastTime) << "]<br>";
+                        str << "Scrub: [LsnToKeep=" << ScrubLsnToKeep 
+                            << ", LastUpdate=" << ToStringLocalTimeUpToSeconds(ScrubLastTime) << "]<br>"; 
 
-                        str << "FreeUpToLsn: " << FormatList(FreeUpToLsn) << "<br>";
+                        str << "FreeUpToLsn: " << FormatList(FreeUpToLsn) << "<br>"; 
 
-                        str << "FreeUpToLsnLastWritten: [Lsn=" << FreeUpToLsnLastWritten
-                            << ", LastUpdate=" << ToStringLocalTimeUpToSeconds(LastCutTime) << "]<br>";
-
+                        str << "FreeUpToLsnLastWritten: [Lsn=" << FreeUpToLsnLastWritten 
+                            << ", LastUpdate=" << ToStringLocalTimeUpToSeconds(LastCutTime) << "]<br>"; 
+ 
                         str << "FirstDuration: " << FirstDuration << "<br>";
                         str << "RegularDuration: " << RegularDuration << "<br>";
                     }
@@ -185,20 +185,20 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(NPDisk::TEvLogResult, Handle)
-            HFunc(NMon::TEvHttpInfo, Handle)
+        STRICT_STFUNC(StateFunc, 
+            HFunc(NPDisk::TEvLogResult, Handle) 
+            HFunc(NMon::TEvHttpInfo, Handle) 
             HFunc(TEvVDiskCutLog, Handle)
-            HFunc(NPDisk::TEvCutLog, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            CFunc(TEvents::TSystem::Wakeup, Timeout)
-        )
+            HFunc(NPDisk::TEvCutLog, Handle) 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            CFunc(TEvents::TSystem::Wakeup, Timeout) 
+        ) 
 
         PDISK_TERMINATE_STATE_FUNC_DEF;
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_RECOVERY_LOG_CUTTER;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_RECOVERY_LOG_CUTTER; 
         }
 
         TRecoveryLogCutter(TLogCutterCtx &&logCutterCtx)
@@ -207,9 +207,9 @@ namespace NKikimr {
             , FirstDuration(LogCutterCtx.Config->RecoveryLogCutterFirstDuration)
             , RegularDuration(LogCutterCtx.Config->RecoveryLogCutterRegularDuration)
         {
-            if (!LogCutterCtx.Config->RunSyncer || LogCutterCtx.Config->BaseInfo.DonorMode) {
-                SyncerLsnToKeep = Max<ui64>();
-            }
+            if (!LogCutterCtx.Config->RunSyncer || LogCutterCtx.Config->BaseInfo.DonorMode) { 
+                SyncerLsnToKeep = Max<ui64>(); 
+            } 
         }
     };
 

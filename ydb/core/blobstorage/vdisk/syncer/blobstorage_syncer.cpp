@@ -28,15 +28,15 @@ namespace NKikimr {
         using TItem = TEvBlobStorage::TEvVSyncGuidResult;
 
     public:
-        ui64 WriteRequest(const TActorId &id, std::unique_ptr<TItem> &&r) {
+        ui64 WriteRequest(const TActorId &id, std::unique_ptr<TItem> &&r) { 
             ui64 seqNum = ++InFlySeqNum;
             Queue.emplace_back(id, std::move(r), seqNum);
             return seqNum;
         }
 
-        void ReadRequest(const TActorContext &ctx, const TActorId &id, std::unique_ptr<TItem> &&r) {
+        void ReadRequest(const TActorContext &ctx, const TActorId &id, std::unique_ptr<TItem> &&r) { 
             if (CommittedSeqNum == InFlySeqNum) {
-                ctx.Send(id, r.release());
+                ctx.Send(id, r.release()); 
             } else {
                 Queue.emplace_back(id, std::move(r), InFlySeqNum);
             }
@@ -48,7 +48,7 @@ namespace NKikimr {
 
             while (!Queue.empty() && Queue.front().SeqNum <= CommittedSeqNum) {
                 auto &elem = Queue.front();
-                ctx.Send(elem.ActorId, elem.Item.release());
+                ctx.Send(elem.ActorId, elem.Item.release()); 
                 Queue.pop_front();
             }
         }
@@ -56,10 +56,10 @@ namespace NKikimr {
     private:
         struct TItemAndSeq {
             TActorId ActorId;
-            std::unique_ptr<TItem> Item;
+            std::unique_ptr<TItem> Item; 
             ui64 SeqNum;
 
-            TItemAndSeq(const TActorId &id, std::unique_ptr<TItem> &&r, ui64 seqNum)
+            TItemAndSeq(const TActorId &id, std::unique_ptr<TItem> &&r, ui64 seqNum) 
                 : ActorId(id)
                 , Item(std::move(r))
                 , SeqNum(seqNum)
@@ -125,14 +125,14 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
+        STRICT_STFUNC(StateFunc, 
                       HFunc(NMon::TEvHttpInfoRes, Handle)
                       HFunc(TEvents::TEvPoisonPill, HandlePoison)
-        )
+        ) 
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_SYNCER_HTTPREQ;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_SYNCER_HTTPREQ; 
         }
 
         TSyncerHttpInfoActor(TIntrusivePtr<TSyncerContext> &sc,
@@ -176,7 +176,7 @@ namespace NKikimr {
         TVector<TActorId> PropagatorIds;
         EPhase Phase = TPhaseVal::PhaseNone;
         TActiveActors ActiveActors;
-        std::unique_ptr<NSyncer::TOutcome> GuidRecovOutcome;
+        std::unique_ptr<NSyncer::TOutcome> GuidRecovOutcome; 
         TDelayedQueue DelayedQueue;
         TSublog<> Sublog;
 
@@ -220,8 +220,8 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         void SyncGuid(const TActorContext &ctx) {
             Become(&TThis::SyncGuidStateFunc);
-            GuidRecoveryId = ctx.Register(CreateVDiskGuidRecoveryActor(SyncerCtx->VCtx, GInfo, CommitterId, SelfId(),
-                LocalSyncerState));
+            GuidRecoveryId = ctx.Register(CreateVDiskGuidRecoveryActor(SyncerCtx->VCtx, GInfo, CommitterId, SelfId(), 
+                LocalSyncerState)); 
             ActiveActors.Insert(GuidRecoveryId);
             Phase = TPhaseVal::PhaseSyncGuid;
         }
@@ -229,7 +229,7 @@ namespace NKikimr {
         void Handle(TEvVDiskGuidRecovered::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
             GuidRecoveryId = TActorId();
-            GuidRecovOutcome = std::make_unique<NSyncer::TOutcome>(std::move(ev->Get()->Outcome));
+            GuidRecovOutcome = std::make_unique<NSyncer::TOutcome>(std::move(ev->Get()->Outcome)); 
 
             switch (GuidRecovOutcome->Decision) {
                 case EDecision::FirstRun:
@@ -247,18 +247,18 @@ namespace NKikimr {
             }
         }
 
-        STRICT_STFUNC(SyncGuidStateFunc,
-            HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
-            HFunc(TEvSyncerCommitDone, Handle)
-            HFunc(TEvVDiskGuidRecovered, Handle)
-            HFunc(NMon::TEvHttpInfo, Handle)
-            HFunc(TEvLocalStatus, Handle)
-            HFunc(NPDisk::TEvCutLog, Handle)
+        STRICT_STFUNC(SyncGuidStateFunc, 
+            HFunc(TEvBlobStorage::TEvVSyncGuid, Handle) 
+            HFunc(TEvSyncerCommitDone, Handle) 
+            HFunc(TEvVDiskGuidRecovered, Handle) 
+            HFunc(NMon::TEvHttpInfo, Handle) 
+            HFunc(TEvLocalStatus, Handle) 
+            HFunc(NPDisk::TEvCutLog, Handle) 
             HFunc(TEvents::TEvActorDied, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvSublogLine, Handle)
-            HFunc(TEvVGenerationChange, SyncGuidModeHandle)
-        )
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            HFunc(TEvSublogLine, Handle) 
+            HFunc(TEvVGenerationChange, SyncGuidModeHandle) 
+        ) 
 
         ////////////////////////////////////////////////////////////////////////
         // Inconsistent State
@@ -270,17 +270,17 @@ namespace NKikimr {
             ctx.Send(SyncerData->NotifyId, new TEvSyncGuidRecoveryDone(NKikimrProto::ERROR, 0));
         }
 
-        STRICT_STFUNC(InconsistentancyStateFunc,
-            HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
-            HFunc(TEvSyncerCommitDone, Handle)
-            HFunc(NMon::TEvHttpInfo, Handle)
-            HFunc(TEvLocalStatus, Handle)
-            HFunc(NPDisk::TEvCutLog, Handle)
+        STRICT_STFUNC(InconsistentancyStateFunc, 
+            HFunc(TEvBlobStorage::TEvVSyncGuid, Handle) 
+            HFunc(TEvSyncerCommitDone, Handle) 
+            HFunc(NMon::TEvHttpInfo, Handle) 
+            HFunc(TEvLocalStatus, Handle) 
+            HFunc(NPDisk::TEvCutLog, Handle) 
             HFunc(TEvents::TEvActorDied, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvSublogLine, Handle)
-            HFunc(TEvVGenerationChange, InconsistencyModeHandle)
-        )
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            HFunc(TEvSublogLine, Handle) 
+            HFunc(TEvVGenerationChange, InconsistencyModeHandle) 
+        ) 
 
         ////////////////////////////////////////////////////////////////////////
         // Recover Lost Data
@@ -288,7 +288,7 @@ namespace NKikimr {
         void RecoverLostData(const TActorContext &ctx) {
             Become(&TThis::RecoverLostDataStateFunc);
             const TVDiskEternalGuid guid = GuidRecovOutcome->Guid;
-            RecoverLostDataId = ctx.Register(CreateSyncerRecoverLostDataActor(SyncerCtx, GInfo, CommitterId, ctx.SelfID, guid));
+            RecoverLostDataId = ctx.Register(CreateSyncerRecoverLostDataActor(SyncerCtx, GInfo, CommitterId, ctx.SelfID, guid)); 
             ActiveActors.Insert(RecoverLostDataId);
             Phase = TPhaseVal::PhaseRecoverLostData;
         }
@@ -300,26 +300,26 @@ namespace NKikimr {
             StandardMode(ctx);
         }
 
-        STRICT_STFUNC(RecoverLostDataStateFunc,
-            HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
-            HFunc(TEvSyncerCommitDone, Handle)
-            HFunc(TEvSyncerLostDataRecovered, Handle)
-            HFunc(NMon::TEvHttpInfo, Handle)
-            HFunc(TEvLocalStatus, Handle)
-            HFunc(NPDisk::TEvCutLog, Handle)
+        STRICT_STFUNC(RecoverLostDataStateFunc, 
+            HFunc(TEvBlobStorage::TEvVSyncGuid, Handle) 
+            HFunc(TEvSyncerCommitDone, Handle) 
+            HFunc(TEvSyncerLostDataRecovered, Handle) 
+            HFunc(NMon::TEvHttpInfo, Handle) 
+            HFunc(TEvLocalStatus, Handle) 
+            HFunc(NPDisk::TEvCutLog, Handle) 
             HFunc(TEvents::TEvActorDied, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvSublogLine, Handle)
-            HFunc(TEvVGenerationChange, RecoverLostDataModeHandle)
-        )
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            HFunc(TEvSublogLine, Handle) 
+            HFunc(TEvVGenerationChange, RecoverLostDataModeHandle) 
+        ) 
 
         ////////////////////////////////////////////////////////////////////////
         // Standard Mode
         ////////////////////////////////////////////////////////////////////////
         void StandardMode(const TActorContext &ctx) {
             // notify synclog that it can start serving requests, tell him the DbBirthLsn
-            auto msg = std::make_unique<NSyncLog::TEvSyncLogDbBirthLsn>(LocalSyncerState.DbBirthLsn);
-            ctx.Send(SyncerCtx->SyncLogId, msg.release());
+            auto msg = std::make_unique<NSyncLog::TEvSyncLogDbBirthLsn>(LocalSyncerState.DbBirthLsn); 
+            ctx.Send(SyncerCtx->SyncLogId, msg.release()); 
 
             RunPropagators(ctx);
             // notify Skeleton about SyncGuid recovery state
@@ -327,22 +327,22 @@ namespace NKikimr {
                      new TEvSyncGuidRecoveryDone(NKikimrProto::OK, LocalSyncerState.DbBirthLsn));
             SyncerData->Neighbors->DbBirthLsn = LocalSyncerState.DbBirthLsn;
             Become(&TThis::StandardModeStateFunc);
-            SchedulerId = ctx.Register(CreateSyncerSchedulerActor(SyncerCtx, GInfo, SyncerData, CommitterId));
-            ActiveActors.Insert(SchedulerId);
+            SchedulerId = ctx.Register(CreateSyncerSchedulerActor(SyncerCtx, GInfo, SyncerData, CommitterId)); 
+            ActiveActors.Insert(SchedulerId); 
             Phase = TPhaseVal::PhaseStandardMode;
         }
 
-        STRICT_STFUNC(StandardModeStateFunc,
-            HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
-            HFunc(TEvSyncerCommitDone, Handle)
-            HFunc(NMon::TEvHttpInfo, Handle)
-            HFunc(TEvLocalStatus, Handle)
-            HFunc(NPDisk::TEvCutLog, Handle)
+        STRICT_STFUNC(StandardModeStateFunc, 
+            HFunc(TEvBlobStorage::TEvVSyncGuid, Handle) 
+            HFunc(TEvSyncerCommitDone, Handle) 
+            HFunc(NMon::TEvHttpInfo, Handle) 
+            HFunc(TEvLocalStatus, Handle) 
+            HFunc(NPDisk::TEvCutLog, Handle) 
             HFunc(TEvents::TEvActorDied, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvSublogLine, Handle)
-            HFunc(TEvVGenerationChange, ReadyModeHandle)
-        )
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            HFunc(TEvSublogLine, Handle) 
+            HFunc(TEvVGenerationChange, ReadyModeHandle) 
+        ) 
 
         ////////////////////////////////////////////////////////////////////////
         // Handle EvVSyncGuid
@@ -363,23 +363,23 @@ namespace NKikimr {
                 auto &data = (*SyncerData->Neighbors)[vdisk].Get().PeerGuidInfo;
                 data.Info = info;
                 // create reply
-                auto result = std::make_unique<TEvBlobStorage::TEvVSyncGuidResult>(NKikimrProto::OK, selfVDisk,
-                    TAppData::TimeProvider->Now(), nullptr, nullptr, std::move(ev->TraceId), ev->GetChannel());
+                auto result = std::make_unique<TEvBlobStorage::TEvVSyncGuidResult>(NKikimrProto::OK, selfVDisk, 
+                    TAppData::TimeProvider->Now(), nullptr, nullptr, std::move(ev->TraceId), ev->GetChannel()); 
                 // put reply into the queue and wait until it would be committed
                 ui64 seqNum = DelayedQueue.WriteRequest(ev->Sender, std::move(result));
                 // commit
                 void *cookie = reinterpret_cast<void*>(intptr_t(seqNum));
                 auto msg = TEvSyncerCommit::Remote(vdisk, state, guid, cookie);
-                ctx.Send(CommitterId, msg.release());
+                ctx.Send(CommitterId, msg.release()); 
             } else {
                 // handle READ request
                 auto &data = (*SyncerData->Neighbors)[vdisk].Get().PeerGuidInfo.Info;
                 auto state = data.GetState();
                 auto guid = data.GetGuid();
                 // create reply
-                auto result = std::make_unique<TEvBlobStorage::TEvVSyncGuidResult>(NKikimrProto::OK, selfVDisk,
-                    TAppData::TimeProvider->Now(), guid, state, nullptr, nullptr, std::move(ev->TraceId),
-                    ev->GetChannel());
+                auto result = std::make_unique<TEvBlobStorage::TEvVSyncGuidResult>(NKikimrProto::OK, selfVDisk, 
+                    TAppData::TimeProvider->Now(), guid, state, nullptr, nullptr, std::move(ev->TraceId), 
+                    ev->GetChannel()); 
                 // put reply into the queue and wait until all required writes are committed
                 DelayedQueue.ReadRequest(ctx, ev->Sender, std::move(result));
             }
@@ -449,8 +449,8 @@ namespace NKikimr {
             TStringStream str;
             LogAndPhaseToHtml(str);
             // create an actor to handle request
-            auto actor = std::make_unique<TSyncerHttpInfoActor>(SyncerCtx, ev, ctx.SelfID, schId, str.Str());
-            auto aid = ctx.Register(actor.release());
+            auto actor = std::make_unique<TSyncerHttpInfoActor>(SyncerCtx, ev, ctx.SelfID, schId, str.Str()); 
+            auto aid = ctx.Register(actor.release()); 
             ActiveActors.Insert(aid);
         }
 
@@ -466,10 +466,10 @@ namespace NKikimr {
             if (Phase == TPhaseVal::PhaseStandardMode) {
                 ctx.Send(ev->Forward(SchedulerId));
             } else {
-                auto result = std::make_unique<TEvLocalStatusResult>();
+                auto result = std::make_unique<TEvLocalStatusResult>(); 
                 NKikimrBlobStorage::TSyncerStatus *rec = result->Record.MutableSyncerStatus();
                 rec->SetPhase(Phase);
-                ctx.Send(ev->Sender, result.release());
+                ctx.Send(ev->Sender, result.release()); 
             }
         }
 
@@ -543,8 +543,8 @@ namespace NKikimr {
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_SYNCER_MAIN;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_SYNCER_MAIN; 
         }
 
         TSyncer(const TIntrusivePtr<TSyncerContext> &sc,

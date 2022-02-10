@@ -35,8 +35,8 @@ struct TBlobStorageErasureParameters {
     ui32 Handoff; // number of selected hinted handoff (1 | 2)
 };
 
-static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpeciesCount>
-        BlobStorageGroupErasureSpeciesParameters{{
+static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpeciesCount> 
+        BlobStorageGroupErasureSpeciesParameters{{ 
     {0} // 0 = ErasureSpicies::ErasureNone
     ,{1} // 1 = ErasureSpicies::ErasureMirror3
     ,{1} // 2 = ErasureSpicies::Erasure3Plus1Block
@@ -45,8 +45,8 @@ static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpec
     ,{2} // 5 = ErasureSpicies::Erasure3Plus2Block
     ,{2} // 6 = ErasureSpicies::Erasure4Plus2Stipe
     ,{2} // 7 = ErasureSpicies::Erasure3Plus2Stipe
-    ,{2} // 8 = ErasureSpicies::ErasureMirror3Plus2
-    ,{6} // 9 = ErasureSpicies::ErasireMirror3dc
+    ,{2} // 8 = ErasureSpicies::ErasureMirror3Plus2 
+    ,{6} // 9 = ErasureSpicies::ErasireMirror3dc 
     ,{3} // 10 = ErasureSpicies::Erasure4Plus3Block
     ,{3} // 11 = ErasureSpicies::Erasure4Plus3Stripe
     ,{3} // 12 = ErasureSpicies::Erasure3Plus3Block
@@ -55,11 +55,11 @@ static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpec
     ,{3} // 15 = ErasureSpicies::Erasure2Plus3Stripe
     ,{2} // 16 = ErasureSpicies::Erasure2Plus2Block
     ,{2} // 17 = ErasureSpicies::Erasure2Plus2Stripe
-    ,{5} // 18 = ErasureSpicies::ErasureMirror3of4
-}};
+    ,{5} // 18 = ErasureSpicies::ErasureMirror3of4 
+}}; 
 
 
-ui32 TBlobStorageGroupType::BlobSubgroupSize() const {
+ui32 TBlobStorageGroupType::BlobSubgroupSize() const { 
     const TBlobStorageErasureParameters& erasure = BlobStorageGroupErasureSpeciesParameters[ErasureSpecies];
     return DataParts() + ParityParts() + erasure.Handoff;
 }
@@ -70,7 +70,7 @@ ui32 TBlobStorageGroupType::Handoff() const {
 }
 
 bool TBlobStorageGroupType::IsHandoffInSubgroup(ui32 idxInSubgroup) const {
-    return idxInSubgroup >= DataParts() + ParityParts();
+    return idxInSubgroup >= DataParts() + ParityParts(); 
 }
 
 struct TReorderablePartLayout {
@@ -102,7 +102,7 @@ bool TBlobStorageGroupType::CorrectLayout(const TPartLayout &layout, TPartPlacem
     TStackVec<ui8, 8> missingParts;
 
     ui32 totalPartCount = TotalPartCount();
-    ui32 blobSubgroupSize = BlobSubgroupSize();
+    ui32 blobSubgroupSize = BlobSubgroupSize(); 
 
     const ui32 lastBit = 0x80000000;
 
@@ -131,7 +131,7 @@ bool TBlobStorageGroupType::CorrectLayout(const TPartLayout &layout, TPartPlacem
     }
     VERBOSE_COUT("handoffDestinedPartMaskInv# " << DebugFormatBits(ReverseMask(handoffDestinedPartMaskInv)) << Endl);
 
-    for (ui32 i = totalPartCount; i < blobSubgroupSize; ++i) {
+    for (ui32 i = totalPartCount; i < blobSubgroupSize; ++i) { 
         if (vDiskMask & ~slowVDiskMask & (1 << i)) {
             VERBOSE_COUT("layout.VDiskPartMask[" << i << "]# " << DebugFormatBits(layout.VDiskPartMask[i]) << Endl);
             remaining.Records.push_back(TReorderablePartLayout::TVDiskParts(i, handoffDestinedPartMaskInv &
@@ -186,17 +186,17 @@ bool TBlobStorageGroupType::CorrectLayout(const TPartLayout &layout, TPartPlacem
 }
 
 ui64 TBlobStorageGroupType::PartSize(const TLogoBlobID &id) const {
-    // Y_VERIFY(id.PartId()); // TODO(alexvru): uncomment when dsproxy is ready for KIKIMR-9881
-    if (GetErasure() == TBlobStorageGroupType::ErasureMirror3of4 && id.PartId() == 3) {
-        return 0;
-    } else {
-        return TErasureType::PartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize());
-    }
+    // Y_VERIFY(id.PartId()); // TODO(alexvru): uncomment when dsproxy is ready for KIKIMR-9881 
+    if (GetErasure() == TBlobStorageGroupType::ErasureMirror3of4 && id.PartId() == 3) { 
+        return 0; 
+    } else { 
+        return TErasureType::PartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize()); 
+    } 
 }
 
-ui64 TBlobStorageGroupType::MaxPartSize(const TLogoBlobID &id) const {
-    Y_VERIFY(!id.PartId());
-    return TErasureType::PartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize());
-}
+ui64 TBlobStorageGroupType::MaxPartSize(const TLogoBlobID &id) const { 
+    Y_VERIFY(!id.PartId()); 
+    return TErasureType::PartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize()); 
+} 
 
 }

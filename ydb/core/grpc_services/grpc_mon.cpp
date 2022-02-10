@@ -42,8 +42,8 @@ public:
         , Peers(2000)
     {}
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::GRPC_MON;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::GRPC_MON; 
     }
 
 private:

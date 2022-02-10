@@ -26,11 +26,11 @@ namespace NKikimr {
         /////////////////////////////////////////////////////////////////////////////////////////////
         // TBarriersDs
         /////////////////////////////////////////////////////////////////////////////////////////////
-        TBarriersDs::TBarriersDs(const TLevelIndexSettings &settings, std::shared_ptr<TRopeArena> arena)
-            : TBase(settings, std::move(arena))
+        TBarriersDs::TBarriersDs(const TLevelIndexSettings &settings, std::shared_ptr<TRopeArena> arena) 
+            : TBase(settings, std::move(arena)) 
             , VDiskLogPrefix(settings.HullCtx->VCtx->VDiskLogPrefix)
-            , MemView(std::make_unique<TMemView>(
-                TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk),
+            , MemView(std::make_unique<TMemView>( 
+                TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk), 
                 settings.HullCtx->VCtx->VDiskLogPrefix,
                 settings.HullCtx->GCOnlySynced))
         {}
@@ -38,12 +38,12 @@ namespace NKikimr {
         TBarriersDs::TBarriersDs(
                 const TLevelIndexSettings &settings,
                 const NKikimrVDiskData::TLevelIndex &pb,
-                ui64 entryPointLsn,
-                std::shared_ptr<TRopeArena> arena)
-            : TBase(settings, pb, entryPointLsn, std::move(arena))
+                ui64 entryPointLsn, 
+                std::shared_ptr<TRopeArena> arena) 
+            : TBase(settings, pb, entryPointLsn, std::move(arena)) 
             , VDiskLogPrefix(settings.HullCtx->VCtx->VDiskLogPrefix)
-            , MemView(std::make_unique<TMemView>(
-                TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk),
+            , MemView(std::make_unique<TMemView>( 
+                TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk), 
                 settings.HullCtx->VCtx->VDiskLogPrefix,
                 settings.HullCtx->GCOnlySynced))
         {}
@@ -54,11 +54,11 @@ namespace NKikimr {
             TBase::PutToFresh(lsn, key, memRec);
         }
 
-        void TBarriersDs::PutToFresh(std::shared_ptr<TBase::TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) {
+        void TBarriersDs::PutToFresh(std::shared_ptr<TBase::TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) { 
              Y_VERIFY_DEBUG(a);
 
              // update barriers cache with newly inserted elements
-             TFreshAppendix::TIterator it(Settings.HullCtx, a.get());
+             TFreshAppendix::TIterator it(Settings.HullCtx, a.get()); 
              it.SeekToFirst();
              while (it.Valid()) {
                  MemView->Update(it.GetCurKey(), it.GetMemRec());

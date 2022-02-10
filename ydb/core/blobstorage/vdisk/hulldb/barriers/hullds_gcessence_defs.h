@@ -4,7 +4,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 
 #include <library/cpp/actors/util/named_tuple.h>
-
+ 
 namespace NKikimr {
     namespace NGc {
 
@@ -55,113 +55,113 @@ namespace NKikimr {
             }
         };
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // TBarrierKey -- structure that identifies entity for the garbage collector, that is tablet id and channel
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        struct TBarrierKey
-            : public TNamedTupleBase<TBarrierKey>
-        {
-            ui64 TabletId = 0;
-            ui32 Channel = 0;
-
-            TBarrierKey() = default;
-            TBarrierKey(const TBarrierKey& other) = default;
-
-            TBarrierKey(ui64 tabletId, ui32 channel)
-                : TabletId(tabletId)
-                , Channel(channel)
-            {}
-
-            TBarrierKey(const TLogoBlobID& id)
-                : TabletId(id.TabletID())
-                , Channel(id.Channel())
-            {}
-
-            TBarrierKey(const TKeyBarrier& key)
-                : TabletId(key.TabletId)
-                , Channel(key.Channel)
-            {}
-
-            auto ConvertToTuple() const {
-                return std::make_tuple(TabletId, Channel);
-            }
-
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        // TBarrierKey -- structure that identifies entity for the garbage collector, that is tablet id and channel 
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        struct TBarrierKey 
+            : public TNamedTupleBase<TBarrierKey> 
+        { 
+            ui64 TabletId = 0; 
+            ui32 Channel = 0; 
+ 
+            TBarrierKey() = default; 
+            TBarrierKey(const TBarrierKey& other) = default; 
+ 
+            TBarrierKey(ui64 tabletId, ui32 channel) 
+                : TabletId(tabletId) 
+                , Channel(channel) 
+            {} 
+ 
+            TBarrierKey(const TLogoBlobID& id) 
+                : TabletId(id.TabletID()) 
+                , Channel(id.Channel()) 
+            {} 
+ 
+            TBarrierKey(const TKeyBarrier& key) 
+                : TabletId(key.TabletId) 
+                , Channel(key.Channel) 
+            {} 
+ 
+            auto ConvertToTuple() const { 
+                return std::make_tuple(TabletId, Channel); 
+            } 
+ 
             void Output(IOutputStream& str) const {
-                str << TabletId << ":" << Channel;
-            }
-
+                str << TabletId << ":" << Channel; 
+            } 
+ 
             TString ToString() const {
-                TStringStream str;
-                Output(str);
-                return str.Str();
-            }
-        };
-
+                TStringStream str; 
+                Output(str); 
+                return str.Str(); 
+            } 
+        }; 
+ 
         //////////////////////////////////////////////////////////////////////////////////////////
-        // TBarrier
-        //////////////////////////////////////////////////////////////////////////////////////////
-        struct TBarrier
-            : public TNamedTupleBase<TBarrier>
-        {
-            ui32 BarrierGen = 0;        // generation of tablet that issued this barrier
-            ui32 BarrierGenCounter = 0; // in-generation counter (step) of this entry
-            ui32 CollectGen = 0;        // generation
-            ui32 CollectStep = 0;       // step
-
-            TBarrier() = default;
-            TBarrier(const TBarrier& other) = default;
-
-            TBarrier(ui32 barrierGen, ui32 barrierGenCounter, ui32 collectGen, ui32 collectStep)
-                : BarrierGen(barrierGen)
-                , BarrierGenCounter(barrierGenCounter)
-                , CollectGen(collectGen)
-                , CollectStep(collectStep)
-            {}
-
-            TBarrier(const TKeyBarrier& key, const TMemRecBarrier& memRec)
-                : BarrierGen(key.Gen)
-                , BarrierGenCounter(key.GenCounter)
-                , CollectGen(memRec.CollectGen)
-                , CollectStep(memRec.CollectStep)
-            {}
-
-            auto ConvertToTuple() const {
-                return std::make_tuple(BarrierGen, BarrierGenCounter, CollectGen, CollectStep);
-            }
-
-            // checks whether the barrier is set; the default value is treated as empty
-            operator bool() const {
-                return *this != TBarrier();
-            }
-
+        // TBarrier 
+        ////////////////////////////////////////////////////////////////////////////////////////// 
+        struct TBarrier 
+            : public TNamedTupleBase<TBarrier> 
+        { 
+            ui32 BarrierGen = 0;        // generation of tablet that issued this barrier 
+            ui32 BarrierGenCounter = 0; // in-generation counter (step) of this entry 
+            ui32 CollectGen = 0;        // generation 
+            ui32 CollectStep = 0;       // step 
+ 
+            TBarrier() = default; 
+            TBarrier(const TBarrier& other) = default; 
+ 
+            TBarrier(ui32 barrierGen, ui32 barrierGenCounter, ui32 collectGen, ui32 collectStep) 
+                : BarrierGen(barrierGen) 
+                , BarrierGenCounter(barrierGenCounter) 
+                , CollectGen(collectGen) 
+                , CollectStep(collectStep) 
+            {} 
+ 
+            TBarrier(const TKeyBarrier& key, const TMemRecBarrier& memRec) 
+                : BarrierGen(key.Gen) 
+                , BarrierGenCounter(key.GenCounter) 
+                , CollectGen(memRec.CollectGen) 
+                , CollectStep(memRec.CollectStep) 
+            {} 
+ 
+            auto ConvertToTuple() const { 
+                return std::make_tuple(BarrierGen, BarrierGenCounter, CollectGen, CollectStep); 
+            } 
+ 
+            // checks whether the barrier is set; the default value is treated as empty 
+            operator bool() const { 
+                return *this != TBarrier(); 
+            } 
+ 
             void Output(IOutputStream& str) const {
                 str << "Issued:[" << BarrierGen << ":" << BarrierGenCounter << "]" << " -> Collect:[" << CollectGen << ":" << CollectStep << "]";
-            }
-
+            } 
+ 
             TString ToString() const {
-                TStringStream str;
-                Output(str);
-                return str.Str();
-            }
-        };
-
-        //////////////////////////////////////////////////////////////////////////////////////////
+                TStringStream str; 
+                Output(str); 
+                return str.Str(); 
+            } 
+        }; 
+ 
+        ////////////////////////////////////////////////////////////////////////////////////////// 
         // TFindResult
         //////////////////////////////////////////////////////////////////////////////////////////
         struct TFindResult {
-            bool EntryFound;
-            TBarrier SoftBarrier;
-            TBarrier HardBarrier;
-
-            TFindResult()
-                : EntryFound(false)
-            {}
-
-            TFindResult(const TBarrier& soft, const TBarrier& hard)
-                : EntryFound(true)
-                , SoftBarrier(soft)
-                , HardBarrier(hard)
-            {}
+            bool EntryFound; 
+            TBarrier SoftBarrier; 
+            TBarrier HardBarrier; 
+ 
+            TFindResult() 
+                : EntryFound(false) 
+            {} 
+ 
+            TFindResult(const TBarrier& soft, const TBarrier& hard) 
+                : EntryFound(true) 
+                , SoftBarrier(soft) 
+                , HardBarrier(hard) 
+            {} 
         };
 
         //////////////////////////////////////////////////////////////////////////////////////
@@ -173,11 +173,11 @@ namespace NKikimr {
             ui64 NotSyncedNum = 0;
             TStringStream DbgStream;
 
-            void Init(const THullCtxPtr &hullCtx, int debugLevel) {
-                if (debugLevel > 0) {
-                    DbgStream << hullCtx->VCtx->VDiskLogPrefix;
-                }
-            }
+            void Init(const THullCtxPtr &hullCtx, int debugLevel) { 
+                if (debugLevel > 0) { 
+                    DbgStream << hullCtx->VCtx->VDiskLogPrefix; 
+                } 
+            } 
         };
 
         //////////////////////////////////////////////////////////////////////////////////////

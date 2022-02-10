@@ -50,9 +50,9 @@ namespace NKikimr {
 
         virtual ~TVPatchDecorator() {
             if (NActors::TlsActivationContext) {
-                std::unique_ptr<IEventBase> ev = std::make_unique<TEvRequestEnd>();
-                std::unique_ptr<IEventHandle> handle = std::make_unique<IEventHandle>(EdgeActor, EdgeActor, ev.release());
-                TActivationContext::Send(handle.release());
+                std::unique_ptr<IEventBase> ev = std::make_unique<TEvRequestEnd>(); 
+                std::unique_ptr<IEventHandle> handle = std::make_unique<IEventHandle>(EdgeActor, EdgeActor, ev.release()); 
+                TActivationContext::Send(handle.release()); 
             }
         }
 
@@ -147,14 +147,14 @@ namespace NKikimr {
             Runtime.SetLogPriority(NActorsServices::TEST, NLog::PRI_DEBUG);
         }
 
-        std::unique_ptr<TEvBlobStorage::TEvVPatchStart> CreateVPatchStart(TMaybe<ui64> cookie, ui32 nodeId = 0) const {
-            return std::make_unique<TEvBlobStorage::TEvVPatchStart>(OriginalBlobId, PatchedBlobId, VDiskIds[nodeId], Deadline,
+        std::unique_ptr<TEvBlobStorage::TEvVPatchStart> CreateVPatchStart(TMaybe<ui64> cookie, ui32 nodeId = 0) const { 
+            return std::make_unique<TEvBlobStorage::TEvVPatchStart>(OriginalBlobId, PatchedBlobId, VDiskIds[nodeId], Deadline, 
                     cookie, false);
         }
 
-        std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> CreateVPatchDiff(ui8 partId, ui8 waitedXorDiffs,
+        std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> CreateVPatchDiff(ui8 partId, ui8 waitedXorDiffs, 
                 const TVector<TDiff> &diffs, TMaybe<ui64> cookie, ui8 nodeId = 0) const {
-            std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = std::make_unique<TEvBlobStorage::TEvVPatchDiff>(TLogoBlobID(OriginalBlobId, partId),
+            std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = std::make_unique<TEvBlobStorage::TEvVPatchDiff>(TLogoBlobID(OriginalBlobId, partId), 
                     TLogoBlobID(PatchedBlobId, partId), VDiskIds[nodeId], waitedXorDiffs, Deadline, cookie);
             for (auto &diffBlock : diffs) {
                 diff->AddDiff(diffBlock.Offset, diffBlock.Buffer);
@@ -162,8 +162,8 @@ namespace NKikimr {
             return std::move(diff);
         }
 
-        std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> CreateForceEndVPatchDiff(ui8 partId, TMaybe<ui64> cookie) const {
-            std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = std::make_unique<TEvBlobStorage::TEvVPatchDiff>(TLogoBlobID(OriginalBlobId, partId),
+        std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> CreateForceEndVPatchDiff(ui8 partId, TMaybe<ui64> cookie) const { 
+            std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = std::make_unique<TEvBlobStorage::TEvVPatchDiff>(TLogoBlobID(OriginalBlobId, partId), 
                     TLogoBlobID(PatchedBlobId, partId), VDiskIds[partId - 1], false, Deadline, cookie);
             diff->SetForceEnd();
             return std::move(diff);
@@ -197,12 +197,12 @@ namespace NKikimr {
         }
 
         void ForceEndTest() {
-            std::unique_ptr<IEventHandle> handle;
+            std::unique_ptr<IEventHandle> handle; 
             ui32 nodeCount = Runtime.GetNodeCount();
             for (ui32 nodeId = 0; nodeId < nodeCount; ++nodeId) {
-                handle = std::make_unique<IEventHandle>(VPatchActorIds[nodeId], EdgeActors[nodeId],
+                handle = std::make_unique<IEventHandle>(VPatchActorIds[nodeId], EdgeActors[nodeId], 
                         new NActors::TEvents::TEvPoisonPill);
-                Runtime.Send(handle.release());
+                Runtime.Send(handle.release()); 
             }
             WaitEndTest();
         }
@@ -210,9 +210,9 @@ namespace NKikimr {
 
     template<typename EventType>
     typename EventType::TPtr CreateEventHandle(const TActorId &recipient, const TActorId &sender,
-            std::unique_ptr<EventType> &&ev)
+            std::unique_ptr<EventType> &&ev) 
     {
-        return static_cast<TEventHandle<EventType>*>(new IEventHandle(recipient, sender, ev.release()));
+        return static_cast<TEventHandle<EventType>*>(new IEventHandle(recipient, sender, ev.release())); 
     }
 
 
@@ -251,7 +251,7 @@ namespace NKikimr {
 
             UNIT_ASSERT(evVGetRange->Record.HasCookie());
             UNIT_ASSERT(evVGetRange->Record.HasIndexOnly() && evVGetRange->Record.GetIndexOnly());
-            std::unique_ptr<TEvBlobStorage::TEvVGetResult> evVGetRangeResult = std::make_unique<TEvBlobStorage::TEvVGetResult>(
+            std::unique_ptr<TEvBlobStorage::TEvVGetResult> evVGetRangeResult = std::make_unique<TEvBlobStorage::TEvVGetResult>( 
                     vGetStatus, testData.VDiskIds[nodeId], testData.Now, evVGetRange->GetCachedByteSize(), &evVGetRange->Record,
                     nullptr, nullptr, nullptr, std::move(handle->TraceId), evVGetRange->Record.GetCookie(),
                     handle->GetChannel(), 0);
@@ -260,7 +260,7 @@ namespace NKikimr {
             for (ui8 partId : foundParts) {
                 evVGetRangeResult->Record.MutableResult(0)->AddParts(partId);
             }
-            handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, evVGetRangeResult.release());
+            handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, evVGetRangeResult.release()); 
             runtime.Send(handle.Release());
 
             auto evVPatchFoundParts = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchFoundParts>(handle);
@@ -296,15 +296,15 @@ namespace NKikimr {
             testData.SequenceOfReceivingEvents = std::move(receivingEvents);
             testData.SequenceOfSendingEvents = std::move(sendingEvents);
 
-            std::unique_ptr<TEvBlobStorage::TEvVPatchStart> start = testData.CreateVPatchStart(0);
+            std::unique_ptr<TEvBlobStorage::TEvVPatchStart> start = testData.CreateVPatchStart(0); 
             TEvBlobStorage::TEvVPatchStart::TPtr ev = CreateEventHandle(edgeActor, edgeActor, std::move(start));
             TActorId vPatchActorId = testData.CreateTVPatchActor<TVPatchDecorator>(std::move(ev));
 
             bool isKilled = PassFindingParts(testData, vGetStatus, foundParts);
             TAutoPtr<IEventHandle> handle;
             if (!isKilled) {
-                std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = testData.CreateForceEndVPatchDiff(1, 0);
-                handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, diff.release());
+                std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = testData.CreateForceEndVPatchDiff(1, 0); 
+                handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, diff.release()); 
                 testData.Runtime.Send(handle.Release());
 
                 auto result = testData.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchResult>(handle);
@@ -376,7 +376,7 @@ namespace NKikimr {
                     TEvBlobStorage::EvVPatchFoundParts,
                     TEvBlobStorage::EvVPatchDyingRequest};
 
-            std::unique_ptr<TEvBlobStorage::TEvVPatchStart> start = testData.CreateVPatchStart(0);
+            std::unique_ptr<TEvBlobStorage::TEvVPatchStart> start = testData.CreateVPatchStart(0); 
             TEvBlobStorage::TEvVPatchStart::TPtr ev = CreateEventHandle(edgeActor, edgeActor, std::move(start));
             TActorId actorId = testData.CreateTVPatchActor<TVPatchDecorator>(std::move(ev));
 
@@ -405,14 +405,14 @@ namespace NKikimr {
             UNIT_ASSERT(evVGet->Record.HasCookie());
             UNIT_ASSERT(!evVGet->Record.HasIndexOnly() || !evVGet->Record.GetIndexOnly());
 
-            std::unique_ptr<TEvBlobStorage::TEvVGetResult> evVGetResult = std::make_unique<TEvBlobStorage::TEvVGetResult>(
+            std::unique_ptr<TEvBlobStorage::TEvVGetResult> evVGetResult = std::make_unique<TEvBlobStorage::TEvVGetResult>( 
                     vGetStatus, testData.VDiskIds[nodeId], testData.Now, evVGet->GetCachedByteSize(), &evVGet->Record,
                     nullptr, nullptr, nullptr, std::move(vGetHandle->TraceId), evVGet->Record.GetCookie(),
                     vGetHandle->GetChannel(), 0);
             evVGetResult->AddResult(NKikimrProto::OK, blob.BlobId, 0, blob.Buffer.data(), blob.Buffer.size());
 
-            std::unique_ptr<IEventHandle> handle = std::make_unique<IEventHandle>(vPatchActorId, edgeActor, evVGetResult.release());
-            runtime.Send(handle.release());
+            std::unique_ptr<IEventHandle> handle = std::make_unique<IEventHandle>(vPatchActorId, edgeActor, evVGetResult.release()); 
+            runtime.Send(handle.release()); 
 
             return vGetStatus != NKikimrProto::OK;
         }
@@ -435,12 +435,12 @@ namespace NKikimr {
             UNIT_ASSERT_C(vPut->GetBuffer() == blob.Buffer, "NodeId# " << nodeId);
 
             TOutOfSpaceStatus oos = TOutOfSpaceStatus(testData.StatusFlags, testData.ApproximateFreeSpaceShare);
-            std::unique_ptr<TEvBlobStorage::TEvVPutResult> vPutResult = std::make_unique<TEvBlobStorage::TEvVPutResult>(
+            std::unique_ptr<TEvBlobStorage::TEvVPutResult> vPutResult = std::make_unique<TEvBlobStorage::TEvVPutResult>( 
                     vPutStatus, blobId, testData.VDiskIds[nodeId], &cookie, oos, testData.Now,
                     0, &record, nullptr, nullptr, nullptr, vPut->GetBufferBytes(), std::move(handle->TraceId),
                     0, "");
 
-            handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, vPutResult.release());
+            handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, vPutResult.release()); 
             runtime.Send(handle.Release());
             return true;
         }
@@ -459,7 +459,7 @@ namespace NKikimr {
             testData.SequenceOfReceivingEvents = std::move(receivingEvents);
             testData.SequenceOfSendingEvents = std::move(sendingEvents);
 
-            std::unique_ptr<TEvBlobStorage::TEvVPatchStart> start = testData.CreateVPatchStart(0);
+            std::unique_ptr<TEvBlobStorage::TEvVPatchStart> start = testData.CreateVPatchStart(0); 
             TEvBlobStorage::TEvVPatchStart::TPtr ev = CreateEventHandle(edgeActor, edgeActor, std::move(start));
             TActorId vPatchActorId = testData.CreateTVPatchActor<TVPatchDecorator>(std::move(ev));
 
@@ -468,10 +468,10 @@ namespace NKikimr {
             isKilled = PassFindingParts(testData, NKikimrProto::OK, foundPartIds);
             UNIT_ASSERT(!isKilled);
 
-            std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = testData.CreateVPatchDiff(pullingPart, false, {}, 0);
+            std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = testData.CreateVPatchDiff(pullingPart, false, {}, 0); 
             TAutoPtr<IEventHandle> handle;
 
-            handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, diff.release());
+            handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, diff.release()); 
             runtime.Send(handle.Release());
             TBlob pullingBlob(testData.OriginalBlobId, pullingPart, partSize);
 
@@ -557,7 +557,7 @@ namespace NKikimr {
             TActorId vPatchActorId = testData.VPatchActorIds[nodeId];
             TVDiskID vDiskId = testData.VDiskIds[nodeId];
 
-            std::unique_ptr<TEvBlobStorage::TEvVPatchXorDiff> xorDiff = std::make_unique<TEvBlobStorage::TEvVPatchXorDiff>(
+            std::unique_ptr<TEvBlobStorage::TEvVPatchXorDiff> xorDiff = std::make_unique<TEvBlobStorage::TEvVPatchXorDiff>( 
                     TLogoBlobID(testData.OriginalBlobId, toPart),
                     TLogoBlobID(testData.PatchedBlobId, toPart),
                     vDiskId, toPart, testData.Deadline, 0);
@@ -565,8 +565,8 @@ namespace NKikimr {
                 xorDiff->AddDiff(diff.Offset, diff.Buffer);
             }
 
-            std::unique_ptr<IEventHandle> handle = std::make_unique<IEventHandle>(vPatchActorId, edgeActor, xorDiff.release());
-            runtime.Send(handle.release());
+            std::unique_ptr<IEventHandle> handle = std::make_unique<IEventHandle>(vPatchActorId, edgeActor, xorDiff.release()); 
+            runtime.Send(handle.release()); 
         }
 
         void ReceiveVPatchResult(TVPatchTestGeneralData &testData, NKikimrProto::EReplyStatus status) {
@@ -587,7 +587,7 @@ namespace NKikimr {
             testData.SequenceOfReceivingEvents = std::move(receivingEvents);
             testData.SequenceOfSendingEvents = std::move(sendingEvents);
 
-            std::unique_ptr<TEvBlobStorage::TEvVPatchStart> start = testData.CreateVPatchStart(0);
+            std::unique_ptr<TEvBlobStorage::TEvVPatchStart> start = testData.CreateVPatchStart(0); 
             TEvBlobStorage::TEvVPatchStart::TPtr ev = CreateEventHandle(edgeActor, edgeActor, std::move(start));
             TActorId vPatchActorId = testData.CreateTVPatchActor<TVPatchDecorator>(std::move(ev));
 
@@ -597,11 +597,11 @@ namespace NKikimr {
             UNIT_ASSERT(!isKilled);
 
             SendXorDiff(testData, diffs, type.DataParts());
-            std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = testData.CreateVPatchDiff(partId, 1, {}, 0);
-            std::unique_ptr<IEventHandle> handle;
+            std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = testData.CreateVPatchDiff(partId, 1, {}, 0); 
+            std::unique_ptr<IEventHandle> handle; 
 
-            handle = std::make_unique<IEventHandle>(vPatchActorId, edgeActor, diff.release());
-            runtime.Send(handle.release());
+            handle = std::make_unique<IEventHandle>(vPatchActorId, edgeActor, diff.release()); 
+            runtime.Send(handle.release()); 
 
             if (status != NKikimrProto::OK) {
                 TAutoPtr<IEventHandle> handle;
@@ -680,7 +680,7 @@ namespace NKikimr {
             TVPatchTestGeneralData testData(type, data.Size(), nodeCount);
 
             for (ui32 nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
-                std::unique_ptr<TEvBlobStorage::TEvVPatchStart> start = testData.CreateVPatchStart(nodeIdx, nodeIdx);
+                std::unique_ptr<TEvBlobStorage::TEvVPatchStart> start = testData.CreateVPatchStart(nodeIdx, nodeIdx); 
                 TActorId edgeActor = testData.EdgeActors[nodeIdx];
                 TEvBlobStorage::TEvVPatchStart::TPtr ev = CreateEventHandle(edgeActor, edgeActor, std::move(start));
                 testData.CreateTVPatchActor<TVPatchDecorator>(std::move(ev), nodeIdx);
@@ -714,17 +714,17 @@ namespace NKikimr {
             ui32 dataDiffCount = 0;
             for (ui32 partIdx = 0; partIdx < dataPartCount; ++partIdx) {
                 ui32 partId = partIdx + 1;
-                std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = testData.CreateVPatchDiff(partId, 0,
+                std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = testData.CreateVPatchDiff(partId, 0, 
                         diffSet.PartDiffs[partIdx].Diffs, 0, partIdx);
 
                 for (ui32 parityPartIdx = dataPartCount; parityPartIdx < totalPartCount; ++parityPartIdx) {
                     diff->AddXorReceiver(testData.VDiskIds[parityPartIdx], parityPartIdx + 1);
                 }
 
-                std::unique_ptr<IEventHandle> handle;
-                handle = std::make_unique<IEventHandle>(testData.VPatchActorIds[partIdx], testData.EdgeActors[partIdx],
-                        diff.release());
-                testData.Runtime.Send(handle.release());
+                std::unique_ptr<IEventHandle> handle; 
+                handle = std::make_unique<IEventHandle>(testData.VPatchActorIds[partIdx], testData.EdgeActors[partIdx], 
+                        diff.release()); 
+                testData.Runtime.Send(handle.release()); 
                 dataDiffCount++;
             }
 
@@ -737,12 +737,12 @@ namespace NKikimr {
             if (!quickXorDiffs) {
                 for (ui32 partIdx = dataPartCount; partIdx < totalPartCount; ++partIdx) {
                     ui32 partId = partIdx + 1;
-                    std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = testData.CreateVPatchDiff(partId, dataDiffCount,
+                    std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = testData.CreateVPatchDiff(partId, dataDiffCount, 
                             {}, 0, partIdx);
-                    std::unique_ptr<IEventHandle> handle;
-                    handle = std::make_unique<IEventHandle>(testData.VPatchActorIds[partIdx], testData.EdgeActors[partIdx],
-                            diff.release());
-                    testData.Runtime.Send(handle.release());
+                    std::unique_ptr<IEventHandle> handle; 
+                    handle = std::make_unique<IEventHandle>(testData.VPatchActorIds[partIdx], testData.EdgeActors[partIdx], 
+                            diff.release()); 
+                    testData.Runtime.Send(handle.release()); 
                 }
 
                 for (ui32 partIdx = dataPartCount; partIdx < totalPartCount; ++partIdx) {
@@ -772,9 +772,9 @@ namespace NKikimr {
                     }
 
                     TActorId patchActor = testData.VPatchActorIds[patchedPartId - 1];
-                    auto handle2 = std::make_unique<IEventHandle>(patchActor, edgeActor, handle->Release().Release(), handle->Flags,
+                    auto handle2 = std::make_unique<IEventHandle>(patchActor, edgeActor, handle->Release().Release(), handle->Flags, 
                             handle->Cookie, nullptr, std::move(handle->TraceId));
-                    testData.Runtime.Send(handle2.release());
+                    testData.Runtime.Send(handle2.release()); 
                 }
             }
 
@@ -785,12 +785,12 @@ namespace NKikimr {
             if (quickXorDiffs) {
                 for (ui32 partIdx = dataPartCount; partIdx < totalPartCount; ++partIdx) {
                     ui32 partId = partIdx + 1;
-                    std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = testData.CreateVPatchDiff(partId, dataDiffCount,
+                    std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = testData.CreateVPatchDiff(partId, dataDiffCount, 
                             {}, 0, partIdx);
-                    std::unique_ptr<IEventHandle> handle;
-                    handle = std::make_unique<IEventHandle>(testData.VPatchActorIds[partIdx], testData.EdgeActors[partIdx],
-                            diff.release());
-                    testData.Runtime.Send(handle.release());
+                    std::unique_ptr<IEventHandle> handle; 
+                    handle = std::make_unique<IEventHandle>(testData.VPatchActorIds[partIdx], testData.EdgeActors[partIdx], 
+                            diff.release()); 
+                    testData.Runtime.Send(handle.release()); 
                 }
 
                 for (ui32 partIdx = dataPartCount; partIdx < totalPartCount; ++partIdx) {

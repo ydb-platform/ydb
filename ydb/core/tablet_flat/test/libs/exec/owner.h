@@ -24,7 +24,7 @@ namespace NFake {
         using TSetup = TTabletSetupInfo;
 
         TOwner(TActorId user, ui32 limit, TIntrusivePtr<TInfo> info, TIntrusivePtr<TSetup> setup, ui32 followerId)
-            : ::NActors::IActor(static_cast<TReceiveFunc>(&TOwner::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
+            : ::NActors::IActor(static_cast<TReceiveFunc>(&TOwner::Inbox), NKikimrServices::TActivity::FAKE_ENV_A) 
             , Info(std::move(info))
             , Setup(std::move(setup))
             , User(user)

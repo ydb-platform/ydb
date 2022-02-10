@@ -51,18 +51,18 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
         ui64 PDiskGuid;
         TActorId Sender;
         TActorId CutLogId;
-        TActorId WhiteboardProxyId;
-        ui32 SlotId;
+        TActorId WhiteboardProxyId; 
+        ui32 SlotId; 
 
-        TInitQueueItem(TOwnerRound ownerRound, TVDiskID vDisk, ui64 pDiskGuid, TActorId sender, TActorId cutLogId,
-                TActorId whiteboardProxyId, ui32 slotId)
+        TInitQueueItem(TOwnerRound ownerRound, TVDiskID vDisk, ui64 pDiskGuid, TActorId sender, TActorId cutLogId, 
+                TActorId whiteboardProxyId, ui32 slotId) 
             : OwnerRound(ownerRound)
             , VDisk(vDisk)
             , PDiskGuid(pDiskGuid)
             , Sender(sender)
             , CutLogId(cutLogId)
-            , WhiteboardProxyId(whiteboardProxyId)
-            , SlotId(slotId)
+            , WhiteboardProxyId(whiteboardProxyId) 
+            , SlotId(slotId) 
         {}
     };
 
@@ -192,8 +192,8 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
     TWhiteboardFlag DeviceFlag;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::PDISK_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::PDISK_ACTOR; 
     }
 
     TPDiskActor(const TIntrusivePtr<TPDiskConfig>& cfg, const NPDisk::TKey &mainKey,
@@ -313,7 +313,7 @@ public:
             PDisk->Initialize(TlsActivationContext->ActorSystem(), SelfId());
             Y_VERIFY(PDisk->PDiskThread.Running());
 
-            *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
+            *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError; 
             *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
             *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorDiskCannotBeFormated;
 
@@ -373,7 +373,7 @@ public:
             FormattingThread->Start();
         } else {
             SecureWipeBuffer((ui8*)&MainKey, sizeof(MainKey));
-            *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
+            *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError; 
             *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
             *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorPDiskCannotBeInitialised;
             if (!IsMagicAlreadyChecked) {
@@ -407,7 +407,7 @@ public:
                     << " Successfully read format record# " << PDisk->Format.ToString());
             TString info;
             if (!PDisk->CheckGuid(&info)) {
-                *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
+                *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError; 
                 *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
                 *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialFormatReadDueToGuid;
                 PDisk->ErrorStr = TStringBuilder() << "Can't start due to a guid error " << info;
@@ -416,7 +416,7 @@ public:
                 LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
                 InitError(str.Str());
             } else if (!PDisk->CheckFormatComplete()) {
-                *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
+                *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError; 
                 *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
                 *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialFormatReadIncompleteFormat;
                 PDisk->ErrorStr = "Can't start due to incomplete format!";
@@ -428,7 +428,7 @@ public:
                 InitError(str.Str());
             } else {
                 // PDisk GUID is OK and format is complete
-                *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogRead;
+                *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogRead; 
                 *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingSysLogRead;
                 PDisk->Format.InitMagic();
                 PDisk->ReadSysLog(SelfId());
@@ -458,8 +458,8 @@ public:
     void InitSuccess() {
         Become(&TThis::StateOnline);
         for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) {
-            NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId,
-                it->SlotId);
+            NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId, 
+                it->SlotId); 
             auto* request = PDisk->ReqCreator.CreateFromEv<TYardInit>(evInit, it->Sender);
             PDisk->InputRequest(request);
         }
@@ -471,8 +471,8 @@ public:
 
     void InitHandle(NPDisk::TEvYardInit::TPtr &ev) {
         const NPDisk::TEvYardInit &evYardInit = *ev->Get();
-        InitQueue.emplace_back(evYardInit.OwnerRound, evYardInit.VDisk, evYardInit.PDiskGuid,
-            ev->Sender, evYardInit.CutLogID, evYardInit.WhiteboardProxyId, evYardInit.SlotId);
+        InitQueue.emplace_back(evYardInit.OwnerRound, evYardInit.VDisk, evYardInit.PDiskGuid, 
+            ev->Sender, evYardInit.CutLogID, evYardInit.WhiteboardProxyId, evYardInit.SlotId); 
     }
 
     void InitHandle(NPDisk::TEvYardControl::TPtr &ev) {
@@ -828,7 +828,7 @@ public:
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDisk->PDiskId
                 << " handle TEvWhiteboardReportResult# " << result->ToString());
         Send(NodeWhiteboardServiceId, result->PDiskState.Release());
-        for (auto& p : result->VDiskStateVect) {
+        for (auto& p : result->VDiskStateVect) { 
             Send(std::get<0>(p),
                     new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(std::move(std::get<1>(p))));
         }
@@ -1082,7 +1082,7 @@ IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &
     return new NPDisk::TPDiskActor(cfg, mainKey, counters);
 }
 
-void TRealPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
+void TRealPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID, 
         const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &mainKey, ui32 poolId, ui32 nodeId) {
     TActorId actorId = ctx.ExecutorThread.RegisterActor(
         CreatePDisk(cfg, mainKey, AppData(ctx)->Counters), TMailboxType::ReadAsFilled, poolId);

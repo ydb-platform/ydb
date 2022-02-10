@@ -16,15 +16,15 @@ namespace NKikimr {
             TEvBlobStorage::EvControllerUpdateDiskStatus> {
         TEvControllerUpdateDiskStatus() = default;
 
-        TEvControllerUpdateDiskStatus(const TVDiskID& vDiskId, ui32 nodeId, ui32 pdiskId, ui32 vslotId,
-                ui32 satisfactionRankPercent) {
+        TEvControllerUpdateDiskStatus(const TVDiskID& vDiskId, ui32 nodeId, ui32 pdiskId, ui32 vslotId, 
+                ui32 satisfactionRankPercent) { 
             NKikimrBlobStorage::TVDiskMetrics* metric = Record.AddVDisksMetrics();
             VDiskIDFromVDiskID(vDiskId, metric->MutableVDiskId());
             metric->SetSatisfactionRank(satisfactionRankPercent);
-            auto *p = metric->MutableVSlotId();
-            p->SetNodeId(nodeId);
-            p->SetPDiskId(pdiskId);
-            p->SetVSlotId(vslotId);
+            auto *p = metric->MutableVSlotId(); 
+            p->SetNodeId(nodeId); 
+            p->SetPDiskId(pdiskId); 
+            p->SetVSlotId(vslotId); 
         }
     };
 
@@ -36,7 +36,7 @@ namespace NKikimr {
         TEvControllerRegisterNode()
         {}
 
-        TEvControllerRegisterNode(ui32 nodeID, const TVector<ui32>& startedDynamicGroups,
+        TEvControllerRegisterNode(ui32 nodeID, const TVector<ui32>& startedDynamicGroups, 
                 const TVector<ui32>& groupGenerations, const TVector<NPDisk::TDriveData>& drivesData) {
             Record.SetNodeID(nodeID);
             for (auto groupId: startedDynamicGroups) {
@@ -112,11 +112,11 @@ namespace NKikimr {
         TEvControllerGroupReconfigureWipe()
         {}
 
-        TEvControllerGroupReconfigureWipe(ui32 nodeId, ui32 pDiskId, ui32 vSlotId) {
-            auto *id = Record.MutableVSlotId();
-            id->SetNodeId(nodeId);
-            id->SetPDiskId(pDiskId);
-            id->SetVSlotId(vSlotId);
+        TEvControllerGroupReconfigureWipe(ui32 nodeId, ui32 pDiskId, ui32 vSlotId) { 
+            auto *id = Record.MutableVSlotId(); 
+            id->SetNodeId(nodeId); 
+            id->SetPDiskId(pDiskId); 
+            id->SetVSlotId(vSlotId); 
         }
 
         TString ToString() const override {
@@ -168,14 +168,14 @@ namespace NKikimr {
             Record.AddGroupIDs(groupID);
         }
 
-        template<typename TBeginIter, typename TEndIter = TBeginIter>
-        TEvControllerGetGroup(ui32 nodeID, TBeginIter beginIter, TEndIter&& endIter) {
-            Record.SetNodeID(nodeID);
-            while (beginIter != endIter) {
-                Record.AddGroupIDs(*beginIter++);
-            }
-        }
-
+        template<typename TBeginIter, typename TEndIter = TBeginIter> 
+        TEvControllerGetGroup(ui32 nodeID, TBeginIter beginIter, TEndIter&& endIter) { 
+            Record.SetNodeID(nodeID); 
+            while (beginIter != endIter) { 
+                Record.AddGroupIDs(*beginIter++); 
+            } 
+        } 
+ 
         TString ToString() const override {
             TStringStream str;
             str << "{TEvControllerGetGroup NodeID# " << Record.GetNodeID();
@@ -202,7 +202,7 @@ namespace NKikimr {
 
         TString ToString() const override {
             TStringStream str;
-            str << "{TEvControllerSelectGroups}";
+            str << "{TEvControllerSelectGroups}"; 
             return str.Str();
         }
     };
@@ -265,7 +265,7 @@ namespace NKikimr {
     struct TEvBlobStorage::TEvControllerConfigResponse : TEventPB<TEvBlobStorage::TEvControllerConfigResponse,
         NKikimrBlobStorage::TEvControllerConfigResponse, TEvBlobStorage::EvControllerConfigResponse>
     {
-        TEvControllerConfigResponse() = default;
+        TEvControllerConfigResponse() = default; 
     };
 
     struct TEvBlobStorage::TEvControllerProposeGroupKey : public TEventPB<
@@ -277,7 +277,7 @@ namespace NKikimr {
         {}
 
         TEvControllerProposeGroupKey(ui32 nodeId, ui32 groupId, ui32 lifeCyclePhase,
-                const TString& mainKeyId, const TString& encryptedGroupKey, ui64 mainKeyVersion, ui64 groupKeyNonce) {
+                const TString& mainKeyId, const TString& encryptedGroupKey, ui64 mainKeyVersion, ui64 groupKeyNonce) { 
             Record.SetNodeId(nodeId);
             Record.SetGroupId(groupId);
             Record.SetLifeCyclePhase(lifeCyclePhase);
@@ -322,16 +322,16 @@ namespace NKikimr {
     {
         TEvVStatusResult() = default;
 
-        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, bool joinedGroup, bool replicated,
-                ui64 incarnationGuid)
+        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, bool joinedGroup, bool replicated, 
+                ui64 incarnationGuid) 
         {
             Record.SetStatus(status);
             Record.SetJoinedGroup(joinedGroup);
             Record.SetReplicated(replicated);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            if (status == NKikimrProto::OK) {
-                Record.SetIncarnationGuid(incarnationGuid);
-            }
+            if (status == NKikimrProto::OK) { 
+                Record.SetIncarnationGuid(incarnationGuid); 
+            } 
         }
 
         TEvVStatusResult(NKikimrProto::EReplyStatus status, const NKikimrBlobStorage::TVDiskID &vdisk) {
@@ -401,24 +401,24 @@ namespace NKikimr {
         {}
     };
 
-    struct TEvBlobStorage::TEvDropDonor : TEventLocal<TEvDropDonor, EvDropDonor> {
-        const ui32 NodeId;
-        const ui32 PDiskId;
-        const ui32 VSlotId;
-        const TVDiskID VDiskId;
-
-        TEvDropDonor(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId)
-            : NodeId(nodeId)
-            , PDiskId(pdiskId)
-            , VSlotId(vslotId)
-            , VDiskId(vdiskId)
-        {}
-    };
-
-    struct TEvBlobStorage::TEvBunchOfEvents : TEventLocal<TEvBunchOfEvents, EvBunchOfEvents> {
-        std::vector<std::unique_ptr<IEventHandle>> Bunch;
-    };
-
+    struct TEvBlobStorage::TEvDropDonor : TEventLocal<TEvDropDonor, EvDropDonor> { 
+        const ui32 NodeId; 
+        const ui32 PDiskId; 
+        const ui32 VSlotId; 
+        const TVDiskID VDiskId; 
+ 
+        TEvDropDonor(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId) 
+            : NodeId(nodeId) 
+            , PDiskId(pdiskId) 
+            , VSlotId(vslotId) 
+            , VDiskId(vdiskId) 
+        {} 
+    }; 
+ 
+    struct TEvBlobStorage::TEvBunchOfEvents : TEventLocal<TEvBunchOfEvents, EvBunchOfEvents> { 
+        std::vector<std::unique_ptr<IEventHandle>> Bunch; 
+    }; 
+ 
     struct TEvBlobStorage::TEvAskRestartPDisk : TEventLocal<TEvAskRestartPDisk, EvAskRestartPDisk> {
         const ui32 PDiskId;
 
@@ -448,104 +448,104 @@ namespace NKikimr {
             , Status(status)
         {}
     };
-
-    struct TEvBlobStorage::TEvControllerScrubQueryStartQuantum : TEventPB<TEvControllerScrubQueryStartQuantum,
-            NKikimrBlobStorage::TEvControllerScrubQueryStartQuantum, EvControllerScrubQueryStartQuantum> {
-        TEvControllerScrubQueryStartQuantum() = default;
-
-        TEvControllerScrubQueryStartQuantum(ui32 nodeId, ui32 pdiskId, ui32 vslotId) {
-            auto *x = Record.MutableVSlotId();
-            x->SetNodeId(nodeId);
-            x->SetPDiskId(pdiskId);
-            x->SetVSlotId(vslotId);
-        }
-    };
-
-    struct TEvBlobStorage::TEvControllerScrubStartQuantum : TEventPB<TEvControllerScrubStartQuantum,
-            NKikimrBlobStorage::TEvControllerScrubStartQuantum, EvControllerScrubStartQuantum> {
-        TEvControllerScrubStartQuantum() = default;
-
-        TEvControllerScrubStartQuantum(ui32 nodeId, ui32 pdiskId, ui32 vslotId, std::optional<TString> state) {
-            auto *x = Record.MutableVSlotId();
-            x->SetNodeId(nodeId);
-            x->SetPDiskId(pdiskId);
-            x->SetVSlotId(vslotId);
-            if (state) {
-                Record.SetState(*state);
-            }
-        }
-    };
-
-    struct TEvBlobStorage::TEvControllerScrubQuantumFinished : TEventPB<TEvControllerScrubQuantumFinished,
-            NKikimrBlobStorage::TEvControllerScrubQuantumFinished, EvControllerScrubQuantumFinished> {
-        TEvControllerScrubQuantumFinished() = default;
-
-        TEvControllerScrubQuantumFinished(const NKikimrBlobStorage::TEvControllerScrubQuantumFinished& m) {
-            Record.CopyFrom(m);
-        }
-
-        TEvControllerScrubQuantumFinished(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TString& state)
-            : TEvControllerScrubQuantumFinished(nodeId, pdiskId, vslotId)
-        {
-            Record.SetState(state);
-        }
-
-        TEvControllerScrubQuantumFinished(ui32 nodeId, ui32 pdiskId, ui32 vslotId, bool success)
-            : TEvControllerScrubQuantumFinished(nodeId, pdiskId, vslotId)
-        {
-            Record.SetSuccess(success);
-        }
-
-        TEvControllerScrubQuantumFinished(ui32 nodeId, ui32 pdiskId, ui32 vslotId) {
-            auto *x = Record.MutableVSlotId();
-            x->SetNodeId(nodeId);
-            x->SetPDiskId(pdiskId);
-            x->SetVSlotId(vslotId);
-        }
-    };
-
-    struct TEvBlobStorage::TEvControllerScrubReportQuantumInProgress : TEventPB<TEvControllerScrubReportQuantumInProgress,
-            NKikimrBlobStorage::TEvControllerScrubReportQuantumInProgress, EvControllerScrubReportQuantumInProgress> {
-        TEvControllerScrubReportQuantumInProgress() = default;
-
-        TEvControllerScrubReportQuantumInProgress(ui32 nodeId, ui32 pdiskId, ui32 vslotId) {
-            auto *x = Record.MutableVSlotId();
-            x->SetNodeId(nodeId);
-            x->SetPDiskId(pdiskId);
-            x->SetVSlotId(vslotId);
-        }
-    };
-
-    struct TEvNodeWardenQueryGroupInfo : TEventPB<TEvNodeWardenQueryGroupInfo, NKikimrBlobStorage::TEvNodeWardenQueryGroupInfo,
-            TEvBlobStorage::EvNodeWardenQueryGroupInfo> {
-        TEvNodeWardenQueryGroupInfo() = default;
-
-        TEvNodeWardenQueryGroupInfo(ui32 groupId) {
-            Record.SetGroupId(groupId);
-        }
-    };
-
-    struct TEvNodeWardenGroupInfo : TEventPB<TEvNodeWardenGroupInfo, NKikimrBlobStorage::TEvNodeWardenGroupInfo,
-            TEvBlobStorage::EvNodeWardenGroupInfo> {
-        TEvNodeWardenGroupInfo() = default;
-
-        TEvNodeWardenGroupInfo(const NKikimrBlobStorage::TGroupInfo& group) {
-            Record.MutableGroup()->CopyFrom(group);
-        }
-    };
-
-    struct TEvStatusUpdate : TEventLocal<TEvStatusUpdate, TEvBlobStorage::EvStatusUpdate> {
-        ui32 NodeId;
-        ui32 PDiskId;
-        ui32 VSlotId;
-        NKikimrBlobStorage::EVDiskStatus Status;
-
-        TEvStatusUpdate(ui32 nodeId, ui32 pdiskId, ui32 vslotId, NKikimrBlobStorage::EVDiskStatus status)
-            : NodeId(nodeId)
-            , PDiskId(pdiskId)
-            , VSlotId(vslotId)
-            , Status(status)
-        {}
-    };
-
+ 
+    struct TEvBlobStorage::TEvControllerScrubQueryStartQuantum : TEventPB<TEvControllerScrubQueryStartQuantum, 
+            NKikimrBlobStorage::TEvControllerScrubQueryStartQuantum, EvControllerScrubQueryStartQuantum> { 
+        TEvControllerScrubQueryStartQuantum() = default; 
+ 
+        TEvControllerScrubQueryStartQuantum(ui32 nodeId, ui32 pdiskId, ui32 vslotId) { 
+            auto *x = Record.MutableVSlotId(); 
+            x->SetNodeId(nodeId); 
+            x->SetPDiskId(pdiskId); 
+            x->SetVSlotId(vslotId); 
+        } 
+    }; 
+ 
+    struct TEvBlobStorage::TEvControllerScrubStartQuantum : TEventPB<TEvControllerScrubStartQuantum, 
+            NKikimrBlobStorage::TEvControllerScrubStartQuantum, EvControllerScrubStartQuantum> { 
+        TEvControllerScrubStartQuantum() = default; 
+ 
+        TEvControllerScrubStartQuantum(ui32 nodeId, ui32 pdiskId, ui32 vslotId, std::optional<TString> state) { 
+            auto *x = Record.MutableVSlotId(); 
+            x->SetNodeId(nodeId); 
+            x->SetPDiskId(pdiskId); 
+            x->SetVSlotId(vslotId); 
+            if (state) { 
+                Record.SetState(*state); 
+            } 
+        } 
+    }; 
+ 
+    struct TEvBlobStorage::TEvControllerScrubQuantumFinished : TEventPB<TEvControllerScrubQuantumFinished, 
+            NKikimrBlobStorage::TEvControllerScrubQuantumFinished, EvControllerScrubQuantumFinished> { 
+        TEvControllerScrubQuantumFinished() = default; 
+ 
+        TEvControllerScrubQuantumFinished(const NKikimrBlobStorage::TEvControllerScrubQuantumFinished& m) { 
+            Record.CopyFrom(m); 
+        } 
+ 
+        TEvControllerScrubQuantumFinished(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TString& state) 
+            : TEvControllerScrubQuantumFinished(nodeId, pdiskId, vslotId) 
+        { 
+            Record.SetState(state); 
+        } 
+ 
+        TEvControllerScrubQuantumFinished(ui32 nodeId, ui32 pdiskId, ui32 vslotId, bool success) 
+            : TEvControllerScrubQuantumFinished(nodeId, pdiskId, vslotId) 
+        { 
+            Record.SetSuccess(success); 
+        } 
+ 
+        TEvControllerScrubQuantumFinished(ui32 nodeId, ui32 pdiskId, ui32 vslotId) { 
+            auto *x = Record.MutableVSlotId(); 
+            x->SetNodeId(nodeId); 
+            x->SetPDiskId(pdiskId); 
+            x->SetVSlotId(vslotId); 
+        } 
+    }; 
+ 
+    struct TEvBlobStorage::TEvControllerScrubReportQuantumInProgress : TEventPB<TEvControllerScrubReportQuantumInProgress, 
+            NKikimrBlobStorage::TEvControllerScrubReportQuantumInProgress, EvControllerScrubReportQuantumInProgress> { 
+        TEvControllerScrubReportQuantumInProgress() = default; 
+ 
+        TEvControllerScrubReportQuantumInProgress(ui32 nodeId, ui32 pdiskId, ui32 vslotId) { 
+            auto *x = Record.MutableVSlotId(); 
+            x->SetNodeId(nodeId); 
+            x->SetPDiskId(pdiskId); 
+            x->SetVSlotId(vslotId); 
+        } 
+    }; 
+ 
+    struct TEvNodeWardenQueryGroupInfo : TEventPB<TEvNodeWardenQueryGroupInfo, NKikimrBlobStorage::TEvNodeWardenQueryGroupInfo, 
+            TEvBlobStorage::EvNodeWardenQueryGroupInfo> { 
+        TEvNodeWardenQueryGroupInfo() = default; 
+ 
+        TEvNodeWardenQueryGroupInfo(ui32 groupId) { 
+            Record.SetGroupId(groupId); 
+        } 
+    }; 
+ 
+    struct TEvNodeWardenGroupInfo : TEventPB<TEvNodeWardenGroupInfo, NKikimrBlobStorage::TEvNodeWardenGroupInfo, 
+            TEvBlobStorage::EvNodeWardenGroupInfo> { 
+        TEvNodeWardenGroupInfo() = default; 
+ 
+        TEvNodeWardenGroupInfo(const NKikimrBlobStorage::TGroupInfo& group) { 
+            Record.MutableGroup()->CopyFrom(group); 
+        } 
+    }; 
+ 
+    struct TEvStatusUpdate : TEventLocal<TEvStatusUpdate, TEvBlobStorage::EvStatusUpdate> { 
+        ui32 NodeId; 
+        ui32 PDiskId; 
+        ui32 VSlotId; 
+        NKikimrBlobStorage::EVDiskStatus Status; 
+ 
+        TEvStatusUpdate(ui32 nodeId, ui32 pdiskId, ui32 vslotId, NKikimrBlobStorage::EVDiskStatus status) 
+            : NodeId(nodeId) 
+            , PDiskId(pdiskId) 
+            , VSlotId(vslotId) 
+            , Status(status) 
+        {} 
+    }; 
+ 
 } // NKikimr

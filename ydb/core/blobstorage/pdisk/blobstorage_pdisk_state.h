@@ -73,7 +73,7 @@ struct TOwnerData {
     TLogPosition LogStartPosition{0, 0};
     NMetrics::TDecayingAverageValue<ui64, NMetrics::DurationPerMinute, NMetrics::DurationPerSecond> ReadThroughput;
     NMetrics::TDecayingAverageValue<ui64, NMetrics::DurationPerMinute, NMetrics::DurationPerSecond> WriteThroughput;
-    ui32 VDiskSlotId = 0;
+    ui32 VDiskSlotId = 0; 
 
     TIntrusivePtr<TLogReaderBase> LogReader;
     TIntrusivePtr<TOwnerInflight> InFlight;

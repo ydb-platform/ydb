@@ -36,7 +36,7 @@ namespace NKikimr {
                 ++Pos;
             }
 
-            const std::shared_ptr<T> &Get() const {
+            const std::shared_ptr<T> &Get() const { 
                 Y_VERIFY_DEBUG(Valid());
                 return Snap->VecPtr->at(Pos);
             }
@@ -63,16 +63,16 @@ namespace NKikimr {
         TSVecSnap() = default;
 
         void Destroy() {
-            VecPtr.reset();
+            VecPtr.reset(); 
         }
 
     private:
-        TSVecSnap(const std::shared_ptr<TVector<std::shared_ptr<T>>> &vecPtr) {
+        TSVecSnap(const std::shared_ptr<TVector<std::shared_ptr<T>>> &vecPtr) { 
             VecPtr = vecPtr;
             NElements = vecPtr->size();
         }
 
-        std::shared_ptr<TVector<std::shared_ptr<T>>> VecPtr;
+        std::shared_ptr<TVector<std::shared_ptr<T>>> VecPtr; 
         size_t NElements = 0;
     };
 
@@ -80,32 +80,32 @@ namespace NKikimr {
     class TSVec {
     public:
         TSVec(size_t capacity)
-            : VecPtr(std::make_shared<TVector<std::shared_ptr<T>>>())
+            : VecPtr(std::make_shared<TVector<std::shared_ptr<T>>>()) 
         {
             VecPtr->reserve(capacity);
         }
 
-        void Add(const std::shared_ptr<T> &t) {
+        void Add(const std::shared_ptr<T> &t) { 
             ResizeIfRequired();
             SizeApprox += t->SizeApproximation();
             VecPtr->push_back(t);
         }
 
-        void Add(std::shared_ptr<T> &&t) {
+        void Add(std::shared_ptr<T> &&t) { 
             ResizeIfRequired();
             SizeApprox += t->SizeApproximation();
             VecPtr->push_back(std::move(t));
         }
 
         void RemoveFirstElements(size_t n) {
-            auto rebuildVecPtr = std::make_shared<TVector<std::shared_ptr<T>>>();
+            auto rebuildVecPtr = std::make_shared<TVector<std::shared_ptr<T>>>(); 
             rebuildVecPtr->reserve(VecPtr->capacity());
             ui64 sizeApprox = 0;
             for (size_t i = n, size = VecPtr->size(); i < size; ++i) {
                 sizeApprox += VecPtr->at(i)->SizeApproximation();
                 rebuildVecPtr->push_back(VecPtr->at(i));
             }
-            VecPtr.swap(rebuildVecPtr);
+            VecPtr.swap(rebuildVecPtr); 
             SizeApprox = sizeApprox;
         }
 
@@ -122,18 +122,18 @@ namespace NKikimr {
         }
 
     private:
-        std::shared_ptr<TVector<std::shared_ptr<T>>> VecPtr;
+        std::shared_ptr<TVector<std::shared_ptr<T>>> VecPtr; 
         ui64 SizeApprox = 0;
 
         void ResizeIfRequired() {
             if (VecPtr->size() == VecPtr->capacity()) {
                 // rebuild vec with extended capacity
-                auto rebuildVecPtr = std::make_shared<TVector<std::shared_ptr<T>>>();
+                auto rebuildVecPtr = std::make_shared<TVector<std::shared_ptr<T>>>(); 
                 rebuildVecPtr->reserve(VecPtr->capacity() * 2);
                 for (const auto &x : *VecPtr) {
                     rebuildVecPtr->push_back(x);
                 }
-                VecPtr.swap(rebuildVecPtr);
+                VecPtr.swap(rebuildVecPtr); 
             }
         }
     };
@@ -149,10 +149,10 @@ namespace NKikimr {
     template <class T, class TCtx>
     class TSTreeSnap {
     private:
-        using TOneLevel = TVector<std::shared_ptr<T>>;
-        using TOneLevelPtr = std::shared_ptr<TOneLevel>;
+        using TOneLevel = TVector<std::shared_ptr<T>>; 
+        using TOneLevelPtr = std::shared_ptr<TOneLevel>; 
         using TLevels = TVector<TOneLevelPtr>;
-        using TLevelsPtr = std::shared_ptr<TLevels>;
+        using TLevelsPtr = std::shared_ptr<TLevels>; 
         friend class TSTree<T, TCtx>;
 
         TSTreeSnap(const TCtx &ctx, const TSVecSnap<T> &staging, const TLevelsPtr &levelsPtr)
@@ -161,7 +161,7 @@ namespace NKikimr {
             , LevelsPtr(levelsPtr)
         {}
 
-        // TLevelsIterator -- iterates over levels (not staging), returns std::shared_ptr<T> on each iteration
+        // TLevelsIterator -- iterates over levels (not staging), returns std::shared_ptr<T> on each iteration 
         class TLevelsIterator {
         public:
             TLevelsIterator(TLevels *levels)
@@ -192,7 +192,7 @@ namespace NKikimr {
                 }
             }
 
-            const std::shared_ptr<T> &Get() const {
+            const std::shared_ptr<T> &Get() const { 
                 Y_VERIFY_DEBUG(Valid());
                 return *IntraLevelIt;
             }
@@ -208,7 +208,7 @@ namespace NKikimr {
 
             void Position() {
                 while (ViaLevelsIt != Levels->end()) {
-                    if (ViaLevelsIt->get() && !(*ViaLevelsIt)->empty()) {
+                    if (ViaLevelsIt->get() && !(*ViaLevelsIt)->empty()) { 
                         IntraLevelIt = (*ViaLevelsIt)->begin();
                         break;
                     } else {
@@ -221,13 +221,13 @@ namespace NKikimr {
     public:
         TSTreeSnap() = default;
 
-        // TIterator -- iterates over levels _and_ staging, returns std::shared_ptr<T> on each iteration
+        // TIterator -- iterates over levels _and_ staging, returns std::shared_ptr<T> on each iteration 
         class TIterator {
         public:
             TIterator(const TSTreeSnap *snap)
                 : Snap(snap)
                 , StagingIt(Snap ? &Snap->Staging : nullptr)
-                , LevelsIt(Snap ? Snap->LevelsPtr.get() : nullptr)
+                , LevelsIt(Snap ? Snap->LevelsPtr.get() : nullptr) 
             {}
 
             void SeekToFirst() {
@@ -248,7 +248,7 @@ namespace NKikimr {
                 }
             }
 
-            const std::shared_ptr<T> &Get() const {
+            const std::shared_ptr<T> &Get() const { 
                 Y_VERIFY_DEBUG(Valid());
                 if (StagingIt.Valid()) {
                     return StagingIt.Get();
@@ -268,7 +268,7 @@ namespace NKikimr {
             str << "Staging: ";
             Staging.Output(str, printer);
             str << "\n";
-            TLevelsIterator it(LevelsPtr.get());
+            TLevelsIterator it(LevelsPtr.get()); 
             it.SeekToFirst();
             while (it.Valid()) {
                 str << "Level# " << it.GetLevel() << " Value# ";
@@ -280,7 +280,7 @@ namespace NKikimr {
 
         void Destroy() {
             Staging.Destroy();
-            LevelsPtr.reset();
+            LevelsPtr.reset(); 
         }
 
     private:
@@ -332,10 +332,10 @@ namespace NKikimr {
             , StagingCompactionThreshold(stagingCompThreshold)
             , LevelCompactionThreshold(levelCompThreshold)
             , Staging(stagingCapacity)
-            , LevelsPtr(std::make_shared<TLevels>())
+            , LevelsPtr(std::make_shared<TLevels>()) 
         {}
 
-        void Add(const std::shared_ptr<T> &t) {
+        void Add(const std::shared_ptr<T> &t) { 
             Staging.Add(t);
         }
 
@@ -347,17 +347,17 @@ namespace NKikimr {
             return TSTreeSnap<T, TCtx>(Ctx, Staging.GetSnapshot(), LevelsPtr);
         }
 
-        std::shared_ptr<ISTreeCompaction> Compact() {
+        std::shared_ptr<ISTreeCompaction> Compact() { 
             if (Staging.GetVecSize() > StagingCompactionThreshold) {
-                return std::make_shared<TCompactionJob>(Ctx, LevelCompactionThreshold,
+                return std::make_shared<TCompactionJob>(Ctx, LevelCompactionThreshold, 
                     Staging.GetSnapshot(), LevelsPtr);
             } else {
                 return nullptr;
             }
         }
 
-        std::shared_ptr<ISTreeCompaction> ApplyCompactionResult(std::shared_ptr<ISTreeCompaction> cjob) {
-            auto *job = dynamic_cast<TCompactionJob*>(cjob.get());
+        std::shared_ptr<ISTreeCompaction> ApplyCompactionResult(std::shared_ptr<ISTreeCompaction> cjob) { 
+            auto *job = dynamic_cast<TCompactionJob*>(cjob.get()); 
             auto result = job->GetCompactionResult();
             Staging.RemoveFirstElements(result.ClearFirstRecs);
             LevelsPtr = result.LevelsPtrDst;
@@ -372,10 +372,10 @@ namespace NKikimr {
         }
 
     private:
-        using TOneLevel = TVector<std::shared_ptr<T>>;
-        using TOneLevelPtr = std::shared_ptr<TOneLevel>;
+        using TOneLevel = TVector<std::shared_ptr<T>>; 
+        using TOneLevelPtr = std::shared_ptr<TOneLevel>; 
         using TLevels = TVector<TOneLevelPtr>;
-        using TLevelsPtr = std::shared_ptr<TLevels>;
+        using TLevelsPtr = std::shared_ptr<TLevels>; 
 
         TCtx Ctx;
         const size_t StagingCompactionThreshold;
@@ -416,20 +416,20 @@ namespace NKikimr {
             }
 
             virtual void Work() override {
-                std::shared_ptr<T> s = CompactStaging();
+                std::shared_ptr<T> s = CompactStaging(); 
                 ui64 sizeApprox = 0;
                 bool toNextLine = true;
 
-                CompactionResult.LevelsPtrDst = std::make_shared<TLevels>();
+                CompactionResult.LevelsPtrDst = std::make_shared<TLevels>(); 
                 CompactionResult.LevelsPtrDst->reserve(LevelsPtrSource->size() + 1);
 
                 size_t level = 0;
                 while (toNextLine) {
-                    auto newLevelPtr = std::make_shared<TOneLevel>();
+                    auto newLevelPtr = std::make_shared<TOneLevel>(); 
                     if (level < LevelsPtrSource->size() && // handle no vec at level=level
                             LevelsPtrSource->at(level)->size() + 1 > LevelCompactionThreshold) {
                         // compact
-                        TVector<std::shared_ptr<T>> input;
+                        TVector<std::shared_ptr<T>> input; 
                         input = *LevelsPtrSource->at(level);
                         input.push_back(s);
                         // gather stat
@@ -485,8 +485,8 @@ namespace NKikimr {
             const TLevelsPtr LevelsPtrSource;
             TCompactionResult CompactionResult;
 
-            std::shared_ptr<T> CompactStaging() {
-                TVector<std::shared_ptr<T>> input;
+            std::shared_ptr<T> CompactStaging() { 
+                TVector<std::shared_ptr<T>> input; 
                 CompactionResult.ClearFirstRecs = StagingSource.GetSize();
                 input.reserve(CompactionResult.ClearFirstRecs);
                 typename TSVecSnap<T>::TIterator it(&StagingSource);

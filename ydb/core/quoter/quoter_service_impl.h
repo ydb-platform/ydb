@@ -300,8 +300,8 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
 
     TString PrintEvent(const TEvQuota::TEvRequest::TPtr& ev);
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::QUOTER_SERVICE_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::QUOTER_SERVICE_ACTOR; 
     }
 
     TQuoterService(const TQuoterServiceConfig &config);

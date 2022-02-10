@@ -1,7 +1,7 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:kikimr)
-
+ 
 SRCS(
     blob_recovery.cpp
     blob_recovery.h
@@ -23,10 +23,10 @@ SRCS(
     scrub_actor_sst_blob_merger.h
     scrub_actor_unreadable.cpp
 )
-
+ 
 PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/blobstorage/vdisk/common
 )
-
-END()
+ 
+END() 

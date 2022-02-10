@@ -1,12 +1,12 @@
-UNITTEST()
-
+UNITTEST() 
+ 
 FORK_SUBTESTS()
 
 OWNER(
     alexvru
     g:kikimr
 )
-
+ 
 REQUIREMENTS(
     cpu:4
     ram:16
@@ -24,7 +24,7 @@ ENDIF()
 SRCS(
     main.cpp
 )
-
+ 
 PEERDIR(
     ydb/core/base
     ydb/core/blobstorage
@@ -35,9 +35,9 @@ PEERDIR(
     ydb/core/testlib
     ydb/core/testlib/basics
 )
-
+ 
 YQL_LAST_ABI_VERSION()
 
 REQUIREMENTS(network:full)
 
-END()
+END() 

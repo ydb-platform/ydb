@@ -55,9 +55,9 @@ namespace NKikimr {
         bool VDiskIncarnationGuidSet; // only for asserts
 
     public:
-        // SyncLog first item LSN that can't be deleted before unless synced
-        std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> SyncLogFirstLsnToKeep;
-
+        // SyncLog first item LSN that can't be deleted before unless synced 
+        std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> SyncLogFirstLsnToKeep; 
+ 
         // Settings
         TIntrusivePtr<TVDiskConfig> Config;
         TIntrusivePtr<TVDiskContext> VCtx;

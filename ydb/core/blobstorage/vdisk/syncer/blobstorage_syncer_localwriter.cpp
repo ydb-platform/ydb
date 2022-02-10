@@ -96,7 +96,7 @@ namespace NKikimr {
 
         // record handlers
         auto blobHandler = [&] (const NSyncLog::TLogoBlobRec *rec) {
-            Y_VERIFY_DEBUG(TIngress::MustKnowAboutLogoBlob(vctx->Top.get(), vctx->ShortSelfVDisk, rec->LogoBlobID()),
+            Y_VERIFY_DEBUG(TIngress::MustKnowAboutLogoBlob(vctx->Top.get(), vctx->ShortSelfVDisk, rec->LogoBlobID()), 
                     "logoBlobID# %s ShortSelfVDisk# %s top# %s", rec->LogoBlobID().ToString().data(),
                     vctx->ShortSelfVDisk.ToString().data(), vctx->Top->ToString().data());
 
@@ -111,29 +111,29 @@ namespace NKikimr {
             TMemRecBarrier memRecBarrier(rec->CollectGeneration, rec->CollectStep, rec->Ingress);
             barriers.emplace_back(keyBarrier, memRecBarrier);
         };
-        auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) {
-            blocks.emplace_back(TKeyBlock(rec->TabletId), TMemRecBlock(rec->Generation));
-        };
+        auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) { 
+            blocks.emplace_back(TKeyBlock(rec->TabletId), TMemRecBlock(rec->Generation)); 
+        }; 
 
         // process synclog data
         NSyncLog::TFragmentReader fragment(Data);
-        fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2);
+        fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2); 
 
         if (logoBlobs) {
             Squeeze(logoBlobs);
             Extracted.LogoBlobs =
-                std::make_shared<TFreshAppendixLogoBlobs>(std::move(logoBlobs), vctx->FreshIndex, true);
+                std::make_shared<TFreshAppendixLogoBlobs>(std::move(logoBlobs), vctx->FreshIndex, true); 
         }
         if (blocks) {
             Squeeze(blocks);
             // blocks are already sorted
             Extracted.Blocks =
-                std::make_shared<TFreshAppendixBlocks>(std::move(blocks), vctx->FreshIndex, true);
+                std::make_shared<TFreshAppendixBlocks>(std::move(blocks), vctx->FreshIndex, true); 
         }
         if (barriers) {
             Squeeze(barriers);
             Extracted.Barriers =
-                std::make_shared<TFreshAppendixBarriers>(std::move(barriers), vctx->FreshIndex, true);
+                std::make_shared<TFreshAppendixBarriers>(std::move(barriers), vctx->FreshIndex, true); 
         }
         Y_VERIFY(Extracted.IsReady());
     }
@@ -149,7 +149,7 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskContext> VCtx;
         TActorId SkeletonId;
         TActorId ParentId;
-        std::unique_ptr<TEvLocalSyncData> Ev;
+        std::unique_ptr<TEvLocalSyncData> Ev; 
 
         void Bootstrap(const TActorContext &ctx) {
             auto startTime = TAppData::TimeProvider->Now();
@@ -160,7 +160,7 @@ namespace NKikimr {
                     << " dataSize# " << Ev->Data.size()
                     << " duration# %s" << (finishTime - startTime));
 
-            ctx.Send(new IEventHandle(SkeletonId, ParentId, Ev.release()));
+            ctx.Send(new IEventHandle(SkeletonId, ParentId, Ev.release())); 
             PassAway();
         }
 
@@ -173,7 +173,7 @@ namespace NKikimr {
                 const TIntrusivePtr<TVDiskContext> &vctx,
                 const TActorId &skeletonId,
                 const TActorId &parentId,
-                std::unique_ptr<TEvLocalSyncData> ev)
+                std::unique_ptr<TEvLocalSyncData> ev) 
             : VCtx(vctx)
             , SkeletonId(skeletonId)
             , ParentId(parentId)
@@ -182,7 +182,7 @@ namespace NKikimr {
     };
 
     IActor *CreateLocalSyncDataExtractor(const TIntrusivePtr<TVDiskContext> &vctx, const TActorId &skeletonId,
-        const TActorId &parentId, std::unique_ptr<TEvLocalSyncData> ev) {
+        const TActorId &parentId, std::unique_ptr<TEvLocalSyncData> ev) { 
         return new TLocalSyncDataExtractorActor(vctx, skeletonId, parentId, std::move(ev));
     }
 

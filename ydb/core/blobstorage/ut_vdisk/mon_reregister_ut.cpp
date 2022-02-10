@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(TMonitoring) {
     // TMyTest
     ////////////////////////////////////////////////////////////////////
     class TMyTest : public TActorBootstrapped<TMyTest> {
-        std::shared_ptr<TTestWithActorSystem> Env;
+        std::shared_ptr<TTestWithActorSystem> Env; 
         TActorId WorkerId;
 
         friend class TActorBootstrapped<TMyTest>;
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(TMonitoring) {
         }
 
     public:
-        TMyTest(std::shared_ptr<TTestWithActorSystem> env)
+        TMyTest(std::shared_ptr<TTestWithActorSystem> env) 
             : TActorBootstrapped<TThis>()
             , Env(env)
         {}
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TMonitoring) {
     // Unit test
     ////////////////////////////////////////////////////////////////////
     Y_UNIT_TEST(ReregisterTest) {
-        std::shared_ptr<TTestWithActorSystem> test(new TTestWithActorSystem(0));
+        std::shared_ptr<TTestWithActorSystem> test(new TTestWithActorSystem(0)); 
         test->Run(new TMyTest(test));
     }
 }

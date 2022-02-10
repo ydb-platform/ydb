@@ -508,9 +508,9 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             ui64 totalSize = 0;
             for (ui64 i = firstRequestIdx; i != endIdx; ++i) {
                 ui64 size = refs[i].BlobSize();
-                Y_VERIFY(size != 0);
+                Y_VERIFY(size != 0); 
 
-                const ui64 replyDataSize = totalSize + size + NKikimr::BlobProtobufHeaderMaxSize;
+                const ui64 replyDataSize = totalSize + size + NKikimr::BlobProtobufHeaderMaxSize; 
                 if (replyDataSize <= NKikimr::MaxProtobufSize) {
                     totalSize += size + NKikimr::BlobProtobufHeaderMaxSize;
                 } else {
@@ -862,8 +862,8 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_REQ_REBUILD_GRAPH;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_REQ_REBUILD_GRAPH; 
     }
 
     TTabletReqRebuildHistoryGraph(const TActorId &owner, TTabletStorageInfo *info, ui32 blockedGen, NTracing::ITrace *trace, ui64 followerCookie)

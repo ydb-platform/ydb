@@ -29,7 +29,7 @@ namespace NDeprecatedUserData {
 } // NDeprecatedUserData
 
 TUsersInfoStorage::TUsersInfoStorage(
-    TString dcId,
+    TString dcId, 
     ui64 tabletId,
     const TString& topicName,
     ui32 partition,
@@ -39,7 +39,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     const TString& dbId,
     const TString& folderId
 )
-    : DCId(std::move(dcId))
+    : DCId(std::move(dcId)) 
     , TabletId(tabletId)
     , TopicName(topicName)
     , Partition(partition)

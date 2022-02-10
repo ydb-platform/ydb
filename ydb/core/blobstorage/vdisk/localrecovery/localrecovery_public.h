@@ -39,33 +39,33 @@ namespace NKikimr {
     {
         NKikimrProto::EReplyStatus Status;
         TIntrusivePtr<TLocalRecoveryInfo> RecovInfo;
-        std::unique_ptr<NSyncLog::TSyncLogRepaired> RepairedSyncLog;
-        std::shared_ptr<NHuge::THullHugeKeeperPersState> RepairedHuge;
+        std::unique_ptr<NSyncLog::TSyncLogRepaired> RepairedSyncLog; 
+        std::shared_ptr<NHuge::THullHugeKeeperPersState> RepairedHuge; 
         TIntrusivePtr<TSyncerData> SyncerData;
-        std::shared_ptr<THullDbRecovery> Uncond;
+        std::shared_ptr<THullDbRecovery> Uncond; 
         std::shared_ptr<TPDiskCtx> PDiskCtx;
         TIntrusivePtr<THullCtx> HullCtx;
-        std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
+        std::shared_ptr<THugeBlobCtx> HugeBlobCtx; 
         TIntrusivePtr<TLocalRecoveryInfo> LocalRecoveryInfo;
         TIntrusivePtr<TLsnMngr> LsnMngr;
         TVDiskIncarnationGuid VDiskIncarnationGuid;
-        NKikimrVDiskData::TScrubEntrypoint ScrubEntrypoint;
-        ui64 ScrubEntrypointLsn;
+        NKikimrVDiskData::TScrubEntrypoint ScrubEntrypoint; 
+        ui64 ScrubEntrypointLsn; 
 
         TEvLocalRecoveryDone(NKikimrProto::EReplyStatus status,
                              TIntrusivePtr<TLocalRecoveryInfo> recovInfo,
-                             std::unique_ptr<NSyncLog::TSyncLogRepaired> repairedSyncLog,
-                             std::shared_ptr<NHuge::THullHugeKeeperPersState> repairedHuge,
+                             std::unique_ptr<NSyncLog::TSyncLogRepaired> repairedSyncLog, 
+                             std::shared_ptr<NHuge::THullHugeKeeperPersState> repairedHuge, 
                              TIntrusivePtr<TSyncerData> syncerData,
-                             std::shared_ptr<THullDbRecovery> &&reparedHullDb,
+                             std::shared_ptr<THullDbRecovery> &&reparedHullDb, 
                              const TPDiskCtxPtr &pdiskCtx,
                              TIntrusivePtr<THullCtx> &hullCtx,
-                             std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
+                             std::shared_ptr<THugeBlobCtx> &hugeBlobCtx, 
                              TIntrusivePtr<TLocalRecoveryInfo> &localRecoveryInfo,
                              const TIntrusivePtr<TLsnMngr> &lsnMngr,
-                             TVDiskIncarnationGuid vdiskIncarnationGuid,
-                             NKikimrVDiskData::TScrubEntrypoint scrubEntrypoint,
-                             ui64 scrubEntrypointLsn);
+                             TVDiskIncarnationGuid vdiskIncarnationGuid, 
+                             NKikimrVDiskData::TScrubEntrypoint scrubEntrypoint, 
+                             ui64 scrubEntrypointLsn); 
         ~TEvLocalRecoveryDone();
     };
 
@@ -75,9 +75,9 @@ namespace NKikimr {
     IActor* CreateDatabaseLocalRecoveryActor(
                 const TIntrusivePtr<TVDiskContext> &vctx,
                 const TIntrusivePtr<TVDiskConfig> &config,
-                const TVDiskID &selfVDiskId,
+                const TVDiskID &selfVDiskId, 
                 const TActorId &skeletonId,
-                const TActorId skeletonFrontId,
-                std::shared_ptr<TRopeArena> arena);
+                const TActorId skeletonFrontId, 
+                std::shared_ptr<TRopeArena> arena); 
 
 } // NKikimr

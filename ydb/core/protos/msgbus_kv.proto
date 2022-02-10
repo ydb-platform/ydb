@@ -1,4 +1,4 @@
-package NKikimrClient;
+package NKikimrClient; 
 option java_package = "ru.yandex.kikimr.proto";
 
 
@@ -57,7 +57,7 @@ message TKeyValueRequest {
         optional EPriority Priority = 4; // (default = REALTIME)
         optional bytes KeyToCache = 5; // used in PQ
         optional ETactic Tactic = 6 [default = MAX_THROUGHPUT]; // mandatory, used for non-inline puts only
-        repeated EStorageChannel AutoselectChannel = 7; // when filled, channel is selected automatically from this set
+        repeated EStorageChannel AutoselectChannel = 7; // when filled, channel is selected automatically from this set 
     }
     message TCmdRename {
         optional bytes OldKey = 1; // mandatory
@@ -76,9 +76,9 @@ message TKeyValueRequest {
     message TCmdGetStatus {
         optional EStorageChannel StorageChannel = 1; // (default = MAIN)
     }
-    message TCmdTrimLeakedBlobs {
-        optional uint32 MaxItemsToTrim = 1;
-    }
+    message TCmdTrimLeakedBlobs { 
+        optional uint32 MaxItemsToTrim = 1; 
+    } 
     message TCmdSetExecutorFastLogPolicy {
         optional bool IsAllowed = 1 [default = false]; // mandatory
     }
@@ -95,7 +95,7 @@ message TKeyValueRequest {
     repeated TCmdCopyRange CmdCopyRange = 11;
     repeated TCmdConcat CmdConcat = 12;
     repeated TCmdGetStatus CmdGetStatus = 13;
-    optional TCmdTrimLeakedBlobs CmdTrimLeakedBlobs = 14;
+    optional TCmdTrimLeakedBlobs CmdTrimLeakedBlobs = 14; 
     optional TCmdSetExecutorFastLogPolicy CmdSetExecutorFastLogPolicy = 15;
 
     optional uint64 DeadlineInstantMs = 10;
@@ -150,11 +150,11 @@ message TKeyValueResponse {
         optional TKeyValueRequest.EStorageChannel StorageChannel = 2;
         optional uint32 StatusFlags = 3; // A set of flags from EStatusFlags ydb/core/protos/blobstorage.proto
     }
-    message TTrimLeakedBlobsResult {
+    message TTrimLeakedBlobsResult { 
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
-        optional uint32 NumItemsTrimmed = 2;
-        optional uint32 NumItemsLeft = 3;
-    }
+        optional uint32 NumItemsTrimmed = 2; 
+        optional uint32 NumItemsLeft = 3; 
+    } 
     message TSetExecutorFastLogPolicyResult {
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
     }
@@ -169,7 +169,7 @@ message TKeyValueResponse {
     repeated TCopyRangeResult CopyRangeResult = 10;
     repeated TConcatResult ConcatResult = 11;
     repeated TGetStatusResult GetStatusResult = 12;
-    optional TTrimLeakedBlobsResult TrimLeakedBlobsResult = 13;
+    optional TTrimLeakedBlobsResult TrimLeakedBlobsResult = 13; 
     optional TSetExecutorFastLogPolicyResult SetExecutorFastLogPolicyResult = 14;
     optional string ErrorReason = 9; // When present contains human-readable error description
 }

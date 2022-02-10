@@ -68,20 +68,20 @@ namespace NKikimr {
             BarriersAdditions = std::move(vec);
         }
 
-        ui32 GetLsnRange() const {
-            ui32 res = 0;
-            for (const auto& x : LogoBlobsAdditions) {
-                res += x.RecsNum;
-            }
-            for (const auto& x : BlocksAdditions) {
-                res += x.RecsNum;
-            }
-            for (const auto& x : BarriersAdditions) {
-                res += x.RecsNum;
-            }
-            return res;
-        }
-
+        ui32 GetLsnRange() const { 
+            ui32 res = 0; 
+            for (const auto& x : LogoBlobsAdditions) { 
+                res += x.RecsNum; 
+            } 
+            for (const auto& x : BlocksAdditions) { 
+                res += x.RecsNum; 
+            } 
+            for (const auto& x : BarriersAdditions) { 
+                res += x.RecsNum; 
+            } 
+            return res; 
+        } 
+ 
     private:
         template <class TAddition>
         static void SerializeToProto(TAddition &x, NKikimrVDiskData::TAddBulkSstRecoveryLogRec::TSstAndRecsNum *ad) {

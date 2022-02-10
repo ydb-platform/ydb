@@ -20,7 +20,7 @@ namespace NActors {
 
         virtual void Bootstrap(const TActorContext& ctx) {
             Become(&TSenderBaseActor::StateFunc);
-            ctx.Send(ctx.ExecutorThread.ActorSystem->InterconnectProxy(RecipientActorId.NodeId()), new TEvInterconnect::TEvConnectNode);
+            ctx.Send(ctx.ExecutorThread.ActorSystem->InterconnectProxy(RecipientActorId.NodeId()), new TEvInterconnect::TEvConnectNode); 
         }
 
         virtual void SendMessagesIfPossible(const TActorContext& ctx) {
@@ -41,8 +41,8 @@ namespace NActors {
             SendMessagesIfPossible(ctx);
         }
 
-        void Handle(TEvInterconnect::TEvNodeConnected::TPtr& /*ev*/, const TActorContext& ctx) {
-            SendMessagesIfPossible(ctx);
+        void Handle(TEvInterconnect::TEvNodeConnected::TPtr& /*ev*/, const TActorContext& ctx) { 
+            SendMessagesIfPossible(ctx); 
         }
 
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& /*ev*/, const TActorContext& /*ctx*/) {
@@ -52,13 +52,13 @@ namespace NActors {
             Die(ctx);
         }
 
-        virtual STRICT_STFUNC(StateFunc,
-            HFunc(TEvTestResponse, Handle)
-            HFunc(TEvents::TEvUndelivered, Handle)
-            HFunc(TEvents::TEvPoisonPill, Handle)
-            HFunc(TEvInterconnect::TEvNodeConnected, Handle)
-            HFunc(TEvInterconnect::TEvNodeDisconnected, Handle)
-        )
+        virtual STRICT_STFUNC(StateFunc, 
+            HFunc(TEvTestResponse, Handle) 
+            HFunc(TEvents::TEvUndelivered, Handle) 
+            HFunc(TEvents::TEvPoisonPill, Handle) 
+            HFunc(TEvInterconnect::TEvNodeConnected, Handle) 
+            HFunc(TEvInterconnect::TEvNodeDisconnected, Handle) 
+        ) 
     };
 
     class TReceiverBaseActor: public TActor<TReceiverBaseActor> {
@@ -74,10 +74,10 @@ namespace NActors {
         virtual ~TReceiverBaseActor() {
         }
 
-        virtual STRICT_STFUNC(StateFunc,
-            HFunc(TEvTest, Handle)
-        )
+        virtual STRICT_STFUNC(StateFunc, 
+            HFunc(TEvTest, Handle) 
+        ) 
 
-        virtual void Handle(TEvTest::TPtr& /*ev*/, const TActorContext& /*ctx*/) {}
+        virtual void Handle(TEvTest::TPtr& /*ev*/, const TActorContext& /*ctx*/) {} 
     };
 }

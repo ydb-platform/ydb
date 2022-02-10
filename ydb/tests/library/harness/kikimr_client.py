@@ -122,11 +122,11 @@ class KiKiMRMessageBusClient(object):
         command.UpdateDriveStatus.Status = status
         return self.send(request, 'BlobStorageConfig')
 
-    def send_request(self, protobuf_request, method=None):
+    def send_request(self, protobuf_request, method=None): 
         return self.send(protobuf_request, method)
 
     def send_and_poll_request(self, protobuf_request, method='SchemeOperation'):
-        response = self.send_request(protobuf_request, method)
+        response = self.send_request(protobuf_request, method) 
         return self.__poll(response)
 
     def __poll(self, flat_transaction_response):
@@ -134,11 +134,11 @@ class KiKiMRMessageBusClient(object):
             return flat_transaction_response
 
         return self.send_request(
-            TSchemeOperationStatus(
+            TSchemeOperationStatus( 
                 flat_transaction_response.FlatTxId.TxId,
                 flat_transaction_response.FlatTxId.SchemeShardTabletId
-            ).protobuf,
-            'SchemeOperationStatus'
+            ).protobuf, 
+            'SchemeOperationStatus' 
         )
 
     def bind_storage_pools(self, domain_name, spools):

@@ -86,8 +86,8 @@ struct THistogramCounter {
     }
 
     void IncrementFor(ui64 value) {
-        const size_t i = Max<ssize_t>(0, std::upper_bound(Ranges.begin(), Ranges.end(), value) - Ranges.begin() - 1);
-        Values[i]->Inc();
+        const size_t i = Max<ssize_t>(0, std::upper_bound(Ranges.begin(), Ranges.end(), value) - Ranges.begin() - 1); 
+        Values[i]->Inc(); 
 
         Histogram->Collect(value);
     }
@@ -973,11 +973,11 @@ private:
                         "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
 
                     for (ui32 r = 0; r < rangeCount; ++r) {
-                        if (percentileCounter.GetIntegral()) {
-                            *pcx[r] = percentileCounter.GetRangeValue(r);
-                        } else {
-                            *pcx[r] += percentileCounter.GetRangeValue(r);
-                        }
+                        if (percentileCounter.GetIntegral()) { 
+                            *pcx[r] = percentileCounter.GetRangeValue(r); 
+                        } else { 
+                            *pcx[r] += percentileCounter.GetRangeValue(r); 
+                        } 
                     }
 
                     if (rangeCount < 2) {
@@ -1558,8 +1558,8 @@ TIntrusivePtr<NSysView::IDbCounters> CreateTabletDbCounters(
 ////////////////////////////////////////////
 class TTabletCountersAggregatorActor : public TActorBootstrapped<TTabletCountersAggregatorActor> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_COUNTERS_AGGREGATOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_COUNTERS_AGGREGATOR; 
     }
 
     //
@@ -1905,8 +1905,8 @@ class TClusterLabeledCountersAggregatorActorV1 : public TActorBootstrapped<TClus
 
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_COUNTERS_AGGREGATOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_COUNTERS_AGGREGATOR; 
     }
 
     //
@@ -2179,8 +2179,8 @@ class TClusterLabeledCountersAggregatorActorV2 : public TActorBootstrapped<TClus
     bool NewFormat;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_COUNTERS_AGGREGATOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_COUNTERS_AGGREGATOR; 
     }
 
     //

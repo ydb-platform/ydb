@@ -106,8 +106,8 @@ namespace NKikimr {
         // AllocForSyncLog -- allocations to SyncLog
         // Take into account that currently any allocation for SyncLog implies
         // allocation for Hull. The opposite is wrong.
-        std::unique_ptr<TLsnAllocTracker> AllocForHull;
-        std::unique_ptr<TLsnAllocTracker> AllocForSyncLog;
+        std::unique_ptr<TLsnAllocTracker> AllocForHull; 
+        std::unique_ptr<TLsnAllocTracker> AllocForSyncLog; 
 
         // basic lsn allocation
         TLsnSeg AllocLsn(ui64 lsnAdvance = 1) {
@@ -142,8 +142,8 @@ namespace NKikimr {
             CurrentLsnPtr = &CurrentLsn;
 
             // Init trackers
-            AllocForHull = std::make_unique<TLsnAllocTracker>(StartLsn);
-            AllocForSyncLog = std::make_unique<TLsnAllocTracker>(lsnToSyncLogRecovered);
+            AllocForHull = std::make_unique<TLsnAllocTracker>(StartLsn); 
+            AllocForSyncLog = std::make_unique<TLsnAllocTracker>(lsnToSyncLogRecovered); 
         }
 
         TLsnMngr() = delete;

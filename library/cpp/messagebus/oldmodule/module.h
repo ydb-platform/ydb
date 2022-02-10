@@ -71,8 +71,8 @@ namespace NBus {
         TJobHandler(TBusHandlerPtr fptr = nullptr) {
             MyPtr = fptr;
         }
-        TJobHandler(const TJobHandler&) = default;
-        TJobHandler& operator =(const TJobHandler&) = default;
+        TJobHandler(const TJobHandler&) = default; 
+        TJobHandler& operator =(const TJobHandler&) = default; 
         bool operator==(TJobHandler h) const {
             return MyPtr == h.MyPtr;
         }

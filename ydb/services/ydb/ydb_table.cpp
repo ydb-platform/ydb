@@ -32,7 +32,7 @@ void TGRpcYdbTableService::DecRequest() {
 }
 
 void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
-    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_); 
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif

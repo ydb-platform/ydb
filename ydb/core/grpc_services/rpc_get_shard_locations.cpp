@@ -39,8 +39,8 @@ private:
     THashMap<ui32, TNodeInfo> NodeInfos;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::GRPC_REQ;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::GRPC_REQ; 
     }
 
     explicit TGetShardLocationsRPC(TAutoPtr<TEvGetShardLocationsRequest> request)

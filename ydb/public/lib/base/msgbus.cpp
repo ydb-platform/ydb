@@ -8,10 +8,10 @@ void ExplainProposeTransactionStatus(ui32 status, TString& name, TString& descri
     name = ToString(status);
     description = "Unknown status";
 
-    auto field = NKikimrClient::TResponse::descriptor()->FindFieldByNumber(
-        NKikimrClient::TResponse::kProxyErrorCodeFieldNumber);
+    auto field = NKikimrClient::TResponse::descriptor()->FindFieldByNumber( 
+        NKikimrClient::TResponse::kProxyErrorCodeFieldNumber); 
 
-    auto extension = field->options().GetExtension(NKikimrClient::EnumValueHint);
+    auto extension = field->options().GetExtension(NKikimrClient::EnumValueHint); 
 
     for (auto item : extension.GetHints()) {
         if (status == item.GetValue()) {
@@ -26,10 +26,10 @@ void ExplainExecutionEngineStatus(ui32 status, TString& name, TString& descripti
     name = ToString(status);
     description = "Unknown status";
 
-    auto field = NKikimrClient::TResponse::descriptor()->FindFieldByNumber(
-        NKikimrClient::TResponse::kExecutionEngineStatusFieldNumber);
+    auto field = NKikimrClient::TResponse::descriptor()->FindFieldByNumber( 
+        NKikimrClient::TResponse::kExecutionEngineStatusFieldNumber); 
 
-    auto extension = field->options().GetExtension(NKikimrClient::EnumValueHint);
+    auto extension = field->options().GetExtension(NKikimrClient::EnumValueHint); 
 
     for (auto item : extension.GetHints()) {
         if (status == item.GetValue()) {

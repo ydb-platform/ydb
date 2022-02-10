@@ -25,13 +25,13 @@ namespace NKikimr {
         const EPhase Phase;
         const NKikimrProto::EReplyStatus Status;
         const TIntrusivePtr<TPDiskParams> Dsk;
-        const std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
+        const std::shared_ptr<THugeBlobCtx> HugeBlobCtx; 
         const TVDiskIncarnationGuid VDiskIncarnationGuid;
 
         TEvFrontRecoveryStatus(EPhase phase,
                                NKikimrProto::EReplyStatus status,
                                const TIntrusivePtr<TPDiskParams> &dsk,
-                               std::shared_ptr<THugeBlobCtx> hugeBlobCtx,
+                               std::shared_ptr<THugeBlobCtx> hugeBlobCtx, 
                                TVDiskIncarnationGuid vdiskIncarnationGuid);
         ~TEvFrontRecoveryStatus();
     };

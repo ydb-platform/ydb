@@ -51,29 +51,29 @@ namespace NKikimr {
                 return Sprintf("[TabletId# %" PRIu64 " Generation# %" PRIu32 "]", TabletId, Generation);
             }
         };
-
-        struct TBlockRecV2 {
-            ui64 TabletId;
-            ui32 Generation;
-            ui64 IssuerGuid;
-
-            TBlockRecV2(ui64 tabletId = 0, ui32 generation = 0, ui64 issuerGuid = 0)
-                : TabletId(tabletId)
-                , Generation(generation)
-                , IssuerGuid(issuerGuid)
-            {}
-
-            TString ToString() const {
-                return TStringBuilder() << "[TabletId# " << TabletId << " Generation# " << Generation
-                     << " IssuerGuid# " << IssuerGuid << "]";
-            }
-        };
+ 
+        struct TBlockRecV2 { 
+            ui64 TabletId; 
+            ui32 Generation; 
+            ui64 IssuerGuid; 
+ 
+            TBlockRecV2(ui64 tabletId = 0, ui32 generation = 0, ui64 issuerGuid = 0) 
+                : TabletId(tabletId) 
+                , Generation(generation) 
+                , IssuerGuid(issuerGuid) 
+            {} 
+ 
+            TString ToString() const { 
+                return TStringBuilder() << "[TabletId# " << TabletId << " Generation# " << Generation 
+                     << " IssuerGuid# " << IssuerGuid << "]"; 
+            } 
+        }; 
 
         struct TBarrierRec {
             ui64 TabletId;
-            ui32 Channel : 8;
-            ui32 Reserved : 23;
-            ui32 Hard : 1;
+            ui32 Channel : 8; 
+            ui32 Reserved : 23; 
+            ui32 Hard : 1; 
             ui32 Gen;
             ui32 GenCounter;
             ui32 CollectGeneration;
@@ -81,11 +81,11 @@ namespace NKikimr {
             TBarrierIngress Ingress;
 
             TBarrierRec(ui64 tabletId = 0, ui32 channel = 0, ui32 gen = 0, ui32 genCounter = 0, ui32 collGen = 0,
-                        ui32 collStep = 0, bool hard = false, ui64 ingressRaw = 0)
+                        ui32 collStep = 0, bool hard = false, ui64 ingressRaw = 0) 
                 : TabletId(tabletId)
                 , Channel(channel)
-                , Reserved(0)
-                , Hard(hard)
+                , Reserved(0) 
+                , Hard(hard) 
                 , Gen(gen)
                 , GenCounter(genCounter)
                 , CollectGeneration(collGen)
@@ -94,7 +94,7 @@ namespace NKikimr {
             {}
 
             TString ToString() const {
-                return Sprintf("[TabletId# %" PRIu64 " Channel# %" PRIu32 " %s]", TabletId, Channel, Hard ? "hard" : "soft");
+                return Sprintf("[TabletId# %" PRIu64 " Channel# %" PRIu32 " %s]", TabletId, Channel, Hard ? "hard" : "soft"); 
             }
         };
 
@@ -102,8 +102,8 @@ namespace NKikimr {
             enum ESyncLogRecType {
                 RecLogoBlob,
                 RecBlock,
-                RecBarrier,
-                RecBlockV2,
+                RecBarrier, 
+                RecBlockV2, 
             };
 
             ui64 RecType : 2;
@@ -123,7 +123,7 @@ namespace NKikimr {
                     case RecLogoBlob:   payloadSize = sizeof(TLogoBlobRec); break;
                     case RecBlock:      payloadSize = sizeof(TBlockRec); break;
                     case RecBarrier:    payloadSize = sizeof(TBarrierRec); break;
-                    case RecBlockV2:    payloadSize = sizeof(TBlockRecV2); break;
+                    case RecBlockV2:    payloadSize = sizeof(TBlockRecV2); break; 
                     default: Y_FAIL("Unsupported type: RecType=%" PRIu64 " Lsn=%" PRIu64, (ui64)RecType, Lsn);
                 }
                 return sizeof(*this) + payloadSize;
@@ -134,7 +134,7 @@ namespace NKikimr {
                     case RecLogoBlob:   return "LogoBlob";
                     case RecBlock:      return "Block";
                     case RecBarrier:    return "Barrier";
-                    case RecBlockV2:    return "Block";
+                    case RecBlockV2:    return "Block"; 
                     default:            return "Unknown";
                 }
             }
@@ -154,11 +154,11 @@ namespace NKikimr {
                 return (const TBarrierRec *)(this + 1);
             }
 
-            const TBlockRecV2 *GetBlockV2() const {
-                Y_VERIFY_DEBUG(RecType == RecBlockV2);
-                return (const TBlockRecV2 *)(this + 1);
-            }
-
+            const TBlockRecV2 *GetBlockV2() const { 
+                Y_VERIFY_DEBUG(RecType == RecBlockV2); 
+                return (const TBlockRecV2 *)(this + 1); 
+            } 
+ 
             TString ToString() const {
                 return Sprintf("{Lsn# %" PRIu64 " Rec# %s %s}", Lsn, RecTypeToStr(RecType), ValueToString().data());
             }
@@ -168,7 +168,7 @@ namespace NKikimr {
                     case RecLogoBlob:   return GetLogoBlob()->ToString();
                     case RecBlock:      return GetBlock()->ToString();
                     case RecBarrier:    return GetBarrier()->ToString();
-                    case RecBlockV2:    return GetBlockV2()->ToString();
+                    case RecBlockV2:    return GetBlockV2()->ToString(); 
                     default: Y_FAIL("Unsupported type: RecType=%" PRIu64 " Lsn=%" PRIu64, (ui64)RecType, Lsn);
                 }
             }
@@ -196,7 +196,7 @@ namespace NKikimr {
                                     ui64 lsn,
                                     const TLogoBlobID &id,
                                     const TIngress &ingress);
-            static ui32 SetBlock(char *buf, ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid);
+            static ui32 SetBlock(char *buf, ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid); 
             static ui32 SetBarrier(char *buf,
                                    ui64 lsn,
                                    ui64 tabletId,
@@ -205,7 +205,7 @@ namespace NKikimr {
                                    ui32 genCounter,
                                    ui32 collGen,
                                    ui32 collStep,
-                                   bool hard,
+                                   bool hard, 
                                    const TBarrierIngress &ingress);
             static ui32 SetGC(const TBlobStorageGroupType &gtype,
                               char *buf,
@@ -230,7 +230,7 @@ namespace NKikimr {
                              ui64 lsn,
                              const TLogoBlobID &id,
                              const TIngress &ingress);
-            void SetBlock(ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid);
+            void SetBlock(ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid); 
             void SetBarrier(ui64 lsn,
                             ui64 tabletId,
                             ui32 channel,
@@ -238,7 +238,7 @@ namespace NKikimr {
                             ui32 genCounter,
                             ui32 collGen,
                             ui32 collStep,
-                            bool hard,
+                            bool hard, 
                             const TBarrierIngress &ingress);
             void SetGC(const TBlobStorageGroupType &gtype,
                        ui64 lsn,

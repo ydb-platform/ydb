@@ -11,8 +11,8 @@ using namespace NNodeWhiteboard;
 
 class TWalleCheckTaskAdapter : public TActorBootstrapped<TWalleCheckTaskAdapter> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::CMS_WALLE_REQ;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::CMS_WALLE_REQ; 
     }
 
     TWalleCheckTaskAdapter(TEvCms::TEvWalleCheckTaskRequest::TPtr &event,

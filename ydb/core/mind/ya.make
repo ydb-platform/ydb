@@ -31,7 +31,7 @@ SRCS(
     node_broker__update_config.cpp
     node_broker__update_config_subscription.cpp
     node_broker__update_epoch.cpp
-    table_adapter.h
+    table_adapter.h 
     tenant_node_enumeration.cpp
     tenant_node_enumeration.h
     tenant_pool.h

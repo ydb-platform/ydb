@@ -99,30 +99,30 @@ namespace NActors {
             return (ActorPack == TMailboxActorPack::Simple && ActorsInfo.Simple.ActorId == 0);
         }
 
-        template<typename T>
-        void ForEach(T&& callback) noexcept {
-            switch (ActorPack) {
-                case TMailboxActorPack::Simple:
-                    if (ActorsInfo.Simple.ActorId) {
-                        callback(ActorsInfo.Simple.ActorId, ActorsInfo.Simple.Actor);
-                    }
-                    break;
-
-                case TMailboxActorPack::Map:
-                    for (const auto& [actorId, actor] : *ActorsInfo.Map.ActorsMap) {
-                        callback(actorId, actor);
-                    }
-                    break;
-
-                case TMailboxActorPack::Array:
-                    for (ui64 i = 0; i < ActorsInfo.Array.ActorsCount; ++i) {
-                        auto& row = ActorsInfo.Array.ActorsArray->Actors[i];
-                        callback(row.ActorId, row.Actor);
-                    }
-                    break;
-            }
-        }
-
+        template<typename T> 
+        void ForEach(T&& callback) noexcept { 
+            switch (ActorPack) { 
+                case TMailboxActorPack::Simple: 
+                    if (ActorsInfo.Simple.ActorId) { 
+                        callback(ActorsInfo.Simple.ActorId, ActorsInfo.Simple.Actor); 
+                    } 
+                    break; 
+ 
+                case TMailboxActorPack::Map: 
+                    for (const auto& [actorId, actor] : *ActorsInfo.Map.ActorsMap) { 
+                        callback(actorId, actor); 
+                    } 
+                    break; 
+ 
+                case TMailboxActorPack::Array: 
+                    for (ui64 i = 0; i < ActorsInfo.Array.ActorsCount; ++i) { 
+                        auto& row = ActorsInfo.Array.ActorsArray->Actors[i]; 
+                        callback(row.ActorId, row.Actor); 
+                    } 
+                    break; 
+            } 
+        } 
+ 
         IActor* FindActor(ui64 localActorId) noexcept {
             switch (ActorPack) {
                 case TMailboxActorPack::Simple: {

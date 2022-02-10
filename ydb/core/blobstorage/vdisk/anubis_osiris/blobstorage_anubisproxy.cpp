@@ -23,13 +23,13 @@ namespace NKikimr {
         TVDiskID SelfVDiskId;
         TActiveActors ActiveActors;
         TActorId CliId; // backpressure client id
-        std::unique_ptr<IActor> Actor; // backpressure client actor
+        std::unique_ptr<IActor> Actor; // backpressure client actor 
         TActorId RequestFrom;
 
         friend class TActorBootstrapped<TAnubisProxyActor>;
 
         void Bootstrap(const TActorContext &ctx) {
-            CliId = ctx.Register(Actor.release());
+            CliId = ctx.Register(Actor.release()); 
             ActiveActors.Insert(CliId);
             Become(&TThis::StateFunc);
         }
@@ -39,14 +39,14 @@ namespace NKikimr {
 
             Y_VERIFY(RequestFrom == TActorId());
             const auto eclass = NKikimrBlobStorage::EGetHandleClass::AsyncRead;
-            auto msg = TEvVGet::CreateExtremeIndexQuery(TargetVDiskId, TInstant::Max(), eclass);
+            auto msg = TEvVGet::CreateExtremeIndexQuery(TargetVDiskId, TInstant::Max(), eclass); 
             msg->Record.SetSuppressBarrierCheck(true);
 
             for (const auto &x : ev->Get()->Candidates) {
                 msg->AddExtremeQuery(x, 0, 0, nullptr);
             }
 
-            ctx.Send(CliId, msg.release());
+            ctx.Send(CliId, msg.release()); 
         }
 
         void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
@@ -58,9 +58,9 @@ namespace NKikimr {
             if (status == NKikimrProto::OK && !SelfVDiskId.SameDisk(record.GetVDiskID())) {
                 record.SetStatus(NKikimrProto::RACE);
             }
-            if (status == NKikimrProto::NOTREADY) {
-                record.SetStatus(NKikimrProto::ERROR);
-            }
+            if (status == NKikimrProto::NOTREADY) { 
+                record.SetStatus(NKikimrProto::ERROR); 
+            } 
 
             // reply with result
             ctx.Send(RequestFrom, new TEvAnubisVGetResult(TargetVDiskIdShort, ev));
@@ -80,8 +80,8 @@ namespace NKikimr {
                       )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_SYNCER_ANUBIS;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_SYNCER_ANUBIS; 
         }
 
         TAnubisProxyActor(const TIntrusivePtr<TVDiskContext> &vctx,
@@ -100,15 +100,15 @@ namespace NKikimr {
                                            VCtx->Top->GetOrderNumber(VCtx->ShortSelfVDisk));
             auto monGroup = VCtx->VDiskCounters->GetSubgroup("subsystem", "synceranubis");
             TIntrusivePtr<TFlowRecord> flowRecord(new TFlowRecord);
-            Actor.reset(CreateVDiskBackpressureClient(ginfo,
+            Actor.reset(CreateVDiskBackpressureClient(ginfo, 
                                                       TargetVDiskIdShort,
-                                                      queueId,
+                                                      queueId, 
                                                       monGroup,
                                                       VCtx,
                                                       clientId,
                                                       "Get",
                                                       replInterconnectChannel,
-                                                      false,
+                                                      false, 
                                                       TDuration::Minutes(1),
                                                       flowRecord,
                                                       NMonitoring::TCountableBase::EVisibility::Private));

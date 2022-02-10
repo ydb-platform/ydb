@@ -38,7 +38,7 @@ public:
     static constexpr EType KESUS = Kesus;
     static constexpr EType SYS_VIEW_PROCESSOR = SysViewProcessor;
     static constexpr EType FILESTORE = FileStore;
-    static constexpr EType TESTSHARD = TestShard;
+    static constexpr EType TESTSHARD = TestShard; 
     static constexpr EType SEQUENCESHARD = SequenceShard;
     static constexpr EType REPLICATION_CONTROLLER = ReplicationController;
 

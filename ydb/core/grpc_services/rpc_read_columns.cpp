@@ -69,8 +69,8 @@ private:
     TKikhouseSnapshotId SnapshotId;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::GRPC_REQ;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::GRPC_REQ; 
     }
 
     explicit TReadColumnsRPC(TAutoPtr<TEvReadColumnsRequest> request)

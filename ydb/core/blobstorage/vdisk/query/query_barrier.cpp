@@ -19,7 +19,7 @@ namespace NKikimr {
         TBarriersSnapshot BarriersSnap;
         TEvBlobStorage::TEvVGetBarrier::TPtr Ev;
         NKikimrBlobStorage::TEvVGetBarrier &Record;
-        std::unique_ptr<TEvBlobStorage::TEvVGetBarrierResult> Result;
+        std::unique_ptr<TEvBlobStorage::TEvVGetBarrierResult> Result; 
 
         friend class TActorBootstrapped<TLevelIndexBarrierQuery>;
 
@@ -33,7 +33,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_VDISK_GC,
                     VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                             "TEvVGetBarrierResult: %s", Result->ToString().data()));
-            SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, Ev->Cookie);
+            SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, Ev->Cookie); 
             ctx.Send(ParentId, new TEvents::TEvActorDied);
             Die(ctx);
         }
@@ -54,8 +54,8 @@ namespace NKikimr {
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_LEVEL_INDEX_BARRIER;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_LEVEL_INDEX_BARRIER; 
         }
 
         TLevelIndexBarrierQuery(
@@ -63,14 +63,14 @@ namespace NKikimr {
                 const TActorId &parentId,
                 TBarriersSnapshot &&barriersSnap,
                 TEvBlobStorage::TEvVGetBarrier::TPtr &ev,
-                std::unique_ptr<TEvBlobStorage::TEvVGetBarrierResult> result)
+                std::unique_ptr<TEvBlobStorage::TEvVGetBarrierResult> result) 
             : TActorBootstrapped<TLevelIndexBarrierQuery>()
             , HullCtx(hullCtx)
             , ParentId(parentId)
             , BarriersSnap(std::move(barriersSnap))
             , Ev(ev)
             , Record(Ev->Get()->Record)
-            , Result(std::move(result))
+            , Result(std::move(result)) 
         {}
     };
 
@@ -82,8 +82,8 @@ namespace NKikimr {
                 const TActorId &parentId,
                 TBarriersSnapshot &&barriersSnap,
                 TEvBlobStorage::TEvVGetBarrier::TPtr &ev,
-                std::unique_ptr<TEvBlobStorage::TEvVGetBarrierResult> result) {
-        return new TLevelIndexBarrierQuery(hullCtx, parentId, std::move(barriersSnap), ev, std::move(result));
+                std::unique_ptr<TEvBlobStorage::TEvVGetBarrierResult> result) { 
+        return new TLevelIndexBarrierQuery(hullCtx, parentId, std::move(barriersSnap), ev, std::move(result)); 
     }
 
 

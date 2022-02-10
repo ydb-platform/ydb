@@ -76,7 +76,7 @@ TCypherKey::~TCypherKey() {
 ////////////////////////////////////////////////////////////////////////////
 
 THashCalculator::THashCalculator() {
-    Poly = std::make_unique<Poly1305Vec>();
+    Poly = std::make_unique<Poly1305Vec>(); 
     Clear();
 }
 
@@ -170,7 +170,7 @@ TStreamCypher::TStreamCypher()
 {
 #if ENABLE_ENCRYPTION
     memset(Key, 0, sizeof(Key));
-    Cypher.reset(new ChaChaVec(CYPHER_ROUNDS));
+    Cypher.reset(new ChaChaVec(CYPHER_ROUNDS)); 
 #else
     Y_UNUSED(Leftover);
     Y_UNUSED(Key);

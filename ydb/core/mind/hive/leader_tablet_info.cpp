@@ -27,7 +27,7 @@ bool TLeaderTabletInfo::IsSomeoneAliveOnNode(TNodeId nodeId) const {
 ui32 TLeaderTabletInfo::GetFollowersAliveOnDataCenter(TDataCenterId dataCenterId) const {
     ui32 followers = 0;
     for (const TTabletInfo& follower : Followers) {
-        if (follower.CanBeAlive() && follower.Node->Location.GetDataCenterId() == dataCenterId) {
+        if (follower.CanBeAlive() && follower.Node->Location.GetDataCenterId() == dataCenterId) { 
             ++followers;
         }
     }
@@ -39,7 +39,7 @@ ui32 TLeaderTabletInfo::GetFollowersAliveOnDataCenterExcludingFollower(TDataCent
     for (const TTabletInfo& follower : Followers) {
         if (follower == excludingFollower)
             continue;
-        if (follower.CanBeAlive() && follower.Node->Location.GetDataCenterId() == dataCenterId) {
+        if (follower.CanBeAlive() && follower.Node->Location.GetDataCenterId() == dataCenterId) { 
             ++followers;
         }
     }

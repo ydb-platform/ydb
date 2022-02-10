@@ -11,10 +11,10 @@ namespace {
 
 template <typename ResponseType>
 class TMessageBusKeyValue
-        : public TMessageBusSimpleTabletRequest<TMessageBusKeyValue<ResponseType>, TEvKeyValue::TEvResponse, NKikimrServices::TActivity::FRONT_KV_REQUEST> {
-    using TBase = TMessageBusSimpleTabletRequest<TMessageBusKeyValue<ResponseType>, TEvKeyValue::TEvResponse, NKikimrServices::TActivity::FRONT_KV_REQUEST>;
+        : public TMessageBusSimpleTabletRequest<TMessageBusKeyValue<ResponseType>, TEvKeyValue::TEvResponse, NKikimrServices::TActivity::FRONT_KV_REQUEST> { 
+    using TBase = TMessageBusSimpleTabletRequest<TMessageBusKeyValue<ResponseType>, TEvKeyValue::TEvResponse, NKikimrServices::TActivity::FRONT_KV_REQUEST>; 
 public:
-    NKikimrClient::TKeyValueRequest RequestProto;
+    NKikimrClient::TKeyValueRequest RequestProto; 
     ui64 TabletId;
 
     TMessageBusKeyValue(TBusMessageContext &msg, ui64 tabletId, bool withRetry, TDuration timeout)

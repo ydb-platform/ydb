@@ -138,7 +138,7 @@ IDataGenerator* CreateBlobGenerator(ui64 maxCumSize, ui32 maxNumBlobs, ui32 minB
             // generate pseudorandom data with step and size seed
             TString data = GenerateData(size);
 
-            ui32 numDisks = Info->Type.BlobSubgroupSize();
+            ui32 numDisks = Info->Type.BlobSubgroupSize(); 
             ui32 handoff = Info->Type.Handoff();
 
             // find matching LogoBlobID
@@ -149,13 +149,13 @@ IDataGenerator* CreateBlobGenerator(ui64 maxCumSize, ui32 maxNumBlobs, ui32 minB
                 id = TLogoBlobID(tabletId, 1, ++Step, 0, size, 0);
                 ui32 hash = id.Hash();
                 for (const TVDiskID& vDiskID : MatchingVDisks) {
-                    TBlobStorageGroupInfo::TVDiskIds vDisks;
-                    TBlobStorageGroupInfo::TServiceIds services;
-                    Info->PickSubgroup(hash, &vDisks, &services);
-                    for (ui32 i = 0; i < numDisks - handoff; ++i) {
-                        if (vDisks[i] == vDiskID) {
-                            goodId = true;
-                            break;
+                    TBlobStorageGroupInfo::TVDiskIds vDisks; 
+                    TBlobStorageGroupInfo::TServiceIds services; 
+                    Info->PickSubgroup(hash, &vDisks, &services); 
+                    for (ui32 i = 0; i < numDisks - handoff; ++i) { 
+                        if (vDisks[i] == vDiskID) { 
+                            goodId = true; 
+                            break; 
                         }
                     }
                     if (goodId)

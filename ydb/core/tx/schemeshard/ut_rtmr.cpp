@@ -1,10 +1,10 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-
+ 
 using namespace NKikimr::NSchemeShard;
-using namespace NKikimr;
+using namespace NKikimr; 
 using namespace NKikimrSchemeOp;
-using namespace NSchemeShardUT_Private;
-
+using namespace NSchemeShardUT_Private; 
+ 
 Y_UNIT_TEST_SUITE(TRtmrTest) {
     Y_UNIT_TEST(CreataWithoutTimeCastBuckets) {
         TTestBasicRuntime runtime;

@@ -68,8 +68,8 @@ public:
         : TActor(&TThis::StateWork)
     {}
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::KESUS_PROXY_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::KESUS_PROXY_ACTOR; 
     }
 
 private:
@@ -240,8 +240,8 @@ public:
         Become(&TThis::StateWork);
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::KESUS_RESOLVE_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::KESUS_RESOLVE_ACTOR; 
     }
 
 private:

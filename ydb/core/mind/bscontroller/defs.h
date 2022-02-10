@@ -1,7 +1,7 @@
-#pragma once
-
+#pragma once 
+ 
 #include <ydb/core/mind/defs.h>
-
+ 
 #include <google/protobuf/text_format.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -41,14 +41,14 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <type_traits>
-#include <util/generic/algorithm.h>
-#include <util/generic/intrlist.h>
-#include <util/generic/map.h>
-#include <util/generic/ptr.h>
-#include <util/generic/set.h>
-#include <util/generic/string.h>
-#include <util/generic/vector.h>
-#include <util/string/builder.h>
-#include <util/string/strip.h>
-#include <util/system/hp_timer.h>
+#include <type_traits> 
+#include <util/generic/algorithm.h> 
+#include <util/generic/intrlist.h> 
+#include <util/generic/map.h> 
+#include <util/generic/ptr.h> 
+#include <util/generic/set.h> 
+#include <util/generic/string.h> 
+#include <util/generic/vector.h> 
+#include <util/string/builder.h> 
+#include <util/string/strip.h> 
+#include <util/system/hp_timer.h> 

@@ -71,13 +71,13 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     //response from KV on READ or WRITE config request
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
-    void HandleConfigWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx);
-    void HandleConfigReadResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx);
+    void HandleConfigWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx); 
+    void HandleConfigReadResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx); 
     void ApplyNewConfigAndReply(const TActorContext& ctx);
-    void HandleStateWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx);
+    void HandleStateWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx); 
 
-    void ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
-    void ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
+    void ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx); 
+    void ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx); 
 
     void FillMeteringParams(const TActorContext& ctx);
     TString GetMeteringJson(const TString& metricBillingId, const TString& schemeName, const THashMap<TString, ui64>& tags,
@@ -99,7 +99,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     //client request
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
 #define DESCRIBE_HANDLE(A) void A(const ui64 responseCookie, const TActorId& partActor, \
-                                  const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx);
+                                  const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx); 
     DESCRIBE_HANDLE(HandleGetMaxSeqNoRequest)
     DESCRIBE_HANDLE(HandleDeleteSessionRequest)
     DESCRIBE_HANDLE(HandleCreateSessionRequest)
@@ -113,7 +113,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     DESCRIBE_HANDLE(HandleSplitMessageGroupRequest)
 #undef DESCRIBE_HANDLE
 #define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, const TActorId& partActor, \
-                                  const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,\
+                                  const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,\ 
                                   const TActorId& pipeClient, const TActorId& sender);
     DESCRIBE_HANDLE_WITH_SENDER(HandleGetOwnershipRequest)
     DESCRIBE_HANDLE_WITH_SENDER(HandleReserveBytesRequest)
@@ -126,8 +126,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     static constexpr const char * KeyState() { return "_state"; }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::PERSQUEUE_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::PERSQUEUE_ACTOR; 
     }
 
     TPersQueue(const TActorId& tablet, TTabletStorageInfo *info);
@@ -147,7 +147,7 @@ private:
     TString TopicName;
     TString TopicPath;
     bool LocalDC;
-    TString DCId;
+    TString DCId; 
     TVector<NScheme::TTypeId> KeySchema;
     NKikimrPQ::TPQTabletConfig Config;
 

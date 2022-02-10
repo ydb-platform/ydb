@@ -2,11 +2,11 @@
 #include "event_pb.h"
 
 namespace NActors {
-
-    const TScopeId TScopeId::LocallyGenerated{
-        Max<ui64>(), Max<ui64>()
-    };
-
+ 
+    const TScopeId TScopeId::LocallyGenerated{ 
+        Max<ui64>(), Max<ui64>() 
+    }; 
+ 
     TIntrusivePtr<TEventSerializedData> IEventHandle::ReleaseChainBuffer() {
         if (Buffer) {
             TIntrusivePtr<TEventSerializedData> result;
@@ -17,7 +17,7 @@ namespace NActors {
         if (Event) {
             TAllocChunkSerializer serializer;
             Event->SerializeToArcadiaStream(&serializer);
-            auto chainBuf = serializer.Release(Event->IsExtendedFormat());
+            auto chainBuf = serializer.Release(Event->IsExtendedFormat()); 
             Event.Reset();
             return chainBuf;
         }
@@ -30,7 +30,7 @@ namespace NActors {
         if (Event) {
             TAllocChunkSerializer serializer;
             Event->SerializeToArcadiaStream(&serializer);
-            Buffer = serializer.Release(Event->IsExtendedFormat());
+            Buffer = serializer.Release(Event->IsExtendedFormat()); 
             return Buffer;
         }
         return new TEventSerializedData;

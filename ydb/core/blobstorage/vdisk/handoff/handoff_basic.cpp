@@ -93,10 +93,10 @@ namespace NKikimr {
         bool TProxyState::Restore(const TActorContext &ctx,
                                   const TLogoBlobID &id,
                                   ui64 fullDataSize,
-                                  TRope&& data) {
+                                  TRope&& data) { 
             Y_VERIFY(Initialized, "Restore(%p): SelfVDiskID# %s TargetVDiskID# %s id# %s",
                    this, SelfVDiskID.ToString().data(), TargetVDiskID.ToString().data(), id.ToString().data());
-            ui32 byteSize = TEvLocalHandoff::ByteSize(data.GetSize());
+            ui32 byteSize = TEvLocalHandoff::ByteSize(data.GetSize()); 
             Y_VERIFY_DEBUG(byteSize < MaxBytes);
 
             while (true) {
@@ -110,7 +110,7 @@ namespace NKikimr {
                     bool done = AtomicCas<ui64>((ui64 *)&Monitor, newMonitor, monitor);
                     if (done) {
                         // send message
-                        ctx.Send(ProxyID, new TEvLocalHandoff(id, fullDataSize, data.ConvertToString()));
+                        ctx.Send(ProxyID, new TEvLocalHandoff(id, fullDataSize, data.ConvertToString())); 
                         return true;
                     }
                 } else {

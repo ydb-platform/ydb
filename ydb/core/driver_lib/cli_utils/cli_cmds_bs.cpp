@@ -15,9 +15,9 @@ TClientCommandBlobStorage::TClientCommandBlobStorage()
 {
     AddCommand(CreateClientCommandDisk());
     AddCommand(CreateClientCommandGroup());
-    AddCommand(CreateClientCommandGenConfig());
-    AddCommand(CreateClientCommandGet());
-    AddCommand(CreateClientCommandBsConfig());
+    AddCommand(CreateClientCommandGenConfig()); 
+    AddCommand(CreateClientCommandGet()); 
+    AddCommand(CreateClientCommandBsConfig()); 
 }
 
 }

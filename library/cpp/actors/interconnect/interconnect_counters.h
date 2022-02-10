@@ -17,18 +17,18 @@ class IInterconnectMetrics {
 public:
     virtual ~IInterconnectMetrics() = default;
 
-    virtual void AddInflightDataAmount(ui64 value) = 0;
-    virtual void SubInflightDataAmount(ui64 value) = 0;
-    virtual void AddTotalBytesWritten(ui64 value) = 0;
-    virtual void SetClockSkewMicrosec(i64 value) = 0;
+    virtual void AddInflightDataAmount(ui64 value) = 0; 
+    virtual void SubInflightDataAmount(ui64 value) = 0; 
+    virtual void AddTotalBytesWritten(ui64 value) = 0; 
+    virtual void SetClockSkewMicrosec(i64 value) = 0; 
     virtual void IncSessionDeaths() = 0;
     virtual void IncHandshakeFails() = 0;
     virtual void SetConnected(ui32 value) = 0;
     virtual void IncSubscribersCount() = 0;
     virtual void SubSubscribersCount(ui32 value) = 0;
-    virtual void SubOutputBuffersTotalSize(ui64 value) = 0;
-    virtual void AddOutputBuffersTotalSize(ui64 value) = 0;
-    virtual ui64 GetOutputBuffersTotalSize() const = 0;
+    virtual void SubOutputBuffersTotalSize(ui64 value) = 0; 
+    virtual void AddOutputBuffersTotalSize(ui64 value) = 0; 
+    virtual ui64 GetOutputBuffersTotalSize() const = 0; 
     virtual void IncDisconnections() = 0;
     virtual void IncUsefulWriteWakeups() = 0;
     virtual void IncSpuriousWriteWakeups() = 0;
@@ -38,12 +38,12 @@ public:
     virtual void IncUsefulReadWakeups() = 0;
     virtual void IncSpuriousReadWakeups() = 0;
     virtual void SetPeerInfo(const TString& name, const TString& dataCenterId) = 0;
-    virtual void AddInputChannelsIncomingTraffic(ui16 channel, ui64 incomingTraffic) = 0;
+    virtual void AddInputChannelsIncomingTraffic(ui16 channel, ui64 incomingTraffic) = 0; 
     virtual void IncInputChannelsIncomingEvents(ui16 channel) = 0;
     virtual void IncRecvSyscalls() = 0;
-    virtual void AddTotalBytesRead(ui64 value) = 0;
+    virtual void AddTotalBytesRead(ui64 value) = 0; 
     virtual void UpdateLegacyPingTimeHist(ui64 value) = 0;
-    virtual void UpdateOutputChannelTraffic(ui16 channel, ui64 value) = 0;
+    virtual void UpdateOutputChannelTraffic(ui16 channel, ui64 value) = 0; 
     virtual void UpdateOutputChannelEvents(ui16 channel) = 0;
     TString GetHumanFriendlyPeerHostName() const {
         return HumanFriendlyPeerHostName.value_or(TString());

@@ -57,8 +57,8 @@ private:
     void Handle(TEvBusProxy::TEvInitRoot::TPtr &ev, const TActorContext &ctx);
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::MSGBUS_PROXY_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::MSGBUS_PROXY_ACTOR; 
     }
 
     TMessageBusServerProxy(
@@ -71,9 +71,9 @@ public:
     }
 
     ~TMessageBusServerProxy() {
-        if (Server) {
-            Server->ShutdownSession();
-        }
+        if (Server) { 
+            Server->ShutdownSession(); 
+        } 
     }
 
     void Bootstrap(const TActorContext &ctx);

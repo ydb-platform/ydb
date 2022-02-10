@@ -31,7 +31,7 @@ namespace NKikimr {
         ui64 OldSegLastKeepLsn = ui64(-1);
         bool WaitForCommit = false;
         const bool UseDreg;
-        std::shared_ptr<TRopeArena> Arena;
+        std::shared_ptr<TRopeArena> Arena; 
 
         static constexpr ui64 CalculateBufLowWatermark(ui32 chunkSize, bool useDreg) {
             return ui64(chunkSize) * (2u + !!useDreg);
@@ -39,20 +39,20 @@ namespace NKikimr {
 
     public:
         TFreshData(const TLevelIndexSettings &s, const TIntrusivePtr<ITimeProvider> &tp,
-                std::shared_ptr<TRopeArena> arena)
+                std::shared_ptr<TRopeArena> arena) 
             : HullCtx(s.HullCtx)
             , TimeProvider(tp)
             , CompThreshold(s.CompThreshold)
             , Cur(new TFreshSegment(HullCtx, s.CompThreshold, tp->Now(), arena))
             , UseDreg(s.FreshUseDreg)
-            , Arena(std::move(arena))
+            , Arena(std::move(arena)) 
         {}
 
         // Puts
         void Put(ui64 lsn, const TKey &key, const TMemRec &memRec);
         void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer);
-        void PutAppendix(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn);
-
+        void PutAppendix(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn); 
+ 
         // Compaction
         bool NeedsCompaction(ui64 yardFreeUpToLsn) const;
         TIntrusivePtr<TFreshSegment> FindSegmentForCompaction();
@@ -103,7 +103,7 @@ namespace NKikimr {
     }
 
     template <class TKey, class TMemRec>
-    void TFreshData<TKey, TMemRec>::PutAppendix(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) {
+    void TFreshData<TKey, TMemRec>::PutAppendix(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) { 
         Y_VERIFY_DEBUG(lastLsn >= firstLsn);
         Cur->PutAppendix(std::move(a), firstLsn, lastLsn);
         SwapWithDregIfRequired();
@@ -132,7 +132,7 @@ namespace NKikimr {
         }
 
         OldSegLastKeepLsn = Old->GetFirstLsnToKeep();
-        Cur = MakeIntrusive<TFreshSegment>(HullCtx, CompThreshold, TimeProvider->Now(), Arena);
+        Cur = MakeIntrusive<TFreshSegment>(HullCtx, CompThreshold, TimeProvider->Now(), Arena); 
         return Old;
     }
 
@@ -225,13 +225,13 @@ namespace NKikimr {
         const bool renewCur = UseDreg && !Dreg && Cur->NeedsCompactionBySize();
         if (renewCur) {
             Dreg.Swap(Cur);
-            Cur = MakeIntrusive<TFreshSegment>(HullCtx, CompThreshold, TimeProvider->Now(), Arena);
+            Cur = MakeIntrusive<TFreshSegment>(HullCtx, CompThreshold, TimeProvider->Now(), Arena); 
         }
     }
 
-    extern template class TFreshData<TKeyLogoBlob, TMemRecLogoBlob>;
-    extern template class TFreshData<TKeyBarrier, TMemRecBarrier>;
-    extern template class TFreshData<TKeyBlock, TMemRecBlock>;
-
+    extern template class TFreshData<TKeyLogoBlob, TMemRecLogoBlob>; 
+    extern template class TFreshData<TKeyBarrier, TMemRecBarrier>; 
+    extern template class TFreshData<TKeyBlock, TMemRecBlock>; 
+ 
 } // NKikimr
 

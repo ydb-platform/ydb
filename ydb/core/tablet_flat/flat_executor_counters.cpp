@@ -81,19 +81,19 @@ TExecutorCounters::TExecutorCounters()
     static TTabletPercentileCounter::TRangeDef txDataRate[] = { FLAT_EXECUTOR_DATA_RATE(COUNTER_PERCENTILE_CONFIG_ARRAY) };
     static TTabletPercentileCounter::TRangeDef txConsumedCpu[] = { FLAT_EXECUTOR_CONSUMED_CPU_RANGES(COUNTER_PERCENTILE_CONFIG_ARRAY) };
 
-    Percentile()[TX_PERCENTILE_LATENCY_RO].Initialize(txLatencyConfig, false);
-    Percentile()[TX_PERCENTILE_LATENCY_RW].Initialize(txLatencyConfig, false);
-    Percentile()[TX_PERCENTILE_LATENCY_COMMIT].Initialize(txLatencyConfig, false);
-    Percentile()[TX_PERCENTILE_EXECUTE_CPUTIME].Initialize(txLatencyConfig, false);
-    Percentile()[TX_PERCENTILE_BOOKKEEPING_CPUTIME].Initialize(txLatencyConfig, false);
-    Percentile()[TX_PERCENTILE_COMMITED_CPUTIME].Initialize(txLatencyConfig, false);
-    Percentile()[TX_PERCENTILE_LOGSNAP_CPUTIME].Initialize(txLatencyConfig, false);
-    Percentile()[TX_PERCENTILE_PARTSWITCH_CPUTIME].Initialize(txLatencyConfig, false);
-    Percentile()[TX_PERCENTILE_TOUCHED_BLOCKS].Initialize(txTouchedConfig, false);
-    Percentile()[TX_PERCENTILE_DB_DATA_BYTES].Initialize(txDataSize, false);
-    Percentile()[TX_PERCENTILE_TABLET_BYTES_READ].Initialize(txDataRate, false);
-    Percentile()[TX_PERCENTILE_TABLET_BYTES_WRITTEN].Initialize(txDataRate, false);
-    Percentile()[TX_PERCENTILE_CONSUMED_CPU].Initialize(txConsumedCpu, false);
+    Percentile()[TX_PERCENTILE_LATENCY_RO].Initialize(txLatencyConfig, false); 
+    Percentile()[TX_PERCENTILE_LATENCY_RW].Initialize(txLatencyConfig, false); 
+    Percentile()[TX_PERCENTILE_LATENCY_COMMIT].Initialize(txLatencyConfig, false); 
+    Percentile()[TX_PERCENTILE_EXECUTE_CPUTIME].Initialize(txLatencyConfig, false); 
+    Percentile()[TX_PERCENTILE_BOOKKEEPING_CPUTIME].Initialize(txLatencyConfig, false); 
+    Percentile()[TX_PERCENTILE_COMMITED_CPUTIME].Initialize(txLatencyConfig, false); 
+    Percentile()[TX_PERCENTILE_LOGSNAP_CPUTIME].Initialize(txLatencyConfig, false); 
+    Percentile()[TX_PERCENTILE_PARTSWITCH_CPUTIME].Initialize(txLatencyConfig, false); 
+    Percentile()[TX_PERCENTILE_TOUCHED_BLOCKS].Initialize(txTouchedConfig, false); 
+    Percentile()[TX_PERCENTILE_DB_DATA_BYTES].Initialize(txDataSize, false); 
+    Percentile()[TX_PERCENTILE_TABLET_BYTES_READ].Initialize(txDataRate, false); 
+    Percentile()[TX_PERCENTILE_TABLET_BYTES_WRITTEN].Initialize(txDataRate, false); 
+    Percentile()[TX_PERCENTILE_CONSUMED_CPU].Initialize(txConsumedCpu, false); 
     Percentile()[TX_PERCENTILE_FOLLOWERSYNC_LATENCY].Initialize(txLatencyConfig, false);
 }
 

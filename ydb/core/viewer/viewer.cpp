@@ -125,8 +125,8 @@ void SetupDBVirtualHandlers(IViewer* viewer) {
 
 class TViewer : public TActorBootstrapped<TViewer>, public IViewer {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_MONITORING_PROXY;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_MONITORING_PROXY; 
     }
 
     TViewer(const TKikimrRunConfig &kikimrRunConfig)
@@ -571,22 +571,22 @@ NKikimrViewer::EFlag GetFlagFromUsage(double usage) {
 NKikimrViewer::EFlag GetPDiskStateFlag(const NKikimrWhiteboard::TPDiskStateInfo& info) {
     NKikimrViewer::EFlag flag = NKikimrViewer::EFlag::Grey;
     switch (info.GetState()) {
-        case NKikimrBlobStorage::TPDiskState::Normal:
+        case NKikimrBlobStorage::TPDiskState::Normal: 
             flag = NKikimrViewer::EFlag::Green;
             break;
-        case NKikimrBlobStorage::TPDiskState::Initial:
-        case NKikimrBlobStorage::TPDiskState::InitialFormatRead:
-        case NKikimrBlobStorage::TPDiskState::InitialSysLogRead:
-        case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead:
+        case NKikimrBlobStorage::TPDiskState::Initial: 
+        case NKikimrBlobStorage::TPDiskState::InitialFormatRead: 
+        case NKikimrBlobStorage::TPDiskState::InitialSysLogRead: 
+        case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead: 
             flag = NKikimrViewer::EFlag::Yellow;
             break;
-        case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
-        case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
-        case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError:
-        case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
-        case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
-        case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
-        case NKikimrBlobStorage::TPDiskState::OpenFileError:
+        case NKikimrBlobStorage::TPDiskState::InitialFormatReadError: 
+        case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError: 
+        case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError: 
+        case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError: 
+        case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError: 
+        case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError: 
+        case NKikimrBlobStorage::TPDiskState::OpenFileError: 
             flag = NKikimrViewer::EFlag::Red;
             break;
         default:

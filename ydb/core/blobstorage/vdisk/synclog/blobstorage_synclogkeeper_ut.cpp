@@ -38,7 +38,7 @@ namespace NKikimr {
         void WriteToLog(TSyncLogKeeperState *state, ui64 *lsn) {
             ++*lsn;
             ++Gen;
-            ui32 size = NSyncLog::TSerializeRoutines::SetBlock(Buf, *lsn, TabletId, Gen, 0);
+            ui32 size = NSyncLog::TSerializeRoutines::SetBlock(Buf, *lsn, TabletId, Gen, 0); 
             state->PutOne((const NSyncLog::TRecordHdr *)Buf, size);
             STR << "Put lsn# " << *lsn << "\n";
         }
@@ -58,10 +58,10 @@ namespace NKikimr {
         void Run(bool oldFormatForEntryPoint);
 
         void PrintStatus(const TString &str = {}) {
-            ::NKikimr::PrintStatus(State.get(), str);
+            ::NKikimr::PrintStatus(State.get(), str); 
         }
     private:
-        std::unique_ptr<TSyncLogKeeperState> State;
+        std::unique_ptr<TSyncLogKeeperState> State; 
         TPayloadWriter PayloadWriter;
 
         bool Trim(ui64 lsn);
@@ -95,16 +95,16 @@ namespace NKikimr {
         TString explanation;
         auto r = TSyncLogRepaired::Construct(std::move(params), ep.EntryPoint, ep.EntryPointLsn, explanation);
         Y_VERIFY(r);
-        std::unique_ptr<NSyncLog::TSyncLogRecovery> recovery = std::make_unique<NSyncLog::TSyncLogRecovery>(std::move(r));
+        std::unique_ptr<NSyncLog::TSyncLogRecovery> recovery = std::make_unique<NSyncLog::TSyncLogRecovery>(std::move(r)); 
         const ui64 lastLsnOfIndexRecord = recovery->GetLastLsnOfIndexRecord();
-        std::unique_ptr<TSyncLogRepaired> repaired = recovery->ReleaseRepaired();
+        std::unique_ptr<TSyncLogRepaired> repaired = recovery->ReleaseRepaired(); 
 
         const ui64 syncLogMaxMemAmount = ui64(64) << ui64(20);
         const ui64 syncLogMaxDiskAmount = 0;
 
-        State = std::make_unique<TSyncLogKeeperState>(vctx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount,
+        State = std::make_unique<TSyncLogKeeperState>(vctx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount, 
                 syncLogMaxEntryPointSize);
-        State->Init(nullptr, std::make_shared<TFakeLoggerCtx>());
+        State->Init(nullptr, std::make_shared<TFakeLoggerCtx>()); 
 
         STR << "CREATE STATE entryPointLsn# " << ep.EntryPointLsn <<
             " entryPoint# " << (ep.EntryPoint.empty() ? "<empty>" : "<exists>") << "\n";
@@ -135,7 +135,7 @@ namespace NKikimr {
         {}
 
         void Start(TSyncLogKeeperState *state, ui64 recoveryLogConfirmedLsn) {
-            CommitData = std::make_unique<TSyncLogKeeperCommitData>(state->PrepareCommitData(recoveryLogConfirmedLsn));
+            CommitData = std::make_unique<TSyncLogKeeperCommitData>(state->PrepareCommitData(recoveryLogConfirmedLsn)); 
             Y_VERIFY((!CommitData->SwapSnap || CommitData->SwapSnap->Empty()) &&
                     CommitData->ChunksToDeleteDelayed.empty() &&
                     CommitData->ChunksToDelete.empty());
@@ -163,7 +163,7 @@ namespace NKikimr {
         }
     private:
         const bool OldFormatForEntryPoint;
-        std::unique_ptr<TSyncLogKeeperCommitData> CommitData;
+        std::unique_ptr<TSyncLogKeeperCommitData> CommitData; 
     };
 
     void TSyncLogKeeperTest::Run(bool oldFormatForEntryPoint) {
@@ -174,7 +174,7 @@ namespace NKikimr {
         bool commit = false;
         // write sample payload
         for (ui64 i = 0; i < 10; ++i) {
-            PayloadWriter.WriteToLog(State.get(), &lsn);
+            PayloadWriter.WriteToLog(State.get(), &lsn); 
         }
         PrintStatus();
 
@@ -188,17 +188,17 @@ namespace NKikimr {
 
         // start parallel commit
         TCommitWithNoSwapAndDelChunks parallelCommit(oldFormatForEntryPoint);
-        parallelCommit.Start(State.get(), 10);
+        parallelCommit.Start(State.get(), 10); 
 
         // write more messages during parallel commit
         lsn = 21;
         for (ui64 i = 0; i < 10; ++i) {
-            PayloadWriter.WriteToLog(State.get(), &lsn);
+            PayloadWriter.WriteToLog(State.get(), &lsn); 
         }
         PrintStatus();
 
         // commit finished with lsn=31
-        entryPointPair = parallelCommit.Finish(State.get(), 31);
+        entryPointPair = parallelCommit.Finish(State.get(), 31); 
 
         // trim all written data
         commit = Trim(31);
@@ -209,17 +209,17 @@ namespace NKikimr {
 
         // start parallel commit
         TCommitWithNoSwapAndDelChunks parallelCommit2(oldFormatForEntryPoint);
-        parallelCommit2.Start(State.get(), 31);
+        parallelCommit2.Start(State.get(), 31); 
 
         // commit finished with lsn=33
-        entryPointPair = parallelCommit2.Finish(State.get(), 33);
+        entryPointPair = parallelCommit2.Finish(State.get(), 33); 
 
         STR << "\n************************** RESTART ***********************************************************\n\n";
 
         ////////////////////////////////////////////////////////////////////////////////////
         // RESTART
         ////////////////////////////////////////////////////////////////////////////////////
-        State.reset();
+        State.reset(); 
         CreateState(entryPointPair);
 
         // imitate other VDisk that is syncing with current VDisk

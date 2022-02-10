@@ -65,8 +65,8 @@ using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
     ui32 DomainUid;
     TString ErrorReason;
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::MSGBUS_COMMON;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::MSGBUS_COMMON; 
     }
 
     TMessageBusHiveCreateTablet(TBusMessageContext &msg)

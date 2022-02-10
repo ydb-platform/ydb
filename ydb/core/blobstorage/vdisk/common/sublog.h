@@ -1,11 +1,11 @@
-#pragma once
-
+#pragma once 
+ 
 #include "defs.h"
 
 #include <ydb/core/base/blobstorage.h>
-
-namespace NKikimr {
-
+ 
+namespace NKikimr { 
+ 
     ////////////////////////////////////////////////////////////////////////////
     // TSublog
     // We use TSublog for logging activities inside some class (actor).
@@ -26,7 +26,7 @@ namespace NKikimr {
         IOutputStream &Log() const {
             ++Recs;
             if (PrefixWithTime) {
-                Out << TAppData::TimeProvider->Now().ToStringLocalUpToSeconds() << " ";
+                Out << TAppData::TimeProvider->Now().ToStringLocalUpToSeconds() << " "; 
             }
             Out << Prefix;
             return Out;
@@ -72,11 +72,11 @@ namespace NKikimr {
         TSublogLineHolder(const TActorId &aid, const TActorContext &ctx)
             : Aid(aid)
             , Ctx(ctx)
-            , Ev(std::make_unique<TEvSublogLine>())
+            , Ev(std::make_unique<TEvSublogLine>()) 
         {}
 
         ~TSublogLineHolder() {
-            Ctx.Send(Aid, Ev.release());
+            Ctx.Send(Aid, Ev.release()); 
         }
 
         IOutputStream &GetStream() {
@@ -85,10 +85,10 @@ namespace NKikimr {
     private:
         TActorId Aid;
         const TActorContext &Ctx;
-        std::unique_ptr<TEvSublogLine> Ev;
+        std::unique_ptr<TEvSublogLine> Ev; 
     };
 
-} // NKikimr
+} // NKikimr 
 
 
 // SUBLOGLINE is used for generating TEvSublogLine events

@@ -1,19 +1,19 @@
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
-
-package NKikimrVDiskData;
-
-////////////////////////////////////////////////////////////////////////////////
-// On-disk structures
-////////////////////////////////////////////////////////////////////////////////
-
-message TDiskPart {
-    optional uint32 ChunkIdx = 1;
-    optional uint32 Offset = 2;
-    optional uint32 Size = 3;
-};
-
+ 
+package NKikimrVDiskData; 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+// On-disk structures 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+message TDiskPart { 
+    optional uint32 ChunkIdx = 1; 
+    optional uint32 Offset = 2; 
+    optional uint32 Size = 3; 
+}; 
+ 
 message TDiskPartVec {
     repeated TDiskPart DiskParts = 1;
 }
@@ -25,24 +25,24 @@ message TPhantomLogoBlobs {
 ////////////////////////////////////////////////////////////////////////////////
 // Bulk formed sst info
 ////////////////////////////////////////////////////////////////////////////////
-message TBulkFormedSstInfo {
-    optional uint64 FirstBlobLsn = 1;
-    optional uint64 LastBlobLsn = 2;
-    optional TDiskPart EntryPoint = 3;
-    repeated uint32 ChunkIds = 4;
-    optional bool RemovedFromIndex = 5 [default = false];
-};
-
-message TBulkFormedSstInfoSet {
-    repeated TBulkFormedSstInfo Segments = 1;
-};
-
+message TBulkFormedSstInfo { 
+    optional uint64 FirstBlobLsn = 1; 
+    optional uint64 LastBlobLsn = 2; 
+    optional TDiskPart EntryPoint = 3; 
+    repeated uint32 ChunkIds = 4; 
+    optional bool RemovedFromIndex = 5 [default = false]; 
+}; 
+ 
+message TBulkFormedSstInfoSet { 
+    repeated TBulkFormedSstInfo Segments = 1; 
+}; 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 // TLevelIndex -- record for hull db index
 ////////////////////////////////////////////////////////////////////////////////
 message TLevel0 {
     repeated TDiskPart Ssts = 1;
-};
+}; 
 
 message TLevelX {
     repeated TDiskPart Ssts = 1;
@@ -64,16 +64,16 @@ message TLevelIndex {
 // THullDbEntryPoint -- entry point for the whole db
 ////////////////////////////////////////////////////////////////////////////////
 message THullDbEntryPoint {
-    message TUncommittedRemovedHugeBlob {
-        optional uint64 RecordLsn = 1;
-        optional TDiskPartVec RemovedHugeBlobs = 2;
-    };
-
+    message TUncommittedRemovedHugeBlob { 
+        optional uint64 RecordLsn = 1; 
+        optional TDiskPartVec RemovedHugeBlobs = 2; 
+    }; 
+ 
     optional TLevelIndex LevelIndex = 1;
     optional TDiskPartVec RemovedHugeBlobs = 2;
-
-    // obsolete field
-    repeated TUncommittedRemovedHugeBlob UncommittedRemovedHugeBlobs = 3;
+ 
+    // obsolete field 
+    repeated TUncommittedRemovedHugeBlob UncommittedRemovedHugeBlobs = 3; 
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -123,54 +123,54 @@ message TSyncerEntryPoint {
     repeated TSyncerVDiskEntry Entries = 10;
 };
 
-message TIncrHugeChunks {
-    enum EChunkState {
-        Complete = 1;
-        WriteIntent = 2;
-    };
-    message TChunkInfo {
-        optional uint32      ChunkIdx = 1;    // chunk index
-        optional uint64      ChunkSerNum = 2; // unique id of allocated chunk
-        optional EChunkState State = 3;       // chunk state (whether it is complete and has index or write intent only)
-    };
-    repeated TChunkInfo Chunks = 1;    // list of all consumed chunks
-    repeated uint32 DeletedChunks = 2; // list of deleted chunks; incremental field only
-    optional uint64 CurrentSerNum = 3; // current version of this state
-};
-
+message TIncrHugeChunks { 
+    enum EChunkState { 
+        Complete = 1; 
+        WriteIntent = 2; 
+    }; 
+    message TChunkInfo { 
+        optional uint32      ChunkIdx = 1;    // chunk index 
+        optional uint64      ChunkSerNum = 2; // unique id of allocated chunk 
+        optional EChunkState State = 3;       // chunk state (whether it is complete and has index or write intent only) 
+    }; 
+    repeated TChunkInfo Chunks = 1;    // list of all consumed chunks 
+    repeated uint32 DeletedChunks = 2; // list of deleted chunks; incremental field only 
+    optional uint64 CurrentSerNum = 3; // current version of this state 
+}; 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 // IncrHuge
 ////////////////////////////////////////////////////////////////////////////////
-message TIncrHugeDelete {
-    message TChunkInfo {
-        message TItemRange {
-            optional uint32 First = 1;
-            optional uint32 Count = 2;
-        };
-        message TDeletedItems {
-            repeated uint32 Indexes = 1; // indexes of deleted items
-            repeated TItemRange Ranges = 2; // ranges of deleted items
-        };
-        message TDeletedBits {
-            optional bytes Bits = 1; // bitmap of deleted items
-        };
-
-        // unique id of this chunk
-        optional uint64 ChunkSerNum = 1;
-
-        // one of encodins of deletion
-        oneof DeletedData {
-            TDeletedItems DeletedItems = 2;
-            bytes Bits = 3;
-        };
-    };
-    message TOwnerInfo {
-        optional uint32 Owner = 1; // owner of the record
-        optional uint64 SeqNo = 2; // last sequence number of executed delete query from this owner
-    };
-    repeated TChunkInfo Chunks = 1; // deletes in active chunks
-    repeated TOwnerInfo Owners = 2; // per-owner sequence numbers
-};
+message TIncrHugeDelete { 
+    message TChunkInfo { 
+        message TItemRange { 
+            optional uint32 First = 1; 
+            optional uint32 Count = 2; 
+        }; 
+        message TDeletedItems { 
+            repeated uint32 Indexes = 1; // indexes of deleted items 
+            repeated TItemRange Ranges = 2; // ranges of deleted items 
+        }; 
+        message TDeletedBits { 
+            optional bytes Bits = 1; // bitmap of deleted items 
+        }; 
+ 
+        // unique id of this chunk 
+        optional uint64 ChunkSerNum = 1; 
+ 
+        // one of encodins of deletion 
+        oneof DeletedData { 
+            TDeletedItems DeletedItems = 2; 
+            bytes Bits = 3; 
+        }; 
+    }; 
+    message TOwnerInfo { 
+        optional uint32 Owner = 1; // owner of the record 
+        optional uint64 SeqNo = 2; // last sequence number of executed delete query from this owner 
+    }; 
+    repeated TChunkInfo Chunks = 1; // deletes in active chunks 
+    repeated TOwnerInfo Owners = 2; // per-owner sequence numbers 
+}; 
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -218,19 +218,19 @@ message TSyncLogEntryPoint {
     optional bytes DiskRecLogSerialized = 21;
 };
 
-message TScrubState {
-    optional uint64 NextSstIdToScrub = 1;
-    optional NKikimrProto.TLogoBlobID BlobId = 2;
-    optional bool Success = 3;
-    optional fixed64 IncarnationGuid = 4;
-};
-
-message TScrubEntrypoint {
-    message TUnreadableBlobState {
-        optional NKikimrProto.TLogoBlobID BlobId = 1;
-        optional uint32 UnreadableParts = 2;
-        optional TDiskPart CorruptedPart = 3;
-    }
-    repeated TUnreadableBlobState UnreadableBlobs = 1;
-    optional TScrubState ScrubState = 2;
-}
+message TScrubState { 
+    optional uint64 NextSstIdToScrub = 1; 
+    optional NKikimrProto.TLogoBlobID BlobId = 2; 
+    optional bool Success = 3; 
+    optional fixed64 IncarnationGuid = 4; 
+}; 
+ 
+message TScrubEntrypoint { 
+    message TUnreadableBlobState { 
+        optional NKikimrProto.TLogoBlobID BlobId = 1; 
+        optional uint32 UnreadableParts = 2; 
+        optional TDiskPart CorruptedPart = 3; 
+    } 
+    repeated TUnreadableBlobState UnreadableBlobs = 1; 
+    optional TScrubState ScrubState = 2; 
+} 

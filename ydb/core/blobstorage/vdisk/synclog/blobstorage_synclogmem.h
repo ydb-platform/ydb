@@ -20,7 +20,7 @@ namespace NKikimr {
         class TSyncLogPageDeleter;
         using TSyncLogPagePtr = std::shared_ptr<TSyncLogPage>;
 
-        class TSyncLogPage : public TNonCopyable {
+        class TSyncLogPage : public TNonCopyable { 
         public:
             // TODO: we may need to add additional index
 
@@ -565,9 +565,9 @@ namespace NKikimr {
             TString ToString() const;
 
         private:
-            ui32 DiscardPages(ui32 pagesToKeep, ui64 lastUnneededLsn);
-
-        private:
+            ui32 DiscardPages(ui32 pagesToKeep, ui64 lastUnneededLsn); 
+ 
+        private: 
             TSyncLogPages Pages;
             ui32 RecsNum;
             TSyncLogPageDeleter SyncLogPageDeleter;

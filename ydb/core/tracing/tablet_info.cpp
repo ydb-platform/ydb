@@ -85,8 +85,8 @@ class TTabletLookupActor : public TActorBootstrapped<TTabletLookupActor> {
 public:
     using TReplyStatus = TWBReplyStatus<TEvWhiteboard::TEvTabletLookupResponse>;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_LOOKUP_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_LOOKUP_ACTOR; 
     }
 
     TTabletLookupActor(ui32 nodeId, const TActorId& sender, ui32 timeout)
@@ -271,7 +271,7 @@ class TTraceLookupActor : public TActorBootstrapped<TTraceLookupActor> {
 public:
     using TReplyStatus = TWBReplyStatus<TEvWhiteboard::TEvTraceLookupResponse>;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
         return NKikimrServices::TActivity::TRACE_LOOKUP_ACTOR;
     }
 
@@ -480,8 +480,8 @@ private:
 
 class TTraceRequestActor : public TActorBootstrapped<TTraceRequestActor> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TRACE_REQUEST_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TRACE_REQUEST_ACTOR; 
     }
 
     TTraceRequestActor(const NTracing::TTraceInfo& traceInfo, const TActorId& sender)
@@ -556,8 +556,8 @@ private:
 
 class TSignalBodyRequestActor : public TActorBootstrapped<TSignalBodyRequestActor> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SIGNAL_BODY_REQUEST_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::SIGNAL_BODY_REQUEST_ACTOR; 
     }
 
     TSignalBodyRequestActor(const NTracing::TTraceInfo& traceInfo, const TString& signalId, const TActorId& sender)
@@ -656,8 +656,8 @@ void RenderTabletPage(NMon::TEvHttpInfo::TPtr ev, const TActorContext &ctx, ui64
 
 class TTabletInfoActor : public TActorBootstrapped<TTabletInfoActor> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_INFO;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_INFO; 
     }
     void Bootstrap(const TActorContext &ctx);
     STFUNC(StateWork);

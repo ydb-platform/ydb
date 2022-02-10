@@ -1,13 +1,13 @@
-UNITTEST()
-
+UNITTEST() 
+ 
 OWNER(g:kikimr)
-
+ 
 IF (NOT WITH_VALGRIND)
     SRCS(
         main.cpp
-    )
+    ) 
 ENDIF()
-
+ 
 IF (SANITIZER_TYPE)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -30,4 +30,4 @@ PEERDIR(
     ydb/core/util
 )
 
-END()
+END() 

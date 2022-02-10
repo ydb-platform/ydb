@@ -31,7 +31,7 @@ namespace NKikimr {
                 const TLogoBlobID &id,
                 ui8 partId,
                 const TIngress &ingress,
-                TRope buffer,
+                TRope buffer, 
                 ui64 lsn,
                 EOpMode mode);
 
@@ -62,7 +62,7 @@ namespace NKikimr {
                 const TActorContext &ctx,
                 ui64 tabletID,
                 ui32 gen,
-                ui64 issuerGuid,
+                ui64 issuerGuid, 
                 ui64 lsn,
                 EOpMode mode);
 
@@ -79,7 +79,7 @@ namespace NKikimr {
                 const TBarrierIngress &ingress,
                 ui64 lsn,
                 EOpMode mode);
-
+ 
         void ReplayAddGCCmd(
                 const TActorContext &ctx,
                 const NKikimrBlobStorage::TEvVCollectGarbage &record,
@@ -98,22 +98,22 @@ namespace NKikimr {
                 const NKikimrBlobStorage::TEvVCollectGarbage &record,
                 ui64 lsn,
                 EOpMode mode);
-
+ 
         void ReplaySyncDataCmd_LogoBlobsBatch(
                 const TActorContext &ctx,
-                std::shared_ptr<TFreshAppendixLogoBlobs> &&logoBlobs,
+                std::shared_ptr<TFreshAppendixLogoBlobs> &&logoBlobs, 
                 TLsnSeg seg,
                 EOpMode mode);
 
         void ReplaySyncDataCmd_BlocksBatch(
                 const TActorContext &ctx,
-                std::shared_ptr<TFreshAppendixBlocks> &&blocks,
+                std::shared_ptr<TFreshAppendixBlocks> &&blocks, 
                 TLsnSeg seg,
                 EOpMode mode);
 
         void ReplaySyncDataCmd_BarriersBatch(
                 const TActorContext &ctx,
-                std::shared_ptr<TFreshAppendixBarriers> &&barriers,
+                std::shared_ptr<TFreshAppendixBarriers> &&barriers, 
                 TLsnSeg seg,
                 EOpMode mode);
 
@@ -123,7 +123,7 @@ namespace NKikimr {
         TSatisfactionRank GetSatisfactionRank(EHullDbType t, ESatisfactionRankType s) const;
         void OutputHtmlForDb(IOutputStream &str) const;
         void OutputHtmlForHugeBlobDeleter(IOutputStream &str) const;
-
+ 
         // FIXME: remove it when ready
         TIntrusivePtr<THullDs> GetHullDs() const {
             return HullDs;
@@ -138,7 +138,7 @@ namespace NKikimr {
         TIntrusivePtr<THullDs> HullDs;
         TLogoBlobFilter Filter;
         TBlocksCache BlocksCache;
-        TBarrierCache BarrierCache;
+        TBarrierCache BarrierCache; 
 
         // check on BLOCK incoming TEvVCollectGarbage message
         TBlocksCache::TBlockRes IsBlocked(const NKikimrBlobStorage::TEvVCollectGarbage &record) const;
@@ -146,10 +146,10 @@ namespace NKikimr {
         bool CheckGC(const TActorContext &ctx, const NKikimrBlobStorage::TEvVCollectGarbage &record);
 
     private:
-        void UpdateBlocksCache(ui64 tabletId, ui32 gen, ui64 issuerGuid, ui64 lsn, EOpMode mode);
-        void UpdateBlocksCache(const std::shared_ptr<TFreshAppendixBlocks> &blocks, TLsnSeg seg, EOpMode mode);
+        void UpdateBlocksCache(ui64 tabletId, ui32 gen, ui64 issuerGuid, ui64 lsn, EOpMode mode); 
+        void UpdateBlocksCache(const std::shared_ptr<TFreshAppendixBlocks> &blocks, TLsnSeg seg, EOpMode mode); 
         void UpdateBarrierCache(const TKeyBarrier& key);
-        void UpdateBarrierCache(const std::shared_ptr<TFreshAppendixBarriers>& barriers);
+        void UpdateBarrierCache(const std::shared_ptr<TFreshAppendixBarriers>& barriers); 
     };
 
 } // NKikimr

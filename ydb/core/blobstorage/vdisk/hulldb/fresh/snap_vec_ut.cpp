@@ -55,9 +55,9 @@ namespace NKikimr {
         Y_UNIT_TEST(Basic) {
             TSVec<TBundle> svec(4);
 
-            svec.Add(std::make_shared<TBundle>(1));
-            svec.Add(std::make_shared<TBundle>(2));
-            svec.Add(std::make_shared<TBundle>(3));
+            svec.Add(std::make_shared<TBundle>(1)); 
+            svec.Add(std::make_shared<TBundle>(2)); 
+            svec.Add(std::make_shared<TBundle>(3)); 
 
             auto snap1 = svec.GetSnapshot();
             UNIT_ASSERT_EQUAL(snap1.GetSize(), 3);
@@ -65,10 +65,10 @@ namespace NKikimr {
             UNIT_ASSERT_EQUAL(svec.SizeApproximation(), 3 * sizeof(int));
 
             // rebuild happens
-            svec.Add(std::make_shared<TBundle>(4));
-            svec.Add(std::make_shared<TBundle>(5));
-            svec.Add(std::make_shared<TBundle>(6));
-            svec.Add(std::make_shared<TBundle>(7));
+            svec.Add(std::make_shared<TBundle>(4)); 
+            svec.Add(std::make_shared<TBundle>(5)); 
+            svec.Add(std::make_shared<TBundle>(6)); 
+            svec.Add(std::make_shared<TBundle>(7)); 
 
             CheckSnap(snap1, TVector<int>({1, 2, 3}));
 
@@ -116,9 +116,9 @@ namespace NKikimr {
                 return sizeof(int) * Vec.size();
             }
 
-            static std::shared_ptr<TBundle> Merge(const TCtx &ctx, const TVector<std::shared_ptr<TBundle>> &v) {
+            static std::shared_ptr<TBundle> Merge(const TCtx &ctx, const TVector<std::shared_ptr<TBundle>> &v) { 
                 Y_UNUSED(ctx);
-                std::shared_ptr<TBundle> result = std::make_shared<TBundle>();
+                std::shared_ptr<TBundle> result = std::make_shared<TBundle>(); 
                 for (const auto &item : v) {
                     result->Append(*item);
                 }
@@ -128,7 +128,7 @@ namespace NKikimr {
             TVector<int> Vec;
         };
 
-        static void SnapshotPrinter(IOutputStream &str, const std::shared_ptr<TBundle> &val) {
+        static void SnapshotPrinter(IOutputStream &str, const std::shared_ptr<TBundle> &val) { 
             val->Output(str);
         }
 
@@ -166,7 +166,7 @@ namespace NKikimr {
         Y_UNIT_TEST(Basic) {
             TCtx ctx;
             TSTree<TBundle, TCtx> stree(ctx, 4, 4, 4);
-            std::unique_ptr<TSTreeSnap<TBundle, TCtx>> intermedSnap;
+            std::unique_ptr<TSTreeSnap<TBundle, TCtx>> intermedSnap; 
 
             TString intermedCanonized = "Staging: \n"
                 "Level# 0 Value# [50 51 52 53 54]\n"
@@ -183,8 +183,8 @@ namespace NKikimr {
                 "Level# 1 Value# [75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99]\n";
 
             for (int i = 0; i < 102; ++i) {
-                stree.Add(std::make_shared<TBundle>(i));
-                std::shared_ptr<ISTreeCompaction> cjob = stree.Compact();
+                stree.Add(std::make_shared<TBundle>(i)); 
+                std::shared_ptr<ISTreeCompaction> cjob = stree.Compact(); 
                 if (cjob) {
                     STR << "compaction\n";
                     cjob->Work();
@@ -192,7 +192,7 @@ namespace NKikimr {
                 }
                 UNIT_ASSERT_EQUAL(stree.SizeApproximation(), 4u * (i + 1));
                 if (i == 69) {
-                    intermedSnap = std::make_unique<TSTreeSnap<TBundle, TCtx>>(stree.GetSnapshot());
+                    intermedSnap = std::make_unique<TSTreeSnap<TBundle, TCtx>>(stree.GetSnapshot()); 
                     UNIT_ASSERT_EQUAL(stree.SizeApproximation(), 4 * 5 * 4 + 25 * 4 + 25 * 4);
                     DebugPrint(*intermedSnap, "Intermed (at time of creation)");
                     CheckSnap(*intermedSnap, intermedCanonized);

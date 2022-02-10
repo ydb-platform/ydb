@@ -436,7 +436,7 @@ class TMessageBusServerPersQueueImpl : public TActorBootstrapped<TMessageBusServ
     using TEvAllTopicsDescribeResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse;
 
 protected:
-    NKikimrClient::TPersQueueRequest RequestProto;
+    NKikimrClient::TPersQueueRequest RequestProto; 
     const TString RequestId;
     const bool IsMetaRequest;
     const bool IsFetchRequest;
@@ -446,7 +446,7 @@ protected:
     ui64 FetchRequestCurrentReadTablet; //if zero then no read at this time
     ui64 CurrentCookie;
     ui32 FetchRequestBytesLeft;
-    NKikimrClient::TPersQueueFetchResponse FetchResponse;
+    NKikimrClient::TPersQueueFetchResponse FetchResponse; 
     TVector<TActorId> PQClient;
     const TActorId SchemeCache;
 
@@ -465,8 +465,8 @@ protected:
     bool NoTopicsAtStart;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::MSGBUS_PROXY_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::MSGBUS_PROXY_ACTOR; 
     }
 
     virtual ~TMessageBusServerPersQueueImpl() {}
@@ -1380,8 +1380,8 @@ public:
         SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::BAD_REQUEST, ErrorText), ctx);
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::PQ_BASE_REQUEST_PROCESSOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::PQ_BASE_REQUEST_PROCESSOR; 
     }
 
     TString ErrorText;

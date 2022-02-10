@@ -41,7 +41,7 @@ RECURSE(
     localrecovery
     query
     repl
-    scrub
+    scrub 
     skeleton
     syncer
     synclog

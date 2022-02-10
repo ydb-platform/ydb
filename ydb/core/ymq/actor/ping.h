@@ -17,8 +17,8 @@ public:
     {
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SQS_PING_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::SQS_PING_ACTOR; 
     }
 
     void Bootstrap() {

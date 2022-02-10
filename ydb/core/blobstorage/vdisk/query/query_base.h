@@ -14,25 +14,25 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TLevelIndexQueryBase {
     protected:
-        std::shared_ptr<TQueryCtx> QueryCtx;
+        std::shared_ptr<TQueryCtx> QueryCtx; 
         const TActorId ParentId;
         TLogoBlobsSnapshot LogoBlobsSnapshot;
         TBarriersSnapshot BarriersSnapshot;
         TReadBatcherCtxPtr BatcherCtx;
         const NKikimrBlobStorage::TEvVGet &Record;
         const bool ShowInternals;
-        std::unique_ptr<TEvBlobStorage::TEvVGetResult> Result;
+        std::unique_ptr<TEvBlobStorage::TEvVGetResult> Result; 
         TQueryResultSizeTracker ResultSize;
-        const TActorId ReplSchedulerId;
+        const TActorId ReplSchedulerId; 
 
         TLevelIndexQueryBase(
-                std::shared_ptr<TQueryCtx> &queryCtx,
+                std::shared_ptr<TQueryCtx> &queryCtx, 
                 const TActorId &parentId,
                 TLogoBlobsSnapshot &&logoBlobsSnapshot,
                 TBarriersSnapshot &&barrierSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
-                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
-                TActorId replSchedulerId)
+                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result, 
+                TActorId replSchedulerId) 
             : QueryCtx(queryCtx)
             , ParentId(parentId)
             , LogoBlobsSnapshot(std::move(logoBlobsSnapshot))
@@ -40,10 +40,10 @@ namespace NKikimr {
             , BatcherCtx(new TReadBatcherCtx(QueryCtx->HullCtx->VCtx, QueryCtx->PDiskCtx, ev))
             , Record(BatcherCtx->OrigEv->Get()->Record)
             , ShowInternals(Record.GetShowInternals())
-            , Result(std::move(result))
-            , ReplSchedulerId(replSchedulerId)
+            , Result(std::move(result)) 
+            , ReplSchedulerId(replSchedulerId) 
         {
-            Y_VERIFY_DEBUG(Result);
+            Y_VERIFY_DEBUG(Result); 
         }
 
         ui8 PDiskPriority() const {
@@ -66,16 +66,16 @@ namespace NKikimr {
             return priority;
         }
 
-        bool IsRepl() const {
-            return Result->Record.HasMsgQoS()
-                ? NBackpressure::TQueueClientId(Result->Record.GetMsgQoS()).IsRepl()
-                : false;
-        }
-
+        bool IsRepl() const { 
+            return Result->Record.HasMsgQoS() 
+                ? NBackpressure::TQueueClientId(Result->Record.GetMsgQoS()).IsRepl() 
+                : false; 
+        } 
+ 
         template <class T>
         void SendResponseAndDie(const TActorContext &ctx, T *self) {
-            bool hasNotYet = false;
-
+            bool hasNotYet = false; 
+ 
             if (ResultSize.IsOverflow()) {
                 Result->Record.SetStatus(NKikimrProto::ERROR);
                 Result->Record.MutableResult()->Clear();
@@ -97,7 +97,7 @@ namespace NKikimr {
                 ui64 total = 0;
                 for (const auto& result : Result->Record.GetResult()) {
                     total += result.GetBuffer().size();
-                    hasNotYet = hasNotYet || result.GetStatus() == NKikimrProto::NOT_YET;
+                    hasNotYet = hasNotYet || result.GetStatus() == NKikimrProto::NOT_YET; 
                 }
                 QueryCtx->MonGroup.GetTotalBytes() += total;
                 LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_GET,
@@ -105,14 +105,14 @@ namespace NKikimr {
                             "TEvVGetResult: %s", Result->ToString().data()));
             }
 
-            if (hasNotYet && ReplSchedulerId) {
-                // send reply event to repl scheduler to possibly fix NOT_YET replies
-                ctx.Send(ReplSchedulerId, new TEvBlobStorage::TEvEnrichNotYet(BatcherCtx->OrigEv, std::move(Result)));
-            } else {
-                // send reply event to sender
-                SendVDiskResponse(ctx, BatcherCtx->OrigEv->Sender, Result.release(), *self, BatcherCtx->OrigEv->Cookie);
-            }
-
+            if (hasNotYet && ReplSchedulerId) { 
+                // send reply event to repl scheduler to possibly fix NOT_YET replies 
+                ctx.Send(ReplSchedulerId, new TEvBlobStorage::TEvEnrichNotYet(BatcherCtx->OrigEv, std::move(Result))); 
+            } else { 
+                // send reply event to sender 
+                SendVDiskResponse(ctx, BatcherCtx->OrigEv->Sender, Result.release(), *self, BatcherCtx->OrigEv->Cookie); 
+            } 
+ 
             ctx.Send(ParentId, new TEvents::TEvActorDied);
             self->Die(ctx);
         }

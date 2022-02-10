@@ -12,9 +12,9 @@ message TBigMessage {
     optional string OneMoreStr = 3;
     optional uint64 YANumber = 4;
 }
-
-message TMessageWithPayload {
-    optional string Meta = 1;
-    repeated uint32 PayloadId = 2;
+ 
+message TMessageWithPayload { 
+    optional string Meta = 1; 
+    repeated uint32 PayloadId = 2; 
     repeated string SomeData = 3;
-}
+} 

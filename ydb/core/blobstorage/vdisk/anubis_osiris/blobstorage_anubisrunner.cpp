@@ -80,8 +80,8 @@ namespace NKikimr {
                       )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_SYNCER_ANUBIS;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_SYNCER_ANUBIS; 
         }
 
         TAnubisRunnerHttpInfoActor(
@@ -143,7 +143,7 @@ namespace NKikimr {
     // 3. We retry Anubis if we got some errors from previous runs
     ////////////////////////////////////////////////////////////////////////////
     class TAnubisRunner : public TActorBootstrapped<TAnubisRunner> {
-        std::shared_ptr<TAnubisCtx> AnubisCtx;
+        std::shared_ptr<TAnubisCtx> AnubisCtx; 
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TQuorumForAnubisTracker QuorumTracker;
         TActiveActors ActiveActors;
@@ -258,29 +258,29 @@ namespace NKikimr {
             // save current local state
             TString s = QuorumTracker.ToString();
             // create an actor to handle request
-            auto actor = std::make_unique<TAnubisRunnerHttpInfoActor>(ev, ctx.SelfID, AnubisId, s);
-            auto aid = ctx.Register(actor.release());
+            auto actor = std::make_unique<TAnubisRunnerHttpInfoActor>(ev, ctx.SelfID, AnubisId, s); 
+            auto aid = ctx.Register(actor.release()); 
             ActiveActors.Insert(aid);
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_SYNCER_ANUBIS;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_SYNCER_ANUBIS; 
         }
 
-        TAnubisRunner(const std::shared_ptr<TAnubisCtx> &anubisCtx,
+        TAnubisRunner(const std::shared_ptr<TAnubisCtx> &anubisCtx, 
                       const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo)
             : TActorBootstrapped<TAnubisRunner>()
             , AnubisCtx(anubisCtx)
             , GInfo(ginfo)
-            , QuorumTracker(AnubisCtx->HullCtx->VCtx->Top.get())
+            , QuorumTracker(AnubisCtx->HullCtx->VCtx->Top.get()) 
         {}
     };
 
     ////////////////////////////////////////////////////////////////////////////
     // ANUBIS RUNNER ACTOR CREATOR
     ////////////////////////////////////////////////////////////////////////////
-    IActor* CreateAnubisRunner(const std::shared_ptr<TAnubisCtx> &anubisCtx,
+    IActor* CreateAnubisRunner(const std::shared_ptr<TAnubisCtx> &anubisCtx, 
                                const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo) {
         return new TAnubisRunner(anubisCtx, ginfo);
     }

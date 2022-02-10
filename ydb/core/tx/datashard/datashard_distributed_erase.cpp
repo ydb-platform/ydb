@@ -623,7 +623,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
             for (const auto& [tableId, info] : TableInfos) {
                 TVector<TCell> cells(Reserve(info.GetKeyMap().size()));
-                for (const auto& [_, id] : info.GetKeyMap()) {
+                for (const auto& [_, id] : info.GetKeyMap()) { 
                     if (!keyColumnIdToIdx.contains(id)) {
                         return BadRequest(TStringBuilder() << "Key column is absent"
                             << ": tableId# " << tableId
@@ -693,7 +693,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 request.SetTableId(tableId.PathId.LocalPathId);
                 request.SetSchemaVersion(tableId.SchemaVersion);
 
-                for (const auto& [id, _] : keyMap) {
+                for (const auto& [id, _] : keyMap) { 
                     request.AddKeyColumnIds(id);
                 }
 

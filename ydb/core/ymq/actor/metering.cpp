@@ -243,8 +243,8 @@ public:
         records << record.ToJsonSafe() << "\n";
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SQS_METERING_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::SQS_METERING_ACTOR; 
     }
 
     void FlushProcessedRequestsAttributes() {

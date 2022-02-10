@@ -45,7 +45,7 @@ str = endptr + 1;
             return false;
         }
 
-        out = TKeyBarrier(tabletID, channel, gen, genCounter, false);
+        out = TKeyBarrier(tabletID, channel, gen, genCounter, false); 
         return true;
     }
 

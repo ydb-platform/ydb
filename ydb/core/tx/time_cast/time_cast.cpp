@@ -139,8 +139,8 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR; 
     }
 
     TMediatorTimecastProxy()

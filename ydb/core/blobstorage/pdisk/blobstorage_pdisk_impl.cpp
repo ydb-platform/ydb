@@ -68,7 +68,7 @@ TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<NMonit
     ConfigureCbs(OwnerUnallocated, GateTrim, 16);
 
     Format.Clear();
-    *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::Initial;
+    *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::Initial; 
     *Mon.PDiskBriefState = TPDiskMon::TPDisk::Booting;
     ErrorStr = "PDisk is initializing now";
 
@@ -643,7 +643,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                             str << " OwnerId# " << (ui32)owner;
                             str << " { VDiskId# " << data.VDiskId.ToStringWOGeneration();
                             str << " CutLogId# " << data.CutLogId.ToString();
-                            str << " WhiteboardProxyId# " << data.WhiteboardProxyId;
+                            str << " WhiteboardProxyId# " << data.WhiteboardProxyId; 
                             str << " CurLsnToKeep# " << data.CurrentFirstLsnToKeep;
                             str << " FirstNonceToKeep# " << SysLogFirstNoncesToKeep.FirstNonceToKeep[owner];
                             str << " AskedToCutLogAt# " << data.AskedToCutLogAt;
@@ -973,7 +973,7 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
 
     ui64 readOffset = Format.Offset(read->ChunkIdx, read->FirstSector, currentSectorOffset);
     // TODO: Get this from the drive
-    WILSON_TRACE(*ActorSystem, &read->TraceId, AsyncReadScheduled, DiskOffset = readOffset, Size = bytesToRead);
+    WILSON_TRACE(*ActorSystem, &read->TraceId, AsyncReadScheduled, DiskOffset = readOffset, Size = bytesToRead); 
     THolder<TCompletionChunkReadPart> completion(new TCompletionChunkReadPart(this, read, bytesToRead,
                 payloadBytesToRead, payloadOffset, read->FinalCompletion, isTheLastPart, Cfg->UseT1ha0HashInFooter));
     completion->CostNs = DriveModel.TimeForSizeNs(bytesToRead, read->ChunkIdx, TDriveModel::OP_TYPE_READ);
@@ -1204,24 +1204,24 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             vdiskMetrics->SetAvailableSize(ownerFree);
             vdiskMetrics->SetAllocatedSize(ownerAllocated);
             vdiskMetrics->SetStatusFlags(Keeper.GetSpaceStatusFlags(owner));
-            auto *vslotId = vdiskMetrics->MutableVSlotId();
-            vslotId->SetNodeId(ActorSystem->NodeId);
-            vslotId->SetPDiskId(PDiskId);
-            vslotId->SetVSlotId(data.VDiskSlotId);
+            auto *vslotId = vdiskMetrics->MutableVSlotId(); 
+            vslotId->SetNodeId(ActorSystem->NodeId); 
+            vslotId->SetPDiskId(PDiskId); 
+            vslotId->SetVSlotId(data.VDiskSlotId); 
         }
         NKikimrBlobStorage::TPDiskMetrics& pDiskMetrics = *reportResult->DiskMetrics->Record.AddPDisksMetrics();
         pDiskMetrics.SetPDiskId(PDiskId);
         pDiskMetrics.SetTotalSize(Format.DiskSize);
-        pDiskMetrics.SetAvailableSize(availableSize);
-        pDiskMetrics.SetMaxReadThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_READ));
-        pDiskMetrics.SetMaxWriteThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_WRITE));
+        pDiskMetrics.SetAvailableSize(availableSize); 
+        pDiskMetrics.SetMaxReadThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_READ)); 
+        pDiskMetrics.SetMaxWriteThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_WRITE)); 
         pDiskMetrics.SetNonRealTimeMs(AtomicGet(NonRealTimeMs));
         pDiskMetrics.SetSlowDeviceMs(Max((ui64)AtomicGet(SlowDeviceMs), (ui64)*Mon.DeviceNonperformanceMs));
-        pDiskMetrics.SetMaxIOPS(DriveModel.IOPS());
+        pDiskMetrics.SetMaxIOPS(DriveModel.IOPS()); 
         if (minSlotSize != Max<i64>()) {
             pDiskMetrics.SetEnforcedDynamicSlotSize(minSlotSize);
         }
-        pDiskMetrics.SetState(state);
+        pDiskMetrics.SetState(state); 
     }
 
     ActorSystem->Send(whiteboardReport.Sender, reportResult);
@@ -1463,8 +1463,8 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     GetStartingPoints(owner, result->StartingPoints);
     ownerData.VDiskId = vDiskId;
     ownerData.CutLogId = evYardInit.CutLogId;
-    ownerData.WhiteboardProxyId = evYardInit.WhiteboardProxyId;
-    ownerData.VDiskSlotId = evYardInit.SlotId;
+    ownerData.WhiteboardProxyId = evYardInit.WhiteboardProxyId; 
+    ownerData.VDiskSlotId = evYardInit.SlotId; 
     ownerData.LogRecordsConsequentlyRead = 0;
     ownerData.LastSeenLsn = 0;
     ownerData.HasAlreadyLoggedThisIncarnation = false;
@@ -1570,8 +1570,8 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         Y_VERIFY(SysLogFirstNoncesToKeep.FirstNonceToKeep[owner] <= SysLogRecord.Nonces.Value[NonceLog]);
         SysLogFirstNoncesToKeep.FirstNonceToKeep[owner] = SysLogRecord.Nonces.Value[NonceLog];
         OwnerData[owner].CutLogId = evYardInit.CutLogId;
-        OwnerData[owner].WhiteboardProxyId = evYardInit.WhiteboardProxyId;
-        OwnerData[owner].VDiskSlotId = evYardInit.SlotId;
+        OwnerData[owner].WhiteboardProxyId = evYardInit.WhiteboardProxyId; 
+        OwnerData[owner].VDiskSlotId = evYardInit.SlotId; 
         OwnerData[owner].OwnerRound = evYardInit.OwnerRound;
         VDiskOwners[vDiskId] = owner;
         OwnerData[owner].Status = TOwnerData::VDISK_STATUS_SENT_INIT;
@@ -2187,7 +2187,7 @@ bool TPDisk::Initialize(TActorSystem *actorSystem, const TActorId &pDiskActor) {
     PDiskThread.Start();
 
     if (!BlockDevice->IsGood()) {
-        *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::OpenFileError;
+        *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::OpenFileError; 
         *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
         TStringStream errStr;
         errStr << "Can't open file " << Cfg->GetDevicePath().Quote() << ": ";
@@ -2226,7 +2226,7 @@ bool TPDisk::Initialize(TActorSystem *actorSystem, const TActorId &pDiskActor) {
         }
         ErrorStr = str.Str();
 
-        *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::OpenFileError;
+        *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::OpenFileError; 
         *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
         *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorDeviceSerialMismatch;
 

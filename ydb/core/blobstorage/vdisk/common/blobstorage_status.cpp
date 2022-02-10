@@ -14,16 +14,16 @@ namespace NKikimr {
         const TActorId SkeletonId;
         const TActorId SyncerId;
         const TActorId SyncLogId;
-        std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
+        std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup; 
         const TVDiskID SelfVDiskId;
-        const ui64 IncarnationGuid;
-        const TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
+        const ui64 IncarnationGuid; 
+        const TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo; 
         TEvBlobStorage::TEvVStatus::TPtr Ev;
         const TActorId NotifyId;
         const TInstant Now;
-        const bool ReplDone;
+        const bool ReplDone; 
         unsigned Counter;
-        std::unique_ptr<TEvBlobStorage::TEvVStatusResult> Result;
+        std::unique_ptr<TEvBlobStorage::TEvVStatusResult> Result; 
 
         friend class TActorBootstrapped<TStatusRequestHandler>;
 
@@ -31,18 +31,18 @@ namespace NKikimr {
             // check request
             const NKikimrBlobStorage::TEvVStatus &record = Ev->Get()->Record;
             if (!SelfVDiskId.SameDisk(record.GetVDiskID())) {
-                Result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::RACE, SelfVDiskId, false,
-                    false, IncarnationGuid);
-                SetRacingGroupInfo(record, Result->Record, GroupInfo);
-                LOG_DEBUG(ctx, BS_VDISK_OTHER, VDISKP(VCtx->VDiskLogPrefix, "TEvVStatusResult Request# {%s} Response# {%s}",
-                    SingleLineProto(record).data(), SingleLineProto(Result->Record).data()));
-                SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, Ev->Cookie, Ev->GetChannel());
+                Result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::RACE, SelfVDiskId, false, 
+                    false, IncarnationGuid); 
+                SetRacingGroupInfo(record, Result->Record, GroupInfo); 
+                LOG_DEBUG(ctx, BS_VDISK_OTHER, VDISKP(VCtx->VDiskLogPrefix, "TEvVStatusResult Request# {%s} Response# {%s}", 
+                    SingleLineProto(record).data(), SingleLineProto(Result->Record).data())); 
+                SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, Ev->Cookie, Ev->GetChannel()); 
                 Die(ctx);
                 return;
             }
 
-            Result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, SelfVDiskId, true, ReplDone,
-                IncarnationGuid);
+            Result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, SelfVDiskId, true, ReplDone, 
+                IncarnationGuid); 
 
             NPDisk::TStatusFlags statusFlags = VCtx->GetOutOfSpaceState().GetGlobalStatusFlags().Flags;
             Result->Record.SetStatusFlags(statusFlags);
@@ -71,7 +71,7 @@ namespace NKikimr {
                 ctx.Send(NotifyId, new TEvents::TEvActorDied());
                 LOG_DEBUG(ctx, BS_VDISK_GET,
                     VDISKP(VCtx->VDiskLogPrefix, "TEvVStatusResult"));
-                SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, Ev->Cookie, Ev->GetChannel());
+                SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, Ev->Cookie, Ev->GetChannel()); 
                 Die(ctx);
             }
         }
@@ -81,14 +81,14 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(TEvLocalStatusResult, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-        )
+        STRICT_STFUNC(StateFunc, 
+            HFunc(TEvLocalStatusResult, Handle) 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+        ) 
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_STATUS_REQUEST_HANDLER;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_STATUS_REQUEST_HANDLER; 
         }
 
         TStatusRequestHandler(
@@ -96,10 +96,10 @@ namespace NKikimr {
                 const TActorId &skeletonId,
                 const TActorId &syncerId,
                 const TActorId &syncLogId,
-                const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
+                const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup, 
                 const TVDiskID selfVDiskId,
-                const ui64 incarnationGuid,
-                const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo,
+                const ui64 incarnationGuid, 
+                const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo, 
                 TEvBlobStorage::TEvVStatus::TPtr &ev,
                 const TActorId &notifyId,
                 const TInstant &now,
@@ -111,12 +111,12 @@ namespace NKikimr {
             , SyncLogId(syncLogId)
             , IFaceMonGroup(ifaceMonGroup)
             , SelfVDiskId(selfVDiskId)
-            , IncarnationGuid(incarnationGuid)
-            , GroupInfo(groupInfo)
+            , IncarnationGuid(incarnationGuid) 
+            , GroupInfo(groupInfo) 
             , Ev(ev)
             , NotifyId(notifyId)
             , Now(now)
-            , ReplDone(replDone)
+            , ReplDone(replDone) 
             , Counter(0)
         {}
     };
@@ -126,16 +126,16 @@ namespace NKikimr {
             const TActorId &skeletonId,
             const TActorId &syncerId,
             const TActorId &syncLogId,
-            const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
+            const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup, 
             const TVDiskID selfVDiskId,
-            const ui64 incarnationGuid,
-            const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo,
+            const ui64 incarnationGuid, 
+            const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo, 
             TEvBlobStorage::TEvVStatus::TPtr &ev,
             const TActorId &notifyId,
             const TInstant &now,
             bool replDone) {
         return new TStatusRequestHandler(vctx, skeletonId, syncerId, syncLogId, ifaceMonGroup, selfVDiskId,
-            incarnationGuid, groupInfo, ev, notifyId, now, replDone);
+            incarnationGuid, groupInfo, ev, notifyId, now, replDone); 
     }
 
 } // NKikimr

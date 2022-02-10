@@ -147,8 +147,8 @@ namespace NKikimr {
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_SYNCER_ANUBIS;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_SYNCER_ANUBIS; 
         }
 
         TAnubisCandidatesFinderActor(const TIntrusivePtr<THullCtx> &hullCtx,

@@ -72,7 +72,7 @@ struct TEvGRpcProxyStatus {
     struct TEvResponse : public TEventLocal<TEvResponse, EvResponse> {
         THashMap<ui32, std::shared_ptr<TEvGRpcProxyStatus::TEvGetStatusResponse>> PerNodeResponse;
         THashMap<ui32, TString> NodeNames;
-        THashMap<ui32, TString> NodeDataCenter;
+        THashMap<ui32, TString> NodeDataCenter; 
     };
 
 };

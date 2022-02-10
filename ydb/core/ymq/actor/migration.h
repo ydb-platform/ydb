@@ -15,8 +15,8 @@ public:
 
     void Bootstrap();
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SQS_QUEUE_MIGRATION_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::SQS_QUEUE_MIGRATION_ACTOR; 
     }
 
 private:

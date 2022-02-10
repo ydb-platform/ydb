@@ -26,19 +26,19 @@ namespace NKikimr {
 
 
         const TRec *Begin() const {
-            return Segment->LoadedIndex.data();
+            return Segment->LoadedIndex.data(); 
         }
 
         const TRec *End() const {
-            return Segment->LoadedIndex.data() + Segment->LoadedIndex.size();
+            return Segment->LoadedIndex.data() + Segment->LoadedIndex.size(); 
         }
 
         TRec *Begin() {
-            return const_cast<TLevelSegment *>(Segment)->LoadedIndex.data();
+            return const_cast<TLevelSegment *>(Segment)->LoadedIndex.data(); 
         }
 
         TRec *End() {
-            return const_cast<TLevelSegment *>(Segment)->LoadedIndex.data() + Segment->LoadedIndex.size();
+            return const_cast<TLevelSegment *>(Segment)->LoadedIndex.data() + Segment->LoadedIndex.size(); 
         }
 
     public:
@@ -118,7 +118,7 @@ namespace NKikimr {
             return !operator == (it);
         }
 
-        TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr) const {
+        TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr) const { 
             return Ptr->MemRec.GetDiskData(extr, Segment->GetOutbound());
         }
 

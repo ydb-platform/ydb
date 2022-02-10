@@ -68,6 +68,6 @@ namespace NKikimr {
     // CreateLocalSyncDataExtractor
     ///////////////////////////////////////////////////////////////////////////////////////////////
     IActor *CreateLocalSyncDataExtractor(const TIntrusivePtr<TVDiskContext> &vctx, const TActorId &skeletonId,
-        const TActorId &parentId, std::unique_ptr<TEvLocalSyncData> ev);
+        const TActorId &parentId, std::unique_ptr<TEvLocalSyncData> ev); 
 
 } // NKikimr

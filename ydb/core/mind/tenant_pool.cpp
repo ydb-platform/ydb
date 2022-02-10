@@ -129,9 +129,9 @@ class TDomainTenantPool : public TActorBootstrapped<TDomainTenantPool> {
     THashSet<TActorId> StatusSubscribers;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
     {
-        return NKikimrServices::TActivity::TENANT_POOL_ACTOR;
+        return NKikimrServices::TActivity::TENANT_POOL_ACTOR; 
     }
 
     TDomainTenantPool(const TString &domain, TActorId localID, TTenantPoolConfig::TPtr config)
@@ -793,9 +793,9 @@ class TTenantPool : public TActorBootstrapped<TTenantPool> {
     const TString DomainPrefix;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
     {
-        return NKikimrServices::TActivity::TENANT_POOL_ACTOR;
+        return NKikimrServices::TActivity::TENANT_POOL_ACTOR; 
     }
 
     TTenantPool(TTenantPoolConfig::TPtr config)

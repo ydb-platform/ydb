@@ -58,13 +58,13 @@ void TSendDataProtocol::TryAgain(const TActorContext& ctx) noexcept {
         }
     }
 
-    if (-sendResult == EAGAIN || -sendResult == EWOULDBLOCK) {
-        IPoller* poller = NKikimr::AppData(ctx)->PollerThreads.Get();
-        poller->StartWrite(Socket,
-            std::bind(NotifyReadyWrite, std::placeholders::_1, ctx));
-        return;
-    }
-
+    if (-sendResult == EAGAIN || -sendResult == EWOULDBLOCK) { 
+        IPoller* poller = NKikimr::AppData(ctx)->PollerThreads.Get(); 
+        poller->StartWrite(Socket, 
+            std::bind(NotifyReadyWrite, std::placeholders::_1, ctx)); 
+        return; 
+    } 
+ 
     switch (-sendResult) {
     case ECONNRESET:
         CatchSendDataError("Connection reset by peer");
@@ -99,10 +99,10 @@ void TSendDataProtocol::TryAgain(const TActorContext& ctx) noexcept {
     }
 }
 
-void TSendDataProtocol::CancelSendData(const TActorContext& /*ctx*/) noexcept {
+void TSendDataProtocol::CancelSendData(const TActorContext& /*ctx*/) noexcept { 
     Cancelled = true;
-//    IPoller* poller = NKikimr::AppData(ctx)->PollerThreads.Get();
-//    poller->CancelWrite(Socket);
+//    IPoller* poller = NKikimr::AppData(ctx)->PollerThreads.Get(); 
+//    poller->CancelWrite(Socket); 
 }
 
 }

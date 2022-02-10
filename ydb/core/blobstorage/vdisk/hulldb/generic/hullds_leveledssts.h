@@ -75,8 +75,8 @@ namespace NKikimr {
             , Pos(0)
         {}
 
-        TIterator(const TIterator&) = default;
-        TIterator& operator =(const TIterator&) = default;
+        TIterator(const TIterator&) = default; 
+        TIterator& operator =(const TIterator&) = default; 
 
         void SeekToFirst() {
             Pos = 0;

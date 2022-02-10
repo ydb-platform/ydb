@@ -22,8 +22,8 @@ class TConsoleRequestActor : public TMessageBusSecureRequest<TMessageBusServerRe
     using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TConsoleRequestActor>>;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::MSGBUS_COMMON;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::MSGBUS_COMMON; 
     }
 
     TConsoleRequestActor(NKikimrClient::TConsoleRequest &request, NMsgBusProxy::TBusMessageContext &msg)

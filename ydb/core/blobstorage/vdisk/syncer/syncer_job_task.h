@@ -26,22 +26,22 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         struct TSjOutcome {
             // we can send a message as a result ...
-            std::unique_ptr<IEventBase> Ev;
+            std::unique_ptr<IEventBase> Ev; 
             TActorId To;
             // ... or run a actor
-            std::unique_ptr<IActor> ActorActivity;
+            std::unique_ptr<IActor> ActorActivity; 
             bool RunInBatchPool = false;
             // ... or/and finish working
             bool Die = false;
 
-            static TSjOutcome Event(const TActorId &to, std::unique_ptr<IEventBase> &&ev) {
+            static TSjOutcome Event(const TActorId &to, std::unique_ptr<IEventBase> &&ev) { 
                 TSjOutcome outcome;
                 outcome.To = to;
                 outcome.Ev = std::move(ev);
                 return outcome;
             }
 
-            static TSjOutcome Actor(std::unique_ptr<IActor> actor, bool runInBatchPool = false) {
+            static TSjOutcome Actor(std::unique_ptr<IActor> actor, bool runInBatchPool = false) { 
                 TSjOutcome outcome;
                 outcome.ActorActivity = std::move(actor);
                 outcome.RunInBatchPool = runInBatchPool;
@@ -71,7 +71,7 @@ namespace NKikimr {
             const TIntrusivePtr<TSyncerContext> SyncerCtx;
 
             // create TSjCtx using actual Db and GInfo
-            static std::shared_ptr<TSjCtx> Create(
+            static std::shared_ptr<TSjCtx> Create( 
                                 const TIntrusivePtr<TSyncerContext> &sc,
                                 const TIntrusivePtr<TBlobStorageGroupInfo> &info);
 
@@ -133,7 +133,7 @@ namespace NKikimr {
                     const TVDiskID &vdisk,
                     const TActorId &service,
                     const NSyncer::TPeerSyncState &peerState,
-                    const std::shared_ptr<TSjCtx> &ctx);
+                    const std::shared_ptr<TSjCtx> &ctx); 
             void Output(IOutputStream &str) const;
             TString ToString() const;
             TSjOutcome NextRequest();
@@ -200,7 +200,7 @@ namespace NKikimr {
             // if performing FullRecovery, we save state here
             TMaybe<TFullRecoverInfo> FullRecoverInfo;
             // context passed to us from outside
-            std::shared_ptr<TSjCtx> Ctx;
+            std::shared_ptr<TSjCtx> Ctx; 
             // Sublog
             TSublog<> Sublog;
         };

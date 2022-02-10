@@ -374,7 +374,7 @@ Storage.prototype.updateFromStorage = function(update) {
         }
         if (pDisk && pDisk.AvailableSize && pDisk.TotalSize) {
             usage = Math.max(usage, 1 - pDisk.AvailableSize / pDisk.TotalSize);
-            if (!pDisk.State || (vDisk.Replicated === false && !vDisk.DonorMode) || isVDiskInErrorState(vDisk.VDiskState) === true) {
+            if (!pDisk.State || (vDisk.Replicated === false && !vDisk.DonorMode) || isVDiskInErrorState(vDisk.VDiskState) === true) { 
                 missingDisks++;
             }
         } else {

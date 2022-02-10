@@ -9,9 +9,9 @@ namespace NActors {
     public:
         using TTestActorRuntime::TTestActorRuntime;
 
-        using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
-        TNodeLocationCallback LocationCallback;
-
+        using TNodeLocationCallback = std::function<TNodeLocation(ui32)>; 
+        TNodeLocationCallback LocationCallback; 
+ 
         ~TTestBasicRuntime();
 
         void Initialize(TEgg) override;

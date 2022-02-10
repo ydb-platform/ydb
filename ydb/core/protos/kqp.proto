@@ -400,9 +400,9 @@ message TEvExecuterProgress {
 
 message TKqpProxyNodeResources {
     optional uint32 NodeId = 1;
-    optional uint64 DataCenterNumId = 2;
+    optional uint64 DataCenterNumId = 2; 
     optional uint32 ActiveWorkersCount = 3;
-    optional string DataCenterId = 4;
+    optional string DataCenterId = 4; 
     optional double CpuUsage = 5;
     optional uint32 Threads = 6;
 }

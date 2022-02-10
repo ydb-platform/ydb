@@ -14,13 +14,13 @@ message TVDiskConfig {
     optional bool FreshUseDreg = 21;
 
     optional bool AllowKeepFlags = 40;
-
+ 
     optional uint32 HullCompLevel0MaxSstsAtOnce = 45;
     optional uint32 HullCompSortedPartsNum = 46;
 
-    optional uint32 ReplInterconnectChannel = 50;
-
-    optional bool BarrierValidation = 60;
+    optional uint32 ReplInterconnectChannel = 50; 
+ 
+    optional bool BarrierValidation = 60; 
     optional bool EnableOverseerLsnReporting = 61; // deprecated
 };
 
@@ -52,10 +52,10 @@ message TAllVDiskKinds {
     repeated TVDiskKind VDiskKinds = 1;
 };
 
-message TIncrHugeConfig {
-    optional uint32 MinHugeBlobInBytes = 1 [default = 500000];
-    optional uint32 MinCleanChunks = 2 [default = 8];
-    optional uint32 MinAllocationBatch = 3 [default = 4];
-    optional uint32 UnalignedBlockSize = 4 [default = 50000];
-    optional uint32 MaxInFlightWrites = 5 [default = 5];
-};
+message TIncrHugeConfig { 
+    optional uint32 MinHugeBlobInBytes = 1 [default = 500000]; 
+    optional uint32 MinCleanChunks = 2 [default = 8]; 
+    optional uint32 MinAllocationBatch = 3 [default = 4]; 
+    optional uint32 UnalignedBlockSize = 4 [default = 50000]; 
+    optional uint32 MaxInFlightWrites = 5 [default = 5]; 
+}; 

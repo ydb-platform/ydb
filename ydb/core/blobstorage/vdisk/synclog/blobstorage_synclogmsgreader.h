@@ -13,7 +13,7 @@ namespace NKikimr {
         using TReadLogoBlobRec = std::function<void(const TLogoBlobRec *)>;
         using TReadBlockRec = std::function<void(const TBlockRec *)>;
         using TReadBarrierRec = std::function<void(const TBarrierRec *)>;
-        using TReadBlockRecV2 = std::function<void(const TBlockRecV2 *)>;
+        using TReadBlockRecV2 = std::function<void(const TBlockRecV2 *)>; 
 
 
         ////////////////////////////////////////////////////////////////////////////
@@ -21,8 +21,8 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class IFragmentReader {
         public:
-            virtual void ForEach(TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2) = 0;
-            virtual bool Check(TString &errorString) = 0;
+            virtual void ForEach(TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2) = 0; 
+            virtual bool Check(TString &errorString) = 0; 
             virtual ~IFragmentReader() {}
         };
 
@@ -36,12 +36,12 @@ namespace NKikimr {
                 : Data(data)
             {}
 
-            virtual void ForEach(TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2) override;
-            virtual bool Check(TString &errorString) override;
+            virtual void ForEach(TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2) override; 
+            virtual bool Check(TString &errorString) override; 
 
         protected:
             const TString &Data;
-            void ForEach(const TString &d, TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2);
+            void ForEach(const TString &d, TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2); 
         };
 
 
@@ -55,12 +55,12 @@ namespace NKikimr {
                 , Uncompressed()
             {}
 
-            virtual void ForEach(TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2) override;
-            virtual bool Check(TString &errorString) override;
+            virtual void ForEach(TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2) override; 
+            virtual bool Check(TString &errorString) override; 
 
         private:
             mutable TString Uncompressed;
-            void Decompress();
+            void Decompress(); 
         };
 
 
@@ -69,12 +69,12 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TBaseOrderedFragmentReader : public IFragmentReader {
         public:
-            virtual void ForEach(TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2) override;
+            virtual void ForEach(TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2) override; 
 
         protected:
-            TRecordsWithSerial Records;
+            TRecordsWithSerial Records; 
 
-            virtual bool Decompress() = 0;
+            virtual bool Decompress() = 0; 
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -87,13 +87,13 @@ namespace NKikimr {
                 , Decompressed(false)
             {}
 
-            virtual bool Check(TString &errorString) override;
+            virtual bool Check(TString &errorString) override; 
 
         private:
             const TString &Data;
-            bool Decompressed;
+            bool Decompressed; 
 
-            bool Decompress() override;
+            bool Decompress() override; 
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -106,13 +106,13 @@ namespace NKikimr {
                 , Decompressed(false)
             {}
 
-            virtual bool Check(TString &errorString) override;
+            virtual bool Check(TString &errorString) override; 
 
         private:
             const TString &Data;
-            bool Decompressed;
+            bool Decompressed; 
 
-            bool Decompress() override;
+            bool Decompress() override; 
         };
 
 
@@ -123,16 +123,16 @@ namespace NKikimr {
         public:
             TFragmentReader(const TString &data);
 
-            void ForEach(TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2) {
-                Impl->ForEach(fblob, fblock, fbar, fblock2);
+            void ForEach(TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2) { 
+                Impl->ForEach(fblob, fblock, fbar, fblock2); 
             }
 
-            bool Check(TString &errorString) {
+            bool Check(TString &errorString) { 
                 return Impl->Check(errorString);
             }
 
         private:
-            std::unique_ptr<IFragmentReader> Impl;
+            std::unique_ptr<IFragmentReader> Impl; 
         };
 
     } // NSyncLog

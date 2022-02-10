@@ -26,16 +26,16 @@ ui16 TResult::GetType() const {
     return Reply == nullptr ? 0 : Reply.Get()->GetHeader()->Type;
 }
 
-template <> const NKikimrClient::TResponse& TResult::GetResult<NKikimrClient::TResponse>() const {
+template <> const NKikimrClient::TResponse& TResult::GetResult<NKikimrClient::TResponse>() const { 
     Y_VERIFY(GetType() == NMsgBusProxy::MTYPE_CLIENT_RESPONSE, "Unexpected response type: %d", GetType());
     return static_cast<NMsgBusProxy::TBusResponse*>(Reply.Get())->Record;
 }
 
-template <> const NKikimrClient::TBsTestLoadResponse& TResult::GetResult<NKikimrClient::TBsTestLoadResponse>() const {
-    Y_VERIFY(GetType() == NMsgBusProxy::MTYPE_CLIENT_LOAD_RESPONSE, "Unexpected response type: %d", GetType());
-    return static_cast<NMsgBusProxy::TBusBsTestLoadResponse*>(Reply.Get())->Record;
-}
-
+template <> const NKikimrClient::TBsTestLoadResponse& TResult::GetResult<NKikimrClient::TBsTestLoadResponse>() const { 
+    Y_VERIFY(GetType() == NMsgBusProxy::MTYPE_CLIENT_LOAD_RESPONSE, "Unexpected response type: %d", GetType()); 
+    return static_cast<NMsgBusProxy::TBusBsTestLoadResponse*>(Reply.Get())->Record; 
+} 
+ 
 NMsgBusProxy::EResponseStatus TResult::GetStatus() const {
     if (TransportStatus != NBus::MESSAGE_OK) {
         switch (TransportStatus) {
@@ -65,7 +65,7 @@ NMsgBusProxy::EResponseStatus TResult::GetStatus() const {
         };
     } else
     if (GetType() == NMsgBusProxy::MTYPE_CLIENT_RESPONSE) {
-        return static_cast<NMsgBusProxy::EResponseStatus>(GetResult<NKikimrClient::TResponse>().GetStatus());
+        return static_cast<NMsgBusProxy::EResponseStatus>(GetResult<NKikimrClient::TResponse>().GetStatus()); 
     } else
     return NMsgBusProxy::MSTATUS_INTERNALERROR;
 }
@@ -79,7 +79,7 @@ TQueryResult::TQueryResult(const TResult& result)
 {}
 
 TValue TQueryResult::GetValue() const {
-    const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>();
+    const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>(); 
     Y_VERIFY(response.HasExecutionEngineEvaluatedResponse());
     const auto& result = response.GetExecutionEngineEvaluatedResponse();
     // TODO: type caching
@@ -287,7 +287,7 @@ TPrepareResult::TPrepareResult(const TResult& result, const TQuery& query)
 {}
 
 TPreparedQuery TPrepareResult::GetQuery() const {
-    const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>();
+    const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>(); 
     Y_VERIFY(response.HasMiniKQLCompileResults());
     const auto& compileResult = response.GetMiniKQLCompileResults();
     Y_VERIFY(compileResult.HasCompiledProgram(), "Compile error (%" PRIu64 "): %" PRIu32 ":%" PRIu32 " %s",

@@ -28,7 +28,7 @@ namespace NKikimr {
         void AddAllPartsOfLogoBlob(const TBlobStorageGroupType &type, TLogoBlobID blobId) {
             for (ui32 partIdx = 0; partIdx < type.TotalPartCount(); ++partIdx) {
                 AddLogoBlobIndex();
-                AddLogoBlobData(type.PartSize(TLogoBlobID(blobId, partIdx + 1)), 0, 0);
+                AddLogoBlobData(type.PartSize(TLogoBlobID(blobId, partIdx + 1)), 0, 0); 
             }
         }
 

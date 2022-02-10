@@ -13,37 +13,37 @@ namespace NKikimr {
     public:
         TIntrusivePtr<TVDiskContext> VCtx;
         TPDiskCtxPtr PDiskCtx;
-        std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
-        TIntrusivePtr<THullDs> HullDs;
-        TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
+        std::shared_ptr<THugeBlobCtx> HugeBlobCtx; 
+        TIntrusivePtr<THullDs> HullDs; 
+        TIntrusivePtr<TBlobStorageGroupInfo> GInfo; 
         TActorId SkeletonId;
         NMonGroup::TReplGroup MonGroup;
 
         // settings
-        TIntrusivePtr<TVDiskConfig> VDiskCfg;
-        std::shared_ptr<std::atomic_uint64_t> PDiskWriteBytes;
-        const bool PausedAtStart;
+        TIntrusivePtr<TVDiskConfig> VDiskCfg; 
+        std::shared_ptr<std::atomic_uint64_t> PDiskWriteBytes; 
+        const bool PausedAtStart; 
 
         TReplCtx(
                 TIntrusivePtr<TVDiskContext> vctx,
                 TPDiskCtxPtr pdiskCtx,
-                std::shared_ptr<THugeBlobCtx> hugeBlobCtx,
-                TIntrusivePtr<THullDs> hullDs,
-                TIntrusivePtr<TBlobStorageGroupInfo> info,
+                std::shared_ptr<THugeBlobCtx> hugeBlobCtx, 
+                TIntrusivePtr<THullDs> hullDs, 
+                TIntrusivePtr<TBlobStorageGroupInfo> info, 
                 const TActorId &skeletonId,
-                TIntrusivePtr<TVDiskConfig> vdiskCfg,
-                std::shared_ptr<std::atomic_uint64_t> pdiskWriteBytes,
-                bool pausedAtStart = false)
+                TIntrusivePtr<TVDiskConfig> vdiskCfg, 
+                std::shared_ptr<std::atomic_uint64_t> pdiskWriteBytes, 
+                bool pausedAtStart = false) 
             : VCtx(std::move(vctx))
             , PDiskCtx(std::move(pdiskCtx))
             , HugeBlobCtx(std::move(hugeBlobCtx))
-            , HullDs(std::move(hullDs))
-            , GInfo(std::move(info))
+            , HullDs(std::move(hullDs)) 
+            , GInfo(std::move(info)) 
             , SkeletonId(skeletonId)
             , MonGroup(VCtx->VDiskCounters, "subsystem", "repl")
-            , VDiskCfg(std::move(vdiskCfg))
-            , PDiskWriteBytes(std::move(pdiskWriteBytes))
-            , PausedAtStart(pausedAtStart)
+            , VDiskCfg(std::move(vdiskCfg)) 
+            , PDiskWriteBytes(std::move(pdiskWriteBytes)) 
+            , PausedAtStart(pausedAtStart) 
         {}
     };
 

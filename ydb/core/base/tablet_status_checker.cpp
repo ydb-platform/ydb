@@ -34,8 +34,8 @@ private:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_ACTOR; 
     }
 
     TTabletStatusCheckRequest(const TActorId &replyTo, TTabletStorageInfo *info)

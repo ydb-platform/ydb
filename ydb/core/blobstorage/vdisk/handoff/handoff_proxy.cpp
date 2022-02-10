@@ -62,21 +62,21 @@ namespace NKikimr {
                 || (State.InFlightQueueByteSize + size >= Params.MaxInFlightByteSize);
         }
 
-        void SendItem(const TActorContext &ctx, std::unique_ptr<TEvLocalHandoff> item) {
+        void SendItem(const TActorContext &ctx, std::unique_ptr<TEvLocalHandoff> item) { 
             auto vd = Info->GetVDiskId(VDiskInfoPtr->OrderNumber);
             auto aid = Info->GetActorId(VDiskInfoPtr->OrderNumber);
-            auto msg = std::make_unique<TEvBlobStorage::TEvVPut>(item->Id, item->Data, vd, true, &item->Cookie,
-                TInstant::Max(), NKikimrBlobStorage::AsyncBlob);
+            auto msg = std::make_unique<TEvBlobStorage::TEvVPut>(item->Id, item->Data, vd, true, &item->Cookie, 
+                TInstant::Max(), NKikimrBlobStorage::AsyncBlob); 
             State.InFlightQueueSize++;
             State.InFlightQueueByteSize += item->ByteSize();
-            InFlightQueue.PushBack(item.release());
+            InFlightQueue.PushBack(item.release()); 
 
             State.LastSendTime = TAppData::TimeProvider->Now();
-            ctx.Send(aid, msg.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+            ctx.Send(aid, msg.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession); 
         }
 
         void DisposeFrontItem() {
-            std::unique_ptr<TEvLocalHandoff> item(InFlightQueue.PopFront());
+            std::unique_ptr<TEvLocalHandoff> item(InFlightQueue.PopFront()); 
             ui32 byteSize = item->ByteSize();
             State.InFlightQueueSize--;
             State.InFlightQueueByteSize -= byteSize;
@@ -85,14 +85,14 @@ namespace NKikimr {
             VDiskInfoPtr->Get().FreeElement(byteSize);
         }
 
-        void PutToWaitQueue(std::unique_ptr<TEvLocalHandoff> item) {
+        void PutToWaitQueue(std::unique_ptr<TEvLocalHandoff> item) { 
             State.WaitQueueSize++;
             State.WaitQueueByteSize += item->ByteSize();
-            WaitQueue.PushBack(item.release());
+            WaitQueue.PushBack(item.release()); 
         }
 
-        std::unique_ptr<TEvLocalHandoff> GetFromWaitQueue() {
-            std::unique_ptr<TEvLocalHandoff> item(WaitQueue.PopFront());
+        std::unique_ptr<TEvLocalHandoff> GetFromWaitQueue() { 
+            std::unique_ptr<TEvLocalHandoff> item(WaitQueue.PopFront()); 
             State.WaitQueueSize--;
             State.WaitQueueByteSize -= item->ByteSize();
             return item;
@@ -103,7 +103,7 @@ namespace NKikimr {
             ui32 maxCntr = State.BadnessState == TPrivateProxyState::GOOD ? Max<ui32>() : 1;
             ui32 cntr = 0;
             while (cntr < maxCntr && !WaitQueueIsEmpty() && !InFlightQueueIsFull(WaitQueue.Front()->ByteSize())) {
-                SendItem(ctx, GetFromWaitQueue());
+                SendItem(ctx, GetFromWaitQueue()); 
                 cntr++;
             }
         }
@@ -118,7 +118,7 @@ namespace NKikimr {
                              "THandoffProxyActor(%s)::Handle(TEvLocalHandoff)",
                              VDiskInfoPtr->VDiskIdShort.ToString().data()));
 
-            std::unique_ptr<TEvLocalHandoff> item(ev->Release().Release());
+            std::unique_ptr<TEvLocalHandoff> item(ev->Release().Release()); 
             ui32 byteSize = item->ByteSize();
 
             SendQueuedMessagesUntilAllowed(ctx);
@@ -126,11 +126,11 @@ namespace NKikimr {
             if (!InFlightQueueIsFull(byteSize)) {
                 //Y_VERIFY_DEBUG(WaitQueueIsEmpty()); // FIXME: it seems that assert is invalid
                 item->Cookie = GenerateCookie();
-                SendItem(ctx, std::move(item));
+                SendItem(ctx, std::move(item)); 
                 Counters.LocalHandoffSendRightAway++;
             } else if (!WaitQueueIsFull(byteSize)) {
                 item->Cookie = GenerateCookie();
-                PutToWaitQueue(std::move(item));
+                PutToWaitQueue(std::move(item)); 
                 Counters.LocalHandoffPostpone++;
             } else {
                 Counters.LocalHandoffDiscard++;
@@ -150,12 +150,12 @@ namespace NKikimr {
 
             // move all in flight messages to the wait queue for retrying
             while (!InFlightQueueIsEmpty()) {
-                std::unique_ptr<TEvLocalHandoff> item(InFlightQueue.PopBack());
+                std::unique_ptr<TEvLocalHandoff> item(InFlightQueue.PopBack()); 
                 ui32 byteSize = item->ByteSize();
                 State.InFlightQueueSize--;
                 State.InFlightQueueByteSize -= byteSize;
 
-                WaitQueue.PushFront(item.release());
+                WaitQueue.PushFront(item.release()); 
                 State.WaitQueueSize++;
                 State.WaitQueueByteSize += byteSize;
             }
@@ -292,19 +292,19 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(TEvLocalHandoff, Handle)
-            HFunc(TEvBlobStorage::TEvVPutResult, Handle)
-            HFunc(TEvents::TEvUndelivered, Handle)
-            HFunc(TEvHandoffProxyMon, Handle)
-            HFunc(TEvBlobStorage::TEvVWindowChange, Handle)
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-        )
+        STRICT_STFUNC(StateFunc, 
+            HFunc(TEvLocalHandoff, Handle) 
+            HFunc(TEvBlobStorage::TEvVPutResult, Handle) 
+            HFunc(TEvents::TEvUndelivered, Handle) 
+            HFunc(TEvHandoffProxyMon, Handle) 
+            HFunc(TEvBlobStorage::TEvVWindowChange, Handle) 
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup) 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+        ) 
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_HANDOFF_PROXY;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_HANDOFF_PROXY; 
         }
 
 

@@ -59,7 +59,7 @@ namespace NKikimr {
             if (IsAnubis()) {
                 Y_VERIFY(!LogoBlobId.PartId());
                 TIngress ingressDontKeep;
-                ingressDontKeep.SetKeep(TIngress::IngressMode(top->GType), CollectModeDoNotKeep);
+                ingressDontKeep.SetKeep(TIngress::IngressMode(top->GType), CollectModeDoNotKeep); 
                 return {LogoBlobId, ingressDontKeep};
             } else {
                 Y_VERIFY(LogoBlobId.PartId());

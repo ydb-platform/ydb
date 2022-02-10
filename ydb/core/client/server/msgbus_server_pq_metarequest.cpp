@@ -49,7 +49,7 @@ TPersQueueGetTopicMetadataTopicWorker::TPersQueueGetTopicMetadataTopicWorker(
 )
     : TReplierToParent<TTopicInfoBasedActor>(parent, topicEntry, name)
 {
-    SetActivityType(NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR);
+    SetActivityType(NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR); 
 }
 
 
@@ -108,7 +108,7 @@ TPersQueueGetPartitionOffsetsTopicWorker::TPersQueueGetPartitionOffsetsTopicWork
     , PartitionsToRequest(partitionsToRequest)
     , RequestProto(requestProto)
 {
-    SetActivityType(NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR);
+    SetActivityType(NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR); 
 }
 
 void TPersQueueGetPartitionOffsetsTopicWorker::BootstrapImpl(const TActorContext &ctx) {
@@ -221,7 +221,7 @@ TPersQueueGetPartitionStatusTopicWorker::TPersQueueGetPartitionStatusTopicWorker
     , PartitionsToRequest(partitionsToRequest)
     , RequestProto(requestProto)
 {
-    SetActivityType(NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR);
+    SetActivityType(NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR); 
 }
 
 void TPersQueueGetPartitionStatusTopicWorker::BootstrapImpl(const TActorContext &ctx) {
@@ -345,7 +345,7 @@ TPersQueueGetPartitionLocationsTopicWorker::TPersQueueGetPartitionLocationsTopic
     , RequestProto(requestProto)
     , NodesInfo(nodesInfo)
 {
-    SetActivityType(NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR);
+    SetActivityType(NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR); 
 }
 
 void TPersQueueGetPartitionLocationsTopicWorker::BootstrapImpl(const TActorContext& ctx) {
@@ -475,7 +475,7 @@ TPersQueueGetReadSessionsInfoTopicWorker::TPersQueueGetReadSessionsInfoTopicWork
     , RequestProto(requestProto)
     , NodesInfo(nodesInfo)
 {
-    SetActivityType(NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR);
+    SetActivityType(NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR); 
 }
 
 void TPersQueueGetReadSessionsInfoTopicWorker::Die(const TActorContext& ctx) {

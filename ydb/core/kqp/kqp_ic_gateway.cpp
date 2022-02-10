@@ -71,8 +71,8 @@ static NThreading::TFuture<TResult> NotImplemented() {
 
 struct TAppConfigResult : public IKqpGateway::TGenericResult {
     std::shared_ptr<const NKikimrConfig::TAppConfig> Config;
-};
-
+}; 
+ 
 
 template<typename TRequest, typename TResponse, typename TResult>
 class TProxyRequestHandler: public TRequestHandlerBase<
@@ -827,7 +827,7 @@ public:
     using TRequest = TEvTxUserProxy::TEvProposeKqpTransaction;
     using TResult = IKqpGateway::TExecPhysicalResult;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
         return NKikimrServices::TActivity::KQP_EXEC_PHYSICAL_REQUEST_HANDLER;
     }
 

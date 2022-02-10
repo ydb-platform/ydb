@@ -7,15 +7,15 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 
-#include <util/folder/path.h>
+#include <util/folder/path.h> 
 
 namespace NKikimr {
-    struct ICacheAccessor {
-        virtual ~ICacheAccessor() = default;
-        virtual TString Read() = 0;
-        virtual void Update(std::function<TString(TString)> processor) = 0;
-    };
-
+    struct ICacheAccessor { 
+        virtual ~ICacheAccessor() = default; 
+        virtual TString Read() = 0; 
+        virtual void Update(std::function<TString(TString)> processor) = 0; 
+    }; 
+ 
     struct TNodeWardenConfig : public TThrRefBase {
         NKikimrBlobStorage::TNodeWardenServiceSet ServiceSet;
         TIntrusivePtr<IPDiskServiceFactory> PDiskServiceFactory;
@@ -23,19 +23,19 @@ namespace NKikimr {
         TIntrusivePtr<NPDisk::TDriveModelDb> AllDriveModels;
         NKikimrBlobStorage::TPDiskConfig PDiskConfigOverlay;
         NKikimrConfig::TFeatureFlags FeatureFlags;
-        NKikimrBlobStorage::TIncrHugeConfig IncrHugeConfig;
+        NKikimrBlobStorage::TIncrHugeConfig IncrHugeConfig; 
         THashMap<TString, TIntrusivePtr<NPDisk::TSectorMap>> SectorMaps;
-        std::unique_ptr<ICacheAccessor> CacheAccessor;
-        TEncryptionKey TenantKey;
-        TEncryptionKey StaticKey;
+        std::unique_ptr<ICacheAccessor> CacheAccessor; 
+        TEncryptionKey TenantKey; 
+        TEncryptionKey StaticKey; 
         TEncryptionKey PDiskKey;
-        bool CachePDisks = false;
-        bool CacheVDisks = false;
-        bool EnableVDiskCooldownTimeout = false;
+        bool CachePDisks = false; 
+        bool CacheVDisks = false; 
+        bool EnableVDiskCooldownTimeout = false; 
 
-        // debugging options
-        bool VDiskReplPausedAtStart = false;
-
+        // debugging options 
+        bool VDiskReplPausedAtStart = false; 
+ 
         TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
             : PDiskServiceFactory(pDiskServiceFactory)
             , AllVDiskKinds(new TAllVDiskKinds)
@@ -52,18 +52,18 @@ namespace NKikimr {
                  return NPDisk::YdbDefaultPDiskSequence;
              }
         }
-
-        bool IsCacheEnabled() const {
-            return static_cast<bool>(CacheAccessor);
-        }
+ 
+        bool IsCacheEnabled() const { 
+            return static_cast<bool>(CacheAccessor); 
+        } 
     };
 
     IActor* CreateBSNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg);
 
-    bool ObtainTenantKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig);
-    bool ObtainStaticKey(TEncryptionKey *key);
+    bool ObtainTenantKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig); 
+    bool ObtainStaticKey(TEncryptionKey *key); 
     bool ObtainPDiskKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig);
-
-    std::unique_ptr<ICacheAccessor> CreateFileCacheAccessor(const TFsPath& cacheFilePath);
-
+ 
+    std::unique_ptr<ICacheAccessor> CreateFileCacheAccessor(const TFsPath& cacheFilePath); 
+ 
 } // NKikimr

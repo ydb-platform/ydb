@@ -23,10 +23,10 @@ struct TColorLimits {
     i64 OrangeDivisor = 1;
     i64 OrangeAddend = 0;
 
-    i64 LightOrangeMultiplier = 0;
-    i64 LightOrangeDivisor = 1;
-    i64 LightOrangeAddend = 0;
-
+    i64 LightOrangeMultiplier = 0; 
+    i64 LightOrangeDivisor = 1; 
+    i64 LightOrangeAddend = 0; 
+ 
     i64 YellowMultiplier = 0;
     i64 YellowDivisor = 1;
     i64 YellowAddend = 0;
@@ -65,9 +65,9 @@ struct TColorLimits {
         l.OrangeAddend = 4;
 
         l.LightOrangeMultiplier = 65;
-        l.LightOrangeDivisor =  1000;
+        l.LightOrangeDivisor =  1000; 
         l.LightOrangeAddend = 5;
-
+ 
         l.YellowMultiplier = 80; // Stop serving user writes at 8% free space
         l.YellowDivisor =  1000;
         l.YellowAddend = 6;
@@ -76,7 +76,7 @@ struct TColorLimits {
         l.LightYellowDivisor =   1000;
         l.LightYellowAddend = 7;
 
-        l.CyanMultiplier = 130; // 13% free space or less
+        l.CyanMultiplier = 130; // 13% free space or less 
         l.CyanDivisor =   1000;
         l.CyanAddend = 8;
 
@@ -95,9 +95,9 @@ struct TColorLimits {
         l.OrangeMultiplier = 500;
         l.OrangeDivisor =   1000;
 
-        l.LightOrangeMultiplier = 700;
-        l.LightOrangeDivisor =   1000;
-
+        l.LightOrangeMultiplier = 700; 
+        l.LightOrangeDivisor =   1000; 
+ 
         l.YellowMultiplier = 900;
         l.YellowDivisor =   1000;
 

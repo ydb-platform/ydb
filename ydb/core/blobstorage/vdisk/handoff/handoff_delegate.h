@@ -40,12 +40,12 @@ namespace NKikimr {
                      const TVDiskIdShort &vdisk,
                      const TLogoBlobID &id,
                      ui64 fullDataSize,
-                     TRope&& data);
+                     TRope&& data); 
         TActorId GetMonActorID() const;
 
     private:
         struct TFields;
-        std::unique_ptr<TFields> Fields;
+        std::unique_ptr<TFields> Fields; 
     };
 
 } // NKikimr

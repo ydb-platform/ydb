@@ -125,13 +125,13 @@ struct TCmsSentinelConfig {
         stateLimits[NKikimrBlobStorage::TPDiskState::ChunkQuotaError] = 60;
         stateLimits[NKikimrBlobStorage::TPDiskState::DeviceIoError] = 60;
         // node online, pdisk missing
-        stateLimits[NKikimrBlobStorage::TPDiskState::Missing] = 60;
+        stateLimits[NKikimrBlobStorage::TPDiskState::Missing] = 60; 
         // node timeout
-        stateLimits[NKikimrBlobStorage::TPDiskState::Timeout] = 60;
+        stateLimits[NKikimrBlobStorage::TPDiskState::Timeout] = 60; 
         // node offline
-        stateLimits[NKikimrBlobStorage::TPDiskState::NodeDisconnected] = 60;
+        stateLimits[NKikimrBlobStorage::TPDiskState::NodeDisconnected] = 60; 
         // disable for unknown states
-        stateLimits[NKikimrBlobStorage::TPDiskState::Unknown] = 0;
+        stateLimits[NKikimrBlobStorage::TPDiskState::Unknown] = 0; 
 
         return stateLimits;
     }

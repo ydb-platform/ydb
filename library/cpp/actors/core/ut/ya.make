@@ -1,11 +1,11 @@
 UNITTEST_FOR(library/cpp/actors/core)
-
+ 
 OWNER(
     alexvru
     g:kikimr
 )
-
-FORK_SUBTESTS()
+ 
+FORK_SUBTESTS() 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     TIMEOUT(1200)
@@ -28,19 +28,19 @@ PEERDIR(
     library/cpp/actors/testlib
 )
 
-SRCS(
+SRCS( 
     actor_coroutine_ut.cpp
     actor_ut.cpp
     actorsystem_ut.cpp
     ask_ut.cpp
     balancer_ut.cpp
     event_pb_payload_ut.cpp
-    event_pb_ut.cpp
+    event_pb_ut.cpp 
     executor_pool_basic_ut.cpp
     executor_pool_united_ut.cpp
     log_ut.cpp
     memory_tracker_ut.cpp
     scheduler_actor_ut.cpp
-)
-
-END()
+) 
+ 
+END() 

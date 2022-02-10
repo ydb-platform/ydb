@@ -34,7 +34,7 @@ class IKikimrServicesInitializer : public IServiceInitializer {
 protected:
     const NKikimrConfig::TAppConfig& Config;
     const ui32                       NodeId;
-    const TKikimrScopeId             ScopeId;
+    const TKikimrScopeId             ScopeId; 
 
 public:
     IKikimrServicesInitializer(const TKikimrRunConfig& runConfig);
@@ -50,7 +50,7 @@ class TBasicServicesInitializer : public IKikimrServicesInitializer {
     static ISchedulerThread* CreateScheduler(const NKikimrConfig::TActorSystemConfig::TScheduler &config);
 
 public:
-    TBasicServicesInitializer(const TKikimrRunConfig& runConfig);
+    TBasicServicesInitializer(const TKikimrRunConfig& runConfig); 
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -315,19 +315,19 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TLoadInitializer : public IKikimrServicesInitializer {
-public:
-    TLoadInitializer(const TKikimrRunConfig& runConfig);
+class TLoadInitializer : public IKikimrServicesInitializer { 
+public: 
+    TLoadInitializer(const TKikimrRunConfig& runConfig); 
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
-class TFailureInjectionInitializer : public IKikimrServicesInitializer {
-public:
-    TFailureInjectionInitializer(const TKikimrRunConfig& runConfig);
+}; 
+ 
+class TFailureInjectionInitializer : public IKikimrServicesInitializer { 
+public: 
+    TFailureInjectionInitializer(const TKikimrRunConfig& runConfig); 
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
+}; 
 
 class TPersQueueL2CacheInitializer : public IKikimrServicesInitializer {
 public:

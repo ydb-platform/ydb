@@ -96,8 +96,8 @@ namespace NKikimr {
                       )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_SYNCER_HTTPREQ;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_SYNCER_HTTPREQ; 
         }
 
         TSyncerSchedulerHttpActor(const TIntrusivePtr<TSyncerContext> &sc,
@@ -123,10 +123,10 @@ namespace NKikimr {
     struct TEvSyncerCommitProxyDone :
         public TEventLocal<TEvSyncerCommitProxyDone, TEvBlobStorage::EvSyncerCommitProxyDone>
     {
-        std::unique_ptr<TSyncerJobTask> Task;
+        std::unique_ptr<TSyncerJobTask> Task; 
 
-        TEvSyncerCommitProxyDone(std::unique_ptr<TSyncerJobTask> task)
-            : Task(std::move(task))
+        TEvSyncerCommitProxyDone(std::unique_ptr<TSyncerJobTask> task) 
+            : Task(std::move(task)) 
         {}
     };
 
@@ -138,17 +138,17 @@ namespace NKikimr {
 
         const TActorId NotifyId;
         const TActorId CommitterId;
-        std::unique_ptr<TSyncerJobTask> Task;
+        std::unique_ptr<TSyncerJobTask> Task; 
 
         void Bootstrap(const TActorContext &ctx) {
             auto msg = TEvSyncerCommit::Remote(Task->VDiskId, Task->GetCurrent());
-            ctx.Send(CommitterId, msg.release());
+            ctx.Send(CommitterId, msg.release()); 
             TThis::Become(&TThis::StateFunc);
         }
 
         void Handle(TEvSyncerCommitDone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
-            ctx.Send(NotifyId, new TEvSyncerCommitProxyDone(std::move(Task)));
+            ctx.Send(NotifyId, new TEvSyncerCommitProxyDone(std::move(Task))); 
             Die(ctx);
         }
 
@@ -157,23 +157,23 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(TEvSyncerCommitDone, Handle);
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-        )
+        STRICT_STFUNC(StateFunc, 
+            HFunc(TEvSyncerCommitDone, Handle); 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+        ) 
 
     public:
         static constexpr auto ActorActivityType() {
-            return NKikimrServices::TActivity::BS_SYNCER_COMMITTER_PROXY;
-        }
-
+            return NKikimrServices::TActivity::BS_SYNCER_COMMITTER_PROXY; 
+        } 
+ 
         TSyncerCommitterProxy(const TActorId &notifyId,
                               const TActorId &committerId,
-                              std::unique_ptr<TSyncerJobTask> task)
+                              std::unique_ptr<TSyncerJobTask> task) 
             : TActorBootstrapped<TSyncerCommitterProxy>()
             , NotifyId(notifyId)
             , CommitterId(committerId)
-            , Task(std::move(task))
+            , Task(std::move(task)) 
         {}
     };
 
@@ -206,7 +206,7 @@ namespace NKikimr {
         const TDuration SyncTimeInterval;
         TActorId CommitterId;
         bool Scheduled;
-        std::shared_ptr<TSjCtx> JobCtx;
+        std::shared_ptr<TSjCtx> JobCtx; 
 
         friend class TActorBootstrapped<TSyncerScheduler>;
 
@@ -233,13 +233,13 @@ namespace NKikimr {
                 }
             }
 
-            // if we haven't found any neighbors to sync with, notify skeleton
-            if (SchedulerQueue.empty()) {
-                Become(&TThis::NothingToDo);
-            } else {
-                // start sync immediately
-                Schedule(ctx);
-            }
+            // if we haven't found any neighbors to sync with, notify skeleton 
+            if (SchedulerQueue.empty()) { 
+                Become(&TThis::NothingToDo); 
+            } else { 
+                // start sync immediately 
+                Schedule(ctx); 
+            } 
         }
 
         void HandleWakeup(const TActorContext &ctx) {
@@ -247,10 +247,10 @@ namespace NKikimr {
             Schedule(ctx);
         }
 
-        void ApplyChanges(const TActorContext &ctx, TSyncerJobTask& task) {
-            SyncerData->Neighbors->ApplyChanges(ctx, &task, SyncerContext->Config->SyncTimeInterval);
+        void ApplyChanges(const TActorContext &ctx, TSyncerJobTask& task) { 
+            SyncerData->Neighbors->ApplyChanges(ctx, &task, SyncerContext->Config->SyncTimeInterval); 
             ActualizeUnsyncedDisksNum();
-            SchedulerQueue.push(&(*SyncerData->Neighbors)[task.VDiskId]);
+            SchedulerQueue.push(&(*SyncerData->Neighbors)[task.VDiskId]); 
             Schedule(ctx);
         }
 
@@ -259,23 +259,23 @@ namespace NKikimr {
             TEvSyncerJobDone *msg = ev->Get();
 
             if (msg->Task->NeedCommit()) {
-                auto proxy = std::make_unique<TSyncerCommitterProxy>(ctx.SelfID, CommitterId, std::move(msg->Task));
-                const TActorId aid = ctx.Register(proxy.release());
+                auto proxy = std::make_unique<TSyncerCommitterProxy>(ctx.SelfID, CommitterId, std::move(msg->Task)); 
+                const TActorId aid = ctx.Register(proxy.release()); 
                 ActiveActors.Insert(aid);
             } else {
-                ApplyChanges(ctx, *msg->Task);
+                ApplyChanges(ctx, *msg->Task); 
             }
         }
 
         void Handle(TEvSyncerCommitProxyDone::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
             TEvSyncerCommitProxyDone *msg = ev->Get();
-            ApplyChanges(ctx, *msg->Task);
+            ApplyChanges(ctx, *msg->Task); 
         }
 
         void Schedule(const TActorContext &ctx) {
-            Become(&TThis::StateFunc);
-
+            Become(&TThis::StateFunc); 
+ 
             TInstant now = TAppData::TimeProvider->Now();
             // NOTE: After full recovery we run sync op immediately. We achieve this by setting
             //       SchTime to 'now' in ApplyChanges and running sync op below
@@ -285,9 +285,9 @@ namespace NKikimr {
                 TVDiskInfoPtr tmp = SchedulerQueue.top();
                 SchedulerQueue.pop();
                 Y_VERIFY_DEBUG(tmp->Get().PeerSyncState.LastSyncStatus != TSyncStatusVal::Running);
-                auto task = std::make_unique<TSyncerJobTask>(TSyncerJobTask::EJustSync, GInfo->GetVDiskId(tmp->OrderNumber),
-                    GInfo->GetActorId(tmp->OrderNumber), tmp->Get().PeerSyncState, JobCtx);
-                const TActorId aid = ctx.Register(CreateSyncerJob(SyncerContext, std::move(task), ctx.SelfID));
+                auto task = std::make_unique<TSyncerJobTask>(TSyncerJobTask::EJustSync, GInfo->GetVDiskId(tmp->OrderNumber), 
+                    GInfo->GetActorId(tmp->OrderNumber), tmp->Get().PeerSyncState, JobCtx); 
+                const TActorId aid = ctx.Register(CreateSyncerJob(SyncerContext, std::move(task), ctx.SelfID)); 
                 ActiveActors.Insert(aid);
             }
 
@@ -301,20 +301,20 @@ namespace NKikimr {
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
             Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
             // create an actor to handle request
-            auto actor = std::make_unique<TSyncerSchedulerHttpActor>(SyncerContext, GInfo, SyncerData, ev, ctx.SelfID);
-            auto aid = ctx.RegisterWithSameMailbox(actor.release());
+            auto actor = std::make_unique<TSyncerSchedulerHttpActor>(SyncerContext, GInfo, SyncerData, ev, ctx.SelfID); 
+            auto aid = ctx.RegisterWithSameMailbox(actor.release()); 
             ActiveActors.Insert(aid);
         }
 
         void Handle(TEvLocalStatus::TPtr &ev, const TActorContext &ctx) {
-            std::unique_ptr<TEvLocalStatusResult> result(new TEvLocalStatusResult());
+            std::unique_ptr<TEvLocalStatusResult> result(new TEvLocalStatusResult()); 
             NKikimrBlobStorage::TSyncerStatus *rec = result->Record.MutableSyncerStatus();
             rec->SetPhase(NKikimrBlobStorage::TSyncerStatus::PhaseStandardMode);
             for (const auto &x: *SyncerData->Neighbors) {
                 NKikimrBlobStorage::TSyncState *st = rec->AddSyncState();
                 SyncStateFromSyncState(x.Get().PeerSyncState.SyncState, st);
             }
-            ctx.Send(ev->Sender, result.release());
+            ctx.Send(ev->Sender, result.release()); 
         }
 
         void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
@@ -340,30 +340,30 @@ namespace NKikimr {
             ActiveActors.Erase(ev->Sender);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(TEvSyncerJobDone, Handle)
-            HFunc(TEvSyncerCommitProxyDone, Handle)
-            HFunc(NMon::TEvHttpInfo, Handle)
-            HFunc(TEvLocalStatus, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(NPDisk::TEvCutLog, Handle)
-            HFunc(TEvVGenerationChange, Handle)
+        STRICT_STFUNC(StateFunc, 
+            HFunc(TEvSyncerJobDone, Handle) 
+            HFunc(TEvSyncerCommitProxyDone, Handle) 
+            HFunc(NMon::TEvHttpInfo, Handle) 
+            HFunc(TEvLocalStatus, Handle) 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            HFunc(NPDisk::TEvCutLog, Handle) 
+            HFunc(TEvVGenerationChange, Handle) 
             HFunc(TEvents::TEvActorDied, Handle)
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
-        )
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup) 
+        ) 
 
-        STRICT_STFUNC(NothingToDo,
-            HFunc(NMon::TEvHttpInfo, Handle)
-            HFunc(TEvLocalStatus, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(NPDisk::TEvCutLog, Handle)
-            HFunc(TEvVGenerationChange, Handle)
+        STRICT_STFUNC(NothingToDo, 
+            HFunc(NMon::TEvHttpInfo, Handle) 
+            HFunc(TEvLocalStatus, Handle) 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            HFunc(NPDisk::TEvCutLog, Handle) 
+            HFunc(TEvVGenerationChange, Handle) 
             HFunc(TEvents::TEvActorDied, Handle)
-        )
-
+        ) 
+ 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_SYNCER_SCHEDULER;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_SYNCER_SCHEDULER; 
         }
 
         TSyncerScheduler(const TIntrusivePtr<TSyncerContext> &sc,
@@ -376,7 +376,7 @@ namespace NKikimr {
             , SyncerData(syncerData)
             , SchedulerQueue()
             , ActiveActors()
-            , SyncTimeInterval(SyncerContext->Config->SyncTimeInterval)
+            , SyncTimeInterval(SyncerContext->Config->SyncTimeInterval) 
             , CommitterId(committerId)
             , Scheduled(false)
             , JobCtx(TSjCtx::Create(SyncerContext, GInfo))

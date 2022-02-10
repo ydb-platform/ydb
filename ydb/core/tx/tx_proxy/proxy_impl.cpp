@@ -453,8 +453,8 @@ public:
                     " Become StateWork");
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_PROXY_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TX_PROXY_ACTOR; 
     }
 
     STFUNC(StateWork) {

@@ -10,12 +10,12 @@ TIntermediate::TRead::TRead()
     , Size(0)
     , ValueSize(0)
     , CreationUnixTime(0)
-    , StorageChannel(NKikimrClient::TKeyValueRequest::MAIN)
+    , StorageChannel(NKikimrClient::TKeyValueRequest::MAIN) 
     , Status(NKikimrProto::UNKNOWN)
 {}
 
 TIntermediate::TRead::TRead(const TString &key, ui32 valueSize, ui64 creationUnixTime,
-        NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel)
+        NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel) 
     : Key(key)
     , Offset(0)
     , Size(valueSize)

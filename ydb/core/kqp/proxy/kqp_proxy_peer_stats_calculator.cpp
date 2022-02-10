@@ -16,14 +16,14 @@ TSimpleResourceStats CalcPeerStats(
     if (data.empty())
         return TSimpleResourceStats(0.0, 0.0, 0);
 
-    auto getDataCenterId = [](const auto& entry) {
-        return entry.HasDataCenterId() ? entry.GetDataCenterId() : DataCenterToString(entry.GetDataCenterNumId());
-    };
-
+    auto getDataCenterId = [](const auto& entry) { 
+        return entry.HasDataCenterId() ? entry.GetDataCenterId() : DataCenterToString(entry.GetDataCenterNumId()); 
+    }; 
+ 
     double sum = 0;
     ui32 cnt = 0;
     for(const auto& entry: data) {
-        if (getDataCenterId(entry) != selfDataCenterId && localDatacenterPolicy)
+        if (getDataCenterId(entry) != selfDataCenterId && localDatacenterPolicy) 
             continue;
 
         sum += ExtractValue(entry);
@@ -38,7 +38,7 @@ TSimpleResourceStats CalcPeerStats(
     double deviation = 0;
     double xadd = 0;
     for(const auto& entry: data) {
-        if (getDataCenterId(entry) != selfDataCenterId && localDatacenterPolicy)
+        if (getDataCenterId(entry) != selfDataCenterId && localDatacenterPolicy) 
             continue;
 
         xadd = static_cast<double> (entry.GetActiveWorkersCount()) - mean;

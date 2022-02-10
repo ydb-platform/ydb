@@ -60,8 +60,8 @@ class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBloc
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_REQ_BLOCK_BS;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_REQ_BLOCK_BS; 
     }
 
     void Bootstrap() {
@@ -123,8 +123,8 @@ public:
         , BlockPrevEntry(blockPrevEntry)
     {}
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_REQ_BLOCK_BS;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_REQ_BLOCK_BS; 
     }
 
     void Bootstrap() {

@@ -11,8 +11,8 @@ message TSlotAllocation {
     // Empty string means any node type.
     optional string Type = 1;
     // If data center is 0 then any data center may be used.
-    optional uint64 DataCenterNum = 2;
-    optional string DataCenter = 7;
+    optional uint64 DataCenterNum = 2; 
+    optional string DataCenter = 7; 
     optional uint64 Count = 3;
     // This flag defines behaviour in case there are no free slots
     // available in required data center. Forced location means slot

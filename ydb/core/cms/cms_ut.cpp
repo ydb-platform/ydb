@@ -466,7 +466,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // PDisk-0 on node-0 is down.
         auto &node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
-        node.PDiskStateInfo[env.PDiskId(0).DiskId].SetState(NKikimrBlobStorage::TPDiskState::Initial);
+        node.PDiskStateInfo[env.PDiskId(0).DiskId].SetState(NKikimrBlobStorage::TPDiskState::Initial); 
 
         // OK to restart broken PDisk.
         env.CheckPermissionRequest("user", false, true, false, true, TStatus::ALLOW,

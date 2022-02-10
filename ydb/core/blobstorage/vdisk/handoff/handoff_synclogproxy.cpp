@@ -56,15 +56,15 @@ namespace NKikimr {
             TThis::Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(TEvHandoffSyncLogDel, Handle)
+        STRICT_STFUNC(StateFunc, 
+            HFunc(TEvHandoffSyncLogDel, Handle) 
             HFunc(TEvDelLogoBlobDataSyncLogResult, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-        )
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+        ) 
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_HANDOFF_SYNCLOG_PROXY;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_HANDOFF_SYNCLOG_PROXY; 
         }
 
         THandoffSyncLogProxy(const TActorId &skeletonId,

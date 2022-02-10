@@ -1422,8 +1422,8 @@ TMiniKQLCompileActorEvents::TEvCompileResult::TEvCompileResult(const TMiniKQLCom
 
 class TMiniKQLCompileActor : public TActorBootstrapped<TMiniKQLCompileActor> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::MINIKQL_COMPILE_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::MINIKQL_COMPILE_ACTOR; 
     }
 
     TMiniKQLCompileActor(const TString& program,

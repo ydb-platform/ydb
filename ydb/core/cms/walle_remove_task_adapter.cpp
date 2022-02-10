@@ -11,8 +11,8 @@ using namespace NNodeWhiteboard;
 
 class TWalleRemoveTaskAdapter : public TActorBootstrapped<TWalleRemoveTaskAdapter> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::CMS_WALLE_REQ;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::CMS_WALLE_REQ; 
     }
 
     TWalleRemoveTaskAdapter(TEvCms::TEvWalleRemoveTaskRequest::TPtr &event, const TCmsStatePtr state, TActorId cms)

@@ -110,16 +110,16 @@ namespace NKikimr {
                 const ui64 DefHighWatermark;
                 const ui64 CostChangeUntilFrozen;  // how much cost change we should skip to move from Fading to Frozen
                 const ui64 CostChangeUntilDeath;   // how much cost change we should skip to remove window completely
-                TInstant LastActivityTime;
-                TDuration WindowTimeout;
-                ui64 InFlight;
+                TInstant LastActivityTime; 
+                TDuration WindowTimeout; 
+                ui64 InFlight; 
 
-                void SetStatus(TWindowStatus *ptr, EStatus status, bool notify, const TMessageId &failedMsgId = {}) {
-                    const ui64 maxWindowSize = Min(LowWatermark, HighWatermark);
+                void SetStatus(TWindowStatus *ptr, EStatus status, bool notify, const TMessageId &failedMsgId = {}) { 
+                    const ui64 maxWindowSize = Min(LowWatermark, HighWatermark); 
                     if (notify) {
-                        LastMaxWindowSize = maxWindowSize;
+                        LastMaxWindowSize = maxWindowSize; 
                     }
-                    ptr->Set(ClientId, ActorId, status, notify, Cost, maxWindowSize, ExpectedMsgId, failedMsgId);
+                    ptr->Set(ClientId, ActorId, status, notify, Cost, maxWindowSize, ExpectedMsgId, failedMsgId); 
                 }
 
                 void UpdateCountdown(ui64 costChange) {
@@ -144,11 +144,11 @@ namespace NKikimr {
 
             public:
                 TWindow(TStatPtr globalStatPtr, const TClientId &clientId, const TActorId& actorId,
-                        ui64 percentThreshold, ui64 defLowWatermark, ui64 defHighWatermark, ui64 costChangeUntilFrozen,
-                        ui64 costChangeUntilDeath, TDuration windowTimeout, TInstant now)
+                        ui64 percentThreshold, ui64 defLowWatermark, ui64 defHighWatermark, ui64 costChangeUntilFrozen, 
+                        ui64 costChangeUntilDeath, TDuration windowTimeout, TInstant now) 
                     : GlobalStatPtr(globalStatPtr)
                     , ClientId(clientId)
-                    , ActorId(actorId)
+                    , ActorId(actorId) 
                     , ExpectedMsgId()
                     , Cost(0)
                     , LowWatermark(defLowWatermark)
@@ -161,47 +161,47 @@ namespace NKikimr {
                     , DefHighWatermark(defHighWatermark)
                     , CostChangeUntilFrozen(costChangeUntilFrozen)
                     , CostChangeUntilDeath(costChangeUntilDeath)
-                    , LastActivityTime(now)
-                    , WindowTimeout(windowTimeout)
-                    , InFlight(0)
+                    , LastActivityTime(now) 
+                    , WindowTimeout(windowTimeout) 
+                    , InFlight(0) 
                 {}
 
-                void Push(bool checkMsgId, const TMessageId &msgId, ui64 cost, TWindowStatus *opStatus,
-                        TInstant now) {
+                void Push(bool checkMsgId, const TMessageId &msgId, ui64 cost, TWindowStatus *opStatus, 
+                        TInstant now) { 
                     Y_VERIFY_DEBUG(LowWatermark != 0);
                     Y_VERIFY_DEBUG(LowWatermark <= HighWatermark);
-                    Y_VERIFY_DEBUG(cost > 0);
+                    Y_VERIFY_DEBUG(cost > 0); 
 
-                    if ((msgId.MsgId == ExpectedMsgId.MsgId && msgId.SequenceId >= ExpectedMsgId.SequenceId) || !checkMsgId) {
+                    if ((msgId.MsgId == ExpectedMsgId.MsgId && msgId.SequenceId >= ExpectedMsgId.SequenceId) || !checkMsgId) { 
                         // accept if msgId is correct
-                        if (Cost + cost <= HighWatermark || InFlight == 0) { // accept at least one message of any cost
+                        if (Cost + cost <= HighWatermark || InFlight == 0) { // accept at least one message of any cost 
                             GlobalStatPtr->IncSuccess();
                             CostChangeUntilFrozenCountdown = CostChangeUntilFrozen;
                             CostChangeUntilDeathCountdown = CostChangeUntilDeath;
-                            LastActivityTime = now;
+                            LastActivityTime = now; 
                             Cost += cost;
-                            ++InFlight;
-                            ExpectedMsgId = TMessageId(msgId.SequenceId, msgId.MsgId + 1);
+                            ++InFlight; 
+                            ExpectedMsgId = TMessageId(msgId.SequenceId, msgId.MsgId + 1); 
                             SetStatus(opStatus, NKikimrBlobStorage::TWindowFeedback::Success, false);
                         } else {
-                            // reject message
-                            ExpectedMsgId.SequenceId = Max(ExpectedMsgId.SequenceId, msgId.SequenceId + 1);
-                            SetStatus(opStatus, NKikimrBlobStorage::TWindowFeedback::HighWatermarkOverflow, true, msgId);
-                            GlobalStatPtr->IncHighWatermarkOverflow();
+                            // reject message 
+                            ExpectedMsgId.SequenceId = Max(ExpectedMsgId.SequenceId, msgId.SequenceId + 1); 
+                            SetStatus(opStatus, NKikimrBlobStorage::TWindowFeedback::HighWatermarkOverflow, true, msgId); 
+                            GlobalStatPtr->IncHighWatermarkOverflow(); 
                         }
                     } else {
-                        ExpectedMsgId.SequenceId = Max(ExpectedMsgId.SequenceId, msgId.SequenceId + 1);
-                        SetStatus(opStatus, NKikimrBlobStorage::TWindowFeedback::IncorrectMsgId, true, msgId);
-                        GlobalStatPtr->IncIncorrectMsgId();
+                        ExpectedMsgId.SequenceId = Max(ExpectedMsgId.SequenceId, msgId.SequenceId + 1); 
+                        SetStatus(opStatus, NKikimrBlobStorage::TWindowFeedback::IncorrectMsgId, true, msgId); 
+                        GlobalStatPtr->IncIncorrectMsgId(); 
                     }
                 }
 
-                TWindowStatus *Processed(bool checkMsgId, const TMessageId &msgId, ui64 cost, TWindowStatus *opStatus) {
+                TWindowStatus *Processed(bool checkMsgId, const TMessageId &msgId, ui64 cost, TWindowStatus *opStatus) { 
                     Y_UNUSED(checkMsgId);
                     Y_UNUSED(msgId);
                     Y_VERIFY(Cost >= cost);
                     Cost -= cost;
-                    --InFlight;
+                    --InFlight; 
                     SetStatus(opStatus, NKikimrBlobStorage::TWindowFeedback::Processed, true);
                     GlobalStatPtr->IncProcessed();
                     return opStatus;
@@ -228,21 +228,21 @@ namespace NKikimr {
                     return opStatus;
                 }
 
-                EWindowState GetState(TInstant now) const {
-                    if (Cost > 0 || InFlight) {
+                EWindowState GetState(TInstant now) const { 
+                    if (Cost > 0 || InFlight) { 
                         return EWindowState::Active;
                     } else if (LowWatermark > DefLowWatermark || CostChangeUntilFrozenCountdown > 0) {
                         return EWindowState::Fading;
-                    } else if (CostChangeUntilDeathCountdown > 0 || now < LastActivityTime + WindowTimeout) {
+                    } else if (CostChangeUntilDeathCountdown > 0 || now < LastActivityTime + WindowTimeout) { 
                         return EWindowState::Frozen;
                     } else {
-                        Y_ASSERT(CostChangeUntilFrozenCountdown == 0 && CostChangeUntilDeathCountdown == 0 &&
-                            now >= LastActivityTime + WindowTimeout);
+                        Y_ASSERT(CostChangeUntilFrozenCountdown == 0 && CostChangeUntilDeathCountdown == 0 && 
+                            now >= LastActivityTime + WindowTimeout); 
                         return EWindowState::Dead;
                     }
                 }
 
-                void Fade(EWindowState state, ui64 costChange, TInstant now) {
+                void Fade(EWindowState state, ui64 costChange, TInstant now) { 
                     Y_VERIFY(state == GetState(now));
 
                     // TODO: we can implement more gracefull fading, take into account that beside this fading
@@ -261,10 +261,10 @@ namespace NKikimr {
                     return Cost;
                 }
 
-                TMessageId GetExpectedMsgId() const {
-                    return ExpectedMsgId;
-                }
-
+                TMessageId GetExpectedMsgId() const { 
+                    return ExpectedMsgId; 
+                } 
+ 
                 void Output(IOutputStream &str) const {
                     str << "ClientId# " << ClientId << " ExpectedMsgId# " << ExpectedMsgId
                     << " Cost# " << Cost << " LowWatermark# " << LowWatermark
@@ -275,7 +275,7 @@ namespace NKikimr {
             };
 
             typedef TIntrusivePtr<TWindow> TWindowPtr;
-            typedef THashMap<TActorId, TWindowPtr> TAllWindows;
+            typedef THashMap<TActorId, TWindowPtr> TAllWindows; 
             typedef TVector<TWindowPtr> TWindowPtrVec;
 
             const bool CheckMsgId;
@@ -293,7 +293,7 @@ namespace NKikimr {
             TWindowStatus RecalculateStatusCache;
             TVector<TWindowStatus> OtherWindowsStatusVecCache;
             TStatPtr GlobalStatPtr;
-            TDuration WindowTimeout;
+            TDuration WindowTimeout; 
 
 
             void ClearRecalculateCache() {
@@ -302,8 +302,8 @@ namespace NKikimr {
                 OtherWindowsStatusVecCache.clear();
             }
 
-            void Recalculate(const TActorId& actorId, bool force, TInstant now) {
-                if (CostChange < CostChangeToRecalculate && !force)
+            void Recalculate(const TActorId& actorId, bool force, TInstant now) { 
+                if (CostChange < CostChangeToRecalculate && !force) 
                     return;
 
                 ui64 actualCostChange = CostChange;
@@ -317,12 +317,12 @@ namespace NKikimr {
                 TIterator it = AllWindows.begin();
                 while (it != AllWindows.end()) {
                     TWindowPtr wPtr = it->second;
-                    EWindowState windowState = wPtr->GetState(now);
+                    EWindowState windowState = wPtr->GetState(now); 
                     switch (windowState) {
                         case EWindowState::Active: {
                             ActiveWindowsCache.push_back(wPtr);
                             totalCost += wPtr->GetCost();
-                            wPtr->Fade(windowState, actualCostChange, now);
+                            wPtr->Fade(windowState, actualCostChange, now); 
                             ++it;
                             break;
                         }
@@ -331,13 +331,13 @@ namespace NKikimr {
                             Y_VERIFY(wPtr->GetCost() == 0);
                             ActiveWindowsCache.push_back(wPtr);
                             totalCost += wPtr->GetCost();
-                            wPtr->Fade(windowState, actualCostChange, now);
+                            wPtr->Fade(windowState, actualCostChange, now); 
                             ++it;
                             break;
                         }
                         case EWindowState::Frozen: {
                             Y_VERIFY(wPtr->GetCost() == 0);
-                            wPtr->Fade(windowState, actualCostChange, now);
+                            wPtr->Fade(windowState, actualCostChange, now); 
                             ++it;
                             break;
                         }
@@ -372,7 +372,7 @@ namespace NKikimr {
                         // adjust window
                         TWindowStatus *update = a->AdjustWindow(lowWatermark, highWatermark, &RecalculateStatusCache);
                         if (update->Notify) {
-                            if (a->ActorId == actorId) {
+                            if (a->ActorId == actorId) { 
                                 StatusCache.WindowUpdate(*update);
                             } else {
                                 OtherWindowsStatusVecCache.emplace_back(*update);
@@ -385,8 +385,8 @@ namespace NKikimr {
         public:
             TQueueBackpressure(bool checkMsgId, ui64 maxCost = 100u, ui64 costChangeToRecalculate = 10u,
                                ui64 minLowWatermark = 2u, ui64 maxLowWatermark = 20u, ui64 percentThreshold = 10u,
-                               ui64 costChangeUntilFrozen = 20u, ui64 costChangeUntilDeath = 30u,
-                               TDuration windowTimeout = TDuration::Seconds(20))
+                               ui64 costChangeUntilFrozen = 20u, ui64 costChangeUntilDeath = 30u, 
+                               TDuration windowTimeout = TDuration::Seconds(20)) 
                 : CheckMsgId(checkMsgId)
                 , MaxCost(maxCost)
                 , CostChangeToRecalculate(costChangeToRecalculate)
@@ -402,68 +402,68 @@ namespace NKikimr {
                 , RecalculateStatusCache()
                 , OtherWindowsStatusVecCache()
                 , GlobalStatPtr(new TStat())
-                , WindowTimeout(windowTimeout)
+                , WindowTimeout(windowTimeout) 
             {}
 
-            std::optional<TMessageId> GetExpectedMsgId(const TActorId& actorId) const {
-                if (const auto it = AllWindows.find(actorId); it != AllWindows.end()) {
-                    return it->second->GetExpectedMsgId();
-                } else {
-                    return std::nullopt;
-                }
-            }
-
+            std::optional<TMessageId> GetExpectedMsgId(const TActorId& actorId) const { 
+                if (const auto it = AllWindows.find(actorId); it != AllWindows.end()) { 
+                    return it->second->GetExpectedMsgId(); 
+                } else { 
+                    return std::nullopt; 
+                } 
+            } 
+ 
             TFeedback Push(const TClientId& clientId, const TActorId& actorId, const TMessageId &msgId, ui64 cost, TInstant now) {
-                Y_VERIFY(actorId);
+                Y_VERIFY(actorId); 
                 ClearRecalculateCache();
 
                 // find or create window
-                bool newWindow = false;
-                auto it = AllWindows.find(actorId);
+                bool newWindow = false; 
+                auto it = AllWindows.find(actorId); 
                 if (it == AllWindows.end()) {
                     // first connect, create window
                     ui64 defWindowLowWatermark = MinLowWatermark;
                     ui64 defWindowHighWatermark = MaxLowWatermark;
-                    TWindowPtr window(new TWindow(GlobalStatPtr, clientId, actorId, PercentThreshold,
+                    TWindowPtr window(new TWindow(GlobalStatPtr, clientId, actorId, PercentThreshold, 
                                                   defWindowLowWatermark, defWindowHighWatermark,
-                                                  CostChangeUntilFrozen, CostChangeUntilDeath,
-                                                  WindowTimeout, now));
-                    auto res = AllWindows.emplace(actorId, window);
+                                                  CostChangeUntilFrozen, CostChangeUntilDeath, 
+                                                  WindowTimeout, now)); 
+                    auto res = AllWindows.emplace(actorId, window); 
                     it = res.first;
                     Y_VERIFY(res.second);
-                    newWindow = true;
+                    newWindow = true; 
                 }
                 TWindow &window = *(it->second);
 
                 // perform action
-                window.Push(CheckMsgId, msgId, cost, &StatusCache, now);
+                window.Push(CheckMsgId, msgId, cost, &StatusCache, now); 
                 CostChange += Good(StatusCache.Status) ? cost : 0;
-                Recalculate(actorId, newWindow && Good(StatusCache.Status), now);
+                Recalculate(actorId, newWindow && Good(StatusCache.Status), now); 
                 return TFeedback(StatusCache, OtherWindowsStatusVecCache);
             }
 
-            TFeedback Processed(const TActorId& actorId, const TMessageId &msgId, ui64 cost, TInstant now) {
+            TFeedback Processed(const TActorId& actorId, const TMessageId &msgId, ui64 cost, TInstant now) { 
                 ClearRecalculateCache();
 
                 // find window
-                auto it = AllWindows.find(actorId);
+                auto it = AllWindows.find(actorId); 
                 Y_VERIFY(it != AllWindows.end());
 
                 TWindow &window = *(it->second);
                 // perform action
-                window.Processed(CheckMsgId, msgId, cost, &StatusCache);
+                window.Processed(CheckMsgId, msgId, cost, &StatusCache); 
                 CostChange += cost;
-                Recalculate(actorId, false, now);
+                Recalculate(actorId, false, now); 
                 return TFeedback(StatusCache, OtherWindowsStatusVecCache);
             }
 
-            template<typename TCallback>
-            void ForEachWindow(TCallback&& callback) {
-                for (const auto& [actorId, window] : AllWindows) {
-                    callback(window);
-                }
-            }
-
+            template<typename TCallback> 
+            void ForEachWindow(TCallback&& callback) { 
+                for (const auto& [actorId, window] : AllWindows) { 
+                    callback(window); 
+                } 
+            } 
+ 
             void Output(IOutputStream &str, TInstant now) const {
                 str << "MaxCost# " << MaxCost;
                 ui64 actualCost = 0;
@@ -471,7 +471,7 @@ namespace NKikimr {
                 ForEach(windowTypesHisto, windowTypesHisto + unsigned(EWindowState::Max), [](ui32 &x) {x = 0;});
                 for (const auto &x : AllWindows) {
                     actualCost += x.second->GetCost();
-                    windowTypesHisto[unsigned(x.second->GetState(now))]++;
+                    windowTypesHisto[unsigned(x.second->GetState(now))]++; 
                 }
                 str << " ActualCost# " << actualCost
                 << " activeWindows# " << windowTypesHisto[unsigned(EWindowState::Active)]
@@ -499,15 +499,15 @@ inline void Out<NKikimr::NBackpressure::TMessageId>(IOutputStream& o,
     return x.Out(o);
 }
 
-template<>
+template<> 
 inline void Out<NKikimr::NBackpressure::TQueueClientId>(IOutputStream& o,
                                                         const NKikimr::NBackpressure::TQueueClientId &x) {
     return x.Output(o);
 }
 
 template<>
-struct THash<NKikimr::NBackpressure::TQueueClientId> {
-    size_t operator ()(const NKikimr::NBackpressure::TQueueClientId& clientId) const {
-        return clientId.Hash();
-    }
-};
+struct THash<NKikimr::NBackpressure::TQueueClientId> { 
+    size_t operator ()(const NKikimr::NBackpressure::TQueueClientId& clientId) const { 
+        return clientId.Hash(); 
+    } 
+}; 

@@ -1,8 +1,8 @@
-#pragma once
-#include "defs.h"
-
-namespace NKikimr {
-
+#pragma once 
+#include "defs.h" 
+ 
+namespace NKikimr { 
+ 
 IActor* CreateFlatBsController(const TActorId &tablet, TTabletStorageInfo *info);
-
-} //NKikimr
+ 
+} //NKikimr 

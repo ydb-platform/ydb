@@ -436,8 +436,8 @@ private:
 
 class TResourceBrokerActor : public TActorBootstrapped<TResourceBrokerActor> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_COMPACTION_BROKER;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_COMPACTION_BROKER; 
     }
 
     TResourceBrokerActor(const NKikimrResourceBroker::TResourceBrokerConfig &config,

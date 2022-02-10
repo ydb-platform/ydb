@@ -19,11 +19,11 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////////////////
         typedef TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob> TSstLogoBlob;
         typedef TSstLogoBlob::TWriter TWriterLogoBlob;
-        typedef TCompactRecordMergerIndexPass<TKeyLogoBlob, TMemRecLogoBlob> TTLogoBlobCompactRecordMerger;
+        typedef TCompactRecordMergerIndexPass<TKeyLogoBlob, TMemRecLogoBlob> TTLogoBlobCompactRecordMerger; 
 
         typedef TLevelSegment<TKeyBlock, TMemRecBlock> TSstBlock;
         typedef TSstBlock::TWriter TWriterBlock;
-        typedef TCompactRecordMergerIndexPass<TKeyBlock, TMemRecBlock> TBlockCompactRecordMerger;
+        typedef TCompactRecordMergerIndexPass<TKeyBlock, TMemRecBlock> TBlockCompactRecordMerger; 
         TTestContexts TestCtx;
 
 
@@ -34,9 +34,9 @@ namespace NKikimr {
         class TTest {
         public:
             struct TSstStat {
-                TIndexWriterConclusion<TKey, TMemRec> WriterConclusion;
+                TIndexWriterConclusion<TKey, TMemRec> WriterConclusion; 
                 ui32 Step;
-                TSstStat(const TIndexWriterConclusion<TKey, TMemRec> &writerStat, ui32 step)
+                TSstStat(const TIndexWriterConclusion<TKey, TMemRec> &writerStat, ui32 step) 
                     : WriterConclusion(writerStat)
                     , Step(step)
                 {}
@@ -48,7 +48,7 @@ namespace NKikimr {
 
             struct TAllStat {
                 TVector<TSstStat> Stat;
-                void Push(const TIndexWriterConclusion<TKey, TMemRec> &writerStat, ui32 step) {
+                void Push(const TIndexWriterConclusion<TKey, TMemRec> &writerStat, ui32 step) { 
                     Stat.push_back(TSstStat(writerStat, step));
                 }
 
@@ -72,13 +72,13 @@ namespace NKikimr {
                 , OwnerRound(ownerRound)
                 , ChunkSize(chunkSize)
                 , AppendBlockSize(appendBlockSize)
-                , WriteBlockSize(writeBlockSize)
+                , WriteBlockSize(writeBlockSize) 
                 , WriterPtr(new TWriter(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse, Owner, OwnerRound,
                         ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks))
                 , ReservedChunks()
                 , Stat()
             {
-                for (ui32 i = 1; i < 2000; i++)
+                for (ui32 i = 1; i < 2000; i++) 
                     ReservedChunks.push_back(i);
             }
 
@@ -104,56 +104,56 @@ namespace NKikimr {
             const ui64 OwnerRound;
             const ui32 ChunkSize;
             const ui32 AppendBlockSize;
-            const ui32 WriteBlockSize;
+            const ui32 WriteBlockSize; 
 
-            std::unique_ptr<TWriter> WriterPtr;
+            std::unique_ptr<TWriter> WriterPtr; 
             TDeque<ui32> ReservedChunks;
             TAllStat Stat;
-            THashMap<ui32, TMap<ui32, ui32>> WriteSpan;
+            THashMap<ui32, TMap<ui32, ui32>> WriteSpan; 
 
-            void Apply(std::unique_ptr<NPDisk::TEvChunkWrite> &msg) {
+            void Apply(std::unique_ptr<NPDisk::TEvChunkWrite> &msg) { 
                 ui32 chunkIdx = msg->ChunkIdx;
-                UNIT_ASSERT(msg->ChunkIdx != 0);
+                UNIT_ASSERT(msg->ChunkIdx != 0); 
                 NPDisk::TEvChunkWrite::TPartsPtr partsPtr = msg->PartsPtr;
-                const ui32 begin = msg->Offset;
-                const ui32 end = begin + partsPtr->ByteSize();
-                UNIT_ASSERT(!WriteSpan[msg->ChunkIdx].count(begin));
-                WriteSpan[msg->ChunkIdx].emplace(begin, end);
+                const ui32 begin = msg->Offset; 
+                const ui32 end = begin + partsPtr->ByteSize(); 
+                UNIT_ASSERT(!WriteSpan[msg->ChunkIdx].count(begin)); 
+                WriteSpan[msg->ChunkIdx].emplace(begin, end); 
                 void *cookie = msg->Cookie;
-                auto res = std::make_unique<NPDisk::TEvChunkWriteResult>(NKikimrProto::OK, chunkIdx, partsPtr, cookie, 0, TString());
+                auto res = std::make_unique<NPDisk::TEvChunkWriteResult>(NKikimrProto::OK, chunkIdx, partsPtr, cookie, 0, TString()); 
                 msg.Destroy();
             }
 
             void Finish(ui32 step) {
-                std::unique_ptr<NPDisk::TEvChunkWrite> msg;
+                std::unique_ptr<NPDisk::TEvChunkWrite> msg; 
 
                 bool done = false;
                 while (!done) {
-                    done = WriterPtr->FlushNext(0, 100500, 1);
-                    while (auto msg = WriterPtr->GetPendingMessage()) {
+                    done = WriterPtr->FlushNext(0, 100500, 1); 
+                    while (auto msg = WriterPtr->GetPendingMessage()) { 
                         Apply(msg);
                     }
                 }
                 Stat.Push(WriterPtr->GetConclusion(), step);
-
-                ValidateWriteSpan();
+ 
+                ValidateWriteSpan(); 
             }
-
-            void ValidateWriteSpan() {
-                for (const auto& kv : WriteSpan) {
-                    ui32 expectedBegin = 0;
-                    for (auto it = kv.second.begin(); it != kv.second.end(); ++it) {
-                        UNIT_ASSERT_VALUES_EQUAL(expectedBegin, it->first);
-                        expectedBegin = it->second;
-                    }
-                }
-            }
+ 
+            void ValidateWriteSpan() { 
+                for (const auto& kv : WriteSpan) { 
+                    ui32 expectedBegin = 0; 
+                    for (auto it = kv.second.begin(); it != kv.second.end(); ++it) { 
+                        UNIT_ASSERT_VALUES_EQUAL(expectedBegin, it->first); 
+                        expectedBegin = it->second; 
+                    } 
+                } 
+            } 
         };
 
 
         template <>
         void TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob>::Test(ui32 maxStep, const TString &data) {
-            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3);
+            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3); 
 
             for (ui32 step = 0; step < maxStep; step++) {
                 TLogoBlobID id(1, 1, step, 0, 0, 0);
@@ -171,16 +171,16 @@ namespace NKikimr {
                 merger.Add(memRec, blobBuf.data(), key);
                 merger.Finish();
 
-                bool pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
+                bool pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger()); 
                 if (!pushRes) {
                     Finish(step);
 
-                    WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
-                        Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks);
-                    pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
+                    WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse, 
+                        Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks); 
+                    pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger()); 
                     Y_VERIFY(pushRes);
                 }
-                while (auto msg = WriterPtr->GetPendingMessage()) {
+                while (auto msg = WriterPtr->GetPendingMessage()) { 
                     Apply(msg);
                 }
             }
@@ -190,7 +190,7 @@ namespace NKikimr {
 
         template <>
         void TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob>::TestOutbound(ui32 maxStep) {
-            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3);
+            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3); 
 
             for (ui32 step = 0; step < maxStep; step++) {
                 TLogoBlobID id(1, 1, step, 0, 0, 0);
@@ -209,20 +209,20 @@ namespace NKikimr {
 
                 merger.Clear();
                 merger.SetLoadDataMode(true);
-                merger.Add(memRec1, nullptr, key);
-                merger.Add(memRec2, nullptr, key);
+                merger.Add(memRec1, nullptr, key); 
+                merger.Add(memRec2, nullptr, key); 
                 merger.Finish();
 
-                bool pushRes = WriterPtr->Push(key, merger.GetMemRec(), merger.GetDataMerger());
+                bool pushRes = WriterPtr->Push(key, merger.GetMemRec(), merger.GetDataMerger()); 
                 if (!pushRes) {
                     Finish(step);
 
-                    WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
-                        Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks);
-                    pushRes = WriterPtr->Push(key, merger.GetMemRec(), merger.GetDataMerger());
+                    WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse, 
+                        Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks); 
+                    pushRes = WriterPtr->Push(key, merger.GetMemRec(), merger.GetDataMerger()); 
                     Y_VERIFY(pushRes);
                 }
-                while (auto msg = WriterPtr->GetPendingMessage()) {
+                while (auto msg = WriterPtr->GetPendingMessage()) { 
                     Apply(msg);
                 }
             }
@@ -232,26 +232,26 @@ namespace NKikimr {
 
         template <>
         void TTest<TKeyBlock, TMemRecBlock, TWriterBlock>::Test(ui32 maxGen) {
-            TBlockCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3);
+            TBlockCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3); 
 
             for (ui32 gen = 0; gen < maxGen; gen++) {
-                TKeyBlock key(34 + gen);
+                TKeyBlock key(34 + gen); 
                 TMemRecBlock memRec(gen);
                 merger.Clear();
                 merger.SetLoadDataMode(true);
-                merger.Add(memRec, nullptr, key);
+                merger.Add(memRec, nullptr, key); 
                 merger.Finish();
 
-                bool pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
+                bool pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger()); 
                 if (!pushRes) {
                     Finish(gen);
 
-                    WriterPtr = std::make_unique<TWriterBlock>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
-                        Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks);
-                    pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
+                    WriterPtr = std::make_unique<TWriterBlock>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse, 
+                        Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks); 
+                    pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger()); 
                     Y_VERIFY(pushRes);
                 }
-                while (auto msg = WriterPtr->GetPendingMessage()) {
+                while (auto msg = WriterPtr->GetPendingMessage()) { 
                     Apply(msg);
                 }
             }
@@ -270,64 +270,64 @@ namespace NKikimr {
             ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
-            ui32 writeBlockSize = 16u << 10u;
+            ui32 writeBlockSize = 16u << 10u; 
             TString data("Hello, world!");
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(10000, data);
 
             TString res("{SST {Addr: {ChunkIdx: 1 Offset: 200000 Size: 440096} "
-                            "IndexParts: 1 {UsedChunks: 1}} step: 10000}");
+                            "IndexParts: 1 {UsedChunks: 1}} step: 10000}"); 
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
+            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res); 
         }
 
-        Y_UNIT_TEST(LogoBlobOneSstOneIndexWithSmallWriteBlocks) {
-            ui32 chunksToUse = 4;
-            ui8 owner = 1;
-            ui64 ownerRound = 1;
-            ui32 chunkSize = 1u << 20u;
-            ui32 appendBlockSize = 1 << 10u;
-            ui32 writeBlockSize = appendBlockSize;
-
-            TString data("Hello, world!");
-            while (data.size() < writeBlockSize * 2) {
-                data += data;
-            }
-
-            ui32 numBlobs = chunkSize / 2 / data.size();
-
-            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
-            test.Test(numBlobs, data);
-
-            const ui32 offset = ((data.size() + 8) & ~3) * numBlobs; // 8 = 5 byte blob header + blob data + alignment up to 4 bytes
-            const ui32 size = numBlobs * (sizeof(TKeyLogoBlob) + sizeof(TMemRecLogoBlob)) + sizeof(TIdxDiskPlaceHolder);
-            const ui32 step = numBlobs;
-
-            auto res = Sprintf("{SST {Addr: {ChunkIdx: 1 Offset: %u Size: %u} IndexParts: 1 {UsedChunks: 1}} step: %u}",
-                offset, size, step);
-
-            STR << res << "\n";
-            STR << test.GetStat().ToString() << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
-        }
-
+        Y_UNIT_TEST(LogoBlobOneSstOneIndexWithSmallWriteBlocks) { 
+            ui32 chunksToUse = 4; 
+            ui8 owner = 1; 
+            ui64 ownerRound = 1; 
+            ui32 chunkSize = 1u << 20u; 
+            ui32 appendBlockSize = 1 << 10u; 
+            ui32 writeBlockSize = appendBlockSize; 
+ 
+            TString data("Hello, world!"); 
+            while (data.size() < writeBlockSize * 2) { 
+                data += data; 
+            } 
+ 
+            ui32 numBlobs = chunkSize / 2 / data.size(); 
+ 
+            TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize); 
+            test.Test(numBlobs, data); 
+ 
+            const ui32 offset = ((data.size() + 8) & ~3) * numBlobs; // 8 = 5 byte blob header + blob data + alignment up to 4 bytes 
+            const ui32 size = numBlobs * (sizeof(TKeyLogoBlob) + sizeof(TMemRecLogoBlob)) + sizeof(TIdxDiskPlaceHolder); 
+            const ui32 step = numBlobs; 
+ 
+            auto res = Sprintf("{SST {Addr: {ChunkIdx: 1 Offset: %u Size: %u} IndexParts: 1 {UsedChunks: 1}} step: %u}", 
+                offset, size, step); 
+ 
+            STR << res << "\n"; 
+            STR << test.GetStat().ToString() << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res); 
+        } 
+ 
         Y_UNIT_TEST(LogoBlobOneSstMultiIndex) {
             ui32 chunksToUse = 4;
             ui8 owner = 1;
             ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
-            ui32 writeBlockSize = 16u << 10u;
+            ui32 writeBlockSize = 16u << 10u; 
             TString data("X");
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(50000, data);
 
             TString res("{SST {Addr: {ChunkIdx: 3 Offset: 0 Size: 502972} "
-                            "IndexParts: 3 {UsedChunks: 1 2 3}} step: 50000}");
+                            "IndexParts: 3 {UsedChunks: 1 2 3}} step: 50000}"); 
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
+            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res); 
         }
 
         Y_UNIT_TEST(LogoBlobMultiSstOneIndex) {
@@ -336,19 +336,19 @@ namespace NKikimr {
             ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
-            ui32 writeBlockSize = 16u << 10u;
+            ui32 writeBlockSize = 16u << 10u; 
             TString data("Hello, world!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(50000, data);
             TString res("{SST {Addr: {ChunkIdx: 2 Offset: 125776 Size: 922776} "
-                            "IndexParts: 1 {UsedChunks: 1 2}} step: 20970} "
-                       "{SST {Addr: {ChunkIdx: 4 Offset: 125776 Size: 922776} "
-                            "IndexParts: 1 {UsedChunks: 3 4}} step: 41940} "
-                       "{SST {Addr: {ChunkIdx: 5 Offset: 451360 Size: 354736} "
-                       "IndexParts: 1 {UsedChunks: 5}} step: 50000}");
+                            "IndexParts: 1 {UsedChunks: 1 2}} step: 20970} " 
+                       "{SST {Addr: {ChunkIdx: 4 Offset: 125776 Size: 922776} " 
+                            "IndexParts: 1 {UsedChunks: 3 4}} step: 41940} " 
+                       "{SST {Addr: {ChunkIdx: 5 Offset: 451360 Size: 354736} " 
+                       "IndexParts: 1 {UsedChunks: 5}} step: 50000}"); 
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
+            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res); 
         }
 
         Y_UNIT_TEST(LogoBlobMultiSstMultiIndex) {
@@ -357,39 +357,39 @@ namespace NKikimr {
             ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
-            ui32 writeBlockSize = 16u << 10u;
+            ui32 writeBlockSize = 16u << 10u; 
             TString data("X");
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(1000000, data);
             TString res("{SST {Addr: {ChunkIdx: 4 Offset: 0 Size: 1048572} "
-                            "IndexParts: 4 {UsedChunks: 1 2 3 4}} step: 80657} "
-                       "{SST {Addr: {ChunkIdx: 8 Offset: 0 Size: 1048572} "
-                            "IndexParts: 4 {UsedChunks: 5 6 7 8}} step: 161314} "
-                       "{SST {Addr: {ChunkIdx: 12 Offset: 0 Size: 1048572} "
-                            "IndexParts: 4 {UsedChunks: 9 10 11 12}} step: 241971} "
-                       "{SST {Addr: {ChunkIdx: 16 Offset: 0 Size: 1048572} "
-                            "IndexParts: 4 {UsedChunks: 13 14 15 16}} step: 322628} "
-                       "{SST {Addr: {ChunkIdx: 20 Offset: 0 Size: 1048572} "
-                            "IndexParts: 4 {UsedChunks: 17 18 19 20}} step: 403285} "
-                       "{SST {Addr: {ChunkIdx: 24 Offset: 0 Size: 1048572} "
-                            "IndexParts: 4 {UsedChunks: 21 22 23 24}} step: 483942} "
-                       "{SST {Addr: {ChunkIdx: 28 Offset: 0 Size: 1048572} "
-                            "IndexParts: 4 {UsedChunks: 25 26 27 28}} step: 564599} "
-                       "{SST {Addr: {ChunkIdx: 32 Offset: 0 Size: 1048572} "
-                            "IndexParts: 4 {UsedChunks: 29 30 31 32}} step: 645256} "
-                       "{SST {Addr: {ChunkIdx: 36 Offset: 0 Size: 1048572} "
-                            "IndexParts: 4 {UsedChunks: 33 34 35 36}} step: 725913} "
-                       "{SST {Addr: {ChunkIdx: 40 Offset: 0 Size: 1048572} "
-                            "IndexParts: 4 {UsedChunks: 37 38 39 40}} step: 806570} "
-                       "{SST {Addr: {ChunkIdx: 44 Offset: 0 Size: 1048572} "
-                            "IndexParts: 4 {UsedChunks: 41 42 43 44}} step: 887227} "
-                       "{SST {Addr: {ChunkIdx: 48 Offset: 0 Size: 1048572} "
-                            "IndexParts: 4 {UsedChunks: 45 46 47 48}} step: 967884} "
-                       "{SST {Addr: {ChunkIdx: 50 Offset: 0 Size: 621596} "
-                            "IndexParts: 2 {UsedChunks: 49 50}} step: 1000000}");
+                            "IndexParts: 4 {UsedChunks: 1 2 3 4}} step: 80657} " 
+                       "{SST {Addr: {ChunkIdx: 8 Offset: 0 Size: 1048572} " 
+                            "IndexParts: 4 {UsedChunks: 5 6 7 8}} step: 161314} " 
+                       "{SST {Addr: {ChunkIdx: 12 Offset: 0 Size: 1048572} " 
+                            "IndexParts: 4 {UsedChunks: 9 10 11 12}} step: 241971} " 
+                       "{SST {Addr: {ChunkIdx: 16 Offset: 0 Size: 1048572} " 
+                            "IndexParts: 4 {UsedChunks: 13 14 15 16}} step: 322628} " 
+                       "{SST {Addr: {ChunkIdx: 20 Offset: 0 Size: 1048572} " 
+                            "IndexParts: 4 {UsedChunks: 17 18 19 20}} step: 403285} " 
+                       "{SST {Addr: {ChunkIdx: 24 Offset: 0 Size: 1048572} " 
+                            "IndexParts: 4 {UsedChunks: 21 22 23 24}} step: 483942} " 
+                       "{SST {Addr: {ChunkIdx: 28 Offset: 0 Size: 1048572} " 
+                            "IndexParts: 4 {UsedChunks: 25 26 27 28}} step: 564599} " 
+                       "{SST {Addr: {ChunkIdx: 32 Offset: 0 Size: 1048572} " 
+                            "IndexParts: 4 {UsedChunks: 29 30 31 32}} step: 645256} " 
+                       "{SST {Addr: {ChunkIdx: 36 Offset: 0 Size: 1048572} " 
+                            "IndexParts: 4 {UsedChunks: 33 34 35 36}} step: 725913} " 
+                       "{SST {Addr: {ChunkIdx: 40 Offset: 0 Size: 1048572} " 
+                            "IndexParts: 4 {UsedChunks: 37 38 39 40}} step: 806570} " 
+                       "{SST {Addr: {ChunkIdx: 44 Offset: 0 Size: 1048572} " 
+                            "IndexParts: 4 {UsedChunks: 41 42 43 44}} step: 887227} " 
+                       "{SST {Addr: {ChunkIdx: 48 Offset: 0 Size: 1048572} " 
+                            "IndexParts: 4 {UsedChunks: 45 46 47 48}} step: 967884} " 
+                       "{SST {Addr: {ChunkIdx: 50 Offset: 0 Size: 621596} " 
+                            "IndexParts: 2 {UsedChunks: 49 50}} step: 1000000}"); 
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
+            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res); 
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////
@@ -401,15 +401,15 @@ namespace NKikimr {
             ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
-            ui32 writeBlockSize = 16u << 10u;
+            ui32 writeBlockSize = 16u << 10u; 
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.TestOutbound(10000);
 
             TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 680096} "
-                            "IndexParts: 1 OutboundItems: 20000 {UsedChunks: 1}} step: 10000}");
+                            "IndexParts: 1 OutboundItems: 20000 {UsedChunks: 1}} step: 10000}"); 
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
+            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res); 
         }
 
         Y_UNIT_TEST(LogoBlobOneSstMultiIndexPartOutbound) {
@@ -418,15 +418,15 @@ namespace NKikimr {
             ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
-            ui32 writeBlockSize = 16u << 10u;
+            ui32 writeBlockSize = 16u << 10u; 
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.TestOutbound(50000);
 
             TString res("{SST {Addr: {ChunkIdx: 4 Offset: 0 Size: 254412} "
-                            "IndexParts: 4 OutboundItems: 100000 {UsedChunks: 1 2 3 4}} step: 50000}");
+                            "IndexParts: 4 OutboundItems: 100000 {UsedChunks: 1 2 3 4}} step: 50000}"); 
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
+            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res); 
         }
 
 
@@ -436,16 +436,16 @@ namespace NKikimr {
             ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
-            ui32 writeBlockSize = 16u << 10u;
+            ui32 writeBlockSize = 16u << 10u; 
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.TestOutbound(20000);
             TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 1048520} "
-                            "IndexParts: 1 OutboundItems: 30836 {UsedChunks: 1}} step: 15418} "
-                       "{SST {Addr: {ChunkIdx: 2 Offset: 0 Size: 311672} "
-                            "IndexParts: 1 OutboundItems: 9164 {UsedChunks: 2}} step: 20000}");
+                            "IndexParts: 1 OutboundItems: 30836 {UsedChunks: 1}} step: 15418} " 
+                       "{SST {Addr: {ChunkIdx: 2 Offset: 0 Size: 311672} " 
+                            "IndexParts: 1 OutboundItems: 9164 {UsedChunks: 2}} step: 20000}"); 
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
+            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res); 
         }
 
 
@@ -458,15 +458,15 @@ namespace NKikimr {
             ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
-            ui32 writeBlockSize = 16u << 10u;
+            ui32 writeBlockSize = 16u << 10u; 
             TTest<TKeyBlock, TMemRecBlock, TWriterBlock> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(5000);
 
             TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 60096} "
-                       "IndexParts: 1 {UsedChunks: 1}} step: 5000}");
+                       "IndexParts: 1 {UsedChunks: 1}} step: 5000}"); 
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
+            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res); 
         }
 
         Y_UNIT_TEST(BlockOneSstMultiIndex) {
@@ -475,15 +475,15 @@ namespace NKikimr {
             ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
-            ui32 writeBlockSize = 16u << 10u;
+            ui32 writeBlockSize = 16u << 10u; 
             TTest<TKeyBlock, TMemRecBlock, TWriterBlock> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(150000);
 
             TString res("{SST {Addr: {ChunkIdx: 2 Offset: 0 Size: 751536} "
-                            "IndexParts: 2 {UsedChunks: 1 2}} step: 150000}");
+                            "IndexParts: 2 {UsedChunks: 1 2}} step: 150000}"); 
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
+            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res); 
         }
 
         Y_UNIT_TEST(BlockMultiSstOneIndex) {
@@ -492,17 +492,17 @@ namespace NKikimr {
             ui64 ownerRound = 1;
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
-            ui32 writeBlockSize = 16u << 10u;
+            ui32 writeBlockSize = 16u << 10u; 
             TTest<TKeyBlock, TMemRecBlock, TWriterBlock> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(150000);
 
             TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 1048572} "
-                            "IndexParts: 1 {UsedChunks: 1}} step: 87373} "
-                       "{SST {Addr: {ChunkIdx: 2 Offset: 0 Size: 751620} "
-                            "IndexParts: 1 {UsedChunks: 2}} step: 150000}");
+                            "IndexParts: 1 {UsedChunks: 1}} step: 87373} " 
+                       "{SST {Addr: {ChunkIdx: 2 Offset: 0 Size: 751620} " 
+                            "IndexParts: 1 {UsedChunks: 2}} step: 150000}"); 
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
+            UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res); 
         }
     }
 

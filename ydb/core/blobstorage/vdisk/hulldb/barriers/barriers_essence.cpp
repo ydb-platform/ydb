@@ -4,23 +4,23 @@
 namespace NKikimr {
     namespace NGcOpt {
 
-        TBarriersEssence::TBarriersEssence(NBarriers::TMemViewSnap memViewSnap, TBlobStorageGroupType gtype)
+        TBarriersEssence::TBarriersEssence(NBarriers::TMemViewSnap memViewSnap, TBlobStorageGroupType gtype) 
             : MemViewSnap(std::move(memViewSnap))
-            , BuildStat(std::make_unique<NGc::TBuildStat>())
-            , IngressMode(TIngress::IngressMode(gtype))
+            , BuildStat(std::make_unique<NGc::TBuildStat>()) 
+            , IngressMode(TIngress::IngressMode(gtype)) 
         {}
 
         TIntrusivePtr<TBarriersEssence> TBarriersEssence::Create(const THullCtxPtr &hullCtx,
                 const NBarriers::TBarriersDsSnapshot &snapshot)
         {
-            return MakeIntrusive<TBarriersEssence>(snapshot.GetMemViewSnap(), hullCtx->VCtx->Top->GType);
+            return MakeIntrusive<TBarriersEssence>(snapshot.GetMemViewSnap(), hullCtx->VCtx->Top->GType); 
         }
 
         TIntrusivePtr<TBarriersEssence> TBarriersEssence::Create(const THullCtxPtr &hullCtx,
                 const NBarriers::TBarriersDsSnapshot &snapshot,
-                ui64 /*firstTabletId*/,
-                ui64 /*lastTabletId*/,
-                int /*debugLevel*/)
+                ui64 /*firstTabletId*/, 
+                ui64 /*lastTabletId*/, 
+                int /*debugLevel*/) 
         {
             return Create(hullCtx, snapshot);
         }
@@ -81,7 +81,7 @@ namespace NKikimr {
                 std::make_tuple(gen, step) > std::make_tuple(soft->CollectGen, soft->CollectStep);
 
             // flags says us to keep the record?
-            const bool keepByFlags = ingress.KeepUnconditionally(IngressMode);
+            const bool keepByFlags = ingress.KeepUnconditionally(IngressMode); 
 
             // is item is spread over multiple ssts?
             const bool itemIsSpreadOverMultipleSsts = recsMerged > 1;

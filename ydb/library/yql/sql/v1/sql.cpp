@@ -5426,7 +5426,7 @@ TNodePtr TSqlExpression::SmartParenthesis(const TRule_smart_parenthesis& node) {
 
     bool hasAliases = false;
     bool hasUnnamed = false;
-    for (const auto& expr: exprs) {
+    for (const auto& expr: exprs) { 
         if (expr->GetLabel()) {
             hasAliases = true;
         } else {
@@ -6620,7 +6620,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         if (!clause.Build(node.GetBlock11().GetRule_group_by_clause1(), source->IsStream())) {
             return nullptr;
         }
-        for (const auto& exprAlias: clause.Aliases()) {
+        for (const auto& exprAlias: clause.Aliases()) { 
             YQL_ENSURE(exprAlias.first == exprAlias.second->GetLabel());
             groupByExpr.emplace_back(exprAlias.second);
         }
@@ -7106,14 +7106,14 @@ bool TGroupByClause::IsCompactGroupBy() const {
 
 TMaybe<TVector<TNodePtr>> TGroupByClause::MultiplyGroupingSets(const TVector<TNodePtr>& lhs, const TVector<TNodePtr>& rhs) const {
     TVector<TNodePtr> content;
-    for (const auto& leftNode: lhs) {
+    for (const auto& leftNode: lhs) { 
         auto leftPtr = leftNode->ContentListPtr();
         if (!leftPtr) {
             // TODO: shouldn't happen
             Ctx.Error() << "Unable to multiply grouping sets";
             return {};
         }
-        for (const auto& rightNode: rhs) {
+        for (const auto& rightNode: rhs) { 
             TVector<TNodePtr> mulItem(leftPtr->begin(), leftPtr->end());
             auto rightPtr = rightNode->ContentListPtr();
             if (!rightPtr) {

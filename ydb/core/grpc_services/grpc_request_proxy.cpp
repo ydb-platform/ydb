@@ -85,7 +85,7 @@ public:
     void Bootstrap(const TActorContext& ctx);
     void StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
         return NKikimrServices::TActivity::GRPC_PROXY;
     }
 

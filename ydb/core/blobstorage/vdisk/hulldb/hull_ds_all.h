@@ -39,15 +39,15 @@ namespace NKikimr {
     using TFreshAppendixBarriers = TFreshAppendix<TKeyBarrier, TMemRecBarrier>;
 
     struct TFreshBatch {
-        std::shared_ptr<TFreshAppendixLogoBlobs> LogoBlobs;
-        std::shared_ptr<TFreshAppendixBlocks> Blocks;
-        std::shared_ptr<TFreshAppendixBarriers> Barriers;
+        std::shared_ptr<TFreshAppendixLogoBlobs> LogoBlobs; 
+        std::shared_ptr<TFreshAppendixBlocks> Blocks; 
+        std::shared_ptr<TFreshAppendixBarriers> Barriers; 
 
         bool IsReady() const { return LogoBlobs || Blocks || Barriers; }
         void Clear() {
-            LogoBlobs.reset();
-            Blocks.reset();
-            Barriers.reset();
+            LogoBlobs.reset(); 
+            Blocks.reset(); 
+            Barriers.reset(); 
         }
         ui64 GetRecords() const {
             return (LogoBlobs ? LogoBlobs->GetSize() : 0)

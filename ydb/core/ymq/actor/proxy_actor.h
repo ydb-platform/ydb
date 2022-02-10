@@ -50,8 +50,8 @@ public:
         DebugInfo->ProxyActors.EraseKeyValue(RequestId_, this);
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SQS_PROXY_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::SQS_PROXY_ACTOR; 
     }
 
     // Watches request type and returns true if this type assumes proxying request to other queue leader node.

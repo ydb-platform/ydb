@@ -117,7 +117,7 @@ namespace NKikimr {
         // TSyncLogFilter
         ////////////////////////////////////////////////////////////////////////////
         struct TSyncLogFilter : private TLogoBlobFilter {
-            TSyncLogFilter(const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
+            TSyncLogFilter(const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top, 
                            const TVDiskID &vdisk)
                 : TLogoBlobFilter(top, vdisk)
             {}
@@ -165,9 +165,9 @@ namespace NKikimr {
                                 "SYNCLOG REPLY: SourceVDisk# %s guid# %" PRIu64 " lsn# %" PRIu64,
                                 SourceVDisk.ToString().data(), static_cast<ui64>(VDiskIncarnationGuid), lsn));
 
-                auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(status, SelfVDiskId,
-                    TSyncState(VDiskIncarnationGuid, lsn), finished, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(),
-                    Now, SlCtx->IFaceMonGroup.SyncReadResMsgsPtr(), nullptr, std::move(Ev->TraceId), Ev->GetChannel());
+                auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(status, SelfVDiskId, 
+                    TSyncState(VDiskIncarnationGuid, lsn), finished, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), 
+                    Now, SlCtx->IFaceMonGroup.SyncReadResMsgsPtr(), nullptr, std::move(Ev->TraceId), Ev->GetChannel()); 
                 if (DiskReads) {
                     NKikimrBlobStorage::TEvVSyncResult::TStat *stat = nullptr;
                     stat = result->Record.MutableStat();
@@ -177,7 +177,7 @@ namespace NKikimr {
                     FragmentWriter.Finish(result->Record.MutableData());
                 }
 
-                SendVDiskResponse(ctx, Ev->Sender, result.release(), *this, Ev->Cookie);
+                SendVDiskResponse(ctx, Ev->Sender, result.release(), *this, Ev->Cookie); 
                 ctx.Send(ParentId, new TEvSyncLogReadFinished(SourceVDisk));
                 Die(ctx);
             }
@@ -209,7 +209,7 @@ namespace NKikimr {
                     str << "SYNCLOG LOGIC ERROR: " << wno.Explanation
                         << " " << InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn);
                     LOG_ERROR(ctx, BS_SYNCLOG,  str.Str());
-                    // Y_FAIL("%s", str.Str().data()); // TODO(alexvru): fix logic
+                    // Y_FAIL("%s", str.Str().data()); // TODO(alexvru): fix logic 
                 }
                 Finish(ctx, NKikimrProto::ERROR, 0, true);
             }
@@ -344,7 +344,7 @@ namespace NKikimr {
                 ui32 chunkIdx = p.first;
                 const TDiskIndexRecord *idxRec = p.second;
                 auto msg = ev->Get();
-                const TBufferWithGaps &readData = ev->Get()->Data;
+                const TBufferWithGaps &readData = ev->Get()->Data; 
                 Y_VERIFY(chunkIdx == msg->ChunkIdx &&
                          idxRec->OffsetInPages * SnapPtr->AppendBlockSize == msg->Offset &&
                          idxRec->PagesNum * SnapPtr->AppendBlockSize == readData.Size(),
@@ -388,21 +388,21 @@ namespace NKikimr {
                 Die(ctx);
             }
 
-            STRICT_STFUNC(StateInitFunc,
-                HFunc(TEvSyncLogSnapshotResult, Handle)
-                HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            )
+            STRICT_STFUNC(StateInitFunc, 
+                HFunc(TEvSyncLogSnapshotResult, Handle) 
+                HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            ) 
 
-            STRICT_STFUNC(StateReadFunc,
-                HFunc(NPDisk::TEvChunkReadResult, Handle)
-                HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            )
+            STRICT_STFUNC(StateReadFunc, 
+                HFunc(NPDisk::TEvChunkReadResult, Handle) 
+                HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            ) 
 
             PDISK_TERMINATE_STATE_FUNC_DEF;
 
         public:
-            static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-                return NKikimrServices::TActivity::BS_SYNCLOG_READER;
+            static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+                return NKikimrServices::TActivity::BS_SYNCLOG_READER; 
             }
 
             TSyncLogReaderActor(

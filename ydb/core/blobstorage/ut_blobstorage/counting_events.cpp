@@ -14,10 +14,10 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     void SendPut(const TTestInfo &test, const TLogoBlobID &blobId, const TString &data,
             NKikimrProto::EReplyStatus status)
     {
-        std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvPut>(blobId, data, TInstant::Max());
+        std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvPut>(blobId, data, TInstant::Max()); 
 
         test.Runtime->WrapInActorContext(test.Edge, [&] {
-            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
+            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release()); 
         });
         std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
 
@@ -29,9 +29,9 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     void SendGet(const TTestInfo &test, const TLogoBlobID &blobId, const TString &data,
             NKikimrProto::EReplyStatus status)
     {
-        std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvGet>(blobId, 0, 0, TInstant::Max(), NKikimrBlobStorage::AsyncRead);
+        std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvGet>(blobId, 0, 0, TInstant::Max(), NKikimrBlobStorage::AsyncRead); 
         test.Runtime->WrapInActorContext(test.Edge, [&] {
-            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
+            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release()); 
         });
         std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
         UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvGetResult);
@@ -45,10 +45,10 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     void SendCollect(const TTestInfo &test, const TLogoBlobID &blobId,
             NKikimrProto::EReplyStatus status)
     {
-        std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(blobId.TabletID(), blobId.Generation(),
+        std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(blobId.TabletID(), blobId.Generation(), 
             blobId.Step(), blobId.Channel(), true, blobId.Generation(), blobId.Step(), nullptr, nullptr, TInstant::Max(), false);
         test.Runtime->WrapInActorContext(test.Edge, [&] {
-            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
+            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release()); 
         });
         std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
         UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvCollectGarbageResult);
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
             NormalizePredictedDelays(queues);
             SendPut(test, originalBlobId2, data, NKikimrProto::OK);
             finishEventsCount = test.Runtime->GetEventsProcessed();
-
+ 
             UNIT_ASSERT_VALUES_EQUAL(finishEventsCount - startEventsCount, eventsCount);
 
             startEventsCount = test.Runtime->GetEventsProcessed();
@@ -164,15 +164,15 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     }
 
     Y_UNIT_TEST(Put_Mirror3of4) {
-        CountingEventsTest("put", 116, TBlobStorageGroupType::ErasureMirror3of4);
+        CountingEventsTest("put", 116, TBlobStorageGroupType::ErasureMirror3of4); 
     }
 
     Y_UNIT_TEST(Put_Mirror3dc) {
-        CountingEventsTest("put", 49, TBlobStorageGroupType::ErasureMirror3dc);
+        CountingEventsTest("put", 49, TBlobStorageGroupType::ErasureMirror3dc); 
     }
 
     Y_UNIT_TEST(Put_Block42) {
-        CountingEventsTest("put", 89, TBlobStorageGroupType::Erasure4Plus2Block);
+        CountingEventsTest("put", 89, TBlobStorageGroupType::Erasure4Plus2Block); 
     }
 
     Y_UNIT_TEST(Put_None) {
@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     }
 
     Y_UNIT_TEST(Get_Mirror3of4) {
-        CountingEventsTest("get", 38, TBlobStorageGroupType::ErasureMirror3of4);
+        CountingEventsTest("get", 38, TBlobStorageGroupType::ErasureMirror3of4); 
     }
 
     Y_UNIT_TEST(Get_Mirror3dc) {
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     }
 
     Y_UNIT_TEST(Get_Block42) {
-        CountingEventsTest("get", 69, TBlobStorageGroupType::Erasure4Plus2Block);
+        CountingEventsTest("get", 69, TBlobStorageGroupType::Erasure4Plus2Block); 
     }
 
     Y_UNIT_TEST(Get_None) {
@@ -196,15 +196,15 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     }
 
     Y_UNIT_TEST(Collect_Mirror3of4) {
-        CountingEventsTest("collect", 113, TBlobStorageGroupType::ErasureMirror3of4);
+        CountingEventsTest("collect", 113, TBlobStorageGroupType::ErasureMirror3of4); 
     }
-
+ 
     Y_UNIT_TEST(Collect_Mirror3dc) {
-        CountingEventsTest("collect", 124, TBlobStorageGroupType::ErasureMirror3dc);
+        CountingEventsTest("collect", 124, TBlobStorageGroupType::ErasureMirror3dc); 
     }
 
     Y_UNIT_TEST(Collect_Block42) {
-        CountingEventsTest("collect", 112, TBlobStorageGroupType::Erasure4Plus2Block);
+        CountingEventsTest("collect", 112, TBlobStorageGroupType::Erasure4Plus2Block); 
     }
 
     Y_UNIT_TEST(Collect_None) {

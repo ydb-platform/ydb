@@ -20,8 +20,8 @@ namespace NKikimr {
             typedef TIntrusivePtr<TState> TPtr;
         };
 
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::TX_COORDINATOR_ACTOR;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::TX_COORDINATOR_ACTOR; 
         }
 
         TFakeCoordinator(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state)
@@ -208,7 +208,7 @@ namespace NKikimr {
                 }
 
                 for (auto& ev : kv.second) {
-                    TAllocChunkSerializer serializer;
+                    TAllocChunkSerializer serializer; 
                     ev->SerializeToArcadiaStream(&serializer);
                     Cerr << "FAKE_COORDINATOR:  Send Plan to tablet " << tabletId << " for txId: " << ev->Record.GetTransactions(0).GetTxId() << " at step: " << step << "\n";
 

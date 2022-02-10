@@ -112,8 +112,8 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                     << "   Host: " << node.Host << Endl
                     << "   ResolveHost: " << node.ResolveHost << Endl
                     << "   Port: " << node.Port << Endl
-                    << "   DataCenter: " << node.Location.GetDataCenterId() << Endl
-                    << "   Location: " << node.Location.ToString() << Endl
+                    << "   DataCenter: " << node.Location.GetDataCenterId() << Endl 
+                    << "   Location: " << node.Location.ToString() << Endl 
                     << "   Lease: " << node.Lease << Endl
                     << "   Expire: " << node.ExpirationString() << Endl;
             }
@@ -299,7 +299,7 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
     info.SetResolveHost(node.ResolveHost);
     info.SetAddress(node.Address);
     info.SetExpire(node.Expire.GetValue());
-    node.Location.Serialize(info.MutableLocation());
+    node.Location.Serialize(info.MutableLocation()); 
 }
 
 void TNodeBroker::ComputeNextEpochDiff(TStateDiff &diff)
@@ -452,25 +452,25 @@ void TNodeBroker::DbAddNode(const TNodeInfo &node,
                 "Adding node " << node.IdString() << " to database"
                 << " resolvehost=" << node.ResolveHost
                 << " address=" << node.Address
-                << " dc=" << node.Location.GetDataCenterId()
-                << " location=" << node.Location.ToString()
+                << " dc=" << node.Location.GetDataCenterId() 
+                << " location=" << node.Location.ToString() 
                 << " lease=" << node.Lease
                 << " expire=" << node.ExpirationString());
 
     NIceDb::TNiceDb db(txc.DB);
-    using T = Schema::Nodes;
-    db.Table<T>().Key(node.NodeId)
-        .Update<T::Host>(node.Host)
-        .Update<T::Port>(node.Port)
-        .Update<T::ResolveHost>(node.ResolveHost)
-        .Update<T::Address>(node.Address)
-        .Update<T::Lease>(node.Lease)
-        .Update<T::Expire>(node.Expire.GetValue())
-        .Update<T::Location>(node.Location.GetSerializedLocation());
-
-    // to be removed
-    const auto& x = node.Location.GetLegacyValue();
-    db.Table<T>().Key(node.NodeId).Update<T::DataCenter, T::Room, T::Rack, T::Body>(x.DataCenter, x.Room, x.Rack, x.Body);
+    using T = Schema::Nodes; 
+    db.Table<T>().Key(node.NodeId) 
+        .Update<T::Host>(node.Host) 
+        .Update<T::Port>(node.Port) 
+        .Update<T::ResolveHost>(node.ResolveHost) 
+        .Update<T::Address>(node.Address) 
+        .Update<T::Lease>(node.Lease) 
+        .Update<T::Expire>(node.Expire.GetValue()) 
+        .Update<T::Location>(node.Location.GetSerializedLocation()); 
+ 
+    // to be removed 
+    const auto& x = node.Location.GetLegacyValue(); 
+    db.Table<T>().Key(node.NodeId).Update<T::DataCenter, T::Room, T::Rack, T::Body>(x.DataCenter, x.Room, x.Rack, x.Body); 
 }
 
 void TNodeBroker::DbApplyStateDiff(const TStateDiff &diff,
@@ -578,8 +578,8 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
 
     TVector<ui32> toRemove;
     while (!nodesRowset.EndOfSet()) {
-        using T = Schema::Nodes;
-        auto id = nodesRowset.GetValue<T::ID>();
+        using T = Schema::Nodes; 
+        auto id = nodesRowset.GetValue<T::ID>(); 
         // We don't remove nodes with a different domain id when there's a
         // single domain. We may have been running in a single domain allocation
         // mode, and now temporarily restarted without this mode enabled. We
@@ -596,49 +596,49 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
                         << MaxStaticId << ", " << MaxDynamicId << "]");
             toRemove.push_back(id);
         } else {
-            auto expire = TInstant::FromValue(nodesRowset.GetValue<T::Expire>());
-            std::optional<TNodeLocation> legacyLocation, modernLocation;
-            if (nodesRowset.HaveValue<T::DataCenter>() && nodesRowset.HaveValue<T::Room>() &&
-                    nodesRowset.HaveValue<T::Rack>() && nodesRowset.HaveValue<T::Body>()) {
-                // priority value for compatibility issues
-                NActorsInterconnect::TNodeLocation proto;
-                proto.SetDataCenterNum(nodesRowset.GetValue<T::DataCenter>());
-                proto.SetRoomNum(nodesRowset.GetValue<T::Room>());
-                proto.SetRackNum(nodesRowset.GetValue<T::Rack>());
-                proto.SetBodyNum(nodesRowset.GetValue<T::Body>());
-                legacyLocation.emplace(proto);
-            }
-            if (nodesRowset.HaveValue<T::Location>()) {
-                modernLocation.emplace(TNodeLocation::FromSerialized, nodesRowset.GetValue<T::Location>());
-            }
-
-            TNodeLocation location;
-
-            if (!legacyLocation) {
-                // only modern value found in database
-                Y_VERIFY(modernLocation);
-                location = std::move(*modernLocation);
-            } else if (!modernLocation) {
-                // only legacy value found in database
-                Y_VERIFY(legacyLocation);
-                location = std::move(*legacyLocation);
-            } else if (*modernLocation == *legacyLocation) {
-                // both modern and legacy values and they match; use modern one with legacy value filled
-                location = std::move(*modernLocation);
-                location.InheritLegacyValue(*legacyLocation);
-            } else {
-                // both values found, but there is no match -- legacy value was rewritten after modern one was written
-                location = std::move(*legacyLocation);
-            }
-
-            TNodeInfo info{id,
-                nodesRowset.GetValue<T::Address>(),
-                nodesRowset.GetValue<T::Host>(),
-                nodesRowset.GetValue<T::ResolveHost>(),
-                (ui16)nodesRowset.GetValue<T::Port>(),
-                location,
-                legacyLocation && !modernLocation}; // format update pending
-            info.Lease = nodesRowset.GetValue<T::Lease>();
+            auto expire = TInstant::FromValue(nodesRowset.GetValue<T::Expire>()); 
+            std::optional<TNodeLocation> legacyLocation, modernLocation; 
+            if (nodesRowset.HaveValue<T::DataCenter>() && nodesRowset.HaveValue<T::Room>() && 
+                    nodesRowset.HaveValue<T::Rack>() && nodesRowset.HaveValue<T::Body>()) { 
+                // priority value for compatibility issues 
+                NActorsInterconnect::TNodeLocation proto; 
+                proto.SetDataCenterNum(nodesRowset.GetValue<T::DataCenter>()); 
+                proto.SetRoomNum(nodesRowset.GetValue<T::Room>()); 
+                proto.SetRackNum(nodesRowset.GetValue<T::Rack>()); 
+                proto.SetBodyNum(nodesRowset.GetValue<T::Body>()); 
+                legacyLocation.emplace(proto); 
+            } 
+            if (nodesRowset.HaveValue<T::Location>()) { 
+                modernLocation.emplace(TNodeLocation::FromSerialized, nodesRowset.GetValue<T::Location>()); 
+            } 
+ 
+            TNodeLocation location; 
+ 
+            if (!legacyLocation) { 
+                // only modern value found in database 
+                Y_VERIFY(modernLocation); 
+                location = std::move(*modernLocation); 
+            } else if (!modernLocation) { 
+                // only legacy value found in database 
+                Y_VERIFY(legacyLocation); 
+                location = std::move(*legacyLocation); 
+            } else if (*modernLocation == *legacyLocation) { 
+                // both modern and legacy values and they match; use modern one with legacy value filled 
+                location = std::move(*modernLocation); 
+                location.InheritLegacyValue(*legacyLocation); 
+            } else { 
+                // both values found, but there is no match -- legacy value was rewritten after modern one was written 
+                location = std::move(*legacyLocation); 
+            } 
+ 
+            TNodeInfo info{id, 
+                nodesRowset.GetValue<T::Address>(), 
+                nodesRowset.GetValue<T::Host>(), 
+                nodesRowset.GetValue<T::ResolveHost>(), 
+                (ui16)nodesRowset.GetValue<T::Port>(), 
+                location, 
+                legacyLocation && !modernLocation}; // format update pending 
+            info.Lease = nodesRowset.GetValue<T::Lease>(); 
             info.Expire = expire;
 
             AddNode(info);
@@ -747,15 +747,15 @@ void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                 "Update node " << node.IdString() << " location in database"
-                << " location=" << node.Location.ToString());
+                << " location=" << node.Location.ToString()); 
 
     NIceDb::TNiceDb db(txc.DB);
-    using T = Schema::Nodes;
-    db.Table<T>().Key(node.NodeId).Update<T::Location>(node.Location.GetSerializedLocation());
-
-    // to be removed
-    const auto& x = node.Location.GetLegacyValue();
-    db.Table<T>().Key(node.NodeId).Update<T::DataCenter, T::Room, T::Rack, T::Body>(x.DataCenter, x.Room, x.Rack, x.Body);
+    using T = Schema::Nodes; 
+    db.Table<T>().Key(node.NodeId).Update<T::Location>(node.Location.GetSerializedLocation()); 
+ 
+    // to be removed 
+    const auto& x = node.Location.GetLegacyValue(); 
+    db.Table<T>().Key(node.NodeId).Update<T::DataCenter, T::Room, T::Rack, T::Body>(x.DataCenter, x.Room, x.Rack, x.Body); 
 }
 
 void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
@@ -826,45 +826,45 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
     LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvRegistrationRequest"
         << ": request# " << ev->Get()->Record.ShortDebugString());
 
-    class TRegisterNodeActor : public TActorBootstrapped<TRegisterNodeActor> {
-        TEvNodeBroker::TEvRegistrationRequest::TPtr Ev;
-        TNodeBroker *Self;
-        NActors::TScopeId ScopeId;
-
-    public:
+    class TRegisterNodeActor : public TActorBootstrapped<TRegisterNodeActor> { 
+        TEvNodeBroker::TEvRegistrationRequest::TPtr Ev; 
+        TNodeBroker *Self; 
+        NActors::TScopeId ScopeId; 
+ 
+    public: 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::NODE_BROKER_ACTOR;
         }
 
-        TRegisterNodeActor(TEvNodeBroker::TEvRegistrationRequest::TPtr& ev, TNodeBroker *self)
-            : Ev(ev)
-            , Self(self)
-        {}
+        TRegisterNodeActor(TEvNodeBroker::TEvRegistrationRequest::TPtr& ev, TNodeBroker *self) 
+            : Ev(ev) 
+            , Self(self) 
+        {} 
+ 
+        void Bootstrap(const TActorContext& ctx) { 
+            Become(&TThis::StateFunc); 
+ 
+            auto& record = Ev->Get()->Record; 
 
-        void Bootstrap(const TActorContext& ctx) {
-            Become(&TThis::StateFunc);
-
-            auto& record = Ev->Get()->Record;
-
-            if (record.HasPath()) {
-                auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-                auto& rset = req->ResultSet;
-                rset.emplace_back();
-                auto& item = rset.back();
-                item.Path = NKikimr::SplitPath(record.GetPath());
+            if (record.HasPath()) { 
+                auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>(); 
+                auto& rset = req->ResultSet; 
+                rset.emplace_back(); 
+                auto& item = rset.back(); 
+                item.Path = NKikimr::SplitPath(record.GetPath()); 
                 item.RedirectRequired = false;
-                item.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-                ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(req), IEventHandle::FlagTrackDelivery, 0);
-            } else {
-                Finish(ctx);
-            }
-        }
-
-        void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-            const auto& navigate = ev->Get()->Request;
-            auto& rset = navigate->ResultSet;
-            Y_VERIFY(rset.size() == 1);
-            auto& response = rset.front();
+                item.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath; 
+                ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(req), IEventHandle::FlagTrackDelivery, 0); 
+            } else { 
+                Finish(ctx); 
+            } 
+        } 
+ 
+        void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) { 
+            const auto& navigate = ev->Get()->Request; 
+            auto& rset = navigate->ResultSet; 
+            Y_VERIFY(rset.size() == 1); 
+            auto& response = rset.front(); 
 
             LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
                 << ": response# " << response.ToString(*AppData()->TypeRegistry));
@@ -875,29 +875,29 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, "Cannot resolve scope id"
                     << ": request# " << Ev->Get()->Record.ShortDebugString()
                     << ", response# " << response.ToString(*AppData()->TypeRegistry));
-            }
+            } 
 
-            Finish(ctx);
-        }
-
-        void HandleUndelivered(const TActorContext& ctx) {
-            Finish(ctx);
-        }
-
-        void Finish(const TActorContext& ctx) {
+            Finish(ctx); 
+        } 
+ 
+        void HandleUndelivered(const TActorContext& ctx) { 
+            Finish(ctx); 
+        } 
+ 
+        void Finish(const TActorContext& ctx) { 
             LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Finished resolving scope id"
                 << ": request# " << Ev->Get()->Record.ShortDebugString()
                 << ": scope id# " << ScopeIdToString(ScopeId));
 
-            Self->ProcessTx(Self->CreateTxRegisterNode(Ev, ScopeId), ctx);
+            Self->ProcessTx(Self->CreateTxRegisterNode(Ev, ScopeId), ctx); 
             Die(ctx);
-        }
-
-        STRICT_STFUNC(StateFunc, {
-            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle)
-            CFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
-        })
-    };
+        } 
+ 
+        STRICT_STFUNC(StateFunc, { 
+            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle) 
+            CFunc(TEvents::TSystem::Undelivered, HandleUndelivered) 
+        }) 
+    }; 
     ctx.RegisterWithSameMailbox(new TRegisterNodeActor(ev, this));
 }
 

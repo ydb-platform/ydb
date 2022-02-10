@@ -507,7 +507,7 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
         return NKikimrServices::TActivity::SCHEME_BOARD_SUBSCRIBER_PROXY_ACTOR;
     }
 
@@ -915,8 +915,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SCHEME_BOARD_SUBSCRIBER_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::SCHEME_BOARD_SUBSCRIBER_ACTOR; 
     }
 
     static constexpr TStringBuf LogPrefix() {

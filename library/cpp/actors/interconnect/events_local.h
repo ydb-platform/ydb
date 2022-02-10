@@ -8,7 +8,7 @@
 
 #include "interconnect_stream.h"
 #include "packet.h"
-#include "types.h"
+#include "types.h" 
 
 namespace NActors {
     struct TProgramInfo {
@@ -23,7 +23,7 @@ namespace NActors {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         Start = EventSpaceBegin(TEvents::ES_INTERCONNECT_TCP),
-
+ 
         SocketReadyRead = Start,
         SocketReadyWrite,
         SocketError,
@@ -32,7 +32,7 @@ namespace NActors {
         IncomingConnection,
         HandshakeAsk,
         HandshakeAck,
-        HandshakeNak,
+        HandshakeNak, 
         HandshakeDone,
         HandshakeFail,
         Kick,
@@ -50,16 +50,16 @@ namespace NActors {
         ConnectProtocolWakeup,
         HTTPProtocolRetry,
         EvPollerRegister,
-        EvPollerRegisterResult,
-        EvPollerReady,
+        EvPollerRegisterResult, 
+        EvPollerReady, 
         EvUpdateFromInputSession,
-        EvConfirmUpdate,
+        EvConfirmUpdate, 
         EvSessionBufferSizeRequest,
         EvSessionBufferSizeResponse,
-        EvProcessPingRequest,
-        EvGetSecureSocket,
-        EvSecureSocket,
-
+        EvProcessPingRequest, 
+        EvGetSecureSocket, 
+        EvSecureSocket, 
+ 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // nonlocal messages; their indices must be preserved in order to work properly while doing rolling update
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -67,7 +67,7 @@ namespace NActors {
         // interconnect load test message
         EvLoadMessage = Start + 256,
     };
-
+ 
     struct TEvSocketReadyRead: public TEventLocal<TEvSocketReadyRead, ui32(ENetwork::SocketReadyRead)> {
         DEFINE_SIMPLE_LOCAL_EVENT(TEvSocketReadyRead, "Network: TEvSocketReadyRead")
     };
@@ -97,10 +97,10 @@ namespace NActors {
 
     struct TEvSocketDisconnect: public TEventLocal<TEvSocketDisconnect, ui32(ENetwork::Disconnect)> {
         DEFINE_SIMPLE_LOCAL_EVENT(TEvSocketDisconnect, "Network: TEvSocketDisconnect")
-        TDisconnectReason Reason;
-
-        TEvSocketDisconnect(TDisconnectReason reason)
-            : Reason(std::move(reason))
+        TDisconnectReason Reason; 
+ 
+        TEvSocketDisconnect(TDisconnectReason reason) 
+            : Reason(std::move(reason)) 
         {
         }
     };
@@ -126,18 +126,18 @@ namespace NActors {
         TEvHandshakeAck(const TActorId& self, ui64 nextPacket, TSessionParams params)
             : Self(self)
             , NextPacket(nextPacket)
-            , Params(std::move(params))
-        {}
+            , Params(std::move(params)) 
+        {} 
 
         const TActorId Self;
         const ui64 NextPacket;
-        const TSessionParams Params;
+        const TSessionParams Params; 
     };
 
-    struct TEvHandshakeNak : TEventLocal<TEvHandshakeNak, ui32(ENetwork::HandshakeNak)> {
-        DEFINE_SIMPLE_LOCAL_EVENT(TEvSocketReadyRead, "Network: TEvHandshakeNak")
-    };
-
+    struct TEvHandshakeNak : TEventLocal<TEvHandshakeNak, ui32(ENetwork::HandshakeNak)> { 
+        DEFINE_SIMPLE_LOCAL_EVENT(TEvSocketReadyRead, "Network: TEvHandshakeNak") 
+    }; 
+ 
     struct TEvHandshakeRequest
        : public TEventLocal<TEvHandshakeRequest,
                              ui32(ENetwork::HandshakeRequest)> {
@@ -173,29 +173,29 @@ namespace NActors {
         DEFINE_SIMPLE_LOCAL_EVENT(TEvIncomingConnection, "Network: TEvIncomingConnection")
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
         NInterconnect::TAddress Address;
-
-        TEvIncomingConnection(TIntrusivePtr<NInterconnect::TStreamSocket> socket, NInterconnect::TAddress address)
-            : Socket(std::move(socket))
-            , Address(std::move(address))
-        {}
+ 
+        TEvIncomingConnection(TIntrusivePtr<NInterconnect::TStreamSocket> socket, NInterconnect::TAddress address) 
+            : Socket(std::move(socket)) 
+            , Address(std::move(address)) 
+        {} 
     };
 
     struct TEvHandshakeDone: public TEventLocal<TEvHandshakeDone, ui32(ENetwork::HandshakeDone)> {
         DEFINE_SIMPLE_LOCAL_EVENT(TEvHandshakeDone, "Network: TEvHandshakeDone")
 
         TEvHandshakeDone(
-                TIntrusivePtr<NInterconnect::TStreamSocket> socket,
+                TIntrusivePtr<NInterconnect::TStreamSocket> socket, 
                 const TActorId& peer,
                 const TActorId& self,
-                ui64 nextPacket,
-                TAutoPtr<TProgramInfo>&& programInfo,
-                TSessionParams params)
+                ui64 nextPacket, 
+                TAutoPtr<TProgramInfo>&& programInfo, 
+                TSessionParams params) 
             : Socket(std::move(socket))
             , Peer(peer)
             , Self(self)
             , NextPacket(nextPacket)
             , ProgramInfo(std::move(programInfo))
-            , Params(std::move(params))
+            , Params(std::move(params)) 
         {
         }
 
@@ -204,7 +204,7 @@ namespace NActors {
         const TActorId Self;
         const ui64 NextPacket;
         TAutoPtr<TProgramInfo> ProgramInfo;
-        const TSessionParams Params;
+        const TSessionParams Params; 
     };
 
     struct TEvHandshakeFail: public TEventLocal<TEvHandshakeFail, ui32(ENetwork::HandshakeFail)> {
@@ -318,48 +318,48 @@ namespace NActors {
         TEvLoadMessage() = default;
 
         template <typename TContainer>
-        TEvLoadMessage(const TContainer& route, const TString& id, const TString* payload) {
+        TEvLoadMessage(const TContainer& route, const TString& id, const TString* payload) { 
             for (const TActorId& actorId : route) {
                 auto* hop = Record.AddHops();
-                if (actorId) {
+                if (actorId) { 
                     ActorIdToProto(actorId, hop->MutableNextHop());
-                }
+                } 
             }
             Record.SetId(id);
             if (payload) {
-                Record.SetPayload(*payload);
+                Record.SetPayload(*payload); 
             }
         }
-
-        template <typename TContainer>
-        TEvLoadMessage(const TContainer& route, const TString& id, TRope&& payload) {
-            for (const TActorId& actorId : route) {
-                auto* hop = Record.AddHops();
-                if (actorId) {
-                    ActorIdToProto(actorId, hop->MutableNextHop());
-                }
-            }
-            Record.SetId(id);
-            AddPayload(std::move(payload));
-        }
+ 
+        template <typename TContainer> 
+        TEvLoadMessage(const TContainer& route, const TString& id, TRope&& payload) { 
+            for (const TActorId& actorId : route) { 
+                auto* hop = Record.AddHops(); 
+                if (actorId) { 
+                    ActorIdToProto(actorId, hop->MutableNextHop()); 
+                } 
+            } 
+            Record.SetId(id); 
+            AddPayload(std::move(payload)); 
+        } 
     };
 
     struct TEvUpdateFromInputSession : TEventLocal<TEvUpdateFromInputSession, static_cast<ui32>(ENetwork::EvUpdateFromInputSession)> {
         ui64 ConfirmedByInput; // latest Confirm value from processed input packet
         ui64 NumDataBytes;
-        TDuration Ping;
-
-        TEvUpdateFromInputSession(ui64 confirmedByInput, ui64 numDataBytes, TDuration ping)
+        TDuration Ping; 
+ 
+        TEvUpdateFromInputSession(ui64 confirmedByInput, ui64 numDataBytes, TDuration ping) 
             : ConfirmedByInput(confirmedByInput)
             , NumDataBytes(numDataBytes)
-            , Ping(ping)
+            , Ping(ping) 
         {
         }
     };
-
-    struct TEvConfirmUpdate : TEventLocal<TEvConfirmUpdate, static_cast<ui32>(ENetwork::EvConfirmUpdate)>
-    {};
-
+ 
+    struct TEvConfirmUpdate : TEventLocal<TEvConfirmUpdate, static_cast<ui32>(ENetwork::EvConfirmUpdate)> 
+    {}; 
+ 
     struct TEvSessionBufferSizeRequest : TEventLocal<TEvSessionBufferSizeRequest, static_cast<ui32>(ENetwork::EvSessionBufferSizeRequest)> {
         //DEFINE_SIMPLE_LOCAL_EVENT(TEvSessionBufferSizeRequest, "Session: TEvSessionBufferSizeRequest")
         DEFINE_SIMPLE_LOCAL_EVENT(TEvSessionBufferSizeRequest, "Network: TEvSessionBufferSizeRequest");
@@ -376,28 +376,28 @@ namespace NActors {
         ui64 BufferSize;
     };
 
-    struct TEvProcessPingRequest : TEventLocal<TEvProcessPingRequest, static_cast<ui32>(ENetwork::EvProcessPingRequest)> {
-        const ui64 Payload;
-
-        TEvProcessPingRequest(ui64 payload)
-            : Payload(payload)
-        {}
-    };
-
-    struct TEvGetSecureSocket : TEventLocal<TEvGetSecureSocket, (ui32)ENetwork::EvGetSecureSocket> {
-        TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
-
-        TEvGetSecureSocket(TIntrusivePtr<NInterconnect::TStreamSocket> socket)
-            : Socket(std::move(socket))
-        {}
-    };
-
-    struct TEvSecureSocket : TEventLocal<TEvSecureSocket, (ui32)ENetwork::EvSecureSocket> {
-        TIntrusivePtr<NInterconnect::TSecureSocket> Socket;
-
-        TEvSecureSocket(TIntrusivePtr<NInterconnect::TSecureSocket> socket)
-            : Socket(std::move(socket))
-        {}
-    };
-
+    struct TEvProcessPingRequest : TEventLocal<TEvProcessPingRequest, static_cast<ui32>(ENetwork::EvProcessPingRequest)> { 
+        const ui64 Payload; 
+ 
+        TEvProcessPingRequest(ui64 payload) 
+            : Payload(payload) 
+        {} 
+    }; 
+ 
+    struct TEvGetSecureSocket : TEventLocal<TEvGetSecureSocket, (ui32)ENetwork::EvGetSecureSocket> { 
+        TIntrusivePtr<NInterconnect::TStreamSocket> Socket; 
+ 
+        TEvGetSecureSocket(TIntrusivePtr<NInterconnect::TStreamSocket> socket) 
+            : Socket(std::move(socket)) 
+        {} 
+    }; 
+ 
+    struct TEvSecureSocket : TEventLocal<TEvSecureSocket, (ui32)ENetwork::EvSecureSocket> { 
+        TIntrusivePtr<NInterconnect::TSecureSocket> Socket; 
+ 
+        TEvSecureSocket(TIntrusivePtr<NInterconnect::TSecureSocket> socket) 
+            : Socket(std::move(socket)) 
+        {} 
+    }; 
+ 
 }

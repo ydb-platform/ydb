@@ -20,7 +20,7 @@ protected:
     TVector<const char*> Names;
     TVector<TVector<TTabletPercentileCounter::TRangeDef>> Ranges;
     TVector<TTabletPercentileCounter::TRangeDef> AppGlobalRanges;
-    TVector<bool> Integral;
+    TVector<bool> Integral; 
 public:
     explicit TAppParsedOpts(const size_t diff = 0)
         : Size(AppCountersDesc()->value_count() + diff)
@@ -53,7 +53,7 @@ public:
             }
             NamesStrings.emplace_back(nameString);
             Ranges.push_back(ParseRanges(co));
-            Integral.push_back(co.GetIntegral());
+            Integral.push_back(co.GetIntegral()); 
         }
 
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
@@ -84,11 +84,11 @@ public:
         Y_FAIL("Ranges for percentile counter '%s' are not defined", AppCountersDesc()->value(idx)->full_name().c_str());
     }
 
-    virtual bool GetIntegral(size_t idx) const {
-        Y_VERIFY(idx < Size);
-        return Integral[idx];
-    }
-
+    virtual bool GetIntegral(size_t idx) const { 
+        Y_VERIFY(idx < Size); 
+        return Integral[idx]; 
+    } 
+ 
 protected:
     TString GetFilePrefix(const NProtoBuf::FileDescriptor* desc) {
         if (desc->options().HasExtension(TabletTypeName)) {
@@ -124,7 +124,7 @@ private:
     using TBase::NamesStrings;
     using TBase::Names;
     using TBase::Ranges;
-    using TBase::Integral;
+    using TBase::Integral; 
     using TBase::AppGlobalRanges;
     TVector<TTabletPercentileCounter::TRangeDef> TxGlobalRanges;
 public:
@@ -163,7 +163,7 @@ public:
                 TVector<TTabletPercentileCounter::TRangeDef> ranges = TBase::ParseRanges(co);
                 NamesStrings.push_back(TBase::GetFilePrefix(typesDesc->file()) + txPrefix + co.GetName());
                 Ranges.push_back(TBase::ParseRanges(co));
-                Integral.push_back(co.GetIntegral());
+                Integral.push_back(co.GetIntegral()); 
             }
         }
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
@@ -480,7 +480,7 @@ private:
                 continue;
             }
             const auto& vec = opts->GetRanges(i);
-            Percentile()[i].Initialize(vec.size(), vec.begin(), opts->GetIntegral(i));
+            Percentile()[i].Initialize(vec.size(), vec.begin(), opts->GetIntegral(i)); 
         }
     }
 };
@@ -533,7 +533,7 @@ private:
                 continue;
             }
             const auto& vec = opts->GetRanges(i);
-            Percentile()[i].Initialize(vec.size(), vec.begin(), opts->GetIntegral(i));
+            Percentile()[i].Initialize(vec.size(), vec.begin(), opts->GetIntegral(i)); 
         }
     }
 };

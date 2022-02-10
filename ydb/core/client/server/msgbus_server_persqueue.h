@@ -96,8 +96,8 @@ public:
 
     std::deque<THolder<TPerTopicInfo>> ChildrenToCreate;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::PQ_BASE_REQUEST_PROCESSOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::PQ_BASE_REQUEST_PROCESSOR; 
     }
 
 protected:
@@ -176,8 +176,8 @@ protected:
 public:
     void Bootstrap(const TActorContext& ctx);
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::PQ_BASE_REQUEST_PROCESSOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::PQ_BASE_REQUEST_PROCESSOR; 
     }
 };
 

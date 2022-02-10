@@ -2,7 +2,7 @@
 #include "defs.h"
 
 #include <util/generic/map.h>
-#include "interval_set.h"
+#include "interval_set.h" 
 
 namespace NKikimr {
 
@@ -20,21 +20,21 @@ public:
     void Write(i32 begin, const char* buffer, i32 size);
     void Read(i32 begin, char* buffer, i32 size) const;
     TString Print() const;
-
+ 
     std::pair<const char*, i32> Get(i32 begin) const;
     void CopyFrom(const TFragmentedBuffer& from, const TIntervalSet<i32>& range);
-
-    explicit operator bool() const {
-        return !BufferForOffset.empty();
-    }
-
-    size_t GetTotalSize() const {
-        size_t res = 0;
-        for (const auto& [offset, buffer] : BufferForOffset) {
-            res += buffer.size();
-        }
-        return res;
-    }
+ 
+    explicit operator bool() const { 
+        return !BufferForOffset.empty(); 
+    } 
+ 
+    size_t GetTotalSize() const { 
+        size_t res = 0; 
+        for (const auto& [offset, buffer] : BufferForOffset) { 
+            res += buffer.size(); 
+        } 
+        return res; 
+    } 
 };
 
 } // NKikimr

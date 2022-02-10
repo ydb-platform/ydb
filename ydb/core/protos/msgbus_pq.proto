@@ -2,7 +2,7 @@ import "ydb/core/protos/pqconfig.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "library/cpp/actors/protos/actors.proto";
 
-package NKikimrClient;
+package NKikimrClient; 
 option java_package = "ru.yandex.kikimr.proto";
 
 

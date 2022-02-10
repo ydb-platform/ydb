@@ -6,7 +6,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/util/iterator.h>
-
+ 
 #include <util/generic/vector.h>
 #include <util/stream/str.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -29,22 +29,22 @@ namespace NKikimr {
             const bool MyFailDomain;
             const bool Myself;
             const ui32 OrderNumber;
-            const ui32 DomainOrderNumber;
-
+            const ui32 DomainOrderNumber; 
+ 
         private:
             T Payload;
 
         public:
             TVDiskInfo(const TVDiskIdShort &vdiskShort,
                        bool myFailDomain,
-                       bool myself,
+                       bool myself, 
                        const ui32 orderNumber,
-                       const ui32 domainOrderNumber)
+                       const ui32 domainOrderNumber) 
                 : VDiskIdShort(vdiskShort)
                 , MyFailDomain(myFailDomain)
                 , Myself(myself)
                 , OrderNumber(orderNumber)
-                , DomainOrderNumber(domainOrderNumber)
+                , DomainOrderNumber(domainOrderNumber) 
             {}
 
             TString ToString() const {
@@ -69,28 +69,28 @@ namespace NKikimr {
             using TValue = TVDiskInfo<T>;
             using TThis = TVDiskNeighbors<T>;
 
-            // TNeighbors contains nested vectors of FailRealms, FailDomains and VDisks inside them; e.g.
-            // [ FailRealm0:[ FailDomain0:[ VDisk_0_0_0 VDisk_0_0_1 ] FailDomain1:[ VDisk_0_1_0 ... ] ] ]
-            // that is TNeighbors[vdisk.FailRealm][vdisk.FailDomain][vdisk.VDisk] contains per-VDisk metadata
+            // TNeighbors contains nested vectors of FailRealms, FailDomains and VDisks inside them; e.g. 
+            // [ FailRealm0:[ FailDomain0:[ VDisk_0_0_0 VDisk_0_0_1 ] FailDomain1:[ VDisk_0_1_0 ... ] ] ] 
+            // that is TNeighbors[vdisk.FailRealm][vdisk.FailDomain][vdisk.VDisk] contains per-VDisk metadata 
             using TNeighbors = TVector<TVector<TVector<TValue>>>;
-
+ 
             template<bool Const>
             class TFailDomainIteratorImpl;
-
+ 
             TVDiskNeighbors(const TVDiskIdShort &self,
-                            std::shared_ptr<TBlobStorageGroupInfo::TTopology> top)
-                : Self(self)
+                            std::shared_ptr<TBlobStorageGroupInfo::TTopology> top) 
+                : Self(self) 
                 , Erasure(top->GType.GetErasure())
             {
                 Setup(top);
             }
 
             TValue &operator [](const TVDiskIdShort &vdisk) {
-                return Neighbors.at(vdisk.FailRealm).at(vdisk.FailDomain).at(vdisk.VDisk);
+                return Neighbors.at(vdisk.FailRealm).at(vdisk.FailDomain).at(vdisk.VDisk); 
             }
 
             const TValue &operator [](const TVDiskIdShort &vdisk) const {
-                return Neighbors.at(vdisk.FailRealm).at(vdisk.FailDomain).at(vdisk.VDisk);
+                return Neighbors.at(vdisk.FailRealm).at(vdisk.FailDomain).at(vdisk.VDisk); 
             }
 
             ui32 GetTotalDisks() const {
@@ -104,7 +104,7 @@ namespace NKikimr {
 
             template<bool Const>
             bool IsMyFailDomain(const TFailDomainIteratorImpl<Const>& it) const {
-                return it == GetMyFailDomainIter();
+                return it == GetMyFailDomainIter(); 
             }
 
             ///////////////////////////////////////////////////////////////////////////
@@ -114,66 +114,66 @@ namespace NKikimr {
             class TIteratorImpl
                 : public TIteratorFacade<TIteratorImpl<Const>,
                                          typename std::conditional<Const,
-                                             const TValue,
-                                             TValue>::type>
+                                             const TValue, 
+                                             TValue>::type> 
             {
                 using TNeighbors = typename std::conditional<Const,
-                    const typename TVDiskNeighbors::TNeighbors,
-                    typename TVDiskNeighbors::TNeighbors>::type;
-
+                    const typename TVDiskNeighbors::TNeighbors, 
+                    typename TVDiskNeighbors::TNeighbors>::type; 
+ 
                 using TValue = typename std::conditional<Const,
-                    const typename TVDiskNeighbors::TVDiskNeighbors::TValue,
-                    typename TVDiskNeighbors::TValue>::type;
+                    const typename TVDiskNeighbors::TVDiskNeighbors::TValue, 
+                    typename TVDiskNeighbors::TValue>::type; 
+ 
+                using TFailDomainIterator = TFailDomainIteratorImpl<Const>; 
 
-                using TFailDomainIterator = TFailDomainIteratorImpl<Const>;
-
-                TFailDomainIterator FailDomainIter;
-                ui32 VDisk;
-
+                TFailDomainIterator FailDomainIter; 
+                ui32 VDisk; 
+ 
             public:
                 using value_type = TValue;
                 using reference = value_type&;
                 using pointer = value_type*;
                 using difference_type = std::size_t;
                 using iterator_category = std::forward_iterator_tag;
-                TIteratorImpl(const TFailDomainIterator& failDomainIter, ui32 vdisk)
-                    : FailDomainIter(failDomainIter)
-                    , VDisk(vdisk)
+                TIteratorImpl(const TFailDomainIterator& failDomainIter, ui32 vdisk) 
+                    : FailDomainIter(failDomainIter) 
+                    , VDisk(vdisk) 
                 {}
 
             private:
                 friend struct TIteratorFacade<TIteratorImpl, TValue>;
-
+ 
                 TValue& Dereference() const {
-                    auto& vec = FailDomainIter.GetVDiskVector();
-                    return vec[VDisk];
+                    auto& vec = FailDomainIter.GetVDiskVector(); 
+                    return vec[VDisk]; 
                 }
-
+ 
                 void MoveNext() {
-                    const auto& vec = FailDomainIter.GetVDiskVector();
+                    const auto& vec = FailDomainIter.GetVDiskVector(); 
                     if (++VDisk == vec.size()) {
-                        VDisk = 0;
-                        ++FailDomainIter;
+                        VDisk = 0; 
+                        ++FailDomainIter; 
                     }
                 }
 
                 template<bool OtherConst>
                 bool EqualTo(const TIteratorImpl<OtherConst>& other) const {
-                    return FailDomainIter == other.FailDomainIter && VDisk == other.VDisk;
+                    return FailDomainIter == other.FailDomainIter && VDisk == other.VDisk; 
                 }
 
                 size_t DistanceTo(const TIteratorImpl& other) const {
                     size_t rv = 0;
-                    ui32 offset = VDisk;
-                    TFailDomainIterator iter(FailDomainIter);
-                    while (iter != other.FailDomainIter) {
+                    ui32 offset = VDisk; 
+                    TFailDomainIterator iter(FailDomainIter); 
+                    while (iter != other.FailDomainIter) { 
                         rv += iter.GetVDiskVector().size() - offset;
-                        ++iter;
-                        offset = 0;
+                        ++iter; 
+                        offset = 0; 
                     }
-                    rv += other.VDisk - offset;
+                    rv += other.VDisk - offset; 
                     return rv;
-                }
+                } 
             };
 
             ///////////////////////////////////////////////////////////////////////////
@@ -190,13 +190,13 @@ namespace NKikimr {
                 : public TIteratorFacade<TFailDomainIteratorImpl<Const>, TVDiskRangeImpl<Const>, TVDiskRangeImpl<Const>>
             {
                 using TNeighbors = typename std::conditional<Const,
-                    const typename TVDiskNeighbors::TNeighbors,
-                    typename TVDiskNeighbors::TNeighbors>::type;
+                    const typename TVDiskNeighbors::TNeighbors, 
+                    typename TVDiskNeighbors::TNeighbors>::type; 
 
-                using TValue = typename std::conditional<Const,
-                    const typename TVDiskNeighbors::TValue,
-                    typename TVDiskNeighbors::TValue>::type;
-
+                using TValue = typename std::conditional<Const, 
+                    const typename TVDiskNeighbors::TValue, 
+                    typename TVDiskNeighbors::TValue>::type; 
+ 
                 // alias for VDisk range class
                 using TVDiskRange = TVDiskRangeImpl<Const>;
 
@@ -204,7 +204,7 @@ namespace NKikimr {
                 using TIterator = TIteratorImpl<Const>;
 
                 TNeighbors &Ref;
-                ui32 FailRealm;
+                ui32 FailRealm; 
                 ui32 FailDomain;
 
             public:
@@ -213,55 +213,55 @@ namespace NKikimr {
                 using pointer = value_type*;
                 using difference_type = std::size_t;
                 using iterator_category = std::forward_iterator_tag;
-                TFailDomainIteratorImpl(TNeighbors &ref, ui32 ring, ui32 failDomain)
+                TFailDomainIteratorImpl(TNeighbors &ref, ui32 ring, ui32 failDomain) 
                     : Ref(ref)
-                    , FailRealm(ring)
+                    , FailRealm(ring) 
                     , FailDomain(failDomain)
                 {}
 
-            private:
-                friend class TVDiskNeighbors;
-
-                ui32 GetFailRealmIndex() const {
-                    return FailRealm;
-                }
-
-                ui32 GetFailDomainIndex() const {
+            private: 
+                friend class TVDiskNeighbors; 
+ 
+                ui32 GetFailRealmIndex() const { 
+                    return FailRealm; 
+                } 
+ 
+                ui32 GetFailDomainIndex() const { 
                     return FailDomain;
                 }
 
             private:
-                template<bool OtherConst>
-                friend class TIteratorImpl;
-
-                using TVDiskVector = typename std::conditional<Const,
-                      const typename TNeighbors::value_type::value_type,
-                      typename TNeighbors::value_type::value_type>::type;
-
-                TVDiskVector& GetVDiskVector() const {
-                    return Ref[FailRealm][FailDomain];
-                }
-
-            private:
+                template<bool OtherConst> 
+                friend class TIteratorImpl; 
+ 
+                using TVDiskVector = typename std::conditional<Const, 
+                      const typename TNeighbors::value_type::value_type, 
+                      typename TNeighbors::value_type::value_type>::type; 
+ 
+                TVDiskVector& GetVDiskVector() const { 
+                    return Ref[FailRealm][FailDomain]; 
+                } 
+ 
+            private: 
                 friend struct TIteratorFacade<TFailDomainIteratorImpl, TVDiskRangeImpl<Const>, TVDiskRangeImpl<Const>>;
 
                 TVDiskRange Dereference() const {
-                    TIterator begin(*this, 0);
-                    TIterator end(++TFailDomainIteratorImpl(*this), 0);
+                    TIterator begin(*this, 0); 
+                    TIterator end(++TFailDomainIteratorImpl(*this), 0); 
                     return TVDiskRange(begin, end);
                 }
 
                 void MoveNext() {
                     if (++FailDomain == Ref[FailRealm].size()) {
-                        FailDomain = 0;
-                        ++FailRealm;
-                    }
+                        FailDomain = 0; 
+                        ++FailRealm; 
+                    } 
                 }
 
                 template<bool OtherConst>
                 bool EqualTo(const TFailDomainIteratorImpl<OtherConst>& other) const {
                     Y_VERIFY(&Ref == &other.Ref);
-                    return FailRealm == other.FailRealm && FailDomain == other.FailDomain;
+                    return FailRealm == other.FailRealm && FailDomain == other.FailDomain; 
                 }
             };
 
@@ -276,27 +276,27 @@ namespace NKikimr {
 
             using TFailDomainIterator = TFailDomainIteratorImpl<false>;
             using TConstFailDomainIterator = TFailDomainIteratorImpl<true>;
-
-            TFailDomainIterator GetMyFailDomainIter() {
-                return TFailDomainIterator(Neighbors, Self.FailRealm, Self.FailDomain);
-            }
-
-            TConstFailDomainIterator GetMyFailDomainIter() const {
-                return TConstFailDomainIterator(Neighbors, Self.FailRealm, Self.FailDomain);
-            }
-
+ 
+            TFailDomainIterator GetMyFailDomainIter() { 
+                return TFailDomainIterator(Neighbors, Self.FailRealm, Self.FailDomain); 
+            } 
+ 
+            TConstFailDomainIterator GetMyFailDomainIter() const { 
+                return TConstFailDomainIterator(Neighbors, Self.FailRealm, Self.FailDomain); 
+            } 
+ 
             TFailDomainRangeImpl<true> GetFailDomains() const {
-                return TFailDomainRangeImpl<true>(TConstFailDomainIterator(Neighbors, 0, 0),
+                return TFailDomainRangeImpl<true>(TConstFailDomainIterator(Neighbors, 0, 0), 
                                                   TConstFailDomainIterator(Neighbors, Neighbors.size(), 0));
             }
-
+ 
             TFailDomainRangeImpl<false> GetFailDomains() {
-                return TFailDomainRangeImpl<false>(TFailDomainIterator(Neighbors, 0, 0),
+                return TFailDomainRangeImpl<false>(TFailDomainIterator(Neighbors, 0, 0), 
                                                    TFailDomainIterator(Neighbors, Neighbors.size(), 0));
             }
-
+ 
             TIterator Begin() {
-                return TIterator(TFailDomainIterator(Neighbors, 0, 0), 0);
+                return TIterator(TFailDomainIterator(Neighbors, 0, 0), 0); 
             }
 
             TIterator begin() {
@@ -304,7 +304,7 @@ namespace NKikimr {
             }
 
             TConstIterator Begin() const {
-                return TConstIterator(TConstFailDomainIterator(Neighbors, 0, 0), 0);
+                return TConstIterator(TConstFailDomainIterator(Neighbors, 0, 0), 0); 
             }
 
             TConstIterator begin() const {
@@ -379,30 +379,30 @@ namespace NKikimr {
         public:
             const TVDiskIdShort Self;
             const TErasureType::EErasureSpecies Erasure;
-
+ 
         protected:
             TNeighbors Neighbors;
             ui32 TotalDisks = 0;
             ui32 DisksInDomain = 0;
 
-            void Setup(std::shared_ptr<TBlobStorageGroupInfo::TTopology> top) {
+            void Setup(std::shared_ptr<TBlobStorageGroupInfo::TTopology> top) { 
                 Neighbors.resize(top->GetTotalFailRealmsNum());
                 for (auto realmIt = top->FailRealmsBegin(), realmEnd = top->FailRealmsEnd(); realmIt != realmEnd; ++realmIt) {
-                    auto& realm = Neighbors[realmIt.GetFailRealmIdx()];
-                    realm.resize(realmIt.GetNumFailDomainsPerFailRealm());
-                    for (auto domIt = realmIt.FailRealmFailDomainsBegin(), domEnd = realmIt.FailRealmFailDomainsEnd();
-                            domIt != domEnd; ++domIt) {
-                        auto& domain = realm[domIt.GetFailDomainIdx()];
+                    auto& realm = Neighbors[realmIt.GetFailRealmIdx()]; 
+                    realm.resize(realmIt.GetNumFailDomainsPerFailRealm()); 
+                    for (auto domIt = realmIt.FailRealmFailDomainsBegin(), domEnd = realmIt.FailRealmFailDomainsEnd(); 
+                            domIt != domEnd; ++domIt) { 
+                        auto& domain = realm[domIt.GetFailDomainIdx()]; 
                         const bool myFailDomain = top->GetFailDomainOrderNumber(Self) == domIt->FailDomainOrderNumber;
-                        for (const auto& vdisk : domIt.GetFailDomainVDisks()) {
+                        for (const auto& vdisk : domIt.GetFailDomainVDisks()) { 
                             const bool myself = Self == vdisk.VDiskIdShort;
                             domain.emplace_back(vdisk.VDiskIdShort, myFailDomain, myself,
                                                 vdisk.OrderNumber, vdisk.FailDomainOrderNumber);
-                            TotalDisks++;
-                        }
-                    }
+                            TotalDisks++; 
+                        } 
+                    } 
                 }
-
+ 
                 bool first = true;
                 for (const auto& vdisks : GetFailDomains()) {
                     const ui32 numDisks = vdisks.end() - vdisks.begin();
@@ -411,11 +411,11 @@ namespace NKikimr {
                     } else {
                         Y_VERIFY(DisksInDomain == numDisks);
                     }
-                }
+                } 
 
                 Y_VERIFY(top->GType.GetErasure() == TBlobStorageGroupType::ErasureNone || TotalDisks > 2);
-            }
-
+            } 
+ 
             template <class TPrinter>
             void OutputHtmlTableBody(IOutputStream &str, TPrinter &printer, TVector<TConstIterator> &its) const {
                 HTML(str) {
@@ -425,13 +425,13 @@ namespace NKikimr {
                                 // column iterator -- one entry for each domain in "its"
                                 typename TVector<TConstIterator>::iterator colIt = its.begin();
 
-                                for (const auto& vdisks : GetFailDomains()) {
+                                for (const auto& vdisks : GetFailDomains()) { 
                                     TABLED() {
-                                        TConstIterator& x = *colIt++;
-                                        printer(str, x++);
-                                        if (row + 1 == DisksInDomain) {
-                                            Y_VERIFY(x == vdisks.end());
-                                        }
+                                        TConstIterator& x = *colIt++; 
+                                        printer(str, x++); 
+                                        if (row + 1 == DisksInDomain) { 
+                                            Y_VERIFY(x == vdisks.end()); 
+                                        } 
                                     }
                                 }
                             }
@@ -456,7 +456,7 @@ namespace NKikimr {
 
 
             TVDiskNeighborsSerializable(const TVDiskIdShort &self,
-                                        std::shared_ptr<TBlobStorageGroupInfo::TTopology> top)
+                                        std::shared_ptr<TBlobStorageGroupInfo::TTopology> top) 
                 : TBase(self, top)
             {}
 

@@ -364,7 +364,7 @@ struct TPDiskMon {
         };
 
         static TString StateToStr(i64 val) {
-            return NKikimrBlobStorage::TPDiskState::E_Name(static_cast<NKikimrBlobStorage::TPDiskState::E>(val));
+            return NKikimrBlobStorage::TPDiskState::E_Name(static_cast<NKikimrBlobStorage::TPDiskState::E>(val)); 
         }
 
         static const char *BriefStateToStr(i64 val) {
@@ -642,7 +642,7 @@ struct TPDiskMon {
     NMonitoring::TDynamicCounters::TCounterPtr BandwidthPSysLogRecordHeader;
     NMonitoring::TDynamicCounters::TCounterPtr BandwidthPSysLogPadding;
     NMonitoring::TDynamicCounters::TCounterPtr BandwidthPSysLogErasure;
-
+ 
     NMonitoring::TDynamicCounters::TCounterPtr BandwidthPChunkPayload;
     NMonitoring::TDynamicCounters::TCounterPtr BandwidthPChunkSectorFooter;
     NMonitoring::TDynamicCounters::TCounterPtr BandwidthPChunkPadding;
@@ -660,27 +660,27 @@ struct TPDiskMon {
             Requests = subgroup->GetCounter("Requests", true);
             Bytes = subgroup->GetCounter("Bytes", true);
             Results = subgroup->GetCounter("Results", true);
-        }
-
-        void CountRequest(ui32 size) {
+        } 
+ 
+        void CountRequest(ui32 size) { 
             Requests->Inc();
             *Bytes += size;
-        }
-
+        } 
+ 
         void CountRequest() {
             Requests->Inc();
         }
 
-        void CountResponse() {
+        void CountResponse() { 
             Results->Inc();
-        }
+        } 
 
         void CountResponse(ui32 size) {
             Results->Inc();
             *Bytes += size;
         }
-    };
-
+    }; 
+ 
     struct TReqCounters {
         NMonitoring::TDynamicCounters::TCounterPtr Requests;
         NMonitoring::TDynamicCounters::TCounterPtr Results;
@@ -715,7 +715,7 @@ struct TPDiskMon {
     TIoCounters WriteHuge;
     TIoCounters WriteComp;
     TIoCounters Trim;
-
+ 
     TIoCounters ReadSyncLog;
     TIoCounters ReadComp;
     TIoCounters ReadOnlineRt;

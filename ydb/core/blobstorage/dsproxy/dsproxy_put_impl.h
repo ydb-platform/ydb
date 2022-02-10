@@ -8,7 +8,7 @@
 #include "dsproxy_strategy_accelerate_put_m3dc.h"
 #include "dsproxy_strategy_restore.h"
 #include "dsproxy_strategy_put_m3dc.h"
-#include "dsproxy_strategy_put_m3of4.h"
+#include "dsproxy_strategy_put_m3of4.h" 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/base/wilson_events.h>
 #include <util/generic/set.h>
@@ -19,7 +19,7 @@ class TStrategyBase;
 
 class TPutImpl {
 public:
-    using TPutResultVec = TBatchedVec<std::pair<ui64, std::unique_ptr<TEvBlobStorage::TEvPutResult>>>;
+    using TPutResultVec = TBatchedVec<std::pair<ui64, std::unique_ptr<TEvBlobStorage::TEvPutResult>>>; 
 
 private:
     TBlobStorageGroupInfo::TServiceIds VDisksSvc;
@@ -55,7 +55,7 @@ private:
     TString ErrorDescription;
 
 public:
-    TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
+    TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state, 
             TEvBlobStorage::TEvPut *ev, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             bool enableRequestMod3x3ForMinLatecy)
         : Deadline(ev->Deadline)
@@ -73,7 +73,7 @@ public:
         Y_VERIFY(BlobIds.size() <= MaxBatchedPutRequests);
     }
 
-    TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
+    TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state, 
             TBatchedVec<TEvBlobStorage::TEvPut::TPtr> &events, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             NKikimrBlobStorage::EPutHandleClass putHandleClass, TEvBlobStorage::TEvPut::ETactic tactic,
             bool enableRequestMod3x3ForMinLatecy)
@@ -108,7 +108,7 @@ public:
 
     template <typename TVPutEvent>
     void GenerateInitialRequests(TLogContext &logCtx, TBatchedVec<TDataPartSet> &partSets,
-            TDeque<std::unique_ptr<TVPutEvent>> &outVPuts) {
+            TDeque<std::unique_ptr<TVPutEvent>> &outVPuts) { 
         Y_UNUSED(logCtx);
         Y_VERIFY_S(partSets.size() == BlobIds.size(), "partSets.size# " << partSets.size()
                 << " BlobIds.size# " << BlobIds.size());
@@ -334,26 +334,26 @@ public:
 
     void PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logCtx, TString errorReason,
             TPutResultVec &outPutResults);
-    void PrepareReply(TLogContext &logCtx, TString errorReason, TBatchedVec<TBlackboard::TBlobStates::value_type*>& finished,
-            TPutResultVec &outPutResults);
+    void PrepareReply(TLogContext &logCtx, TString errorReason, TBatchedVec<TBlackboard::TBlobStates::value_type*>& finished, 
+            TPutResultVec &outPutResults); 
     void PrepareOneReply(NKikimrProto::EReplyStatus status, TLogoBlobID blobId, ui64 blobIdx, TLogContext &logCtx,
             TString errorReason, TPutResultVec &outPutResults);
-
+ 
     ui64 GetTimeToAccelerateNs(TLogContext &logCtx);
 
     template <typename TVPutEvent>
-    void Accelerate(TLogContext &logCtx, TDeque<std::unique_ptr<TVPutEvent>> &outVPuts) {
+    void Accelerate(TLogContext &logCtx, TDeque<std::unique_ptr<TVPutEvent>> &outVPuts) { 
         Blackboard.ChangeAll();
-        switch (Info->Type.GetErasure()) {
-            case TBlobStorageGroupType::ErasureMirror3dc:
+        switch (Info->Type.GetErasure()) { 
+            case TBlobStorageGroupType::ErasureMirror3dc: 
                 Blackboard.RunStrategy(logCtx, TAcceleratePut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy));
-                break;
-            case TBlobStorageGroupType::ErasureMirror3of4:
-                Blackboard.RunStrategy(logCtx, TPut3of4Strategy(Tactic, true));
-                break;
-            default:
-                Blackboard.RunStrategy(logCtx, TAcceleratePutStrategy());
-                break;
+                break; 
+            case TBlobStorageGroupType::ErasureMirror3of4: 
+                Blackboard.RunStrategy(logCtx, TPut3of4Strategy(Tactic, true)); 
+                break; 
+            default: 
+                Blackboard.RunStrategy(logCtx, TAcceleratePutStrategy()); 
+                break; 
         }
         PrepareVPuts(logCtx, outVPuts);
     }
@@ -367,11 +367,11 @@ public:
 
 protected:
     bool RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults);
-    bool RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutResultVec &outPutResults);
+    bool RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutResultVec &outPutResults); 
 
     // Returns true if there are additional requests to send
     template <typename TVPutEvent>
-    bool Step(TLogContext &logCtx, TDeque<std::unique_ptr<TVPutEvent>> &outVPuts,
+    bool Step(TLogContext &logCtx, TDeque<std::unique_ptr<TVPutEvent>> &outVPuts, 
             TPutResultVec &outPutResults) {
         if (!RunStrategies(logCtx, outPutResults)) {
             const ui32 numRequests = outVPuts.size();

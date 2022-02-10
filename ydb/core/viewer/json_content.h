@@ -25,8 +25,8 @@ class TJsonContent : public TActorBootstrapped<TJsonContent> {
     TInstant BrowseStarted;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::VIEWER_HANDLER; 
     }
 
     TJsonContent(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)

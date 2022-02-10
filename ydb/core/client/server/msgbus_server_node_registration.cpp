@@ -21,8 +21,8 @@ class TNodeRegistrationActor : public TActorBootstrapped<TNodeRegistrationActor>
     using TActorBase = TActorBootstrapped<TNodeRegistrationActor>;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::MSGBUS_COMMON;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::MSGBUS_COMMON; 
     }
 
     TNodeRegistrationActor(NKikimrClient::TNodeRegistrationRequest &request, NMsgBusProxy::TBusMessageContext &msg)
@@ -68,9 +68,9 @@ public:
         request->Record.SetAddress(Request.GetAddress());
         request->Record.MutableLocation()->CopyFrom(Request.GetLocation());
         request->Record.SetFixedNodeId(Request.GetFixedNodeId());
-        if (Request.HasPath()) {
-            request->Record.SetPath(Request.GetPath());
-        }
+        if (Request.HasPath()) { 
+            request->Record.SetPath(Request.GetPath()); 
+        } 
         NTabletPipe::SendData(ctx, NodeBrokerPipe, request.Release());
 
         Become(&TNodeRegistrationActor::MainState);
@@ -90,13 +90,13 @@ public:
         Response.SetDomainPath(Request.GetDomainPath());
         Response.AddNodes()->CopyFrom(rec.GetNode());
 
-        if (rec.HasScopeTabletId()) {
-            Response.SetScopeTabletId(rec.GetScopeTabletId());
-        }
-        if (rec.HasScopePathId()) {
-            Response.SetScopePathId(rec.GetScopePathId());
-        }
-
+        if (rec.HasScopeTabletId()) { 
+            Response.SetScopeTabletId(rec.GetScopeTabletId()); 
+        } 
+        if (rec.HasScopePathId()) { 
+            Response.SetScopePathId(rec.GetScopePathId()); 
+        } 
+ 
         const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
     }
@@ -114,7 +114,7 @@ public:
                 info.SetAddress(node.Address);
                 info.SetResolveHost(node.ResolveHost);
                 info.SetPort(node.Port);
-                node.Location.Serialize(info.MutableLocation());
+                node.Location.Serialize(info.MutableLocation()); 
             }
         }
 

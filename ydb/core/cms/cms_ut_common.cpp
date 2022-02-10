@@ -265,7 +265,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             pdisk.SetGuid(1);
             pdisk.SetAvailableSize(100ULL << 30);
             pdisk.SetTotalSize(200ULL << 30);
-            pdisk.SetState(NKikimrBlobStorage::TPDiskState::Normal);
+            pdisk.SetState(NKikimrBlobStorage::TPDiskState::Normal); 
 
             auto &pdiskConfig = *config->AddPDisk();
             pdiskConfig.SetNodeId(nodeId);

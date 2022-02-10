@@ -49,9 +49,9 @@ private:
     TString LogPrefix;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
     {
-        return NKikimrServices::TActivity::CMS_TENANTS_MANAGER;
+        return NKikimrServices::TActivity::CMS_TENANTS_MANAGER; 
     }
 
     TPoolManip(TActorId ownerId, TDomainsInfo::TDomain::TPtr domain,
@@ -106,7 +106,7 @@ public:
 
     void ReadPoolState(const TActorContext &ctx)
     {
-        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>(); 
         auto &read = *request->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
         read.SetBoxId(Pool->Config.GetBoxId());
         read.AddName(Pool->Config.GetName());
@@ -118,7 +118,7 @@ public:
 
     void AllocatePool(const TActorContext &ctx)
     {
-        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>(); 
         request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(Pool->Config);
 
         BLOG_D(LogPrefix << "send pool request: " << request->Record.ShortDebugString());
@@ -135,7 +135,7 @@ public:
             return;
         }
 
-        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>(); 
         auto &del = *request->Record.MutableRequest()->AddCommand()->MutableDeleteStoragePool();
         del.SetBoxId(Pool->Config.GetBoxId());
         del.SetStoragePoolId(PoolId);
@@ -400,9 +400,9 @@ private:
     static THashMap<ui64, TString> IssuesMap;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
     {
-        return NKikimrServices::TActivity::CMS_TENANTS_MANAGER;
+        return NKikimrServices::TActivity::CMS_TENANTS_MANAGER; 
     }
 
     TSubDomainManip(TActorId ownerId, TTenantsManager::TTenant::TPtr tenant, EAction action,
@@ -1075,7 +1075,7 @@ bool TTenantsManager::TTenantsConfig::Parse(const NKikimrConsole::TTenantsConfig
             }
         case NKikimrConsole::TAvailabilityZoneKind::ZONE_NOT_SET:
             {
-                TAvailabilityZone zone(kind.GetKind(), ANY_DATA_CENTER);
+                TAvailabilityZone zone(kind.GetKind(), ANY_DATA_CENTER); 
                 AvailabilityZones[kind.GetKind()] = zone;
                 break;
             }
@@ -2928,7 +2928,7 @@ void TTenantsManager::Handle(TEvConsole::TEvDescribeTenantOptionsRequest::TPtr &
         auto &description = *result.add_availability_zones();
         description.set_name(pr.first);
         TString dc;
-        if (pr.second.DataCenter != ANY_DATA_CENTER)
+        if (pr.second.DataCenter != ANY_DATA_CENTER) 
             (*description.mutable_labels())["fixed_data_center"] = pr.second.DataCenter;
         else
             (*description.mutable_labels())["any_data_center"] = "true";

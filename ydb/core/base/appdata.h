@@ -7,7 +7,7 @@
 #include "nameservice.h"
 #include "tablet_types.h"
 #include "resource_profile.h"
-#include "event_filter.h"
+#include "event_filter.h" 
 
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
@@ -100,7 +100,7 @@ struct TAppData {
         TTabletTypes::EType Hive;
         TTabletTypes::EType SysViewProcessor;
         TTabletTypes::EType ColumnShard;
-        TTabletTypes::EType TestShard;
+        TTabletTypes::EType TestShard; 
         TTabletTypes::EType SequenceShard;
         TTabletTypes::EType ReplicationController;
 
@@ -129,7 +129,7 @@ struct TAppData {
 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
 
-    THolder<NKikimrBlobStorage::TNodeWardenServiceSet> StaticBlobStorageConfig;
+    THolder<NKikimrBlobStorage::TNodeWardenServiceSet> StaticBlobStorageConfig; 
     THolder<NKikimrCms::TCmsConfig> DefaultCmsConfig;
 
     NKikimrStream::TStreamingConfig StreamingConfig;
@@ -155,7 +155,7 @@ struct TAppData {
     TVector<TString> DefaultUserSIDs;
     TString AllAuthenticatedUsers;
     TResourceProfilesPtr ResourceProfiles;
-
+ 
     TProgramShouldContinue * const KikimrShouldContinue;
     bool EnableIntrospection = true;
 
@@ -169,8 +169,8 @@ struct TAppData {
     // Used to disable object deletion in schemeshard for cleanup tests
     bool DisableSchemeShardCleanupOnDropForTest = false;
 
-    TKikimrScopeId LocalScopeId;
-
+    TKikimrScopeId LocalScopeId; 
+ 
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,
             TMap<TString, ui32> servicePools,

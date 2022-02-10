@@ -187,8 +187,8 @@ namespace NKikimr {
         PDISK_TERMINATE_STATE_FUNC_DEF;
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_DISK_SPACE_TRACKER;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_DISK_SPACE_TRACKER; 
         }
 
         TDskSpaceTrackerActor(

@@ -164,11 +164,11 @@ struct TVDiskState {
         LastCookie = handle->Cookie;
         InnerCookie = vput->Record.GetCookie();
         Data = vput->Record.GetBuffer();
-        if (!vput->Record.HasBuffer()) {
-            const TRope& rope = vput->GetPayload(0);
-            Data = TString::Uninitialized(rope.GetSize());
-            rope.Begin().ExtractPlainDataAndAdvance(Data.Detach(), Data.size());
-        }
+        if (!vput->Record.HasBuffer()) { 
+            const TRope& rope = vput->GetPayload(0); 
+            Data = TString::Uninitialized(rope.GetSize()); 
+            rope.Begin().ExtractPlainDataAndAdvance(Data.Detach(), Data.size()); 
+        } 
         MsgId = vput->Record.GetMsgQoS().GetMsgId().GetMsgId();
         SequenceId = vput->Record.GetMsgQoS().GetMsgId().GetSequenceId();
         IsValid = true;
@@ -244,10 +244,10 @@ void SetPredictedDelaysForAllQueues(const THashMap<TVDiskID, ui32> &latencies) {
 void SendVGetResult(ui32 vDiskIdx, NKikimrProto::EReplyStatus status, ui32 partId,
         TVector<TVDiskState> &subgroup, TTestActorRuntime &runtime) {
 
-    TVDiskState *from = &subgroup[vDiskIdx];
+    TVDiskState *from = &subgroup[vDiskIdx]; 
 
-    std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(NKikimrProto::OK, from->VDiskId,
-        TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr, nullptr, NWilson::TTraceId(), {}, 0U, 0U));
+    std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(NKikimrProto::OK, from->VDiskId, 
+        TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr, nullptr, NWilson::TTraceId(), {}, 0U, 0U)); 
 
     SetPredictedDelaysForAllQueues({});
     ui64 queryCookie = from->QueryCookies.size() ? from->QueryCookies[0] : 0;
@@ -255,7 +255,7 @@ void SendVGetResult(ui32 vDiskIdx, NKikimrProto::EReplyStatus status, ui32 partI
         result->Record.SetCookie(from->InnerCookie);
         TVDiskState *part = nullptr;
         Y_VERIFY(subgroup.size() > partId - 1);
-        part = &subgroup[partId - 1];
+        part = &subgroup[partId - 1]; 
 
         result->AddResult(status, part->LogoBlobId, 0, part->Data.data(), part->Data.size(),
             &queryCookie);
@@ -269,15 +269,15 @@ void SendVGetResult(ui32 vDiskIdx, NKikimrProto::EReplyStatus status, ui32 partI
         TLogoBlobID id(from->LogoBlobId, 0);
         result->AddResult(status, id, &queryCookie);
     }
-    result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(subgroup[vDiskIdx].MsgId);
-    result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(subgroup[vDiskIdx].SequenceId);
-    runtime.Send(new IEventHandle(from->Sender, from->ActorId, result.release(), 0, from->LastCookie));
+    result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(subgroup[vDiskIdx].MsgId); 
+    result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(subgroup[vDiskIdx].SequenceId); 
+    runtime.Send(new IEventHandle(from->Sender, from->ActorId, result.release(), 0, from->LastCookie)); 
 }
 
 void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus status,
         TVector<TVector<TVDiskState>> &blobSubgroups,
         TMap<TActorId, TGetRequest> &lastRequest, TTestActorRuntime &runtime) {
-    TGetRequest &request = lastRequest[blobSubgroups[blobIdx][vDiskIdx].ActorId];
+    TGetRequest &request = lastRequest[blobSubgroups[blobIdx][vDiskIdx].ActorId]; 
     if (!request.IsValid) {
         return;
     }
@@ -286,21 +286,21 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
     if (status == NKikimrProto::ERROR || status == NKikimrProto::TRYLATER
             || status == NKikimrProto::TRYLATER_SIZE || status == NKikimrProto::TRYLATER_TIME
             || status == NKikimrProto::VDISK_ERROR_STATE) {
-        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
-            status, request.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr, nullptr,
-            NWilson::TTraceId(), {}, 0U, 0U));
+        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult( 
+            status, request.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr, nullptr, 
+            NWilson::TTraceId(), {}, 0U, 0U)); 
         for (auto it = request.Queries.begin(); it != request.Queries.end(); ++it) {
             result->AddResult(status, it->LogoBlobId, &it->QueryCookie);
         }
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(request.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(request.SequenceId);
         result->Record.SetCookie(request.RecordCookie);
-        runtime.Send(new IEventHandle(request.Sender, request.ActorId, result.release(), 0, request.Cookie));
+        runtime.Send(new IEventHandle(request.Sender, request.ActorId, result.release(), 0, request.Cookie)); 
         return;
     } else if (status == NKikimrProto::NODATA) {
-        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
-            NKikimrProto::OK, request.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr,
-            nullptr, nullptr, nullptr, NWilson::TTraceId(), {}, 0U, 0U));
+        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult( 
+            NKikimrProto::OK, request.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, 
+            nullptr, nullptr, nullptr, NWilson::TTraceId(), {}, 0U, 0U)); 
         for (auto it = request.Queries.begin(); it != request.Queries.end(); ++it) {
             result->AddResult(status, it->LogoBlobId, &it->QueryCookie);
             TLogoBlobID id(it->LogoBlobId);
@@ -309,19 +309,19 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(request.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(request.SequenceId);
         result->Record.SetCookie(request.RecordCookie);
-        runtime.Send(new IEventHandle(request.Sender, request.ActorId, result.release(), 0, request.Cookie));
+        runtime.Send(new IEventHandle(request.Sender, request.ActorId, result.release(), 0, request.Cookie)); 
         return;
     } else if (status == NKikimrProto::OK) {
-        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
-            NKikimrProto::OK, request.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr,
-            nullptr, nullptr, nullptr, NWilson::TTraceId(), {}, 0U, 0U));
+        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult( 
+            NKikimrProto::OK, request.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, 
+            nullptr, nullptr, nullptr, NWilson::TTraceId(), {}, 0U, 0U)); 
         for (auto it = request.Queries.begin(); it != request.Queries.end(); ++it) {
             TString data;
             ui32 partIdx = 0;
-            for (ui32 bIdx = 0; bIdx < blobSubgroups.size(); ++bIdx) {
-                if (blobSubgroups[bIdx][0].LogoBlobId.IsSameBlob(it->LogoBlobId)) {
-                    for (ui32 vIdx = 0; vIdx < blobSubgroups[bIdx].size(); ++vIdx) {
-                        TVDiskState &state = blobSubgroups[bIdx][vIdx];
+            for (ui32 bIdx = 0; bIdx < blobSubgroups.size(); ++bIdx) { 
+                if (blobSubgroups[bIdx][0].LogoBlobId.IsSameBlob(it->LogoBlobId)) { 
+                    for (ui32 vIdx = 0; vIdx < blobSubgroups[bIdx].size(); ++vIdx) { 
+                        TVDiskState &state = blobSubgroups[bIdx][vIdx]; 
                         if (state.ActorId == request.ActorId) {
                             partIdx = vIdx % 6;
                             ui32 size = state.Data.size() - it->Shift;
@@ -340,7 +340,7 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(request.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(request.SequenceId);
         result->Record.SetCookie(request.RecordCookie);
-        runtime.Send(new IEventHandle(request.Sender, request.ActorId, result.release(), 0, request.Cookie));
+        runtime.Send(new IEventHandle(request.Sender, request.ActorId, result.release(), 0, request.Cookie)); 
         return;
     } else {
         Y_FAIL();
@@ -363,14 +363,14 @@ void GrabVPutEvent(TTestActorRuntime &runtime, TVector<TVDiskState> &subgroup, u
 
 void SendVPutResultEvent(TTestActorRuntime &runtime, TVDiskState &vdisk, NKikimrProto::EReplyStatus status) {
     Y_VERIFY(vdisk.IsValid);
-    std::unique_ptr<TEvBlobStorage::TEvVPutResult> vPutResult(new TEvBlobStorage::TEvVPutResult(
+    std::unique_ptr<TEvBlobStorage::TEvVPutResult> vPutResult(new TEvBlobStorage::TEvVPutResult( 
         status, vdisk.LogoBlobId, vdisk.VDiskId,
         &vdisk.InnerCookie, TOutOfSpaceStatus(0u, 0.0), TAppData::TimeProvider->Now(),
-        0, nullptr, nullptr, nullptr, nullptr, 0, NWilson::TTraceId(), 0, TString()));
+        0, nullptr, nullptr, nullptr, nullptr, 0, NWilson::TTraceId(), 0, TString())); 
     vPutResult->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(vdisk.MsgId);
     vPutResult->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(vdisk.SequenceId);
     SetPredictedDelaysForAllQueues({});
-    runtime.Send(new IEventHandle(vdisk.Sender, vdisk.ActorId, vPutResult.release(), 0, vdisk.LastCookie));
+    runtime.Send(new IEventHandle(vdisk.Sender, vdisk.ActorId, vPutResult.release(), 0, vdisk.LastCookie)); 
 }
 
 void PrepareBlobSubgroup(TLogoBlobID logoblobid, TString data, TVector<TVDiskState> &subgroup,
@@ -447,7 +447,7 @@ Y_UNIT_TEST(TestBlock42PutWithChangingSlowDisk) {
     TBatchedVec<TEvBlobStorage::TEvPut::TPtr> batched;
 
     TEvBlobStorage::TEvPut::TPtr ev = testState.CreatePutRequest(blob, tactic, handleClass);
-    std::unique_ptr<IActor> putActor = DSProxyEnv.CreatePutRequestActor(ev);
+    std::unique_ptr<IActor> putActor = DSProxyEnv.CreatePutRequestActor(ev); 
 
     TGroupMock &groupMock = testState.GetGroupMock();
     groupMock.SetError(0, NKikimrProto::ERROR);
@@ -480,7 +480,7 @@ Y_UNIT_TEST(TestBlock42PutWithChangingSlowDisk) {
         return true;
     };
 
-    runtime.Register(new TGeneralDecorator(THolder<IActor>(putActor.release()), action));
+    runtime.Register(new TGeneralDecorator(THolder<IActor>(putActor.release()), action)); 
 
     for (ui64 idx = 0; idx < 8; ++idx) {
         TEvBlobStorage::TEvVPut::TPtr ev = testState.GrabEventPtr<TEvBlobStorage::TEvVPut>();
@@ -525,7 +525,7 @@ void MakeTestMultiPutItemStatuses(TTestBasicRuntime &runtime, const TBlobStorage
 
     TBatchedVec<TEvBlobStorage::TEvPut::TPtr> batched;
     testState.CreatePutRequests(blobs, std::back_inserter(batched), tactic, handleClass);
-    runtime.Register(DSProxyEnv.CreatePutRequestActor(batched, tactic, handleClass).release());
+    runtime.Register(DSProxyEnv.CreatePutRequestActor(batched, tactic, handleClass).release()); 
 
     TMap<TPartLocation, NKikimrProto::EReplyStatus> specialStatuses;
     for (ui64 idx = 0; idx < blobIds.size(); ++idx) {
@@ -552,7 +552,7 @@ Y_UNIT_TEST(TestGivenBlock42MultiPut2ItemsStatuses) {
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     TTestBasicRuntime runtime(1, false);
     Setup(runtime, type);
-    constexpr ui64 statusCount = 3;
+    constexpr ui64 statusCount = 3; 
     NKikimrProto::EReplyStatus maybeStatuses[statusCount] = {
         NKikimrProto::OK,
         NKikimrProto::BLOCKED,
@@ -674,7 +674,7 @@ void MakeTestGivenBlock42GetRecoverMultiPutStatuses(NKikimrProto::EReplyStatus e
     groupMock.Wipe(4);
 
     TEvBlobStorage::TEvGet::TPtr ev = testState.CreateGetRequest(blobIds, true);
-    runtime.Register(DSProxyEnv.CreateGetRequestActor(ev, NKikimrBlobStorage::TabletLog, true).release());
+    runtime.Register(DSProxyEnv.CreateGetRequestActor(ev, NKikimrBlobStorage::TabletLog, true).release()); 
 
     testState.HandleVGetsWithMock(type.BlobSubgroupSize());
 
@@ -702,7 +702,7 @@ void MakeTestGivenBlock42GetRecoverMultiPutStatuses(NKikimrProto::EReplyStatus e
 }
 
 Y_UNIT_TEST(TestGivenBlock42GetRecoverMultiPutStatuses) {
-    constexpr ui64 statusCount = 3;
+    constexpr ui64 statusCount = 3; 
     NKikimrProto::EReplyStatus maybeStatuses[statusCount] = {
         NKikimrProto::OK,
         NKikimrProto::BLOCKED,
@@ -715,7 +715,7 @@ Y_UNIT_TEST(TestGivenBlock42GetRecoverMultiPutStatuses) {
 }
 
 Y_UNIT_TEST(TestGivenBlock42GetRecoverMultiPut2ItemsStatuses) {
-    constexpr ui64 statusCount = 3;
+    constexpr ui64 statusCount = 3; 
     NKikimrProto::EReplyStatus maybeStatuses[statusCount] = {
         NKikimrProto::OK,
         NKikimrProto::BLOCKED,
@@ -739,7 +739,7 @@ Y_UNIT_TEST(TestGivenMirror3DCGetWithFirstSlowDisk) {
 
 
     TEvBlobStorage::TEvGet::TPtr ev = testState.CreateGetRequest({blobId}, false);
-    TActorId getActorId = runtime.Register(DSProxyEnv.CreateGetRequestActor(ev, NKikimrBlobStorage::TabletLog, false).release());
+    TActorId getActorId = runtime.Register(DSProxyEnv.CreateGetRequestActor(ev, NKikimrBlobStorage::TabletLog, false).release()); 
     runtime.EnableScheduleForActor(getActorId);
 
     testState.GrabEventPtr<TEvBlobStorage::TEvVGet>();
@@ -766,21 +766,21 @@ Y_UNIT_TEST(TestGivenBlock42GetThenVGetResponseParts2523Nodata4ThenGetOk) {
         TAutoPtr<IEventHandle> handle;
         auto vget = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>(handle);
         UNIT_ASSERT(vget);
-        for (size_t idx = 0; idx < subgroup.size(); ++idx) {
-            if (subgroup[idx].ActorId == handle->Recipient) {
-                subgroup[idx].SetCookiesAndSenderFrom(handle.Get(), vget);
+        for (size_t idx = 0; idx < subgroup.size(); ++idx) { 
+            if (subgroup[idx].ActorId == handle->Recipient) { 
+                subgroup[idx].SetCookiesAndSenderFrom(handle.Get(), vget); 
             }
         }
     }
 
-    SendVGetResult(6, NKikimrProto::OK, 2, subgroup, runtime);
-    SendVGetResult(4, NKikimrProto::OK, 5, subgroup, runtime);
-    SendVGetResult(1, NKikimrProto::OK, 2, subgroup, runtime);
-    SendVGetResult(2, NKikimrProto::OK, 3, subgroup, runtime);
+    SendVGetResult(6, NKikimrProto::OK, 2, subgroup, runtime); 
+    SendVGetResult(4, NKikimrProto::OK, 5, subgroup, runtime); 
+    SendVGetResult(1, NKikimrProto::OK, 2, subgroup, runtime); 
+    SendVGetResult(2, NKikimrProto::OK, 3, subgroup, runtime); 
     SendVGetResult(7, NKikimrProto::NODATA, 1, subgroup, runtime);
-    SendVGetResult(3, NKikimrProto::OK, 4, subgroup, runtime);
-    SendVGetResult(5, NKikimrProto::OK, 6, subgroup, runtime);
-    SendVGetResult(0, NKikimrProto::OK, 1, subgroup, runtime);
+    SendVGetResult(3, NKikimrProto::OK, 4, subgroup, runtime); 
+    SendVGetResult(5, NKikimrProto::OK, 6, subgroup, runtime); 
+    SendVGetResult(0, NKikimrProto::OK, 1, subgroup, runtime); 
 
     TAutoPtr<IEventHandle> handle;
     auto getResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(handle);
@@ -995,21 +995,21 @@ Y_UNIT_TEST(TestGivenStripe42GetThenVGetResponsePartsNodata263451ThenGetOk) {
         TAutoPtr<IEventHandle> handle;
         auto vget = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>(handle);
         UNIT_ASSERT(vget);
-        for (size_t idx = 0; idx < subgroup.size(); ++idx) {
-            if (subgroup[idx].ActorId == handle->Recipient) {
-                subgroup[idx].SetCookiesAndSenderFrom(handle.Get(), vget);
+        for (size_t idx = 0; idx < subgroup.size(); ++idx) { 
+            if (subgroup[idx].ActorId == handle->Recipient) { 
+                subgroup[idx].SetCookiesAndSenderFrom(handle.Get(), vget); 
             }
         }
     }
 
     SendVGetResult(7, NKikimrProto::NODATA, 1, subgroup, runtime);
-    SendVGetResult(1, NKikimrProto::OK, 2, subgroup, runtime);
-    SendVGetResult(5, NKikimrProto::OK, 6, subgroup, runtime);
-    SendVGetResult(2, NKikimrProto::OK, 3, subgroup, runtime);
-    SendVGetResult(6, NKikimrProto::OK, 6, subgroup, runtime);
-    SendVGetResult(3, NKikimrProto::OK, 4, subgroup, runtime);
-    SendVGetResult(4, NKikimrProto::OK, 5, subgroup, runtime);
-    SendVGetResult(0, NKikimrProto::OK, 1, subgroup, runtime);
+    SendVGetResult(1, NKikimrProto::OK, 2, subgroup, runtime); 
+    SendVGetResult(5, NKikimrProto::OK, 6, subgroup, runtime); 
+    SendVGetResult(2, NKikimrProto::OK, 3, subgroup, runtime); 
+    SendVGetResult(6, NKikimrProto::OK, 6, subgroup, runtime); 
+    SendVGetResult(3, NKikimrProto::OK, 4, subgroup, runtime); 
+    SendVGetResult(4, NKikimrProto::OK, 5, subgroup, runtime); 
+    SendVGetResult(0, NKikimrProto::OK, 1, subgroup, runtime); 
 
     TAutoPtr<IEventHandle> handle;
     auto getResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(handle);
@@ -1043,7 +1043,7 @@ Y_UNIT_TEST(TestGivenStripe42WhenGet2PartsOfBlobThenGetOk) {
     sizes.push_back(100);
 
     TVector<TVector<TVDiskState>> blobSubgroups;
-    blobSubgroups.resize(logoblobids.size());
+    blobSubgroups.resize(logoblobids.size()); 
     TMap<TActorId, TGetRequest> lastRequest;
 
     for (ui32 i = 0; i < logoblobids.size(); ++i) {
@@ -1071,7 +1071,7 @@ Y_UNIT_TEST(TestGivenStripe42WhenGet2PartsOfBlobThenGetOk) {
     runtime.EnableScheduleForActor(lastRequest.begin()->second.Sender, true);
 
     for (ui32 vDiskIdx = 0; vDiskIdx < 8; ++vDiskIdx) {
-        SendVGetResult(0, vDiskIdx, NKikimrProto::OK, blobSubgroups, lastRequest, runtime);
+        SendVGetResult(0, vDiskIdx, NKikimrProto::OK, blobSubgroups, lastRequest, runtime); 
     }
     TAutoPtr<IEventHandle> handle;
     auto getResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(handle);
@@ -1104,7 +1104,7 @@ Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {
         sizes.push_back(200);
     }
     TVector<TVector<TVDiskState>> blobSubgroups;
-    blobSubgroups.resize(logoblobids.size());
+    blobSubgroups.resize(logoblobids.size()); 
     TMap<TActorId, TGetRequest> lastRequest;
 
     for (ui32 i = 0; i < logoblobids.size(); ++i) {
@@ -1130,9 +1130,9 @@ Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {
     }
     runtime.EnableScheduleForActor(lastRequest.begin()->second.Sender, true);
 
-    SendVGetResult(0, 0, NKikimrProto::NODATA, blobSubgroups, lastRequest, runtime);
+    SendVGetResult(0, 0, NKikimrProto::NODATA, blobSubgroups, lastRequest, runtime); 
     for (ui32 vDiskIdx = 1; vDiskIdx < 8; ++vDiskIdx) {
-        SendVGetResult(0, vDiskIdx, NKikimrProto::OK, blobSubgroups, lastRequest, runtime);
+        SendVGetResult(0, vDiskIdx, NKikimrProto::OK, blobSubgroups, lastRequest, runtime); 
     }
     TAutoPtr<IEventHandle> handle;
     auto getResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(handle);
@@ -1209,10 +1209,10 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
                 // Send VGetResult
                 TLogoBlobID id(query.LogoBlobId, query.LogoBlobId.PartId());
                 TString resultData = blobSubgroup[query.LogoBlobId.PartId() - 1].Data.substr(query.Shift, query.Size);
-                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(
+                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result( 
                     new TEvBlobStorage::TEvVGetResult(
-                        NKikimrProto::OK, theRequest.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr,
-                        nullptr, nullptr, nullptr, NWilson::TTraceId(), {}, 0U, 0U));
+                        NKikimrProto::OK, theRequest.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, 
+                        nullptr, nullptr, nullptr, NWilson::TTraceId(), {}, 0U, 0U)); 
                 result->AddResult(
                     NKikimrProto::OK, id, query.Shift, resultData.data(),
                     resultData.size(), &query.QueryCookie);
@@ -1220,7 +1220,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
                 result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(sequenceId);
                 result->Record.SetCookie(theRequest.RecordCookie);
                 runtime.Send(
-                    new IEventHandle(theRequest.Sender, theRequest.ActorId, result.release(), 0, theRequest.Cookie));
+                    new IEventHandle(theRequest.Sender, theRequest.ActorId, result.release(), 0, theRequest.Cookie)); 
 
                 // Receive GetResult
                 auto getResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(handle);
@@ -1239,14 +1239,14 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
                 // Send responses in order for queues to progress
                 for (const auto &item: lastRequest) {
                     const auto &request = item.second;
-                    std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
-                        NKikimrProto::RACE, request.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr,
-                        nullptr, nullptr, nullptr, NWilson::TTraceId(), {}, 0U, 0U));
+                    std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult( 
+                        NKikimrProto::RACE, request.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, 
+                        nullptr, nullptr, nullptr, NWilson::TTraceId(), {}, 0U, 0U)); 
                     result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(request.MsgId);
                     result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(request.SequenceId);
                     result->Record.SetCookie(request.RecordCookie);
                     runtime.Send(new IEventHandle(
-                        request.Sender, request.ActorId, result.release(), 0, request.Cookie));
+                        request.Sender, request.ActorId, result.release(), 0, request.Cookie)); 
                 }
 
             }
@@ -1269,7 +1269,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
     }
     TLogoBlobID logoblobid(1, 2, 3, 4, (ui32)data.size(), 5);
     TVector<TVector<TVDiskState>> blobSubgroups;
-    blobSubgroups.resize(1);
+    blobSubgroups.resize(1); 
     PrepareBlobSubgroup(logoblobid, data, blobSubgroups[0], runtime, type);
 
 
@@ -1299,21 +1299,21 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
         // Send 6 part VGetResult from the first handoff vDiskIdx# 6
         TGetRequest &req = lastRequest[firstHandoffActorId];
         TGetRangeQuery &query = req.RangeQueries[0];
-        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
-                NKikimrProto::OK, req.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr,
-                nullptr, NWilson::TTraceId(), {}, 0U, 0U));
+        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult( 
+                NKikimrProto::OK, req.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr, 
+                nullptr, NWilson::TTraceId(), {}, 0U, 0U)); 
         TIngress ingress;
         for (ui32 partIdx = 0; partIdx < 6; ++partIdx) {
             TLogoBlobID blobPartId(logoblobid, partIdx + 1);
             TIngress partIngress(*TIngress::CreateIngressWithLocal(&DSProxyEnv.Info->GetTopology(), req.VDiskId, blobPartId));
             ingress.Merge(partIngress);
         }
-        const ui64 ingressRaw = ingress.Raw();
+        const ui64 ingressRaw = ingress.Raw(); 
         result->AddResult(NKikimrProto::OK, logoblobid, 0, nullptr, 0, &query.QueryCookie,
-                &ingressRaw);
+                &ingressRaw); 
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(req.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(req.SequenceId);
-        runtime.Send(new IEventHandle(req.Sender, req.ActorId, result.release(), 0, req.Cookie));
+        runtime.Send(new IEventHandle(req.Sender, req.ActorId, result.release(), 0, req.Cookie)); 
     }
 
     for (auto iter = lastRequest.begin(); iter != lastRequest.end(); ++iter) {
@@ -1323,13 +1323,13 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
         // Send Nodata VGetResult
         TGetRequest &req = iter->second;
         //TGetRangeQuery &query = req.RangeQueries[0];
-        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
-                NKikimrProto::OK, req.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr,
-                nullptr, NWilson::TTraceId(), {}, 0U, 0U));
+        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult( 
+                NKikimrProto::OK, req.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr, 
+                nullptr, NWilson::TTraceId(), {}, 0U, 0U)); 
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(req.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(req.SequenceId);
         runtime.Send(
-            new IEventHandle(req.Sender, req.ActorId, result.release(), 0, req.Cookie));
+            new IEventHandle(req.Sender, req.ActorId, result.release(), 0, req.Cookie)); 
     }
 
     lastRequest.clear();
@@ -1350,9 +1350,9 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
         // Send Nodata VGetResult
         TGetRequest &req = iter->second;
         TGetQuery &query = req.Queries[0];
-        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(
+        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result( 
             new TEvBlobStorage::TEvVGetResult(
-                NKikimrProto::OK, req.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr,
+                NKikimrProto::OK, req.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr, 
                 nullptr, 0));
         result->AddResult(
             NKikimrProto::NODATA, query.LogoBlobId, 0, query.Shift, nullptr,
@@ -1360,7 +1360,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(req.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(req.SequenceId);
         runtime.Send(
-            new IEventHandle(req.Sender, req.ActorId, result.release(), 0, req.Cookie));
+            new IEventHandle(req.Sender, req.ActorId, result.release(), 0, req.Cookie)); 
     }
     */
 

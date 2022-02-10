@@ -40,14 +40,14 @@ struct TIntermediate {
         ui32 ValueSize;
         ui32 RequestedSize = 0;
         ui64 CreationUnixTime;
-        NKikimrClient::TKeyValueRequest::EStorageChannel StorageChannel;
+        NKikimrClient::TKeyValueRequest::EStorageChannel StorageChannel; 
         NKikimrBlobStorage::EGetHandleClass HandleClass;
         NKikimrProto::EReplyStatus Status;
         TString Message;
 
         TRead();
         TRead(const TString &key, ui32 valueSize, ui64 creationUnixTime,
-                NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel);
+                NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel); 
         NKikimrProto::EReplyStatus ItemsStatus() const;
         NKikimrProto::EReplyStatus CumulativeStatus() const;
     };
@@ -66,7 +66,7 @@ struct TIntermediate {
         NKikimrBlobStorage::EPutHandleClass HandleClass;
         NKikimrProto::EReplyStatus Status;
         TStorageStatusFlags StatusFlags;
-        TDuration Latency;
+        TDuration Latency; 
     };
     struct TDelete {
         TKeyRange Range;
@@ -86,16 +86,16 @@ struct TIntermediate {
         bool KeepInputs;
     };
     struct TGetStatus {
-        NKikimrClient::TKeyValueRequest::EStorageChannel StorageChannel;
+        NKikimrClient::TKeyValueRequest::EStorageChannel StorageChannel; 
         TLogoBlobID LogoBlobId;
         NKikimrProto::EReplyStatus Status;
         TStorageStatusFlags StatusFlags;
     };
-    struct TTrimLeakedBlobs {
-        ui32 MaxItemsToTrim;
+    struct TTrimLeakedBlobs { 
+        ui32 MaxItemsToTrim; 
         TMultiMap<ui32, ui32> ChannelGroupMap;
         TVector<TLogoBlobID> FoundBlobs;
-    };
+    }; 
     struct TSetExecutorFastLogPolicy {
         bool IsAllowed;
     };
@@ -111,7 +111,7 @@ struct TIntermediate {
     TDeque<TCopyRange> CopyRanges;
     TDeque<TConcat> Concats;
     TDeque<TGetStatus> GetStatuses;
-    TMaybe<TTrimLeakedBlobs> TrimLeakedBlobs;
+    TMaybe<TTrimLeakedBlobs> TrimLeakedBlobs; 
     TMaybe<TSetExecutorFastLogPolicy> SetExecutorFastLogPolicy;
 
     TStackVec<TCmd, 1> Commands;
@@ -149,7 +149,7 @@ struct TIntermediate {
 
     TRequestStat Stat;
 
-    NKikimrClient::TResponse Response;
+    NKikimrClient::TResponse Response; 
     NKikimrKeyValue::ExecuteTransactionResult ExecuteTransactionResponse;
     NKikimrKeyValue::GetStatusResult GetStatusResponse;
 

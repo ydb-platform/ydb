@@ -45,8 +45,8 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     NKikimrViewer::TTenantInfo Result;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::VIEWER_HANDLER; 
     }
 
     TJsonTenantInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
@@ -101,7 +101,7 @@ public:
     }
 
     void PassAway() override {
-        for (const TNodeId nodeId : NodeIds) {
+        for (const TNodeId nodeId : NodeIds) { 
             Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
         };
         TBase::PassAway();

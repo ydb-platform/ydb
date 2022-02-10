@@ -16,12 +16,12 @@ namespace NKikimr {
         {}
 
         // create TSjCtx using actual Db and GInfo
-        std::shared_ptr<TSjCtx> TSjCtx::Create(const TIntrusivePtr<TSyncerContext> &sc,
+        std::shared_ptr<TSjCtx> TSjCtx::Create(const TIntrusivePtr<TSyncerContext> &sc, 
                                                 const TIntrusivePtr<TBlobStorageGroupInfo> &info)
         {
             const TVDiskID vdiskId = info->GetVDiskId(sc->VCtx->ShortSelfVDisk);
-            // to prevent memory leaks -- unique_ptr ctor does not throw, unlike shared_ptr's one
-            return std::shared_ptr<TSjCtx>(std::unique_ptr<TSjCtx>(new TSjCtx(vdiskId, sc)));
+            // to prevent memory leaks -- unique_ptr ctor does not throw, unlike shared_ptr's one 
+            return std::shared_ptr<TSjCtx>(std::unique_ptr<TSjCtx>(new TSjCtx(vdiskId, sc))); 
         }
 
 
@@ -52,7 +52,7 @@ namespace NKikimr {
                          const TVDiskID &vdisk,
                          const TActorId &service,
                          const NSyncer::TPeerSyncState &peerState,
-                         const std::shared_ptr<TSjCtx> &ctx)
+                         const std::shared_ptr<TSjCtx> &ctx) 
             : VDiskId(vdisk)
             , ServiceId(service)
             , Type(type)
@@ -158,15 +158,15 @@ namespace NKikimr {
             Phase = EWaitRemote;
             ++SentMsg;
             if (Type == EFullRecover) {
-                auto msg = std::make_unique<TEvBlobStorage::TEvVSyncFull>(Current.SyncState, Ctx->SelfVDiskId, VDiskId,
-                    FullRecoverInfo->VSyncFullMsgsReceived, FullRecoverInfo->Stage,
-                    FullRecoverInfo->LogoBlobFrom.LogoBlobID(), FullRecoverInfo->BlockTabletFrom.TabletId,
-                    FullRecoverInfo->BarrierFrom);
+                auto msg = std::make_unique<TEvBlobStorage::TEvVSyncFull>(Current.SyncState, Ctx->SelfVDiskId, VDiskId, 
+                    FullRecoverInfo->VSyncFullMsgsReceived, FullRecoverInfo->Stage, 
+                    FullRecoverInfo->LogoBlobFrom.LogoBlobID(), FullRecoverInfo->BlockTabletFrom.TabletId, 
+                    FullRecoverInfo->BarrierFrom); 
                 Ctx->SyncerCtx->MonGroup.SyncerVSyncFullBytesSent() += msg->GetCachedByteSize();
                 ++Ctx->SyncerCtx->MonGroup.SyncerVSyncFullMessagesSent();
                 return TSjOutcome::Event(ServiceId, std::move(msg));
             } else {
-                auto msg = std::make_unique<TEvBlobStorage::TEvVSync>(Current.SyncState, Ctx->SelfVDiskId, VDiskId);
+                auto msg = std::make_unique<TEvBlobStorage::TEvVSync>(Current.SyncState, Ctx->SelfVDiskId, VDiskId); 
                 Ctx->SyncerCtx->MonGroup.SyncerVSyncBytesSent() += msg->GetCachedByteSize();
                 ++Ctx->SyncerCtx->MonGroup.SyncerVSyncMessagesSent();
                 return TSjOutcome::Event(ServiceId, std::move(msg));
@@ -191,10 +191,10 @@ namespace NKikimr {
                 Phase = EWaitLocal;
                 const TVDiskID vdisk(VDiskIDFromVDiskID(record.GetVDiskID()));
                 auto syncState = GetCurrent().SyncState;
-                auto msg = std::make_unique<TEvLocalSyncData>(vdisk, syncState, data);
+                auto msg = std::make_unique<TEvLocalSyncData>(vdisk, syncState, data); 
 
 #ifdef UNPACK_LOCALSYNCDATA
-                std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId,
+                std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId, 
                         parentId, std::move(msg)));
                 return TSjOutcome::Actor(actor.Release(), true);
 #else
@@ -330,9 +330,9 @@ namespace NKikimr {
                 // by lsn, so we need to get them all at once and finally write the correct
                 // SyncState position.
                 Phase = EWaitLocal;
-                auto msg = std::make_unique<TEvLocalSyncData>(vdisk, OldSyncState, data);
+                auto msg = std::make_unique<TEvLocalSyncData>(vdisk, OldSyncState, data); 
 #ifdef UNPACK_LOCALSYNCDATA
-                std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId,
+                std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId, 
                         parentId, std::move(msg)));
                 return TSjOutcome::Actor(actor.Release(), true);
 #else

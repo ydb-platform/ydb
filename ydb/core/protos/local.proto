@@ -16,7 +16,7 @@ message TTabletAvailability {
 message TEvRegisterNode {
     optional fixed64 HiveId = 1;
     repeated NKikimrSubDomains.TDomainKey ServicedDomains = 2;
-    optional NActorsInterconnect.TNodeLocation SystemLocation = 3;
+    optional NActorsInterconnect.TNodeLocation SystemLocation = 3; 
     repeated TTabletAvailability TabletAvailability = 4;
 }
 

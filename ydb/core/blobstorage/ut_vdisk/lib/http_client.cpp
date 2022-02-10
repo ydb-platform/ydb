@@ -89,17 +89,17 @@ void THttpClient::SendHttpRequest(const TStringBuf relativeUrl,
     }
 }
 
-std::unique_ptr<TNetworkAddress> THttpClient::Resolve() const {
+std::unique_ptr<TNetworkAddress> THttpClient::Resolve() const { 
     try {
-        return std::make_unique<TNetworkAddress>(Host, Port);
+        return std::make_unique<TNetworkAddress>(Host, Port); 
     } catch (const yexception& e) {
         ythrow THttpRequestException() << "Resolve of " << Host << ": " << e.what();
     }
 }
 
-std::unique_ptr<TSocket> THttpClient::Connect(TNetworkAddress& addr) const {
+std::unique_ptr<TSocket> THttpClient::Connect(TNetworkAddress& addr) const { 
     try {
-        std::unique_ptr<TSocket> socket = std::make_unique<TSocket>(addr, ConnectTimeout);
+        std::unique_ptr<TSocket> socket = std::make_unique<TSocket>(addr, ConnectTimeout); 
         socket->SetSocketTimeout(SocketTimeout.Seconds());
         return socket;
     } catch (const yexception& e) {

@@ -12,7 +12,7 @@
 namespace NKikimr {
 
 //
-// A set of non-intersecting non-adjoint non-empty intervals in form [begin, end) (end > begin)
+// A set of non-intersecting non-adjoint non-empty intervals in form [begin, end) (end > begin) 
 //
 template <class T> struct TIntervalMap; // implemented as TMap
 template <class T> struct TIntervalVec; // implemented as sorted TStackVec
@@ -33,10 +33,10 @@ struct TIntervalMap {
         Y_VERIFY_DEBUG_S(begin < end, "begin# " << begin << " end# " << end);
         EndForBegin[begin] = end;
     }
-
+ 
     TIntervalMap& operator=(const TIntervalMap<T>&) = default;
     TIntervalMap& operator=(TIntervalMap<T>&&) = default;
-
+ 
     void Add(const TIntervalMap<T>& b) {
        *this |= b;
     }
@@ -161,12 +161,12 @@ struct TIntervalMap {
             }
         }
         return true;
-    }
-
-    explicit operator bool() const {
-        return !IsEmpty();
-    }
-
+    } 
+ 
+    explicit operator bool() const { 
+        return !IsEmpty(); 
+    } 
+ 
     template <class Y>
     TIntervalMap<T> operator |(const Y& y) const {
         TIntervalMap<T> res;

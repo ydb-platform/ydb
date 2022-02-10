@@ -367,7 +367,7 @@ private:
             // Adjust counters.
             RequestSize = Request_->ByteSize();
             Counters_->StartProcessing(RequestSize);
-            RequestTimer.Reset();
+            RequestTimer.Reset(); 
 
             if (!SslServer()) {
                 Counters_->CountRequestWithoutTls();
@@ -499,7 +499,7 @@ private:
     ui32 RequestSize = 0;
     ui32 ResponseSize = 0;
     ui32 ResponseStatus = 0;
-    THPTimer RequestTimer;
+    THPTimer RequestTimer; 
     TAuthState AuthState_ = 0;
     bool RequestRegistered_ = false;
 

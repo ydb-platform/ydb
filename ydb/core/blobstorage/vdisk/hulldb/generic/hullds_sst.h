@@ -86,7 +86,7 @@ namespace NKikimr {
         TTrackableVector<TDiskPart> LoadedOutbound;
         TIdxDiskPlaceHolder::TInfo Info;
         TVector<ui32> AllChunks;    // all chunk ids that store index and data for this segment
-        std::vector<TDiskPart> IndexParts; // index part locations; the first one is 'placeholder', stored as LastPartAddr
+        std::vector<TDiskPart> IndexParts; // index part locations; the first one is 'placeholder', stored as LastPartAddr 
         NHullComp::TSstRatioThreadSafeHolder StorageRatio;
         // Every Sst has unique id
         ui64 AssignedSstId = 0;
@@ -168,10 +168,10 @@ namespace NKikimr {
                     case TBlobType::ManyHugeBlobs:
                         it.GetDiskData(&extr);
                         for (const TDiskPart *part = extr.Begin; part != extr.End; ++part) {
-                            if (part->Size) {
-                                Y_VERIFY(part->ChunkIdx);
-                                chunks.insert(part->ChunkIdx);
-                            }
+                            if (part->Size) { 
+                                Y_VERIFY(part->ChunkIdx); 
+                                chunks.insert(part->ChunkIdx); 
+                            } 
                         }
                         extr.Clear();
                         break;
@@ -191,22 +191,22 @@ namespace NKikimr {
         const TKey &FirstKey() const;
         const TKey &LastKey() const;
         // number of elements in the sst
-        ui64 Elements() const {
-            Y_VERIFY_DEBUG(IsLoaded());
-            return LoadedIndex.size();
-        }
+        ui64 Elements() const { 
+            Y_VERIFY_DEBUG(IsLoaded()); 
+            return LoadedIndex.size(); 
+        } 
         // append cur seg chunk ids (index and data) to the vector
-        void FillInChunkIds(TVector<ui32> &vec) const {
-            // copy chunks ids
-            for (auto idx : AllChunks)
-                vec.push_back(idx);
-        }
+        void FillInChunkIds(TVector<ui32> &vec) const { 
+            // copy chunks ids 
+            for (auto idx : AllChunks) 
+                vec.push_back(idx); 
+        } 
         void OutputHtml(ui32 &index, ui32 level, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const;
         // dump all accessible data
-        void DumpAll(IOutputStream &str) const {
-            str << "=== SST ===\n";
-            // We can add dump of SST here to be more verbose
-        }
+        void DumpAll(IOutputStream &str) const { 
+            str << "=== SST ===\n"; 
+            // We can add dump of SST here to be more verbose 
+        } 
         void Output(IOutputStream &str) const;
 
         class TBaseWriter;
@@ -215,9 +215,9 @@ namespace NKikimr {
         class TWriter;
     };
 
-    extern template struct TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
-    extern template struct TLevelSegment<TKeyBarrier, TMemRecBarrier>;
-    extern template struct TLevelSegment<TKeyBlock, TMemRecBlock>;
-
+    extern template struct TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>; 
+    extern template struct TLevelSegment<TKeyBarrier, TMemRecBarrier>; 
+    extern template struct TLevelSegment<TKeyBlock, TMemRecBlock>; 
+ 
 } // NKikimr
 

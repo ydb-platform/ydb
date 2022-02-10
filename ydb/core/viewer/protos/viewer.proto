@@ -449,7 +449,7 @@ message TTabletStateInfo {
 message TComputeNodeInfo {
     uint64 StartTime = 1;
     uint64 ChangeTime = 2;
-    NKikimrWhiteboard.TSystemStateInfo.TLegacyNodeLocation SystemLocation = 3;
+    NKikimrWhiteboard.TSystemStateInfo.TLegacyNodeLocation SystemLocation = 3; 
     repeated double LoadAverage = 4;
     uint32 NumberOfCpus = 5;
     EFlag Overall = 6;

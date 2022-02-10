@@ -45,28 +45,28 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &c
         CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_NVME);
         CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_UNKNOWN);
     }
-
-    // restart counters
-    {
-        auto group = Group->GetSubgroup("subsystem", "restart");
-        RestartPut = group->GetCounter("EvPut", true);
-        RestartGet = group->GetCounter("EvGet", true);
+ 
+    // restart counters 
+    { 
+        auto group = Group->GetSubgroup("subsystem", "restart"); 
+        RestartPut = group->GetCounter("EvPut", true); 
+        RestartGet = group->GetCounter("EvGet", true); 
         RestartPatch = group->GetCounter("EvPatch", true);
-        RestartBlock = group->GetCounter("EvBlock", true);
-        RestartDiscover = group->GetCounter("EvDiscover", true);
-        RestartRange = group->GetCounter("EvRange", true);
-        RestartCollectGarbage = group->GetCounter("EvCollectGarbage", true);
-        RestartIndexRestoreGet = group->GetCounter("EvIndexRestoreGet", true);
-        RestartStatus = group->GetCounter("EvStatus", true);
-    }
-
-    {
-        auto group = Group->GetSubgroup("subsystem", "restart_histo");
+        RestartBlock = group->GetCounter("EvBlock", true); 
+        RestartDiscover = group->GetCounter("EvDiscover", true); 
+        RestartRange = group->GetCounter("EvRange", true); 
+        RestartCollectGarbage = group->GetCounter("EvCollectGarbage", true); 
+        RestartIndexRestoreGet = group->GetCounter("EvIndexRestoreGet", true); 
+        RestartStatus = group->GetCounter("EvStatus", true); 
+    } 
+ 
+    { 
+        auto group = Group->GetSubgroup("subsystem", "restart_histo"); 
         auto histoGroup = group->GetSubgroup("sensor", "restart_histo");
-        for (size_t i = 0; i < RestartHisto.size(); ++i) {
+        for (size_t i = 0; i < RestartHisto.size(); ++i) { 
             RestartHisto[i] = histoGroup->GetNamedCounter("restartCount", ToString(i), true);
-        }
-    }
+        } 
+    } 
     // Accelerate counters
     {
         auto group = Group->GetSubgroup("subsystem", "accelerate");
@@ -74,14 +74,14 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &c
         AccelerateEvVMultiPutCount = group->GetCounter("EvVMultiPutCount", true);
         AccelerateEvVGetCount = group->GetCounter("EvVGetCount", true);
     }
-    // malfunction counters
-    {
-        auto group = Group->GetSubgroup("subsystem", "malfunction");
-        EstablishingSessionsTimeout = group->GetCounter("EstablishingSessionsTimeout", false);
-        EstablishingSessionsTimeout5min = group->GetCounter("EstablishingSessionsTimeout5min", false);
-        UnconfiguredTimeout = group->GetCounter("UnconfiguredTimeout", false);
-        UnconfiguredTimeout5min = group->GetCounter("UnconfiguredTimeout5min", false);
-    }
+    // malfunction counters 
+    { 
+        auto group = Group->GetSubgroup("subsystem", "malfunction"); 
+        EstablishingSessionsTimeout = group->GetCounter("EstablishingSessionsTimeout", false); 
+        EstablishingSessionsTimeout5min = group->GetCounter("EstablishingSessionsTimeout5min", false); 
+        UnconfiguredTimeout = group->GetCounter("UnconfiguredTimeout", false); 
+        UnconfiguredTimeout5min = group->GetCounter("UnconfiguredTimeout5min", false); 
+    } 
 }
 
 ui32 IdxForType(TPDiskCategory::EDeviceType type) {

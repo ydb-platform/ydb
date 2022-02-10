@@ -1,13 +1,13 @@
-UNITTEST()
-
+UNITTEST() 
+ 
 OWNER(g:kikimr)
 
 FORK_SUBTESTS()
-
+ 
 SIZE(MEDIUM)
-
+ 
 TIMEOUT(600)
-
+ 
 SRCS(
     block_race.cpp
     counting_events.cpp
@@ -47,11 +47,11 @@ PEERDIR(
 
 REQUIREMENTS(ram:32)
 
-END()
+END() 
 
-RECURSE_FOR_TESTS(
-    ut_group_reconfiguration
-    ut_osiris
-    ut_replication
-    ut_scrub
-)
+RECURSE_FOR_TESTS( 
+    ut_group_reconfiguration 
+    ut_osiris 
+    ut_replication 
+    ut_scrub 
+) 

@@ -24,7 +24,7 @@ constexpr TStringBuf PDisksName = "ds_pdisks";
 constexpr TStringBuf VSlotsName = "ds_vslots";
 constexpr TStringBuf GroupsName = "ds_groups";
 constexpr TStringBuf StoragePoolsName = "ds_storage_pools";
-constexpr TStringBuf StorageStatsName = "ds_storage_stats";
+constexpr TStringBuf StorageStatsName = "ds_storage_stats"; 
 
 constexpr TStringBuf TabletsName = "hive_tablets";
 
@@ -187,10 +187,10 @@ struct Schema : NIceDb::Schema {
         struct AvailableSize : Column<10, NScheme::NTypeIds::Uint64> {};
         struct TotalSize : Column<11, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<12, NScheme::NTypeIds::String> {};
-        //struct StopFactor : Column<13, NScheme::NTypeIds::Double> {};
-        struct StatusChangeTimestamp : Column<14, NScheme::NTypeIds::Timestamp> {};
-        struct ExpectedSlotCount : Column<15, NScheme::NTypeIds::Uint32> {};
-        struct NumActiveSlots : Column<16, NScheme::NTypeIds::Uint32> {};
+        //struct StopFactor : Column<13, NScheme::NTypeIds::Double> {}; 
+        struct StatusChangeTimestamp : Column<14, NScheme::NTypeIds::Timestamp> {}; 
+        struct ExpectedSlotCount : Column<15, NScheme::NTypeIds::Uint32> {}; 
+        struct NumActiveSlots : Column<16, NScheme::NTypeIds::Uint32> {}; 
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -205,10 +205,10 @@ struct Schema : NIceDb::Schema {
             ReadCentric,
             AvailableSize,
             TotalSize,
-            Status,
-            StatusChangeTimestamp,
-            ExpectedSlotCount,
-            NumActiveSlots>;
+            Status, 
+            StatusChangeTimestamp, 
+            ExpectedSlotCount, 
+            NumActiveSlots>; 
     };
 
     struct VSlots : Table<5> {
@@ -224,7 +224,7 @@ struct Schema : NIceDb::Schema {
         struct AllocatedSize : Column<10, NScheme::NTypeIds::Uint64> {};
         struct AvailableSize : Column<11, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<12, NScheme::NTypeIds::String> {};
-        //struct StopFactor : Column<13, NScheme::NTypeIds::Double> {};
+        //struct StopFactor : Column<13, NScheme::NTypeIds::Double> {}; 
         struct Kind : Column<14, NScheme::NTypeIds::String> {};
         struct FailRealm : Column<15, NScheme::NTypeIds::Uint32> {};
 
@@ -254,8 +254,8 @@ struct Schema : NIceDb::Schema {
         struct LifeCyclePhase : Column<7, NScheme::NTypeIds::Uint32> {};
         struct AllocatedSize : Column<8, NScheme::NTypeIds::Uint64> {};
         struct AvailableSize : Column<9, NScheme::NTypeIds::Uint64> {};
-        //struct Usage : Column<10, NScheme::NTypeIds::Double> {};
-        //struct StopFactor : Column<11, NScheme::NTypeIds::Double> {};
+        //struct Usage : Column<10, NScheme::NTypeIds::Double> {}; 
+        //struct StopFactor : Column<11, NScheme::NTypeIds::Double> {}; 
         struct SeenOperational : Column<12, NScheme::NTypeIds::Bool> {};
         struct PutTabletLogLatency : Column<13, NScheme::NTypeIds::Interval> {};
         struct PutUserDataLatency : Column<14, NScheme::NTypeIds::Interval> {};
@@ -404,20 +404,20 @@ struct Schema : NIceDb::Schema {
             Portions,
             Blobs>;
     };
-
-    struct StorageStats : Table<11> {
-        struct PDiskFilter : Column<2, NScheme::NTypeIds::Utf8> {};
-        struct ErasureSpecies : Column<3, NScheme::NTypeIds::Utf8> {};
-        struct CurrentGroupsCreated : Column<4, NScheme::NTypeIds::Uint32> {};
-        struct CurrentAllocatedSize : Column<5, NScheme::NTypeIds::Uint64> {};
-        struct CurrentAvailableSize : Column<6, NScheme::NTypeIds::Uint64> {};
-        struct AvailableGroupsToCreate : Column<7, NScheme::NTypeIds::Uint32> {};
-        struct AvailableSizeToCreate : Column<8, NScheme::NTypeIds::Uint64> {};
-
-        using TKey = TableKey<PDiskFilter, ErasureSpecies>;
-        using TColumns = TableColumns<PDiskFilter, ErasureSpecies, CurrentGroupsCreated, CurrentAllocatedSize,
-                                      CurrentAvailableSize, AvailableGroupsToCreate, AvailableSizeToCreate>;
-    };
+ 
+    struct StorageStats : Table<11> { 
+        struct PDiskFilter : Column<2, NScheme::NTypeIds::Utf8> {}; 
+        struct ErasureSpecies : Column<3, NScheme::NTypeIds::Utf8> {}; 
+        struct CurrentGroupsCreated : Column<4, NScheme::NTypeIds::Uint32> {}; 
+        struct CurrentAllocatedSize : Column<5, NScheme::NTypeIds::Uint64> {}; 
+        struct CurrentAvailableSize : Column<6, NScheme::NTypeIds::Uint64> {}; 
+        struct AvailableGroupsToCreate : Column<7, NScheme::NTypeIds::Uint32> {}; 
+        struct AvailableSizeToCreate : Column<8, NScheme::NTypeIds::Uint64> {}; 
+ 
+        using TKey = TableKey<PDiskFilter, ErasureSpecies>; 
+        using TColumns = TableColumns<PDiskFilter, ErasureSpecies, CurrentGroupsCreated, CurrentAllocatedSize, 
+                                      CurrentAvailableSize, AvailableGroupsToCreate, AvailableSizeToCreate>; 
+    }; 
 };
 
 bool MaybeSystemViewPath(const TVector<TString>& path);

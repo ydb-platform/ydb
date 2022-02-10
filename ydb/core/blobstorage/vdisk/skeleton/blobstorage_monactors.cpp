@@ -27,8 +27,8 @@ namespace NKikimr {
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_MON_ERROR;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_MON_ERROR; 
         }
 
         TMonErrorActor(const TActorId &notifyId,
@@ -62,8 +62,8 @@ namespace NKikimr {
         TString DskSpaceTrackerInfo;
         TString LocalRecovInfo;
         TString AnubisRunnerInfo;
-        TString DelayedHugeBlobDeleterInfo;
-        TString ScrubInfo;
+        TString DelayedHugeBlobDeleterInfo; 
+        TString ScrubInfo; 
 
         friend class TActorBootstrapped<TSkeletonMonMainPageActor>;
 
@@ -74,8 +74,8 @@ namespace NKikimr {
                 Counter++;
                 ctx.Send(Db->SkeletonID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::HullInfoId));
                 Counter++;
-                ctx.Send(Db->SkeletonID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::DelayedHugeBlobDeleterId));
-                Counter++;
+                ctx.Send(Db->SkeletonID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::DelayedHugeBlobDeleterId)); 
+                Counter++; 
             }
 
             if (bool(TActorId(Db->SyncerID))) {
@@ -123,9 +123,9 @@ namespace NKikimr {
                 Counter++;
             }
 
-            ctx.Send(Db->SkeletonID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::ScrubId));
-            Counter++;
-
+            ctx.Send(Db->SkeletonID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::ScrubId)); 
+            Counter++; 
+ 
             if (Counter) {
                 // set up timeout, after which we reply
                 ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
@@ -154,8 +154,8 @@ namespace NKikimr {
                     DIV_CLASS("col-md-6") {Output(HugeKeeperInfo, str, "Huge Blob Keeper");}
                     DIV_CLASS("col-md-6") {Output(DskSpaceTrackerInfo, str, "Disk Space Tracker");}
                     DIV_CLASS("col-md-6") {Output(LocalRecovInfo, str, "Local Recovery Info");}
-                    DIV_CLASS("col-md-6") {Output(DelayedHugeBlobDeleterInfo, str, "Delayed Huge Blob Deleter Info");}
-                    DIV_CLASS("col-md-6") {Output(ScrubInfo, str, "Scrub Info");}
+                    DIV_CLASS("col-md-6") {Output(DelayedHugeBlobDeleterInfo, str, "Delayed Huge Blob Deleter Info");} 
+                    DIV_CLASS("col-md-6") {Output(ScrubInfo, str, "Scrub Info");} 
                     // uses column wrapping (sum is greater than 12)
                 }
                 Output(HullInfo, str, "Hull");
@@ -181,29 +181,29 @@ namespace NKikimr {
             NMon::TEvHttpInfoRes *ptr = dynamic_cast<NMon::TEvHttpInfoRes*>(ev->Get());
             Y_VERIFY_DEBUG(ptr);
 
-            static const std::unordered_map<int, TString TThis::*> names{
-                {TDbMon::SkeletonStateId,          &TThis::SkeletonState},
-                {TDbMon::HullInfoId,               &TThis::HullInfo},
-                {TDbMon::SyncerInfoId,             &TThis::SyncerInfo},
-                {TDbMon::SyncLogId,                &TThis::SyncLogInfo},
-                {TDbMon::ReplId,                   &TThis::ReplInfo},
-                {TDbMon::LogCutterId,              &TThis::LogCutterInfo},
-                {TDbMon::HugeKeeperId,             &TThis::HugeKeeperInfo},
-                {TDbMon::HandoffMonId,             &TThis::HandoffInfo},
-                {TDbMon::DskSpaceTrackerId,        &TThis::DskSpaceTrackerInfo},
-                {TDbMon::LocalRecovInfoId,         &TThis::LocalRecovInfo},
-                {TDbMon::AnubisRunnerId,           &TThis::AnubisRunnerInfo},
-                {TDbMon::DelayedHugeBlobDeleterId, &TThis::DelayedHugeBlobDeleterInfo},
-                {TDbMon::ScrubId,                  &TThis::ScrubInfo},
-            };
-
-            const auto it = names.find(ptr->SubRequestId);
-            Y_VERIFY(it != names.end());
-            this->*it->second = ptr->Answer;
+            static const std::unordered_map<int, TString TThis::*> names{ 
+                {TDbMon::SkeletonStateId,          &TThis::SkeletonState}, 
+                {TDbMon::HullInfoId,               &TThis::HullInfo}, 
+                {TDbMon::SyncerInfoId,             &TThis::SyncerInfo}, 
+                {TDbMon::SyncLogId,                &TThis::SyncLogInfo}, 
+                {TDbMon::ReplId,                   &TThis::ReplInfo}, 
+                {TDbMon::LogCutterId,              &TThis::LogCutterInfo}, 
+                {TDbMon::HugeKeeperId,             &TThis::HugeKeeperInfo}, 
+                {TDbMon::HandoffMonId,             &TThis::HandoffInfo}, 
+                {TDbMon::DskSpaceTrackerId,        &TThis::DskSpaceTrackerInfo}, 
+                {TDbMon::LocalRecovInfoId,         &TThis::LocalRecovInfo}, 
+                {TDbMon::AnubisRunnerId,           &TThis::AnubisRunnerInfo}, 
+                {TDbMon::DelayedHugeBlobDeleterId, &TThis::DelayedHugeBlobDeleterInfo}, 
+                {TDbMon::ScrubId,                  &TThis::ScrubInfo}, 
+            }; 
+ 
+            const auto it = names.find(ptr->SubRequestId); 
+            Y_VERIFY(it != names.end()); 
+            this->*it->second = ptr->Answer; 
             --Counter;
-            if (Counter == 0) {
+            if (Counter == 0) { 
                 Finish(ctx);
-            }
+            } 
         }
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
@@ -211,15 +211,15 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(NMon::TEvHttpInfoRes, Handle)
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-        )
+        STRICT_STFUNC(StateFunc, 
+            HFunc(NMon::TEvHttpInfoRes, Handle) 
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup) 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+        ) 
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_MON_MAIN_PAGE;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_MON_MAIN_PAGE; 
         }
 
         TSkeletonMonMainPageActor(TIntrusivePtr<TDb> &db,
@@ -300,7 +300,7 @@ namespace NKikimr {
     class TSkeletonFrontMonLogoBlobsQueryActor : public TActorBootstrapped<TSkeletonFrontMonLogoBlobsQueryActor>, public TMonQueryBaseActor {
         const TVDiskID SelfVDiskId;
         TIntrusivePtr<TVDiskConfig> Cfg;
-        std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
+        std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top; 
         const TActorId NotifyId;
         const TActorId SkeletonFrontID;
         NMon::TEvHttpInfo::TPtr Ev;
@@ -337,9 +337,9 @@ namespace NKikimr {
 
             // FIXME: how to turn pages?
 
-            std::unique_ptr<TEvBlobStorage::TEvVGet> req;
-            const auto flags = ShowInternals ? TEvBlobStorage::TEvVGet::EFlags::ShowInternals : TEvBlobStorage::TEvVGet::EFlags::None;
-
+            std::unique_ptr<TEvBlobStorage::TEvVGet> req; 
+            const auto flags = ShowInternals ? TEvBlobStorage::TEvVGet::EFlags::ShowInternals : TEvBlobStorage::TEvVGet::EFlags::None; 
+ 
             if (submitButton) {
                 // check that 'from' field is not empty
                 if (fromParam.empty()) {
@@ -358,13 +358,13 @@ namespace NKikimr {
                 if (toParam.empty()) {
                     // exact query
                     IsRangeQuery = false;
-                    if (IndexOnly) {
-                        req = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(SelfVDiskId, TInstant::Max(),
-                                NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, {From});
-                    } else {
-                        req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(SelfVDiskId, TInstant::Max(),
-                                NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, {From});
-                    }
+                    if (IndexOnly) { 
+                        req = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(SelfVDiskId, TInstant::Max(), 
+                                NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, {From}); 
+                    } else { 
+                        req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(SelfVDiskId, TInstant::Max(), 
+                                NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, {From}); 
+                    } 
                 } else {
                     // range query
                     IsRangeQuery = true;
@@ -376,23 +376,23 @@ namespace NKikimr {
                         return;
                     }
 
-                    req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(SelfVDiskId, TInstant::Max(),
-                            NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, From, To, 15);
+                    req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(SelfVDiskId, TInstant::Max(), 
+                            NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, From, To, 15); 
                 }
             } else if (allButton) {
                 // browse database
                 IsRangeQuery = true;
                 From = TLogoBlobID(0, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
                 To = TLogoBlobID(0, 0, 0, 0, 0, 0, 1);
-                req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(SelfVDiskId, TInstant::Max(),
-                        NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, From, To, 15);
+                req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(SelfVDiskId, TInstant::Max(), 
+                        NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, From, To, 15); 
             } else
                 Y_FAIL("Unknown button");
 
-            if (req) {
-                req->SetIsLocalMon();
-                ctx.Send(SkeletonFrontID, req.release());
-            }
+            if (req) { 
+                req->SetIsLocalMon(); 
+                ctx.Send(SkeletonFrontID, req.release()); 
+            } 
 
             // set up timeout, after which we reply
             ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
@@ -409,7 +409,7 @@ namespace NKikimr {
                     str << "Status: " << NKikimrProto::EReplyStatus_Name(q.GetStatus()) << "<br>";
                     str << "Id: " << id.ToString() << "<br>";
                     if (ShowInternals) {
-                        str << "Ingress: " << ingress.ToString(Top.get(), TVDiskIdShort(SelfVDiskId), id) << "<br>";
+                        str << "Ingress: " << ingress.ToString(Top.get(), TVDiskIdShort(SelfVDiskId), id) << "<br>"; 
                     }
                     if (!IndexOnly) {
                         str << "FullDataSize: " << q.GetFullDataSize() << "<br>";
@@ -467,21 +467,21 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(TEvBlobStorage::TEvVGetResult, Handle)
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-        )
+        STRICT_STFUNC(StateFunc, 
+            HFunc(TEvBlobStorage::TEvVGetResult, Handle) 
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup) 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+        ) 
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_MON_SF_LOGOBLOBS;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_MON_SF_LOGOBLOBS; 
         }
 
         TSkeletonFrontMonLogoBlobsQueryActor(const TVDiskID &selfVDiskId,
                                              const TActorId &notifyId,
                                              TIntrusivePtr<TVDiskConfig> cfg,
-                                             const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
+                                             const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top, 
                                              const TActorId &skeletonFrontID,
                                              NMon::TEvHttpInfo::TPtr &ev)
             : TActorBootstrapped<TSkeletonFrontMonLogoBlobsQueryActor>()
@@ -506,7 +506,7 @@ namespace NKikimr {
     class TSkeletonFrontMonBarriersQueryActor : public TActorBootstrapped<TSkeletonFrontMonBarriersQueryActor>, public TMonQueryBaseActor {
         const TVDiskID SelfVDiskId;
         TIntrusivePtr<TVDiskConfig> Cfg;
-        std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
+        std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top; 
         const TActorId NotifyId;
         const TActorId SkeletonFrontID;
         NMon::TEvHttpInfo::TPtr Ev;
@@ -539,7 +539,7 @@ namespace NKikimr {
             }
 
             ui32 maxResults = 15;
-            std::unique_ptr<TEvBlobStorage::TEvVGetBarrier> req;
+            std::unique_ptr<TEvBlobStorage::TEvVGetBarrier> req; 
             if (submitButton) {
                 // check that 'from' field is not empty
                 if (fromParam.empty()) {
@@ -558,8 +558,8 @@ namespace NKikimr {
                 if (toParam.empty()) {
                     // exact query
                     IsRangeQuery = false;
-                    req = std::make_unique<TEvBlobStorage::TEvVGetBarrier>(SelfVDiskId, From, From, &maxResults, showInternals);
-                    ctx.Send(SkeletonFrontID, req.release());
+                    req = std::make_unique<TEvBlobStorage::TEvVGetBarrier>(SelfVDiskId, From, From, &maxResults, showInternals); 
+                    ctx.Send(SkeletonFrontID, req.release()); 
                 } else {
                     // range query
                     IsRangeQuery = true;
@@ -571,16 +571,16 @@ namespace NKikimr {
                         return;
                     }
 
-                    req = std::make_unique<TEvBlobStorage::TEvVGetBarrier>(SelfVDiskId, From, To, &maxResults, showInternals);
-                    ctx.Send(SkeletonFrontID, req.release());
+                    req = std::make_unique<TEvBlobStorage::TEvVGetBarrier>(SelfVDiskId, From, To, &maxResults, showInternals); 
+                    ctx.Send(SkeletonFrontID, req.release()); 
                 }
             } else if (allButton) {
                 // browse database
                 IsRangeQuery = true;
                 From = TKeyBarrier::First();
                 To = TKeyBarrier::Inf();
-                req = std::make_unique<TEvBlobStorage::TEvVGetBarrier>(SelfVDiskId, From, To, &maxResults, showInternals);
-                ctx.Send(SkeletonFrontID, req.release());
+                req = std::make_unique<TEvBlobStorage::TEvVGetBarrier>(SelfVDiskId, From, To, &maxResults, showInternals); 
+                ctx.Send(SkeletonFrontID, req.release()); 
             }
 
             // set up timeout, after which we reply
@@ -592,7 +592,7 @@ namespace NKikimr {
 
         void OutputOneResult(IOutputStream &str, const NKikimrBlobStorage::TBarrierKey &k,
                              const NKikimrBlobStorage::TBarrierVal &v) {
-            TIngressCachePtr ingressCache = TIngressCache::Create(Top, SelfVDiskId);
+            TIngressCachePtr ingressCache = TIngressCache::Create(Top, SelfVDiskId); 
             HTML(str) {
                 DIV_CLASS("well well-small") {
                     str << "TabletId: " << k.GetTabletId() << "<br>";
@@ -656,21 +656,21 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(TEvBlobStorage::TEvVGetBarrierResult, Handle)
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-        )
+        STRICT_STFUNC(StateFunc, 
+            HFunc(TEvBlobStorage::TEvVGetBarrierResult, Handle) 
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup) 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+        ) 
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_MON_SF_BARRIERS;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_MON_SF_BARRIERS; 
         }
 
         TSkeletonFrontMonBarriersQueryActor(const TVDiskID &selfVDiskId,
                                             const TActorId &notifyId,
                                             TIntrusivePtr<TVDiskConfig> cfg,
-                                            const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
+                                            const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top, 
                                             const TActorId &skeletonFrontID,
                                             NMon::TEvHttpInfo::TPtr &ev)
             : TActorBootstrapped<TSkeletonFrontMonBarriersQueryActor>()
@@ -737,7 +737,7 @@ namespace NKikimr {
 
         struct TMessage {
             bool Error;                 // was an error?
-            std::unique_ptr<IEventBase> Msg;    // in case of error contains reply, or a request to VDisk otherwise
+            std::unique_ptr<IEventBase> Msg;    // in case of error contains reply, or a request to VDisk otherwise 
         };
 
         TMessage CreateDumpDbMessageOK(NKikimrBlobStorage::EDbStatType dbStatType, bool pretty) {
@@ -745,18 +745,18 @@ namespace NKikimr {
             auto channelParseRes = ParseChannel();
             if (tabletIdParseRes.Status == NMonUtil::EParseRes::Error) {
                 auto s = Sprintf("Unsupported value '%s' for CGI parameter 'tabletid'", tabletIdParseRes.StrVal.data());
-                return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))};
+                return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))}; 
             }
             if (channelParseRes.Status == NMonUtil::EParseRes::Error) {
                 auto s = Sprintf("Unsupported value '%s' for CGI parameter 'channel'", channelParseRes.StrVal.data());
-                return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))};
+                return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))}; 
             }
             if (tabletIdParseRes.Status != channelParseRes.Status) {
                 auto s = Sprintf("CGI parameters 'tabletid' and 'channel' must be both OK or empty");
-                return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))};
+                return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))}; 
             }
 
-            auto msg = std::make_unique<TEvBlobStorage::TEvVDbStat>(SelfVDiskId, Action, dbStatType, pretty);
+            auto msg = std::make_unique<TEvBlobStorage::TEvVDbStat>(SelfVDiskId, Action, dbStatType, pretty); 
             if (tabletIdParseRes.Status == NMonUtil::EParseRes::OK) {
                 // set up constraint
                 ui64 tabletId = tabletIdParseRes.Value;
@@ -768,14 +768,14 @@ namespace NKikimr {
         }
 
         TMessage CreateStatDbMessageOK(NKikimrBlobStorage::EDbStatType dbStatType, bool pretty) {
-            return TMessage {false, std::make_unique<TEvBlobStorage::TEvVDbStat>(SelfVDiskId, Action, dbStatType, pretty)};
+            return TMessage {false, std::make_unique<TEvBlobStorage::TEvVDbStat>(SelfVDiskId, Action, dbStatType, pretty)}; 
         }
 
         TMessage CreateStatDumpDbMessage() {
             auto r = NMonUtil::ParseDbName(Dbname);
             if (r.Status == NMonUtil::EParseRes::Error || r.Status == NMonUtil::EParseRes::Empty) {
                 auto s = Sprintf("Unsupported value '%s' for CGI parameter 'dbname'", r.StrVal.data());
-                return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))};
+                return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))}; 
             } else {
                 // send db stat request
                 NKikimrBlobStorage::EDbStatType dbStatType = r.Value;
@@ -795,10 +795,10 @@ namespace NKikimr {
             auto r = ParseTabletId();
             if (r.Status == NMonUtil::EParseRes::OK) {
                 const bool pretty = PrettyPrint();
-                return TMessage {false, std::make_unique<TEvBlobStorage::TEvVDbStat>(SelfVDiskId, r.Value, pretty)};
+                return TMessage {false, std::make_unique<TEvBlobStorage::TEvVDbStat>(SelfVDiskId, r.Value, pretty)}; 
             } else {
                 auto s = Sprintf("Unsupported value '%s' for CGI parameter 'tabletid'", r.StrVal.data());
-                return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))};
+                return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))}; 
             }
         }
 
@@ -806,8 +806,8 @@ namespace NKikimr {
             const bool pretty = PrettyPrint();
             return TMessage {
                 false,
-                std::make_unique<TEvBlobStorage::TEvVDbStat>(SelfVDiskId, NKikimrBlobStorage::StatHugeAction,
-                NKikimrBlobStorage::StatHugeType, pretty)};
+                std::make_unique<TEvBlobStorage::TEvVDbStat>(SelfVDiskId, NKikimrBlobStorage::StatHugeAction, 
+                NKikimrBlobStorage::StatHugeType, pretty)}; 
         }
 
         // creates a message
@@ -829,10 +829,10 @@ namespace NKikimr {
             TMessage msg(CreateMessage());
             if (msg.Error) {
                 // error creating a message, finish with error
-                Finish(ctx, msg.Msg.release());
+                Finish(ctx, msg.Msg.release()); 
             } else {
                 // send TEvDbStat message
-                ctx.Send(SkeletonFrontID, msg.Msg.release());
+                ctx.Send(SkeletonFrontID, msg.Msg.release()); 
                 // set up timeout, after which we reply
                 ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
                 // switch state
@@ -862,15 +862,15 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(TEvBlobStorage::TEvVDbStatResult, Handle)
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-        )
+        STRICT_STFUNC(StateFunc, 
+            HFunc(TEvBlobStorage::TEvVDbStatResult, Handle) 
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup) 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+        ) 
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_MON_SF_LBSTAT;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_MON_SF_LBSTAT; 
         }
 
         TSkeletonFrontMonDbStatActor(const TVDiskID &selfVDiskId,
@@ -950,14 +950,14 @@ namespace NKikimr {
             Finish(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(NMon::TEvHttpInfoRes, Handle)
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
-        )
+        STRICT_STFUNC(StateFunc, 
+            HFunc(NMon::TEvHttpInfoRes, Handle) 
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup) 
+        ) 
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_MON_SF_MAIN_PAGE;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_MON_SF_MAIN_PAGE; 
         }
 
         TSkeletonFrontMonMainPageActor(const TActorId &notifyId,
@@ -980,7 +980,7 @@ namespace NKikimr {
                                                  const TActorId &skeletonID,
                                                  const TActorId &skeletonFrontID,
                                                  TIntrusivePtr<TVDiskConfig> cfg,
-                                                 const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
+                                                 const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top, 
                                                  NMon::TEvHttpInfo::TPtr &ev,
                                                  const TString &frontHtml) {
         const TCgiParameters& cgi = ev->Get()->Request.GetParams();

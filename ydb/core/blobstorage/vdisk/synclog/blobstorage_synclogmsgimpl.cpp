@@ -57,11 +57,11 @@ namespace NKikimr {
 
             void Columnize(TVector<TLogoBlobRecWithSerial> &logoBlobs) {
                 Clear();
-                auto comp = [](const TLogoBlobRecWithSerial& x, const TLogoBlobRecWithSerial& y) {
-                    return std::make_tuple(x.LogoBlobID(), x.Ingress.Raw(), x.Counter) <
-                        std::make_tuple(y.LogoBlobID(), y.Ingress.Raw(), y.Counter);
-                };
-                Sort(logoBlobs.begin(), logoBlobs.end(), comp);
+                auto comp = [](const TLogoBlobRecWithSerial& x, const TLogoBlobRecWithSerial& y) { 
+                    return std::make_tuple(x.LogoBlobID(), x.Ingress.Raw(), x.Counter) < 
+                        std::make_tuple(y.LogoBlobID(), y.Ingress.Raw(), y.Counter); 
+                }; 
+                Sort(logoBlobs.begin(), logoBlobs.end(), comp); 
 
                 const ui32 blobsSize = logoBlobs.size();
                 TabletIds.reserve(blobsSize);
@@ -319,127 +319,127 @@ namespace NKikimr {
             TImpl(EEncoding enc) {
                 switch (enc) {
                     case EEncoding::Trivial:
-                        LogoBlobsColumns.reset(new TLogoBlobColumnsTrivialCodec);
+                        LogoBlobsColumns.reset(new TLogoBlobColumnsTrivialCodec); 
                         break;
                     case EEncoding::Custom:
-                        LogoBlobsColumns.reset(new TLogoBlobColumnsCustomCodec);
+                        LogoBlobsColumns.reset(new TLogoBlobColumnsCustomCodec); 
                         break;
                     default:
                         Y_FAIL("Unexpected case");
                 }
             }
 
-            TString Encode(TRecordsWithSerial& records) {
-                const ui32 blobsSize = records.LogoBlobs.size();
-                LogoBlobsColumns->Columnize(records.LogoBlobs);
+            TString Encode(TRecordsWithSerial& records) { 
+                const ui32 blobsSize = records.LogoBlobs.size(); 
+                LogoBlobsColumns->Columnize(records.LogoBlobs); 
 
-                const ui32 blocksSize = records.Blocks.size();
-                const ui32 barriersSize = records.Barriers.size();
-                const ui32 blocksSizeV2 = records.BlocksV2.size();
+                const ui32 blocksSize = records.Blocks.size(); 
+                const ui32 barriersSize = records.Barriers.size(); 
+                const ui32 blocksSizeV2 = records.BlocksV2.size(); 
                 size_t blobsSerializedSize = sizeof(ui32) + blobsSize * LogoBlobsColumns->GetEncodedApproximationSize();
                 size_t blocksSerializedSize = sizeof(ui32) + blocksSize * sizeof(TBlockRecWithSerial);
                 size_t barriersSerializedSize = sizeof(ui32) + barriersSize * sizeof(TBarrierRecWithSerial);
-                size_t blocksSerializedSizeV2 = blocksSizeV2 ? sizeof(ui32) + blocksSizeV2 * sizeof(TBlockRecWithSerialV2) : 0;
-                size_t serializedSize = blobsSerializedSize + blocksSerializedSize + barriersSerializedSize + blocksSerializedSizeV2;
+                size_t blocksSerializedSizeV2 = blocksSizeV2 ? sizeof(ui32) + blocksSizeV2 * sizeof(TBlockRecWithSerialV2) : 0; 
+                size_t serializedSize = blobsSerializedSize + blocksSerializedSize + barriersSerializedSize + blocksSerializedSizeV2; 
 
                 TStringStream str;
                 str.Reserve(serializedSize);
-
+ 
                 LogoBlobsColumns->Encode(str);
-
+ 
                 str.Write(&blocksSize, sizeof(ui32));
                 if (blocksSize) {
-                    str.Write(records.Blocks.data(), sizeof(TBlockRecWithSerial) * blocksSize);
+                    str.Write(records.Blocks.data(), sizeof(TBlockRecWithSerial) * blocksSize); 
                 }
-
+ 
                 str.Write(&barriersSize, sizeof(ui32));
                 if (barriersSize) {
-                    str.Write(records.Barriers.data(), sizeof(TBarrierRecWithSerial) * barriersSize);
+                    str.Write(records.Barriers.data(), sizeof(TBarrierRecWithSerial) * barriersSize); 
                 }
 
-                if (blocksSizeV2) {
-                    str.Write(&blocksSizeV2, sizeof(ui32));
-                    str.Write(records.BlocksV2.data(), sizeof(TBlockRecWithSerialV2) * blocksSizeV2);
-                }
-
+                if (blocksSizeV2) { 
+                    str.Write(&blocksSizeV2, sizeof(ui32)); 
+                    str.Write(records.BlocksV2.data(), sizeof(TBlockRecWithSerialV2) * blocksSizeV2); 
+                } 
+ 
                 return str.Str();
             }
 
-            bool Decode(const char *pos, const char *end, TRecordsWithSerial& records) {
+            bool Decode(const char *pos, const char *end, TRecordsWithSerial& records) { 
                 // clear output
-                records.LogoBlobs.clear();
-                records.Blocks.clear();
-                records.Barriers.clear();
-                records.BlocksV2.clear();
+                records.LogoBlobs.clear(); 
+                records.Blocks.clear(); 
+                records.Barriers.clear(); 
+                records.BlocksV2.clear(); 
 
                 // logoblobs
                 pos = LogoBlobsColumns->Decode(pos, end);
-                if (!pos) {
+                if (!pos) { 
                     return false;
-                }
-                LogoBlobsColumns->Decolumnize(records.LogoBlobs);
+                } 
+                LogoBlobsColumns->Decolumnize(records.LogoBlobs); 
 
                 // blocks
-                if (size_t(end - pos) < sizeof(ui32)) {
+                if (size_t(end - pos) < sizeof(ui32)) { 
                     return false;
-                }
+                } 
 
                 const ui32 blocksSize = ReadUnaligned<ui32>(pos);
-                pos += sizeof(ui32);
-                if (size_t(end - pos) < sizeof(TBlockRecWithSerial) * blocksSize) {
+                pos += sizeof(ui32); 
+                if (size_t(end - pos) < sizeof(TBlockRecWithSerial) * blocksSize) { 
                     return false;
-                }
+                } 
 
                 if (blocksSize) {
-                    records.Blocks.resize(blocksSize);
-                    memcpy(records.Blocks.data(), pos, sizeof(TBlockRecWithSerial) * blocksSize);
+                    records.Blocks.resize(blocksSize); 
+                    memcpy(records.Blocks.data(), pos, sizeof(TBlockRecWithSerial) * blocksSize); 
                     pos += sizeof(TBlockRecWithSerial) * blocksSize;
                 }
 
                 // barriers
-                if (size_t(end - pos) < sizeof(ui32)) {
+                if (size_t(end - pos) < sizeof(ui32)) { 
                     return false;
-                }
+                } 
 
                 const ui32 barriersSize = ReadUnaligned<ui32>(pos);
-                pos += sizeof(ui32);
-                if (size_t(end - pos) < sizeof(TBarrierRecWithSerial) * barriersSize) {
+                pos += sizeof(ui32); 
+                if (size_t(end - pos) < sizeof(TBarrierRecWithSerial) * barriersSize) { 
                     return false;
-                }
+                } 
 
                 if (barriersSize) {
-                    records.Barriers.resize(barriersSize);
-                    memcpy(records.Barriers.data(), pos, sizeof(TBarrierRecWithSerial) * barriersSize);
+                    records.Barriers.resize(barriersSize); 
+                    memcpy(records.Barriers.data(), pos, sizeof(TBarrierRecWithSerial) * barriersSize); 
                     pos += sizeof(TBarrierRecWithSerial) * barriersSize;
                 }
 
-                if (end != pos) {
-                    if (size_t(end - pos) < sizeof(ui32)) {
-                        return false;
-                    }
-                    const ui32 blocksSizeV2 = ReadUnaligned<ui32>(pos);
-                    pos += sizeof(ui32);
-                    if (!blocksSizeV2) {
-                        return false;
-                    }
-                    const size_t len = sizeof(TBlockRecWithSerialV2) * blocksSizeV2;
-                    if (size_t(end - pos) < len) {
-                        return false;
-                    }
-                    records.BlocksV2.resize(blocksSizeV2);
-                    memcpy(records.BlocksV2.data(), pos, len);
-                    pos += len;
-                }
-
-                if (end != pos) {
-                    return false;
-                }
-
+                if (end != pos) { 
+                    if (size_t(end - pos) < sizeof(ui32)) { 
+                        return false; 
+                    } 
+                    const ui32 blocksSizeV2 = ReadUnaligned<ui32>(pos); 
+                    pos += sizeof(ui32); 
+                    if (!blocksSizeV2) { 
+                        return false; 
+                    } 
+                    const size_t len = sizeof(TBlockRecWithSerialV2) * blocksSizeV2; 
+                    if (size_t(end - pos) < len) { 
+                        return false; 
+                    } 
+                    records.BlocksV2.resize(blocksSizeV2); 
+                    memcpy(records.BlocksV2.data(), pos, len); 
+                    pos += len; 
+                } 
+ 
+                if (end != pos) { 
+                    return false; 
+                } 
+ 
                 return true;
             }
 
         private:
-            std::unique_ptr<TLogoBlobColumns> LogoBlobsColumns;
+            std::unique_ptr<TLogoBlobColumns> LogoBlobsColumns; 
         };
 
 
@@ -453,12 +453,12 @@ namespace NKikimr {
 
         TReorderCodec::~TReorderCodec() {}
 
-        TString TReorderCodec::Encode(TRecordsWithSerial& records) {
-            return Impl->Encode(records);
+        TString TReorderCodec::Encode(TRecordsWithSerial& records) { 
+            return Impl->Encode(records); 
         }
 
-        bool TReorderCodec::Decode(const char *pos, const char *end, TRecordsWithSerial& records) {
-            return Impl->Decode(pos, end, records);
+        bool TReorderCodec::Decode(const char *pos, const char *end, TRecordsWithSerial& records) { 
+            return Impl->Decode(pos, end, records); 
         }
 
     } // NSyncLog

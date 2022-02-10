@@ -24,7 +24,7 @@ SRCS(
     blobstorage_syncfullhandler.cpp
     blobstorage_syncfullhandler.h
     blobstorage_takedbsnap.h
-    skeleton_capturevdisklayout.h
+    skeleton_capturevdisklayout.h 
     skeleton_compactionstate.cpp
     skeleton_compactionstate.h
     skeleton_events.h

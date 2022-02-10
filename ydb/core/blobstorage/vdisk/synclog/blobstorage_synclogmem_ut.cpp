@@ -25,7 +25,7 @@ namespace NKikimr {
             ui64 tabletId = 1;
 
             for (ui64 i = 0; i < num; i++) {
-                size = NSyncLog::TSerializeRoutines::SetBlock(buf, ctx.Lsn, tabletId, ctx.Gen, 0);
+                size = NSyncLog::TSerializeRoutines::SetBlock(buf, ctx.Lsn, tabletId, ctx.Gen, 0); 
                 ctx.Lsn += 2;
                 ctx.Gen++;
                 mem->PutOne((const NSyncLog::TRecordHdr *)buf, size);
@@ -44,12 +44,12 @@ namespace NKikimr {
         };
 
         TFillInLogoBlobContext FillInLogoBlob(NSyncLog::TMemRecLog *mem, ui64 num, TFillInLogoBlobContext ctx) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4); 
             char buf[NSyncLog::MaxRecFullSize];
             ui32 size = 0;
 
             for (unsigned i = 0; i < num; i++) {
-                size = NSyncLog::TSerializeRoutines::SetLogoBlob(groupInfo.Type, buf, ctx.Lsn, ctx.Id, TIngress());
+                size = NSyncLog::TSerializeRoutines::SetLogoBlob(groupInfo.Type, buf, ctx.Lsn, ctx.Id, TIngress()); 
                 ctx.Lsn += 2;
                 ctx.Id = TLogoBlobID(ctx.Id.TabletID(), ctx.Id.Generation(), ctx.Id.Step() + 1,
                                      ctx.Id.Channel(), ctx.Id.BlobSize(), ctx.Id.Cookie());

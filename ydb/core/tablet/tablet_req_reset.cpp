@@ -105,8 +105,8 @@ class TTabletReqReset : public TActorBootstrapped<TTabletReqReset> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_REQ_DELETE_TABLET;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_REQ_DELETE_TABLET; 
     }
 
     TTabletReqReset(const TActorId& owner, const TIntrusivePtr<TTabletStorageInfo>& tabletStorageInfo, ui32 knownGeneration)

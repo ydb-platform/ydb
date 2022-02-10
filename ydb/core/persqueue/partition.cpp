@@ -250,7 +250,7 @@ void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue
 void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst)
 {
     THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
-    NKikimrClient::TResponse& resp = response->Response;
+    NKikimrClient::TResponse& resp = response->Response; 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
     ctx.Send(Tablet, response.Release());
@@ -259,7 +259,7 @@ void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst)
 void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie)
 {
     THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
-    NKikimrClient::TResponse& resp = response->Response;
+    NKikimrClient::TResponse& resp = response->Response; 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
     resp.MutablePartitionResponse()->MutableCmdGetOwnershipResult()->SetOwnerCookie(cookie);
@@ -275,7 +275,7 @@ void TPartition::ReplyWrite(
     Y_VERIFY(seqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, seqNo);
 
     THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
-    NKikimrClient::TResponse& resp = response->Response;
+    NKikimrClient::TResponse& resp = response->Response; 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
     auto write = resp.MutablePartitionResponse()->AddCmdWriteResult();
@@ -302,7 +302,7 @@ void TPartition::ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst
     const TInstant writeTimestamp, const TInstant createTimestamp)
 {
     THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
-    NKikimrClient::TResponse& resp = response->Response;
+    NKikimrClient::TResponse& resp = response->Response; 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
 
@@ -453,8 +453,8 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
 }
 
 TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
-                       const TString& topicName, const TString& topicPath, const bool localDC, TString dcId,
-                       const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
+                       const TString& topicName, const TString& topicPath, const bool localDC, TString dcId, 
+                       const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, 
                        const TActorContext &ctx, bool newPartition)
     : TabletID(tabletId)
     , Partition(partition)
@@ -462,7 +462,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , TopicName(topicName)
     , TopicPath(topicPath)
     , LocalDC(localDC)
-    , DCId(std::move(dcId))
+    , DCId(std::move(dcId)) 
     , StartOffset(0)
     , EndOffset(0)
     , WriteInflightSize(0)
@@ -1372,7 +1372,7 @@ void TPartition::HandleMetaRead(const NKikimrClient::TKeyValueResponse::TReadRes
 
 
 
-void TPartition::HandleInfoRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx)
+void TPartition::HandleInfoRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx) 
 {
     //megaqc check here all results
     Y_VERIFY(range.HasStatus());
@@ -1427,7 +1427,7 @@ void TPartition::HandleInfoRangeRead(const NKikimrClient::TKeyValueResponse::TRe
     };
 }
 
-void TPartition::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx)
+void TPartition::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx) 
 {
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         auto pair = range.GetPair(i);
@@ -1492,7 +1492,7 @@ void TPartition::FormHeadAndProceed(const TActorContext& ctx)
     RequestData(ctx, Tablet, keys);
 }
 
-void TPartition::HandleDataRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx)
+void TPartition::HandleDataRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx) 
 {
     Y_VERIFY(range.HasStatus());
     switch(range.GetStatus()) {
@@ -1517,7 +1517,7 @@ void TPartition::HandleDataRangeRead(const NKikimrClient::TKeyValueResponse::TRe
     };
 }
 
-void TPartition::HandleDataRead(const NKikimrClient::TResponse& response, const TActorContext& ctx)
+void TPartition::HandleDataRead(const NKikimrClient::TResponse& response, const TActorContext& ctx) 
 {
     Y_VERIFY(InitState == WaitDataRead);
     ui32 currentLevel = 0;
@@ -2172,7 +2172,7 @@ void TPartition::ProcessUserActs(TUserInfo& userInfo, const TActorContext& ctx)
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
     auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie);
-    NKikimrClient::TResponse& resp = response->Response;
+    NKikimrClient::TResponse& resp = response->Response; 
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -2291,7 +2291,7 @@ TReadAnswer TReadInfo::FormAnswer(
 ) {
     Y_UNUSED(partition);
     THolder<TEvPQ::TEvProxyResponse> answer = MakeHolder<TEvPQ::TEvProxyResponse>(cookie);
-    NKikimrClient::TResponse& res = answer->Response;
+    NKikimrClient::TResponse& res = answer->Response; 
     const TEvPQ::TEvBlobResponse* response = &blobResponse;
 
     if (HasError(blobResponse)) {
@@ -3374,7 +3374,7 @@ void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContex
     HandleWriteResponse(ctx);
 }
 
-void TPartition::HandleSetOffsetResponse(NKikimrClient::TResponse& response, const TActorContext& ctx) {
+void TPartition::HandleSetOffsetResponse(NKikimrClient::TResponse& response, const TActorContext& ctx) { 
     ui64 cookie = response.GetCookie();
     auto it = CookieToUser.find(cookie);
     Y_VERIFY(it != CookieToUser.end());

@@ -26,18 +26,18 @@ namespace NActors {
         TIntrusivePtr<TTableNameserverSetup> table = new TTableNameserverSetup;
 
         for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
-            const ui16 port = 12001 + nodeIndex;
+            const ui16 port = 12001 + nodeIndex; 
             table->StaticNodeTable[FirstNodeId + nodeIndex] =
                 std::pair<TString, ui32>("::1", UseRealInterconnect ? GetPortManager().GetPort(port) : port);
-
-            NActorsInterconnect::TNodeLocation proto;
-            proto.SetDataCenter(ToString(nodeIndex % DataCenterCount + 1));
-            proto.SetModule(ToString(nodeIndex + 1));
-            proto.SetRack(ToString(nodeIndex + 1));
-            proto.SetUnit(ToString(nodeIndex + 1));
-            table->StaticNodeTable[FirstNodeId + nodeIndex].Location = LocationCallback
-                ? LocationCallback(nodeIndex)
-                : TNodeLocation(proto);
+ 
+            NActorsInterconnect::TNodeLocation proto; 
+            proto.SetDataCenter(ToString(nodeIndex % DataCenterCount + 1)); 
+            proto.SetModule(ToString(nodeIndex + 1)); 
+            proto.SetRack(ToString(nodeIndex + 1)); 
+            proto.SetUnit(ToString(nodeIndex + 1)); 
+            table->StaticNodeTable[FirstNodeId + nodeIndex].Location = LocationCallback 
+                ? LocationCallback(nodeIndex) 
+                : TNodeLocation(proto); 
         }
 
         const TActorId dnsId = NDnsResolver::MakeDnsResolverActorId();
@@ -65,11 +65,11 @@ namespace NActors {
             common->ClusterUUID = ClusterUUID;
             common->AcceptUUID = {ClusterUUID};
 
-            if (UseRealInterconnect) {
+            if (UseRealInterconnect) { 
                 auto listener = new TInterconnectListenerTCP(nameNode.first, nameNode.second, common);
-                AddLocalService({}, TActorSetupCmd(listener, TMailboxType::Simple, InterconnectPoolId()), num);
-                AddLocalService(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::Simple, 0), num);
-            }
+                AddLocalService({}, TActorSetupCmd(listener, TMailboxType::Simple, InterconnectPoolId()), num); 
+                AddLocalService(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::Simple, 0), num); 
+            } 
         }
     }
 }

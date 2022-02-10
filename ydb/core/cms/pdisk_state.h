@@ -6,7 +6,7 @@ namespace NKikimr {
 namespace NCms {
 
 using TPDiskStateInfo = NKikimrWhiteboard::TPDiskStateInfo;
-using EPDiskState = NKikimrBlobStorage::TPDiskState::E;
+using EPDiskState = NKikimrBlobStorage::TPDiskState::E; 
 
 } // NCms
 } // NKikimr

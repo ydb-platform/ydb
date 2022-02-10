@@ -37,7 +37,7 @@ namespace NKikimr {
             }
 
             void Handle(TEvSyncLogLocalStatusResult::TPtr &ev, const TActorContext &ctx) {
-                std::unique_ptr<TEvLocalStatusResult> result(new TEvLocalStatusResult());
+                std::unique_ptr<TEvLocalStatusResult> result(new TEvLocalStatusResult()); 
                 NKikimrBlobStorage::TSyncLogStatus *rec = result->Record.MutableSyncLogStatus();
                 const TLogEssence &e = ev->Get()->Essence;
                 rec->SetLogStartLsn(e.LogStartLsn);
@@ -48,7 +48,7 @@ namespace NKikimr {
                 rec->SetFirstDiskLsn(e.FirstDiskLsn);
                 rec->SetLastDiskLsn(e.LastDiskLsn);
 
-                ctx.Send(Ev->Sender, result.release());
+                ctx.Send(Ev->Sender, result.release()); 
                 ctx.Send(NotifyId, new TEvents::TEvCompleted());
                 Die(ctx);
             }
@@ -58,14 +58,14 @@ namespace NKikimr {
                 Die(ctx);
             }
 
-            STRICT_STFUNC(StateFunc,
+            STRICT_STFUNC(StateFunc, 
                 HFunc(TEvSyncLogLocalStatusResult, Handle)
-                HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            )
+                HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            ) 
 
         public:
-            static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-                return NKikimrServices::TActivity::BS_SYNCLOG_LOCAL_STATUS;
+            static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+                return NKikimrServices::TActivity::BS_SYNCLOG_LOCAL_STATUS; 
             }
 
             TSyncLogGetLocalStatusActor(TIntrusivePtr<TSyncLogCtx> &slCtx,
@@ -95,7 +95,7 @@ namespace NKikimr {
             TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
             // actual self VDiskID, it is changed during BlobStorage Group reconfiguration
             TVDiskID SelfVDiskId;
-            std::unique_ptr<TSyncLogRepaired> Repaired;
+            std::unique_ptr<TSyncLogRepaired> Repaired; 
             TSyncLogNeighborsPtr NeighborsPtr;
             const TVDiskIncarnationGuid VDiskIncarnationGuid;
             TActorId KeeperId;
@@ -114,7 +114,7 @@ namespace NKikimr {
                                                                 SlCtx->VCtx->Top,
                                                                 SlCtx->VCtx->VDiskLogPrefix,
                                                                 ctx.ExecutorThread.ActorSystem);
-                KeeperId = ctx.Register(CreateSyncLogKeeperActor(SlCtx, std::move(Repaired)));
+                KeeperId = ctx.Register(CreateSyncLogKeeperActor(SlCtx, std::move(Repaired))); 
                 ActiveActors.Insert(KeeperId);
                 TThis::Become(&TThis::StateFunc);
             }
@@ -138,11 +138,11 @@ namespace NKikimr {
                                     SelfVDiskId.ToString().data(), sourceVDisk.ToString().data(),
                                     targetVDisk.ToString().data()));
 
-                    auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::RACE, SelfVDiskId,
-                        TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
-                        SlCtx->CountersMonGroup.VDiskCheckFailedPtr(), nullptr, std::move(ev->TraceId),
-                        ev->GetChannel());
-                    SendVDiskResponse(ctx, ev->Sender, result.release(), *this, ev->Cookie);
+                    auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::RACE, SelfVDiskId, 
+                        TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now, 
+                        SlCtx->CountersMonGroup.VDiskCheckFailedPtr(), nullptr, std::move(ev->TraceId), 
+                        ev->GetChannel()); 
+                    SendVDiskResponse(ctx, ev->Sender, result.release(), *this, ev->Cookie); 
                     return;
                 }
 
@@ -158,10 +158,10 @@ namespace NKikimr {
                                     "sourceVDisk# %s targetVDisk# %s",
                                     sourceVDisk.ToString().data(), targetVDisk.ToString().data()));
 
-                    auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::BLOCKED, SelfVDiskId,
-                        TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
-                        SlCtx->CountersMonGroup.DiskLockedPtr(), nullptr, std::move(ev->TraceId), ev->GetChannel());
-                    SendVDiskResponse(ctx, ev->Sender, result.release(), *this, ev->Cookie);
+                    auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::BLOCKED, SelfVDiskId, 
+                        TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now, 
+                        SlCtx->CountersMonGroup.DiskLockedPtr(), nullptr, std::move(ev->TraceId), ev->GetChannel()); 
+                    SendVDiskResponse(ctx, ev->Sender, result.release(), *this, ev->Cookie); 
                     return;
                 }
 
@@ -178,10 +178,10 @@ namespace NKikimr {
 
                     auto status = NKikimrProto::RESTART;
                     TSyncState syncState(VDiskIncarnationGuid, GetDbBirthLsn());
-                    auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(status, SelfVDiskId, syncState,
-                        true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
-                        SlCtx->CountersMonGroup.UnequalGuidPtr(), nullptr, std::move(ev->TraceId), ev->GetChannel());
-                    SendVDiskResponse(ctx, ev->Sender, result.release(), *this, ev->Cookie);
+                    auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(status, SelfVDiskId, syncState, 
+                        true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now, 
+                        SlCtx->CountersMonGroup.UnequalGuidPtr(), nullptr, std::move(ev->TraceId), ev->GetChannel()); 
+                    SendVDiskResponse(ctx, ev->Sender, result.release(), *this, ev->Cookie); 
                     return;
                 }
 
@@ -189,8 +189,8 @@ namespace NKikimr {
                 CutLog(ctx, sourceVDisk, oldSyncState.SyncedLsn);
                 // process the request further asyncronously
                 NeighborsPtr->Lock(sourceVDisk, oldSyncState.SyncedLsn);
-                auto aid = ctx.Register(CreateSyncLogReaderActor(SlCtx, VDiskIncarnationGuid, ev, ctx.SelfID, KeeperId,
-                    SelfVDiskId, sourceVDisk, GetDbBirthLsn(), now));
+                auto aid = ctx.Register(CreateSyncLogReaderActor(SlCtx, VDiskIncarnationGuid, ev, ctx.SelfID, KeeperId, 
+                    SelfVDiskId, sourceVDisk, GetDbBirthLsn(), now)); 
                 ActiveActors.Insert(aid);
             }
 
@@ -203,11 +203,11 @@ namespace NKikimr {
                 ctx.Send(ev->Forward(KeeperId));
             }
 
-            void Handle(TEvSyncLogPutSst::TPtr& ev, const TActorContext& ctx) {
+            void Handle(TEvSyncLogPutSst::TPtr& ev, const TActorContext& ctx) { 
                 ++SlCtx->IFaceMonGroup.SyncPutSstMsgs();
                 ctx.Send(ev->Forward(KeeperId));
-            }
-
+            } 
+ 
             void Handle(TEvSyncLogReadFinished::TPtr &ev, const TActorContext &ctx) {
                 Y_UNUSED(ctx);
                 NeighborsPtr->Unlock(ev->Get()->VDiskID);
@@ -246,8 +246,8 @@ namespace NKikimr {
 
             void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
                 Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::SyncLogId);
-                auto aid = ctx.RegisterWithSameMailbox(CreateGetHttpInfoActor(SlCtx->VCtx, GInfo, ev, SelfId(), KeeperId,
-                    NeighborsPtr));
+                auto aid = ctx.RegisterWithSameMailbox(CreateGetHttpInfoActor(SlCtx->VCtx, GInfo, ev, SelfId(), KeeperId, 
+                    NeighborsPtr)); 
                 ActiveActors.Insert(aid);
             }
 
@@ -257,8 +257,8 @@ namespace NKikimr {
 
             void Handle(TEvLocalStatus::TPtr &ev, const TActorContext &ctx) {
                 auto selfId = ctx.SelfID;
-                auto actor = std::make_unique<TSyncLogGetLocalStatusActor>(SlCtx, ev, selfId, KeeperId);
-                auto aid = ctx.Register(actor.release());
+                auto actor = std::make_unique<TSyncLogGetLocalStatusActor>(SlCtx, ev, selfId, KeeperId); 
+                auto aid = ctx.Register(actor.release()); 
                 ActiveActors.Insert(aid);
             }
 
@@ -285,36 +285,36 @@ namespace NKikimr {
                 Die(ctx);
             }
 
-            STRICT_STFUNC(StateFunc,
-                HFunc(TEvSyncLogPut, Handle)
-                HFunc(TEvSyncLogPutSst, Handle)
+            STRICT_STFUNC(StateFunc, 
+                HFunc(TEvSyncLogPut, Handle) 
+                HFunc(TEvSyncLogPutSst, Handle) 
                 HFunc(TEvBlobStorage::TEvVSync, Handle)
-                HFunc(TEvSyncLogReadFinished, Handle)
-                HFunc(TEvSyncLogDbBirthLsn, Handle)
-                HFunc(NPDisk::TEvCutLog, Handle)
-                HFunc(NMon::TEvHttpInfo, Handle)
+                HFunc(TEvSyncLogReadFinished, Handle) 
+                HFunc(TEvSyncLogDbBirthLsn, Handle) 
+                HFunc(NPDisk::TEvCutLog, Handle) 
+                HFunc(NMon::TEvHttpInfo, Handle) 
                 HFunc(TEvBlobStorage::TEvVBaldSyncLog, Handle)
-                HFunc(TEvLocalStatus, Handle)
-                HFunc(TEvVGenerationChange, Handle)
-                HFunc(TEvents::TEvCompleted, HandleActorCompletion)
-                HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            )
+                HFunc(TEvLocalStatus, Handle) 
+                HFunc(TEvVGenerationChange, Handle) 
+                HFunc(TEvents::TEvCompleted, HandleActorCompletion) 
+                HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            ) 
 
         public:
-            static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-                return NKikimrServices::TActivity::BS_SYNCLOG_ACTOR;
+            static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+                return NKikimrServices::TActivity::BS_SYNCLOG_ACTOR; 
             }
 
             TSyncLogActor(
                     const TIntrusivePtr<TSyncLogCtx> &slCtx,
                     const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo,
                     const TVDiskID &selfVDiskId,
-                    std::unique_ptr<TSyncLogRepaired> repaired)
+                    std::unique_ptr<TSyncLogRepaired> repaired) 
                 : TActorBootstrapped<TSyncLogActor>()
                 , SlCtx(slCtx)
                 , GInfo(ginfo)
                 , SelfVDiskId(selfVDiskId)
-                , Repaired(std::move(repaired))
+                , Repaired(std::move(repaired)) 
                 , NeighborsPtr()
                 , VDiskIncarnationGuid(Repaired->SyncLogPtr->Header.VDiskIncarnationGuid)
                 , KeeperId()
@@ -327,8 +327,8 @@ namespace NKikimr {
             const TIntrusivePtr<TSyncLogCtx> &slCtx,
             const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo,
             const TVDiskID &selfVDiskId,
-            std::unique_ptr<NSyncLog::TSyncLogRepaired> repaired) {
-        return new TSyncLogActor(slCtx, ginfo, selfVDiskId, std::move(repaired));
+            std::unique_ptr<NSyncLog::TSyncLogRepaired> repaired) { 
+        return new TSyncLogActor(slCtx, ginfo, selfVDiskId, std::move(repaired)); 
     }
 
 } // NKikimr

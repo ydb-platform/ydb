@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NFake {
 
-    class TProxyDS : public TThrRefBase {
+    class TProxyDS : public TThrRefBase { 
         using TTabletId = ui64;
         using TChannel = ui8;
         using TGeneration = ui32;
@@ -88,7 +88,7 @@ namespace NFake {
 
         TEvBlobStorage::TEvGetResult* Handle(TEvBlobStorage::TEvGet *msg) {
             // prepare result structure holding the returned data
-            auto result = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, msg->QuerySize, 0u);
+            auto result = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, msg->QuerySize, 0u); 
 
             // traverse against requested blobs and process them
             for (ui32 i = 0; i < msg->QuerySize; ++i) {
@@ -127,7 +127,7 @@ namespace NFake {
                 }
             }
 
-            return result.release();
+            return result.release(); 
         }
 
         TEvBlobStorage::TEvBlockResult* Handle(TEvBlobStorage::TEvBlock *msg) {
@@ -154,7 +154,7 @@ namespace NFake {
                 }
             }
 
-            std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> result;
+            std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> result; 
 
             TLogoBlobID id(msg->TabletId, Max<ui32>(), Max<ui32>(), 0, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
             auto it = Blobs.upper_bound(id);
@@ -168,17 +168,17 @@ namespace NFake {
                         buffer = it->second.Buffer;
                     }
 
-                    result = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(lastBlobId, msg->MinGeneration, buffer,
+                    result = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(lastBlobId, msg->MinGeneration, buffer, 
                             blockedGeneration);
                 }
             }
 
             if (!result) {
-                result = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::NODATA, msg->MinGeneration,
+                result = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::NODATA, msg->MinGeneration, 
                         blockedGeneration);
             }
 
-            return result.release();
+            return result.release(); 
         }
 
         TEvBlobStorage::TEvRangeResult* Handle(TEvBlobStorage::TEvRange *msg) {
@@ -189,7 +189,7 @@ namespace NFake {
             Y_VERIFY(from.Channel() == to.Channel());
             Y_VERIFY(from.TabletID() == msg->TabletId);
 
-            auto result = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, from, to, 0u);
+            auto result = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, from, to, 0u); 
 
             auto process = [&](const TLogoBlobID& id, const TString& buffer) {
                 result->Responses.emplace_back(id, buffer);
@@ -212,12 +212,12 @@ namespace NFake {
                 }
             }
 
-            return result.release();
+            return result.release(); 
         }
 
         TEvBlobStorage::TEvCollectGarbageResult* Handle(TEvBlobStorage::TEvCollectGarbage *msg) {
-            if (IsBlocked(msg->TabletId, msg->RecordGeneration) && (msg->CollectGeneration != Max<ui32>() ||
-                    msg->CollectStep != Max<ui32>() || Blocks.at(msg->TabletId) != Max<ui32>())) {
+            if (IsBlocked(msg->TabletId, msg->RecordGeneration) && (msg->CollectGeneration != Max<ui32>() || 
+                    msg->CollectStep != Max<ui32>() || Blocks.at(msg->TabletId) != Max<ui32>())) { 
                 return new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::BLOCKED,
                         msg->TabletId, msg->RecordGeneration, msg->PerGenerationCounter, msg->Channel);
             }

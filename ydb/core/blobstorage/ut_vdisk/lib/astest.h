@@ -33,10 +33,10 @@ public:
 private:
     TProgramShouldContinue KikimrShouldContinue;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    std::unique_ptr<NActors::TMon> Monitoring;
-    std::unique_ptr<NKikimr::TAppData> AppData;
+    std::unique_ptr<NActors::TMon> Monitoring; 
+    std::unique_ptr<NKikimr::TAppData> AppData; 
     std::shared_ptr<NKikimr::NPDisk::IIoContextFactory> IoContext;
-    std::unique_ptr<NActors::TActorSystem> ActorSystem1;
+    std::unique_ptr<NActors::TActorSystem> ActorSystem1; 
     TSystemEvent DoneEvent { TSystemEvent::rAuto };
 public:
     ui16 MonPort;
@@ -51,7 +51,7 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     nameserverTable->StaticNodeTable[1] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12001));
     nameserverTable->StaticNodeTable[2] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12002));
 
-    auto setup1 = MakeHolder<TActorSystemSetup>();
+    auto setup1 = MakeHolder<TActorSystemSetup>(); 
     setup1->NodeId = 1;
     setup1->ExecutorsCount = 4;
     setup1->Executors.Reset(new TAutoPtr<IExecutorPool>[4]);
@@ -117,13 +117,13 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     loggerActor->Log(Now(), NKikimr::NLog::PRI_NOTICE, NActorsServices::TEST, "Monitoring settings set up");
     //////////////////////////////////////////////////////////////////////////////
 
-    AppData.reset(new NKikimr::TAppData(0, 1, 2, 3, TMap<TString, ui32>(), typeRegistry.Get(),
+    AppData.reset(new NKikimr::TAppData(0, 1, 2, 3, TMap<TString, ui32>(), typeRegistry.Get(), 
                                         nullptr, nullptr, &KikimrShouldContinue));
     AppData->Counters = Counters;
-    AppData->Mon = Monitoring.get();
+    AppData->Mon = Monitoring.get(); 
     IoContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();
     AppData->IoContextFactory = IoContext.get();
-    ActorSystem1.reset(new TActorSystem(setup1, AppData.get(), logSettings));
+    ActorSystem1.reset(new TActorSystem(setup1, AppData.get(), logSettings)); 
     loggerActor->Log(Now(), NKikimr::NLog::PRI_NOTICE, NActorsServices::TEST, "Actor system created");
 
 
@@ -134,5 +134,5 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
 
     DoneEvent.Wait();
     ActorSystem1->Stop();
-    ActorSystem1.reset();
+    ActorSystem1.reset(); 
 }

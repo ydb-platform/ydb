@@ -1,18 +1,18 @@
-#pragma once
-
+#pragma once 
+ 
 #include "defs.h"
-#include "test_load_time_series.h"
-
+#include "test_load_time_series.h" 
+ 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NKikimr {
-
-    template<typename T>
-    class TQuantileTracker : public TTimeSeries<T>
-    {
-        using TItem = typename TTimeSeries<T>::TItem;
-        using TTimeSeries<T>::Items;
-
+namespace NKikimr { 
+ 
+    template<typename T> 
+    class TQuantileTracker : public TTimeSeries<T> 
+    { 
+        using TItem = typename TTimeSeries<T>::TItem; 
+        using TTimeSeries<T>::Items; 
+ 
         using TPercentile = std::pair<float, NMonitoring::TDynamicCounters::TCounterPtr>;
         using TPercentiles = TVector<TPercentile>;
 
@@ -20,15 +20,15 @@ namespace NKikimr {
         TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
         NMonitoring::TDynamicCounters::TCounterPtr Samples;
 
-        struct TCompareTimestamp {
-            bool operator ()(const TItem& x, TInstant y) {
-                return x.Timestamp < y;
-            }
-        };
-
-    public:
-        using TTimeSeries<T>::TTimeSeries;
-
+        struct TCompareTimestamp { 
+            bool operator ()(const TItem& x, TInstant y) { 
+                return x.Timestamp < y; 
+            } 
+        }; 
+ 
+    public: 
+        using TTimeSeries<T>::TTimeSeries; 
+ 
         TQuantileTracker(TDuration lifetime, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
                 const TString& metric, const TVector<float>& percentiles)
             : TTimeSeries<T>(lifetime)
@@ -70,39 +70,39 @@ namespace NKikimr {
             }
         }
 
-        bool CalculateQuantiles(size_t count, const size_t *numerators, size_t denominator, T *res,
-                size_t *numSamples = nullptr, TDuration *interval = nullptr) const {
-            if (numSamples) {
-                *numSamples = Items.size();
-                if (interval) {
-                    *interval = Items ? Items.back().Timestamp - Items.front().Timestamp : TDuration::Zero();
-                }
-            }
-
-            // create a vector of values matching time criterion
+        bool CalculateQuantiles(size_t count, const size_t *numerators, size_t denominator, T *res, 
+                size_t *numSamples = nullptr, TDuration *interval = nullptr) const { 
+            if (numSamples) { 
+                *numSamples = Items.size(); 
+                if (interval) { 
+                    *interval = Items ? Items.back().Timestamp - Items.front().Timestamp : TDuration::Zero(); 
+                } 
+            } 
+ 
+            // create a vector of values matching time criterion 
             TVector<T> values;
-            values.reserve(Items.size());
-            for (const TItem &item : Items) {
-                values.push_back(item.Value);
-            }
-
-            // if there are no values, return false meaning we can't get adequate results
-            if (values.empty()) {
-                std::fill(res, res + count, T());
-                return false;
-            }
-
-            // sort and calculate quantiles
-            std::sort(values.begin(), values.end());
-            size_t maxIndex = values.size() - 1;
-            while (count--) {
-                const size_t numerator = *numerators++;
-                Y_VERIFY(numerator >= 0 && numerator <= denominator);
-                const size_t index = maxIndex * numerator / denominator;
-                *res++ = values[index];
-            }
-            return true;
-        }
-    };
-
-} // NKikimr
+            values.reserve(Items.size()); 
+            for (const TItem &item : Items) { 
+                values.push_back(item.Value); 
+            } 
+ 
+            // if there are no values, return false meaning we can't get adequate results 
+            if (values.empty()) { 
+                std::fill(res, res + count, T()); 
+                return false; 
+            } 
+ 
+            // sort and calculate quantiles 
+            std::sort(values.begin(), values.end()); 
+            size_t maxIndex = values.size() - 1; 
+            while (count--) { 
+                const size_t numerator = *numerators++; 
+                Y_VERIFY(numerator >= 0 && numerator <= denominator); 
+                const size_t index = maxIndex * numerator / denominator; 
+                *res++ = values[index]; 
+            } 
+            return true; 
+        } 
+    }; 
+ 
+} // NKikimr 

@@ -109,7 +109,7 @@ public:
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
-        std::unique_ptr<TEvBlobStorage::TEvPatchResult> result = std::make_unique<TEvBlobStorage::TEvPatchResult>(status, PatchedId,
+        std::unique_ptr<TEvBlobStorage::TEvPatchResult> result = std::make_unique<TEvBlobStorage::TEvPatchResult>(status, PatchedId, 
                 StatusFlags, Info->GroupID, ApproximateFreeSpaceShare);
         result->ErrorReason = ErrorReason;
         result->Orbit = std::move(Orbit);
@@ -170,10 +170,10 @@ public:
         Buffer = result->Responses[0].Buffer;
         ApplyDiffs();
 
-        std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(PatchedId, Buffer, Deadline,
+        std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(PatchedId, Buffer, Deadline, 
                 NKikimrBlobStorage::AsyncBlob, TEvBlobStorage::TEvPut::TacticDefault);
         put->Orbit = std::move(Orbit);
-        Send(ProxyActorId, put.release(), 0, OriginalId.Hash(), std::move(TraceId));
+        Send(ProxyActorId, put.release(), 0, OriginalId.Hash(), std::move(TraceId)); 
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr &ev) {
@@ -386,13 +386,13 @@ public:
     }
 
     void SendStopDiffs() {
-        TDeque<std::unique_ptr<TEvBlobStorage::TEvVPatchDiff>> events;
+        TDeque<std::unique_ptr<TEvBlobStorage::TEvVPatchDiff>> events; 
         for (ui32 vdiskIdx = 0; vdiskIdx < VDisks.size(); ++vdiskIdx) {
             if (!ErrorResponseFlags[vdiskIdx] && !EmptyResponseFlags[vdiskIdx] && ReceivedResponseFlags[vdiskIdx]) {
-                std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> ev = std::make_unique<TEvBlobStorage::TEvVPatchDiff>(
+                std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> ev = std::make_unique<TEvBlobStorage::TEvVPatchDiff>( 
                         OriginalId, PatchedId, VDisks[vdiskIdx], 0, Deadline, vdiskIdx);
                 ev->SetForceEnd();
-                events.emplace_back(std::move(ev));
+                events.emplace_back(std::move(ev)); 
             }
         }
         SendToQueues(events, false);
@@ -403,7 +403,7 @@ public:
     }
 
     void SendDiffs(const TStackVec<TPartPlacement, TypicalPartsInBlob> &placement) {
-        TDeque<std::unique_ptr<TEvBlobStorage::TEvVPatchDiff>> events;
+        TDeque<std::unique_ptr<TEvBlobStorage::TEvVPatchDiff>> events; 
 
         TPartDiffSet diffSet;
         TVector<TDiff> diffs;
@@ -444,8 +444,8 @@ public:
             TLogoBlobID partchedPartBlobId(PatchedId, partPlacement.PartId);
 
             ui32 waitedXorDiffs = (partPlacement.PartId > dataParts)  ? dataPartCount : 0;
-            auto ev = std::make_unique<TEvBlobStorage::TEvVPatchDiff>(originalPartBlobId, partchedPartBlobId,
-                VDisks[idxInSubgroup], waitedXorDiffs, Deadline, idxInSubgroup);
+            auto ev = std::make_unique<TEvBlobStorage::TEvVPatchDiff>(originalPartBlobId, partchedPartBlobId, 
+                VDisks[idxInSubgroup], waitedXorDiffs, Deadline, idxInSubgroup); 
 
             ui32 diffForPartIdx = 0;
             if (Info->Type.ErasureFamily() != TErasureType::ErasureMirror) {
@@ -460,7 +460,7 @@ public:
                 ev->AddXorReceiver(VDisks[parity.VDiskIdxInSubgroup], parity.PartId);
             }
 
-            events.push_back(std::move(ev));
+            events.push_back(std::move(ev)); 
         }
         SendToQueues(events, false);
         SendStopDiffs();
@@ -506,7 +506,7 @@ public:
             subgroupIdx = RandomNumber<ui32>(Info->Type.TotalPartCount());
         }
         TVDiskID vDisk = Info->GetVDiskInSubgroup(subgroupIdx, OriginalId.Hash());
-        TDeque<std::unique_ptr<TEvBlobStorage::TEvVMovedPatch>> events;
+        TDeque<std::unique_ptr<TEvBlobStorage::TEvVMovedPatch>> events; 
 
         ui64 cookie = ((ui64)OriginalId.Hash() << 32) | PatchedId.Hash();
         events.emplace_back(new TEvBlobStorage::TEvVMovedPatch(OriginalGroupId, Info->GroupID,
@@ -527,13 +527,13 @@ public:
             << " PatchedBlob# " << PatchedId
             << " Deadline# " << Deadline);
         Become(&TThis::NaiveState);
-        auto get = std::make_unique<TEvBlobStorage::TEvGet>(OriginalId, 0, OriginalId.BlobSize(), Deadline,
-            NKikimrBlobStorage::AsyncRead);
+        auto get = std::make_unique<TEvBlobStorage::TEvGet>(OriginalId, 0, OriginalId.BlobSize(), Deadline, 
+            NKikimrBlobStorage::AsyncRead); 
         get->Orbit = std::move(Orbit);
         if (OriginalGroupId == Info->GroupID) {
-            Send(ProxyActorId, get.release(), 0, PatchedId.Hash(), std::move(TraceId));
+            Send(ProxyActorId, get.release(), 0, PatchedId.Hash(), std::move(TraceId)); 
         } else {
-            SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), std::move(TraceId));
+            SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), std::move(TraceId)); 
         }
     }
 
@@ -554,10 +554,10 @@ public:
         ErrorResponseFlags.assign(VDisks.size(), false);
         EmptyResponseFlags.assign(VDisks.size(), false);
 
-        TDeque<std::unique_ptr<TEvBlobStorage::TEvVPatchStart>> events;
+        TDeque<std::unique_ptr<TEvBlobStorage::TEvVPatchStart>> events; 
 
         for (ui32 idx = 0; idx < VDisks.size(); ++idx) {
-            std::unique_ptr<TEvBlobStorage::TEvVPatchStart> ev = std::make_unique<TEvBlobStorage::TEvVPatchStart>(
+            std::unique_ptr<TEvBlobStorage::TEvVPatchStart> ev = std::make_unique<TEvBlobStorage::TEvVPatchStart>( 
                     OriginalId, PatchedId, VDisks[idx], Deadline, idx, true);
             events.emplace_back(std::move(ev));
             SendedStarts++;

@@ -402,16 +402,16 @@ private:
         const size_t endChunk = end >> DivCount;
         const size_t endBitOffset = end & ModMask;
 
-        size_t bitOffset = startBitOffset;
-        for (size_t chunk = startChunk; chunk <= endChunk; ++chunk) {
-            TChunk updateMask = FullChunk << bitOffset;
-            if (chunk == endChunk) {
-                updateMask ^= FullChunk << endBitOffset;
-                if (!updateMask)
-                    break;
+        size_t bitOffset = startBitOffset; 
+        for (size_t chunk = startChunk; chunk <= endChunk; ++chunk) { 
+            TChunk updateMask = FullChunk << bitOffset; 
+            if (chunk == endChunk) { 
+                updateMask ^= FullChunk << endBitOffset; 
+                if (!updateMask) 
+                    break; 
             }
-            Mask.Data[chunk] = TUpdateOp::Op(Mask.Data[chunk], updateMask);
-            bitOffset = 0;
+            Mask.Data[chunk] = TUpdateOp::Op(Mask.Data[chunk], updateMask); 
+            bitOffset = 0; 
         }
     }
 

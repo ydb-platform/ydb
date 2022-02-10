@@ -19,7 +19,7 @@ namespace NKikimr {
             SyncLog,
             Syncer,
             HugeKeeper,
-            Scrub,
+            Scrub, 
             Max
         };
         const EComp Component;

@@ -2531,8 +2531,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::PROXY_SCHEME_CACHE;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::PROXY_SCHEME_CACHE; 
     }
 
     TSchemeCache(NSchemeCache::TSchemeCacheConfig* config)

@@ -175,7 +175,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
     BandwidthPSysLogRecordHeader = BandwidthGroup->GetCounter("Bandwidth/PDisk/SysLog/RecordHeader", true);
     BandwidthPSysLogPadding = BandwidthGroup->GetCounter("Bandwidth/PDisk/SysLog/Padding", true);
     BandwidthPSysLogErasure = BandwidthGroup->GetCounter("Bandwidth/PDisk/SysLog/Erasure", true);
-
+ 
     BandwidthPChunkPayload = BandwidthGroup->GetCounter("Bandwidth/PDisk/Chunk/Payload", true);
     BandwidthPChunkSectorFooter = BandwidthGroup->GetCounter("Bandwidth/PDisk/Chunk/SectorFooter", true);
     BandwidthPChunkPadding = BandwidthGroup->GetCounter("Bandwidth/PDisk/Chunk/Padding", true);
@@ -402,15 +402,15 @@ void TPDiskMon::UpdateStats() {
 }
 
 TPDiskMon::TIoCounters *TPDiskMon::GetWriteCounter(ui8 priority) {
-    switch (priority) {
-        case NPriWrite::SyncLog: return &WriteSyncLog;
-        case NPriWrite::HullFresh: return &WriteFresh;
+    switch (priority) { 
+        case NPriWrite::SyncLog: return &WriteSyncLog; 
+        case NPriWrite::HullFresh: return &WriteFresh; 
         case NPriWrite::HullHugeAsyncBlob: return &WriteHuge;
         case NPriWrite::HullHugeUserData: return &WriteHuge;
-        case NPriWrite::HullComp: return &WriteComp;
-    }
+        case NPriWrite::HullComp: return &WriteComp; 
+    } 
     return &Unknown;
-}
+} 
 
 TPDiskMon::TIoCounters *TPDiskMon::GetReadCounter(ui8 priority) {
     switch (priority) {

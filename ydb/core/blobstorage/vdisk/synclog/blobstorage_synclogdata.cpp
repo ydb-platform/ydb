@@ -258,8 +258,8 @@ namespace NKikimr {
 
         const TEntryPointDbgInfo &TSyncLog::GetLastEntryPointDbgInfo() const {
             return LastEntryPointDbgInfo;
-        }
-
+        } 
+ 
         TString TSyncLog::BoundariesToString() const {
             return Sprintf("{LogStartLsn: %" PRIu64 " LastLsnOfIndexRecord: %" PRIu64
                            " %s %s}", LogStartLsn, LastLsnOfIndexRecord,
@@ -310,7 +310,7 @@ namespace NKikimr {
 
         TVector<ui32> TSyncLog::TrimLogByConfirmedLsn(
             ui64 confirmedCutLsn,
-            std::shared_ptr<IActorNotify> notifier,
+            std::shared_ptr<IActorNotify> notifier, 
             std::function<void(const TString&)> logger)
         {
             if (LogStartLsn > confirmedCutLsn + 1) {
@@ -331,7 +331,7 @@ namespace NKikimr {
 
         TVector<ui32> TSyncLog::TrimLogByRemovingChunks(
             ui32 numChunksToDel,
-            std::shared_ptr<IActorNotify> notifier)
+            std::shared_ptr<IActorNotify> notifier) 
         {
             TVector<ui32> chunks;
             ui64 sLsn = DiskRecLog.DeleteChunks(numChunksToDel, std::move(notifier), chunks);
@@ -488,9 +488,9 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TEntryPointParser - a class for parsing SyncLog entry point
         ////////////////////////////////////////////////////////////////////////////
-        bool TEntryPointParser::Parse(const TString &serializedData, bool &needsInitialCommit, TString &explanation) {
+        bool TEntryPointParser::Parse(const TString &serializedData, bool &needsInitialCommit, TString &explanation) { 
             NKikimrVDiskData::TSyncLogEntryPoint pb;
-            bool success = ParseToProto(pb, serializedData, needsInitialCommit, explanation);
+            bool success = ParseToProto(pb, serializedData, needsInitialCommit, explanation); 
             if (!success) {
                 return false;
             }
@@ -529,13 +529,13 @@ namespace NKikimr {
         bool TEntryPointParser::ParseToProto(
                 NKikimrVDiskData::TSyncLogEntryPoint &pb,
                 const TString &serializedData,
-                bool &needsInitialCommit,
+                bool &needsInitialCommit, 
                 TString &explanation)
         {
             TStringStream err;
             if (serializedData.empty()) {
                 // empty entry point
-                needsInitialCommit = true;
+                needsInitialCommit = true; 
                 FillInEmptyEntryPoint(pb);
                 return true;
             }

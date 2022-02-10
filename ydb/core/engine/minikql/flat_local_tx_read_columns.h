@@ -79,7 +79,7 @@ public:
 
         TVector<NTable::TTag> valueColumns;
         TVector<std::pair<TString, NScheme::TTypeId>> columns;
-        for (const auto& col : Ev->Get()->Record.GetColumns()) {
+        for (const auto& col : Ev->Get()->Record.GetColumns()) { 
             const auto* colNameInfo = tableInfo->ColumnNames.FindPtr(col);
             if (!colNameInfo) {
                 SetError(Ydb::StatusIds::SCHEME_ERROR, Sprintf("Unknown column %s", col.c_str()));

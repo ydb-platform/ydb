@@ -156,23 +156,23 @@ namespace NKikimr {
         typedef NKikimr::TLevelSegment<TKey, TMemRec> TLevelSegment;
         typedef NKikimr::TFreshAppendix<TKey, TMemRec> TFreshAppendix;
 
-        static constexpr ui32 GetSignature() {
-            if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
-                return 0x5567FEDC;
-            } else if constexpr (std::is_same_v<TKey, TKeyBlock>) {
-                return 0x5567FEDD;
-            } else if constexpr (std::is_same_v<TKey, TKeyBarrier>) {
-                return 0x5567FEDE;
-            } else {
-                static_assert(!std::is_same_v<TKey, TKey>, "invalid TKey");
-            }
-        }
+        static constexpr ui32 GetSignature() { 
+            if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) { 
+                return 0x5567FEDC; 
+            } else if constexpr (std::is_same_v<TKey, TKeyBlock>) { 
+                return 0x5567FEDD; 
+            } else if constexpr (std::is_same_v<TKey, TKeyBarrier>) { 
+                return 0x5567FEDE; 
+            } else { 
+                static_assert(!std::is_same_v<TKey, TKey>, "invalid TKey"); 
+            } 
+        } 
 
-        static constexpr ui32 Signature = GetSignature();
-        static constexpr size_t KeySizeOf = sizeof(TKey);
-
+        static constexpr ui32 Signature = GetSignature(); 
+        static constexpr size_t KeySizeOf = sizeof(TKey); 
+ 
     private:
-        std::shared_ptr<TLevelIndexCtx> Ctx;
+        std::shared_ptr<TLevelIndexCtx> Ctx; 
         TFreshData Fresh;
 
     public:
@@ -188,7 +188,7 @@ namespace NKikimr {
         TAtomic HullCompWritesInFlight = 0;
 
         TIntrusivePtr<TDelayedHugeBlobDeleterInfo> DelayedHugeBlobDeleterInfo;
-        std::shared_ptr<TLevelIndexActorCtx> ActorCtx;
+        std::shared_ptr<TLevelIndexActorCtx> ActorCtx; 
 
     private:
         // it is used for allocation unique id to a new sst
@@ -225,27 +225,27 @@ namespace NKikimr {
 
         // Constructors just create corresponding structures in memory from entryPoint record or from nothing;
         // nothing is loaded into memory from disk, use TLevelIndexLoader for bringing index to memory
-        TLevelIndex(const TLevelIndexSettings &settings, std::shared_ptr<TRopeArena> arena)
+        TLevelIndex(const TLevelIndexSettings &settings, std::shared_ptr<TRopeArena> arena) 
             : TLevelIndexBase(settings)
-            , Ctx(std::make_shared<TLevelIndexCtx>())
-            , Fresh(settings, TAppData::TimeProvider, std::move(arena))
+            , Ctx(std::make_shared<TLevelIndexCtx>()) 
+            , Fresh(settings, TAppData::TimeProvider, std::move(arena)) 
             , CurSlice(MakeIntrusive<TLevelSlice>(settings, Ctx))
             , DelayedHugeBlobDeleterInfo(new TDelayedHugeBlobDeleterInfo)
-            , ActorCtx(std::make_shared<TLevelIndexActorCtx>())
+            , ActorCtx(std::make_shared<TLevelIndexActorCtx>()) 
             , CompactedLsn()
         {}
 
         TLevelIndex(const TLevelIndexSettings &settings,
                     const NKikimrVDiskData::TLevelIndex &pb,
-                    ui64 entryPointLsn,
-                    std::shared_ptr<TRopeArena> arena)
+                    ui64 entryPointLsn, 
+                    std::shared_ptr<TRopeArena> arena) 
             : TLevelIndexBase(settings)
-            , Ctx(std::make_shared<TLevelIndexCtx>())
-            , Fresh(settings, TAppData::TimeProvider, std::move(arena))
+            , Ctx(std::make_shared<TLevelIndexCtx>()) 
+            , Fresh(settings, TAppData::TimeProvider, std::move(arena)) 
             , CurSlice(MakeIntrusive<TLevelSlice>(settings, Ctx, pb))
             , CurEntryPointLsn(entryPointLsn)
             , DelayedHugeBlobDeleterInfo(new TDelayedHugeBlobDeleterInfo)
-            , ActorCtx(std::make_shared<TLevelIndexActorCtx>())
+            , ActorCtx(std::make_shared<TLevelIndexActorCtx>()) 
             , NextSstId(pb.GetNextSstId())
             , CompactedLsn(pb)
         {}
@@ -267,16 +267,16 @@ namespace NKikimr {
         // Operations with Fresh
         //////////////////////////////////////////////////////////////////////////////////////
         void PutToFresh(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer) {
-            Y_VERIFY_DEBUG(Loaded);
+            Y_VERIFY_DEBUG(Loaded); 
             Fresh.PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer));
-        }
-
+        } 
+ 
         void PutToFresh(ui64 lsn, const TKey &key, const TMemRec &memRec) {
             Y_VERIFY_DEBUG(Loaded);
             Fresh.Put(lsn, key, memRec);
         }
 
-        void PutToFresh(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) {
+        void PutToFresh(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) { 
             Y_VERIFY_DEBUG(Loaded);
             Fresh.PutAppendix(std::move(a), firstLsn, lastLsn);
         }
@@ -290,11 +290,11 @@ namespace NKikimr {
         TIntrusivePtr<TFreshSegment> FindFreshSegmentForCompaction() {
             return Fresh.FindSegmentForCompaction();
         }
-
-        bool FreshCompactionInProgress() const {
-            return Fresh.CompactionInProgress();
-        }
-
+ 
+        bool FreshCompactionInProgress() const { 
+            return Fresh.CompactionInProgress(); 
+        } 
+ 
         void FreshCompactionFinished() {
             Fresh.CompactionFinished();
         }
@@ -313,7 +313,7 @@ namespace NKikimr {
             return Min(Min(CurEntryPointLsn, PrevEntryPointLsn), Fresh.GetFirstLsnToKeep());
         }
 
-        virtual void LoadCompleted() {
+        virtual void LoadCompleted() { 
             Y_VERIFY_DEBUG(!Loaded);
             Loaded = true;
 
@@ -427,159 +427,159 @@ namespace NKikimr {
         void UpdateLevelStat(NMonGroup::TLsmAllLevelsStat &stat);
     };
 
-    ///////////////////////////////////////////////////////////////////////////////////////////
-    // Custom implementation of GetSnapshot for every Hull Database (optimization applies)
-    ///////////////////////////////////////////////////////////////////////////////////////////
-    template <>
-    inline TLevelIndexSnapshot<TKeyLogoBlob, TMemRecLogoBlob> TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>::GetSnapshot(TActorSystem *as) {
-        return PrivateGetSnapshot(as);
-    }
-
-    template <>
-    inline TLevelIndexSnapshot<TKeyBlock, TMemRecBlock> TLevelIndex<TKeyBlock, TMemRecBlock>::GetSnapshot(TActorSystem *) {
-        // we never want to take data snapshots for Blocks Database
-        return PrivateGetSnapshot(nullptr);
-    }
-
-    template <>
-    inline TLevelIndexSnapshot<TKeyBarrier, TMemRecBarrier> TLevelIndex<TKeyBarrier, TMemRecBarrier>::GetSnapshot(TActorSystem *) {
-        // we never want to take data snapshots for Barriers Database
-        return PrivateGetSnapshot(nullptr);
-    }
-
-    ///////////////////////////////////////////////////////////////////////////////////////////
-    // Custom implementation of UpdateLevelStat
-    ///////////////////////////////////////////////////////////////////////////////////////////
-    template <>
-    inline void TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>::UpdateLevelStat(NMonGroup::TLsmAllLevelsStat &stat) {
-        struct TLevelGroupInfo {
-            ui64 SstNum = 0;
-            ui64 NumItems = 0;
-            ui64 NumItemsInplaced = 0;
-            ui64 NumItemsHuge = 0;
-            ui64 DataInplaced = 0;
-            ui64 DataHuge = 0;
-        };
-
-        TLevelGroupInfo level0, level1to8, level9to16, level17, level18;
-
-        auto process = [](TLevelGroupInfo *stat, TLevelSegment *seg) {
-            stat->SstNum += 1;
-            stat->NumItems += seg->Info.Items;
-            stat->NumItemsInplaced += seg->Info.ItemsWithInplacedData;
-            stat->NumItemsHuge += seg->Info.ItemsWithHugeData;
-            stat->DataInplaced += seg->Info.InplaceDataTotalSize;
-            stat->DataHuge += seg->Info.HugeDataTotalSize;
-        };
-
-        for (const auto& seg : CurSlice->Level0.Segs->Segments) {
-            process(&level0, seg.Get());
-        }
-
-        ui32 levelIndex = 1;
-        for (const auto& level : CurSlice->SortedLevels) {
-            TLevelGroupInfo *info = nullptr;
-            switch (levelIndex) {
-                case 1:
-                case 2:
-                case 3:
-                case 4:
-                case 5:
-                case 6:
-                case 7:
-                case 8:
-                    info = &level1to8;
-                    break;
-
-                case 9:
-                case 10:
-                case 11:
-                case 12:
-                case 13:
-                case 14:
-                case 15:
-                case 16:
-                    info = &level9to16;
-                    break;
-
-                case 17:
-                    info = &level17;
-                    break;
-
-                case 18:
-                    info = &level18;
-                    break;
-            }
-
-            if (info) {
-                for (const auto& seg : level.Segs->Segments) {
-                    process(info, seg.Get());
-                }
-            }
-
-            ++levelIndex;
-        }
-
-        for (const auto& p : {std::make_pair(&level0, &stat.Level0),
-                std::make_pair(&level1to8, &stat.Level1to8),
-                std::make_pair(&level9to16, &stat.Level9to16),
-                std::make_pair(&level17, &stat.Level17),
-                std::make_pair(&level18, &stat.Level18)}) {
-            TLevelGroupInfo *from = p.first;
-            NMonGroup::TLsmLevelGroup *to = p.second;
-            to->SstNum() = from->SstNum;
-            to->NumItems() = from->NumItems;
-            to->NumItemsInplaced() = from->NumItemsInplaced;
-            to->NumItemsHuge() = from->NumItemsHuge;
-            to->DataInplaced() = from->DataInplaced;
-            to->DataHuge() = from->DataHuge;
-        }
-    }
-
-    template <>
-    inline void TLevelIndex<TKeyBlock, TMemRecBlock>::UpdateLevelStat(NMonGroup::TLsmAllLevelsStat &) {
-        // intentionally empty
-    }
-
-    template <>
-    inline void TLevelIndex<TKeyBarrier, TMemRecBarrier>::UpdateLevelStat(NMonGroup::TLsmAllLevelsStat &) {
-        // intentionally empty
-    }
-
-    template <class TKey, class TMemRec>
-    inline void TLevelIndex<TKey, TMemRec>::OutputHugeStatButton(const TString& /*name*/, IOutputStream& /*str*/) const {
-        // by default don't output HugeStat button
-    }
-
-    template <>
-    inline void TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>::OutputHugeStatButton(const TString& /*name*/, IOutputStream &str) const
-    {
-        str << "<a class=\"btn btn-primary btn-xs navbar-right\""
-            << " href=\"?type=hugestat\">Huge Stat</a>";
-    }
-
-    template <class TKey, class TMemRec>
-    inline void TLevelIndex<TKey, TMemRec>::OutputQueryDbButton(const TString& /*name*/, IOutputStream& /*str*/) const {
-        // by default don't output QueryDb button
-    }
-
-    template <>
-    inline void TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>::OutputQueryDbButton(const TString &name, IOutputStream &str) const
-    {
-        str << "<a class=\"btn btn-primary btn-xs navbar-right\""
-            << " href=\"?type=query&dbname=" << name << "&form=1\">Query Database</a>";
-    }
-
-    template <>
-    inline void TLevelIndex<TKeyBarrier, TMemRecBarrier>::OutputQueryDbButton(const TString &name, IOutputStream &str) const
-    {
-        str << "<a class=\"btn btn-primary btn-xs navbar-right\""
-            << " href=\"?type=query&dbname=" << name << "&form=1\">Query Database</a>";
-    }
-
-    extern template class TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>;
-    extern template class TLevelIndex<TKeyBarrier, TMemRecBarrier>;
-    extern template class TLevelIndex<TKeyBlock, TMemRecBlock>;
-
+    /////////////////////////////////////////////////////////////////////////////////////////// 
+    // Custom implementation of GetSnapshot for every Hull Database (optimization applies) 
+    /////////////////////////////////////////////////////////////////////////////////////////// 
+    template <> 
+    inline TLevelIndexSnapshot<TKeyLogoBlob, TMemRecLogoBlob> TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>::GetSnapshot(TActorSystem *as) { 
+        return PrivateGetSnapshot(as); 
+    } 
+ 
+    template <> 
+    inline TLevelIndexSnapshot<TKeyBlock, TMemRecBlock> TLevelIndex<TKeyBlock, TMemRecBlock>::GetSnapshot(TActorSystem *) { 
+        // we never want to take data snapshots for Blocks Database 
+        return PrivateGetSnapshot(nullptr); 
+    } 
+ 
+    template <> 
+    inline TLevelIndexSnapshot<TKeyBarrier, TMemRecBarrier> TLevelIndex<TKeyBarrier, TMemRecBarrier>::GetSnapshot(TActorSystem *) { 
+        // we never want to take data snapshots for Barriers Database 
+        return PrivateGetSnapshot(nullptr); 
+    } 
+ 
+    /////////////////////////////////////////////////////////////////////////////////////////// 
+    // Custom implementation of UpdateLevelStat 
+    /////////////////////////////////////////////////////////////////////////////////////////// 
+    template <> 
+    inline void TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>::UpdateLevelStat(NMonGroup::TLsmAllLevelsStat &stat) { 
+        struct TLevelGroupInfo { 
+            ui64 SstNum = 0; 
+            ui64 NumItems = 0; 
+            ui64 NumItemsInplaced = 0; 
+            ui64 NumItemsHuge = 0; 
+            ui64 DataInplaced = 0; 
+            ui64 DataHuge = 0; 
+        }; 
+ 
+        TLevelGroupInfo level0, level1to8, level9to16, level17, level18; 
+ 
+        auto process = [](TLevelGroupInfo *stat, TLevelSegment *seg) { 
+            stat->SstNum += 1; 
+            stat->NumItems += seg->Info.Items; 
+            stat->NumItemsInplaced += seg->Info.ItemsWithInplacedData; 
+            stat->NumItemsHuge += seg->Info.ItemsWithHugeData; 
+            stat->DataInplaced += seg->Info.InplaceDataTotalSize; 
+            stat->DataHuge += seg->Info.HugeDataTotalSize; 
+        }; 
+ 
+        for (const auto& seg : CurSlice->Level0.Segs->Segments) { 
+            process(&level0, seg.Get()); 
+        } 
+ 
+        ui32 levelIndex = 1; 
+        for (const auto& level : CurSlice->SortedLevels) { 
+            TLevelGroupInfo *info = nullptr; 
+            switch (levelIndex) { 
+                case 1: 
+                case 2: 
+                case 3: 
+                case 4: 
+                case 5: 
+                case 6: 
+                case 7: 
+                case 8: 
+                    info = &level1to8; 
+                    break; 
+ 
+                case 9: 
+                case 10: 
+                case 11: 
+                case 12: 
+                case 13: 
+                case 14: 
+                case 15: 
+                case 16: 
+                    info = &level9to16; 
+                    break; 
+ 
+                case 17: 
+                    info = &level17; 
+                    break; 
+ 
+                case 18: 
+                    info = &level18; 
+                    break; 
+            } 
+ 
+            if (info) { 
+                for (const auto& seg : level.Segs->Segments) { 
+                    process(info, seg.Get()); 
+                } 
+            } 
+ 
+            ++levelIndex; 
+        } 
+ 
+        for (const auto& p : {std::make_pair(&level0, &stat.Level0), 
+                std::make_pair(&level1to8, &stat.Level1to8), 
+                std::make_pair(&level9to16, &stat.Level9to16), 
+                std::make_pair(&level17, &stat.Level17), 
+                std::make_pair(&level18, &stat.Level18)}) { 
+            TLevelGroupInfo *from = p.first; 
+            NMonGroup::TLsmLevelGroup *to = p.second; 
+            to->SstNum() = from->SstNum; 
+            to->NumItems() = from->NumItems; 
+            to->NumItemsInplaced() = from->NumItemsInplaced; 
+            to->NumItemsHuge() = from->NumItemsHuge; 
+            to->DataInplaced() = from->DataInplaced; 
+            to->DataHuge() = from->DataHuge; 
+        } 
+    } 
+ 
+    template <> 
+    inline void TLevelIndex<TKeyBlock, TMemRecBlock>::UpdateLevelStat(NMonGroup::TLsmAllLevelsStat &) { 
+        // intentionally empty 
+    } 
+ 
+    template <> 
+    inline void TLevelIndex<TKeyBarrier, TMemRecBarrier>::UpdateLevelStat(NMonGroup::TLsmAllLevelsStat &) { 
+        // intentionally empty 
+    } 
+ 
+    template <class TKey, class TMemRec> 
+    inline void TLevelIndex<TKey, TMemRec>::OutputHugeStatButton(const TString& /*name*/, IOutputStream& /*str*/) const { 
+        // by default don't output HugeStat button 
+    } 
+ 
+    template <> 
+    inline void TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>::OutputHugeStatButton(const TString& /*name*/, IOutputStream &str) const 
+    { 
+        str << "<a class=\"btn btn-primary btn-xs navbar-right\"" 
+            << " href=\"?type=hugestat\">Huge Stat</a>"; 
+    } 
+ 
+    template <class TKey, class TMemRec> 
+    inline void TLevelIndex<TKey, TMemRec>::OutputQueryDbButton(const TString& /*name*/, IOutputStream& /*str*/) const { 
+        // by default don't output QueryDb button 
+    } 
+ 
+    template <> 
+    inline void TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>::OutputQueryDbButton(const TString &name, IOutputStream &str) const 
+    { 
+        str << "<a class=\"btn btn-primary btn-xs navbar-right\"" 
+            << " href=\"?type=query&dbname=" << name << "&form=1\">Query Database</a>"; 
+    } 
+ 
+    template <> 
+    inline void TLevelIndex<TKeyBarrier, TMemRecBarrier>::OutputQueryDbButton(const TString &name, IOutputStream &str) const 
+    { 
+        str << "<a class=\"btn btn-primary btn-xs navbar-right\"" 
+            << " href=\"?type=query&dbname=" << name << "&form=1\">Query Database</a>"; 
+    } 
+ 
+    extern template class TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>; 
+    extern template class TLevelIndex<TKeyBarrier, TMemRecBarrier>; 
+    extern template class TLevelIndex<TKeyBlock, TMemRecBlock>; 
+ 
 } // NKikimr
 

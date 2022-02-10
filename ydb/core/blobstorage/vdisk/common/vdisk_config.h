@@ -27,18 +27,18 @@ namespace NKikimr {
             EKind Kind = NKikimrBlobStorage::TVDiskKind::Default;
             // name of the storage pool this VDisk belongs to
             TString StoragePoolName;
-            // is the donor mode enabled for this disk? (no communication with group, actually, no group -- only reads)
-            const bool DonorMode = false;
-            // a set of donor disks for this one
-            std::vector<std::pair<TVDiskID, TActorId>> DonorDiskIds;
-            // replication quoters
-            TReplQuoter::TPtr ReplPDiskReadQuoter;
-            TReplQuoter::TPtr ReplPDiskWriteQuoter;
-            TReplQuoter::TPtr ReplNodeRequestQuoter;
-            TReplQuoter::TPtr ReplNodeResponseQuoter;
-            TDuration YardInitDelay = TDuration::Zero();
-            const ui64 ScrubCookie = 0;
-            const ui64 WhiteboardInstanceGuid = 0;
+            // is the donor mode enabled for this disk? (no communication with group, actually, no group -- only reads) 
+            const bool DonorMode = false; 
+            // a set of donor disks for this one 
+            std::vector<std::pair<TVDiskID, TActorId>> DonorDiskIds; 
+            // replication quoters 
+            TReplQuoter::TPtr ReplPDiskReadQuoter; 
+            TReplQuoter::TPtr ReplPDiskWriteQuoter; 
+            TReplQuoter::TPtr ReplNodeRequestQuoter; 
+            TReplQuoter::TPtr ReplNodeResponseQuoter; 
+            TDuration YardInitDelay = TDuration::Zero(); 
+            const ui64 ScrubCookie = 0; 
+            const ui64 WhiteboardInstanceGuid = 0; 
 
             TBaseInfo(
                     const TVDiskIdShort &vDiskIdShort,
@@ -50,10 +50,10 @@ namespace NKikimr {
                     EKind kind,
                     ui64 initOwnerRound,
                     TString storagePoolName,
-                    const bool donorMode = false,
-                    std::vector<std::pair<TVDiskID, TActorId>> donorDiskIds = {},
-                    ui64 scrubCookie = 0,
-                    ui64 whiteboardInstanceGuid = 0)
+                    const bool donorMode = false, 
+                    std::vector<std::pair<TVDiskID, TActorId>> donorDiskIds = {}, 
+                    ui64 scrubCookie = 0, 
+                    ui64 whiteboardInstanceGuid = 0) 
                 : VDiskIdShort(vDiskIdShort)
                 , PDiskActorID(pDiskActorId)
                 , InitOwnerRound(initOwnerRound)
@@ -63,12 +63,12 @@ namespace NKikimr {
                 , VDiskSlotId(vdiskSlotId)
                 , Kind(kind)
                 , StoragePoolName(storagePoolName)
-                , DonorMode(donorMode)
-                , DonorDiskIds(std::move(donorDiskIds))
-                , ScrubCookie(scrubCookie)
-                , WhiteboardInstanceGuid(whiteboardInstanceGuid)
+                , DonorMode(donorMode) 
+                , DonorDiskIds(std::move(donorDiskIds)) 
+                , ScrubCookie(scrubCookie) 
+                , WhiteboardInstanceGuid(whiteboardInstanceGuid) 
             {}
-
+ 
             TBaseInfo(const TBaseInfo &) = default;
             TBaseInfo &operator=(const TBaseInfo &) = default;
 
@@ -117,10 +117,10 @@ namespace NKikimr {
         ui32 HullCompSortedPartsNum;
         double HullCompLevelRateThreshold;
         double HullCompFreeSpaceThreshold;
-        ui32 FreshCompMaxInFlightWrites;
-        ui32 HullCompMaxInFlightWrites;
-        ui32 HullCompMaxInFlightReads;
-        double HullCompReadBatchEfficiencyThreshold;
+        ui32 FreshCompMaxInFlightWrites; 
+        ui32 HullCompMaxInFlightWrites; 
+        ui32 HullCompMaxInFlightReads; 
+        double HullCompReadBatchEfficiencyThreshold; 
         ui64 AnubisOsirisMaxInFly;
 
         //////////////// LOG CUTTER SETTINGS ////////////////
@@ -156,7 +156,7 @@ namespace NKikimr {
         ui32 ReplPrefetchElements;
         ui32 ReplPrefetchDataSize;
         ui32 ReplMaxResponseSize;
-        ui32 ReplInterconnectChannel;
+        ui32 ReplInterconnectChannel; 
         ui32 HandoffMaxWaitQueueSize;
         ui32 HandoffMaxWaitQueueByteSize;
         ui32 HandoffMaxInFlightSize;
@@ -164,13 +164,13 @@ namespace NKikimr {
         TDuration HandoffTimeout;
         bool RunRepl;
         bool RunHandoff;
-        bool ReplPausedAtStart = false;
+        bool ReplPausedAtStart = false; 
 
         ///////////// SKELETON SETTINGS /////////////////////
         ui64 SkeletonFrontGets_MaxInFlightCount;
         ui64 SkeletonFrontGets_MaxInFlightCost;
-        ui64 SkeletonFrontDiscover_MaxInFlightCount;
-        ui64 SkeletonFrontDiscover_MaxInFlightCost;
+        ui64 SkeletonFrontDiscover_MaxInFlightCount; 
+        ui64 SkeletonFrontDiscover_MaxInFlightCost; 
         ui64 SkeletonFrontLogPuts_MaxInFlightCount;
         ui64 SkeletonFrontLogPuts_MaxInFlightCost;
         ui64 SkeletonFrontHugePuts_MaxInFlightCount;
@@ -180,7 +180,7 @@ namespace NKikimr {
         ui64 SkeletonFrontExtPutUserData_TotalCost;
         ui64 SkeletonFrontExtGetAsync_TotalCost;
         ui64 SkeletonFrontExtGetFast_TotalCost;
-        ui64 SkeletonFrontExtGetDiscover_TotalCost;
+        ui64 SkeletonFrontExtGetDiscover_TotalCost; 
         ui64 SkeletonFrontExtGetLow_TotalCost;
         TDuration SkeletonFrontWakeupPeriod;
         TDuration SkeletonFrontRequestTimeout;
@@ -198,9 +198,9 @@ namespace NKikimr {
         ///////////// OTHER SETTINGS ////////////////////////
         ui32 MaxResponseSize;
         TDuration DskTrackerInterval;
-        bool BarrierValidation;
+        bool BarrierValidation; 
         TDuration WhiteboardUpdateInterval;
-        bool EnableVDiskCooldownTimeout;
+        bool EnableVDiskCooldownTimeout; 
         TControlWrapper EnableVPatch = true;
 
         TVDiskConfig(const TBaseInfo &baseInfo);

@@ -222,7 +222,7 @@ class TKeyValuePair(namedtuple('TKeyValuePair', ['key', 'value', 'size', 'creati
 TCmdRename = namedtuple('TCmdRename', ['old_key', 'new_key'])
 
 
-class TSchemeDescribe(AbstractProtobufBuilder):
+class TSchemeDescribe(AbstractProtobufBuilder): 
     def __init__(self, path):
-        super(TSchemeDescribe, self).__init__(msgbus.TSchemeDescribe())
+        super(TSchemeDescribe, self).__init__(msgbus.TSchemeDescribe()) 
         self.protobuf.Path = path

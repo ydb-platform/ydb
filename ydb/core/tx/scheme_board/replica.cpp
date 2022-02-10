@@ -1299,8 +1299,8 @@ private:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SCHEME_BOARD_REPLICA_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::SCHEME_BOARD_REPLICA_ACTOR; 
     }
 
     void Bootstrap() {

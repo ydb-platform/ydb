@@ -611,8 +611,8 @@ public:
 
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) override;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::FLAT_EXECUTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::FLAT_EXECUTOR; 
     }
 
     TExecutor(NFlatExecutorSetup::ITablet *owner, const TActorId& ownerActorId);

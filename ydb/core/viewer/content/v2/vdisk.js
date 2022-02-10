@@ -130,11 +130,11 @@ VDisk.prototype.updateVDiskInfo = function(update) {
         state += '<tr><td>FronQueues</td><td>' + this.FrontQueues + '</td></tr>';
         severity = Math.max(severity, Math.min(4, this.getColorSeverity(this.FrontQueues)));
     }
-    dash = false;
-    if (this.DonorMode === true) {
-        state += '<tr><td>Donor</td><td>YES</td></tr>';
-        dash = true;
-    } else if (!this.Replicated) {
+    dash = false; 
+    if (this.DonorMode === true) { 
+        state += '<tr><td>Donor</td><td>YES</td></tr>'; 
+        dash = true; 
+    } else if (!this.Replicated) { 
         state += '<tr><td>Replicated</td><td>NO</td></tr>';
         if (severity === 1) {
             severity = 2;
@@ -176,10 +176,10 @@ VDisk.prototype.updateVDiskInfo = function(update) {
         state += '<tr><td>Write</td><td>' + bytesToSpeed(this.WriteThroughput) + '</td></tr>';
     }
     state += '</table>';
-    if (dash) {
-        background = 'linear-gradient(45deg, forestgreen, forestgreen 8px, transparent 8px, transparent 100%)';
-        vDisk.css('background', background);
-    }
+    if (dash) { 
+        background = 'linear-gradient(45deg, forestgreen, forestgreen 8px, transparent 8px, transparent 100%)'; 
+        vDisk.css('background', background); 
+    } 
     vDisk.css('background-color', color);
     vDisk.attr('data-original-title', state);
     this.color = color;

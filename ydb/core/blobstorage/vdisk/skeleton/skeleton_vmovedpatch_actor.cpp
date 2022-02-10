@@ -20,7 +20,7 @@ namespace NKikimr {
             TString ErrorReason;
 
             ui32 DiffCount = 0;
-            std::unique_ptr<TEvBlobStorage::TEvPatch::TDiff[]> Diffs;
+            std::unique_ptr<TEvBlobStorage::TEvPatch::TDiff[]> Diffs; 
 
             TActorIDPtr SkeletonFrontIDPtr;
             NMonitoring::TDynamicCounters::TCounterPtr MovedPatchResMsgsPtr;
@@ -61,7 +61,7 @@ namespace NKikimr {
                 PatchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
 
                 DiffCount = record.DiffsSize();
-                Diffs.reset(new TEvBlobStorage::TEvPatch::TDiff[DiffCount]);
+                Diffs.reset(new TEvBlobStorage::TEvPatch::TDiff[DiffCount]); 
                 for (ui32 idx = 0; idx < DiffCount; ++idx) {
                     const NKikimrBlobStorage::TDiffBlock &diff = record.GetDiffs(idx);
                     Y_VERIFY(diff.HasOffset());
@@ -84,7 +84,7 @@ namespace NKikimr {
                 }
 
                 TInstant now = TAppData::TimeProvider->Now();
-                auto vMovedPatchResult = std::make_unique<TEvBlobStorage::TEvVMovedPatchResult>(status, OriginalId,
+                auto vMovedPatchResult = std::make_unique<TEvBlobStorage::TEvVMovedPatchResult>(status, OriginalId, 
                         PatchedId, vdisk, cookie, OOSStatus, now, Event->Get()->GetCachedByteSize(), &record,
                         SkeletonFrontIDPtr, MovedPatchResMsgsPtr, nullptr, std::move(TraceId), IncarnationGuid,
                         ErrorReason);
@@ -98,7 +98,7 @@ namespace NKikimr {
                             << " ErrorReason# " << ErrorReason
                             << " Marker# BSVSP01");
                 }
-                SendVDiskResponse(ctx, Event->Sender, vMovedPatchResult.release(), *this, Event->Cookie);
+                SendVDiskResponse(ctx, Event->Sender, vMovedPatchResult.release(), *this, Event->Cookie); 
                 PassAway();
             }
 
@@ -146,11 +146,11 @@ namespace NKikimr {
                 // We have chosen UserData as PutHandleClass on purpose.
                 // If VMovedPatch and Put were AsyncWrite, it would become a deadlock
                 // because the put subrequest may not send and the moved patch request will end by timeout.
-                std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(PatchedId, Buffer, deadline,
+                std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(PatchedId, Buffer, deadline, 
                         NKikimrBlobStorage::UserData, TEvBlobStorage::TEvPut::TacticDefault);
                 put->Orbit = std::move(Orbit);
 
-                SendToBSProxy(SelfId(), PatchedGroupId, put.release(), OriginalId.Hash(), std::move(Event->TraceId));
+                SendToBSProxy(SelfId(), PatchedGroupId, put.release(), OriginalId.Hash(), std::move(Event->TraceId)); 
             }
 
             void Handle(TEvBlobStorage::TEvPutResult::TPtr &ev, const TActorContext &ctx) {
@@ -178,11 +178,11 @@ namespace NKikimr {
 
             void Bootstrap() {
                 TInstant deadline = TActivationContext::Now() + TDuration::MilliSeconds(SubRequestDurationMs);
-                std::unique_ptr<TEvBlobStorage::TEvGet> get = std::make_unique<TEvBlobStorage::TEvGet>(OriginalId, 0,
+                std::unique_ptr<TEvBlobStorage::TEvGet> get = std::make_unique<TEvBlobStorage::TEvGet>(OriginalId, 0, 
                         OriginalId.BlobSize(), deadline, NKikimrBlobStorage::AsyncRead);
                 get->Orbit = std::move(Event->Get()->Orbit);
 
-                SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), std::move(Event->TraceId));
+                SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), std::move(Event->TraceId)); 
                 Become(&TThis::StateWait);
             }
 

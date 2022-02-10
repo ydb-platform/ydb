@@ -138,7 +138,7 @@ namespace NKikimr {
             return !operator == (it);
         }
 
-        TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr) const {
+        TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr) const { 
             return CurSegIt.GetDiskData(extr);
         }
 

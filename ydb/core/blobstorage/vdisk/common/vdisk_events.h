@@ -14,286 +14,286 @@
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
-
+ 
 #include <ydb/core/util/pb.h>
-
+ 
 #include <library/cpp/string_utils/base64/base64.h>
 
-#include <util/digest/multi.h>
-#include <util/generic/maybe.h>
+#include <util/digest/multi.h> 
+#include <util/generic/maybe.h> 
 #include <util/stream/str.h>
-#include <util/string/escape.h>
+#include <util/string/escape.h> 
 
-// FIXME: this check is obsolete; TEvVGet message generators check expected reply size by their own
-#ifndef BS_EVVGET_SIZE_VERIFY
+// FIXME: this check is obsolete; TEvVGet message generators check expected reply size by their own 
+#ifndef BS_EVVGET_SIZE_VERIFY 
 #define BS_EVVGET_SIZE_VERIFY 0
-#endif
-
+#endif 
+ 
 namespace NKikimr {
 
-    namespace NBackpressure {
-
-        enum class EQueueClientType : ui32 {
-            None,
-            ReplJob,
-            DSProxy,
-            VDiskLoad,
+    namespace NBackpressure { 
+ 
+        enum class EQueueClientType : ui32 { 
+            None, 
+            ReplJob, 
+            DSProxy, 
+            VDiskLoad, 
             VPatch,
-        };
-
-        inline const char *EQueueClientType2String(EQueueClientType t) {
-            switch (t) {
-                case EQueueClientType::None:        return "None";
-                case EQueueClientType::ReplJob:     return "ReplJob";
-                case EQueueClientType::DSProxy:     return "DSProxy";
-                case EQueueClientType::VDiskLoad:   return "VDiskLoad";
+        }; 
+ 
+        inline const char *EQueueClientType2String(EQueueClientType t) { 
+            switch (t) { 
+                case EQueueClientType::None:        return "None"; 
+                case EQueueClientType::ReplJob:     return "ReplJob"; 
+                case EQueueClientType::DSProxy:     return "DSProxy"; 
+                case EQueueClientType::VDiskLoad:   return "VDiskLoad"; 
                 case EQueueClientType::VPatch:   return "VPatch";
-            }
-
-            Y_FAIL("unexpected EQueueClientType");
-        }
-
-        // backpressure queue client identifier; ui32 means NodeId of DS Proxy actor, TVDiskID -- replication job identifier.
-        class TQueueClientId {
-            EQueueClientType Type;
-            ui64 Identifier;
-
-        public:
-            TQueueClientId()
-                : Type(EQueueClientType::None)
-                , Identifier(0)
-            {}
-
-            TQueueClientId(EQueueClientType type, ui64 identifier)
-                : Type(type)
-                , Identifier(identifier)
-            {}
-
-            explicit TQueueClientId(const NKikimrBlobStorage::TMsgQoS& msgQoS)
-            {
-                switch (msgQoS.ClientId_case()) {
-                    case NKikimrBlobStorage::TMsgQoS::ClientIdCase::kProxyNodeId:
-                        Type = EQueueClientType::DSProxy;
-                        Identifier = msgQoS.GetProxyNodeId();
-                        break;
-
-                    case NKikimrBlobStorage::TMsgQoS::ClientIdCase::kReplVDiskId:
-                        Type = EQueueClientType::ReplJob;
-                        Identifier = msgQoS.GetReplVDiskId();
-                        break;
-
-                    case NKikimrBlobStorage::TMsgQoS::ClientIdCase::kVDiskLoadId:
-                        Type = EQueueClientType::VDiskLoad;
-                        Identifier = msgQoS.GetVDiskLoadId();
-                        break;
-
+            } 
+ 
+            Y_FAIL("unexpected EQueueClientType"); 
+        } 
+ 
+        // backpressure queue client identifier; ui32 means NodeId of DS Proxy actor, TVDiskID -- replication job identifier. 
+        class TQueueClientId { 
+            EQueueClientType Type; 
+            ui64 Identifier; 
+ 
+        public: 
+            TQueueClientId() 
+                : Type(EQueueClientType::None) 
+                , Identifier(0) 
+            {} 
+ 
+            TQueueClientId(EQueueClientType type, ui64 identifier) 
+                : Type(type) 
+                , Identifier(identifier) 
+            {} 
+ 
+            explicit TQueueClientId(const NKikimrBlobStorage::TMsgQoS& msgQoS) 
+            { 
+                switch (msgQoS.ClientId_case()) { 
+                    case NKikimrBlobStorage::TMsgQoS::ClientIdCase::kProxyNodeId: 
+                        Type = EQueueClientType::DSProxy; 
+                        Identifier = msgQoS.GetProxyNodeId(); 
+                        break; 
+ 
+                    case NKikimrBlobStorage::TMsgQoS::ClientIdCase::kReplVDiskId: 
+                        Type = EQueueClientType::ReplJob; 
+                        Identifier = msgQoS.GetReplVDiskId(); 
+                        break; 
+ 
+                    case NKikimrBlobStorage::TMsgQoS::ClientIdCase::kVDiskLoadId: 
+                        Type = EQueueClientType::VDiskLoad; 
+                        Identifier = msgQoS.GetVDiskLoadId(); 
+                        break; 
+ 
                     case NKikimrBlobStorage::TMsgQoS::ClientIdCase::kVPatchVDiskId:
                         Type = EQueueClientType::VPatch;
                         Identifier = msgQoS.GetVPatchVDiskId();
                         break;
 
-                    case NKikimrBlobStorage::TMsgQoS::ClientIdCase::CLIENTID_NOT_SET:
-                        Type = EQueueClientType::None;
-                        Identifier = 0;
-                        break;
-
-                    default:
-                        Y_FAIL("unexpected case");
-                }
-            }
-
-            void Serialize(NKikimrBlobStorage::TMsgQoS *msgQoS) const {
-                switch (Type) {
-                    case EQueueClientType::None:
-                        break;
-
-                    case EQueueClientType::DSProxy:
-                        msgQoS->SetProxyNodeId(Identifier);
-                        break;
-
-                    case EQueueClientType::ReplJob:
-                        msgQoS->SetReplVDiskId(Identifier);
-                        break;
-
-                    case EQueueClientType::VDiskLoad:
-                        msgQoS->SetVDiskLoadId(Identifier);
-                        break;
+                    case NKikimrBlobStorage::TMsgQoS::ClientIdCase::CLIENTID_NOT_SET: 
+                        Type = EQueueClientType::None; 
+                        Identifier = 0; 
+                        break; 
+ 
+                    default: 
+                        Y_FAIL("unexpected case"); 
+                } 
+            } 
+ 
+            void Serialize(NKikimrBlobStorage::TMsgQoS *msgQoS) const { 
+                switch (Type) { 
+                    case EQueueClientType::None: 
+                        break; 
+ 
+                    case EQueueClientType::DSProxy: 
+                        msgQoS->SetProxyNodeId(Identifier); 
+                        break; 
+ 
+                    case EQueueClientType::ReplJob: 
+                        msgQoS->SetReplVDiskId(Identifier); 
+                        break; 
+ 
+                    case EQueueClientType::VDiskLoad: 
+                        msgQoS->SetVDiskLoadId(Identifier); 
+                        break; 
 
                     case EQueueClientType::VPatch:
                         msgQoS->SetVPatchVDiskId(Identifier);
                         break;
-                }
-            }
-
-            bool IsRepl() const {
-                return Type == EQueueClientType::ReplJob;
-            }
-
-            size_t Hash() const {
-                return MultiHash(Type, Identifier);
-            }
-
-            bool operator ==(const TQueueClientId& other) const {
-                return Type == other.Type && Identifier == other.Identifier;
-            }
-
-            void Output(IOutputStream &str) const {
-                str << "{Type# " << EQueueClientType2String(Type) << " Identifier# " << Identifier << "}";
-            }
-
-            TString ToString() const {
-                TStringStream str;
-                Output(str);
-                return str.Str();
-            }
-        };
-
-        ////////////////////////////////////////////////////////////////////////////
-        // Status for window op/feedback
-        ////////////////////////////////////////////////////////////////////////////
-        using EStatus = NKikimrBlobStorage::TWindowFeedback::EStatus;
-
-        inline bool Good(EStatus s) {
-            return s == NKikimrBlobStorage::TWindowFeedback::Success ||
-                s == NKikimrBlobStorage::TWindowFeedback::WindowUpdate ||
-                s == NKikimrBlobStorage::TWindowFeedback::Processed;
-        }
-
-        ////////////////////////////////////////////////////////////////////////////
-        // TMessageId -- Status for window op/feedback
-        ////////////////////////////////////////////////////////////////////////////
-        struct TMessageId {
-            ui64 SequenceId;    // id of sequence, incremented by client after failure of expected TMessageId
-            ui64 MsgId;         // message id in sequence, increments on each message
-
-            TMessageId()
-                : SequenceId(0)
-                , MsgId(0)
-            {}
-
-            explicit TMessageId(ui64 sequenceId, ui64 msgId)
-                : SequenceId(sequenceId)
-                , MsgId(msgId)
-            {}
-
-            TMessageId(const NKikimrBlobStorage::TMessageId &from)
-                : SequenceId(from.GetSequenceId())
-                , MsgId(from.GetMsgId())
-            {}
-
-            void Serialize(NKikimrBlobStorage::TMessageId &to) const {
-                to.SetSequenceId(SequenceId);
-                to.SetMsgId(MsgId);
-            }
-
-            bool operator ==(const TMessageId &other) const {
-                return SequenceId == other.SequenceId && MsgId == other.MsgId;
-            }
-
-            bool Empty() const {
-                return SequenceId == 0 && MsgId == 0;
-            }
-
-            TString ToString() const {
-                TStringStream str;
-                Out(str);
-                return str.Str();
-            }
-
-            void Out(IOutputStream &str) const {
-                str << "[" << SequenceId << " " << MsgId << "]";
-            }
-        };
-
-        ////////////////////////////////////////////////////////////////////////////
-        // Current window status (after operation on window or layout change)
-        ////////////////////////////////////////////////////////////////////////////
-        template <class TClientId>
-        struct TWindowStatus {
-            TClientId ClientId;
+                } 
+            } 
+ 
+            bool IsRepl() const { 
+                return Type == EQueueClientType::ReplJob; 
+            } 
+ 
+            size_t Hash() const { 
+                return MultiHash(Type, Identifier); 
+            } 
+ 
+            bool operator ==(const TQueueClientId& other) const { 
+                return Type == other.Type && Identifier == other.Identifier; 
+            } 
+ 
+            void Output(IOutputStream &str) const { 
+                str << "{Type# " << EQueueClientType2String(Type) << " Identifier# " << Identifier << "}"; 
+            } 
+ 
+            TString ToString() const { 
+                TStringStream str; 
+                Output(str); 
+                return str.Str(); 
+            } 
+        }; 
+ 
+        //////////////////////////////////////////////////////////////////////////// 
+        // Status for window op/feedback 
+        //////////////////////////////////////////////////////////////////////////// 
+        using EStatus = NKikimrBlobStorage::TWindowFeedback::EStatus; 
+ 
+        inline bool Good(EStatus s) { 
+            return s == NKikimrBlobStorage::TWindowFeedback::Success || 
+                s == NKikimrBlobStorage::TWindowFeedback::WindowUpdate || 
+                s == NKikimrBlobStorage::TWindowFeedback::Processed; 
+        } 
+ 
+        //////////////////////////////////////////////////////////////////////////// 
+        // TMessageId -- Status for window op/feedback 
+        //////////////////////////////////////////////////////////////////////////// 
+        struct TMessageId { 
+            ui64 SequenceId;    // id of sequence, incremented by client after failure of expected TMessageId 
+            ui64 MsgId;         // message id in sequence, increments on each message 
+ 
+            TMessageId() 
+                : SequenceId(0) 
+                , MsgId(0) 
+            {} 
+ 
+            explicit TMessageId(ui64 sequenceId, ui64 msgId) 
+                : SequenceId(sequenceId) 
+                , MsgId(msgId) 
+            {} 
+ 
+            TMessageId(const NKikimrBlobStorage::TMessageId &from) 
+                : SequenceId(from.GetSequenceId()) 
+                , MsgId(from.GetMsgId()) 
+            {} 
+ 
+            void Serialize(NKikimrBlobStorage::TMessageId &to) const { 
+                to.SetSequenceId(SequenceId); 
+                to.SetMsgId(MsgId); 
+            } 
+ 
+            bool operator ==(const TMessageId &other) const { 
+                return SequenceId == other.SequenceId && MsgId == other.MsgId; 
+            } 
+ 
+            bool Empty() const { 
+                return SequenceId == 0 && MsgId == 0; 
+            } 
+ 
+            TString ToString() const { 
+                TStringStream str; 
+                Out(str); 
+                return str.Str(); 
+            } 
+ 
+            void Out(IOutputStream &str) const { 
+                str << "[" << SequenceId << " " << MsgId << "]"; 
+            } 
+        }; 
+ 
+        //////////////////////////////////////////////////////////////////////////// 
+        // Current window status (after operation on window or layout change) 
+        //////////////////////////////////////////////////////////////////////////// 
+        template <class TClientId> 
+        struct TWindowStatus { 
+            TClientId ClientId; 
             TActorId ActorId;
-            EStatus Status;
-            bool Notify;
-            ui64 ActualWindowSize;
-            ui64 MaxWindowSize;
-            TMessageId ExpectedMsgId;
-            TMessageId FailedMsgId;
-
-            TWindowStatus()
-                : ClientId()
-                , ActorId()
-                , Status(NKikimrBlobStorage::TWindowFeedback::Unknown)
-                , Notify(false)
-                , ActualWindowSize(0)
-                , MaxWindowSize(0)
-                , ExpectedMsgId()
-                , FailedMsgId()
-            {}
-
+            EStatus Status; 
+            bool Notify; 
+            ui64 ActualWindowSize; 
+            ui64 MaxWindowSize; 
+            TMessageId ExpectedMsgId; 
+            TMessageId FailedMsgId; 
+ 
+            TWindowStatus() 
+                : ClientId() 
+                , ActorId() 
+                , Status(NKikimrBlobStorage::TWindowFeedback::Unknown) 
+                , Notify(false) 
+                , ActualWindowSize(0) 
+                , MaxWindowSize(0) 
+                , ExpectedMsgId() 
+                , FailedMsgId() 
+            {} 
+ 
             void Set(const TClientId &clientId, const TActorId& actorId, EStatus status, bool notify,
-                    ui64 actualWindowSize, ui64 maxWindowSize, const TMessageId &expectedMsgId,
-                    const TMessageId &failedMsgId) {
-                ClientId = clientId;
-                ActorId = actorId;
-                Status = status;
-                Notify = notify;
-                ActualWindowSize = actualWindowSize;
-                MaxWindowSize = maxWindowSize;
-                ExpectedMsgId = expectedMsgId;
-                FailedMsgId = failedMsgId;
-            }
-
-            void WindowUpdate(const TWindowStatus &s) {
-                Y_VERIFY(ClientId == s.ClientId);
-                // don't touch Status
-                Notify = Notify || s.Notify;
-                ActualWindowSize = s.ActualWindowSize;
-                MaxWindowSize = s.MaxWindowSize;
-                Y_VERIFY(ExpectedMsgId == s.ExpectedMsgId);
-                // don't touch FailedMsgId
-            }
-
-            TString ToString() const {
-                TStringStream str;
-                str << "{Status# " << ui32(Status) << " Notify# " << Notify
-                    << " ActualWindowSize# " << ActualWindowSize << " MaxWindowSize# " << MaxWindowSize
-                    << " ExpectedMsgId# " << ExpectedMsgId.ToString() << " FailedMsgId# " << FailedMsgId.ToString()
-                    << "}";
-                return str.Str();
-            }
-
-            void Serialize(NKikimrBlobStorage::TWindowFeedback &to) const {
-                to.SetStatus(Status);
-                to.SetActualWindowSize(ActualWindowSize);
-                to.SetMaxWindowSize(MaxWindowSize);
-                ExpectedMsgId.Serialize(*to.MutableExpectedMsgId());
-                if (!FailedMsgId.Empty())
-                    FailedMsgId.Serialize(*to.MutableFailedMsgId());
-            }
-        };
-
-    } // NBackpressure
-
+                    ui64 actualWindowSize, ui64 maxWindowSize, const TMessageId &expectedMsgId, 
+                    const TMessageId &failedMsgId) { 
+                ClientId = clientId; 
+                ActorId = actorId; 
+                Status = status; 
+                Notify = notify; 
+                ActualWindowSize = actualWindowSize; 
+                MaxWindowSize = maxWindowSize; 
+                ExpectedMsgId = expectedMsgId; 
+                FailedMsgId = failedMsgId; 
+            } 
+ 
+            void WindowUpdate(const TWindowStatus &s) { 
+                Y_VERIFY(ClientId == s.ClientId); 
+                // don't touch Status 
+                Notify = Notify || s.Notify; 
+                ActualWindowSize = s.ActualWindowSize; 
+                MaxWindowSize = s.MaxWindowSize; 
+                Y_VERIFY(ExpectedMsgId == s.ExpectedMsgId); 
+                // don't touch FailedMsgId 
+            } 
+ 
+            TString ToString() const { 
+                TStringStream str; 
+                str << "{Status# " << ui32(Status) << " Notify# " << Notify 
+                    << " ActualWindowSize# " << ActualWindowSize << " MaxWindowSize# " << MaxWindowSize 
+                    << " ExpectedMsgId# " << ExpectedMsgId.ToString() << " FailedMsgId# " << FailedMsgId.ToString() 
+                    << "}"; 
+                return str.Str(); 
+            } 
+ 
+            void Serialize(NKikimrBlobStorage::TWindowFeedback &to) const { 
+                to.SetStatus(Status); 
+                to.SetActualWindowSize(ActualWindowSize); 
+                to.SetMaxWindowSize(MaxWindowSize); 
+                ExpectedMsgId.Serialize(*to.MutableExpectedMsgId()); 
+                if (!FailedMsgId.Empty()) 
+                    FailedMsgId.Serialize(*to.MutableFailedMsgId()); 
+            } 
+        }; 
+ 
+    } // NBackpressure 
+ 
     struct TVMsgContext {
-        const NBackpressure::TQueueClientId ClientId;
-        const ui32 RecByteSize = 0;
-        const NBackpressure::TMessageId MsgId;
-        const ui64 Cost = 0;
-        const NKikimrBlobStorage::EVDiskQueueId ExtQueueId = NKikimrBlobStorage::EVDiskQueueId::Unknown;
-        const NKikimrBlobStorage::EVDiskInternalQueueId IntQueueId = NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown;
-        const TActorId ActorId;
+        const NBackpressure::TQueueClientId ClientId; 
+        const ui32 RecByteSize = 0; 
+        const NBackpressure::TMessageId MsgId; 
+        const ui64 Cost = 0; 
+        const NKikimrBlobStorage::EVDiskQueueId ExtQueueId = NKikimrBlobStorage::EVDiskQueueId::Unknown; 
+        const NKikimrBlobStorage::EVDiskInternalQueueId IntQueueId = NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown; 
+        const TActorId ActorId; 
 
-        TVMsgContext() = default;
+        TVMsgContext() = default; 
 
-        TVMsgContext(ui32 recByteSize, const NKikimrBlobStorage::TMsgQoS& msgQoS)
-            : ClientId(NBackpressure::TQueueClientId(msgQoS))
+        TVMsgContext(ui32 recByteSize, const NKikimrBlobStorage::TMsgQoS& msgQoS) 
+            : ClientId(NBackpressure::TQueueClientId(msgQoS)) 
             , RecByteSize(recByteSize)
-            , MsgId(msgQoS.GetMsgId())
-            , Cost(msgQoS.GetCost())
-            , ExtQueueId(msgQoS.GetExtQueueId())
-            , IntQueueId(msgQoS.GetIntQueueId())
-            , ActorId(ActorIdFromProto(msgQoS.GetSenderActorId()))
-        {}
+            , MsgId(msgQoS.GetMsgId()) 
+            , Cost(msgQoS.GetCost()) 
+            , ExtQueueId(msgQoS.GetExtQueueId()) 
+            , IntQueueId(msgQoS.GetIntQueueId()) 
+            , ActorId(ActorIdFromProto(msgQoS.GetSenderActorId())) 
+        {} 
 
         void Output(IOutputStream &str) const {
             str << "{ClientId# " << ClientId
@@ -315,18 +315,18 @@ namespace NKikimr {
     struct TEvVDiskRequestCompleted
             : public TEventLocal<TEvVDiskRequestCompleted, TEvBlobStorage::EvVDiskRequestCompleted> {
         TVMsgContext Ctx;
-        std::unique_ptr<IEventHandle> Event;
+        std::unique_ptr<IEventHandle> Event; 
 
-        TEvVDiskRequestCompleted(const TVMsgContext &ctx, std::unique_ptr<IEventHandle> event)
+        TEvVDiskRequestCompleted(const TVMsgContext &ctx, std::unique_ptr<IEventHandle> event) 
             : Ctx(ctx)
-            , Event(std::move(event))
+            , Event(std::move(event)) 
         {
             Y_VERIFY_DEBUG(Ctx.ExtQueueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
             Y_VERIFY_DEBUG(Ctx.IntQueueId != NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown);
         }
     };
 
-    typedef std::shared_ptr<TActorId> TActorIDPtr;
+    typedef std::shared_ptr<TActorId> TActorIDPtr; 
 
     class TVDiskNonlocalResultBase {
         ui32 Channel = 0;
@@ -348,11 +348,11 @@ namespace NKikimr {
         }
     };
 
-    // Base class for all VDisk result events
+    // Base class for all VDisk result events 
     class TEvVResultBase : public TVDiskNonlocalResultBase {
     public:
-        TEvVResultBase() = default;
-
+        TEvVResultBase() = default; 
+ 
         TEvVResultBase(const TInstant &now, ui32 channel, const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
                 const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId)
             : TVDiskNonlocalResultBase(channel)
@@ -360,28 +360,28 @@ namespace NKikimr {
             , Size(0)
             , CounterPtr(counterPtr)
             , HistoPtr(histoPtr)
-            , TraceId(std::move(traceId))
+            , TraceId(std::move(traceId)) 
         {}
 
         virtual ~TEvVResultBase() {
             //Y_VERIFY(Finalized);
         }
 
-        virtual void FinalizeAndSend(const TActorContext& /*ctx*/, std::unique_ptr<IEventHandle> ev) {
+        virtual void FinalizeAndSend(const TActorContext& /*ctx*/, std::unique_ptr<IEventHandle> ev) { 
             Y_VERIFY(!Finalized); // call Finalize only once
-            Finalized = true;
+            Finalized = true; 
 
             if (CounterPtr) {
-                CounterPtr->Inc();
+                CounterPtr->Inc(); 
             }
-
-            if (HistoPtr) {
+ 
+            if (HistoPtr) { 
                 HistoPtr->Collect(TAppData::TimeProvider->Now() - Start, Size);
-            }
-
-            TActivationContext::Send(ev.release());
-        }
-
+            } 
+ 
+            TActivationContext::Send(ev.release()); 
+        } 
+ 
     protected:
         void IncrementSize(ui64 size) {
             Size += size;
@@ -392,21 +392,21 @@ namespace NKikimr {
         ui64 Size;
         NMonitoring::TDynamicCounters::TCounterPtr CounterPtr;
         NVDiskMon::TLtcHistoPtr HistoPtr;
-        bool Finalized = false;
-
-    public:
-        NWilson::TTraceId TraceId;
-    };
+        bool Finalized = false; 
+ 
+    public: 
+        NWilson::TTraceId TraceId; 
+    }; 
 
     template<typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType>
-    class TEvVResultBasePB
-        : public TEventPB<TEv, TRecord, TEventType>
-        , public TEvVResultBase
-    {
-        using TEventPBBase = TEventPB<TEv, TRecord, TEventType>;
+    class TEvVResultBasePB 
+        : public TEventPB<TEv, TRecord, TEventType> 
+        , public TEvVResultBase 
+    { 
+        using TEventPBBase = TEventPB<TEv, TRecord, TEventType>; 
 
     public:
-        TEvVResultBasePB() = default;
+        TEvVResultBasePB() = default; 
 
         TEvVResultBasePB(const TInstant &now, const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
                 const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui32 channel)
@@ -414,18 +414,18 @@ namespace NKikimr {
         {}
     };
 
-    template<typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType>
-    class TEvVResultBaseWithQoSPB : public TEvVResultBasePB<TEv, TRecord, TEventType> {
-        using TBase = TEvVResultBasePB<TEv, TRecord, TEventType>;
-
-        TVMsgContext MsgCtx;
-        TActorIDPtr SkeletonFrontIDPtr;
-        THPTimer ExecutionTimer;
-
-    public:
-        TEvVResultBaseWithQoSPB() = default;
-
-        template<typename TQueryRecord>
+    template<typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType> 
+    class TEvVResultBaseWithQoSPB : public TEvVResultBasePB<TEv, TRecord, TEventType> { 
+        using TBase = TEvVResultBasePB<TEv, TRecord, TEventType>; 
+ 
+        TVMsgContext MsgCtx; 
+        TActorIDPtr SkeletonFrontIDPtr; 
+        THPTimer ExecutionTimer; 
+ 
+    public: 
+        TEvVResultBaseWithQoSPB() = default; 
+ 
+        template<typename TQueryRecord> 
         static inline TInstant GetReceivedTimestamp(const TQueryRecord *queryRecord) {
             return TInstant::MicroSeconds(queryRecord->GetMsgQoS().GetExecTimeStats().GetReceivedTimestamp());
         }
@@ -436,61 +436,61 @@ namespace NKikimr {
                 ui32 recByteSize, TQueryRecord *queryRecord, const TActorIDPtr &skeletonFrontIDPtr)
             : TBase(queryRecord ? GetReceivedTimestamp(queryRecord) : now,
                 counterPtr, histoPtr, std::move(traceId), channel)
-            , MsgCtx(queryRecord ? TVMsgContext(recByteSize, queryRecord->GetMsgQoS()) : TVMsgContext())
+            , MsgCtx(queryRecord ? TVMsgContext(recByteSize, queryRecord->GetMsgQoS()) : TVMsgContext()) 
             , SkeletonFrontIDPtr(skeletonFrontIDPtr)
-        {
-            if (queryRecord) {
-                Y_VERIFY(queryRecord->HasMsgQoS());
+        { 
+            if (queryRecord) { 
+                Y_VERIFY(queryRecord->HasMsgQoS()); 
                 auto *resultQoS = TBase::Record.MutableMsgQoS();
                 resultQoS->Swap(queryRecord->MutableMsgQoS());
                 resultQoS->ClearDeadlineSeconds();
                 resultQoS->ClearSendMeCostSettings();
-            } else {
-                Y_VERIFY(!SkeletonFrontIDPtr);
-            }
-        }
-
-        void MarkHugeWriteTime() {
-            if (auto *stats = GetExecTimeStats()) {
-                TDuration hugeWriteTime = TDuration::Seconds(ExecutionTimer.Passed());
-                stats->SetHugeWriteTime(hugeWriteTime.GetValue());
-            }
-        }
-
-        void FinalizeAndSend(const TActorContext &ctx, std::unique_ptr<IEventHandle> ev) override {
-            TBase::FinalizeAndSend(ctx, nullptr);
-
-            // update execution time stats
-            if (auto *stats = GetExecTimeStats()) {
-                TDuration execution = TDuration::Seconds(ExecutionTimer.Passed());
-                stats->SetExecution(execution.GetValue());
-                if (stats->HasReceivedTimestamp()) {
+            } else { 
+                Y_VERIFY(!SkeletonFrontIDPtr); 
+            } 
+        } 
+ 
+        void MarkHugeWriteTime() { 
+            if (auto *stats = GetExecTimeStats()) { 
+                TDuration hugeWriteTime = TDuration::Seconds(ExecutionTimer.Passed()); 
+                stats->SetHugeWriteTime(hugeWriteTime.GetValue()); 
+            } 
+        } 
+ 
+        void FinalizeAndSend(const TActorContext &ctx, std::unique_ptr<IEventHandle> ev) override { 
+            TBase::FinalizeAndSend(ctx, nullptr); 
+ 
+            // update execution time stats 
+            if (auto *stats = GetExecTimeStats()) { 
+                TDuration execution = TDuration::Seconds(ExecutionTimer.Passed()); 
+                stats->SetExecution(execution.GetValue()); 
+                if (stats->HasReceivedTimestamp()) { 
                     TInstant started = TInstant::MicroSeconds(stats->GetReceivedTimestamp());
-                    TInstant now = TAppData::TimeProvider->Now();
-                    TDuration total = now - started;
-                    stats->SetTotal(total.GetValue());
-                }
-            }
-
-            size_t byteSize = TBase::Record.ByteSize();
+                    TInstant now = TAppData::TimeProvider->Now(); 
+                    TDuration total = now - started; 
+                    stats->SetTotal(total.GetValue()); 
+                } 
+            } 
+ 
+            size_t byteSize = TBase::Record.ByteSize(); 
             Y_VERIFY(byteSize <= NActors::EventMaxByteSize,
-                "event suspiciously large: %zu\n%s",
+                "event suspiciously large: %zu\n%s", 
                 byteSize, this->ToString().data());
-
-            if (SkeletonFrontIDPtr && MsgCtx.IntQueueId != NKikimrBlobStorage::IntUnknown) {
-                ctx.Send(*SkeletonFrontIDPtr, new TEvVDiskRequestCompleted(MsgCtx, std::move(ev)));
-            } else {
-                TActivationContext::Send(ev.release());
-            }
-        }
-
-    private:
-        NKikimrBlobStorage::TExecTimeStats *GetExecTimeStats() {
-            auto *msgQoS = TBase::Record.MutableMsgQoS();
-            return msgQoS->HasExecTimeStats() ? msgQoS->MutableExecTimeStats() : nullptr;
-        }
-    };
-
+ 
+            if (SkeletonFrontIDPtr && MsgCtx.IntQueueId != NKikimrBlobStorage::IntUnknown) { 
+                ctx.Send(*SkeletonFrontIDPtr, new TEvVDiskRequestCompleted(MsgCtx, std::move(ev))); 
+            } else { 
+                TActivationContext::Send(ev.release()); 
+            } 
+        } 
+ 
+    private: 
+        NKikimrBlobStorage::TExecTimeStats *GetExecTimeStats() { 
+            auto *msgQoS = TBase::Record.MutableMsgQoS(); 
+            return msgQoS->HasExecTimeStats() ? msgQoS->MutableExecTimeStats() : nullptr; 
+        } 
+    }; 
+ 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TEvVPut
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -506,7 +506,7 @@ namespace NKikimr {
 
         TEvVPut(const TLogoBlobID &logoBlobId, const TString &buffer, const TVDiskID &vdisk,
                 const bool ignoreBlock, const ui64 *cookie, TInstant deadline,
-                NKikimrBlobStorage::EPutHandleClass cls)
+                NKikimrBlobStorage::EPutHandleClass cls) 
         {
             InitWithoutBuffer(logoBlobId, vdisk, ignoreBlock, cookie, deadline, cls);
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.Data(), buffer.size());
@@ -555,8 +555,8 @@ namespace NKikimr {
             return Record.HasBuffer() ? TRope(Record.GetBuffer()) : GetPayload(0);
         }
 
-        void StorePayload(const TString& buffer);
-
+        void StorePayload(const TString& buffer); 
+ 
         void StorePayload(TRope&& buffer);
 
         ui64 GetBufferBytes() const {
@@ -700,13 +700,13 @@ namespace NKikimr {
         mutable NLWTrace::TOrbit Orbit;
 
         TEvVPutResult();
-
+ 
         TEvVPutResult(const NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, const TVDiskID &vdisk,
                 const ui64 *cookie, TOutOfSpaceStatus oosStatus, const TInstant &now, ui32 recByteSize,
                 NKikimrBlobStorage::TEvVPut *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
                 const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                const ui64 bufferSizeBytes, NWilson::TTraceId traceId, ui64 incarnationGuid,
-                const TString& errorReason);
+                const ui64 bufferSizeBytes, NWilson::TTraceId traceId, ui64 incarnationGuid, 
+                const TString& errorReason); 
 
         TString ToString() const override {
             return ToString(Record);
@@ -720,9 +720,9 @@ namespace NKikimr {
             TStringStream str;
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetBlobID());
             str << "{EvVPutResult Status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus()).data();
-            if (record.HasErrorReason()) {
-                str << " ErrorReason# " << '"' << EscapeC(record.GetErrorReason()) << '"';
-            }
+            if (record.HasErrorReason()) { 
+                str << " ErrorReason# " << '"' << EscapeC(record.GetErrorReason()) << '"'; 
+            } 
             str << " ID# " << id.ToString();
             if (record.HasCookie()) {
                 str << " Cookie# " << record.GetCookie();
@@ -736,12 +736,12 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason,
-                const NKikimrBlobStorage::TEvVPut &request) {
+        void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason, 
+                const NKikimrBlobStorage::TEvVPut &request) { 
             Record.SetStatus(status);
-            if (status != NKikimrProto::OK && errorReason) {
-                Record.SetErrorReason(errorReason);
-            }
+            if (status != NKikimrProto::OK && errorReason) { 
+                Record.SetErrorReason(errorReason); 
+            } 
             if (request.HasBlobID()) {
                 Record.MutableBlobID()->CopyFrom(request.GetBlobID());
             }
@@ -905,11 +905,11 @@ namespace NKikimr {
 
         TEvVMultiPutResult() = default;
 
-        TEvVMultiPutResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const ui64 *cookie,
+        TEvVMultiPutResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const ui64 *cookie, 
                 const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVMultiPut *record,
                 const TActorIDPtr &skeletonFrontIDPtr, const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
                 const NVDiskMon::TLtcHistoPtr &histoPtr, const ui64 bufferSizeBytes, NWilson::TTraceId traceId,
-                ui64 incarnationGuid, const TString& errorReason)
+                ui64 incarnationGuid, const TString& errorReason) 
             : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
                     TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, record, skeletonFrontIDPtr)
         {
@@ -922,22 +922,22 @@ namespace NKikimr {
             if (record && record->HasTimestamps()) {
                 Record.MutableTimestamps()->CopyFrom(record->GetTimestamps());
             }
-            if (status == NKikimrProto::OK) {
-                Record.SetIncarnationGuid(incarnationGuid);
-            }
-            if (errorReason && status != NKikimrProto::OK) {
-                Record.SetErrorReason(errorReason);
-            }
+            if (status == NKikimrProto::OK) { 
+                Record.SetIncarnationGuid(incarnationGuid); 
+            } 
+            if (errorReason && status != NKikimrProto::OK) { 
+                Record.SetErrorReason(errorReason); 
+            } 
         }
 
-        void AddVPutResult(NKikimrProto::EReplyStatus status, const TString& errorReason, const TLogoBlobID &logoBlobId,
-                ui64 *cookie, ui32 statusFlags = 0)
+        void AddVPutResult(NKikimrProto::EReplyStatus status, const TString& errorReason, const TLogoBlobID &logoBlobId, 
+                ui64 *cookie, ui32 statusFlags = 0) 
         {
             NKikimrBlobStorage::TVMultiPutResultItem *item = Record.AddItems();
             item->SetStatus(status);
-            if (errorReason && status != NKikimrProto::OK) {
-                item->SetErrorReason(errorReason);
-            }
+            if (errorReason && status != NKikimrProto::OK) { 
+                item->SetErrorReason(errorReason); 
+            } 
             LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
             if (cookie) {
                 item->SetCookie(*cookie);
@@ -945,15 +945,15 @@ namespace NKikimr {
             item->SetStatusFlags(statusFlags);
         }
 
-        void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason,
-                const NKikimrBlobStorage::TEvVMultiPut &request) {
+        void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason, 
+                const NKikimrBlobStorage::TEvVMultiPut &request) { 
             Record.SetStatus(status);
-            if (errorReason && status != NKikimrProto::OK) {
-                Record.SetErrorReason(errorReason);
-            }
-            if (status == NKikimrProto::NOTREADY) {
-                status = NKikimrProto::ERROR; // treat BS_QUEUE internally generated NOTREADY as ERROR
-            }
+            if (errorReason && status != NKikimrProto::OK) { 
+                Record.SetErrorReason(errorReason); 
+            } 
+            if (status == NKikimrProto::NOTREADY) { 
+                status = NKikimrProto::ERROR; // treat BS_QUEUE internally generated NOTREADY as ERROR 
+            } 
 
             for (auto &item : request.GetItems()) {
                 Y_VERIFY(item.HasBlobID());
@@ -964,7 +964,7 @@ namespace NKikimr {
                     cookieValue = item.GetCookie();
                     cookie = &cookieValue;
                 }
-                AddVPutResult(status, errorReason, logoBlobId, cookie);
+                AddVPutResult(status, errorReason, logoBlobId, cookie); 
             }
 
             if (request.HasVDiskID()) {
@@ -985,17 +985,17 @@ namespace NKikimr {
         static TString ToString(const NKikimrBlobStorage::TEvVMultiPutResult &record) {
             TStringStream str;
             str << "{EvVMultiPutResult Status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus()).data();
-            if (record.HasErrorReason()) {
-                str << " ErrorReason# " << '"' << EscapeC(record.GetErrorReason()) << '"';
-            }
+            if (record.HasErrorReason()) { 
+                str << " ErrorReason# " << '"' << EscapeC(record.GetErrorReason()) << '"'; 
+            } 
             ui64 size = record.ItemsSize();
             for (ui64 itemIdx = 0; itemIdx < size; ++itemIdx) {
                 const NKikimrBlobStorage::TVMultiPutResultItem &item = record.GetItems(itemIdx);
                 str << " Item# {VMultiPutResultItem";
                 str << " Status# " << NKikimrProto::EReplyStatus_Name(item.GetStatus()).data();
-                if (item.HasErrorReason()) {
-                    str << " ErrorReason# " << '"' << EscapeC(item.GetErrorReason()) << '"';
-                }
+                if (item.HasErrorReason()) { 
+                    str << " ErrorReason# " << '"' << EscapeC(item.GetErrorReason()) << '"'; 
+                } 
                 TLogoBlobID id = LogoBlobIDFromLogoBlobID(item.GetBlobID());
                 str << " ID# " << id.ToString();
                 if (item.HasCookie()) {
@@ -1022,67 +1022,67 @@ namespace NKikimr {
     struct TEvBlobStorage::TEvVGet
         : public TEventPB<TEvBlobStorage::TEvVGet, NKikimrBlobStorage::TEvVGet, TEvBlobStorage::EvVGet>
     {
-        TEvVGet() = default;
+        TEvVGet() = default; 
 
-        enum class EFlags : ui32 {
-            None = 0,
-            NotifyIfNotReady = 1,
-            ShowInternals = 2,
-        };
-
-        struct TExtremeQuery : std::tuple<TLogoBlobID, ui32, ui32, const ui64*> {
-            TExtremeQuery(const TLogoBlobID &logoBlobId, ui32 sh, ui32 sz, const ui64 *cookie = nullptr)
-                : std::tuple<TLogoBlobID, ui32, ui32, const ui64*>(logoBlobId, sh, sz, cookie)
-            {}
-
-            TExtremeQuery(const TLogoBlobID &logoBlobId)
-                : TExtremeQuery(logoBlobId, 0, 0)
-            {}
-        };
-
-        static std::unique_ptr<TEvVGet> CreateExtremeIndexQuery(const TVDiskID &vdisk, TInstant deadline,
-                NKikimrBlobStorage::EGetHandleClass cls, EFlags flags = EFlags::None, TMaybe<ui64> requestCookie = {},
+        enum class EFlags : ui32 { 
+            None = 0, 
+            NotifyIfNotReady = 1, 
+            ShowInternals = 2, 
+        }; 
+ 
+        struct TExtremeQuery : std::tuple<TLogoBlobID, ui32, ui32, const ui64*> { 
+            TExtremeQuery(const TLogoBlobID &logoBlobId, ui32 sh, ui32 sz, const ui64 *cookie = nullptr) 
+                : std::tuple<TLogoBlobID, ui32, ui32, const ui64*>(logoBlobId, sh, sz, cookie) 
+            {} 
+ 
+            TExtremeQuery(const TLogoBlobID &logoBlobId) 
+                : TExtremeQuery(logoBlobId, 0, 0) 
+            {} 
+        }; 
+ 
+        static std::unique_ptr<TEvVGet> CreateExtremeIndexQuery(const TVDiskID &vdisk, TInstant deadline, 
+                NKikimrBlobStorage::EGetHandleClass cls, EFlags flags = EFlags::None, TMaybe<ui64> requestCookie = {}, 
                 std::initializer_list<TExtremeQuery> queries = {}, ui32 forceBlockedGeneration = 0) {
-            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, cls, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
+            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, cls, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)), 
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, true, forceBlockedGeneration));
-            for (const auto &q : queries) {
-                res->AddExtremeQuery(std::get<0>(q), std::get<1>(q), std::get<2>(q), std::get<3>(q));
+            for (const auto &q : queries) { 
+                res->AddExtremeQuery(std::get<0>(q), std::get<1>(q), std::get<2>(q), std::get<3>(q)); 
             }
-            return res;
-        }
-
-        static std::unique_ptr<TEvVGet> CreateExtremeDataQuery(const TVDiskID &vdisk, TInstant deadline,
-                NKikimrBlobStorage::EGetHandleClass cls, EFlags flags = EFlags::None, TMaybe<ui64> requestCookie = {},
+            return res; 
+        } 
+ 
+        static std::unique_ptr<TEvVGet> CreateExtremeDataQuery(const TVDiskID &vdisk, TInstant deadline, 
+                NKikimrBlobStorage::EGetHandleClass cls, EFlags flags = EFlags::None, TMaybe<ui64> requestCookie = {}, 
                 std::initializer_list<TExtremeQuery> queries = {}, ui32 forceBlockedGeneration = 0) {
-            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, cls, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
+            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, cls, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)), 
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, false, true, forceBlockedGeneration));
-            for (const auto &q : queries) {
-                res->AddExtremeQuery(std::get<0>(q), std::get<1>(q), std::get<2>(q), std::get<3>(q));
+            for (const auto &q : queries) { 
+                res->AddExtremeQuery(std::get<0>(q), std::get<1>(q), std::get<2>(q), std::get<3>(q)); 
             }
-            return res;
-        }
-
-        static std::unique_ptr<TEvVGet> CreateRangeIndexQuery(const TVDiskID &vdisk, TInstant deadline,
-                NKikimrBlobStorage::EGetHandleClass cls, EFlags flags, TMaybe<ui64> requestCookie,
+            return res; 
+        } 
+ 
+        static std::unique_ptr<TEvVGet> CreateRangeIndexQuery(const TVDiskID &vdisk, TInstant deadline, 
+                NKikimrBlobStorage::EGetHandleClass cls, EFlags flags, TMaybe<ui64> requestCookie, 
                 const TLogoBlobID &fromId, const TLogoBlobID &toId, ui32 maxResults = 0, const ui64 *cookie = nullptr,
                 ui32 forceBlockedGeneration = 0) {
-            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, cls, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
+            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, cls, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)), 
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, false, forceBlockedGeneration));
-            NKikimrBlobStorage::TRangeQuery *q = res->Record.MutableRangeQuery();
-            LogoBlobIDFromLogoBlobID(fromId, q->MutableFrom());
-            LogoBlobIDFromLogoBlobID(toId, q->MutableTo());
-            if (maxResults) {
-                q->SetMaxResults(maxResults);
+            NKikimrBlobStorage::TRangeQuery *q = res->Record.MutableRangeQuery(); 
+            LogoBlobIDFromLogoBlobID(fromId, q->MutableFrom()); 
+            LogoBlobIDFromLogoBlobID(toId, q->MutableTo()); 
+            if (maxResults) { 
+                q->SetMaxResults(maxResults); 
             }
-            if (cookie) {
-                q->SetCookie(*cookie);
+            if (cookie) { 
+                q->SetCookie(*cookie); 
             }
-            return res;
+            return res; 
         }
 
         void AddExtremeQuery(const TLogoBlobID &logoBlobId, ui32 sh, ui32 sz, const ui64 *cookie = nullptr) {
-            Y_VERIFY(Extreme);
-
+            Y_VERIFY(Extreme); 
+ 
             NKikimrBlobStorage::TExtremeQuery *q = Record.AddExtremeQueries();
             LogoBlobIDFromLogoBlobID(logoBlobId, q->MutableId());
             if (sh != 0)
@@ -1091,7 +1091,7 @@ namespace NKikimr {
                 q->SetSize(sz);
             if (cookie)
                 q->SetCookie(*cookie);
-#if BS_EVVGET_SIZE_VERIFY
+#if BS_EVVGET_SIZE_VERIFY 
             if (Record.HasIndexOnly() && Record.GetIndexOnly()) {
                 ExpectedReplySize += BlobProtobufHeaderMaxSize;
                 Y_VERIFY(TBlobStorageGroupType::GetMaxDataSizeWithErasureOverhead(ExpectedReplySize) <= MaxProtobufSize,
@@ -1103,7 +1103,7 @@ namespace NKikimr {
                 if (!blobSize) {
                     blobSize = MaxBlobSize;
                 }
-
+ 
                 ui32 payloadSize = sz ? sz : blobSize;
                 if (payloadSize + sh > blobSize) {
                     payloadSize = blobSize > sh ? blobSize - sh : 0;
@@ -1113,8 +1113,8 @@ namespace NKikimr {
                     "Possible protobuf overflow for get request. ExpectedReplySize# %" PRIu64
                     " MaxProtobufSize# %" PRIu64 " ExtremeQueries# %" PRIu64, (ui64)ExpectedReplySize,
                     (ui64)MaxProtobufSize, (ui64)Record.ExtremeQueriesSize());
-            }
-#endif
+            } 
+#endif 
         }
 
         bool Validate(TString& errorReason) {
@@ -1180,57 +1180,57 @@ namespace NKikimr {
                 << "}";
             return str.Str();
         }
-
-        bool GetIsLocalMon() const {
-            return IsLocalMon;
-        }
-
-        void SetIsLocalMon() {
-            IsLocalMon = true;
-        }
-
-    private:
-        bool IsLocalMon = false;
-        const bool Extreme = false;
-
-#if BS_EVVGET_SIZE_VERIFY
-        ui64 ExpectedReplySize = 0;
-#endif
-
-    private:
-        TEvVGet(const TVDiskID &vdisk,
-                TInstant deadline,
-                NKikimrBlobStorage::EGetHandleClass cls,
-                bool notifyIfNotReady,
-                bool showInternals,
-                TMaybe<ui64> requestCookie,
-                bool indexOnly,
+ 
+        bool GetIsLocalMon() const { 
+            return IsLocalMon; 
+        } 
+ 
+        void SetIsLocalMon() { 
+            IsLocalMon = true; 
+        } 
+ 
+    private: 
+        bool IsLocalMon = false; 
+        const bool Extreme = false; 
+ 
+#if BS_EVVGET_SIZE_VERIFY 
+        ui64 ExpectedReplySize = 0; 
+#endif 
+ 
+    private: 
+        TEvVGet(const TVDiskID &vdisk, 
+                TInstant deadline, 
+                NKikimrBlobStorage::EGetHandleClass cls, 
+                bool notifyIfNotReady, 
+                bool showInternals, 
+                TMaybe<ui64> requestCookie, 
+                bool indexOnly, 
                 bool extreme,
                 ui32 forceBlockedGeneration)
-            : Extreme(extreme)
-        {
-            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            Record.SetHandleClass(cls);
-            if (notifyIfNotReady) {
-                Record.SetNotifyIfNotReady(true);
-            }
-            if (showInternals) {
-                Record.SetShowInternals(true);
-            }
-            if (requestCookie) {
-                Record.SetCookie(*requestCookie);
-            }
-            if (indexOnly) {
-                Record.SetIndexOnly(true);
-            }
-            if (deadline != TInstant::Max()) {
-                Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds());
-            }
+            : Extreme(extreme) 
+        { 
+            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID()); 
+            Record.SetHandleClass(cls); 
+            if (notifyIfNotReady) { 
+                Record.SetNotifyIfNotReady(true); 
+            } 
+            if (showInternals) { 
+                Record.SetShowInternals(true); 
+            } 
+            if (requestCookie) { 
+                Record.SetCookie(*requestCookie); 
+            } 
+            if (indexOnly) { 
+                Record.SetIndexOnly(true); 
+            } 
+            if (deadline != TInstant::Max()) { 
+                Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds()); 
+            } 
             if (forceBlockedGeneration) {
                 Record.SetForceBlockedGeneration(forceBlockedGeneration);
             }
-            Record.MutableMsgQoS()->SetExtQueueId(HandleClassToQueueId(cls));
-        }
+            Record.MutableMsgQoS()->SetExtQueueId(HandleClassToQueueId(cls)); 
+        } 
     };
 
     struct TEvBlobStorage::TEvVGetResult
@@ -1252,14 +1252,14 @@ namespace NKikimr {
             if (queryRecord && queryRecord->HasTimestamps()) {
                 Record.MutableTimestamps()->CopyFrom(queryRecord->GetTimestamps());
             }
-
-            // copy cookie if it was set in initial query
-            if (cookie)
-                Record.SetCookie(*cookie);
-
-            if (status == NKikimrProto::OK) {
-                Record.SetIncarnationGuid(incarnationGuid);
-            }
+ 
+            // copy cookie if it was set in initial query 
+            if (cookie) 
+                Record.SetCookie(*cookie); 
+ 
+            if (status == NKikimrProto::OK) { 
+                Record.SetIncarnationGuid(incarnationGuid); 
+            } 
         }
 
         void MarkRangeOverflow() {
@@ -1275,10 +1275,10 @@ namespace NKikimr {
             if (sh != 0) {
                 r->SetShift(sh);
             }
-            if (data) {
+            if (data) { 
                 r->SetBuffer(data, size);
             }
-            r->SetSize(size);
+            r->SetSize(size); 
             r->SetFullDataSize(logoBlobId.BlobSize());
             if (cookie) {
                 r->SetCookie(*cookie);
@@ -1288,7 +1288,7 @@ namespace NKikimr {
         }
 
         void AddResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, const ui64 *cookie = nullptr,
-                       const ui64 *ingress = nullptr, const NMatrix::TVectorType *local = nullptr) {
+                       const ui64 *ingress = nullptr, const NMatrix::TVectorType *local = nullptr) { 
             NKikimrBlobStorage::TQueryResult *r = Record.AddResult();
             r->SetStatus(status);
             LogoBlobIDFromLogoBlobID(logoBlobId, r->MutableBlobID());
@@ -1296,31 +1296,31 @@ namespace NKikimr {
                 r->SetCookie(*cookie);
             if (ingress)
                 r->SetIngress(*ingress);
-            if (local) {
-                for (ui8 i = local->FirstPosition(); i != local->GetSize(); i = local->NextPosition(i)) {
-                    r->AddParts(i + 1);
-                }
-            }
+            if (local) { 
+                for (ui8 i = local->FirstPosition(); i != local->GetSize(); i = local->NextPosition(i)) { 
+                    r->AddParts(i + 1); 
+                } 
+            } 
         }
 
         TString ToString() const override {
             TStringStream str;
             str << "{EvVGetResult QueryResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
-            for (const auto& result : Record.GetResult()) {
-                str << " {";
-                str << (result.HasBlobID() ? LogoBlobIDFromLogoBlobID(result.GetBlobID()).ToString() : "?")
-                    << " " << (result.HasStatus() ? NKikimrProto::EReplyStatus_Name(result.GetStatus()) : "?");
-                if (result.HasShift()) {
-                    str << " Shift# " << result.GetShift();
+            for (const auto& result : Record.GetResult()) { 
+                str << " {"; 
+                str << (result.HasBlobID() ? LogoBlobIDFromLogoBlobID(result.GetBlobID()).ToString() : "?") 
+                    << " " << (result.HasStatus() ? NKikimrProto::EReplyStatus_Name(result.GetStatus()) : "?"); 
+                if (result.HasShift()) { 
+                    str << " Shift# " << result.GetShift(); 
                 }
-                if (result.HasSize()) {
-                    str << " Size# " << result.GetSize();
+                if (result.HasSize()) { 
+                    str << " Size# " << result.GetSize(); 
                 }
-                if (result.HasFullDataSize()) {
-                    str << " FullDataSize# " << result.GetFullDataSize();
+                if (result.HasFullDataSize()) { 
+                    str << " FullDataSize# " << result.GetFullDataSize(); 
                 }
-                if (result.HasBuffer()) {
-                    const TString &data = result.GetBuffer();
+                if (result.HasBuffer()) { 
+                    const TString &data = result.GetBuffer(); 
                     str << " DataSize# " << data.size();
                     if (data.size() > 16) {
                         str << " Data# <too_large>";
@@ -1330,16 +1330,16 @@ namespace NKikimr {
                         str << " Data# " << encoded;
                     }
                 }
-                if (result.HasCookie()) {
-                    str << " Cookie# " << result.GetCookie();
+                if (result.HasCookie()) { 
+                    str << " Cookie# " << result.GetCookie(); 
                 }
-                if (result.HasIngress()) {
-                    ui64 ingress = result.GetIngress();
-                    str << " Ingress# " << ingress;
+                if (result.HasIngress()) { 
+                    ui64 ingress = result.GetIngress(); 
+                    str << " Ingress# " << ingress; 
                 }
-                if (const auto& v = result.GetParts(); !v.empty()) {
-                    str << " Parts# " << FormatList(v);
-                }
+                if (const auto& v = result.GetParts(); !v.empty()) { 
+                    str << " Parts# " << FormatList(v); 
+                } 
                 str << "}";
             }
             str << " BlockedGeneration# " << Record.GetBlockedGeneration();
@@ -1347,10 +1347,10 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
-                const NKikimrBlobStorage::TEvVGet &request) {
+        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/, 
+                const NKikimrBlobStorage::TEvVGet &request) { 
             NKikimrProto::EReplyStatus messageStatus = status;
-            NKikimrProto::EReplyStatus queryStatus = status != NKikimrProto::NOTREADY ? status : NKikimrProto::ERROR;
+            NKikimrProto::EReplyStatus queryStatus = status != NKikimrProto::NOTREADY ? status : NKikimrProto::ERROR; 
 
             Record.SetStatus(messageStatus);
             // Ignore RangeQuery (pretend there are no results)
@@ -1679,13 +1679,13 @@ namespace NKikimr {
         TEvVBlock()
         {}
 
-        TEvVBlock(ui64 tabletId, ui32 generation, const TVDiskID &vdisk, TInstant deadline, ui64 issuerGuid = 0)
+        TEvVBlock(ui64 tabletId, ui32 generation, const TVDiskID &vdisk, TInstant deadline, ui64 issuerGuid = 0) 
         {
             Record.SetTabletId(tabletId);
             Record.SetGeneration(generation);
-            if (issuerGuid) {
-                Record.SetIssuerGuid(issuerGuid);
-            }
+            if (issuerGuid) { 
+                Record.SetIssuerGuid(issuerGuid); 
+            } 
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             if (deadline != TInstant::Max()) {
                 Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds());
@@ -1707,7 +1707,7 @@ namespace NKikimr {
                 , ActualGen(actualGen)
             {}
         };
-        TEvVBlockResult() = default;
+        TEvVBlockResult() = default; 
 
         TEvVBlockResult(NKikimrProto::EReplyStatus status, const TTabletActGen *actual, const TVDiskID &vdisk,
                 const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVBlock *queryRecord,
@@ -1722,9 +1722,9 @@ namespace NKikimr {
                 Record.SetGeneration(actual->ActualGen);
             }
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            if (status == NKikimrProto::OK) {
-                Record.SetIncarnationGuid(incarnationGuid);
-            }
+            if (status == NKikimrProto::OK) { 
+                Record.SetIncarnationGuid(incarnationGuid); 
+            } 
         }
 
         void UpdateStatus(NKikimrProto::EReplyStatus status, ui64 tabletId, ui32 actualGen) {
@@ -1749,8 +1749,8 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
-                const NKikimrBlobStorage::TEvVBlock &request) {
+        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/, 
+                const NKikimrBlobStorage::TEvVBlock &request) { 
             Record.SetStatus(status);
             Y_VERIFY(request.HasTabletId());
             Record.SetTabletId(request.GetTabletId());
@@ -2081,7 +2081,7 @@ namespace NKikimr {
         : public TEvVResultBaseWithQoSPB<TEvBlobStorage::TEvVGetBlockResult,
                         NKikimrBlobStorage::TEvVGetBlockResult,
                         TEvBlobStorage::EvVGetBlockResult> {
-        TEvVGetBlockResult() = default;
+        TEvVGetBlockResult() = default; 
 
         TEvVGetBlockResult(NKikimrProto::EReplyStatus status, ui64 tabletId, const TVDiskID &vdisk,
                 const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVGetBlock *queryRecord,
@@ -2124,8 +2124,8 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
-                const NKikimrBlobStorage::TEvVGetBlock &request) {
+        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/, 
+                const NKikimrBlobStorage::TEvVGetBlock &request) { 
             Record.SetStatus(status);
             Y_VERIFY(request.HasTabletId());
             Record.SetTabletId(request.GetTabletId());
@@ -2146,7 +2146,7 @@ namespace NKikimr {
 
         explicit
         TEvVCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel, bool collect,
-            ui32 collectGeneration, ui32 collectStep, bool hard,
+            ui32 collectGeneration, ui32 collectStep, bool hard, 
             const TVector<TLogoBlobID> *keep, const TVector<TLogoBlobID> *doNotKeep,
             const TVDiskID &vdisk, TInstant deadline)
         {
@@ -2157,7 +2157,7 @@ namespace NKikimr {
             if (collect) {
                 Record.SetCollectGeneration(collectGeneration);
                 Record.SetCollectStep(collectStep);
-                Record.SetHard(hard);
+                Record.SetHard(hard); 
             }
             if (keep) {
                 for (ui64 i = 0; i < keep->size(); ++i) {
@@ -2200,12 +2200,12 @@ namespace NKikimr {
         }
     };
 
-    struct TEvBlobStorage::TEvVCollectGarbageResult
-        : public TEvVResultBaseWithQoSPB<TEvBlobStorage::TEvVCollectGarbageResult,
+    struct TEvBlobStorage::TEvVCollectGarbageResult 
+        : public TEvVResultBaseWithQoSPB<TEvBlobStorage::TEvVCollectGarbageResult, 
                     NKikimrBlobStorage::TEvVCollectGarbageResult,
                     TEvBlobStorage::EvVCollectGarbageResult>
-    {
-        TEvVCollectGarbageResult() = default;
+    { 
+        TEvVCollectGarbageResult() = default; 
 
         TEvVCollectGarbageResult(NKikimrProto::EReplyStatus status, ui64 tabletId, ui32 recordGeneration, ui32 channel,
                 const TVDiskID &vdisk, const TInstant &now, ui32 recByteSize,
@@ -2220,9 +2220,9 @@ namespace NKikimr {
             Record.SetRecordGeneration(recordGeneration);
             Record.SetChannel(channel);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            if (status == NKikimrProto::OK) {
-                Record.SetIncarnationGuid(incarnationGuid);
-            }
+            if (status == NKikimrProto::OK) { 
+                Record.SetIncarnationGuid(incarnationGuid); 
+            } 
         }
 
         void UpdateStatus(NKikimrProto::EReplyStatus status) {
@@ -2248,8 +2248,8 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
-                const NKikimrBlobStorage::TEvVCollectGarbage &request) {
+        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/, 
+                const NKikimrBlobStorage::TEvVCollectGarbage &request) { 
             Record.SetStatus(status);
             Y_VERIFY(request.HasTabletId());
             Record.SetTabletId(request.GetTabletId());
@@ -2301,7 +2301,7 @@ namespace NKikimr {
         : public TEvVResultBaseWithQoSPB<TEvBlobStorage::TEvVGetBarrierResult,
                         NKikimrBlobStorage::TEvVGetBarrierResult,
                         TEvBlobStorage::EvVGetBarrierResult> {
-        TEvVGetBarrierResult() = default;
+        TEvVGetBarrierResult() = default; 
 
         TEvVGetBarrierResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
                 ui32 recByteSize, NKikimrBlobStorage::TEvVGetBarrier *queryRecord,
@@ -2320,38 +2320,38 @@ namespace NKikimr {
             auto v = Record.AddValues();
             memRec.Serialize(*v, showInternals);
         }
-
-        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
-                const NKikimrBlobStorage::TEvVGetBarrier &request) {
-            Record.SetStatus(status);
-            Record.MutableVDiskID()->CopyFrom(request.GetVDiskID());
-        }
+ 
+        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/, 
+                const NKikimrBlobStorage::TEvVGetBarrier &request) { 
+            Record.SetStatus(status); 
+            Record.MutableVDiskID()->CopyFrom(request.GetVDiskID()); 
+        } 
     };
 
-    struct TEvBlobStorage::TEvVCheckReadiness
+    struct TEvBlobStorage::TEvVCheckReadiness 
         : public TEventPB<TEvBlobStorage::TEvVCheckReadiness,
                     NKikimrBlobStorage::TEvVCheckReadiness,
                     TEvBlobStorage::EvVCheckReadiness>
-    {
-        TEvVCheckReadiness() = default;
-
-        TEvVCheckReadiness(bool notifyIfNotReady) {
-            Record.SetNotifyIfNotReady(notifyIfNotReady);
-        }
-    };
-
-    struct TEvBlobStorage::TEvVCheckReadinessResult
+    { 
+        TEvVCheckReadiness() = default; 
+ 
+        TEvVCheckReadiness(bool notifyIfNotReady) { 
+            Record.SetNotifyIfNotReady(notifyIfNotReady); 
+        } 
+    }; 
+ 
+    struct TEvBlobStorage::TEvVCheckReadinessResult 
         : public TEventPB<TEvBlobStorage::TEvVCheckReadinessResult,
                     NKikimrBlobStorage::TEvVCheckReadinessResult,
                     EvVCheckReadinessResult>
-    {
-        TEvVCheckReadinessResult() = default;
-
-        TEvVCheckReadinessResult(NKikimrProto::EReplyStatus status) {
-            Record.SetStatus(status);
-        }
-    };
-
+    { 
+        TEvVCheckReadinessResult() = default; 
+ 
+        TEvVCheckReadinessResult(NKikimrProto::EReplyStatus status) { 
+            Record.SetStatus(status); 
+        } 
+    }; 
+ 
     struct TEvBlobStorage::TEvVCompact
         : public TEventPB<TEvBlobStorage::TEvVCompact, NKikimrBlobStorage::TEvVCompact, TEvBlobStorage::EvVCompact>
     {
@@ -2473,13 +2473,13 @@ namespace NKikimr {
                     NKikimrBlobStorage::TEvVDbStatResult,
                     TEvBlobStorage::EvVDbStatResult>
     {
-        TEvVDbStatResult() = default;
+        TEvVDbStatResult() = default; 
 
-        TEvVDbStatResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
+        TEvVDbStatResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now, 
                 const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                NWilson::TTraceId traceId)
+                NWilson::TTraceId traceId) 
             : TEvVResultBasePB(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG)
+                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG) 
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
@@ -2539,7 +2539,7 @@ namespace NKikimr {
         // from protobuf
         using EState = NKikimrBlobStorage::TSyncGuidInfo::EState;
 
-        TEvVSyncGuidResult() = default;
+        TEvVSyncGuidResult() = default; 
 
         // read response
         TEvVSyncGuidResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
@@ -2598,7 +2598,7 @@ namespace NKikimr {
         : public TEvVResultBasePB<TEvBlobStorage::TEvVSyncResult,
                     NKikimrBlobStorage::TEvVSyncResult,
                     TEvBlobStorage::EvVSyncResult> {
-        TEvVSyncResult() = default;
+        TEvVSyncResult() = default; 
 
         TEvVSyncResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk,
                        const TSyncState &newSyncState, bool finished, NPDisk::TStatusFlags flags, const TInstant &now,
@@ -2665,7 +2665,7 @@ namespace NKikimr {
                     NKikimrBlobStorage::TEvVSyncFullResult,
                     TEvBlobStorage::EvVSyncFullResult>
     {
-        TEvVSyncFullResult() = default;
+        TEvVSyncFullResult() = default; 
 
         TEvVSyncFullResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TSyncState &syncState,
                 ui64 cookie, const TInstant &now, const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
@@ -2706,25 +2706,25 @@ namespace NKikimr {
                     NKikimrBlobStorage::TEvVWindowChange,
                     TEvBlobStorage::EvVWindowChange>
     {
-        static constexpr struct TDropConnection {} DropConnection{};
-
+        static constexpr struct TDropConnection {} DropConnection{}; 
+ 
         TEvVWindowChange()
         {}
 
-        template<typename TClientId>
-        TEvVWindowChange(NKikimrBlobStorage::EVDiskQueueId queueId,
-                const typename NBackpressure::TWindowStatus<TClientId> &wstatus) {
+        template<typename TClientId> 
+        TEvVWindowChange(NKikimrBlobStorage::EVDiskQueueId queueId, 
+                const typename NBackpressure::TWindowStatus<TClientId> &wstatus) { 
             Record.SetFrontQueueId(queueId);
             wstatus.Serialize(*Record.MutableWindow());
         }
 
-        TEvVWindowChange(NKikimrBlobStorage::EVDiskQueueId queueId, TDropConnection) {
-            Record.SetFrontQueueId(queueId);
-            Record.SetDropConnection(true);
-        }
-
+        TEvVWindowChange(NKikimrBlobStorage::EVDiskQueueId queueId, TDropConnection) { 
+            Record.SetFrontQueueId(queueId); 
+            Record.SetDropConnection(true); 
+        } 
+ 
         TString ToString() const override {
-            return SingleLineProto(Record);
+            return SingleLineProto(Record); 
         }
     };
 
@@ -2732,18 +2732,18 @@ namespace NKikimr {
         TVDiskID NewVDiskId;
         TIntrusivePtr<TBlobStorageGroupInfo> NewInfo;
 
-        TEvVGenerationChange(const TVDiskID &newVDiskId, const TIntrusivePtr<TBlobStorageGroupInfo> &newInfo)
-            : NewVDiskId(newVDiskId)
+        TEvVGenerationChange(const TVDiskID &newVDiskId, const TIntrusivePtr<TBlobStorageGroupInfo> &newInfo) 
+            : NewVDiskId(newVDiskId) 
             , NewInfo(newInfo)
         {}
 
         TEvVGenerationChange *Clone() {
-            return new TEvVGenerationChange(NewVDiskId, NewInfo);
+            return new TEvVGenerationChange(NewVDiskId, NewInfo); 
         }
 
         TString ToString() const override {
-            return TStringBuilder() << "{TEvVGenerationChange NewVDiskId# " << NewVDiskId << " NewInfo# "
-                << NewInfo->ToString() << "}" ;
+            return TStringBuilder() << "{TEvVGenerationChange NewVDiskId# " << NewVDiskId << " NewInfo# " 
+                << NewInfo->ToString() << "}" ; 
         }
     };
 
@@ -2753,9 +2753,9 @@ namespace NKikimr {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         TIntrusivePtr<TStoragePoolCounters> StoragePoolCounters;
 
-        TEvConfigureProxy(TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = nullptr)
-            : Info(std::move(info))
-            , StoragePoolCounters(std::move(storagePoolCounters))
+        TEvConfigureProxy(TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = nullptr) 
+            : Info(std::move(info)) 
+            , StoragePoolCounters(std::move(storagePoolCounters)) 
         {}
 
         TString ToString() const override {
@@ -2777,54 +2777,54 @@ namespace NKikimr {
         }
     };
 
-    struct TEvBlobStorage::TEvUpdateGroupInfo : TEventLocal<TEvUpdateGroupInfo, EvUpdateGroupInfo> {
-        const ui32 GroupId;
-        const ui32 GroupGeneration;
-        std::optional<NKikimrBlobStorage::TGroupInfo> GroupInfo;
-
-        TEvUpdateGroupInfo(ui32 groupId, ui32 groupGeneration, std::optional<NKikimrBlobStorage::TGroupInfo> groupInfo)
+    struct TEvBlobStorage::TEvUpdateGroupInfo : TEventLocal<TEvUpdateGroupInfo, EvUpdateGroupInfo> { 
+        const ui32 GroupId; 
+        const ui32 GroupGeneration; 
+        std::optional<NKikimrBlobStorage::TGroupInfo> GroupInfo; 
+ 
+        TEvUpdateGroupInfo(ui32 groupId, ui32 groupGeneration, std::optional<NKikimrBlobStorage::TGroupInfo> groupInfo) 
             : GroupId(groupId)
-            , GroupGeneration(groupGeneration)
-            , GroupInfo(std::move(groupInfo))
+            , GroupGeneration(groupGeneration) 
+            , GroupInfo(std::move(groupInfo)) 
         {}
     };
 
-    struct TEvBlobStorage::TEvEnrichNotYet : TEventLocal<TEvEnrichNotYet, EvEnrichNotYet> {
-        TEvVGet::TPtr Query;
-        std::unique_ptr<TEvVGetResult> Result;
-
-        TEvEnrichNotYet(TEvVGet::TPtr query, std::unique_ptr<TEvVGetResult> result)
-            : Query(std::move(query))
-            , Result(std::move(result))
-        {}
-    };
-
-    struct TEvBlobStorage::TEvCaptureVDiskLayout : TEventLocal<TEvCaptureVDiskLayout, EvCaptureVDiskLayout>
-    {};
-
-    struct TEvBlobStorage::TEvCaptureVDiskLayoutResult : TEventLocal<TEvCaptureVDiskLayoutResult, EvCaptureVDiskLayoutResult> {
-        enum class EDatabase {
-            LogoBlobs,
-            Blocks,
-            Barriers
-        };
-
-        enum class ERecordType {
-            HugeBlob,
-            InplaceBlob,
-            IndexRecord,
-        };
-
-        struct TLayoutRecord {
-            TDiskPart Location;
-            EDatabase Database;
-            ERecordType RecordType;
-            TLogoBlobID BlobId; // for HugeBlob/InplaceBlob
-            ui64 SstId; // for IndexRecord
-            ui32 Level; // for IndexRecord
-        };
-
-        std::vector<TLayoutRecord> Layout;
-    };
-
+    struct TEvBlobStorage::TEvEnrichNotYet : TEventLocal<TEvEnrichNotYet, EvEnrichNotYet> { 
+        TEvVGet::TPtr Query; 
+        std::unique_ptr<TEvVGetResult> Result; 
+ 
+        TEvEnrichNotYet(TEvVGet::TPtr query, std::unique_ptr<TEvVGetResult> result) 
+            : Query(std::move(query)) 
+            , Result(std::move(result)) 
+        {} 
+    }; 
+ 
+    struct TEvBlobStorage::TEvCaptureVDiskLayout : TEventLocal<TEvCaptureVDiskLayout, EvCaptureVDiskLayout> 
+    {}; 
+ 
+    struct TEvBlobStorage::TEvCaptureVDiskLayoutResult : TEventLocal<TEvCaptureVDiskLayoutResult, EvCaptureVDiskLayoutResult> { 
+        enum class EDatabase { 
+            LogoBlobs, 
+            Blocks, 
+            Barriers 
+        }; 
+ 
+        enum class ERecordType { 
+            HugeBlob, 
+            InplaceBlob, 
+            IndexRecord, 
+        }; 
+ 
+        struct TLayoutRecord { 
+            TDiskPart Location; 
+            EDatabase Database; 
+            ERecordType RecordType; 
+            TLogoBlobID BlobId; // for HugeBlob/InplaceBlob 
+            ui64 SstId; // for IndexRecord 
+            ui32 Level; // for IndexRecord 
+        }; 
+ 
+        std::vector<TLayoutRecord> Layout; 
+    }; 
+ 
 } // NKikimr

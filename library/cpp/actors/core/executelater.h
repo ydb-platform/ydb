@@ -35,13 +35,13 @@ namespace NActors {
                    TEvCallbackCompletion */
 
                     auto local = std::move(Callback);
-                    using T = decltype(local);
+                    using T = decltype(local); 
 
-                    if constexpr (std::is_invocable_v<T, const TActorContext&>) {
-                        local(ctx);
-                    } else {
-                        local();
-                    }
+                    if constexpr (std::is_invocable_v<T, const TActorContext&>) { 
+                        local(ctx); 
+                    } else { 
+                        local(); 
+                    } 
                 }
 
                 if (ReportCompletionTo) {

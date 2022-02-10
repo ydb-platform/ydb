@@ -61,8 +61,8 @@ class TJsonStorage : public TViewerPipeClient<TJsonStorage> {
     EWith With = EWith::Everything;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::VIEWER_HANDLER; 
     }
 
     TJsonStorage(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)

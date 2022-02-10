@@ -544,16 +544,16 @@ class TBootstrapper : public TActor<TBootstrapper> {
     }
 
     void PassAway() override {
-        for (ui32 nodeId : BootstrapperInfo->OtherNodes) {
-            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
-        }
+        for (ui32 nodeId : BootstrapperInfo->OtherNodes) { 
+            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe); 
+        } 
         NotifyWatchers();
         TActor::PassAway();
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_BOOTSTRAPPER;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_BOOTSTRAPPER; 
     }
 
     TBootstrapper(TTabletStorageInfo *tabletInfo, TBootstrapperInfo *bootstrapperInfo, bool standby)

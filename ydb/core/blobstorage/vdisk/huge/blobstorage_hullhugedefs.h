@@ -212,7 +212,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TBlobMerger {
             using TCircaLsns = TVector<ui64>;
-
+ 
         public:
             TBlobMerger() = default;
 
@@ -232,23 +232,23 @@ namespace NKikimr {
             void Add(const TDiskPart *begin, const TDiskPart *end, const NMatrix::TVectorType &parts, ui64 circaLsn) {
                 if (DiskPtrs.empty()) {
                     Parts = parts;
-                    DiskPtrs = {begin, end};
+                    DiskPtrs = {begin, end}; 
                     CircaLsns = TCircaLsns(end - begin, circaLsn);
-                    Y_VERIFY(DiskPtrs.size() == Parts.CountBits());
+                    Y_VERIFY(DiskPtrs.size() == Parts.CountBits()); 
                 } else {
                     Merge(begin, end, parts, circaLsn);
                 }
             }
 
-            void AddMetadataParts(NMatrix::TVectorType parts) {
+            void AddMetadataParts(NMatrix::TVectorType parts) { 
                 // this is special case for mirror3of4, where data can have empty TDiskPart
-                std::array<TDiskPart, 8> zero;
-                zero.fill(TDiskPart());
+                std::array<TDiskPart, 8> zero; 
+                zero.fill(TDiskPart()); 
                 // empty TDiskPart at a position means that every circaLsn shoud work
                 const ui64 circaLsn = Max<ui64>();
                 Merge(zero.begin(), zero.begin() + parts.CountBits(), parts, circaLsn);
-            }
-
+            } 
+ 
             bool Empty() const {
                 return Parts.Empty();
             }
@@ -265,9 +265,9 @@ namespace NKikimr {
                 return DiskPtrs.size() == 1 ? TBlobType::HugeBlob : TBlobType::ManyHugeBlobs;
             }
 
-            ui32 GetNumParts() const {
-                return DiskPtrs.size();
-            }
+            ui32 GetNumParts() const { 
+                return DiskPtrs.size(); 
+            } 
 
             void Output(IOutputStream &str) const {
                 if (Empty()) {
@@ -311,8 +311,8 @@ namespace NKikimr {
 
             void Merge(const TDiskPart *begin, const TDiskPart *end, const NMatrix::TVectorType &parts, ui64 circaLsn)
             {
-                Y_VERIFY(end - begin == parts.CountBits());
-                Y_VERIFY_DEBUG(Parts.GetSize() == parts.GetSize());
+                Y_VERIFY(end - begin == parts.CountBits()); 
+                Y_VERIFY_DEBUG(Parts.GetSize() == parts.GetSize()); 
                 const ui8 maxSize = parts.GetSize();
                 TDiskPtrs newDiskPtrs;
                 TCircaLsns newCircaLsns;
@@ -357,7 +357,7 @@ namespace NKikimr {
                 Parts |= parts;
                 DiskPtrs.swap(newDiskPtrs);
                 CircaLsns.swap(newCircaLsns);
-                Y_VERIFY(DiskPtrs.size() == Parts.CountBits());
+                Y_VERIFY(DiskPtrs.size() == Parts.CountBits()); 
             }
         };
 

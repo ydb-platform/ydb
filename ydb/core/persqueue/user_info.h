@@ -540,7 +540,7 @@ private:
 private:
     THashMap<TString, TUserInfo> UsersInfo;
 
-    const TString DCId;
+    const TString DCId; 
     ui64 TabletId;
     const TString TopicName;
     const ui32 Partition;

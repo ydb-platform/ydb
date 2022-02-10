@@ -20,13 +20,13 @@ ENDIF()
 
 SRCS(
     actor_bootstrapped.h
-    actor_coroutine.cpp
-    actor_coroutine.h
-    actor.cpp
-    actor.h
-    actorid.cpp
+    actor_coroutine.cpp 
+    actor_coroutine.h 
+    actor.cpp 
+    actor.h 
+    actorid.cpp 
     actorid.h
-    actorsystem.cpp
+    actorsystem.cpp 
     actorsystem.h
     ask.cpp
     ask.h
@@ -41,15 +41,15 @@ SRCS(
     cpu_manager.h
     cpu_state.h
     defs.h
-    event.cpp
+    event.cpp 
     event.h
-    event_load.h
-    event_local.h
+    event_load.h 
+    event_local.h 
     event_pb.cpp
     event_pb.h
     events.h
     events_undelivered.cpp
-    executelater.h
+    executelater.h 
     executor_pool_base.cpp
     executor_pool_base.h
     executor_pool_basic.cpp
@@ -61,17 +61,17 @@ SRCS(
     executor_thread.cpp
     executor_thread.h
     hfunc.h
-    interconnect.cpp
+    interconnect.cpp 
     interconnect.h
-    invoke.h
-    io_dispatcher.cpp
-    io_dispatcher.h
+    invoke.h 
+    io_dispatcher.cpp 
+    io_dispatcher.h 
     lease.h
     log.cpp
     log.h
     log_settings.cpp
     log_settings.h
-    mailbox.cpp
+    mailbox.cpp 
     mailbox.h
     mailbox_queue_revolving.h
     mailbox_queue_simple.h
@@ -85,7 +85,7 @@ SRCS(
     monotonic.h
     worker_context.cpp
     worker_context.h
-    probes.cpp
+    probes.cpp 
     probes.h
     process_stats.cpp
     process_stats.h

@@ -53,12 +53,12 @@ struct TEvPersQueue {
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ)");
 
     struct TEvRequest : public TEventPB<TEvRequest,
-            NKikimrClient::TPersQueueRequest, EvRequest> {
+            NKikimrClient::TPersQueueRequest, EvRequest> { 
         TEvRequest() {}
     };
 
     struct TEvResponse: public TEventPB<TEvResponse,
-            NKikimrClient::TResponse, EvResponse> {
+            NKikimrClient::TResponse, EvResponse> { 
         TEvResponse() {}
     };
 

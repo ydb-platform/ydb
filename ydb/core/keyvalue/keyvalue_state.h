@@ -11,14 +11,14 @@
 #include "keyvalue_item_type.h"
 #include "keyvalue_stored_state_data.h"
 #include "keyvalue_simple_db.h"
-#include "channel_balancer.h"
+#include "channel_balancer.h" 
 #include <util/generic/set.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/core/keyvalue/protos/events.pb.h>
-#include <bitset>
+#include <bitset> 
 
 namespace NActors {
     struct TActorContext;
@@ -55,183 +55,183 @@ class TKeyValueState {
         }
     };
 
-public:
+public: 
     using TIndex = TMap<TString, TIndexRecord>;
     using TCommand = NKikimrKeyValue::ExecuteTransactionRequest::Command;
 
-    class TIncrementalKeySet {
+    class TIncrementalKeySet { 
         TMap<TString, TIndexRecord>& Index;
         TSet<TString>                AddedKeys;
         TSet<TString>                DeletedKeys;
-
-        class TIterator {
-            TIncrementalKeySet&                  KeySet;
+ 
+        class TIterator { 
+            TIncrementalKeySet&                  KeySet; 
             TMap<TString, TIndexRecord>::iterator IndexIterator;
             TSet<TString>::iterator               AddedKeysIterator;
             TSet<TString>::iterator               DeletedKeysIterator;
-
-        public:
+ 
+        public: 
             TIterator(TIncrementalKeySet& keySet, TMap<TString, TIndexRecord>::iterator indexIterator,
                     TSet<TString>::iterator addedKeysIterator, TSet<TString>::iterator deletedKeysIterator)
-                : KeySet(keySet)
-                , IndexIterator(indexIterator)
-                , AddedKeysIterator(addedKeysIterator)
-                , DeletedKeysIterator(deletedKeysIterator)
-            {
-                AdvanceToNonDeleted();
-            }
-
-            TIterator(const TIterator&) = default;
-
-            TIterator& operator=(const TIterator& other) {
-                IndexIterator = other.IndexIterator;
-                AddedKeysIterator = other.AddedKeysIterator;
-                DeletedKeysIterator = other.DeletedKeysIterator;
-                return *this;
-            }
-
+                : KeySet(keySet) 
+                , IndexIterator(indexIterator) 
+                , AddedKeysIterator(addedKeysIterator) 
+                , DeletedKeysIterator(deletedKeysIterator) 
+            { 
+                AdvanceToNonDeleted(); 
+            } 
+ 
+            TIterator(const TIterator&) = default; 
+ 
+            TIterator& operator=(const TIterator& other) { 
+                IndexIterator = other.IndexIterator; 
+                AddedKeysIterator = other.AddedKeysIterator; 
+                DeletedKeysIterator = other.DeletedKeysIterator; 
+                return *this; 
+            } 
+ 
             const TString& operator*() const {
-                if (IndexIterator != KeySet.Index.end() && AddedKeysIterator != KeySet.AddedKeys.end()) {
-                    return std::min(IndexIterator->first, *AddedKeysIterator);
-                } else if (IndexIterator != KeySet.Index.end()) {
-                    return IndexIterator->first;
-                } else if (AddedKeysIterator != KeySet.AddedKeys.end()) {
-                    return *AddedKeysIterator;
-                } else {
+                if (IndexIterator != KeySet.Index.end() && AddedKeysIterator != KeySet.AddedKeys.end()) { 
+                    return std::min(IndexIterator->first, *AddedKeysIterator); 
+                } else if (IndexIterator != KeySet.Index.end()) { 
+                    return IndexIterator->first; 
+                } else if (AddedKeysIterator != KeySet.AddedKeys.end()) { 
+                    return *AddedKeysIterator; 
+                } else { 
                     Y_FAIL("operator*() called on invalid iterator");
-                }
-            }
-
+                } 
+            } 
+ 
             const TString *operator->() const {
-                return &**this;
-            }
-
-            TIterator& operator++() {
-                MoveNext();
-                AdvanceToNonDeleted();
-                return *this;
-            }
-
-            void AdvanceToNonDeleted() {
-                for (;;) {
-                    if (IndexIterator == KeySet.Index.end() && AddedKeysIterator == KeySet.AddedKeys.end()) {
-                        DeletedKeysIterator = KeySet.DeletedKeys.end();
-                        break;
-                    } else {
+                return &**this; 
+            } 
+ 
+            TIterator& operator++() { 
+                MoveNext(); 
+                AdvanceToNonDeleted(); 
+                return *this; 
+            } 
+ 
+            void AdvanceToNonDeleted() { 
+                for (;;) { 
+                    if (IndexIterator == KeySet.Index.end() && AddedKeysIterator == KeySet.AddedKeys.end()) { 
+                        DeletedKeysIterator = KeySet.DeletedKeys.end(); 
+                        break; 
+                    } else { 
                         const TString& currentKey = **this;
-                        while (DeletedKeysIterator != KeySet.DeletedKeys.end() && *DeletedKeysIterator < currentKey) {
-                            ++DeletedKeysIterator; // FIXME: optimize
-                        }
-                        if (DeletedKeysIterator == KeySet.DeletedKeys.end() || *DeletedKeysIterator != currentKey) {
-                            break;
-                        }
-                        MoveNext();
-                        ++DeletedKeysIterator;
-                    }
-                }
-            }
-
-            void MoveNext() {
-                if (IndexIterator != KeySet.Index.end() && AddedKeysIterator != KeySet.AddedKeys.end()) {
+                        while (DeletedKeysIterator != KeySet.DeletedKeys.end() && *DeletedKeysIterator < currentKey) { 
+                            ++DeletedKeysIterator; // FIXME: optimize 
+                        } 
+                        if (DeletedKeysIterator == KeySet.DeletedKeys.end() || *DeletedKeysIterator != currentKey) { 
+                            break; 
+                        } 
+                        MoveNext(); 
+                        ++DeletedKeysIterator; 
+                    } 
+                } 
+            } 
+ 
+            void MoveNext() { 
+                if (IndexIterator != KeySet.Index.end() && AddedKeysIterator != KeySet.AddedKeys.end()) { 
                     const TString& key = std::min(IndexIterator->first, *AddedKeysIterator);
-                    if (IndexIterator->first == key) {
-                        ++IndexIterator;
-                    }
-                    if (*AddedKeysIterator == key) {
-                        ++AddedKeysIterator;
-                    }
-                } else if (IndexIterator != KeySet.Index.end()) {
-                    ++IndexIterator;
-                } else if (AddedKeysIterator != KeySet.AddedKeys.end()) {
-                    ++AddedKeysIterator;
-                } else {
+                    if (IndexIterator->first == key) { 
+                        ++IndexIterator; 
+                    } 
+                    if (*AddedKeysIterator == key) { 
+                        ++AddedKeysIterator; 
+                    } 
+                } else if (IndexIterator != KeySet.Index.end()) { 
+                    ++IndexIterator; 
+                } else if (AddedKeysIterator != KeySet.AddedKeys.end()) { 
+                    ++AddedKeysIterator; 
+                } else { 
                     Y_FAIL("operator++() called on invalid iterator");
-                }
-            }
-
-            friend bool operator==(const TIterator& left, const TIterator& right) {
-                return left.IndexIterator == right.IndexIterator
-                    && left.AddedKeysIterator == right.AddedKeysIterator
-                    && left.DeletedKeysIterator == right.DeletedKeysIterator;
-            }
-
-            friend bool operator!=(const TIterator& left, const TIterator& right) {
-                return !(left == right);
-            }
-        };
-
-    public:
-        using iterator = TIterator;
-
-    public:
+                } 
+            } 
+ 
+            friend bool operator==(const TIterator& left, const TIterator& right) { 
+                return left.IndexIterator == right.IndexIterator 
+                    && left.AddedKeysIterator == right.AddedKeysIterator 
+                    && left.DeletedKeysIterator == right.DeletedKeysIterator; 
+            } 
+ 
+            friend bool operator!=(const TIterator& left, const TIterator& right) { 
+                return !(left == right); 
+            } 
+        }; 
+ 
+    public: 
+        using iterator = TIterator; 
+ 
+    public: 
         TIncrementalKeySet(TMap<TString, TIndexRecord>& index)
-            : Index(index)
-        {}
-
-        template<typename Iterator>
-        void insert(Iterator first, Iterator last) {
-            AddedKeys.insert(first, last);
-            if (last != first) {
-                --last;
+            : Index(index) 
+        {} 
+ 
+        template<typename Iterator> 
+        void insert(Iterator first, Iterator last) { 
+            AddedKeys.insert(first, last); 
+            if (last != first) { 
+                --last; 
                 TSet<TString>::iterator begin = DeletedKeys.lower_bound(*first);
                 TSet<TString>::iterator end = DeletedKeys.upper_bound(*last);
-                DeletedKeys.erase(begin, end);
-            }
-        }
-
+                DeletedKeys.erase(begin, end); 
+            } 
+        } 
+ 
         void insert(const TString& key) {
-            AddedKeys.insert(key);
-            DeletedKeys.erase(key);
-        }
-
-        void erase(const iterator& iter) {
+            AddedKeys.insert(key); 
+            DeletedKeys.erase(key); 
+        } 
+ 
+        void erase(const iterator& iter) { 
             const TString& key = *iter;
-            DeletedKeys.insert(key);
-            AddedKeys.erase(key);
-        }
-
-        void erase(iterator first, const iterator& last) {
-            // FIXME: optimize
-            while (first != last) {
-                iterator temp = first;
-                ++first;
-                erase(temp);
-            }
-        }
-
+            DeletedKeys.insert(key); 
+            AddedKeys.erase(key); 
+        } 
+ 
+        void erase(iterator first, const iterator& last) { 
+            // FIXME: optimize 
+            while (first != last) { 
+                iterator temp = first; 
+                ++first; 
+                erase(temp); 
+            } 
+        } 
+ 
         iterator find(const TString& key) {
             TSet<TString>::iterator deleted = DeletedKeys.lower_bound(key);
-            if (deleted != DeletedKeys.end() && *deleted == key) {
-                return end();
-            }
-
+            if (deleted != DeletedKeys.end() && *deleted == key) { 
+                return end(); 
+            } 
+ 
             TMap<TString, TIndexRecord>::iterator index = Index.lower_bound(key);
             TSet<TString>::iterator added = AddedKeys.lower_bound(key);
-
-            if ((index != Index.end() && index->first == key) || (added != AddedKeys.end() && *added == key)) {
-                return TIterator{*this, index, added, deleted};
-            }
-
-            return end();
-        }
-
-        iterator begin() {
-            return TIterator{*this, Index.begin(), AddedKeys.begin(), DeletedKeys.begin()};
-        }
-
-        iterator end() {
-            return TIterator{*this, Index.end(), AddedKeys.end(), DeletedKeys.end()};
-        }
-
+ 
+            if ((index != Index.end() && index->first == key) || (added != AddedKeys.end() && *added == key)) { 
+                return TIterator{*this, index, added, deleted}; 
+            } 
+ 
+            return end(); 
+        } 
+ 
+        iterator begin() { 
+            return TIterator{*this, Index.begin(), AddedKeys.begin(), DeletedKeys.begin()}; 
+        } 
+ 
+        iterator end() { 
+            return TIterator{*this, Index.end(), AddedKeys.end(), DeletedKeys.end()}; 
+        } 
+ 
         iterator lower_bound(const TString& key) {
-            return TIterator{*this, Index.lower_bound(key), AddedKeys.lower_bound(key), DeletedKeys.lower_bound(key)};
-        }
-
+            return TIterator{*this, Index.lower_bound(key), AddedKeys.lower_bound(key), DeletedKeys.lower_bound(key)}; 
+        } 
+ 
         iterator upper_bound(const TString& key) {
-            return TIterator{*this, Index.upper_bound(key), AddedKeys.upper_bound(key), DeletedKeys.upper_bound(key)};
-        }
-    };
-
+            return TIterator{*this, Index.upper_bound(key), AddedKeys.upper_bound(key), DeletedKeys.upper_bound(key)}; 
+        } 
+    }; 
+ 
     ui32 GetGeneration() const {
         return StoredState.UserGeneration;
     }
@@ -241,10 +241,10 @@ protected:
     ui32 NextLogoBlobStep;
     ui32 NextLogoBlobCookie;
 
-    using TKeySet = TIncrementalKeySet;
+    using TKeySet = TIncrementalKeySet; 
 
     TVector<TRangeSet> ChannelRangeSets;
-    TIndex Index;
+    TIndex Index; 
     THashMap<TLogoBlobID, ui32> RefCounts;
     TSet<TLogoBlobID> Trash;
     TMap<ui64, ui64> InFlightForStep;
@@ -253,9 +253,9 @@ protected:
     TIntrusivePtr<TCollectOperation> CollectOperation;
     bool IsCollectEventSent;
     bool IsSpringCleanupDone;
-    std::array<ui64, 256> ChannelDataUsage;
-    std::bitset<256> UsedChannels;
-    THolder<TChannelBalancer::TWeightManager> WeightManager;
+    std::array<ui64, 256> ChannelDataUsage; 
+    std::bitset<256> UsedChannels; 
+    THolder<TChannelBalancer::TWeightManager> WeightManager; 
 
     ui64 TabletId;
     TActorId KeyValueActorId;
@@ -278,7 +278,7 @@ protected:
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
 
     TInstant LastCollectStartedAt;
-
+ 
     ui32 PerGenerationCounter; // for garbage collection
 
     NMetrics::TResourceMetrics* ResourceMetrics;
@@ -296,7 +296,7 @@ public:
     void CountRequestOtherError(TRequestType::EType requestType);
     void CountRequestIncoming(TRequestType::EType requestType);
     void CountTrashRecord(ui32 sizeBytes);
-    void CountWriteRecord(ui8 channel, ui32 sizeBytes);
+    void CountWriteRecord(ui8 channel, ui32 sizeBytes); 
     void CountInitialTrashRecord(ui32 sizeBytes);
     void CountTrashCollected(ui32 sizeBytes);
     void CountOverrun();
@@ -308,8 +308,8 @@ public:
     void CountProcessingInitQueue();
     void CountOnline();
 
-    void Terminate(const TActorContext& ctx);
-    void Load(const TString &key, const TString& value);
+    void Terminate(const TActorContext& ctx); 
+    void Load(const TString &key, const TString& value); 
     void InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 executorGeneration, ISimpleDb &db,
         const TActorContext &ctx, const TTabletStorageInfo *info);
     void RegisterInitialCollectResult(const TActorContext &ctx);
@@ -368,9 +368,9 @@ public:
     void CmdDelete(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
     void CmdWrite(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
     void CmdGetStatus(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
-    void CmdCopyRange(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx);
-    void CmdConcat(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx);
-    void CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx);
+    void CmdCopyRange(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx); 
+    void CmdConcat(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx); 
+    void CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx); 
     void CmdSetExecutorFastLogPolicy(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
     void CmdCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
     void ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
@@ -389,30 +389,30 @@ public:
     TCheckResult CheckCmd(const TIntermediate::TConcat &cmd, TKeySet& keys, ui32 index) const;
 
     bool CheckCmdRenames(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
-            const TTabletStorageInfo *info);
+            const TTabletStorageInfo *info); 
     bool CheckCmdDeletes(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
-            const TTabletStorageInfo *info);
+            const TTabletStorageInfo *info); 
     bool CheckCmdWrites(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
-            const TTabletStorageInfo *info);
+            const TTabletStorageInfo *info); 
     bool CheckCmdCopyRanges(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
-            const TTabletStorageInfo *info);
+            const TTabletStorageInfo *info); 
     bool CheckCmdConcats(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
-            const TTabletStorageInfo *info);
+            const TTabletStorageInfo *info); 
     bool CheckCmdGetStatus(THolder<TIntermediate>& /*intermediate*/, const TActorContext& /*ctx*/,
         TKeySet& /*keys*/, const TTabletStorageInfo* /*info*/);
     bool CheckCmds(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys,
             const TTabletStorageInfo* /*info*/);
-
+ 
     void Step();
     TLogoBlobID AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx);
     TIntrusivePtr<TCollectOperation>& GetCollectOperation() {
         return CollectOperation;
     }
 
-    void Dereference(const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx);
+    void Dereference(const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx); 
     void UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx);
-    void Dereference(const TLogoBlobID& id, ISimpleDb& db, const TActorContext& ctx, bool initial);
-
+    void Dereference(const TLogoBlobID& id, ISimpleDb& db, const TActorContext& ctx, bool initial); 
+ 
     ui32 GetPerGenerationCounter() {
         return PerGenerationCounter;
     }
@@ -429,7 +429,7 @@ public:
             const TTabletStorageInfo *info);
 
     void OnPeriodicRefresh(const TActorContext &ctx);
-    void OnUpdateWeights(TChannelBalancer::TEvUpdateWeights::TPtr ev);
+    void OnUpdateWeights(TChannelBalancer::TEvUpdateWeights::TPtr ev); 
 
     void OnRequestComplete(ui64 requestUid, ui64 generation, ui64 step, const TActorContext &ctx,
         const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat);
@@ -439,10 +439,10 @@ public:
     bool PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THolder<TIntermediate> &intermediate,
         TRequestType::EType &inOutRequestType, const TActorContext &ctx, const TTabletStorageInfo *info);
     void RenderHTMLPage(IOutputStream &out) const;
-    void MonChannelStat(NJson::TJsonValue& out) const;
+    void MonChannelStat(NJson::TJsonValue& out) const; 
 
-    bool CheckDeadline(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate);
+    bool CheckDeadline(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, 
+        THolder<TIntermediate> &intermediate); 
 
     template <typename TRequest>
     bool CheckDeadline(const TActorContext &ctx, TRequest *request,
@@ -469,8 +469,8 @@ public:
         return false;
     }
 
-    bool CheckGeneration(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate);
+    bool CheckGeneration(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, 
+        THolder<TIntermediate> &intermediate); 
 
     template <typename TGrpcRequestWithLockGeneration>
     bool CheckGeneration(const TActorContext &ctx, TGrpcRequestWithLockGeneration *kvRequest,
@@ -494,24 +494,24 @@ public:
 
     void SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, ui32 storageChannelIdx);
 
-    bool PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
+    bool PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, 
         THolder<TIntermediate> &intermediate, bool &outIsInlineOnly);
-    bool PrepareCmdReadRange(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
+    bool PrepareCmdReadRange(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, 
         THolder<TIntermediate> &intermediate, bool &inOutIsInlineOnly);
-    bool PrepareCmdRename(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate);
-    bool PrepareCmdDelete(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate);
-    bool PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
+    bool PrepareCmdRename(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, 
+        THolder<TIntermediate> &intermediate); 
+    bool PrepareCmdDelete(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, 
+        THolder<TIntermediate> &intermediate); 
+    bool PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, 
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
-    bool PrepareCmdGetStatus(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
+    bool PrepareCmdGetStatus(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, 
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
-    bool PrepareCmdCopyRange(const TActorContext& ctx, NKikimrClient::TKeyValueRequest& kvRequest,
-        THolder<TIntermediate>& intermediate);
-    bool PrepareCmdConcat(const TActorContext& ctx, NKikimrClient::TKeyValueRequest& kvRequest,
-        THolder<TIntermediate>& intermediate);
-    bool PrepareCmdTrimLeakedBlobs(const TActorContext& ctx, NKikimrClient::TKeyValueRequest& kvRequest,
-        THolder<TIntermediate>& intermediate, const TTabletStorageInfo *info);
+    bool PrepareCmdCopyRange(const TActorContext& ctx, NKikimrClient::TKeyValueRequest& kvRequest, 
+        THolder<TIntermediate>& intermediate); 
+    bool PrepareCmdConcat(const TActorContext& ctx, NKikimrClient::TKeyValueRequest& kvRequest, 
+        THolder<TIntermediate>& intermediate); 
+    bool PrepareCmdTrimLeakedBlobs(const TActorContext& ctx, NKikimrClient::TKeyValueRequest& kvRequest, 
+        THolder<TIntermediate>& intermediate, const TTabletStorageInfo *info); 
     bool PrepareCmdSetExecutorFastLogPolicy(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
 
@@ -534,9 +534,9 @@ public:
     TPrepareResult InitGetStatusCommand(TIntermediate::TGetStatus &cmd,
         NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info);
     void ReplyError(const TActorContext &ctx, TString errorDescription,
-        NMsgBusProxy::EResponseStatus status, THolder<TIntermediate> &intermediate,
-        const TTabletStorageInfo *info = nullptr);
-
+        NMsgBusProxy::EResponseStatus status, THolder<TIntermediate> &intermediate, 
+        const TTabletStorageInfo *info = nullptr); 
+ 
     template <typename TResponse>
     void ReplyError(const TActorContext &ctx, TString errorDescription,
         NKikimrKeyValue::Statuses::ReplyStatus status, THolder<TIntermediate> &intermediate,
@@ -600,9 +600,9 @@ public:
     void ProcessPostponedIntermediate(const TActorContext& ctx, THolder<TIntermediate> &&intermediate,
              const TTabletStorageInfo *info);
 
-    bool ConvertRange(const NKikimrClient::TKeyValueRequest::TKeyRange& from, TKeyRange *to,
-                      const TActorContext& ctx, THolder<TIntermediate>& intermediate, const char *cmd, ui32 index);
-
+    bool ConvertRange(const NKikimrClient::TKeyValueRequest::TKeyRange& from, TKeyRange *to, 
+                      const TActorContext& ctx, THolder<TIntermediate>& intermediate, const char *cmd, ui32 index); 
+ 
     struct TConvertRangeResult {
         TString ErrorMsg;
         bool WithError = false;
@@ -652,28 +652,28 @@ public:
         return {};
     }
 
-    template<typename Container, typename Iterator = typename Container::iterator>
-    static std::pair<Iterator, Iterator> GetRange(const TKeyRange& range, Container& container) {
-        auto first = !range.HasFrom ? container.begin()
-                                    : range.IncludeFrom ? container.lower_bound(range.KeyFrom)
-                                                        : container.upper_bound(range.KeyFrom);
-
-        auto last = !range.HasTo ? container.end()
-                                 : range.IncludeTo ? container.upper_bound(range.KeyTo)
-                                                   : container.lower_bound(range.KeyTo);
-
-        return {first, last};
-    }
-
-    template<typename Func>
-    void TraverseRange(const TKeyRange& range, Func&& callback) {
-        std::pair<TIndex::iterator, TIndex::iterator> r = GetRange(range, Index);
-        TIndex::iterator nextIt;
-        for (TIndex::iterator it = r.first; it != r.second; it = nextIt) {
-            nextIt = std::next(it);
-            callback(it);
-        }
-    }
+    template<typename Container, typename Iterator = typename Container::iterator> 
+    static std::pair<Iterator, Iterator> GetRange(const TKeyRange& range, Container& container) { 
+        auto first = !range.HasFrom ? container.begin() 
+                                    : range.IncludeFrom ? container.lower_bound(range.KeyFrom) 
+                                                        : container.upper_bound(range.KeyFrom); 
+ 
+        auto last = !range.HasTo ? container.end() 
+                                 : range.IncludeTo ? container.upper_bound(range.KeyTo) 
+                                                   : container.lower_bound(range.KeyTo); 
+ 
+        return {first, last}; 
+    } 
+ 
+    template<typename Func> 
+    void TraverseRange(const TKeyRange& range, Func&& callback) { 
+        std::pair<TIndex::iterator, TIndex::iterator> r = GetRange(range, Index); 
+        TIndex::iterator nextIt; 
+        for (TIndex::iterator it = r.first; it != r.second; it = nextIt) { 
+            nextIt = std::next(it); 
+            callback(it); 
+        } 
+    } 
     void UpdateResourceMetrics(const TActorContext& ctx);
 
     bool GetIsDamaged() const {
@@ -704,13 +704,13 @@ public:
         IsSpringCleanupDone = true;
     }
 
-    ui64 GetTrashTotalBytes() const {
-        ui64 res = 0;
-        for (const TLogoBlobID& id : Trash) {
-            res += id.BlobSize();
-        }
-        return res;
-    }
+    ui64 GetTrashTotalBytes() const { 
+        ui64 res = 0; 
+        for (const TLogoBlobID& id : Trash) { 
+            res += id.BlobSize(); 
+        } 
+        return res; 
+    } 
 
 public: // For testing
     TString Dump() const;

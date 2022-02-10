@@ -61,7 +61,7 @@ namespace NKikimr {
         TOverloadHandler(
                 const TIntrusivePtr<TVDiskContext> &vctx,
                 const TPDiskCtxPtr &pdiskCtx,
-                std::shared_ptr<THull> hull,
+                std::shared_ptr<THull> hull, 
                 NMonGroup::TSkeletonOverloadGroup &&mon,
                 TVMovedPatchHandler &&vMovedPatch,
                 TVPatchStartHandler &&vPatchStart,
@@ -91,10 +91,10 @@ namespace NKikimr {
         void RenderHtml(IOutputStream &str);
 
     private:
-        std::shared_ptr<THull> Hull;
+        std::shared_ptr<THull> Hull; 
         NMonGroup::TSkeletonOverloadGroup Mon;
-        std::unique_ptr<TEmergencyQueue> EmergencyQueue;
-        std::shared_ptr<TDynamicPDiskWeightsManager> DynamicPDiskWeightsManager;
+        std::unique_ptr<TEmergencyQueue> EmergencyQueue; 
+        std::shared_ptr<TDynamicPDiskWeightsManager> DynamicPDiskWeightsManager; 
 
         template <class TEv>
         bool PostponeEventPrivate(TEv &ev, const TActorContext &ctx, IActor *skeleton);

@@ -7,7 +7,7 @@
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <library/cpp/actors/util/named_tuple.h>
-
+ 
 namespace NKikimr {
 
     // Data types for barrier database
@@ -16,13 +16,13 @@ namespace NKikimr {
     // TKeyBarrier
     /////////////////////////////////////////////////////////////////////////
 #pragma pack(push, 4)
-    struct TKeyBarrier
-        : public TNamedTupleBase<TKeyBarrier>
-    {
+    struct TKeyBarrier 
+        : public TNamedTupleBase<TKeyBarrier> 
+    { 
         ui64 TabletId;
-        ui32 Channel : 8;
-        ui32 Reserved : 23;
-        ui32 Hard : 1;
+        ui32 Channel : 8; 
+        ui32 Reserved : 23; 
+        ui32 Hard : 1; 
         ui32 Gen;           // generation of tablet the command was issued
         ui32 GenCounter;    // sequential number of command during tablet lifetime
 
@@ -33,26 +33,26 @@ namespace NKikimr {
         TKeyBarrier()
             : TabletId(0)
             , Channel(0)
-            , Reserved(0)
-            , Hard(0)
+            , Reserved(0) 
+            , Hard(0) 
             , Gen(0)
             , GenCounter(0)
         {}
 
-        TKeyBarrier(ui64 tabletId)
-            : TabletId(tabletId)
-            , Channel(0)
-            , Reserved(0)
-            , Hard(0)
-            , Gen(0)
-            , GenCounter(0)
-        {}
-
-        TKeyBarrier(ui64 tabletId, ui32 channel, ui32 gen, ui32 genCounter, bool hard)
+        TKeyBarrier(ui64 tabletId) 
+            : TabletId(tabletId) 
+            , Channel(0) 
+            , Reserved(0) 
+            , Hard(0) 
+            , Gen(0) 
+            , GenCounter(0) 
+        {} 
+ 
+        TKeyBarrier(ui64 tabletId, ui32 channel, ui32 gen, ui32 genCounter, bool hard) 
             : TabletId(tabletId)
             , Channel(channel)
-            , Reserved(0)
-            , Hard(hard)
+            , Reserved(0) 
+            , Hard(hard) 
             , Gen(gen)
             , GenCounter(genCounter)
         {}
@@ -60,51 +60,51 @@ namespace NKikimr {
         TKeyBarrier(const NKikimrBlobStorage::TBarrierKey &proto)
             : TabletId(proto.GetTabletId())
             , Channel(proto.GetChannel())
-            , Reserved(0)
-            , Hard(proto.GetHard())
+            , Reserved(0) 
+            , Hard(proto.GetHard()) 
             , Gen(proto.GetRecordGeneration())
             , GenCounter(proto.GetPerGenerationCounter())
         {}
 
         TString ToString() const {
-            return Sprintf("[%16" PRIu64 " %" PRIu32 " %" PRIu32 " %" PRIu32 " %s]",
-                           TabletId, Channel, Gen, GenCounter, Hard ? "hard" : "soft");
+            return Sprintf("[%16" PRIu64 " %" PRIu32 " %" PRIu32 " %" PRIu32 " %s]", 
+                           TabletId, Channel, Gen, GenCounter, Hard ? "hard" : "soft"); 
         }
 
         TLogoBlobID LogoBlobID() const {
             return TLogoBlobID();
-        }
-
+        } 
+ 
 
         void Serialize(NKikimrBlobStorage::TBarrierKey &proto) const {
             proto.SetTabletId(TabletId);
             proto.SetChannel(Channel);
             proto.SetRecordGeneration(Gen);
             proto.SetPerGenerationCounter(GenCounter);
-            proto.SetHard(Hard);
+            proto.SetHard(Hard); 
         }
 
         static TKeyBarrier First() {
-            return TKeyBarrier();
+            return TKeyBarrier(); 
         }
 
-        bool IsSameAs(const TKeyBarrier& other) const {
-            return TabletId == other.TabletId
-                && Channel == other.Channel
-                && Gen == other.Gen
-                && GenCounter == other.GenCounter
-                && Hard == other.Hard;
-        }
-
+        bool IsSameAs(const TKeyBarrier& other) const { 
+            return TabletId == other.TabletId 
+                && Channel == other.Channel 
+                && Gen == other.Gen 
+                && GenCounter == other.GenCounter 
+                && Hard == other.Hard; 
+        } 
+ 
         static TKeyBarrier Inf() {
-            return TKeyBarrier(Max<ui64>(), Max<ui32>(), Max<ui32>(), Max<ui32>(), true);
+            return TKeyBarrier(Max<ui64>(), Max<ui32>(), Max<ui32>(), Max<ui32>(), true); 
         }
 
         static bool Parse(TKeyBarrier &out, const TString &buf, TString &errorExplanation);
-
-        auto ConvertToTuple() const {
-            return std::make_tuple(TabletId, Channel, Hard, Gen, GenCounter);
-        }
+ 
+        auto ConvertToTuple() const { 
+            return std::make_tuple(TabletId, Channel, Hard, Gen, GenCounter); 
+        } 
     };
 #pragma pack(pop)
 
@@ -137,11 +137,11 @@ namespace NKikimr {
             , Ingress(ingress)
         {}
 
-        void Merge(const TMemRecBarrier& rec, const TKeyBarrier& key) {
+        void Merge(const TMemRecBarrier& rec, const TKeyBarrier& key) { 
             Y_VERIFY(CollectGen == rec.CollectGen && CollectStep == rec.CollectStep,
                    "Barriers MUST be equal; CollectGen# %" PRIu32 " CollectStep# %" PRIu32
-                   " rec.CollectGen# %" PRIu32 " rec.CollectStep %" PRIu32
-                   " key# %s", CollectGen, CollectStep, rec.CollectGen, rec.CollectStep,
+                   " rec.CollectGen# %" PRIu32 " rec.CollectStep %" PRIu32 
+                   " key# %s", CollectGen, CollectStep, rec.CollectGen, rec.CollectStep, 
                    key.ToString().data());
             TBarrierIngress::Merge(Ingress, rec.Ingress);
         }
@@ -167,7 +167,7 @@ namespace NKikimr {
             Y_FAIL("Must not be called");
         }
 
-        void SetMemBlob(ui64, ui32) {
+        void SetMemBlob(ui64, ui32) { 
             Y_FAIL("Must not be called");
         }
 
@@ -179,7 +179,7 @@ namespace NKikimr {
             Y_UNUSED(t);
         }
 
-        TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr, const TDiskPart *) const {
+        TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr, const TDiskPart *) const { 
             extr->Clear();
             return extr;
         }
@@ -188,13 +188,13 @@ namespace NKikimr {
             Y_FAIL("Must not be called");
         }
 
-        NMatrix::TVectorType GetLocalParts(TBlobStorageGroupType) const {
+        NMatrix::TVectorType GetLocalParts(TBlobStorageGroupType) const { 
             return NMatrix::TVectorType();
         }
 
-        void ClearLocalParts(TBlobStorageGroupType)
-        {}
-
+        void ClearLocalParts(TBlobStorageGroupType) 
+        {} 
+ 
         TBlobType::EType GetType() const {
             return TBlobType::DiskBlob;
         }

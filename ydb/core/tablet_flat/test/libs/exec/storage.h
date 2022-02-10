@@ -14,7 +14,7 @@ namespace NFake {
         using NStore = TEvBlobStorage;
 
         TStorage(ui32 group)
-            : ::NActors::IActor(static_cast<TReceiveFunc>(&TStorage::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
+            : ::NActors::IActor(static_cast<TReceiveFunc>(&TStorage::Inbox), NKikimrServices::TActivity::FAKE_ENV_A) 
             , Group(group)
             , Model(new NFake::TProxyDS)
         {

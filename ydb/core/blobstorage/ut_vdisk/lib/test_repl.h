@@ -10,13 +10,13 @@ struct TReadUntilSuccess {
     const IDataSet *DataSet;
     ui32 VDiskNumber;
     TDuration RepeatTimeout;
-    bool Multipart;
+    bool Multipart; 
 
     TReadUntilSuccess(const IDataSet *dataSet, ui32 vdiskNumber, const TDuration &repeatTimeout, bool multipart = false)
         : DataSet(dataSet)
         , VDiskNumber(vdiskNumber)
         , RepeatTimeout(repeatTimeout)
-        , Multipart(multipart)
+        , Multipart(multipart) 
     {}
 
     void operator ()(TConfiguration *conf);
@@ -33,18 +33,18 @@ struct TTestReplDataWriteAndSync {
     void operator ()(TConfiguration *conf);
 };
 
-///////////////////////////////////////////////////////////////////////////
-struct TTestReplDataWriteAndSyncMultipart {
+/////////////////////////////////////////////////////////////////////////// 
+struct TTestReplDataWriteAndSyncMultipart { 
     const IDataSet *DataSet;
 
     TTestReplDataWriteAndSyncMultipart(const IDataSet *dataSet)
-        : DataSet(dataSet)
-    {}
-
-    void operator ()(TConfiguration *conf);
-};
-
-
+        : DataSet(dataSet) 
+    {} 
+ 
+    void operator ()(TConfiguration *conf); 
+}; 
+ 
+ 
 #define SIMPLE_CLASS_DEF_NO_PARAMS(name)    \
 struct name {                               \
 void operator ()(TConfiguration *conf); \

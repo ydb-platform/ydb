@@ -350,7 +350,7 @@ public:
             return true;
         }
 
-        for (const auto& col : Ev->Get()->Record.GetColumns()) {
+        for (const auto& col : Ev->Get()->Record.GetColumns()) { 
             if (!columnsByName.contains(col)) {
                 SetError(NKikimrTxDataShard::TError::SCHEME_ERROR,
                          Sprintf("Unknown column: %s", col.data()));

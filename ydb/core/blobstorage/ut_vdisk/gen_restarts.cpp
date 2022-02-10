@@ -3,15 +3,15 @@
 
 void WriteRestartRead(const TWriteRestartReadSettings &settings, TDuration testTimeout) {
     TConfiguration Conf;
-    Conf.Prepare(settings.WriteRunSetup.get());
-    std::shared_ptr<TSet<ui32>> badSteps(new TSet<ui32>());
+    Conf.Prepare(settings.WriteRunSetup.get()); 
+    std::shared_ptr<TSet<ui32>> badSteps(new TSet<ui32>()); 
 
     TManyPutsTest w(false, settings.MsgNum, settings.MsgSize, settings.Cls, badSteps);
     bool success1 = Conf.Run<TManyPutsTest>(&w, testTimeout);
     UNIT_ASSERT(success1);
     Conf.Shutdown();
 
-    Conf.Prepare(settings.ReadRunSetup.get(), false);
+    Conf.Prepare(settings.ReadRunSetup.get(), false); 
     TManyGetsTest r(false, settings.MsgNum, settings.MsgSize, settings.Cls, badSteps);
     bool success2 = Conf.Run<TManyGetsTest>(&r, testTimeout);
     UNIT_ASSERT(success2);
@@ -20,15 +20,15 @@ void WriteRestartRead(const TWriteRestartReadSettings &settings, TDuration testT
 
 void MultiPutWriteRestartRead(const TMultiPutWriteRestartReadSettings &settings, TDuration testTimeout) {
     TConfiguration Conf;
-    Conf.Prepare(settings.WriteRunSetup.get());
-    std::shared_ptr<TSet<ui32>> badSteps(new TSet<ui32>());
+    Conf.Prepare(settings.WriteRunSetup.get()); 
+    std::shared_ptr<TSet<ui32>> badSteps(new TSet<ui32>()); 
 
     TManyMultiPutsTest w(false, settings.MsgNum, settings.MsgSize, settings.BatchSize, settings.Cls, badSteps);
     bool success1 = Conf.Run<TManyMultiPutsTest>(&w, testTimeout);
     UNIT_ASSERT(success1);
     Conf.Shutdown();
 
-    Conf.Prepare(settings.ReadRunSetup.get(), false);
+    Conf.Prepare(settings.ReadRunSetup.get(), false); 
     TManyGetsTest r(false, settings.MsgNum, settings.MsgSize, settings.Cls, badSteps);
     bool success2 = Conf.Run<TManyGetsTest>(&r, testTimeout);
     UNIT_ASSERT(success2);
@@ -37,9 +37,9 @@ void MultiPutWriteRestartRead(const TMultiPutWriteRestartReadSettings &settings,
 
 void ChaoticWriteRestartWrite(const TChaoticWriteRestartWriteSettings &settings, TDuration testTimeout) {
     TConfiguration Conf;
-    Conf.Prepare(settings.WriteRunSetup.get());
+    Conf.Prepare(settings.WriteRunSetup.get()); 
 
-    auto cls1 = std::make_shared<TPutHandleClassGenerator>(settings.Cls);
+    auto cls1 = std::make_shared<TPutHandleClassGenerator>(settings.Cls); 
     TChaoticManyPutsTest w(settings.Parallel, settings.MsgNum, settings.MsgSize, cls1, settings.WorkingTime,
         settings.RequestTimeout);
     bool success1 = Conf.Run<TChaoticManyPutsTest>(&w, testTimeout);
@@ -47,8 +47,8 @@ void ChaoticWriteRestartWrite(const TChaoticWriteRestartWriteSettings &settings,
     UNIT_ASSERT(success1);
     Conf.Shutdown();
 
-    Conf.Prepare(settings.WriteRunSetup.get(), false);
-    auto cls2 = std::make_shared<TPutHandleClassGenerator>(settings.Cls);
+    Conf.Prepare(settings.WriteRunSetup.get(), false); 
+    auto cls2 = std::make_shared<TPutHandleClassGenerator>(settings.Cls); 
     TChaoticManyPutsTest x(settings.Parallel, 1, settings.MsgSize, cls2, settings.WorkingTime,
         settings.RequestTimeout);
     bool success2 = Conf.Run<TChaoticManyPutsTest>(&x, testTimeout);

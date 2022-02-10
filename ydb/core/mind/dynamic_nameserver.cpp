@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NNodeBroker {
 
-static void ResetInterconnectProxyConfig(ui32 nodeId, const TActorContext &ctx)
+static void ResetInterconnectProxyConfig(ui32 nodeId, const TActorContext &ctx) 
 {
     auto aid = TActivationContext::InterconnectProxy(nodeId);
     if (!aid)
@@ -40,9 +40,9 @@ void TDynamicNodeResolverBase::Bootstrap(const TActorContext &ctx)
     NTabletPipe::SendData(ctx, NodeBrokerPipe, request.Release());
 
     Become(&TDynamicNodeResolverBase::StateWork);
-    if (Deadline != TInstant::Max()) {
-        Schedule(Deadline, new TEvents::TEvWakeup);
-    }
+    if (Deadline != TInstant::Max()) { 
+        Schedule(Deadline, new TEvents::TEvWakeup); 
+    } 
 }
 
 void TDynamicNodeResolverBase::Die(const TActorContext &ctx)
@@ -173,7 +173,7 @@ void TDynamicNameserver::RequestEpochUpdate(ui32 domain,
     EpochUpdates[domain] = epoch;
 }
 
-void TDynamicNameserver::ResolveStaticNode(ui32 nodeId, TActorId sender, TInstant deadline, const TActorContext &ctx)
+void TDynamicNameserver::ResolveStaticNode(ui32 nodeId, TActorId sender, TInstant deadline, const TActorContext &ctx) 
 {
     auto it = StaticConfig->StaticNodeTable.find(nodeId);
 
@@ -189,8 +189,8 @@ void TDynamicNameserver::ResolveStaticNode(ui32 nodeId, TActorId sender, TInstan
 
 void TDynamicNameserver::ResolveDynamicNode(ui32 nodeId,
                                             TAutoPtr<IEventHandle> ev,
-                                            TInstant deadline,
-                                            const TActorContext &ctx)
+                                            TInstant deadline, 
+                                            const TActorContext &ctx) 
 {
     ui32 domain = NodeIdToDomain(nodeId, *AppData(ctx)->DomainsInfo);
     auto it = DynamicConfigs[domain]->DynamicNodes.find(nodeId);
@@ -209,7 +209,7 @@ void TDynamicNameserver::ResolveDynamicNode(ui32 nodeId,
     }
 }
 
-void TDynamicNameserver::SendNodesList(const TActorContext &ctx)
+void TDynamicNameserver::SendNodesList(const TActorContext &ctx) 
 {
     auto now = ctx.Now();
     for (auto &sender : ListNodesQueue) {
@@ -234,7 +234,7 @@ void TDynamicNameserver::SendNodesList(const TActorContext &ctx)
     ListNodesQueue.clear();
 }
 
-void TDynamicNameserver::PendingRequestAnswered(ui32 domain, const TActorContext &ctx)
+void TDynamicNameserver::PendingRequestAnswered(ui32 domain, const TActorContext &ctx) 
 {
     PendingRequests.Reset(domain);
     if (PendingRequests.Empty())
@@ -312,17 +312,17 @@ void TDynamicNameserver::OnPipeDestroyed(ui32 domain,
 }
 
 void TDynamicNameserver::Handle(TEvInterconnect::TEvResolveNode::TPtr &ev,
-                                const TActorContext &ctx)
+                                const TActorContext &ctx) 
 {
-    auto& record = ev->Get()->Record;
-    const ui32 nodeId = record.GetNodeId();
-    const TInstant deadline = record.HasDeadline() ? TInstant::FromValue(record.GetDeadline()) : TInstant::Max();
+    auto& record = ev->Get()->Record; 
+    const ui32 nodeId = record.GetNodeId(); 
+    const TInstant deadline = record.HasDeadline() ? TInstant::FromValue(record.GetDeadline()) : TInstant::Max(); 
     auto config = AppData(ctx)->DynamicNameserviceConfig;
 
     if (!config || nodeId <= config->MaxStaticNodeId)
-        ResolveStaticNode(nodeId, ev->Sender, deadline, ctx);
+        ResolveStaticNode(nodeId, ev->Sender, deadline, ctx); 
     else
-        ResolveDynamicNode(nodeId, ev.Release(), deadline, ctx);
+        ResolveDynamicNode(nodeId, ev.Release(), deadline, ctx); 
 }
 
 void TDynamicNameserver::Handle(TEvResolveAddress::TPtr &ev, const TActorContext &ctx) {
@@ -334,7 +334,7 @@ void TDynamicNameserver::Handle(TEvResolveAddress::TPtr &ev, const TActorContext
 }
 
 void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
-                                const TActorContext &ctx)
+                                const TActorContext &ctx) 
 {
     if (ListNodesQueue.empty()) {
         auto dinfo = AppData(ctx)->DomainsInfo;
@@ -353,7 +353,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
     ListNodesQueue.push_back(ev->Sender);
 }
 
-void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TActorContext &ctx)
+void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TActorContext &ctx) 
 {
     ui32 nodeId = ev->Get()->NodeId;
     THolder<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(nodeId));
@@ -378,21 +378,21 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
                    && ctx.Now() < DynamicConfigs[domain]->Epoch.End) {
             ctx.Send(ev->Sender, reply.Release());
         } else {
-            const TInstant deadline = ev->Get()->Deadline;
+            const TInstant deadline = ev->Get()->Deadline; 
             ctx.RegisterWithSameMailbox(new TDynamicNodeSearcher(SelfId(), nodeId, DynamicConfigs[domain], ev.Release(),
-                deadline));
+                deadline)); 
         }
     }
 }
 
-void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx)
+void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) 
 {
     ui32 domain = AppData(ctx)->DomainsInfo->GetDomainUidByTabletId(ev->Get()->TabletId);
     if (NodeBrokerPipes[domain] == ev->Get()->ClientId)
         OnPipeDestroyed(domain, ctx);
 }
 
-void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx)
+void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) 
 {
     if (ev->Get()->Status != NKikimrProto::OK) {
         ui32 domain = AppData(ctx)->DomainsInfo->GetDomainUidByTabletId(ev->Get()->TabletId);
@@ -429,7 +429,7 @@ void TDynamicNameserver::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev, const TAct
         RequestEpochUpdate(domain, epoch, ctx);
 }
 
-IActor *CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup, ui32 poolId) {
+IActor *CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup, ui32 poolId) { 
     return new TDynamicNameserver(setup, poolId);
 }
 

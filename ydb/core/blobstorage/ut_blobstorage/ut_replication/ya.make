@@ -1,13 +1,13 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
-
+ 
 OWNER(g:kikimr)
-
+ 
 FORK_SUBTESTS()
-
+ 
 SIZE(LARGE)
-
+ 
 TIMEOUT(3600)
-
+ 
 TAG(ya:fat)
 
 SRCS(
@@ -23,4 +23,4 @@ REQUIREMENTS(
     ram:32
 )
 
-END()
+END() 

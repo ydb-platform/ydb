@@ -1,4 +1,4 @@
-package NKikimrClient;
+package NKikimrClient; 
 option java_package = "ru.yandex.kikimr.proto";
 
 message THealthRequest {

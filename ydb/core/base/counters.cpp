@@ -21,7 +21,7 @@ static const THashSet<TString> DATABASE_SERVICES
          TString("proxy"),
          TString("followers"),
          TString("sqs"),
-         TString("storage_pool_stat"),
+         TString("storage_pool_stat"), 
          TString("tablets"),
          TString("utils"),
          TString("auth"),

@@ -15,8 +15,8 @@ class TMessageBusWhoAmI : public TMessageBusSecureRequest<TMessageBusServerReque
     THolder<TBusWhoAmI> Request;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::WHOAMI;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::WHOAMI; 
     }
 
     TMessageBusWhoAmI(NMsgBusProxy::TBusMessageContext& msg)

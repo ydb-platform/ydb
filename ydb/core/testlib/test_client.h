@@ -298,7 +298,7 @@ namespace Tests {
                 request->Record.SetSecurityToken(SecurityToken);
         }
 
-        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusSchemeOperation>& request) {
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusSchemeOperation>& request) { 
             if (!SecurityToken.empty())
                 request->Record.SetSecurityToken(SecurityToken);
         }
@@ -338,7 +338,7 @@ namespace Tests {
         void InitRootScheme();
         void InitRootScheme(const TString& root);
 
-        void ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path = TString());
+        void ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path = TString()); 
         TString StartTrace(const TString &path);
         void StopTrace();
 
@@ -394,7 +394,7 @@ namespace Tests {
         bool FlatQueryParams(const TString &query, const TString &params, bool queryCompiled, NKikimrMiniKQL::TResult &result);
 
         // returns NMsgBusProxy::MSTATUS_* and the raw response
-        ui32 FlatQueryRaw(const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt = 10);
+        ui32 FlatQueryRaw(const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt = 10); 
 
         bool Compile(const TString &mkql, TString &compiled);
         bool LocalQuery(ui64 tabletId, const TString &pgmText, NKikimrMiniKQL::TResult& result);
@@ -484,7 +484,7 @@ namespace Tests {
         NBus::EMessageStatus WaitCompletion(ui64 txId, ui64 schemeshard, ui64 pathId,
                                             TAutoPtr<NBus::TBusMessage>& reply,
                                             TDuration timeout = TDuration::Seconds(1000));
-        NBus::EMessageStatus SendAndWaitCompletion(TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request,
+        NBus::EMessageStatus SendAndWaitCompletion(TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request, 
                                                    TAutoPtr<NBus::TBusMessage>& reply,
                                                    TDuration timeout = TDuration::Seconds(1000));
 

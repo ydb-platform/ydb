@@ -6,7 +6,7 @@
 namespace NKikimr {
 
     IActor *CreateHandoffMonActor(const TVDiskID &selfVDisk,
-            std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+            std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
             NHandoff::TProxiesPtr proxiesPtr);
 
 } // NKikimr

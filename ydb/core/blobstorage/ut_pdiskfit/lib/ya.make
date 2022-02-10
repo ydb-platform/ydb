@@ -2,8 +2,8 @@ OWNER(
     alexvru
     g:kikimr
 )
-
-LIBRARY()
+ 
+LIBRARY() 
 
 SRCS(
     basic_test.cpp
@@ -17,4 +17,4 @@ PEERDIR(
     ydb/library/pdisk_io
 )
 
-END()
+END() 

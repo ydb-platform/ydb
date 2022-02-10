@@ -25,7 +25,7 @@ int PersQueueRequest(TCommandConfig &cmdConf, int argc, char** argv) {
         ythrow TWithBackTrace<yexception>() << "Error parsing protobuf: \'" << config.Proto << "\'";
     }
     TAutoPtr<NBus::TBusMessage> reply;
-    NBus::EMessageStatus status = config.SyncCall(request, reply);
+    NBus::EMessageStatus status = config.SyncCall(request, reply); 
     Cerr << status << "\n";
     Y_VERIFY(status == NBus::MESSAGE_OK);
     const auto& result = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;

@@ -65,31 +65,31 @@ struct TDsProxyNodeMon : public TThrRefBase {
 
     std::array<bool, KnownDeviceTypesCount> IsCountersPresentedForIdx;
 
-    // restart counters
-    NMonitoring::TDynamicCounters::TCounterPtr RestartPut;
-    NMonitoring::TDynamicCounters::TCounterPtr RestartGet;
-    NMonitoring::TDynamicCounters::TCounterPtr RestartBlock;
-    NMonitoring::TDynamicCounters::TCounterPtr RestartDiscover;
-    NMonitoring::TDynamicCounters::TCounterPtr RestartRange;
-    NMonitoring::TDynamicCounters::TCounterPtr RestartCollectGarbage;
-    NMonitoring::TDynamicCounters::TCounterPtr RestartIndexRestoreGet;
-    NMonitoring::TDynamicCounters::TCounterPtr RestartStatus;
+    // restart counters 
+    NMonitoring::TDynamicCounters::TCounterPtr RestartPut; 
+    NMonitoring::TDynamicCounters::TCounterPtr RestartGet; 
+    NMonitoring::TDynamicCounters::TCounterPtr RestartBlock; 
+    NMonitoring::TDynamicCounters::TCounterPtr RestartDiscover; 
+    NMonitoring::TDynamicCounters::TCounterPtr RestartRange; 
+    NMonitoring::TDynamicCounters::TCounterPtr RestartCollectGarbage; 
+    NMonitoring::TDynamicCounters::TCounterPtr RestartIndexRestoreGet; 
+    NMonitoring::TDynamicCounters::TCounterPtr RestartStatus; 
     NMonitoring::TDynamicCounters::TCounterPtr RestartPatch;
-
-    std::array<NMonitoring::TDynamicCounters::TCounterPtr, 4> RestartHisto;
-
+ 
+    std::array<NMonitoring::TDynamicCounters::TCounterPtr, 4> RestartHisto; 
+ 
 
     // accelerate counters
     NMonitoring::TDynamicCounters::TCounterPtr AccelerateEvVPutCount;
     NMonitoring::TDynamicCounters::TCounterPtr AccelerateEvVMultiPutCount;
     NMonitoring::TDynamicCounters::TCounterPtr AccelerateEvVGetCount;
 
-    // malfunction counters
-    NMonitoring::TDynamicCounters::TCounterPtr EstablishingSessionsTimeout;
-    NMonitoring::TDynamicCounters::TCounterPtr EstablishingSessionsTimeout5min;
-    NMonitoring::TDynamicCounters::TCounterPtr UnconfiguredTimeout;
-    NMonitoring::TDynamicCounters::TCounterPtr UnconfiguredTimeout5min;
-
+    // malfunction counters 
+    NMonitoring::TDynamicCounters::TCounterPtr EstablishingSessionsTimeout; 
+    NMonitoring::TDynamicCounters::TCounterPtr EstablishingSessionsTimeout5min; 
+    NMonitoring::TDynamicCounters::TCounterPtr UnconfiguredTimeout; 
+    NMonitoring::TDynamicCounters::TCounterPtr UnconfiguredTimeout5min; 
+ 
     TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, bool initForAllDeviceTypes);
     void CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, ui32 size,
             TDuration duration);

@@ -66,8 +66,8 @@ class TJsonBrowse : public TActorBootstrapped<TJsonBrowse> {
     ui32 Responses = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::VIEWER_HANDLER; 
     }
 
     TJsonBrowse(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)

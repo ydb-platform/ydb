@@ -571,19 +571,19 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
         UNIT_ASSERT_EQUAL(TBitMap4Chunks().Flip().Reset(50, 64), TBitMap4Chunks().Set(0, 50));
         UNIT_ASSERT_EQUAL(TBitMap4Chunks().Flip().Reset(0, 10).Reset(50, 64), TBitMap4Chunks().Set(10, 50));
     }
-
+ 
     Y_UNIT_TEST(TestSetRangeDyn) {
-        for (size_t start = 0; start < 192; ++start) {
-            for (size_t end = start; end < 192; ++end) {
-                TDynBitMap bm;
-                bm.Reserve(192);
-                bm.Set(start, end);
-                for (size_t k = 0; k < 192; ++k) {
-                    UNIT_ASSERT_VALUES_EQUAL(bm.Get(k), k >= start && k < end ? 1 : 0);
-                }
-            }
-        }
-    }
+        for (size_t start = 0; start < 192; ++start) { 
+            for (size_t end = start; end < 192; ++end) { 
+                TDynBitMap bm; 
+                bm.Reserve(192); 
+                bm.Set(start, end); 
+                for (size_t k = 0; k < 192; ++k) { 
+                    UNIT_ASSERT_VALUES_EQUAL(bm.Get(k), k >= start && k < end ? 1 : 0); 
+                } 
+            } 
+        } 
+    } 
 
     Y_UNIT_TEST(TestResetLargeRangeDyn) {
         TDynBitMap bm;

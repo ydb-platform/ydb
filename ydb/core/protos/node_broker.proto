@@ -18,7 +18,7 @@ message TNodeInfo {
     optional uint32 Port = 3;
     optional string ResolveHost = 4;
     optional string Address = 5;
-    optional NActorsInterconnect.TNodeLocation Location = 6;
+    optional NActorsInterconnect.TNodeLocation Location = 6; 
     optional uint64 Expire = 7;
 }
 
@@ -64,16 +64,16 @@ message TRegistrationRequest {
   optional uint32 Port = 2;
   optional string ResolveHost = 3;
   optional string Address = 4;
-  optional NActorsInterconnect.TNodeLocation Location = 5;
+  optional NActorsInterconnect.TNodeLocation Location = 5; 
   optional bool FixedNodeId = 6;
-  optional string Path = 7;
+  optional string Path = 7; 
 }
 
 message TRegistrationResponse {
   optional TStatus Status = 1;
   optional TNodeInfo Node = 2;
-  optional uint64 ScopeTabletId = 3;
-  optional uint64 ScopePathId = 4;
+  optional uint64 ScopeTabletId = 3; 
+  optional uint64 ScopePathId = 4; 
 }
 
 message TExtendLeaseRequest {

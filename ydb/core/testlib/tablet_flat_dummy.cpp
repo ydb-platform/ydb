@@ -110,8 +110,8 @@ class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExec
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TEST_ACTOR_RUNTIME;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TEST_ACTOR_RUNTIME; 
     }
 
     TDummyFlatTablet(const TActorId &tablet, TTabletStorageInfo *info)

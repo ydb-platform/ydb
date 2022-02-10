@@ -1,30 +1,30 @@
-#pragma once
-
-#include "defs.h"
-
+#pragma once 
+ 
+#include "defs.h" 
+ 
 template <typename TDerived>
-struct TNamedTupleBase {
+struct TNamedTupleBase { 
     friend bool operator==(const TDerived& x, const TDerived& y) {
-        return x.ConvertToTuple() == y.ConvertToTuple();
-    }
-
+        return x.ConvertToTuple() == y.ConvertToTuple(); 
+    } 
+ 
     friend bool operator!=(const TDerived& x, const TDerived& y) {
-        return x.ConvertToTuple() != y.ConvertToTuple();
-    }
-
+        return x.ConvertToTuple() != y.ConvertToTuple(); 
+    } 
+ 
     friend bool operator<(const TDerived& x, const TDerived& y) {
-        return x.ConvertToTuple() < y.ConvertToTuple();
-    }
-
+        return x.ConvertToTuple() < y.ConvertToTuple(); 
+    } 
+ 
     friend bool operator<=(const TDerived& x, const TDerived& y) {
-        return x.ConvertToTuple() <= y.ConvertToTuple();
-    }
-
+        return x.ConvertToTuple() <= y.ConvertToTuple(); 
+    } 
+ 
     friend bool operator>(const TDerived& x, const TDerived& y) {
-        return x.ConvertToTuple() > y.ConvertToTuple();
-    }
-
+        return x.ConvertToTuple() > y.ConvertToTuple(); 
+    } 
+ 
     friend bool operator>=(const TDerived& x, const TDerived& y) {
-        return x.ConvertToTuple() >= y.ConvertToTuple();
-    }
-};
+        return x.ConvertToTuple() >= y.ConvertToTuple(); 
+    } 
+}; 

@@ -24,8 +24,8 @@ class TJsonHiveInfo : public TViewerPipeClient<TJsonHiveInfo> {
     TNodeId NodeId = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::VIEWER_HANDLER; 
     }
 
     TJsonHiveInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)

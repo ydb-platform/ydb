@@ -31,7 +31,7 @@ namespace NKikimr {
     XX(EDM_SCHEME_INITROOT, "scheme-initroot", "init scheme root") \
     XX(EDM_COMPILE_AND_EXEC_MINIKQL, "minikql-exec", "compile and execute MiniKQL program") \
     XX(EDM_TRACE, "mb-trace", "control message bus trace") \
-    XX(EDM_KEYVALUE_REQUEST, "keyvalue-request", "send protobuf request to a keyvalue tablet") \
+    XX(EDM_KEYVALUE_REQUEST, "keyvalue-request", "send protobuf request to a keyvalue tablet") \ 
     XX(EDM_PERSQUEUE_REQUEST, "persqueue-request", "send protobuf request to a persqueue tablet") \
     XX(EDM_PERSQUEUE_STRESS, "persqueue-stress", "stress read or write to a persqueue tablet") \
     XX(EDM_PERSQUEUE_DISCOVER_CLUSTERS, "persqueue-discover-clusters", "persqueue session clusters discovery") \

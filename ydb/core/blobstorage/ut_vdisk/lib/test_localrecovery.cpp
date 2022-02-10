@@ -10,8 +10,8 @@ class TCheckDbIsEmptyManyPutGetActor : public TSyncTestBase {
     const bool ExpectEmpty;
     const ui32 MsgNum;
     const ui32 MsgSize;
-    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen;
-    std::shared_ptr<TSet<ui32>> BadSteps;
+    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen; 
+    std::shared_ptr<TSet<ui32>> BadSteps; 
 
     virtual void Scenario(const TActorContext &ctx) {
         SyncRunner->Run(ctx, CreateCheckDbEmptyness(SyncRunner->NotifyID(), Conf->VDisks->Get(0), ExpectEmpty));
@@ -20,15 +20,15 @@ class TCheckDbIsEmptyManyPutGetActor : public TSyncTestBase {
     }
 
 public:
-    TCheckDbIsEmptyManyPutGetActor(TConfiguration *conf, bool expectEmpty, bool /*waitForCompaction*/, ui32 msgNum,
+    TCheckDbIsEmptyManyPutGetActor(TConfiguration *conf, bool expectEmpty, bool /*waitForCompaction*/, ui32 msgNum, 
                                    ui32 msgSize,  NKikimrBlobStorage::EPutHandleClass cls)
         : TSyncTestBase(conf)
         , ExpectEmpty(expectEmpty)
         , MsgNum(msgNum)
         , MsgSize(msgSize)
-        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls))
-        , BadSteps(std::make_shared<TSet<ui32>>())
-    {}
+        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls)) 
+        , BadSteps(std::make_shared<TSet<ui32>>()) 
+    {} 
 };
 
 void TCheckDbIsEmptyManyPutGet::operator ()(TConfiguration *conf) {
@@ -42,8 +42,8 @@ void TCheckDbIsEmptyManyPutGet::operator ()(TConfiguration *conf) {
 class TManyPutsActor : public TSyncTestBase {
     const ui32 MsgNum;
     const ui32 MsgSize;
-    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen;
-    std::shared_ptr<TSet<ui32>> BadSteps;
+    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen; 
+    std::shared_ptr<TSet<ui32>> BadSteps; 
 
     virtual void Scenario(const TActorContext &ctx) {
         ui64 tabletId = 0;
@@ -55,14 +55,14 @@ class TManyPutsActor : public TSyncTestBase {
     }
 
 public:
-    TManyPutsActor(TConfiguration *conf, bool /*waitForCompaction*/, ui32 msgNum, ui32 msgSize,
-                    NKikimrBlobStorage::EPutHandleClass cls, std::shared_ptr<TSet<ui32>> badSteps)
+    TManyPutsActor(TConfiguration *conf, bool /*waitForCompaction*/, ui32 msgNum, ui32 msgSize, 
+                    NKikimrBlobStorage::EPutHandleClass cls, std::shared_ptr<TSet<ui32>> badSteps) 
         : TSyncTestBase(conf)
         , MsgNum(msgNum)
         , MsgSize(msgSize)
-        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls))
+        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls)) 
         , BadSteps(badSteps)
-    {}
+    {} 
 };
 
 
@@ -74,7 +74,7 @@ void TManyPutsTest::operator ()(TConfiguration *conf) {
 class TManyGetsActor : public TSyncTestBase {
     const ui32 MsgNum;
     const ui32 MsgSize;
-    std::shared_ptr<TSet<ui32>> BadSteps;
+    std::shared_ptr<TSet<ui32>> BadSteps; 
 
     virtual void Scenario(const TActorContext &ctx) {
         ui64 tabletId = 0;
@@ -85,13 +85,13 @@ class TManyGetsActor : public TSyncTestBase {
     }
 
 public:
-    TManyGetsActor(TConfiguration *conf, bool /*waitForCompaction*/, ui32 msgNum, ui32 msgSize,
-                    NKikimrBlobStorage::EPutHandleClass /*cls*/, std::shared_ptr<TSet<ui32>> badSteps)
+    TManyGetsActor(TConfiguration *conf, bool /*waitForCompaction*/, ui32 msgNum, ui32 msgSize, 
+                    NKikimrBlobStorage::EPutHandleClass /*cls*/, std::shared_ptr<TSet<ui32>> badSteps) 
         : TSyncTestBase(conf)
         , MsgNum(msgNum)
         , MsgSize(msgSize)
         , BadSteps(badSteps)
-    {}
+    {} 
 };
 
 
@@ -105,8 +105,8 @@ class TManyMultiPutsActor : public TSyncTestBase {
     const ui32 MsgNum;
     const ui32 BatchSize;
     const ui32 MsgSize;
-    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen;
-    std::shared_ptr<TSet<ui32>> BadSteps;
+    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen; 
+    std::shared_ptr<TSet<ui32>> BadSteps; 
 
     virtual void Scenario(const TActorContext &ctx) {
         ui64 tabletId = 0;
@@ -119,12 +119,12 @@ class TManyMultiPutsActor : public TSyncTestBase {
 
 public:
     TManyMultiPutsActor(TConfiguration *conf, bool /*waitForCompaction*/, ui32 msgNum, ui32 msgSize, ui32 batchSize,
-                    NKikimrBlobStorage::EPutHandleClass cls, std::shared_ptr<TSet<ui32>> badSteps)
+                    NKikimrBlobStorage::EPutHandleClass cls, std::shared_ptr<TSet<ui32>> badSteps) 
         : TSyncTestBase(conf)
         , MsgNum(msgNum)
         , BatchSize(batchSize)
         , MsgSize(msgSize)
-        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls))
+        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls)) 
         , BadSteps(badSteps)
     {}
 };
@@ -141,11 +141,11 @@ class TChaoticManyPutsActor : public NActors::TActorBootstrapped<TChaoticManyPut
     const ui32 Parallel;
     const ui32 MsgNum;
     const ui32 MsgSize;
-    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen;
+    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen; 
     const TDuration WorkingTime;
     const TDuration RequestTimeout;
     ui32 Counter;
-    TVector<std::shared_ptr<TSet<ui32>>> BadSteps;
+    TVector<std::shared_ptr<TSet<ui32>>> BadSteps; 
 
     friend class NActors::TActorBootstrapped<TChaoticManyPutsActor>;
     void Bootstrap(const NActors::TActorContext &ctx) {
@@ -154,7 +154,7 @@ class TChaoticManyPutsActor : public NActors::TActorBootstrapped<TChaoticManyPut
             ui64 tabletId = i + 1;
             ui32 channel = 0;
             ui32 gen = 1;
-            auto badSteps = std::make_shared<TSet<ui32>>();
+            auto badSteps = std::make_shared<TSet<ui32>>(); 
             ctx.ExecutorThread.RegisterActor(CreateManyPuts(Conf, ctx.SelfID, Conf->VDisks->Get(0),
                                                             MsgSize, MsgNum, tabletId, channel, gen,
                                                             HandleClassGen, badSteps, RequestTimeout));
@@ -185,7 +185,7 @@ class TChaoticManyPutsActor : public NActors::TActorBootstrapped<TChaoticManyPut
 
 public:
     TChaoticManyPutsActor(TConfiguration *conf, ui32 parallel, ui32 msgNum, ui32 msgSize,
-                          std::shared_ptr<IPutHandleClassGenerator> cls, TDuration workingTime,
+                          std::shared_ptr<IPutHandleClassGenerator> cls, TDuration workingTime, 
                           TDuration requestTimeout)
         : TActorBootstrapped<TChaoticManyPutsActor>()
         , Conf(conf)

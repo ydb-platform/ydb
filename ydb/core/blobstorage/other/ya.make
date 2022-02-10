@@ -19,8 +19,8 @@ SRCS(
     mon_blob_range_page.h
     mon_get_blob_page.cpp
     mon_get_blob_page.h
-    mon_vdisk_stream.cpp
-    mon_vdisk_stream.h
+    mon_vdisk_stream.cpp 
+    mon_vdisk_stream.h 
 )
 
 END()

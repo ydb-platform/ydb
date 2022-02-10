@@ -258,19 +258,19 @@ namespace NKikimr {
         }
 
         ui32 TMemRecLog::TrimLog(ui64 confirmedCutLsn) {
-            return DiscardPages(0, confirmedCutLsn);
+            return DiscardPages(0, confirmedCutLsn); 
+        } 
+
+        ui32 TMemRecLog::RemoveCachedPages(ui32 pagesMax, ui64 diskLastLsn) { 
+            return DiscardPages(pagesMax, diskLastLsn); 
         }
 
-        ui32 TMemRecLog::RemoveCachedPages(ui32 pagesMax, ui64 diskLastLsn) {
-            return DiscardPages(pagesMax, diskLastLsn);
-        }
-
-        ui32 TMemRecLog::DiscardPages(ui32 pagesToKeep, ui64 lastUnneededLsn) {
+        ui32 TMemRecLog::DiscardPages(ui32 pagesToKeep, ui64 lastUnneededLsn) { 
             ui32 removed = 0;
-            while (Pages.size() > pagesToKeep && Pages.front()->GetLastLsn() <= lastUnneededLsn) {
-                RecsNum -= Pages.front()->Header.RecsNum;
-                Pages.pop_front();
-                removed++;
+            while (Pages.size() > pagesToKeep && Pages.front()->GetLastLsn() <= lastUnneededLsn) { 
+                RecsNum -= Pages.front()->Header.RecsNum; 
+                Pages.pop_front(); 
+                removed++; 
             }
             return removed;
         }

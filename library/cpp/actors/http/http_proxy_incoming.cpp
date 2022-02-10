@@ -3,8 +3,8 @@
 
 namespace NHttp {
 
-using namespace NActors;
-
+using namespace NActors; 
+ 
 template <typename TSocketImpl>
 class TIncomingConnectionActor : public TActor<TIncomingConnectionActor<TSocketImpl>>, public TSocketImpl, virtual public THttpConfig {
 public:
@@ -19,12 +19,12 @@ public:
     THttpOutgoingResponsePtr CurrentResponse;
     TDeque<THttpIncomingRequestPtr> RecycledRequests;
 
-    THPTimer InactivityTimer;
+    THPTimer InactivityTimer; 
     static constexpr TDuration InactivityTimeout = TDuration::Minutes(2);
-    TEvPollerReady* InactivityEvent = nullptr;
-
-    TPollerToken::TPtr PollerToken;
-
+    TEvPollerReady* InactivityEvent = nullptr; 
+ 
+    TPollerToken::TPtr PollerToken; 
+ 
     TIncomingConnectionActor(
             const TEndpointInfo& endpoint,
             TIntrusivePtr<TSocketDescriptor> socket,
@@ -57,9 +57,9 @@ public:
     }
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parent) override {
-        return new IEventHandle(self, parent, new TEvents::TEvBootstrap());
-    }
-
+        return new IEventHandle(self, parent, new TEvents::TEvBootstrap()); 
+    } 
+ 
     void Die(const TActorContext& ctx) override {
         ctx.Send(Endpoint.Owner, new TEvHttpProxy::TEvHttpConnectionClosed(ctx.SelfID, std::move(RecycledRequests)));
         TSocketImpl::Shutdown();
@@ -67,117 +67,117 @@ public:
     }
 
 protected:
-    void Bootstrap(const TActorContext& ctx) {
-        InactivityTimer.Reset();
-        ctx.Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
+    void Bootstrap(const TActorContext& ctx) { 
+        InactivityTimer.Reset(); 
+        ctx.Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false)); 
         LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") incoming connection opened");
         OnAccept(ctx);
-    }
-
+    } 
+ 
     void OnAccept(const NActors::TActorContext& ctx) {
-        int res;
-        bool read = false, write = false;
-        if ((res = TSocketImpl::OnAccept(Endpoint, read, write)) != 1) {
-            if (-res == EAGAIN) {
-                if (PollerToken) {
-                    PollerToken->Request(read, write);
-                }
-                return; // wait for further notifications
-            } else {
-                LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in Accept: " << strerror(-res));
-                return Die(ctx);
+        int res; 
+        bool read = false, write = false; 
+        if ((res = TSocketImpl::OnAccept(Endpoint, read, write)) != 1) { 
+            if (-res == EAGAIN) { 
+                if (PollerToken) { 
+                    PollerToken->Request(read, write); 
+                } 
+                return; // wait for further notifications 
+            } else { 
+                LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in Accept: " << strerror(-res)); 
+                return Die(ctx); 
             }
         }
         TBase::Become(&TIncomingConnectionActor::StateConnected);
-        ctx.Send(ctx.SelfID, new TEvPollerReady(nullptr, true, true));
+        ctx.Send(ctx.SelfID, new TEvPollerReady(nullptr, true, true)); 
     }
 
-    void HandleAccepting(TEvPollerRegisterResult::TPtr ev, const NActors::TActorContext& ctx) {
-        PollerToken = std::move(ev->Get()->PollerToken);
+    void HandleAccepting(TEvPollerRegisterResult::TPtr ev, const NActors::TActorContext& ctx) { 
+        PollerToken = std::move(ev->Get()->PollerToken); 
         OnAccept(ctx);
     }
 
-    void HandleAccepting(NActors::TEvPollerReady::TPtr, const NActors::TActorContext& ctx) {
+    void HandleAccepting(NActors::TEvPollerReady::TPtr, const NActors::TActorContext& ctx) { 
         OnAccept(ctx);
     }
 
-    void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {
-        if (event->Get()->Read) {
-            for (;;) {
-                if (CurrentRequest == nullptr) {
-                    if (RecycleRequests && !RecycledRequests.empty()) {
-                        CurrentRequest = std::move(RecycledRequests.front());
-                        RecycledRequests.pop_front();
-                    }  else {
-                        CurrentRequest = new THttpIncomingRequest();
-                    }
-                    CurrentRequest->Address = Address;
-                    CurrentRequest->WorkerName = Endpoint.WorkerName;
+    void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) { 
+        if (event->Get()->Read) { 
+            for (;;) { 
+                if (CurrentRequest == nullptr) { 
+                    if (RecycleRequests && !RecycledRequests.empty()) { 
+                        CurrentRequest = std::move(RecycledRequests.front()); 
+                        RecycledRequests.pop_front(); 
+                    }  else { 
+                        CurrentRequest = new THttpIncomingRequest(); 
+                    } 
+                    CurrentRequest->Address = Address; 
+                    CurrentRequest->WorkerName = Endpoint.WorkerName; 
                     CurrentRequest->Secure = Endpoint.Secure;
                 }
-                if (!CurrentRequest->EnsureEnoughSpaceAvailable()) {
-                    LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - not enough space available");
-                    return Die(ctx);
-                }
-                ssize_t need = CurrentRequest->Avail();
-                bool read = false, write = false;
-                ssize_t res = TSocketImpl::Recv(CurrentRequest->Pos(), need, read, write);
-                if (res > 0) {
-                    InactivityTimer.Reset();
-                    CurrentRequest->Advance(res);
-                    if (CurrentRequest->IsDone()) {
-                        Requests.emplace_back(CurrentRequest);
-                        CurrentRequest->Timer.Reset();
-                        if (CurrentRequest->IsReady()) {
-                            LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
-                            ctx.Send(Endpoint.Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(CurrentRequest));
-                            CurrentRequest = nullptr;
-                        } else if (CurrentRequest->IsError()) {
-                            LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -! (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
+                if (!CurrentRequest->EnsureEnoughSpaceAvailable()) { 
+                    LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - not enough space available"); 
+                    return Die(ctx); 
+                } 
+                ssize_t need = CurrentRequest->Avail(); 
+                bool read = false, write = false; 
+                ssize_t res = TSocketImpl::Recv(CurrentRequest->Pos(), need, read, write); 
+                if (res > 0) { 
+                    InactivityTimer.Reset(); 
+                    CurrentRequest->Advance(res); 
+                    if (CurrentRequest->IsDone()) { 
+                        Requests.emplace_back(CurrentRequest); 
+                        CurrentRequest->Timer.Reset(); 
+                        if (CurrentRequest->IsReady()) { 
+                            LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")"); 
+                            ctx.Send(Endpoint.Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(CurrentRequest)); 
+                            CurrentRequest = nullptr; 
+                        } else if (CurrentRequest->IsError()) { 
+                            LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -! (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")"); 
                             bool success = Respond(CurrentRequest->CreateResponseBadRequest(), ctx);
                             if (!success) {
                                 return;
                             }
-                            CurrentRequest = nullptr;
-                        }
+                            CurrentRequest = nullptr; 
+                        } 
                     }
-                } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
-                    if (PollerToken) {
-                        if (!read && !write) {
-                            read = true;
-                        }
-                        PollerToken->Request(read, write);
-                    }
+                } else if (-res == EAGAIN || -res == EWOULDBLOCK) { 
+                    if (PollerToken) { 
+                        if (!read && !write) { 
+                            read = true; 
+                        } 
+                        PollerToken->Request(read, write); 
+                    } 
                     break;
-                } else if (-res == EINTR) {
-                    continue;
-                } else if (!res) {
-                    // connection closed
+                } else if (-res == EINTR) { 
+                    continue; 
+                } else if (!res) { 
+                    // connection closed 
                     LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed");
                     return Die(ctx);
-                } else {
+                } else { 
                     LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in Receive: " << strerror(-res));
                     return Die(ctx);
                 }
             }
-            if (event->Get() == InactivityEvent) {
-                const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
-                if (passed >= InactivityTimeout) {
-                    LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed by inactivity timeout");
-                    return Die(ctx); // timeout
-                } else {
-                    ctx.Schedule(InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
-                }
-            }
-        }
-        if (event->Get()->Write) {
-            FlushOutput(ctx);
-        }
+            if (event->Get() == InactivityEvent) { 
+                const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed())); 
+                if (passed >= InactivityTimeout) { 
+                    LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed by inactivity timeout"); 
+                    return Die(ctx); // timeout 
+                } else { 
+                    ctx.Schedule(InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false)); 
+                } 
+            } 
+        } 
+        if (event->Get()->Write) { 
+            FlushOutput(ctx); 
+        } 
     }
 
-    void HandleConnected(TEvPollerRegisterResult::TPtr ev, const TActorContext& /*ctx*/) {
-        PollerToken = std::move(ev->Get()->PollerToken);
-        PollerToken->Request(true, true);
+    void HandleConnected(TEvPollerRegisterResult::TPtr ev, const TActorContext& /*ctx*/) { 
+        PollerToken = std::move(ev->Get()->PollerToken); 
+        PollerToken->Request(true, true); 
     }
 
     void HandleConnected(TEvHttpProxy::TEvHttpOutgoingResponse::TPtr event, const TActorContext& ctx) {
@@ -246,23 +246,23 @@ protected:
                     }
                 }
             }
-            bool read = false, write = false;
-            ssize_t res = TSocketImpl::Send(CurrentResponse->Data(), size, read, write);
+            bool read = false, write = false; 
+            ssize_t res = TSocketImpl::Send(CurrentResponse->Data(), size, read, write); 
             if (res > 0) {
                 CurrentResponse->ChopHead(res);
-            } else if (-res == EINTR) {
-                continue;
-            } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
-                if (PollerToken) {
-                    if (!read && !write) {
-                        write = true;
-                    }
-                    PollerToken->Request(read, write);
+            } else if (-res == EINTR) { 
+                continue; 
+            } else if (-res == EAGAIN || -res == EWOULDBLOCK) { 
+                if (PollerToken) { 
+                    if (!read && !write) { 
+                        write = true; 
+                    } 
+                    PollerToken->Request(read, write); 
                 }
                 break;
-            } else {
-                CleanupResponse(CurrentResponse);
-                LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in FlushOutput: " << strerror(-res));
+            } else { 
+                CleanupResponse(CurrentResponse); 
+                LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in FlushOutput: " << strerror(-res)); 
                 Die(ctx);
                 return false;
             }
@@ -272,17 +272,17 @@ protected:
 
     STFUNC(StateAccepting) {
         switch (ev->GetTypeRewrite()) {
-            CFunc(TEvents::TEvBootstrap::EventType, Bootstrap);
-            HFunc(TEvPollerReady, HandleAccepting);
-            HFunc(TEvPollerRegisterResult, HandleAccepting);
+            CFunc(TEvents::TEvBootstrap::EventType, Bootstrap); 
+            HFunc(TEvPollerReady, HandleAccepting); 
+            HFunc(TEvPollerRegisterResult, HandleAccepting); 
         }
     }
 
     STFUNC(StateConnected) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPollerReady, HandleConnected);
+            HFunc(TEvPollerReady, HandleConnected); 
             HFunc(TEvHttpProxy::TEvHttpOutgoingResponse, HandleConnected);
-            HFunc(TEvPollerRegisterResult, HandleConnected);
+            HFunc(TEvPollerRegisterResult, HandleConnected); 
         }
     }
 };

@@ -557,7 +557,7 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::TICKET_PARSER_ACTOR; }
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::TICKET_PARSER_ACTOR; } 
 
     void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {

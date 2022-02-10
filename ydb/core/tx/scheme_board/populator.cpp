@@ -403,8 +403,8 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SCHEME_BOARD_REPLICA_POPULATOR_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::SCHEME_BOARD_REPLICA_POPULATOR_ACTOR; 
     }
 
     explicit TReplicaPopulator(
@@ -901,8 +901,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SCHEME_BOARD_POPULATOR_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::SCHEME_BOARD_POPULATOR_ACTOR; 
     }
 
     explicit TPopulator(

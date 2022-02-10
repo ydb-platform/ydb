@@ -21,8 +21,8 @@ namespace NKikimr {
             TDiskPart Part;
             // data we get from disk
             TBufferWithGaps Data;
-            // was it read successfully?
-            bool Success = false;
+            // was it read successfully? 
+            bool Success = false; 
 
             TGlueRead(const TDiskPart &part)
                 : Part(part)
@@ -30,8 +30,8 @@ namespace NKikimr {
             {}
         };
 
-        struct TReadError {};
-
+        struct TReadError {}; 
+ 
         using TGlueReads = TDeque<TGlueRead>;
 
         ////////////////////////////////////////////////////////////////////////////////////
@@ -56,27 +56,27 @@ namespace NKikimr {
             // disk
             TDiskPart ActualRead;       // actual read from disk for this item
             // mem
-            TRope MemData;              // found data in memory
+            TRope MemData;              // found data in memory 
 
-            // extra found disk items for the case when ActualRead fails by disk corruption
-            std::vector<TDiskPart> ExtraDiskItems;
-
+            // extra found disk items for the case when ActualRead fails by disk corruption 
+            std::vector<TDiskPart> ExtraDiskItems; 
+ 
         public:
             TString ToString() const {
-                TStringStream str;
-                str << "{Type# ";
-                switch (Type) {
-                    case ET_CLEAN:   str << "ET_CLEAN";   break;
-                    case ET_SETDISK: str << "ET_SETDISK"; break;
-                    case ET_SETMEM:  str << "ET_SETMEM";  break;
-                    case ET_NODATA:  str << "ET_NODATA";  break;
-                    case ET_ERROR:   str << "ET_ERROR";   break;
+                TStringStream str; 
+                str << "{Type# "; 
+                switch (Type) { 
+                    case ET_CLEAN:   str << "ET_CLEAN";   break; 
+                    case ET_SETDISK: str << "ET_SETDISK"; break; 
+                    case ET_SETMEM:  str << "ET_SETMEM";  break; 
+                    case ET_NODATA:  str << "ET_NODATA";  break; 
+                    case ET_ERROR:   str << "ET_ERROR";   break; 
                     case ET_NOT_YET: str << "ET_NOT_YET"; break;
-                }
-                str << " Id# " << Id.ToString() << " ActualRead# " << ActualRead.ToString() << "}";
-                return str.Str();
-            }
-
+                } 
+                str << " Id# " << Id.ToString() << " ActualRead# " << ActualRead.ToString() << "}"; 
+                return str.Str(); 
+            } 
+ 
             // def constructor
             TDataItem()
             {
@@ -91,8 +91,8 @@ namespace NKikimr {
                 Ingress = TIngress();
                 GlueReqIdx = (ui32(-1));
                 ActualRead.Clear();
-                MemData = {};
-                ExtraDiskItems.clear();
+                MemData = {}; 
+                ExtraDiskItems.clear(); 
             }
 
             // Set NO_DATA
@@ -118,10 +118,10 @@ namespace NKikimr {
 
             // Update with disk data
             void UpdateWithDiskItem(const TLogoBlobID &id, void *cookie, const TDiskPart &actualRead) {
-                if (Type == ET_SETDISK) { // add backup copy of data for the case when main reads as CORRUPTED
-                    ExtraDiskItems.push_back(ActualRead);
-                }
-
+                if (Type == ET_SETDISK) { // add backup copy of data for the case when main reads as CORRUPTED 
+                    ExtraDiskItems.push_back(ActualRead); 
+                } 
+ 
                 Type = ET_SETDISK;
                 Id = id;
                 Cookie = cookie;
@@ -130,15 +130,15 @@ namespace NKikimr {
             }
 
             // Update with mem data
-            void UpdateWithMemItem(const TLogoBlobID &id, void *cookie, TRope data) {
+            void UpdateWithMemItem(const TLogoBlobID &id, void *cookie, TRope data) { 
                 Type = ET_SETMEM;
                 Id = id;
                 Cookie = cookie;
                 ////// clear disk
                 ActualRead.Clear();
-                ExtraDiskItems.clear();
+                ExtraDiskItems.clear(); 
                 ////// set mem
-                MemData = std::move(data);
+                MemData = std::move(data); 
             }
 
             void SetIngress(const TIngress &ingress) {
@@ -151,7 +151,7 @@ namespace NKikimr {
 
             bool ShouldUpdateWithDisk() const {
                 Y_VERIFY_DEBUG(Type == ET_CLEAN || Type == ET_SETDISK || Type == ET_SETMEM);
-                return Type == ET_CLEAN || Type == ET_SETDISK;
+                return Type == ET_CLEAN || Type == ET_SETDISK; 
             }
 
             bool ShouldUpdateWithMem() const {
@@ -171,30 +171,30 @@ namespace NKikimr {
                 GlueReqIdx = idx;
             }
 
-            template<typename TProcessor>
-            void GetData(const TGlueReads &glueReads, TProcessor&& processor) const {
-                Y_VERIFY_DEBUG(Type == ET_SETDISK || Type == ET_SETMEM);
+            template<typename TProcessor> 
+            void GetData(const TGlueReads &glueReads, TProcessor&& processor) const { 
+                Y_VERIFY_DEBUG(Type == ET_SETDISK || Type == ET_SETMEM); 
 
-                if (Type == ET_SETMEM) {
-                    processor(MemData);
-                } else {
-                    Y_VERIFY_DEBUG(GlueReqIdx != (ui32)-1);
-                    const TGlueRead &glue = glueReads[GlueReqIdx];
-
-                    Y_VERIFY_DEBUG(glue.Part.ChunkIdx == ActualRead.ChunkIdx &&
-                                 glue.Part.Offset <= ActualRead.Offset &&
-                                 (ActualRead.Offset + ActualRead.Size) <= (glue.Part.Offset + glue.Part.Size));
-
-                    if (glue.Success) {
-                        const char *ptr = glue.Data.DataPtr<const char>(ActualRead.Offset - glue.Part.Offset, ActualRead.Size);
-                        const size_t size = ActualRead.Size;
-                        processor(ptr, size);
-                    } else {
-                        processor(TReadError());
-                    }
-                }
-            }
-
+                if (Type == ET_SETMEM) { 
+                    processor(MemData); 
+                } else { 
+                    Y_VERIFY_DEBUG(GlueReqIdx != (ui32)-1); 
+                    const TGlueRead &glue = glueReads[GlueReqIdx]; 
+ 
+                    Y_VERIFY_DEBUG(glue.Part.ChunkIdx == ActualRead.ChunkIdx && 
+                                 glue.Part.Offset <= ActualRead.Offset && 
+                                 (ActualRead.Offset + ActualRead.Size) <= (glue.Part.Offset + glue.Part.Size)); 
+ 
+                    if (glue.Success) { 
+                        const char *ptr = glue.Data.DataPtr<const char>(ActualRead.Offset - glue.Part.Offset, ActualRead.Size); 
+                        const size_t size = ActualRead.Size; 
+                        processor(ptr, size); 
+                    } else { 
+                        processor(TReadError()); 
+                    } 
+                } 
+            } 
+ 
             static bool DiskPartLess(const TDataItem *x, const TDataItem *y) {
                 Y_VERIFY_DEBUG(x->ActualRead.Size && y->ActualRead.Size); // compare items with non-null Part only
                 return x->ActualRead < y->ActualRead;
@@ -252,9 +252,9 @@ namespace NKikimr {
         }
 
         // FIXME: refactor
-        template<typename TProcessor>
-        void GetData(TProcessor&& processor) const {
-            Cur->GetData(Rbr->GlueReads, std::forward<TProcessor>(processor));
+        template<typename TProcessor> 
+        void GetData(TProcessor&& processor) const { 
+            Cur->GetData(Rbr->GlueReads, std::forward<TProcessor>(processor)); 
         }
 
     private:
@@ -290,7 +290,7 @@ namespace NKikimr {
     public:
         TReadBatcher(TReadBatcherCtxPtr ctx)
             : Ctx(ctx)
-            , Result(std::make_shared<TReadBatcherResult>())
+            , Result(std::make_shared<TReadBatcherResult>()) 
         {
             Y_VERIFY_DEBUG(Ctx->VCtx->Top->GType.TotalPartCount() <= MaxTotalPartCount);
             TmpItems.resize(Ctx->VCtx->Top->GType.TotalPartCount());
@@ -308,31 +308,31 @@ namespace NKikimr {
 
         // We have data on disk
         void operator () (const TDiskPart &data, NMatrix::TVectorType parts);
-        void ProcessFoundDiskItem(const TDiskPart &data, NMatrix::TVectorType parts);
+        void ProcessFoundDiskItem(const TDiskPart &data, NMatrix::TVectorType parts); 
         // We have diskBlob in memory
         void operator () (const TDiskBlob &diskBlob);
-        void ProcessFoundInMemItem(const TDiskBlob &diskBlob);
+        void ProcessFoundInMemItem(const TDiskBlob &diskBlob); 
         // Finish data traverse for a single key
-        void FinishTraverse(const TIngress &ingress);
-        // Abort traverse without giving out results
-        void AbortTraverse();
+        void FinishTraverse(const TIngress &ingress); 
+        // Abort traverse without giving out results 
+        void AbortTraverse(); 
 
-
-        void PutNoData(const TLogoBlobID &id, const TMaybe<TIngress> &ingress, void *cookie) {
+ 
+        void PutNoData(const TLogoBlobID &id, const TMaybe<TIngress> &ingress, void *cookie) { 
             NReadBatcher::TDataItem item;
             item.UpdateWithNoData(id, cookie);
-            if (ingress) {
-                item.SetIngress(*ingress);
-            }
+            if (ingress) { 
+                item.SetIngress(*ingress); 
+            } 
             Result->DataItems.push_back(item);
         }
 
         // creates an actor for efficient async data reads, returns nullptr
         // if no read required
-        IActor *CreateAsyncDataReader(const TActorId &notifyID, ui8 priority, NWilson::TTraceId traceId, bool isRepl);
+        IActor *CreateAsyncDataReader(const TActorId &notifyID, ui8 priority, NWilson::TTraceId traceId, bool isRepl); 
 
         const TReadBatcherResult &GetResult() const { return *Result; }
-        ui64 GetPDiskReadBytes() const { return PDiskReadBytes; }
+        ui64 GetPDiskReadBytes() const { return PDiskReadBytes; } 
 
     private:
         TReadBatcherCtxPtr Ctx;
@@ -347,12 +347,12 @@ namespace NKikimr {
         ui32 QueryShift = 0;
         ui32 QuerySize = 0;
         // final result
-        std::shared_ptr<TReadBatcherResult> Result;
-        ui64 PDiskReadBytes = 0;
+        std::shared_ptr<TReadBatcherResult> Result; 
+        ui64 PDiskReadBytes = 0; 
 
-        TStackVec<std::tuple<TDiskPart, NMatrix::TVectorType>, MaxTotalPartCount> FoundDiskItems;
-        TStackVec<TDiskBlob, MaxTotalPartCount> FoundInMemItems;
-
+        TStackVec<std::tuple<TDiskPart, NMatrix::TVectorType>, MaxTotalPartCount> FoundDiskItems; 
+        TStackVec<TDiskBlob, MaxTotalPartCount> FoundInMemItems; 
+ 
         NReadBatcher::TGlueRead *AddGlueRead(NReadBatcher::TDataItem *item);
         void PrepareReadPlan();
         TString DiskDataItemsToString() const;

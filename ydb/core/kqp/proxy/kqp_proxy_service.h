@@ -124,6 +124,6 @@ struct TPeerStats {
 TSimpleResourceStats CalcPeerStats(
     const TVector<NKikimrKqp::TKqpProxyNodeResources>& data, const TString& selfDataCenterId, bool localDatacenterPolicy,
     std::function<double(const NKikimrKqp::TKqpProxyNodeResources& entry)> ExtractValue);
-TPeerStats CalcPeerStats(const TVector<NKikimrKqp::TKqpProxyNodeResources>& data, const TString& selfDataCenterId, bool localDatacenterPolicy);
+TPeerStats CalcPeerStats(const TVector<NKikimrKqp::TKqpProxyNodeResources>& data, const TString& selfDataCenterId, bool localDatacenterPolicy); 
 
 }  // namespace NKikimr::NKqp

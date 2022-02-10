@@ -7,10 +7,10 @@ struct TInterconnectChannels {
     enum EInterconnectChannels {
         IC_COMMON,
         IC_BLOBSTORAGE,
-        IC_BLOBSTORAGE_ASYNC_DATA,
-        IC_BLOBSTORAGE_SYNCER,
-        IC_BLOBSTORAGE_DISCOVER,
-        IC_BLOBSTORAGE_SMALL_MSG,
+        IC_BLOBSTORAGE_ASYNC_DATA, 
+        IC_BLOBSTORAGE_SYNCER, 
+        IC_BLOBSTORAGE_DISCOVER, 
+        IC_BLOBSTORAGE_SMALL_MSG, 
         IC_TABLETS_SMALL,   // < 1 KB
         IC_TABLETS_MEDIUM,  // < 1 MB
         IC_TABLETS_LARGE,   // > 1 MB

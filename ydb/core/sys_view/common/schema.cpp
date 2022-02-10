@@ -208,7 +208,7 @@ private:
         RegisterDomainSystemView<Schema::VSlots>(VSlotsName);
         RegisterDomainSystemView<Schema::Groups>(GroupsName);
         RegisterDomainSystemView<Schema::StoragePools>(StoragePoolsName);
-        RegisterDomainSystemView<Schema::StorageStats>(StorageStatsName);
+        RegisterDomainSystemView<Schema::StorageStats>(StorageStatsName); 
 
         RegisterDomainSystemView<Schema::Tablets>(TabletsName);
 

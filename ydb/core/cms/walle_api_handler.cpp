@@ -21,9 +21,9 @@ class TWalleCrateTaskHandler : public TActorBootstrapped<TWalleCrateTaskHandler>
 public:
     using TBase = TActorBootstrapped<TWalleCrateTaskHandler>;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
     {
-        return NKikimrServices::TActivity::CMS_SERVICE_PROXY;
+        return NKikimrServices::TActivity::CMS_SERVICE_PROXY; 
     }
 
     TWalleCrateTaskHandler(NMon::TEvHttpInfo::TPtr &event)

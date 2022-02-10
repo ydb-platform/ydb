@@ -48,25 +48,25 @@ namespace NKikimr {
 
         ui32 GetInplacedSize() const {
             Y_VERIFY_DEBUG(HugeBlobMerger.Empty() || DiskBlobMerger.Empty());
-            return HugeBlobMerger.Empty() ? DiskBlobMerger.GetDiskBlob().GetSize() : 0;
+            return HugeBlobMerger.Empty() ? DiskBlobMerger.GetDiskBlob().GetSize() : 0; 
         }
 
         void AddHugeBlob(const TDiskPart *begin, const TDiskPart *end, const NMatrix::TVectorType &parts,
                 ui64 circaLsn) {
-            Y_VERIFY_DEBUG(DiskBlobMerger.Empty());
+            Y_VERIFY_DEBUG(DiskBlobMerger.Empty()); 
             HugeBlobMerger.Add(begin, end, parts, circaLsn);
         }
 
         void AddBlob(const TDiskBlob &addBlob) {
-            Y_VERIFY_DEBUG(HugeBlobMerger.Empty());
+            Y_VERIFY_DEBUG(HugeBlobMerger.Empty()); 
             DiskBlobMerger.Add(addBlob);
         }
 
-        void AddPart(const TDiskBlob& source, const TDiskBlob::TPartIterator& iter) {
-            Y_VERIFY_DEBUG(HugeBlobMerger.Empty());
-            DiskBlobMerger.AddPart(source, iter);
-        }
-
+        void AddPart(const TDiskBlob& source, const TDiskBlob::TPartIterator& iter) { 
+            Y_VERIFY_DEBUG(HugeBlobMerger.Empty()); 
+            DiskBlobMerger.AddPart(source, iter); 
+        } 
+ 
         void SetEmptyFromAnotherMerger(const TDataMerger *dataMerger) {
             DiskBlobMerger.Clear();
             HugeBlobMerger.SetEmptyFromAnotherMerger(&dataMerger->HugeBlobMerger);
@@ -78,7 +78,7 @@ namespace NKikimr {
 
         ui32 GetDiskBlobRawSize() const {
             Y_VERIFY_DEBUG(!DiskBlobMerger.Empty());
-            return DiskBlobMerger.GetDiskBlob().GetSize();
+            return DiskBlobMerger.GetDiskBlob().GetSize(); 
         }
 
         const TDiskBlobMerger &GetDiskBlobMerger() const {

@@ -43,7 +43,7 @@ namespace NKikimr {
     class TSyncFullRecoverState {
     public:
         TSyncFullRecoverState(const TVDiskIdShort &self,
-                              const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top)
+                              const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top) 
             : Neighbors(self, top)
             , QuorumTracker(self, top, false)
             , Sublog(false, self.ToString() + ": ")
@@ -104,7 +104,7 @@ namespace NKikimr {
         const TActorId NotifyId;
         const TVDiskEternalGuid Guid;
         ui64 DbBirthLsn = 0;
-        std::shared_ptr<TSjCtx> JobCtx;
+        std::shared_ptr<TSjCtx> JobCtx; 
 
         void Bootstrap(const TActorContext &ctx) {
             // FIXME: RecoverLostData actor MUST remove artefacts of the previous recover try
@@ -160,11 +160,11 @@ namespace NKikimr {
             }
         }
 
-        STRICT_STFUNC(FullSyncStateFunc,
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvSyncerFullSyncedWithPeer, Handle)
-            HFunc(TEvVGenerationChange, Handle)
-        )
+        STRICT_STFUNC(FullSyncStateFunc, 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            HFunc(TEvSyncerFullSyncedWithPeer, Handle) 
+            HFunc(TEvVGenerationChange, Handle) 
+        ) 
 
         ////////////////////////////////////////////////////////////////////////
         // CALL OSIRIS
@@ -189,12 +189,12 @@ namespace NKikimr {
             WriteFinalLocally(ctx);
         }
 
-        STRICT_STFUNC(WaitOsirisStateFunc,
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvOsirisDone, Handle)
-            IgnoreFunc(TEvSyncerFullSyncedWithPeer)
-            HFunc(TEvVGenerationChange, Handle)
-        )
+        STRICT_STFUNC(WaitOsirisStateFunc, 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            HFunc(TEvOsirisDone, Handle) 
+            IgnoreFunc(TEvSyncerFullSyncedWithPeer) 
+            HFunc(TEvVGenerationChange, Handle) 
+        ) 
 
         ////////////////////////////////////////////////////////////////////////
         // WRITE FINAL GUID LOCALLY
@@ -204,7 +204,7 @@ namespace NKikimr {
                      VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerRecoverLostDataActor: WriteFinalLocally"));
             auto msg = TEvSyncerCommit::LocalFinal(Guid, DbBirthLsn);
-            ctx.Send(CommitterId, msg.release());
+            ctx.Send(CommitterId, msg.release()); 
             Become(&TThis::WriteFinalLocallyStateFunc);
         }
 
@@ -216,12 +216,12 @@ namespace NKikimr {
             Finish(ctx);
         }
 
-        STRICT_STFUNC(WriteFinalLocallyStateFunc,
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvSyncerCommitDone, HandleFinalLocally)
-            HFunc(TEvVGenerationChange, Handle)
+        STRICT_STFUNC(WriteFinalLocallyStateFunc, 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            HFunc(TEvSyncerCommitDone, HandleFinalLocally) 
+            HFunc(TEvVGenerationChange, Handle) 
             IgnoreFunc(TEvSyncerFullSyncedWithPeer)
-        )
+        ) 
 
         ////////////////////////////////////////////////////////////////////////
         // WRITE FINAL GUID LOCALLY
@@ -263,8 +263,8 @@ namespace NKikimr {
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_SYNCER_RECOVER_LOST_DATA;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_SYNCER_RECOVER_LOST_DATA; 
         }
 
         TSyncerRecoverLostDataActor(const TIntrusivePtr<TSyncerContext> &sc,

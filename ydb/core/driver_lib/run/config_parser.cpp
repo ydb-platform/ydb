@@ -57,10 +57,10 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("vdisk-file", "vdisk kind config file").OptionalArgument("PATH");
     opts.AddLongOption("drivemodel-file", "drive model config file").OptionalArgument("PATH");
     opts.AddLongOption("kqp-file", "Kikimr Query Processor config file").OptionalArgument("PATH");
-    opts.AddLongOption("incrhuge-file", "incremental huge blob keeper config file").OptionalArgument("PATH");
+    opts.AddLongOption("incrhuge-file", "incremental huge blob keeper config file").OptionalArgument("PATH"); 
     opts.AddLongOption("memorylog-file", "set buffer size for memory log").OptionalArgument("PATH");
-    opts.AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
-    opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT");
+    opts.AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH"); 
+    opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT"); 
     opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT");
     opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST");
     opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT");
@@ -124,15 +124,15 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
     if (res.Has("kqp-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("kqp-file"), Config.AppConfig.MutableKQPConfig()));
     }
-
-    if (res.Has("incrhuge-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("incrhuge-file"), Config.AppConfig.MutableIncrHugeConfig()));
-    }
-
-    if (res.Has("grpc-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("grpc-file"), Config.AppConfig.MutableGRpcConfig()));
-    }
-
+ 
+    if (res.Has("incrhuge-file")) { 
+        Y_VERIFY(ParsePBFromFile(res.Get("incrhuge-file"), Config.AppConfig.MutableIncrHugeConfig())); 
+    } 
+ 
+    if (res.Has("grpc-file")) { 
+        Y_VERIFY(ParsePBFromFile(res.Get("grpc-file"), Config.AppConfig.MutableGRpcConfig())); 
+    } 
+ 
     if (res.Has("feature-flags-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("feature-flags-file"), Config.AppConfig.MutableFeatureFlags(), true));
     }
@@ -141,11 +141,11 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         Y_VERIFY(ParsePBFromFile(res.Get("sqs-file"), Config.AppConfig.MutableSqsConfig()));
     }
 
-    if (res.Has("grpc-port")) {
-        auto& conf = *Config.AppConfig.MutableGRpcConfig();
-        conf.SetStartGRpcProxy(true);
-        conf.SetPort(FromString<ui16>(res.Get("grpc-port")));
-    }
+    if (res.Has("grpc-port")) { 
+        auto& conf = *Config.AppConfig.MutableGRpcConfig(); 
+        conf.SetStartGRpcProxy(true); 
+        conf.SetPort(FromString<ui16>(res.Get("grpc-port"))); 
+    } 
 
     if (res.Has("grpcs-port")) {
         auto& conf = *Config.AppConfig.MutableGRpcConfig();

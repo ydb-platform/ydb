@@ -969,14 +969,14 @@ function pad2(val) {
     }
 }
 
-function pad4(val) {
-    var len = String(val).length;
-    for (var i = len; i < 4; i++) {
-        val = "0" + val;
-    }
-    return val;
-}
-
+function pad4(val) { 
+    var len = String(val).length; 
+    for (var i = len; i < 4; i++) { 
+        val = "0" + val; 
+    } 
+    return val; 
+} 
+ 
 function pad9(val) {
     var len = String(val).length;
     for (var i = len; i < 9; i++) {
@@ -2224,14 +2224,14 @@ function refreshBSGroupInfo() {
 
 var InterconnectHeight = 36;
 
-function getInterconnectUrl(node, peerNode) {
-    return getBaseUrl(node) + "/actors/interconnect/peer" + pad4(peerNode);
-}
-
-function onInterconnectClick() {
-    window.open(getInterconnectUrl(this.NodeId, this.PeerNodeId));
-}
-
+function getInterconnectUrl(node, peerNode) { 
+    return getBaseUrl(node) + "/actors/interconnect/peer" + pad4(peerNode); 
+} 
+ 
+function onInterconnectClick() { 
+    window.open(getInterconnectUrl(this.NodeId, this.PeerNodeId)); 
+} 
+ 
 function buildInterconnectMap(node, interconnect) {
     if (NodesCount >= 64) {
         var canvas = document.createElement("canvas");
@@ -2274,9 +2274,9 @@ function buildInterconnectMap(node, interconnect) {
                 interconnectcell.style.padding = "1px";
             }
             interconnectdiv.title = getNodeHost(j);
-            interconnectdiv.NodeId = node.Id;
-            interconnectdiv.PeerNodeId = j;
-            interconnectdiv.addEventListener("click", onInterconnectClick, false);
+            interconnectdiv.NodeId = node.Id; 
+            interconnectdiv.PeerNodeId = j; 
+            interconnectdiv.addEventListener("click", onInterconnectClick, false); 
             interconnectcell.appendChild(interconnectdiv);
             node.InterconnectCellDomElement[j] = interconnectdiv;
         }

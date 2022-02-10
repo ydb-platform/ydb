@@ -165,8 +165,8 @@ public:
 
     void Bootstrap();
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SQS_EXECUTOR_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::SQS_EXECUTOR_ACTOR; 
     }
 
     void SetQueryIdForLogging(EQueryId queryId) {

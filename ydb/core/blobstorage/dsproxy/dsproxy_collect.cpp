@@ -1,6 +1,6 @@
-#include "dsproxy.h"
-#include "dsproxy_mon.h"
-#include "dsproxy_quorum_tracker.h"
+#include "dsproxy.h" 
+#include "dsproxy_mon.h" 
+#include "dsproxy_quorum_tracker.h" 
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
@@ -12,27 +12,27 @@ namespace NKikimr {
 // Blobs with generation < CollectGeneration, or generation == CollectGeneration and step <= CollectStep are collected.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupCollectGarbageRequest> {
+class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupCollectGarbageRequest> { 
     const ui64 TabletId;
     const ui32 RecordGeneration;
     const ui32 PerGenerationCounter;
     const ui32 Channel;
     const TInstant Deadline;
-    std::unique_ptr<TVector<TLogoBlobID> > Keep;
-    std::unique_ptr<TVector<TLogoBlobID> > DoNotKeep;
+    std::unique_ptr<TVector<TLogoBlobID> > Keep; 
+    std::unique_ptr<TVector<TLogoBlobID> > DoNotKeep; 
     const ui32 CollectGeneration;
     const ui32 CollectStep;
-    const bool Hard;
+    const bool Hard; 
     const bool Collect;
 
-    TGroupQuorumTracker QuorumTracker;
+    TGroupQuorumTracker QuorumTracker; 
     TInstant StartTime;
 
     ui32 RequestsSent = 0;
     ui32 ResponsesReceived = 0;
 
-    void Handle(TEvBlobStorage::TEvVCollectGarbageResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+    void Handle(TEvBlobStorage::TEvVCollectGarbageResult::TPtr &ev) { 
+        ProcessReplyFromQueue(ev); 
         ResponsesReceived++;
         const NKikimrBlobStorage::TEvVCollectGarbageResult &record = ev->Get()->Record;
         Y_VERIFY(record.HasStatus());
@@ -40,40 +40,40 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
         Y_VERIFY(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
-        A_LOG_LOG_S(false, PriorityForStatusInbound(status), "DSPC01", "received"
-               << " TEvVCollectGarbageResult# " << ev->Get()->ToString());
+        A_LOG_LOG_S(false, PriorityForStatusInbound(status), "DSPC01", "received" 
+               << " TEvVCollectGarbageResult# " << ev->Get()->ToString()); 
+ 
+        Process(status, vdisk, record.HasIncarnationGuid() ? std::make_optional(record.GetIncarnationGuid()) : std::nullopt); 
+        CheckProgress(); 
+    } 
+ 
+    void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev) { 
+        ProcessReplyFromQueue(ev); 
+        ResponsesReceived++; 
+        const auto& record = ev->Get()->Record; 
+        if (record.HasStatus() && record.HasVDiskID()) { 
+            Process(record.GetStatus(), VDiskIDFromVDiskID(record.GetVDiskID()), record.HasIncarnationGuid() 
+                ? std::make_optional(record.GetIncarnationGuid()) : std::nullopt); 
+        } 
+        CheckProgress(); 
+    } 
+ 
+    void Process(NKikimrProto::EReplyStatus status, const TVDiskID& vdisk, std::optional<ui64> incarnationGuid) { 
+        std::vector<TVDiskID> queryStatus, resend; 
+        // replace already status to be treated as non-terminating OK for this kind of request 
+        status = status != NKikimrProto::ALREADY ? status : NKikimrProto::OK; 
+        switch (NKikimrProto::EReplyStatus newStatus = incarnationGuid 
+                ? QuorumTracker.ProcessReplyWithCooldown(vdisk, status, TActivationContext::Now(), *incarnationGuid, queryStatus, resend) 
+                : QuorumTracker.ProcessReply(vdisk, status)) { 
+            case NKikimrProto::OK: 
+                return ReplyAndDie(newStatus); 
 
-        Process(status, vdisk, record.HasIncarnationGuid() ? std::make_optional(record.GetIncarnationGuid()) : std::nullopt);
-        CheckProgress();
-    }
+            case NKikimrProto::UNKNOWN: 
+                break; 
 
-    void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
-        ResponsesReceived++;
-        const auto& record = ev->Get()->Record;
-        if (record.HasStatus() && record.HasVDiskID()) {
-            Process(record.GetStatus(), VDiskIDFromVDiskID(record.GetVDiskID()), record.HasIncarnationGuid()
-                ? std::make_optional(record.GetIncarnationGuid()) : std::nullopt);
-        }
-        CheckProgress();
-    }
-
-    void Process(NKikimrProto::EReplyStatus status, const TVDiskID& vdisk, std::optional<ui64> incarnationGuid) {
-        std::vector<TVDiskID> queryStatus, resend;
-        // replace already status to be treated as non-terminating OK for this kind of request
-        status = status != NKikimrProto::ALREADY ? status : NKikimrProto::OK;
-        switch (NKikimrProto::EReplyStatus newStatus = incarnationGuid
-                ? QuorumTracker.ProcessReplyWithCooldown(vdisk, status, TActivationContext::Now(), *incarnationGuid, queryStatus, resend)
-                : QuorumTracker.ProcessReply(vdisk, status)) {
-            case NKikimrProto::OK:
-                return ReplyAndDie(newStatus);
-
-            case NKikimrProto::UNKNOWN:
-                break;
-
-            case NKikimrProto::ERROR:
-            case NKikimrProto::VDISK_ERROR_STATE:
-            case NKikimrProto::OUT_OF_SPACE:
+            case NKikimrProto::ERROR: 
+            case NKikimrProto::VDISK_ERROR_STATE: 
+            case NKikimrProto::OUT_OF_SPACE: 
                 {
                     TStringStream str;
                     str << "Processed status# " << status << " from VDisk# " << vdisk;
@@ -85,66 +85,66 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
                     str << " QuorumTracker status# " << newStatus;
                     ErrorReason = str.Str();
                 }
-                return ReplyAndDie(NKikimrProto::ERROR);
+                return ReplyAndDie(NKikimrProto::ERROR); 
 
-            default:
+            default: 
                 Y_FAIL("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
         }
-        for (const TVDiskID& vdiskId : queryStatus) {
-            SendToQueue(std::make_unique<TEvBlobStorage::TEvVStatus>(vdiskId), 0, NWilson::TTraceId());
-            RequestsSent++;
-        }
-        for (const TVDiskID& vdiskId : resend) {
-            SendCollectGarbageRequest(vdiskId);
-        }
+        for (const TVDiskID& vdiskId : queryStatus) { 
+            SendToQueue(std::make_unique<TEvBlobStorage::TEvVStatus>(vdiskId), 0, NWilson::TTraceId()); 
+            RequestsSent++; 
+        } 
+        for (const TVDiskID& vdiskId : resend) { 
+            SendCollectGarbageRequest(vdiskId); 
+        } 
+    } 
+
+    void CheckProgress() { 
+        Y_VERIFY(Dead || ResponsesReceived < RequestsSent, "No more unreplied vdisk requests!" 
+            " QuorumTracker# %s RequestsSent# %" PRIu32 " ResponsesReceived# %" PRIu32, 
+            QuorumTracker.ToString().c_str(), RequestsSent, ResponsesReceived); 
     }
 
-    void CheckProgress() {
-        Y_VERIFY(Dead || ResponsesReceived < RequestsSent, "No more unreplied vdisk requests!"
-            " QuorumTracker# %s RequestsSent# %" PRIu32 " ResponsesReceived# %" PRIu32,
-            QuorumTracker.ToString().c_str(), RequestsSent, ResponsesReceived);
-    }
-
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupCollectGarbageRequest>;
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
-        auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbageResult>(status, TabletId, RecordGeneration,
-            PerGenerationCounter, Channel);
+    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupCollectGarbageRequest>; 
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) { 
+        auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbageResult>(status, TabletId, RecordGeneration, 
+            PerGenerationCounter, Channel); 
         result->ErrorReason = ErrorReason;
-        A_LOG_LOG_S(true, PriorityForStatusOutbound(status), "DSPC02", "Result# " << result->Print(false));
-        SendResponseAndDie(std::move(result));
+        A_LOG_LOG_S(true, PriorityForStatusOutbound(status), "DSPC02", "Result# " << result->Print(false)); 
+        SendResponseAndDie(std::move(result)); 
     }
 
-    void SendCollectGarbageRequest(const TVDiskID& vdiskId) {
-        const ui64 cookie = TVDiskIdShort(vdiskId).GetRaw();
-        auto msg = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(TabletId, RecordGeneration, PerGenerationCounter,
-            Channel, Collect, CollectGeneration, CollectStep, Hard, Keep.get(), DoNotKeep.get(), vdiskId, Deadline);
-        SendToQueue(std::move(msg), cookie, NWilson::TTraceId()); // FIXME: wilson
-        RequestsSent++;
-    }
-
-    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
-        ++*Mon->NodeMon->RestartCollectGarbage;
-        auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, RecordGeneration, PerGenerationCounter,
-            Channel, Collect, CollectGeneration, CollectStep, Keep.release(), DoNotKeep.release(), Deadline, false, Hard);
-        ev->RestartCounter = counter;
-        return ev;
-    }
-
+    void SendCollectGarbageRequest(const TVDiskID& vdiskId) { 
+        const ui64 cookie = TVDiskIdShort(vdiskId).GetRaw(); 
+        auto msg = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(TabletId, RecordGeneration, PerGenerationCounter, 
+            Channel, Collect, CollectGeneration, CollectStep, Hard, Keep.get(), DoNotKeep.get(), vdiskId, Deadline); 
+        SendToQueue(std::move(msg), cookie, NWilson::TTraceId()); // FIXME: wilson 
+        RequestsSent++; 
+    } 
+ 
+    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) { 
+        ++*Mon->NodeMon->RestartCollectGarbage; 
+        auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, RecordGeneration, PerGenerationCounter, 
+            Channel, Collect, CollectGeneration, CollectStep, Keep.release(), DoNotKeep.release(), Deadline, false, Hard); 
+        ev->RestartCounter = counter; 
+        return ev; 
+    } 
+ 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_GROUP_COLLECT_GARBAGE;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::BS_GROUP_COLLECT_GARBAGE; 
     }
 
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveCollectGarbage;
-    }
-
+    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) { 
+        return mon->ActiveCollectGarbage; 
+    } 
+ 
     TBlobStorageGroupCollectGarbageRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvCollectGarbage *ev, ui64 cookie,
+            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source, 
+            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvCollectGarbage *ev, ui64 cookie, 
             TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, NWilson::TTraceId(),
-                NKikimrServices::BS_PROXY_COLLECT, false, {}, now, storagePoolCounters, ev->RestartCounter)
+        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, NWilson::TTraceId(), 
+                NKikimrServices::BS_PROXY_COLLECT, false, {}, now, storagePoolCounters, ev->RestartCounter) 
         , TabletId(ev->TabletId)
         , RecordGeneration(ev->RecordGeneration)
         , PerGenerationCounter(ev->PerGenerationCounter)
@@ -154,56 +154,56 @@ public:
         , DoNotKeep(ev->DoNotKeep.Release())
         , CollectGeneration(ev->CollectGeneration)
         , CollectStep(ev->CollectStep)
-        , Hard(ev->Hard)
+        , Hard(ev->Hard) 
         , Collect(ev->Collect)
-        , QuorumTracker(Info.Get())
+        , QuorumTracker(Info.Get()) 
         , StartTime(now)
-    {}
+    {} 
 
-    void Bootstrap() {
-        A_LOG_INFO_S("DSPC03", "bootstrap"
-            << " ActorId# " << SelfId()
-            << " Group# " << Info->GroupID
-            << " TabletId# " << TabletId
-            << " Channel# " << Channel
-            << " RecordGeneration# " << RecordGeneration
-            << " PerGenerationCounter# " << PerGenerationCounter
-            << " Deadline# " << Deadline
-            << " CollectGeneration# " << CollectGeneration
-            << " CollectStep# " << CollectStep
-            << " Collect# " << (Collect ? "true" : "false")
-            << " Hard# " << (Hard ? "true" : "false")
-            << " RestartCounter# " << RestartCounter);
-
-        for (const auto& item : Keep ? *Keep : TVector<TLogoBlobID>()) {
-            A_LOG_INFO_S("DSPC04", "Keep# " << item);
-        }
-
-        for (const auto& item : DoNotKeep ? *DoNotKeep : TVector<TLogoBlobID>()) {
-            A_LOG_INFO_S("DSPC05", "DoNotKeep# " << item);
-        }
-
-        for (const auto& vdisk : Info->GetVDisks()) {
-            SendCollectGarbageRequest(Info->GetVDiskId(vdisk.OrderNumber));
+    void Bootstrap() { 
+        A_LOG_INFO_S("DSPC03", "bootstrap" 
+            << " ActorId# " << SelfId() 
+            << " Group# " << Info->GroupID 
+            << " TabletId# " << TabletId 
+            << " Channel# " << Channel 
+            << " RecordGeneration# " << RecordGeneration 
+            << " PerGenerationCounter# " << PerGenerationCounter 
+            << " Deadline# " << Deadline 
+            << " CollectGeneration# " << CollectGeneration 
+            << " CollectStep# " << CollectStep 
+            << " Collect# " << (Collect ? "true" : "false") 
+            << " Hard# " << (Hard ? "true" : "false") 
+            << " RestartCounter# " << RestartCounter); 
+ 
+        for (const auto& item : Keep ? *Keep : TVector<TLogoBlobID>()) { 
+            A_LOG_INFO_S("DSPC04", "Keep# " << item); 
+        } 
+ 
+        for (const auto& item : DoNotKeep ? *DoNotKeep : TVector<TLogoBlobID>()) { 
+            A_LOG_INFO_S("DSPC05", "DoNotKeep# " << item); 
+        } 
+ 
+        for (const auto& vdisk : Info->GetVDisks()) { 
+            SendCollectGarbageRequest(Info->GetVDiskId(vdisk.OrderNumber)); 
         }
 
         Become(&TThis::StateWait);
     }
 
-    STATEFN(StateWait) {
-        if (ProcessEvent(ev)) {
-            return;
-        }
+    STATEFN(StateWait) { 
+        if (ProcessEvent(ev)) { 
+            return; 
+        } 
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvBlobStorage::TEvVCollectGarbageResult, Handle);
-            hFunc(TEvBlobStorage::TEvVStatusResult, Handle);
+            hFunc(TEvBlobStorage::TEvVCollectGarbageResult, Handle); 
+            hFunc(TEvBlobStorage::TEvVStatusResult, Handle); 
         }
     }
 };
 
 IActor* CreateBlobStorageGroupCollectGarbageRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvCollectGarbage *ev,
+        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source, 
+        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvCollectGarbage *ev, 
         ui64 cookie, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
     return new TBlobStorageGroupCollectGarbageRequest(info, state, source, mon, ev, cookie, now, storagePoolCounters);
 }

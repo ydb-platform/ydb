@@ -92,7 +92,7 @@ struct TSlotDescription {
     TSlotDescription(const NKikimrTenantSlotBroker::TSlotAllocation &slot)
     {
         SlotType = slot.GetType();
-        DataCenter = slot.HasDataCenter() ? slot.GetDataCenter() : DataCenterToString(slot.GetDataCenterNum());
+        DataCenter = slot.HasDataCenter() ? slot.GetDataCenter() : DataCenterToString(slot.GetDataCenterNum()); 
         ForceLocation = slot.GetForceLocation();
         CollocationGroup = slot.GetCollocationGroup();
         ForceCollocation = slot.GetForceCollocation();
@@ -121,8 +121,8 @@ struct TSlotDescription {
     void Serialize(NKikimrTenantSlotBroker::TSlotAllocation &slot) const
     {
         slot.SetType(SlotType);
-        slot.SetDataCenterNum(DataCenterFromString(DataCenter));
-        slot.SetDataCenter(DataCenter);
+        slot.SetDataCenterNum(DataCenterFromString(DataCenter)); 
+        slot.SetDataCenter(DataCenter); 
         slot.SetForceLocation(ForceLocation);
         slot.SetCollocationGroup(CollocationGroup);
         slot.SetForceCollocation(ForceCollocation);
@@ -1144,9 +1144,9 @@ public:
         ClearState();
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
     {
-        return NKikimrServices::TActivity::TENANT_SLOT_BROKER_ACTOR;
+        return NKikimrServices::TActivity::TENANT_SLOT_BROKER_ACTOR; 
     }
 
 private:

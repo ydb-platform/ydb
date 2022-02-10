@@ -21,6 +21,6 @@ namespace NKikimr {
             const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo,
             const TVDiskID &selfVDiskId,
             // state we got after local recovery
-            std::unique_ptr<NSyncLog::TSyncLogRepaired> repaired);
+            std::unique_ptr<NSyncLog::TSyncLogRepaired> repaired); 
 
 } // NKikimr

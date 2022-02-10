@@ -8,7 +8,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 #include <util/generic/queue.h>
 #include <util/generic/hash_set.h>
 #include <util/system/types.h>
@@ -67,16 +67,16 @@ struct TServerOptions {
 
     //! Use GRpc keepalive
     DECLARE_FIELD(KeepAliveEnable, TMaybe<bool>, TMaybe<bool>());
-
+ 
     //! GRPC_ARG_KEEPALIVE_TIME_MS setting
-    DECLARE_FIELD(KeepAliveIdleTimeoutTriggerSec, int, 0);
-
+    DECLARE_FIELD(KeepAliveIdleTimeoutTriggerSec, int, 0); 
+ 
     //! Deprecated, ths option ignored. Will be removed soon.
-    DECLARE_FIELD(KeepAliveMaxProbeCount, int, 0);
-
+    DECLARE_FIELD(KeepAliveMaxProbeCount, int, 0); 
+ 
     //! GRPC_ARG_KEEPALIVE_TIMEOUT_MS setting
-    DECLARE_FIELD(KeepAliveProbeIntervalSec, int, 0);
-
+    DECLARE_FIELD(KeepAliveProbeIntervalSec, int, 0); 
+ 
     //! Max number of requests processing by services (global limit for grpc server)
     DECLARE_FIELD(MaxGlobalRequestInFlight, size_t, 100000);
 

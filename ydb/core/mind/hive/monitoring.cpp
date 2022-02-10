@@ -681,8 +681,8 @@ public:
              TTabletTypes::KeyValue,
              TTabletTypes::PersQueue,
              TTabletTypes::PersQueueReadBalancer,
-             TTabletTypes::NodeBroker,
-             TTabletTypes::TestShard}) {
+             TTabletTypes::NodeBroker, 
+             TTabletTypes::TestShard}) { 
             if (shortType == LongToShortTabletName(TTabletTypes::TypeToStr(tabletType))) {
                 return tabletType;
             }
@@ -927,8 +927,8 @@ public:
              TTabletTypes::KeyValue,
              TTabletTypes::PersQueue,
              TTabletTypes::PersQueueReadBalancer,
-             TTabletTypes::NodeBroker,
-             TTabletTypes::TestShard}) {
+             TTabletTypes::NodeBroker, 
+             TTabletTypes::TestShard}) { 
             const TVector<i64>& allowedMetrics = Self->GetTabletTypeAllowedMetricIds(tabletType);
             out << "<tr>"
                    "<td>" << LongToShortTabletName(TTabletTypes::TypeToStr(tabletType)) << "</td>";
@@ -1088,8 +1088,8 @@ public:
             return "SV";
         case TTabletTypes::FileStore:
             return "FS";
-        case TTabletTypes::TestShard:
-            return "TS";
+        case TTabletTypes::TestShard: 
+            return "TS"; 
         case TTabletTypes::SequenceShard:
             return "S";
         case TTabletTypes::ReplicationController:
@@ -1825,8 +1825,8 @@ public:
             jsonNode["Id"] = id;
             jsonNode["Host"] = host;
             jsonNode["Name"] = name;
-            if (node.LocationAcquired) {
-                jsonNode["DataCenter"] = node.Location.GetDataCenterId();
+            if (node.LocationAcquired) { 
+                jsonNode["DataCenter"] = node.Location.GetDataCenterId(); 
             }
             jsonNode["Domain"] = node.ServicedDomains.empty() ? "" : Self->GetDomainName(node.GetServicedDomain());
             jsonNode["Alive"] = node.IsAlive();
@@ -2697,10 +2697,10 @@ public:
         return item;
     }
 
-    static NJson::TJsonValue MakeFrom(TString item) {
-        return item;
-    }
-
+    static NJson::TJsonValue MakeFrom(TString item) { 
+        return item; 
+    } 
+ 
     template<typename Type>
     static NJson::TJsonValue MakeFrom(const TVector<Type>& array) {
         NJson::TJsonValue result;
@@ -2867,87 +2867,87 @@ public:
     }
 };
 
-class TTxMonEvent_ResetTablet : public TTransactionBase<THive> {
-    class TResetter : public TActorBootstrapped<TResetter> {
-        TIntrusivePtr<TTabletStorageInfo> Info;
+class TTxMonEvent_ResetTablet : public TTransactionBase<THive> { 
+    class TResetter : public TActorBootstrapped<TResetter> { 
+        TIntrusivePtr<TTabletStorageInfo> Info; 
         const TActorId Source;
         const ui32 KnownGeneration;
-
-    public:
+ 
+    public: 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::HIVE_MON_REQUEST;
         }
 
         TResetter(TIntrusivePtr<TTabletStorageInfo> info, TActorId source, ui32 knownGeneration)
-            : Info(std::move(info))
-            , Source(source)
+            : Info(std::move(info)) 
+            , Source(source) 
             , KnownGeneration(knownGeneration)
-        {}
-
-        void Bootstrap(const TActorContext& ctx) {
-            Become(&TThis::StateFunc);
+        {} 
+ 
+        void Bootstrap(const TActorContext& ctx) { 
+            Become(&TThis::StateFunc); 
             ctx.Register(CreateTabletReqReset(SelfId(), std::move(Info), KnownGeneration));
-        }
-
-        STRICT_STFUNC(StateFunc,
-            HFunc(TEvTablet::TEvResetTabletResult, Handle)
-        )
-
-        void Handle(TEvTablet::TEvResetTabletResult::TPtr& ev, const TActorContext& ctx) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Sprintf("{\"status\": \"%s\"}",
-                NKikimrProto::EReplyStatus_Name(ev->Get()->Status).data())));
-        }
-    };
-
-public:
+        } 
+ 
+        STRICT_STFUNC(StateFunc, 
+            HFunc(TEvTablet::TEvResetTabletResult, Handle) 
+        ) 
+ 
+        void Handle(TEvTablet::TEvResetTabletResult::TPtr& ev, const TActorContext& ctx) { 
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Sprintf("{\"status\": \"%s\"}", 
+                NKikimrProto::EReplyStatus_Name(ev->Get()->Status).data()))); 
+        } 
+    }; 
+ 
+public: 
     const TActorId Source;
-    TTabletId TabletId = 0;
-    TString Error;
-    TIntrusivePtr<TTabletStorageInfo> Info;
+    TTabletId TabletId = 0; 
+    TString Error; 
+    TIntrusivePtr<TTabletStorageInfo> Info; 
     ui32 KnownGeneration = 0;
-
+ 
     TTxMonEvent_ResetTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
-        : TBase(hive)
-        , Source(source)
-    {
-        TabletId = FromStringWithDefault<TTabletId>(ev->Get()->Cgi().Get("tablet"), TabletId);
-    }
-
+        : TBase(hive) 
+        , Source(source) 
+    { 
+        TabletId = FromStringWithDefault<TTabletId>(ev->Get()->Cgi().Get("tablet"), TabletId); 
+    } 
+ 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_RESET_TABLET; }
 
-    bool Execute(TTransactionContext&, const TActorContext& /*ctx*/) override {
-        if (TabletId) {
+    bool Execute(TTransactionContext&, const TActorContext& /*ctx*/) override { 
+        if (TabletId) { 
             if (TLeaderTabletInfo* tablet = Self->FindTablet(TabletId)) {
-                Info = tablet->TabletStorageInfo;
+                Info = tablet->TabletStorageInfo; 
                 KnownGeneration = tablet->KnownGeneration;
-            } else {
-                Error = "tablet not found";
-            }
-        } else {
-            Error = "tablet parameter not set";
-        }
-        return true;
-    }
-
-    void Complete(const TActorContext& ctx) override {
-        if (Info) {
+            } else { 
+                Error = "tablet not found"; 
+            } 
+        } else { 
+            Error = "tablet parameter not set"; 
+        } 
+        return true; 
+    } 
+ 
+    void Complete(const TActorContext& ctx) override { 
+        if (Info) { 
             ctx.Register(new TResetter(std::move(Info), Source, KnownGeneration));
-        } else if (Error) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
-        } else {
-            Y_FAIL("unexpected state");
-        }
-    }
-};
-
+        } else if (Error) { 
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}")); 
+        } else { 
+            Y_FAIL("unexpected state"); 
+        } 
+    } 
+}; 
+ 
 class TUpdateResourcesActor : public TActorBootstrapped<TUpdateResourcesActor> {
 public:
     TActorId Source;
     TActorId Hive;
     NKikimrHive::TTabletMetrics Metrics;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::HIVE_MON_REQUEST;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::HIVE_MON_REQUEST; 
     }
 
     TUpdateResourcesActor(const TActorId& source, const TActorId& hive, const NKikimrHive::TTabletMetrics& metrics)
@@ -2989,8 +2989,8 @@ public:
     TAutoPtr<TEvHive::TEvCreateTablet> Event;
     THive* Hive;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::HIVE_MON_REQUEST;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::HIVE_MON_REQUEST; 
     }
 
     TCreateTabletActor(const TActorId& source, ui64 owner, ui64 ownerIdx, TTabletTypes::EType type, ui32 channelsProfile, ui32 followers, THive* hive)
@@ -3057,8 +3057,8 @@ public:
         Event->Record.SetTxId_Deprecated(FAKE_TXID);
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::HIVE_MON_REQUEST;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::HIVE_MON_REQUEST; 
     }
 
     TDeleteTabletActor(const TActorId& source, ui64 tabletId, THive* hive)
@@ -3384,9 +3384,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     if (page == "TabletInfo") {
         return Execute(new TTxMonEvent_TabletInfo(ev->Sender, ev, this), ctx);
     }
-    if (page == "ResetTablet") {
-        return Execute(new TTxMonEvent_ResetTablet(ev->Sender, ev, this), ctx);
-    }
+    if (page == "ResetTablet") { 
+        return Execute(new TTxMonEvent_ResetTablet(ev->Sender, ev, this), ctx); 
+    } 
     if (page == "CreateTablet") {
         ui64 owner = FromStringWithDefault<ui64>(cgi.Get("owner"), 0);
         ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0);

@@ -164,7 +164,7 @@ namespace NKikimr {
     TSyncNeighbors::TSyncNeighbors(const TString &logPrefix,
                                    const TActorId &notifyId,
                                    const TVDiskIdShort &self,
-                                   std::shared_ptr<TBlobStorageGroupInfo::TTopology> top)
+                                   std::shared_ptr<TBlobStorageGroupInfo::TTopology> top) 
         : LogPrefix(logPrefix)
         , NotifyId(notifyId)
         , Neighbors(self, top)
@@ -290,7 +290,7 @@ namespace NKikimr {
     TSyncerData::TSyncerData(const TString &logPrefix,
                              const TActorId &notifyId,
                              const TVDiskIdShort &selfVDisk,
-                             std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                             std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
                              const TString &entryPoint)
         : Neighbors(MakeIntrusive<TSyncNeighbors>(logPrefix,
                                                   notifyId,
@@ -306,7 +306,7 @@ namespace NKikimr {
     bool TSyncerData::CheckEntryPoint(const TString &logPrefix,
                                       const TActorId &notifyId,
                                       const TVDiskIdShort &selfVDisk,
-                                      std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                                      std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
                                       const TString &entryPoint) {
         try {
             TSyncerData n(logPrefix, notifyId, selfVDisk, top);
@@ -321,7 +321,7 @@ namespace NKikimr {
     // Convert from old entry point format to protobuf format
     // TODO: we can remove this function after migrating to the protobuf format
     TString TSyncerData::Convert(const TVDiskIdShort &selfVDisk,
-                                std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                                std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
                                 const TString &entryPoint) {
         if (entryPoint.empty()) {
             return entryPoint;

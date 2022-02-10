@@ -9,7 +9,7 @@
 #include <util/generic/deque.h>
 #include <util/generic/queue.h>
 #include <util/generic/algorithm.h>
-#include <util/generic/set.h>
+#include <util/generic/set.h> 
 #include <util/string/printf.h>
 
 namespace NKikimr {
@@ -112,7 +112,7 @@ namespace NKikimr {
                 return ChunkIdx == c.ChunkIdx;
             }
 
-            void SetUpNotifier(std::shared_ptr<IActorNotify> n) {
+            void SetUpNotifier(std::shared_ptr<IActorNotify> n) { 
                 Notifier = std::move(n);
             }
 
@@ -133,15 +133,15 @@ namespace NKikimr {
             }
 
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
-                const bool inserted = chunks.insert(ChunkIdx).second;
-                Y_VERIFY(inserted);
-            }
-
+                const bool inserted = chunks.insert(ChunkIdx).second; 
+                Y_VERIFY(inserted); 
+            } 
+ 
             static std::pair<TOneChunkPtr, const char *> Construct(const char *serialized);
 
         private:
             ui32 ChunkIdx = 0;
-            std::shared_ptr<IActorNotify> Notifier;
+            std::shared_ptr<IActorNotify> Notifier; 
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -187,10 +187,10 @@ namespace NKikimr {
                 return s.Str();
             }
 
-            TOneChunkIndexPtr DeepCopy() const {
-                return new TOneChunkIndex(*this);
-            }
-
+            TOneChunkIndexPtr DeepCopy() const { 
+                return new TOneChunkIndex(*this); 
+            } 
+ 
             void UpdateIndex(const TVector<TSyncLogPageSnap> &pages, ui32 indexBulk);
             void OutputHtml(IOutputStream &str) const;
             // returns number of index records
@@ -311,7 +311,7 @@ namespace NKikimr {
                 return IndexPtr->GetLastLsn();
             }
 
-            void SetUpNotifier(std::shared_ptr<IActorNotify> n) {
+            void SetUpNotifier(std::shared_ptr<IActorNotify> n) { 
                 ChunkPtr->SetUpNotifier(std::move(n));
             }
 
@@ -340,10 +340,10 @@ namespace NKikimr {
                 return TOneChunkIndex::TIterator(IndexPtr);
             }
 
-            TIndexedChunkPtr DeepCopy() const {
-                return new TIndexedChunk(ChunkPtr, IndexPtr->DeepCopy());
-            }
-
+            TIndexedChunkPtr DeepCopy() const { 
+                return new TIndexedChunk(ChunkPtr, IndexPtr->DeepCopy()); 
+            } 
+ 
             void OutputHtml(IOutputStream &str) const;
             static std::pair<TIndexedChunkPtr, const char *> Construct(const char *serialized);
             TString ToString() const {
@@ -353,9 +353,9 @@ namespace NKikimr {
             }
 
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
-                ChunkPtr->GetOwnedChunks(chunks);
-            }
-
+                ChunkPtr->GetOwnedChunks(chunks); 
+            } 
+ 
         private:
             TOneChunkPtr ChunkPtr;
             TOneChunkIndexPtr IndexPtr;
@@ -490,7 +490,7 @@ namespace NKikimr {
                     ++ChunkIt;
                     if (ChunkIt != SnapPtr->ManyIdxChunks.end()) {
                         IdxBulkIt = (*ChunkIt)->GetIndexIterator();
-                        IdxBulkIt.SeekToFirst();
+                        IdxBulkIt.SeekToFirst(); 
                         Y_VERIFY_DEBUG(IdxBulkIt.Valid(), "ChunkIdx# %u", (*ChunkIt)->GetChunkIdx());
                     }
                 }
@@ -564,12 +564,12 @@ namespace NKikimr {
 
             // cut log because we synced
             ui32 TrimLog(ui64 confirmedCutLsn,
-                         std::shared_ptr<IActorNotify> notifier,
+                         std::shared_ptr<IActorNotify> notifier, 
                          TVector<ui32> &chunks);
             // force to delete nchunks (if we don't have space for instance);
             // returns new LogStartLsn
             ui64 DeleteChunks(ui32 nchunks,
-                              std::shared_ptr<IActorNotify> notifier,
+                              std::shared_ptr<IActorNotify> notifier, 
                               TVector<ui32> &chunks);
             void UpdateIndex(ui32 chunkIdx, const TVector<TSyncLogPageSnap> &pages);
             void UpdateIndex(const TDeltaToDiskRecLog &delta);

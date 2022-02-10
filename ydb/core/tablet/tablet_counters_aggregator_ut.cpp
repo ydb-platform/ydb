@@ -45,7 +45,7 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
     for (const auto& a : cc) {
         THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>();
         for (auto i = 1; i <= NODES; ++i) {
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(i, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(i, "::", "localhost", "localhost", 1234, TNodeLocation())); 
         }
         runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
     }
@@ -110,9 +110,9 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         runtime.DispatchEvents(options);
         for (const auto& a : cc) {
             THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>();
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation())); 
+            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation())); 
+            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation())); 
             runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
         }
 
@@ -208,9 +208,9 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         runtime.DispatchEvents(options);
         for (const auto& a : cc) {
             THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>();
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation())); 
+            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation())); 
+            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation())); 
             runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
         }
 

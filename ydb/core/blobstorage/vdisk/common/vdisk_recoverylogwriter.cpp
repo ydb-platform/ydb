@@ -64,12 +64,12 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         // TQueueItem
         ////////////////////////////////////////////////////////////////////////////
         struct TQueueItem {
-            std::unique_ptr<IEventHandle> Ev;
+            std::unique_ptr<IEventHandle> Ev; 
             ui64 LsnSegmentStart;
             ui64 Lsn;
 
-            TQueueItem(std::unique_ptr<IEventHandle> ev, ui64 lsnSegmentStart, ui64 lsn)
-                : Ev(std::move(ev))
+            TQueueItem(std::unique_ptr<IEventHandle> ev, ui64 lsnSegmentStart, ui64 lsn) 
+                : Ev(std::move(ev)) 
                 , LsnSegmentStart(lsnSegmentStart)
                 , Lsn(lsn)
             {
@@ -105,23 +105,23 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             const TQueueItem *item = nullptr;
             while (!Queue.empty() && ((item = &Queue.top())->LsnSegmentStart == CurSentLsn + 1)) {
                 CurSentLsn = item->Lsn;
-                std::unique_ptr<IEventHandle> ev = std::move(const_cast<TQueueItem*>(item)->Ev);
+                std::unique_ptr<IEventHandle> ev = std::move(const_cast<TQueueItem*>(item)->Ev); 
                 ui32 type = ev->Type;
                 switch (type) {
-                    case TEvBlobStorage::EvLog:
-                        LWTRACK(VDiskRecoveryLogWriterVPutIsSent, ev->Get<NPDisk::TEvLog>()->Orbit, Owner, item->Lsn);
-                        break;
-                    case TEvBlobStorage::EvMultiLog:
-                        {
-                            NPDisk::TEvMultiLog *evLogs = ev->Get<NPDisk::TEvMultiLog>();
-                            for (auto &log : evLogs->Logs) {
-                                LWTRACK(VDiskRecoveryLogWriterVPutIsSent, log->Orbit, Owner, log->Lsn);
-                            }
-                            break;
+                    case TEvBlobStorage::EvLog: 
+                        LWTRACK(VDiskRecoveryLogWriterVPutIsSent, ev->Get<NPDisk::TEvLog>()->Orbit, Owner, item->Lsn); 
+                        break; 
+                    case TEvBlobStorage::EvMultiLog: 
+                        { 
+                            NPDisk::TEvMultiLog *evLogs = ev->Get<NPDisk::TEvMultiLog>(); 
+                            for (auto &log : evLogs->Logs) { 
+                                LWTRACK(VDiskRecoveryLogWriterVPutIsSent, log->Orbit, Owner, log->Lsn); 
+                            } 
+                            break; 
                         }
                 }
                 Queue.pop();
-                ctx.ExecutorThread.Send(ev.release());
+                ctx.ExecutorThread.Send(ev.release()); 
             }
         }
 
@@ -136,17 +136,17 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             *LsmLogBytesWritten += msgSize;
             // update generic counters
             Counters.Update(signature, msgSize);
-            std::unique_ptr<IEventHandle> converted(ev->Forward(YardID).Release());
+            std::unique_ptr<IEventHandle> converted(ev->Forward(YardID).Release()); 
 
             if (lsnSegmentStart == CurSentLsn + 1) {
                 // rewrite and send message;
                 LWTRACK(VDiskRecoveryLogWriterVPutIsSent, converted->Get<NPDisk::TEvLog>()->Orbit, Owner, lsn);
-                ctx.ExecutorThread.Send(converted.release());
+                ctx.ExecutorThread.Send(converted.release()); 
                 CurSentLsn = lsn;
                 // proceed with elements waiting in the queue
                 ProcessQueue(ctx);
             } else {
-                Queue.push(TQueueItem(std::move(converted), lsnSegmentStart, lsn));
+                Queue.push(TQueueItem(std::move(converted), lsnSegmentStart, lsn)); 
             }
         }
 
@@ -170,16 +170,16 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 Counters.Update(signature, msgSize);
                 LWTRACK(VDiskRecoveryLogWriterVPutIsSent, log->Orbit, Owner, lsn);
             }
-            std::unique_ptr<IEventHandle> converted(ev->Forward(YardID).Release());
+            std::unique_ptr<IEventHandle> converted(ev->Forward(YardID).Release()); 
 
             if (lsnSegmentStart == CurSentLsn + 1) {
                 // rewrite and send message;
-                ctx.ExecutorThread.Send(converted.release());
+                ctx.ExecutorThread.Send(converted.release()); 
                 CurSentLsn = lsn;
                 // proceed with elements waiting in the queue
                 ProcessQueue(ctx);
             } else {
-                Queue.push(TQueueItem(std::move(converted), lsnSegmentStart, lsn));
+                Queue.push(TQueueItem(std::move(converted), lsnSegmentStart, lsn)); 
             }
         }
 
@@ -194,16 +194,16 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(NPDisk::TEvLog, Handle)
+        STRICT_STFUNC(StateFunc, 
+            HFunc(NPDisk::TEvLog, Handle) 
             HFunc(NPDisk::TEvMultiLog, Handle)
-            HFunc(TEvBlobStorage::TEvVCompact, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-        )
+            HFunc(TEvBlobStorage::TEvVCompact, Handle) 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+        ) 
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_RECOVERY_LOG_WRITER;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_RECOVERY_LOG_WRITER; 
         }
 
         TRecoveryLogWriter(const TActorId &yardID, const TActorId &skeletonID,

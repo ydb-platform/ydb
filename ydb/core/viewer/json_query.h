@@ -32,8 +32,8 @@ class TJsonQuery : public TActorBootstrapped<TJsonQuery> {
     TString Stats;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::VIEWER_HANDLER; 
     }
 
     TJsonQuery(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)

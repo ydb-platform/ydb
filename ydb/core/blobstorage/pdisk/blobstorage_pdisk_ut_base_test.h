@@ -89,7 +89,7 @@ protected:
         NMon::TEvHttpInfoRes *HttpResult;
         NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate *whiteboardPDiskResult;
         NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate *whiteboardVDiskResult;
-        TEvBlobStorage::TEvControllerUpdateDiskStatus *whiteboardDiskMetricsResult;
+        TEvBlobStorage::TEvControllerUpdateDiskStatus *whiteboardDiskMetricsResult; 
 
         TResponseData() {
             Clear();
@@ -338,7 +338,7 @@ protected:
         VERBOSE_COUT("Got " << ev->Get()->ToString());
         ActTestFSM(ctx);
     }
-    void Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr &ev, const TActorContext &ctx) { 
         LastResponse.whiteboardDiskMetricsResult = ev->Get();
         VERBOSE_COUT("Got " << ev->Get()->ToString());
         ActTestFSM(ctx);
@@ -371,7 +371,7 @@ public:
             HFunc(NMon::TEvHttpInfoRes, Handle);
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate, Handle);
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle);
-            HFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
+            HFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle); 
             HFunc(TEvTablet::TEvBoot, HandleBoot);
         }
     }

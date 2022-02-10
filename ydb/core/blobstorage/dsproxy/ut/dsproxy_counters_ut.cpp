@@ -60,7 +60,7 @@ Y_UNIT_TEST(PutGeneratedSubrequestBytes) {
     };
 
     TEvBlobStorage::TEvPut::TPtr put = testState.CreatePutRequest(blobs[0], tactic, handleClass);
-    runtime.Register(env.CreatePutRequestActor(put).release());
+    runtime.Register(env.CreatePutRequestActor(put).release()); 
 
     TMap<TPartLocation, NKikimrProto::EReplyStatus> specialStatuses;
     for (ui64 part = 1; part <= env.Info->Type.TotalPartCount(); ++part) {
@@ -114,7 +114,7 @@ Y_UNIT_TEST(MultiPutGeneratedSubrequestBytes) {
 
     TBatchedVec<TEvBlobStorage::TEvPut::TPtr> batched;
     testState.CreatePutRequests(blobs, std::back_inserter(batched), tactic, handleClass);
-    runtime.Register(env.CreatePutRequestActor(batched, tactic, handleClass).release());
+    runtime.Register(env.CreatePutRequestActor(batched, tactic, handleClass).release()); 
 
     TMap<TPartLocation, NKikimrProto::EReplyStatus> specialStatuses;
     for (ui64 part = 1; part <= env.Info->Type.TotalPartCount(); ++part) {

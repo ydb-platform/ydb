@@ -35,7 +35,7 @@ class TTrafficInterrupter
         TInet6StreamSocket* Source = nullptr;
         TInet6StreamSocket* Destination = nullptr;
         TList<TConnectionDescriptor>::iterator ListIterator;
-        TInstant Timestamp;
+        TInstant Timestamp; 
         TPriorityQueue<std::pair<TInstant, TDelayedPacket>, TVector<std::pair<TInstant, TDelayedPacket>>, TCompare> DelayedQueue;
 
         TDirectedConnection(TInet6StreamSocket* source, TInet6StreamSocket* destination)
@@ -89,10 +89,10 @@ public:
         Y_VERIFY(ListenSocket.Bind(&addr) == 0);
         Y_VERIFY(ListenSocket.Listen(5) == 0);
 
-        DelayTraffic = (Bandwidth == 0.0) ? false : true;
-
+        DelayTraffic = (Bandwidth == 0.0) ? false : true; 
+ 
         ForwardAddrress.Reset(new TSockAddrInet6(Address.data(), ForwardPort));
-        const ui32 BufSize = DelayTraffic ? 4096 : 65536 + 4096;
+        const ui32 BufSize = DelayTraffic ? 4096 : 65536 + 4096; 
         Buf.resize(BufSize);
     }
 
@@ -154,7 +154,7 @@ private:
                 RandomlyDisconnect();
             }
             if (!RejectingTraffic) {
-                TDuration timeout = DefaultPollTimeout;
+                TDuration timeout = DefaultPollTimeout; 
                 auto updateTimout = [&timeout](TDirectedConnection& conn) {
                     if (conn.DelayedQueue) {
                         timeout = Min(timeout, conn.DelayedQueue.top().first - TInstant::Now());
@@ -163,7 +163,7 @@ private:
                 for (auto& it : Connections) {
                     updateTimout(it.ForwardConnection);
                     updateTimout(it.BackwardConnection);
-                }
+                } 
                 pollReadyCount = SocketPoller.WaitT(Events.data(), Events.size(), timeout);
                 if (pollReadyCount > 0) {
                     for (int i = 0; i < pollReadyCount; i++) {
@@ -229,11 +229,11 @@ private:
                 if (DelayTraffic) {
                     // put packet into DelayQueue
                     const TDuration baseDelay = TDuration::MicroSeconds(recvSize * 1e6 / Bandwidth);
-                    const TInstant now = TInstant::Now();
-                    directedConnection->Timestamp = Max(now, directedConnection->Timestamp) + baseDelay;
-                    TDelayedPacket pkt;
-                    pkt.ForwardSocket = directedConnection->Destination;
-                    pkt.Data.resize(recvSize);
+                    const TInstant now = TInstant::Now(); 
+                    directedConnection->Timestamp = Max(now, directedConnection->Timestamp) + baseDelay; 
+                    TDelayedPacket pkt; 
+                    pkt.ForwardSocket = directedConnection->Destination; 
+                    pkt.Data.resize(recvSize); 
                     memcpy(pkt.Data.data(), Buf.data(), recvSize);
                     directedConnection->DelayedQueue.emplace(directedConnection->Timestamp, std::move(pkt));
                 } else {

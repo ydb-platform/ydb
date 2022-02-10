@@ -31,8 +31,8 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
         struct TEvCleanupDeadTablets : TEventLocal<TEvCleanupDeadTablets, EvCleanupDeadTablets> {};
     };
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::NODE_WHITEBOARD_SERVICE;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::NODE_WHITEBOARD_SERVICE; 
     }
 
     void Bootstrap(const TActorContext &ctx) {
@@ -73,7 +73,7 @@ protected:
     std::unordered_map<std::pair<TTabletId, TFollowerId>, NKikimrWhiteboard::TTabletStateInfo> TabletStateInfo;
     std::unordered_map<TString, NKikimrWhiteboard::TNodeStateInfo> NodeStateInfo;
     std::unordered_map<ui32, NKikimrWhiteboard::TPDiskStateInfo> PDiskStateInfo;
-    std::unordered_map<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, THash<TVDiskID>> VDiskStateInfo;
+    std::unordered_map<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, THash<TVDiskID>> VDiskStateInfo; 
     std::unordered_map<ui32, NKikimrWhiteboard::TBSGroupStateInfo> BSGroupStateInfo;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
@@ -105,26 +105,26 @@ protected:
             const ::google::protobuf::Message& protoFrom,
             const ::google::protobuf::FieldDescriptor* field,
             PropertyType (::google::protobuf::Reflection::* getter)(const ::google::protobuf::Message&, const ::google::protobuf::FieldDescriptor*) const,
-            void (::google::protobuf::Reflection::* setter)(::google::protobuf::Message*, const ::google::protobuf::FieldDescriptor*, PropertyType) const,
-            PropertyType defaultVal) {
+            void (::google::protobuf::Reflection::* setter)(::google::protobuf::Message*, const ::google::protobuf::FieldDescriptor*, PropertyType) const, 
+            PropertyType defaultVal) { 
         int modified = 0;
         bool has = reflectionTo.HasField(protoTo, field);
         PropertyType newVal = (reflectionFrom.*getter)(protoFrom, field);
         if (!has) {
-            if (field->has_default_value() && newVal == defaultVal) {
-                reflectionTo.ClearField(&protoTo, field);
-            } else {
-                (reflectionTo.*setter)(&protoTo, field, newVal);
-            }
+            if (field->has_default_value() && newVal == defaultVal) { 
+                reflectionTo.ClearField(&protoTo, field); 
+            } else { 
+                (reflectionTo.*setter)(&protoTo, field, newVal); 
+            } 
             modified = 100;
         } else {
             PropertyType oldVal = (reflectionTo.*getter)(protoTo, field);
             if (oldVal != newVal) {
-                if (field->has_default_value() && newVal == defaultVal) {
-                    reflectionTo.ClearField(&protoTo, field);
-                } else {
-                    (reflectionTo.*setter)(&protoTo, field, newVal);
-                }
+                if (field->has_default_value() && newVal == defaultVal) { 
+                    reflectionTo.ClearField(&protoTo, field); 
+                } else { 
+                    (reflectionTo.*setter)(&protoTo, field, newVal); 
+                } 
                 const auto& options(field->options());
                 if (options.HasExtension(NKikimrWhiteboard::InsignificantChangeAmount)) {
                     ui64 insignificantChangeAmount = options.GetExtension(NKikimrWhiteboard::InsignificantChangeAmount);
@@ -279,42 +279,42 @@ protected:
                     FieldDescriptor::CppType type = field->cpp_type();
                     switch (type) {
                     case FieldDescriptor::CPPTYPE_INT32: {
-                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetInt32, &Reflection::SetInt32, field->default_value_int32());
+                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetInt32, &Reflection::SetInt32, field->default_value_int32()); 
                         break;
                     }
                     case FieldDescriptor::CPPTYPE_INT64: {
-                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetInt64, &Reflection::SetInt64, field->default_value_int64());
+                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetInt64, &Reflection::SetInt64, field->default_value_int64()); 
                         break;
                     }
                     case FieldDescriptor::CPPTYPE_UINT32: {
-                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetUInt32, &Reflection::SetUInt32, field->default_value_uint32());
+                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetUInt32, &Reflection::SetUInt32, field->default_value_uint32()); 
                         break;
                     }
                     case FieldDescriptor::CPPTYPE_UINT64: {
-                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetUInt64, &Reflection::SetUInt64, field->default_value_uint64());
+                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetUInt64, &Reflection::SetUInt64, field->default_value_uint64()); 
                         break;
                     }
                     case FieldDescriptor::CPPTYPE_DOUBLE: {
-                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetDouble, &Reflection::SetDouble, field->default_value_double());
+                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetDouble, &Reflection::SetDouble, field->default_value_double()); 
                         break;
                     }
                     case FieldDescriptor::CPPTYPE_FLOAT: {
-                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetFloat, &Reflection::SetFloat, field->default_value_float());
+                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetFloat, &Reflection::SetFloat, field->default_value_float()); 
                         break;
                     }
                     case FieldDescriptor::CPPTYPE_BOOL: {
-                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetBool, &Reflection::SetBool, field->default_value_bool());
+                        modified += MergeProtoField(reflectionTo, reflectionFrom, protoTo, protoFrom, field, &Reflection::GetBool, &Reflection::SetBool, field->default_value_bool()); 
                         break;
                     }
                     case FieldDescriptor::CPPTYPE_ENUM: {
                         bool has = reflectionTo.HasField(protoTo, field);
                         auto val = reflectionFrom.GetEnum(protoFrom, field);
                         if (!has || reflectionTo.GetEnum(protoTo, field)->number() != val->number()) {
-                            if (field->has_default_value() && val->number() == field->default_value_enum()->number()) {
-                                reflectionTo.ClearField(&protoTo, field);
-                            } else {
-                                reflectionTo.SetEnum(&protoTo, field, val);
-                            }
+                            if (field->has_default_value() && val->number() == field->default_value_enum()->number()) { 
+                                reflectionTo.ClearField(&protoTo, field); 
+                            } else { 
+                                reflectionTo.SetEnum(&protoTo, field, val); 
+                            } 
                             modified += 100;
                         }
                         break;
@@ -323,11 +323,11 @@ protected:
                         bool has = reflectionTo.HasField(protoTo, field);
                         auto val = reflectionFrom.GetString(protoFrom, field);
                         if (!has || reflectionTo.GetString(protoTo, field) != val) {
-                            if (field->has_default_value() && field->default_value_string() == val) {
-                                reflectionTo.ClearField(&protoTo, field);
-                            } else {
-                                reflectionTo.SetString(&protoTo, field, val);
-                            }
+                            if (field->has_default_value() && field->default_value_string() == val) { 
+                                reflectionTo.ClearField(&protoTo, field); 
+                            } else { 
+                                reflectionTo.SetString(&protoTo, field, val); 
+                            } 
                             modified += 100;
                         }
                         break;
@@ -353,7 +353,7 @@ protected:
             HFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
             HFunc(TEvWhiteboard::TEvPDiskStateDelete, Handle);
             HFunc(TEvWhiteboard::TEvVDiskStateUpdate, Handle);
-            HFunc(TEvWhiteboard::TEvVDiskStateGenerationChange, Handle);
+            HFunc(TEvWhiteboard::TEvVDiskStateGenerationChange, Handle); 
             HFunc(TEvWhiteboard::TEvVDiskStateDelete, Handle);
             HFunc(TEvWhiteboard::TEvVDiskStateRequest, Handle);
             HFunc(TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
@@ -408,40 +408,40 @@ protected:
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateUpdate::TPtr &ev, const TActorContext &ctx) {
-        auto& record = ev->Get()->Record;
-        const auto& key = VDiskIDFromVDiskID(record.GetVDiskId());
-        if (ev->Get()->Initial) {
-            auto& value = VDiskStateInfo[key];
-            value = record;
-            value.SetChangeTime(ctx.Now().MilliSeconds());
-            UpdateSystemState(ctx);
-        } else if (const auto it = VDiskStateInfo.find(key); it != VDiskStateInfo.end() &&
-                it->second.GetInstanceGuid() == record.GetInstanceGuid()) {
-            auto& value = it->second;
-            if (CheckedMerge(value, record) >= 100) {
-                value.SetChangeTime(ctx.Now().MilliSeconds());
-                UpdateSystemState(ctx);
-            }
+        auto& record = ev->Get()->Record; 
+        const auto& key = VDiskIDFromVDiskID(record.GetVDiskId()); 
+        if (ev->Get()->Initial) { 
+            auto& value = VDiskStateInfo[key]; 
+            value = record; 
+            value.SetChangeTime(ctx.Now().MilliSeconds()); 
+            UpdateSystemState(ctx); 
+        } else if (const auto it = VDiskStateInfo.find(key); it != VDiskStateInfo.end() && 
+                it->second.GetInstanceGuid() == record.GetInstanceGuid()) { 
+            auto& value = it->second; 
+            if (CheckedMerge(value, record) >= 100) { 
+                value.SetChangeTime(ctx.Now().MilliSeconds()); 
+                UpdateSystemState(ctx); 
+            } 
         }
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateDelete::TPtr &ev, const TActorContext &ctx) {
-        if (VDiskStateInfo.erase(VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskId()))) {
-            UpdateSystemState(ctx);
-        }
-    }
-
-    void Handle(TEvWhiteboard::TEvVDiskStateGenerationChange::TPtr &ev, const TActorContext &ctx) {
-        auto *msg = ev->Get();
-        if (const auto it = VDiskStateInfo.find(msg->VDiskId); it != VDiskStateInfo.end() &&
-                it->second.GetInstanceGuid() == msg->InstanceGuid) {
-            auto node = VDiskStateInfo.extract(it);
-            node.key().GroupGeneration = msg->Generation;
-            VDiskStateInfo.insert(std::move(node));
-            UpdateSystemState(ctx);
-        }
-    }
-
+        if (VDiskStateInfo.erase(VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskId()))) { 
+            UpdateSystemState(ctx); 
+        } 
+    } 
+ 
+    void Handle(TEvWhiteboard::TEvVDiskStateGenerationChange::TPtr &ev, const TActorContext &ctx) { 
+        auto *msg = ev->Get(); 
+        if (const auto it = VDiskStateInfo.find(msg->VDiskId); it != VDiskStateInfo.end() && 
+                it->second.GetInstanceGuid() == msg->InstanceGuid) { 
+            auto node = VDiskStateInfo.extract(it); 
+            node.key().GroupGeneration = msg->Generation; 
+            VDiskStateInfo.insert(std::move(node)); 
+            UpdateSystemState(ctx); 
+        } 
+    } 
+ 
     void Handle(TEvWhiteboard::TEvBSGroupStateUpdate::TPtr &ev, const TActorContext &ctx) {
         auto& bSGroupStateInfo = BSGroupStateInfo[ev->Get()->Record.GetGroupID()];
         if (CheckedMerge(bSGroupStateInfo, ev->Get()->Record) >= 100) {
@@ -511,15 +511,15 @@ protected:
                 ++yellowFlags;
             } else {
                 switch (pr.second.GetState()) {
-                case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
-                case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
-                case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError:
-                case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
-                case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
-                case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
+                case NKikimrBlobStorage::TPDiskState::InitialFormatReadError: 
+                case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError: 
+                case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError: 
+                case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError: 
+                case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError: 
+                case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError: 
                     pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Red);
                     break;
-                case NKikimrBlobStorage::TPDiskState::OpenFileError:
+                case NKikimrBlobStorage::TPDiskState::OpenFileError: 
                     pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Yellow);
                     ++yellowFlags;
                     break;

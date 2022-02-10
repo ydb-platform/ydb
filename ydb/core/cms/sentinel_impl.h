@@ -77,7 +77,7 @@ private:
 class TClusterMap {
 public:
     using TPDiskIDSet = THashSet<TPDiskID, TPDiskIDHash>;
-    using TDistribution = THashMap<TString, TPDiskIDSet>;
+    using TDistribution = THashMap<TString, TPDiskIDSet>; 
 
     TCmsStatePtr State;
     TDistribution ByDataCenter;

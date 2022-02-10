@@ -44,7 +44,7 @@ namespace NKikimr {
         void TOrderedLz4FragmentWriter::Finish(TString *respData) {
             // reorder
             TReorderCodec codec(TReorderCodec::EEncoding::Trivial);
-            const TString reordered = codec.Encode(Records);
+            const TString reordered = codec.Encode(Records); 
             // compress
             const TString compressed = GetLz4Codec()->Encode(reordered);
             // header
@@ -63,7 +63,7 @@ namespace NKikimr {
         void TCustomCodecFragmentWriter::Finish(TString *respData) {
             // reorder
             TReorderCodec codec(TReorderCodec::EEncoding::Custom);
-            const TString result = codec.Encode(Records);
+            const TString result = codec.Encode(Records); 
             // header
             std::pair<const char *, size_t> hdr = GetCustomCodecHeader();
 

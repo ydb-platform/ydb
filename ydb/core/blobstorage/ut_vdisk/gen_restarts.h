@@ -13,16 +13,16 @@ struct TWriteRestartReadSettings {
     const ui32 MsgSize;
     const EClass Cls;
     // VDisk setup for write phase
-    const std::shared_ptr<IVDiskSetup> WriteRunSetup;
+    const std::shared_ptr<IVDiskSetup> WriteRunSetup; 
     // VDisk setup for read phase
-    const std::shared_ptr<IVDiskSetup> ReadRunSetup;
+    const std::shared_ptr<IVDiskSetup> ReadRunSetup; 
 
     TWriteRestartReadSettings(
             ui32 msgNum,
             ui32 msgSize,
             EClass cls,
-            std::shared_ptr<IVDiskSetup> writeRunSetup,
-            std::shared_ptr<IVDiskSetup> readRunSetup)
+            std::shared_ptr<IVDiskSetup> writeRunSetup, 
+            std::shared_ptr<IVDiskSetup> readRunSetup) 
         : MsgNum(msgNum)
         , MsgSize(msgSize)
         , Cls(cls)
@@ -34,7 +34,7 @@ struct TWriteRestartReadSettings {
             ui32 msgNum,
             ui32 msgSize,
             EClass cls,
-            std::shared_ptr<IVDiskSetup> setup) {
+            std::shared_ptr<IVDiskSetup> setup) { 
         return TWriteRestartReadSettings(msgNum, msgSize, cls, setup, setup);
     }
 };
@@ -49,17 +49,17 @@ struct TMultiPutWriteRestartReadSettings {
     const ui32 MsgSize;
     const EClass Cls;
     // VDisk setup for write phase
-    const std::shared_ptr<IVDiskSetup> WriteRunSetup;
+    const std::shared_ptr<IVDiskSetup> WriteRunSetup; 
     // VDisk setup for read phase
-    const std::shared_ptr<IVDiskSetup> ReadRunSetup;
+    const std::shared_ptr<IVDiskSetup> ReadRunSetup; 
 
     TMultiPutWriteRestartReadSettings(
             ui32 msgNum,
             ui32 batchSize,
             ui32 msgSize,
             EClass cls,
-            std::shared_ptr<IVDiskSetup> writeRunSetup,
-            std::shared_ptr<IVDiskSetup> readRunSetup)
+            std::shared_ptr<IVDiskSetup> writeRunSetup, 
+            std::shared_ptr<IVDiskSetup> readRunSetup) 
         : MsgNum(msgNum)
         , BatchSize(batchSize)
         , MsgSize(msgSize)
@@ -73,7 +73,7 @@ struct TMultiPutWriteRestartReadSettings {
             ui32 batchSize,
             ui32 msgSize,
             EClass cls,
-            std::shared_ptr<IVDiskSetup> setup) {
+            std::shared_ptr<IVDiskSetup> setup) { 
         return TMultiPutWriteRestartReadSettings(msgNum, batchSize, msgSize, cls, setup, setup);
     }
 };

@@ -98,7 +98,7 @@ namespace NKikimr {
         };
 
         struct TBlockRecWithSerial : public TBlockRec {
-            explicit TBlockRecWithSerial() = default;
+            explicit TBlockRecWithSerial() = default; 
 
             explicit TBlockRecWithSerial(const TBlockRec &rec, ui32 counter)
                 : TBlockRec(rec)
@@ -110,18 +110,18 @@ namespace NKikimr {
                 , Counter(counter)
             {}
 
-            ui32 Counter = 0;
-        };
+            ui32 Counter = 0; 
+        }; 
+ 
+        struct TBlockRecWithSerialV2 : public TBlockRecV2 { 
+            explicit TBlockRecWithSerialV2() = default; 
+ 
+            explicit TBlockRecWithSerialV2(const TBlockRecV2& rec, ui32 counter) 
+                : TBlockRecV2(rec) 
+                , Counter(counter) 
+            {} 
 
-        struct TBlockRecWithSerialV2 : public TBlockRecV2 {
-            explicit TBlockRecWithSerialV2() = default;
-
-            explicit TBlockRecWithSerialV2(const TBlockRecV2& rec, ui32 counter)
-                : TBlockRecV2(rec)
-                , Counter(counter)
-            {}
-
-            ui32 Counter = 0;
+            ui32 Counter = 0; 
         };
 
         struct TBarrierRecWithSerial : public TBarrierRec {
@@ -136,8 +136,8 @@ namespace NKikimr {
             {}
 
             explicit TBarrierRecWithSerial(ui64 tabletId, ui32 channel, ui32 gen, ui32 genCounter, ui32 collGen,
-                                  ui32 collStep, bool hard, ui64 ingressRaw, ui32 counter)
-                : TBarrierRec(tabletId, channel, gen, genCounter, collGen, collStep, hard, ingressRaw)
+                                  ui32 collStep, bool hard, ui64 ingressRaw, ui32 counter) 
+                : TBarrierRec(tabletId, channel, gen, genCounter, collGen, collStep, hard, ingressRaw) 
                 , Counter(counter)
             {}
 
@@ -145,13 +145,13 @@ namespace NKikimr {
         };
 #pragma pack(pop)
 
-        struct TRecordsWithSerial {
-            TVector<TLogoBlobRecWithSerial> LogoBlobs;
-            TVector<TBlockRecWithSerial> Blocks;
-            TVector<TBarrierRecWithSerial> Barriers;
-            TVector<TBlockRecWithSerialV2> BlocksV2;
-        };
-
+        struct TRecordsWithSerial { 
+            TVector<TLogoBlobRecWithSerial> LogoBlobs; 
+            TVector<TBlockRecWithSerial> Blocks; 
+            TVector<TBarrierRecWithSerial> Barriers; 
+            TVector<TBlockRecWithSerialV2> BlocksV2; 
+        }; 
+ 
         ////////////////////////////////////////////////////////////////////////////
         // SyncLog message specific codec interface
         // It works with vectors of TLogoBlobRec, TBlockRec and TBarrierRec
@@ -159,13 +159,13 @@ namespace NKikimr {
         class ISpecificCodec {
         public:
             virtual ~ISpecificCodec() {}
-
+ 
             // NOTE: Encode method writes into arguments (sort them, for instance)
-            virtual TString Encode(TRecordsWithSerial& records) = 0;
-            virtual bool Decode(const char *pos, const char *end, TRecordsWithSerial& records) = 0;
-
-            bool DecodeString(const TString &s, TRecordsWithSerial& records) {
-                return Decode(s.data(), s.data() + s.size(), records);
+            virtual TString Encode(TRecordsWithSerial& records) = 0; 
+            virtual bool Decode(const char *pos, const char *end, TRecordsWithSerial& records) = 0; 
+ 
+            bool DecodeString(const TString &s, TRecordsWithSerial& records) { 
+                return Decode(s.data(), s.data() + s.size(), records); 
             }
         };
 
@@ -183,12 +183,12 @@ namespace NKikimr {
             TReorderCodec(EEncoding enc);
             ~TReorderCodec();
 
-            virtual TString Encode(TRecordsWithSerial& records) override;
-            virtual bool Decode(const char *pos, const char *end, TRecordsWithSerial& records) override;
+            virtual TString Encode(TRecordsWithSerial& records) override; 
+            virtual bool Decode(const char *pos, const char *end, TRecordsWithSerial& records) override; 
 
         private:
             class TImpl;
-            std::unique_ptr<TImpl> Impl;
+            std::unique_ptr<TImpl> Impl; 
         };
 
     } // NSyncLog

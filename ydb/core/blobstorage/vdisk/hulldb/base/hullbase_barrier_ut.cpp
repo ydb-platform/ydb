@@ -12,11 +12,11 @@ namespace NKikimr {
             bool res = false;
 
             res = TKeyBarrier::Parse(id, "[ 0:0:34:15]", explanation);
-            expected = TKeyBarrier(0, 0, 34, 15, false);
+            expected = TKeyBarrier(0, 0, 34, 15, false); 
             UNIT_ASSERT(res && id == expected);
 
             res = TKeyBarrier::Parse(id, "[ABC:0:34:15  ]", explanation);
-            expected = TKeyBarrier(0xABC, 0, 34, 15, false);
+            expected = TKeyBarrier(0xABC, 0, 34, 15, false); 
             UNIT_ASSERT(res && id == expected);
 
             res = TKeyBarrier::Parse(id, "[ABC:0:34:15 ", explanation);

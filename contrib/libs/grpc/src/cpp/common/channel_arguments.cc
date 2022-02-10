@@ -101,7 +101,7 @@ void ChannelArguments::SetSocketMutator(grpc_socket_mutator* mutator) {
       GPR_ASSERT(!replaced);
       arg.value.pointer.vtable->destroy(arg.value.pointer.p);
       arg.value.pointer = mutator_arg.value.pointer;
-      replaced = true;
+      replaced = true; 
     }
   }
 

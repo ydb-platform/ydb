@@ -1,15 +1,15 @@
-#include "selfping_actor.h"
-
+#include "selfping_actor.h" 
+ 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
-
+ 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/sliding_window/sliding_window.h>
-
-namespace NActors {
-
-namespace {
-
+ 
+namespace NActors { 
+ 
+namespace { 
+ 
 struct TEvPing: public TEventLocal<TEvPing, TEvents::THelloWorld::Ping> {
     TEvPing(double timeStart)
         : TimeStart(timeStart)
@@ -58,47 +58,47 @@ struct TAvgOperation {
 
 };
 
-class TSelfPingActor : public TActorBootstrapped<TSelfPingActor> {
-private:
-    const TDuration SendInterval;
-    const NMonitoring::TDynamicCounters::TCounterPtr Counter;
+class TSelfPingActor : public TActorBootstrapped<TSelfPingActor> { 
+private: 
+    const TDuration SendInterval; 
+    const NMonitoring::TDynamicCounters::TCounterPtr Counter; 
     const NMonitoring::TDynamicCounters::TCounterPtr CalculationTimeCounter;
-
+ 
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> SlidingWindow;
     NSlidingWindow::TSlidingWindow<TAvgOperation<ui64>> CalculationSlidingWindow;
-
+ 
     THPTimer Timer;
 
-public:
+public: 
     static constexpr auto ActorActivityType() {
         return SELF_PING_ACTOR;
     }
 
     TSelfPingActor(TDuration sendInterval, const NMonitoring::TDynamicCounters::TCounterPtr& counter,
             const NMonitoring::TDynamicCounters::TCounterPtr& calculationTimeCounter)
-        : SendInterval(sendInterval)
-        , Counter(counter)
+        : SendInterval(sendInterval) 
+        , Counter(counter) 
         , CalculationTimeCounter(calculationTimeCounter)
-        , SlidingWindow(TDuration::Seconds(15), 100)
+        , SlidingWindow(TDuration::Seconds(15), 100) 
         , CalculationSlidingWindow(TDuration::Seconds(15), 100)
-    {
-    }
-
-    void Bootstrap(const TActorContext& ctx)
-    {
-        Become(&TSelfPingActor::RunningState);
+    { 
+    } 
+ 
+    void Bootstrap(const TActorContext& ctx) 
+    { 
+        Become(&TSelfPingActor::RunningState); 
         SchedulePing(ctx, Timer.Passed());
-    }
-
-    STFUNC(RunningState)
-    {
-        switch (ev->GetTypeRewrite()) {
+    } 
+ 
+    STFUNC(RunningState) 
+    { 
+        switch (ev->GetTypeRewrite()) { 
             HFunc(TEvPing, HandlePing);
-        default:
-            Y_FAIL("TSelfPingActor::RunningState: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
-        }
-    }
-
+        default: 
+            Y_FAIL("TSelfPingActor::RunningState: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite()); 
+        } 
+    } 
+ 
     ui64 MeasureTaskDurationNs() {
         // Prepare worm test data
         // 11 * 11 * 3 * 8 = 2904 bytes, fits in L1 cache
@@ -147,37 +147,37 @@ public:
     }
 
     void HandlePing(TEvPing::TPtr &ev, const TActorContext &ctx)
-    {
+    { 
         const auto now = ctx.Now();
         const double hpNow = Timer.Passed();
-        const auto& e = *ev->Get();
+        const auto& e = *ev->Get(); 
         const double passedTime = hpNow - e.TimeStart;
         const ui64 delayUs = passedTime > 0.0 ? static_cast<ui64>(passedTime * 1e6) : 0;
-
+ 
         *Counter = SlidingWindow.Update(delayUs, now);
-
+ 
         ui64 d = MeasureTaskDurationNs();
         auto res = CalculationSlidingWindow.Update({1, d}, now);
         *CalculationTimeCounter = double(res.Sum) / double(res.Count + 1);
 
         SchedulePing(ctx, hpNow);
-    }
-
-private:
+    } 
+ 
+private: 
     void SchedulePing(const TActorContext &ctx, double hpNow) const
-    {
+    { 
         ctx.Schedule(SendInterval, new TEvPing(hpNow));
-    }
-};
-
-} // namespace
-
-IActor* CreateSelfPingActor(
-    TDuration sendInterval,
+    } 
+}; 
+ 
+} // namespace 
+ 
+IActor* CreateSelfPingActor( 
+    TDuration sendInterval, 
     const NMonitoring::TDynamicCounters::TCounterPtr& counter,
     const NMonitoring::TDynamicCounters::TCounterPtr& calculationTimeCounter)
-{
+{ 
     return new TSelfPingActor(sendInterval, counter, calculationTimeCounter);
-}
-
-} // NActors
+} 
+ 
+} // NActors 

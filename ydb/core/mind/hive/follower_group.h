@@ -38,13 +38,13 @@ struct TFollowerGroup {
             std::copy(allowedNodes.begin(), allowedNodes.end(), std::back_inserter(AllowedNodes));
         }
         {
-            if (const auto& x = followerGroup.GetAllowedDataCenters(); !x.empty()) {
-                AllowedDataCenters.insert(AllowedDataCenters.end(), x.begin(), x.end());
-            } else {
-                for (const auto& dataCenterId : followerGroup.GetAllowedDataCenterNumIDs()) {
-                    AllowedDataCenters.push_back(DataCenterToString(dataCenterId));
-                }
-            }
+            if (const auto& x = followerGroup.GetAllowedDataCenters(); !x.empty()) { 
+                AllowedDataCenters.insert(AllowedDataCenters.end(), x.begin(), x.end()); 
+            } else { 
+                for (const auto& dataCenterId : followerGroup.GetAllowedDataCenterNumIDs()) { 
+                    AllowedDataCenters.push_back(DataCenterToString(dataCenterId)); 
+                } 
+            } 
         }
         LocalNodeOnly = followerGroup.GetLocalNodeOnly();
         RequireDifferentNodes = followerGroup.GetRequireDifferentNodes();

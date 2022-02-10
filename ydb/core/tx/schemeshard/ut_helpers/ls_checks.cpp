@@ -743,9 +743,9 @@ TCheckFunc FollowerGroups(const TVector<NKikimrHive::TFollowerGroup>& followerGr
                 UNIT_ASSERT_VALUES_EQUAL(srcSG.GetAllowedNodeIDs(i), dstSG.GetAllowedNodeIDs(i));
             }
 
-            UNIT_ASSERT_VALUES_EQUAL(srcSG.AllowedDataCentersSize(), dstSG.AllowedDataCentersSize());
-            for(ui32 i = 0; i < srcSG.AllowedDataCentersSize(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(srcSG.GetAllowedDataCenters(i), dstSG.GetAllowedDataCenters(i));
+            UNIT_ASSERT_VALUES_EQUAL(srcSG.AllowedDataCentersSize(), dstSG.AllowedDataCentersSize()); 
+            for(ui32 i = 0; i < srcSG.AllowedDataCentersSize(); ++i) { 
+                UNIT_ASSERT_VALUES_EQUAL(srcSG.GetAllowedDataCenters(i), dstSG.GetAllowedDataCenters(i)); 
             }
             UNIT_ASSERT_VALUES_EQUAL(srcSG.GetRequireAllDataCenters(), dstSG.GetRequireAllDataCenters());
             UNIT_ASSERT_VALUES_EQUAL(srcSG.GetLocalNodeOnly(), dstSG.GetLocalNodeOnly());

@@ -88,9 +88,9 @@ namespace NKikimr {
             TLsnMngr mngr(0, 0, false);
             TParam p {&mngr, Its / threads};
             auto start = Now();
-            TVector<std::unique_ptr<TThread>> ts(threads);
+            TVector<std::unique_ptr<TThread>> ts(threads); 
             for (auto &t : ts) {
-                t = std::make_unique<TThread>(&AllocLsnForLocalUseFunc, &p);
+                t = std::make_unique<TThread>(&AllocLsnForLocalUseFunc, &p); 
             }
             for (auto &t : ts) {
                 t->Start();

@@ -41,7 +41,7 @@ namespace NKikimr {
                 // lsn
                 TLsnSeg seg = SlCtx->LsnMngr->AllocLsnForLocalUse();
                 // commit msg
-                auto commitMsg = std::make_unique<NPDisk::TEvLog>(SlCtx->PDiskCtx->Dsk->Owner,
+                auto commitMsg = std::make_unique<NPDisk::TEvLog>(SlCtx->PDiskCtx->Dsk->Owner, 
                         SlCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureSyncLogIdx,
                         CommitRecord, EntryPointSerializer.GetSerializedData(), seg, nullptr);
 
@@ -62,7 +62,7 @@ namespace NKikimr {
                                 "COMMIT: type# SyncLog msg# %s",
                                 commitMsg->CommitRecord.ToString().data()));
 
-                ctx.Send(SlCtx->LoggerID, commitMsg.release());
+                ctx.Send(SlCtx->LoggerID, commitMsg.release()); 
                 Become(&TThis::StateCommit);
             }
 
@@ -99,7 +99,7 @@ namespace NKikimr {
                     }
 
                     // generate write
-                    Parts->GenRefs();
+                    Parts->GenRefs(); 
                     Y_VERIFY_DEBUG(Parts->Size());
                     NPDisk::TEvChunkWrite::TPartsPtr p(Parts.Get());
                     ctx.Send(SlCtx->PDiskCtx->PDiskId,
@@ -132,7 +132,7 @@ namespace NKikimr {
                     ui32 offset = 0;
                     FillInPortion(PagesInChunk);
                     // generate write
-                    Parts->GenRefs();
+                    Parts->GenRefs(); 
                     Y_VERIFY_DEBUG(Parts->Size());
                     NPDisk::TEvChunkWrite::TPartsPtr p(Parts.Get());
                     ctx.Send(SlCtx->PDiskCtx->PDiskId,
@@ -173,8 +173,8 @@ namespace NKikimr {
             PDISK_TERMINATE_STATE_FUNC_DEF;
 
         public:
-            static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-                return NKikimrServices::TActivity::BS_SYNCLOG_COMMITTER;
+            static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+                return NKikimrServices::TActivity::BS_SYNCLOG_COMMITTER; 
             }
 
             TSyncLogCommitterActor(

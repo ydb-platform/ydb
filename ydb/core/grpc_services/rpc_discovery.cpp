@@ -140,8 +140,8 @@ class TListEndpointsRPC : public TActorBootstrapped<TListEndpointsRPC> {
     ui64 LookupCookie = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::GRPC_REQ;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::GRPC_REQ; 
     }
 
     TListEndpointsRPC(TEvListEndpointsRequest::TPtr &msg, TActorId cacheId)
@@ -395,8 +395,8 @@ public:
         }
 
         auto &nodeInfo = NameserviceResponse->Node;
-        if (nodeInfo && nodeInfo->Location.GetDataCenterId()) {
-            const auto &location = nodeInfo->Location.GetDataCenterId();
+        if (nodeInfo && nodeInfo->Location.GetDataCenterId()) { 
+            const auto &location = nodeInfo->Location.GetDataCenterId(); 
             if (IsSafeLocationMarker(location))
                 result->set_self_location(location);
         }

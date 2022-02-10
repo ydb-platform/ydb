@@ -10,7 +10,7 @@ namespace NMsgBusProxy {
 template <typename TDerived>
 class TMessageBusServerRequestBase : public TActorBootstrapped<TDerived>, public TMessageBusSessionIdentHolder {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::MSGBUS_PROXY_ACTOR; }
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::MSGBUS_PROXY_ACTOR; } 
 
     TMessageBusServerRequestBase(TBusMessageContext &msg) {
         InitSession(msg);

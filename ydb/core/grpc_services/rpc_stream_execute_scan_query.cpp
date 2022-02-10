@@ -249,8 +249,8 @@ private:
     };
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::GRPC_STREAM_REQ;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::GRPC_STREAM_REQ; 
     }
 
     TStreamExecuteScanQueryRPC(TRequestEv* request, ui64 rpcBufferSize)

@@ -12,9 +12,9 @@ namespace NConsole {
 
 class TImmediateControlsConfigurator : public TActorBootstrapped<TImmediateControlsConfigurator> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
     {
-        return NKikimrServices::TActivity::IMMEDITE_CONTROLS_CONFIGURATOR;
+        return NKikimrServices::TActivity::IMMEDITE_CONTROLS_CONFIGURATOR; 
     }
 
     TImmediateControlsConfigurator(TIntrusivePtr<TControlBoard> board,

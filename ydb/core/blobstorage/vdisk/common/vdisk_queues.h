@@ -23,7 +23,7 @@ namespace NKikimr {
         return gInfo->GetActorId(vdisk.VDiskIdShort);
     }
 
-    inline TActorId GetVDiskActorId(const std::pair<TVDiskID, TActorId> &p,
+    inline TActorId GetVDiskActorId(const std::pair<TVDiskID, TActorId> &p, 
             const TIntrusivePtr<NKikimr::TBlobStorageGroupInfo> &)
     {
         return p.second;
@@ -59,12 +59,12 @@ namespace NKikimr {
             if (vdisk != vCtx->ShortSelfVDisk) {
                 TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord = MakeIntrusive<NBackpressure::TFlowRecord>();
                 TActorId vdiskActorId = GetVDiskActorId(vdiskInfo, gInfo);
-                std::unique_ptr<IActor> queue;
-                queue.reset(CreateVDiskBackpressureClient(gInfo, vdisk,
+                std::unique_ptr<IActor> queue; 
+                queue.reset(CreateVDiskBackpressureClient(gInfo, vdisk, 
                         vDiskQueueId, groupCounters, vCtx, queueClientId, queueName,
                         interconnectChannel, vdiskActorId.NodeId() == parent.NodeId(),
                         TDuration::Minutes(1), flowRecord, NMonitoring::TCountableBase::EVisibility::Private));
-                TActorId serviceId = TActivationContext::Register(queue.release(), parent);
+                TActorId serviceId = TActivationContext::Register(queue.release(), parent); 
                 EmplaceToContainer(cont, vdisk, wrapper.Wrap(std::move(serviceId)));
             }
         }

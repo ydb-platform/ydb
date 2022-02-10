@@ -11,16 +11,16 @@ namespace NKikimr {
         : Modif(ENone)
     {}
 
-    std::unique_ptr<TEvSyncerCommit> TEvSyncerCommit::Local(ELocalState state, TVDiskEternalGuid guid) {
-        auto msg = std::make_unique<TEvSyncerCommit>();
+    std::unique_ptr<TEvSyncerCommit> TEvSyncerCommit::Local(ELocalState state, TVDiskEternalGuid guid) { 
+        auto msg = std::make_unique<TEvSyncerCommit>(); 
         msg->Modif = ELocalGuid;
         msg->LocalGuidInfo.SetState(state);
         msg->LocalGuidInfo.SetGuid(guid);
         return msg;
     }
 
-    std::unique_ptr<TEvSyncerCommit> TEvSyncerCommit::LocalFinal(TVDiskEternalGuid guid, ui64 dbBirthLsn) {
-        auto msg = std::make_unique<TEvSyncerCommit>();
+    std::unique_ptr<TEvSyncerCommit> TEvSyncerCommit::LocalFinal(TVDiskEternalGuid guid, ui64 dbBirthLsn) { 
+        auto msg = std::make_unique<TEvSyncerCommit>(); 
         msg->Modif = ELocalGuid;
         msg->LocalGuidInfo.SetState(TLocalVal::Final);
         msg->LocalGuidInfo.SetGuid(guid);
@@ -28,20 +28,20 @@ namespace NKikimr {
         return msg;
     }
 
-    std::unique_ptr<TEvSyncerCommit> TEvSyncerCommit::Remote(const TVDiskID &vdisk,
+    std::unique_ptr<TEvSyncerCommit> TEvSyncerCommit::Remote(const TVDiskID &vdisk, 
                                                      const NSyncer::TPeerSyncState &p) {
-        auto msg = std::make_unique<TEvSyncerCommit>();
+        auto msg = std::make_unique<TEvSyncerCommit>(); 
         msg->Modif = EVDiskEntry;
         msg->VDiskId = vdisk;
         p.Serialize(msg->VDiskEntry);
         return msg;
     }
 
-    std::unique_ptr<TEvSyncerCommit> TEvSyncerCommit::Remote(const TVDiskID &vdisk,
+    std::unique_ptr<TEvSyncerCommit> TEvSyncerCommit::Remote(const TVDiskID &vdisk, 
                                                      ESyncState state,
                                                      TVDiskEternalGuid guid,
                                                      void *cookie) {
-        auto msg = std::make_unique<TEvSyncerCommit>();
+        auto msg = std::make_unique<TEvSyncerCommit>(); 
         msg->Modif = EVDiskEntry;
         msg->VDiskId = vdisk;
         msg->Cookie = cookie;
@@ -60,7 +60,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TProtoState {
     public:
-        TProtoState(const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
+        TProtoState(const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top, 
                     TSyncerDataSerializer &&sds)
             : Top(top)
             , Sds(std::move(sds))
@@ -89,7 +89,7 @@ namespace NKikimr {
         }
 
     private:
-        std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
+        std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top; 
         TSyncerDataSerializer Sds;
     };
 
@@ -137,12 +137,12 @@ namespace NKikimr {
             TString data = State.Serialize();
             size_t dataSize = data.size();
             TLsnSeg seg = SyncerCtx->LsnMngr->AllocLsnForLocalUse();
-            auto msg = std::make_unique<NPDisk::TEvLog>(SyncerCtx->PDiskCtx->Dsk->Owner,
-                SyncerCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureSyncerState,
-                commitRec, data, seg, nullptr);
+            auto msg = std::make_unique<NPDisk::TEvLog>(SyncerCtx->PDiskCtx->Dsk->Owner, 
+                SyncerCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureSyncerState, 
+                commitRec, data, seg, nullptr); 
             SyncerCtx->MonGroup.SyncerLoggedBytes() += dataSize;
             ++SyncerCtx->MonGroup.SyncerLoggerRecords();
-            ctx.Send(SyncerCtx->LoggerId, msg.release());
+            ctx.Send(SyncerCtx->LoggerId, msg.release()); 
         }
 
         void Handle(TEvSyncerCommit::TPtr &ev, const TActorContext &ctx) {
@@ -232,27 +232,27 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(TEvSyncerCommit, Handle)
-            HFunc(TEvSyncerCommitDone, Handle)
-            HFunc(NPDisk::TEvLogResult, Handle)
-            HFunc(NPDisk::TEvCutLog, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
-        )
+        STRICT_STFUNC(StateFunc, 
+            HFunc(TEvSyncerCommit, Handle) 
+            HFunc(TEvSyncerCommitDone, Handle) 
+            HFunc(NPDisk::TEvLogResult, Handle) 
+            HFunc(NPDisk::TEvCutLog, Handle) 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup) 
+        ) 
 
         PDISK_TERMINATE_STATE_FUNC_DEF;
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_SYNCER_COMMITTER;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_SYNCER_COMMITTER; 
         }
 
         TSyncerCommitter(const TIntrusivePtr<TSyncerContext> &sc,
                          TSyncerDataSerializer &&sds)
             : TActorBootstrapped<TSyncerCommitter>()
             , SyncerCtx(sc)
-            , AdvanceEntryPointTimeout(SyncerCtx->Config->AdvanceEntryPointTimeout)
+            , AdvanceEntryPointTimeout(SyncerCtx->Config->AdvanceEntryPointTimeout) 
             , State(SyncerCtx->VCtx->Top, std::move(sds))
         {}
     };

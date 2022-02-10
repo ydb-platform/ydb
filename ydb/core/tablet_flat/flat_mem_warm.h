@@ -274,7 +274,7 @@ namespace NMem {
             ui32 dstIndex = 0;
 
             auto missing = ScratchMergeTags.begin();
-            for (const TTagWithPos& src : ScratchUpdateTags) {
+            for (const TTagWithPos& src : ScratchUpdateTags) { 
                 const TTag tag = src.first;
                 while (missing != ScratchMergeTags.end() && (*missing)->Tag < tag) {
                     update->Ops()[dstIndex++] = **missing;

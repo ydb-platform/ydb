@@ -32,12 +32,12 @@
 #ifndef KIKIMR_VDISK_SYNCLOG_ENTRY_POINT_PROTO_FORMAT
 #define KIKIMR_VDISK_SYNCLOG_ENTRY_POINT_PROTO_FORMAT 0
 #endif
-
-// This feature flag enables rope payload for protobuf events and may be switched
-// on after 19-6
-#ifndef KIKIMR_USE_PROTOBUF_WITH_PAYLOAD
-#define KIKIMR_USE_PROTOBUF_WITH_PAYLOAD 1
-#endif
+ 
+// This feature flag enables rope payload for protobuf events and may be switched 
+// on after 19-6 
+#ifndef KIKIMR_USE_PROTOBUF_WITH_PAYLOAD 
+#define KIKIMR_USE_PROTOBUF_WITH_PAYLOAD 1 
+#endif 
 
 // This feature flag enables use of column families in tables
 // Runtime support is expected to ship in 19-6, may be enabled in 19-8

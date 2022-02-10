@@ -11,40 +11,40 @@
 
 namespace NKikimr {
 
-struct EStrategyOutcome {
-    enum TValue {
-        IN_PROGRESS,
-        ERROR, // unrecoverable request error
-        DONE,
-    };
-
-    EStrategyOutcome() = default;
-    EStrategyOutcome(TValue value) : Value(value) {}
-    EStrategyOutcome(const EStrategyOutcome&) = default;
-    EStrategyOutcome(EStrategyOutcome&&) = default;
-    EStrategyOutcome& operator =(const EStrategyOutcome&) = default;
-    EStrategyOutcome& operator =(EStrategyOutcome&&) = default;
-
-    static EStrategyOutcome Error(TString err) {
-        EStrategyOutcome res(ERROR);
-        res.ErrorReason = std::move(err);
-        return res;
-    }
-
-    operator TValue() const { return Value; }
-
-    TValue Value;
-    TString ErrorReason;
-};
-
+struct EStrategyOutcome { 
+    enum TValue { 
+        IN_PROGRESS, 
+        ERROR, // unrecoverable request error 
+        DONE, 
+    }; 
+ 
+    EStrategyOutcome() = default; 
+    EStrategyOutcome(TValue value) : Value(value) {} 
+    EStrategyOutcome(const EStrategyOutcome&) = default; 
+    EStrategyOutcome(EStrategyOutcome&&) = default; 
+    EStrategyOutcome& operator =(const EStrategyOutcome&) = default; 
+    EStrategyOutcome& operator =(EStrategyOutcome&&) = default; 
+ 
+    static EStrategyOutcome Error(TString err) { 
+        EStrategyOutcome res(ERROR); 
+        res.ErrorReason = std::move(err); 
+        return res; 
+    } 
+ 
+    operator TValue() const { return Value; } 
+ 
+    TValue Value; 
+    TString ErrorReason; 
+}; 
+ 
 struct TBlobState {
-    enum class ESituation {
-        Unknown,
-        Error,
-        Absent,
-        Lost,
-        Present, // Restore strategy takes action only on theese
-        Sent,    // For Restore and Put strategies
+    enum class ESituation { 
+        Unknown, 
+        Error, 
+        Absent, 
+        Lost, 
+        Present, // Restore strategy takes action only on theese 
+        Sent,    // For Restore and Put strategies 
     };
     struct TState {
         TFragmentedBuffer Data;
@@ -61,28 +61,28 @@ struct TBlobState {
     };
     struct TDiskPart {
         TIntervalSet<i32> Requested;
-        ESituation Situation = ESituation::Unknown;
+        ESituation Situation = ESituation::Unknown; 
         TString ToString() const;
     };
     struct TDisk {
         ui32 OrderNumber;
-        bool IsSlow = false;
+        bool IsSlow = false; 
         TStackVec<TDiskPart, TypicalPartsInBlob> DiskParts;
         TString ToString() const;
     };
 
     TLogoBlobID Id;
     TWholeState Whole;
-    ESituation WholeSituation = ESituation::Unknown;  // TODO(cthulhu): Use a specially tailored enum here
+    ESituation WholeSituation = ESituation::Unknown;  // TODO(cthulhu): Use a specially tailored enum here 
     TStackVec<TState, TypicalPartsInBlob> Parts;
     TStackVec<TDisk, TypicalDisksInSubring> Disks;
-    TVector<TEvBlobStorage::TEvGetResult::TPartMapItem> PartMap;
+    TVector<TEvBlobStorage::TEvGetResult::TPartMapItem> PartMap; 
     ui8 BlobIdx;
     NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
     bool IsChanged = false;
     bool IsDone = false;
 
-    void Init(const TLogoBlobID &id, const TBlobStorageGroupInfo &Info);
+    void Init(const TLogoBlobID &id, const TBlobStorageGroupInfo &Info); 
     void AddNeeded(ui64 begin, ui64 size);
     void AddPartToPut(ui32 partIdx, TString &partData);
     void MarkBlobReadyToPut(ui8 blobIdx = 0);
@@ -93,9 +93,9 @@ struct TBlobState {
     void AddNoDataResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 diskIdxInSubring);
     void AddErrorResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 diskIdxInSubring);
     void AddNotYetResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 diskIdxInSubring);
-    ui64 GetPredictedDelayNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
+    ui64 GetPredictedDelayNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues, 
             ui32 diskIdxInSubring, NKikimrBlobStorage::EVDiskQueueId queueId) const;
-    void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
+    void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues, 
             NKikimrBlobStorage::EVDiskQueueId queueId,
             ui64 *outWorstNs, ui64 *outNextToWorstNs, i32 *outWorstSubgroupIdx) const;
     TString ToString() const;
@@ -106,7 +106,7 @@ struct TDiskGetRequest {
     const TLogoBlobID Id;
     const ui32 Shift;
     const ui32 Size;
-    ssize_t PartMapIndex = -1;
+    ssize_t PartMapIndex = -1; 
 
     TDiskGetRequest(const TLogoBlobID &id, const ui32 shift, const ui32 size)
         : Id(id)
@@ -158,8 +158,8 @@ struct TBlackboard;
 
 class IStrategy {
 public:
-    virtual ~IStrategy() = default;
-    virtual EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
+    virtual ~IStrategy() = default; 
+    virtual EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info, 
             TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests) = 0;
 };
 
@@ -169,24 +169,24 @@ struct TBlackboard {
         AccelerationModeSkipMarked
     };
 
-    using TBlobStates = TMap<TLogoBlobID, TBlobState>;
-    TBlobStates BlobStates;
+    using TBlobStates = TMap<TLogoBlobID, TBlobState>; 
+    TBlobStates BlobStates; 
     TBlobStates DoneBlobStates;
     TGroupDiskRequests GroupDiskRequests;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
-    TIntrusivePtr<TGroupQueues> GroupQueues; // To obtain FlowRecords only
+    TIntrusivePtr<TGroupQueues> GroupQueues; // To obtain FlowRecords only 
     EAccelerationMode AccelerationMode;
     const NKikimrBlobStorage::EPutHandleClass PutHandleClass;
     const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
     const bool IsAllRequestsTogether;
     ui64 DoneCount = 0;
 
-    TBlackboard(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
+    TBlackboard(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues, 
             NKikimrBlobStorage::EPutHandleClass putHandleClass, NKikimrBlobStorage::EGetHandleClass getHandleClass,
             bool isAllRequestsTogether = true)
         : GroupDiskRequests(info->GetTotalVDisksNum())
         , Info(info)
-        , GroupQueues(groupQueues)
+        , GroupQueues(groupQueues) 
         , AccelerationMode(AccelerationModeSkipOneSlowest)
         , PutHandleClass(putHandleClass)
         , GetHandleClass(getHandleClass)
@@ -202,11 +202,11 @@ struct TBlackboard {
     void AddNoDataResponse(const TLogoBlobID &id, ui32 orderNumber);
     void AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber);
     void AddNotYetResponse(const TLogoBlobID &id, ui32 orderNumber);
-    EStrategyOutcome RunStrategy(TLogContext &logCtx, const IStrategy& s, TBatchedVec<TBlobStates::value_type*> *finished = nullptr);
+    EStrategyOutcome RunStrategy(TLogContext &logCtx, const IStrategy& s, TBatchedVec<TBlobStates::value_type*> *finished = nullptr); 
     TBlobState& GetState(const TLogoBlobID &id);
-    ssize_t AddPartMap(const TLogoBlobID &id, ui32 diskOrderNumber, ui32 requestIndex);
-    void ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, NKikimrProto::EReplyStatus status);
-    void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
+    ssize_t AddPartMap(const TLogoBlobID &id, ui32 diskOrderNumber, ui32 requestIndex); 
+    void ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, NKikimrProto::EReplyStatus status); 
+    void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues, 
             NKikimrBlobStorage::EVDiskQueueId queueId,
             ui64 *outWorstNs, ui64 *outNextToWorstNs, i32 *outWorstOrderNumber) const;
     TString ToString() const;

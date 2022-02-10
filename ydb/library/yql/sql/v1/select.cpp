@@ -2407,7 +2407,7 @@ public:
         Y_UNUSED(ctx);
         hint = 0;
         if (GroupByColumns.empty()) {
-            for (const auto& groupByNode: GroupBy) {
+            for (const auto& groupByNode: GroupBy) { 
                 auto namePtr = groupByNode->GetColumnName();
                 YQL_ENSURE(namePtr);
                 GroupByColumns.insert(*namePtr);

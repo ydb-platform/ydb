@@ -32,12 +32,12 @@ namespace NKikimr {
     public:
         // ActorId of the main VDisk actor (currently ActorId of SkeletonFront)
         const TActorId VDiskActorId;
-        const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
+        const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top; 
         const TIntrusivePtr<NMonitoring::TDynamicCounters> VDiskCounters;
         const TIntrusivePtr<NMonitoring::TDynamicCounters> VDiskMemCounters;
         // latency histograms
         NVDiskMon::THistograms Histograms;
-        std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
+        std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup; 
         // Self VDisk related info
         const ui32 GroupId;
         const TVDiskIdShort ShortSelfVDisk;
@@ -55,10 +55,10 @@ namespace NKikimr {
         TMemoryConsumer Replication;
         TMemoryConsumer SyncLogCache;
         TActorSystem *ActorSystem;
-        TReplQuoter::TPtr ReplPDiskReadQuoter;
-        TReplQuoter::TPtr ReplPDiskWriteQuoter;
-        TReplQuoter::TPtr ReplNodeRequestQuoter;
-        TReplQuoter::TPtr ReplNodeResponseQuoter;
+        TReplQuoter::TPtr ReplPDiskReadQuoter; 
+        TReplQuoter::TPtr ReplPDiskWriteQuoter; 
+        TReplQuoter::TPtr ReplNodeRequestQuoter; 
+        TReplQuoter::TPtr ReplNodeResponseQuoter; 
 
     private:
         // Managing disk space
@@ -79,16 +79,16 @@ namespace NKikimr {
     public:
         TVDiskContext(
                 const TActorId &vdiskActorId,
-                std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
                 const TIntrusivePtr<NMonitoring::TDynamicCounters>& vdiskCounters,
                 const TVDiskID &selfVDisk,
                 TActorSystem *as,   // can be nullptr for tests
-                TPDiskCategory::EDeviceType type,
-                bool donorMode = false,
-                TReplQuoter::TPtr replPDiskReadQuoter = nullptr,
-                TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,
-                TReplQuoter::TPtr replNodeRequestQuoter = nullptr,
-                TReplQuoter::TPtr replNodeResponseQuoter = nullptr);
+                TPDiskCategory::EDeviceType type, 
+                bool donorMode = false, 
+                TReplQuoter::TPtr replPDiskReadQuoter = nullptr, 
+                TReplQuoter::TPtr replPDiskWriteQuoter = nullptr, 
+                TReplQuoter::TPtr replNodeRequestQuoter = nullptr, 
+                TReplQuoter::TPtr replNodeResponseQuoter = nullptr); 
 
         // The function checks response from PDisk. Normally, it's OK.
         // Other alternatives are: 1) shutdown; 2) FAIL
@@ -99,10 +99,10 @@ namespace NKikimr {
             // check status
             switch (ev.Status) {
                 case NKikimrProto::OK:
-                    if constexpr (T::EventType != TEvBlobStorage::EvLogResult) {
-                        // we have different semantics for TEvLogResult StatusFlags
-                        OutOfSpaceState.UpdateLocal(ev.StatusFlags);
-                    }
+                    if constexpr (T::EventType != TEvBlobStorage::EvLogResult) { 
+                        // we have different semantics for TEvLogResult StatusFlags 
+                        OutOfSpaceState.UpdateLocal(ev.StatusFlags); 
+                    } 
                     return true;
                 case NKikimrProto::INVALID_OWNER:
                 case NKikimrProto::INVALID_ROUND:

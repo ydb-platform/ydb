@@ -82,7 +82,7 @@ const TString ZONE_ANY = "any";
 
 const TTenantTestConfig DefaultTenantTestConfig = {
     // Domains {name, schemeshard {{ subdomain_names }}}
-    {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }},
+    {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }}, 
     // HiveId
     HIVE_ID,
     // FakeTenantSlotBroker
@@ -98,11 +98,11 @@ const TTenantTestConfig DefaultTenantTestConfig = {
                 // TenantPoolConfig
                 {
                     // Static slots {tenant, {cpu, memory, network}}
-                    {{ {DOMAIN1_NAME, {1, 1, 1}} }},
+                    {{ {DOMAIN1_NAME, {1, 1, 1}} }}, 
                     // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
                     {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, "", {1, 1, 1}},
                        {DOMAIN1_SLOT2, SLOT2_TYPE, DOMAIN1_NAME, "", {2, 2, 2}},
-                       {DOMAIN1_SLOT3, SLOT3_TYPE, DOMAIN1_NAME, "", {3, 3, 3}} }},
+                       {DOMAIN1_SLOT3, SLOT3_TYPE, DOMAIN1_NAME, "", {3, 3, 3}} }}, 
                     "node-type"
                 }
             }
@@ -193,8 +193,8 @@ class TFakeSchemeShard : public TActor<TFakeSchemeShard>, public TTabletExecuted
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR; 
     }
 
     TFakeSchemeShard(const TActorId &tablet, TTabletStorageInfo *info,
@@ -636,8 +636,8 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::HIVE_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::HIVE_ACTOR; 
     }
 
     TFakeHive(const TActorId &tablet, TTabletStorageInfo *info, TActorId sender,
@@ -986,7 +986,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
             host.MutableKey()->SetFqdn(node.Host);
             host.MutableKey()->SetIcPort(node.Port);
         }
-        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>(); 
         request->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig()->CopyFrom(hostConfig);
         request->Record.MutableRequest()->AddCommand()->MutableDefineBox()->CopyFrom(boxConfig);
 
@@ -1047,16 +1047,16 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         auto &config = *req->Record.MutableConfig()->MutableTenantsConfig();
         auto zone1 = config.AddAvailabilityZoneKinds();
         zone1->SetKind(ZONE1);
-        zone1->SetDataCenterName(ToString(1));
+        zone1->SetDataCenterName(ToString(1)); 
         auto zone2 = config.AddAvailabilityZoneKinds();
         zone2->SetKind(ZONE2);
-        zone2->SetDataCenterName(ToString(2));
+        zone2->SetDataCenterName(ToString(2)); 
         auto zone3 = config.AddAvailabilityZoneKinds();
         zone3->SetKind(ZONE3);
-        zone3->SetDataCenterName(ToString(3));
+        zone3->SetDataCenterName(ToString(3)); 
         auto zone4 = config.AddAvailabilityZoneKinds();
         zone4->SetKind(ZONE_ANY);
-        zone4->SetDataCenterName(NTenantSlotBroker::ANY_DATA_CENTER);
+        zone4->SetDataCenterName(NTenantSlotBroker::ANY_DATA_CENTER); 
         auto set1 = config.AddAvailabilityZoneSets();
         set1->SetName("all");
         set1->AddZoneKinds(ZONE1);

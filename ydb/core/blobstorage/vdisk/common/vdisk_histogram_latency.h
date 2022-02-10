@@ -33,7 +33,7 @@ namespace NKikimr {
             NMonitoring::TDynamicCounters::TCounterPtr ThroughputBytes;
         };
 
-        using TLtcHistoPtr = std::shared_ptr<TLtcHisto>;
+        using TLtcHistoPtr = std::shared_ptr<TLtcHisto>; 
 
     } // NVDiskMon
 } // NKikimr

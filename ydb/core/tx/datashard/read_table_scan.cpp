@@ -266,8 +266,8 @@ private:
 
 class TReadTableScan : public TActor<TReadTableScan>, public NTable::IScan {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_READ_TABLE_SCAN;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TX_READ_TABLE_SCAN; 
     }
 
     TReadTableScan(ui64 txId, ui64 shardId, TUserTable::TCPtr tableInfo,

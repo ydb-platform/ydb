@@ -17,6 +17,6 @@ namespace NKikimr {
             const TKeyBlock &keyBlock,
             const TKeyBarrier &keyBarrier,
             NKikimrBlobStorage::ESyncFullStage stage,
-            std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result);
+            std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result); 
 
 } // NKikimr

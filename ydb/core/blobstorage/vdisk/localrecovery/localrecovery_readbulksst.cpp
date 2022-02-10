@@ -32,9 +32,9 @@ namespace NKikimr {
             if (Index == Addition.size()) {
                 Finish(ctx);
             } else {
-                auto actor = std::make_unique<TLevelSegmentLoader>(VCtx, PDiskCtx, Addition[Index++].Sst.Get(),
+                auto actor = std::make_unique<TLevelSegmentLoader>(VCtx, PDiskCtx, Addition[Index++].Sst.Get(), 
                         ctx.SelfID, Origin);
-                auto aid = ctx.Register(actor.release());
+                auto aid = ctx.Register(actor.release()); 
                 ActiveActors.Insert(aid);
             }
         }
@@ -46,9 +46,9 @@ namespace NKikimr {
 
         void Finish(const TActorContext &ctx) {
             Y_VERIFY(Index == Addition.size());
-            auto msg = std::make_unique<TEvBulkSstEssenceLoaded>(RecoveryLogRecLsn);
+            auto msg = std::make_unique<TEvBulkSstEssenceLoaded>(RecoveryLogRecLsn); 
             msg->Essence.Replace(std::move(Addition));
-            ctx.Send(Recipient, msg.release());
+            ctx.Send(Recipient, msg.release()); 
             TThis::Die(ctx);
         }
 
@@ -69,8 +69,8 @@ namespace NKikimr {
         )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_DB_LOCAL_RECOVERY;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_DB_LOCAL_RECOVERY; 
         }
 
         TOneDbBulkSstLoader(
@@ -129,25 +129,25 @@ namespace NKikimr {
             const TString origin = "BulkSstLoader";
             if (Proto.LogoBlobsAdditionsSize() && LoadLogoBlobs) {
                 using TLoader = TOneDbBulkSstLoader<TLogoBlobsSst>;
-                auto actor = std::make_unique<TLoader>(VCtx, PDiskCtx, *Proto.MutableLogoBlobsAdditions(),
+                auto actor = std::make_unique<TLoader>(VCtx, PDiskCtx, *Proto.MutableLogoBlobsAdditions(), 
                         ctx.SelfID, RecoveryLogRecLsn, origin);
-                auto aid = ctx.Register(actor.release());
+                auto aid = ctx.Register(actor.release()); 
                 ActiveActors.Insert(aid);
                 ++RunActors;
             }
             if (Proto.BlocksAdditionsSize() && LoadBlocks) {
                 using TLoader = TOneDbBulkSstLoader<TBlocksSst>;
-                auto actor = std::make_unique<TLoader>(VCtx, PDiskCtx, *Proto.MutableBlocksAdditions(),
+                auto actor = std::make_unique<TLoader>(VCtx, PDiskCtx, *Proto.MutableBlocksAdditions(), 
                         ctx.SelfID, RecoveryLogRecLsn, origin);
-                auto aid = ctx.Register(actor.release());
+                auto aid = ctx.Register(actor.release()); 
                 ActiveActors.Insert(aid);
                 ++RunActors;
             }
             if (Proto.BarriersAdditionsSize() && LoadBarriers) {
                 using TLoader = TOneDbBulkSstLoader<TBarriersSst>;
-                auto actor = std::make_unique<TLoader>(VCtx, PDiskCtx, *Proto.MutableBarriersAdditions(),
+                auto actor = std::make_unique<TLoader>(VCtx, PDiskCtx, *Proto.MutableBarriersAdditions(), 
                         ctx.SelfID, RecoveryLogRecLsn, origin);
-                auto aid = ctx.Register(actor.release());
+                auto aid = ctx.Register(actor.release()); 
                 ActiveActors.Insert(aid);
                 ++RunActors;
             }
@@ -166,8 +166,8 @@ namespace NKikimr {
         }
 
         void Finish(const TActorContext &ctx) {
-            auto msg = std::make_unique<TEvBulkSstEssenceLoaded>(std::move(Essence), RecoveryLogRecLsn);
-            ctx.Send(Recipient, msg.release());
+            auto msg = std::make_unique<TEvBulkSstEssenceLoaded>(std::move(Essence), RecoveryLogRecLsn); 
+            ctx.Send(Recipient, msg.release()); 
             TThis::Die(ctx);
         }
 
@@ -183,8 +183,8 @@ namespace NKikimr {
         )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_DB_LOCAL_RECOVERY;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_DB_LOCAL_RECOVERY; 
         }
 
         TBulkSstLoader(

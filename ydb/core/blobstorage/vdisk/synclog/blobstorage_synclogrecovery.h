@@ -1,15 +1,15 @@
-#pragma once
-
+#pragma once 
+ 
 #include "defs.h"
-#include "blobstorage_synclogdata.h"
+#include "blobstorage_synclogdata.h" 
 #include "blobstorage_synclogkeeper_committer.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
-
-namespace NKikimr {
-    namespace NSyncLog {
-
-        ////////////////////////////////////////////////////////////////////////////
+ 
+namespace NKikimr { 
+    namespace NSyncLog { 
+ 
+        //////////////////////////////////////////////////////////////////////////// 
         // TSyncLogRepaired
         // This is output of local recovery process concerning SyncLog, we pass
         // it to new SyncLog actor and then to SyncLogKeeper respectively
@@ -18,12 +18,12 @@ namespace NKikimr {
             TSyncLogPtr SyncLogPtr;
             TVector<ui32> ChunksToDelete;
             TCommitHistory CommitHistory;
-            bool NeedsInitialCommit;
+            bool NeedsInitialCommit; 
 
             ~TSyncLogRepaired() = default;
 
             // return nullptr on error
-            static std::unique_ptr<TSyncLogRepaired> Construct(
+            static std::unique_ptr<TSyncLogRepaired> Construct( 
                 TSyncLogParams &&params,
                 const TString &data,
                 ui64 entryPointLsn,
@@ -33,22 +33,22 @@ namespace NKikimr {
             TSyncLogRepaired(
                 TSyncLogPtr &&syncLog,
                 TVector<ui32> &&chunksToDelete,
-                TCommitHistory &&commitHistory,
-                bool needsInitialCommit);
+                TCommitHistory &&commitHistory, 
+                bool needsInitialCommit); 
         };
 
 
         ////////////////////////////////////////////////////////////////////////////
-        // TSyncLogRecovery
+        // TSyncLogRecovery 
         // The class manages the process of local recovery for SyncLog
-        ////////////////////////////////////////////////////////////////////////////
-        class TSyncLogRecovery : public TThrRefBase {
-        public:
-            using TLevelSegment = NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
-            using TLevelSegmentPtr = TIntrusivePtr<TLevelSegment>;
-
-        public:
-            TSyncLogRecovery(std::unique_ptr<TSyncLogRepaired> &&repaired);
+        //////////////////////////////////////////////////////////////////////////// 
+        class TSyncLogRecovery : public TThrRefBase { 
+        public: 
+            using TLevelSegment = NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>; 
+            using TLevelSegmentPtr = TIntrusivePtr<TLevelSegment>; 
+ 
+        public: 
+            TSyncLogRecovery(std::unique_ptr<TSyncLogRepaired> &&repaired); 
             void PutLogoBlob(
                 const TBlobStorageGroupType &gtype,
                 ui64 lsn,
@@ -70,22 +70,22 @@ namespace NKikimr {
                 ui32 collectStep,
                 bool hard,
                 const TBarrierIngress &ingress);
-            std::unique_ptr<TSyncLogRepaired> ReleaseRepaired();
+            std::unique_ptr<TSyncLogRepaired> ReleaseRepaired(); 
             ui64 GetLastLsnOfIndexRecord() const;
             ui64 GetLastLsn() const;
             const TSyncLogHeader &GetSyncLogHeader() const;
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
-
-        private:
+ 
+        private: 
             TString ToString() const;
-
-            std::unique_ptr<TSyncLogRepaired> Repaired;
+ 
+            std::unique_ptr<TSyncLogRepaired> Repaired; 
             ui64 AddSegs = 0;
             ui64 LogoBlobs = 0;
             ui64 Blocks = 0;
             ui64 Gcs = 0;
             ui64 Barriers = 0;
-        };
-
-    } // NSyncLog
-} // NKikimr
+        }; 
+ 
+    } // NSyncLog 
+} // NKikimr 

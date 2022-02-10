@@ -29,91 +29,91 @@ public:
         GroupKeyNonce = Proto.GetGroupKeyNonce();
     }
 
-    TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_PROPOSE_GROUP_KEY; }
-
-    void ReadStep() {
-        const auto prevStatus = std::exchange(Status, NKikimrProto::ERROR); // assume error
-        TGroupInfo *group = Self->FindGroup(GroupId);
+    TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_PROPOSE_GROUP_KEY; } 
+ 
+    void ReadStep() { 
+        const auto prevStatus = std::exchange(Status, NKikimrProto::ERROR); // assume error 
+        TGroupInfo *group = Self->FindGroup(GroupId); 
         if (TGroupID(GroupId).ConfigurationType() != GroupConfigurationTypeDynamic) {
-            STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK01, "Can't propose key for non-dynamic group", (GroupId, GroupId));
-        } else if (!group) {
-            STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK02, "Can't read group info", (GroupId, GroupId));
-        } else if (group->EncryptionMode.GetOrElse(0) == 0) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK03, "Group is not encrypted", (GroupId, GroupId));
-        } else if (group->LifeCyclePhase.GetOrElse(0) != TBlobStorageGroupInfo::ELCP_INITIAL) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK04, "Group LifeCyclePhase does not match ELCP_INITIAL",
-                (GroupId, GroupId), (LifeCyclePhase, group->LifeCyclePhase.GetOrElse(0)));
+            STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK01, "Can't propose key for non-dynamic group", (GroupId, GroupId)); 
+        } else if (!group) { 
+            STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK02, "Can't read group info", (GroupId, GroupId)); 
+        } else if (group->EncryptionMode.GetOrElse(0) == 0) { 
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK03, "Group is not encrypted", (GroupId, GroupId)); 
+        } else if (group->LifeCyclePhase.GetOrElse(0) != TBlobStorageGroupInfo::ELCP_INITIAL) { 
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK04, "Group LifeCyclePhase does not match ELCP_INITIAL", 
+                (GroupId, GroupId), (LifeCyclePhase, group->LifeCyclePhase.GetOrElse(0))); 
             IsAnotherTxInProgress = (group->LifeCyclePhase.GetOrElse(0) == TBlobStorageGroupInfo::ELCP_IN_TRANSITION);
         } else if (group->MainKeyVersion.GetOrElse(0) != (MainKeyVersion - 1)) {
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK05, "Group MainKeyVersion does not match required MainKeyVersion",
                 (GroupId, GroupId), (MainKeyVersion, group->MainKeyVersion.GetOrElse(0)),
                 (RequiredMainKeyVersion, MainKeyVersion - 1));
-        } else if (EncryptedGroupKey.size() != 32 + sizeof(ui32)) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK06, "Group does not accept EncryptedGroupKey size",
-                (GroupId, GroupId), (EncryptedGroupKeySize, EncryptedGroupKey.size()),
-                (ExpectedEncryptedGroupKeySize, 32 + sizeof(ui32)));
-        } else {
-            Status = prevStatus; // return old status
+        } else if (EncryptedGroupKey.size() != 32 + sizeof(ui32)) { 
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK06, "Group does not accept EncryptedGroupKey size", 
+                (GroupId, GroupId), (EncryptedGroupKeySize, EncryptedGroupKey.size()), 
+                (ExpectedEncryptedGroupKeySize, 32 + sizeof(ui32))); 
+        } else { 
+            Status = prevStatus; // return old status 
         }
     }
 
-    void WriteStep(TTransactionContext &txc) {
+    void WriteStep(TTransactionContext &txc) { 
         NIceDb::TNiceDb db(txc.DB);
         // Reflect group structure in the database (pass)
 
         TGroupInfo *group = Self->FindGroup(GroupId);
-        Y_VERIFY(group); // the existence of this group must have been checked during ReadStep
+        Y_VERIFY(group); // the existence of this group must have been checked during ReadStep 
         group->LifeCyclePhase = TBlobStorageGroupInfo::ELCP_IN_TRANSITION;
         group->MainKeyId = MainKeyId;
         group->EncryptedGroupKey = EncryptedGroupKey;
         group->GroupKeyNonce = GroupKeyNonce;
         group->MainKeyVersion = MainKeyVersion;
         db.Table<Schema::Group>().Key(GroupId).Update(
-            NIceDb::TUpdate<Schema::Group::LifeCyclePhase>(TBlobStorageGroupInfo::ELCP_IN_USE),
+            NIceDb::TUpdate<Schema::Group::LifeCyclePhase>(TBlobStorageGroupInfo::ELCP_IN_USE), 
             NIceDb::TUpdate<Schema::Group::MainKeyId>(MainKeyId),
-            NIceDb::TUpdate<Schema::Group::EncryptedGroupKey>(EncryptedGroupKey),
-            NIceDb::TUpdate<Schema::Group::GroupKeyNonce>(GroupKeyNonce),
+            NIceDb::TUpdate<Schema::Group::EncryptedGroupKey>(EncryptedGroupKey), 
+            NIceDb::TUpdate<Schema::Group::GroupKeyNonce>(GroupKeyNonce), 
             NIceDb::TUpdate<Schema::Group::MainKeyVersion>(MainKeyVersion));
     }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK07, "TTxProposeGroupKey Execute");
+    bool Execute(TTransactionContext &txc, const TActorContext&) override { 
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK07, "TTxProposeGroupKey Execute"); 
         Status = NKikimrProto::OK;
-        ReadStep();
+        ReadStep(); 
         if (Status == NKikimrProto::OK) {
-            WriteStep(txc);
+            WriteStep(txc); 
         }
-        return true;
+        return true; 
     }
 
-    void Complete(const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK08, "TTxProposeGroupKey Complete");
+    void Complete(const TActorContext&) override { 
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK08, "TTxProposeGroupKey Complete"); 
         if (Status == NKikimrProto::OK) {
-            TGroupInfo *group = Self->FindGroup(GroupId);
-            Y_VERIFY(group);
-            if (group->LifeCyclePhase == TBlobStorageGroupInfo::ELCP_IN_TRANSITION) {
-                group->LifeCyclePhase = TBlobStorageGroupInfo::ELCP_IN_USE;
+            TGroupInfo *group = Self->FindGroup(GroupId); 
+            Y_VERIFY(group); 
+            if (group->LifeCyclePhase == TBlobStorageGroupInfo::ELCP_IN_TRANSITION) { 
+                group->LifeCyclePhase = TBlobStorageGroupInfo::ELCP_IN_USE; 
             } else {
-                STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK09, "TTxProposeGroupKey unexpected LifyCyclePhase",
-                    (GroupId, GroupId), (LifeCyclePhase, group->LifeCyclePhase));
+                STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK09, "TTxProposeGroupKey unexpected LifyCyclePhase", 
+                    (GroupId, GroupId), (LifeCyclePhase, group->LifeCyclePhase)); 
             }
         } else {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK10, "TTxProposeGroupKey error", (GroupId, GroupId),
-                (Status, Status), (Request, Proto));
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK10, "TTxProposeGroupKey error", (GroupId, GroupId), 
+                (Status, Status), (Request, Proto)); 
         }
         if (!IsAnotherTxInProgress) {
             // Get groupinfo for the group and send it to all whom it may concern.
-            Self->NotifyNodesAwaitingKeysForGroups(GroupId);
+            Self->NotifyNodesAwaitingKeysForGroups(GroupId); 
         }
     }
 };
 
-void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev) {
-    const NKikimrBlobStorage::TEvControllerProposeGroupKey& proto = ev->Get()->Record;
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK11, "Handle TEvControllerProposeGroupKey", (Request, proto));
-    Y_VERIFY(AppData());
-    NodesAwaitingKeysForGroup[proto.GetGroupId()].insert(proto.GetNodeId());
-    Execute(new TTxProposeGroupKey(proto, this));
+void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev) { 
+    const NKikimrBlobStorage::TEvControllerProposeGroupKey& proto = ev->Get()->Record; 
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK11, "Handle TEvControllerProposeGroupKey", (Request, proto)); 
+    Y_VERIFY(AppData()); 
+    NodesAwaitingKeysForGroup[proto.GetGroupId()].insert(proto.GetNodeId()); 
+    Execute(new TTxProposeGroupKey(proto, this)); 
 }
 
 } // NBlobStorageController

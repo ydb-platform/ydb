@@ -336,10 +336,10 @@ public:
         return *static_cast<T*>(Reply.Get());
     }
 
-    NBus::EMessageStatus GetTransportStatus() const {
-        return TransportStatus;
-    }
-
+    NBus::EMessageStatus GetTransportStatus() const { 
+        return TransportStatus; 
+    } 
+ 
 protected:
     TResult(NBus::EMessageStatus transportStatus);
     TResult(NBus::EMessageStatus transportStatus, const TString& message);
@@ -628,7 +628,7 @@ public:
     TString GetErrorMessage() const;
 
     ui32 GetNodeId() const;
-    NActors::TScopeId GetScopeId() const;
+    NActors::TScopeId GetScopeId() const; 
 
     const NKikimrClient::TNodeRegistrationResponse& Record() const;
 
@@ -641,8 +641,8 @@ class TNodeRegistrant {
 public:
     TRegistrationResult SyncRegisterNode(const TString& domainPath, const TString& host, ui16 port,
                                          const TString& address, const TString& resolveHost,
-                                         const NActors::TNodeLocation& location,
-                                         bool fixedNodeId = false, TMaybe<TString> path = {}) const;
+                                         const NActors::TNodeLocation& location, 
+                                         bool fixedNodeId = false, TMaybe<TString> path = {}) const; 
 
 private:
     TNodeRegistrant(TKikimr& kikimr);
@@ -775,9 +775,9 @@ public:
         return ExecuteRequest(TAutoPtr<NBus::TBusMessage>(request));
     }
 
-    // execute general message bus request
-    NThreading::TFuture<TResult> ExecuteRequest(TAutoPtr<NBus::TBusMessage> request);
-
+    // execute general message bus request 
+    NThreading::TFuture<TResult> ExecuteRequest(TAutoPtr<NBus::TBusMessage> request); 
+ 
 protected:
     NThreading::TFuture<TQueryResult> ExecuteQuery(const TTextQuery& query, const NKikimrMiniKQL::TParams& parameters);
     NThreading::TFuture<TQueryResult> ExecuteQuery(const TTextQuery& query, const TString& parameters);
@@ -792,8 +792,8 @@ protected:
     NBus::EMessageStatus ExecuteRequestInternal(NThreading::TPromise<TResult> promise, TAutoPtr<NBus::TBusMessage> request);
     NThreading::TFuture<TResult> RegisterNode(const TString& domainPath, const TString& host, ui16 port,
                                               const TString& address, const TString& resolveHost,
-                                              const NActors::TNodeLocation& location,
-                                              bool fixedNodeId, TMaybe<TString> path);
+                                              const NActors::TNodeLocation& location, 
+                                              bool fixedNodeId, TMaybe<TString> path); 
     NThreading::TFuture<TResult> GetNodeConfig(ui32 nodeId,
                                                const TString &host,
                                                const TString &tenant,

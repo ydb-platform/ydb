@@ -17,8 +17,8 @@ class TTabletResponsivenessPinger : public TActorBootstrapped<TTabletResponsiven
     void DoPing(const TActorContext &ctx);
     void ReceivePing(const TActorContext &ctx);
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_RESPONSIVENESS_PINGER;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_RESPONSIVENESS_PINGER; 
     }
 
     TTabletResponsivenessPinger(TTabletSimpleCounter &counter, TDuration pingInterval);

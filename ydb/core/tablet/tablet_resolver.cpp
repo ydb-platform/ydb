@@ -166,7 +166,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     TUnresolvedTablets UnresolvedTablets;
     TResolvedTablets ResolvedTablets;
     THashSet<ui64> TabletsOnStopList;
-    THashMap<ui32, TString> NodeToDcMapping;
+    THashMap<ui32, TString> NodeToDcMapping; 
 
     THashMap<ui32, ui64> NodeProblems;
     ui64 LastNodeProblemsUpdateEpoch = 0;
@@ -185,9 +185,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
     NMonitoring::TDynamicCounters::TCounterPtr InFlyResolveCounter;
 
-    std::optional<TString> FindNodeDc(ui32 nodeId) const {
+    std::optional<TString> FindNodeDc(ui32 nodeId) const { 
         auto it = NodeToDcMapping.find(nodeId);
-        return it != NodeToDcMapping.end() ? std::make_optional(it->second) : std::nullopt;
+        return it != NodeToDcMapping.end() ? std::make_optional(it->second) : std::nullopt; 
     }
 
     void ResolveRequest(ui64 tabletId, const TActorContext &ctx) {
@@ -207,8 +207,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     std::pair<TActorId, TActorId> SelectForward(const TActorContext& ctx, const TEntry& entry, TResolveInfo& info, ui64 tabletId)
     {
         const ui32 selfNode = ctx.SelfID.NodeId();
-        const std::optional<TString> selfDc = FindNodeDc(selfNode);
-        const std::optional<TString> leaderDc = FindNodeDc(entry.KnownLeader.NodeId());
+        const std::optional<TString> selfDc = FindNodeDc(selfNode); 
+        const std::optional<TString> leaderDc = FindNodeDc(entry.KnownLeader.NodeId()); 
 
         struct TCandidate {
             TActorId KnownLeader;
@@ -236,7 +236,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         bool countLeader = (entry.State == TEntry::StNormal || entry.State == TEntry::StFollowerUpdate);
         if (countLeader) {
             bool isLocal = (entry.KnownLeader.NodeId() == selfNode);
-            bool isLocalDc = selfDc && leaderDc == selfDc;
+            bool isLocalDc = selfDc && leaderDc == selfDc; 
             info.Count(isLocal, isLocalDc);
 
             ui32 prio = info.ResFlags.GetTabletPriority(isLocal, isLocalDc, false);
@@ -249,7 +249,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         if (info.ResFlags.AllowFollower()) {
             for (const auto &x : entry.KnownFollowers) {
                 bool isLocal = (x.first.NodeId() == selfNode);
-                bool isLocalDc = selfDc && FindNodeDc(x.first.NodeId()) == selfDc;
+                bool isLocalDc = selfDc && FindNodeDc(x.first.NodeId()) == selfDc; 
                 info.Count(isLocal, isLocalDc);
 
                 ui32 prio = info.ResFlags.GetTabletPriority(isLocal, isLocalDc, true);
@@ -260,18 +260,18 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
         }
 
-        auto dcName = [](const std::optional<TString>& x) { return x ? x->data() : "<none>"; };
-
+        auto dcName = [](const std::optional<TString>& x) { return x ? x->data() : "<none>"; }; 
+ 
         if (!winners.empty()) {
             size_t winnerIndex = (winners.size() == 1 ? 0 : (AppData(ctx)->RandomProvider->GenRand64() % winners.size()));
             const TCandidate& winner = winners[winnerIndex];
 
             LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
-                "SelectForward node %" PRIu32 " selfDC %s leaderDC %s %s"
+                "SelectForward node %" PRIu32 " selfDC %s leaderDC %s %s" 
                 " local %" PRIu32 " localDc %" PRIu32 " other %" PRIu32 " disallowed %" PRIu32
                 " tabletId: %" PRIu64 " followers: %" PRIu64 " countLeader %" PRIu32
                 " allowFollowers %" PRIu32 " winner: %s",
-                selfNode, dcName(selfDc), dcName(leaderDc), info.ResFlags.ToString().data(),
+                selfNode, dcName(selfDc), dcName(leaderDc), info.ResFlags.ToString().data(), 
                 info.NumLocal, info.NumLocalDc, info.NumOtherDc, disallowed,
                 tabletId, entry.KnownFollowers.size(), countLeader, info.ResFlags.AllowFollower(),
                 winner.KnownLeader.ToString().c_str());
@@ -296,9 +296,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
 
         LOG_INFO(ctx, NKikimrServices::TABLET_RESOLVER,
-            "No candidates for SelectForward, node %" PRIu32 " selfDC %s leaderDC %s %s"
+            "No candidates for SelectForward, node %" PRIu32 " selfDC %s leaderDC %s %s" 
             " local %" PRIu32 " localDc %" PRIu32 " other %" PRIu32 " disallowed %" PRIu32,
-            selfNode, dcName(selfDc), dcName(leaderDc), info.ResFlags.ToString().data(),
+            selfNode, dcName(selfDc), dcName(leaderDc), info.ResFlags.ToString().data(), 
             info.NumLocal, info.NumLocalDc, info.NumOtherDc, disallowed);
 
         SelectedNone->Inc();
@@ -780,9 +780,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         const TEvInterconnect::TEvNodesInfo *msg = ev->Get();
         bool distinct = false;
         for (const auto &nodeInfo : msg->Nodes) {
-            if (nodeInfo.Location.GetDataCenterId() != msg->Nodes[0].Location.GetDataCenterId())
+            if (nodeInfo.Location.GetDataCenterId() != msg->Nodes[0].Location.GetDataCenterId()) 
                 distinct = true;
-            NodeToDcMapping[nodeInfo.NodeId] = nodeInfo.Location.GetDataCenterId();
+            NodeToDcMapping[nodeInfo.NodeId] = nodeInfo.Location.GetDataCenterId(); 
         }
 
         if (!distinct)
@@ -800,8 +800,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TABLET_RESOLVER_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TABLET_RESOLVER_ACTOR; 
     }
 
     TTabletResolver(const TIntrusivePtr<TTabletResolverConfig> &config)

@@ -43,23 +43,23 @@ namespace NKikimr {
                 DoSwap(FirstPartId, LastPartId);
                 BackwardIt.Seek(Last);
             }
-
-            const ui64 firstTabletId = Min(First.TabletID(), Last.TabletID());
-            const ui64 lastTabletId = Max(First.TabletID(), Last.TabletID());
+ 
+            const ui64 firstTabletId = Min(First.TabletID(), Last.TabletID()); 
+            const ui64 lastTabletId = Max(First.TabletID(), Last.TabletID()); 
             BarriersEssence = BarriersSnapshot.CreateEssence(QueryCtx->HullCtx, firstTabletId, lastTabletId, 0);
             BarriersSnapshot.Destroy();
         }
 
         TLevelIndexRangeQueryViaBatcherBase(
-                std::shared_ptr<TQueryCtx> &queryCtx,
+                std::shared_ptr<TQueryCtx> &queryCtx, 
                 const TActorId &parentId,
                 TLogoBlobsSnapshot &&logoBlobsSnapshot,
                 TBarriersSnapshot &&barriersSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
-                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
-                TActorId replSchedulerId)
+                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result, 
+                TActorId replSchedulerId) 
             : TLevelIndexQueryBase(queryCtx, parentId, std::move(logoBlobsSnapshot), std::move(barriersSnapshot),
-                    ev, std::move(result), replSchedulerId)
+                    ev, std::move(result), replSchedulerId) 
             , ForwardIt(QueryCtx->HullCtx, &LogoBlobsSnapshot)
             , BackwardIt(QueryCtx->HullCtx, &LogoBlobsSnapshot)
             , First()
@@ -98,7 +98,7 @@ namespace NKikimr {
                 while (Counter > 0 && !ResultSize.IsOverflow() && ForwardIt.Valid() && ForwardIt.GetCurKey() <= Last) {
                     ForwardIt.PutToMerger(&Merger);
                     Merger.Finish();
-                    AddIndexOnly(ForwardIt.GetCurKey().LogoBlobID(), Merger);
+                    AddIndexOnly(ForwardIt.GetCurKey().LogoBlobID(), Merger); 
                     Merger.Clear();
                     ForwardIt.Next();
                 }
@@ -107,7 +107,7 @@ namespace NKikimr {
                 while (Counter > 0 && !ResultSize.IsOverflow() && BackwardIt.Valid() && BackwardIt.GetCurKey() >= First) {
                     BackwardIt.PutToMerger(&Merger);
                     Merger.Finish();
-                    AddIndexOnly(BackwardIt.GetCurKey().LogoBlobID(), Merger);
+                    AddIndexOnly(BackwardIt.GetCurKey().LogoBlobID(), Merger); 
                     Merger.Clear();
                     BackwardIt.Prev();
                 }
@@ -120,37 +120,37 @@ namespace NKikimr {
             SendResponseAndDie(ctx, this);
         }
 
-        template<typename TMerger>
-        void AddIndexOnly(const TLogoBlobID &logoBlobId, const TMerger &merger) {
+        template<typename TMerger> 
+        void AddIndexOnly(const TLogoBlobID &logoBlobId, const TMerger &merger) { 
             const auto &status = BarriersEssence->Keep(logoBlobId, merger.GetMemRec(), merger.GetMemRecsMerged(),
                                                        QueryCtx->HullCtx->AllowKeepFlags);
-            if (status.KeepData) {
-                const TIngress &ingress = merger.GetMemRec().GetIngress();
-                ui64 ingr = ingress.Raw();
-                ui64 *pingr = (ShowInternals ? &ingr : nullptr);
+            if (status.KeepData) { 
+                const TIngress &ingress = merger.GetMemRec().GetIngress(); 
+                ui64 ingr = ingress.Raw(); 
+                ui64 *pingr = (ShowInternals ? &ingr : nullptr); 
                 Y_VERIFY(logoBlobId.PartId() == 0); // Index-only response must contain a single record for the blob
-                const NMatrix::TVectorType local = ingress.LocalParts(QueryCtx->HullCtx->VCtx->Top->GType);
-                Result->AddResult(NKikimrProto::OK, logoBlobId, CookiePtr, pingr, &local);
+                const NMatrix::TVectorType local = ingress.LocalParts(QueryCtx->HullCtx->VCtx->Top->GType); 
+                Result->AddResult(NKikimrProto::OK, logoBlobId, CookiePtr, pingr, &local); 
                 --Counter;
                 ResultSize.AddLogoBlobIndex();
-            }
+            } 
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_HULLQUERY_RANGE_INDEX_ONLY;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_HULLQUERY_RANGE_INDEX_ONLY; 
         }
 
         TLevelIndexRangeQueryViaBatcherIndexOnly(
-                std::shared_ptr<TQueryCtx> &queryCtx,
+                std::shared_ptr<TQueryCtx> &queryCtx, 
                 const TActorId &parentId,
                 TLogoBlobsSnapshot &&logoBlobsSnapshot,
                 TBarriersSnapshot &&barriersSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
-                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
-                TActorId replSchedulerId)
+                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result, 
+                TActorId replSchedulerId) 
             : TLevelIndexRangeQueryViaBatcherBase(queryCtx, parentId,
-                    std::move(logoBlobsSnapshot), std::move(barriersSnapshot), ev, std::move(result), replSchedulerId)
+                    std::move(logoBlobsSnapshot), std::move(barriersSnapshot), ev, std::move(result), replSchedulerId) 
             , TActorBootstrapped<TLevelIndexRangeQueryViaBatcherIndexOnly>()
             , Merger(QueryCtx->HullCtx->VCtx->Top->GType)
         {
@@ -162,20 +162,20 @@ namespace NKikimr {
     // CreateLevelIndexRangeQueryActor
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateLevelIndexRangeQueryActor(
-                    std::shared_ptr<TQueryCtx> &queryCtx,
+                    std::shared_ptr<TQueryCtx> &queryCtx, 
                     const TActorId &parentId,
                     TLogoBlobsSnapshot &&logoBlobsSnapshot,
                     TBarriersSnapshot &&barriersSnapshot,
                     TEvBlobStorage::TEvVGet::TPtr &ev,
-                    std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
-                    TActorId replSchedulerId) {
+                    std::unique_ptr<TEvBlobStorage::TEvVGetResult> result, 
+                    TActorId replSchedulerId) { 
         bool indexOnly = ev->Get()->Record.GetIndexOnly();
-        if (indexOnly) {
+        if (indexOnly) { 
             return new TLevelIndexRangeQueryViaBatcherIndexOnly(queryCtx, parentId,
-                    std::move(logoBlobsSnapshot), std::move(barriersSnapshot), ev, std::move(result), replSchedulerId);
-        } else {
-            return nullptr;
-        }
+                    std::move(logoBlobsSnapshot), std::move(barriersSnapshot), ev, std::move(result), replSchedulerId); 
+        } else { 
+            return nullptr; 
+        } 
     }
 
 

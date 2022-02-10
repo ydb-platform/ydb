@@ -1,11 +1,11 @@
-#pragma once
-
-#include "defs.h"
-
+#pragma once 
+ 
+#include "defs.h" 
+ 
 #include <library/cpp/monlib/service/pages/mon_page.h>
-
-namespace NKikimr {
-
+ 
+namespace NKikimr { 
+ 
     NMonitoring::IMonPage *CreateMonGetBlobPage(const TString& path, TActorSystem *actorSystem);
-
-} // NKikimr
+ 
+} // NKikimr 

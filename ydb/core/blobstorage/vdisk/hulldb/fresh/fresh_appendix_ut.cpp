@@ -13,10 +13,10 @@ namespace NKikimr {
 
         static NMonitoring::TDynamicCounters DynCounters;
 
-        std::shared_ptr<TFreshAppendix<int, int>> CreateAppendix(const TVector<int> &v) {
+        std::shared_ptr<TFreshAppendix<int, int>> CreateAppendix(const TVector<int> &v) { 
             auto group = DynCounters.GetSubgroup("subsystem", "memhull");
             TMemoryConsumer memConsumer(group->GetCounter("MemTotal:FreshIndex"));
-            auto result = std::make_shared<TFreshAppendix<int, int>>(memConsumer);
+            auto result = std::make_shared<TFreshAppendix<int, int>>(memConsumer); 
             for (const auto &x : v) {
                 result->Add(x, 0);
             }
@@ -25,8 +25,8 @@ namespace NKikimr {
 
         // add appendix to the tree and track lsns
         void AddAppendix(
-                std::shared_ptr<TFreshAppendixTree<int, int>> c,
-                std::shared_ptr<TFreshAppendix<int, int>> a,
+                std::shared_ptr<TFreshAppendixTree<int, int>> c, 
+                std::shared_ptr<TFreshAppendix<int, int>> a, 
                 ui64 &curLsn) {
             ui64 firstLsn = curLsn;
             ui64 lastLsn = curLsn + a->GetSize() - 1;
@@ -40,7 +40,7 @@ namespace NKikimr {
             auto a3 = CreateAppendix(TVector{7, 80, 90, 98, 102, 600});
 
             const size_t stagingCapacity = 4;
-            auto c = std::make_shared<TFreshAppendixTree<int, int>>(nullptr, stagingCapacity);
+            auto c = std::make_shared<TFreshAppendixTree<int, int>>(nullptr, stagingCapacity); 
             ui64 lsn = 1;
             AddAppendix(c, a1, lsn);
             AddAppendix(c, a2, lsn);

@@ -124,7 +124,7 @@ namespace NKikimr {
         TSyncNeighbors(const TString &logPrefix,
                        const TActorId &notifyId,
                        const TVDiskIdShort &self,
-                       std::shared_ptr<TBlobStorageGroupInfo::TTopology> top);
+                       std::shared_ptr<TBlobStorageGroupInfo::TTopology> top); 
 
         TConstIterator begin() const { return Neighbors.Begin(); }
         TConstIterator end() const { return Neighbors.End(); }
@@ -193,7 +193,7 @@ namespace NKikimr {
         TSyncerData(const TString &logPrefix,
                     const TActorId &notifyId,
                     const TVDiskIdShort &selfVDisk,
-                    std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                    std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
                     const TString &entryPoint = TString());
 
         // we call this func during local recovery to apply last changes from recovery log
@@ -207,12 +207,12 @@ namespace NKikimr {
         static bool CheckEntryPoint(const TString &logPrefix,
                                     const TActorId &notifyId,
                                     const TVDiskIdShort &selfVDisk,
-                                    std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                                    std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
                                     const TString &entryPoint);
         // Convert from old entry point format to protobuf format
         // TODO: we can remove this function after migrating to the protobuf format
         static TString Convert(const TVDiskIdShort &selfVDisk,
-                              std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                              std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
                               const TString &entryPoint);
 
     private:

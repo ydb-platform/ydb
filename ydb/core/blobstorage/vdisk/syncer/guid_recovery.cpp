@@ -310,7 +310,7 @@ namespace NKikimr {
             using TLocalVal = NKikimrBlobStorage::TLocalGuidInfo;
 
             TDecisionMaker(const TVDiskIdShort &self,
-                           std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                           std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
                            const TLocalSyncerState &locallyRecoveredState)
                 : Self(self)
                 , Top(top)
@@ -384,7 +384,7 @@ namespace NKikimr {
 
         private:
             const TVDiskIdShort Self;
-            const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
+            const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top; 
             const TLocalSyncerState LocallyRecoveredState;
             NSync::TVDiskNeighbors<TNeighborVDiskState> Neighbors;
             NSync::TQuorumTracker QuorumTracker;
@@ -635,7 +635,7 @@ namespace NKikimr {
             const TActorId CommitterId;
             const TActorId NotifyId;
             TDecisionMaker DecisionMaker;
-            std::unique_ptr<TDecision> Decision;
+            std::unique_ptr<TDecision> Decision; 
             EPhase Phase = PhaseNotSet;
             TActorId FirstRunActorId;
 
@@ -669,25 +669,25 @@ namespace NKikimr {
                 GInfo = ev->Get()->NewInfo;
 
                 // reconfigure every proxy that hasn't returned a value yet
-                auto reconfigureProxy = [&ctx] (std::unique_ptr<TEvVGenerationChange> &&msg,
+                auto reconfigureProxy = [&ctx] (std::unique_ptr<TEvVGenerationChange> &&msg, 
                                                 TVDiskInfo<TNeighborVDiskState>& x) {
                     Y_VERIFY(!x.Get().Obtained);
-                    ctx.Send(x.Get().ProxyId, msg.release());
+                    ctx.Send(x.Get().ProxyId, msg.release()); 
                 };
 
                 using namespace std::placeholders;
-                auto call = [&reconfigureProxy, msg = ev->Get()] (TVDiskInfo<TNeighborVDiskState>& x) {
-                    reconfigureProxy(std::unique_ptr<TEvVGenerationChange>(msg->Clone()), x);
+                auto call = [&reconfigureProxy, msg = ev->Get()] (TVDiskInfo<TNeighborVDiskState>& x) { 
+                    reconfigureProxy(std::unique_ptr<TEvVGenerationChange>(msg->Clone()), x); 
                 };
                 DecisionMaker.ReconfigureAllWorkingProxies(call);
             }
 
-            STRICT_STFUNC(ObtainGuidQuorumFunc,
-                HFunc(TEvents::TEvPoisonPill, HandlePoison)
-                HFunc(TEvVDiskGuidObtained, Handle)
-                HFunc(TEvSublogLine, Handle)
-                HFunc(TEvVGenerationChange, HandleObtainGuidQuorumMode)
-            )
+            STRICT_STFUNC(ObtainGuidQuorumFunc, 
+                HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+                HFunc(TEvVDiskGuidObtained, Handle) 
+                HFunc(TEvSublogLine, Handle) 
+                HFunc(TEvVGenerationChange, HandleObtainGuidQuorumMode) 
+            ) 
 
             ////////////////////////////////////////////////////////////////////////
             // Gather Quorum
@@ -703,7 +703,7 @@ namespace NKikimr {
                     // kill actors that didn't respond
                     DecisionMaker.AbandomOngoingRequests(ctx);
                     // reach a verdict and save it
-                    Decision = std::make_unique<TDecision>(DecisionMaker.ReachAVerdict());
+                    Decision = std::make_unique<TDecision>(DecisionMaker.ReachAVerdict()); 
 
                     // log result of guid recovery
                     auto pri = NActors::NLog::PRI_INFO;
@@ -779,7 +779,7 @@ namespace NKikimr {
             void FirstRunPhase(const TActorContext &ctx, EFirstRunStep f) {
                 auto guid = Decision->GetGuid();
                 Become(&TThis::WaitForFirstRunStateFunc);
-                FirstRunActorId = ctx.Register(CreateVDiskGuidFirstRunActor(VCtx, GInfo, CommitterId, ctx.SelfID, f, guid));
+                FirstRunActorId = ctx.Register(CreateVDiskGuidFirstRunActor(VCtx, GInfo, CommitterId, ctx.SelfID, f, guid)); 
                 Phase = PhaseFirstRun;
             }
 
@@ -812,15 +812,15 @@ namespace NKikimr {
                 ctx.Send(FirstRunActorId, ev->Get()->Clone());
             }
 
-            STRICT_STFUNC(WaitForFirstRunStateFunc,
-                HFunc(TEvents::TEvPoisonPill, HandlePoison)
-                HFunc(TEvSyncerGuidFirstRunDone, HandleFirstRunCompleted)
-                // NOTE: In PhaseFirstRun phase we can still receive TEvVDiskGuidObtained
-                // messages (i.e. replies from the previous phase). Ignore them.
-                IgnoreFunc(TEvVDiskGuidObtained)
-                HFunc(TEvSublogLine, Handle)
-                HFunc(TEvVGenerationChange, HandleFirstRunMode)
-            )
+            STRICT_STFUNC(WaitForFirstRunStateFunc, 
+                HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+                HFunc(TEvSyncerGuidFirstRunDone, HandleFirstRunCompleted) 
+                // NOTE: In PhaseFirstRun phase we can still receive TEvVDiskGuidObtained 
+                // messages (i.e. replies from the previous phase). Ignore them. 
+                IgnoreFunc(TEvVDiskGuidObtained) 
+                HFunc(TEvSublogLine, Handle) 
+                HFunc(TEvVGenerationChange, HandleFirstRunMode) 
+            ) 
 
             ////////////////////////////////////////////////////////////////////////
             // Data Loss Phase
@@ -829,7 +829,7 @@ namespace NKikimr {
                 auto guid = Decision->GetGuid();
                 Become(&TThis::WaitForSettlingDataLossStateFunc);
                 auto msg = TEvSyncerCommit::Local(TLocalVal::Lost, guid);
-                ctx.Send(CommitterId, msg.release());
+                ctx.Send(CommitterId, msg.release()); 
                 Phase = PhaseSettleDataLoss;
             }
 
@@ -839,16 +839,16 @@ namespace NKikimr {
                 Finish(ctx, TOutcome(*Decision));
             }
 
-            STRICT_STFUNC(WaitForSettlingDataLossStateFunc,
-                HFunc(TEvents::TEvPoisonPill, HandlePoison)
-                HFunc(TEvSyncerCommitDone, HandleDataLossCompleted)
-                // NOTE: In PhaseFirstRun phase we can still receive TEvVDiskGuidObtained
-                // messages (i.e. replies from the previous phase). Ignore them.
-                IgnoreFunc(TEvVDiskGuidObtained)
-                HFunc(TEvSublogLine, Handle)
-                // no more communication with other VDisks, can ignore generation change
-                IgnoreFunc(TEvVGenerationChange)
-            )
+            STRICT_STFUNC(WaitForSettlingDataLossStateFunc, 
+                HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+                HFunc(TEvSyncerCommitDone, HandleDataLossCompleted) 
+                // NOTE: In PhaseFirstRun phase we can still receive TEvVDiskGuidObtained 
+                // messages (i.e. replies from the previous phase). Ignore them. 
+                IgnoreFunc(TEvVDiskGuidObtained) 
+                HFunc(TEvSublogLine, Handle) 
+                // no more communication with other VDisks, can ignore generation change 
+                IgnoreFunc(TEvVGenerationChange) 
+            ) 
 
             ////////////////////////////////////////////////////////////////////////
             // Handle Poison
@@ -878,8 +878,8 @@ namespace NKikimr {
             }
 
         public:
-            static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-                return NKikimrServices::TActivity::BS_SYNC_VDISK_GUID_RECOVERY;
+            static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+                return NKikimrServices::TActivity::BS_SYNC_VDISK_GUID_RECOVERY; 
             }
 
             TVDiskGuidRecoveryActor(TIntrusivePtr<TVDiskContext> vctx,

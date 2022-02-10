@@ -9,8 +9,8 @@ OWNER(
 SRCS(
     mon.cpp
     mon.h
-    crossref.cpp
-    crossref.h
+    crossref.cpp 
+    crossref.h 
 )
 
 PEERDIR(

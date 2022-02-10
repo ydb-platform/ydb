@@ -11,25 +11,25 @@ namespace NPDisk {
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define DISK_SPACE_COLORS(XX) \
-    XX(Black) \
-    XX(Red) \
-    XX(Orange) \
-    XX(LightOrange) \
-    XX(Yellow) \
+#define DISK_SPACE_COLORS(XX) \ 
+    XX(Black) \ 
+    XX(Red) \ 
+    XX(Orange) \ 
+    XX(LightOrange) \ 
+    XX(Yellow) \ 
     XX(LightYellow) \
-    XX(Cyan) \
-    //
-
+    XX(Cyan) \ 
+    // 
+ 
 class TQuotaRecord {
     friend class TPerOwnerQuotaTracker;
 
     TAtomic HardLimit = 0;
     TAtomic Free = 0;
 
-#define DEFINE_DISK_SPACE_COLOR(NAME) TAtomic NAME = 0;
-    DISK_SPACE_COLORS(DEFINE_DISK_SPACE_COLOR)
-#undef DEFINE_DISK_SPACE_COLOR
+#define DEFINE_DISK_SPACE_COLOR(NAME) TAtomic NAME = 0; 
+    DISK_SPACE_COLORS(DEFINE_DISK_SPACE_COLOR) 
+#undef DEFINE_DISK_SPACE_COLOR 
 
     TString Name;
     std::optional<TVDiskID> VDiskId;
@@ -70,9 +70,9 @@ public:
         str << " Free# " << Free;
         str << " Used# " << GetUsed();
         str << " CurrentColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(EstimateSpaceColor(0)) << "\n";
-#define PRINT_DISK_SPACE_COLOR(NAME) str << " " #NAME "# " << NAME;
-        DISK_SPACE_COLORS(PRINT_DISK_SPACE_COLOR)
-#undef PRINT_DISK_SPACE_COLOR
+#define PRINT_DISK_SPACE_COLOR(NAME) str << " " #NAME "# " << NAME; 
+        DISK_SPACE_COLORS(PRINT_DISK_SPACE_COLOR) 
+#undef PRINT_DISK_SPACE_COLOR 
     }
 
     // Called only from the main trhead
@@ -83,13 +83,13 @@ public:
         AtomicAdd(HardLimit, increment);
         AtomicAdd(Free, increment);
 
-        i64 value = 0;
-#define CALCULATE_COLOR(NAME) \
-        value = Max(value, hardLimit * limits.NAME ## Multiplier / limits.NAME ## Divisor + limits.NAME ## Addend); \
-        AtomicSet(NAME, value); \
-        ++value;
-        DISK_SPACE_COLORS(CALCULATE_COLOR)
-#undef CALCULATE_COLOR
+        i64 value = 0; 
+#define CALCULATE_COLOR(NAME) \ 
+        value = Max(value, hardLimit * limits.NAME ## Multiplier / limits.NAME ## Divisor + limits.NAME ## Addend); \ 
+        AtomicSet(NAME, value); \ 
+        ++value; 
+        DISK_SPACE_COLORS(CALCULATE_COLOR) 
+#undef CALCULATE_COLOR 
 
         return -increment;
     }

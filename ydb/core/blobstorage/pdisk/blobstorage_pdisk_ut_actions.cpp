@@ -1191,7 +1191,7 @@ void TTestWhiteboard::ReceiveEvent() {
     }
     if (LastResponse.whiteboardDiskMetricsResult) {
         ASSERT_YTHROW(LastResponse.whiteboardDiskMetricsResult->Type() ==
-            TEvBlobStorage::EvControllerUpdateDiskStatus, "Unexpected message");
+            TEvBlobStorage::EvControllerUpdateDiskStatus, "Unexpected message"); 
         IsDiskMetricsResultReceived = true;
         VERBOSE_COUT("Received DiskMetricsResult");
     }
@@ -2556,7 +2556,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
             | ui32(NKikimrBlobStorage::StatusDiskSpaceCyan)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceRed)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceOrange)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange) 
             | ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove));
         ASSERT_YTHROW(ChunkIds.size() > 0, "Unexpected ChunkIds.size() == " << ChunkIds.size());
@@ -2572,7 +2572,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
             | ui32(NKikimrBlobStorage::StatusDiskSpaceCyan)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceRed)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceOrange)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange) 
             | ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove));
         VERBOSE_COUT(" Sending TEvLog to delete a chunk");

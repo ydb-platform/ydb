@@ -10,7 +10,7 @@ SRCS(
     document_conversion.h
     http_ping.cpp
     http_ping.h
-    msgbus_blobstorage_config.cpp
+    msgbus_blobstorage_config.cpp 
     msgbus_bsadm.cpp
     msgbus_http_server.h
     msgbus_http_server.cpp
@@ -22,7 +22,7 @@ SRCS(
     msgbus_server_db.cpp
     msgbus_server_drain_node.cpp
     msgbus_server_fill_node.cpp
-    msgbus_server_get.cpp
+    msgbus_server_get.cpp 
     msgbus_server_hive_create_tablet.cpp
     msgbus_server_keyvalue.cpp
     msgbus_server_persqueue.cpp
@@ -33,8 +33,8 @@ SRCS(
     msgbus_server_pq_metarequest.cpp
     msgbus_server_pq_read_session_info.cpp
     msgbus_server_resolve_node.cpp
-    msgbus_server_ic_debug.cpp
-    msgbus_server_load.cpp
+    msgbus_server_ic_debug.cpp 
+    msgbus_server_load.cpp 
     msgbus_server_local_enumerate_tablets.cpp
     msgbus_server_local_minikql.cpp
     msgbus_server_local_scheme_tx.cpp
@@ -50,7 +50,7 @@ SRCS(
     msgbus_server_tablet_counters.cpp
     msgbus_server_tablet_kill.cpp
     msgbus_server_tablet_state.cpp
-    msgbus_server_test_shard_request.cpp
+    msgbus_server_test_shard_request.cpp 
     msgbus_server_tracer.cpp
     msgbus_server_tracer.h
     msgbus_server_tx_request.cpp

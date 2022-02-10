@@ -100,12 +100,12 @@ namespace NKikimr {
         public:
             TSyncLogKeeperState(
                     TIntrusivePtr<TVDiskContext> vctx,
-                    std::unique_ptr<TSyncLogRepaired> repaired,
+                    std::unique_ptr<TSyncLogRepaired> repaired, 
                     ui64 syncLogMaxMemAmount,
                     ui64 syncLogMaxDiskAmount,
                     ui64 syncLogMaxEntryPointSize);
 
-            void Init(std::shared_ptr<IActorNotify> notifier, std::shared_ptr<ILoggerCtx> loggerCtx) {
+            void Init(std::shared_ptr<IActorNotify> notifier, std::shared_ptr<ILoggerCtx> loggerCtx) { 
                 Notifier = std::move(notifier);
                 LoggerCtx = std::move(loggerCtx);
             }
@@ -143,7 +143,7 @@ namespace NKikimr {
             bool PerformTrimTailAction();
             bool PerformMemOverflowAction();
             bool PerformDeleteChunkAction();
-            bool PerformInitialCommit();
+            bool PerformInitialCommit(); 
 
             bool FreeUpToLsnSatisfied() const { return CalculateFirstLsnToKeep() >= FreeUpToLsn; }
             TSyncLogKeeperCommitData PrepareCommitData(ui64 recoveryLogConfirmedLsn);
@@ -168,17 +168,17 @@ namespace NKikimr {
             // chunks that are still used by snapshots
             TChunksToDeleteDelayed ChunksToDeleteDelayed;
             // notifier for deleted chunks
-            std::shared_ptr<IActorNotify> Notifier;
+            std::shared_ptr<IActorNotify> Notifier; 
             // logger ctx
-            std::shared_ptr<ILoggerCtx> LoggerCtx;
+            std::shared_ptr<ILoggerCtx> LoggerCtx; 
             // number of retries me made to cut the log
             ui32 CutLogRetries = 0;
             // settings:
             const ui32 MaxMemPages;
             const ui32 MaxDiskChunks;
             const ui64 SyncLogMaxEntryPointSize;
-            // does it need initial commit?
-            bool NeedsInitialCommit;
+            // does it need initial commit? 
+            bool NeedsInitialCommit; 
 
             // Fix Disk overflow, i.e. remove some chunks from SyncLog
             TVector<ui32> FixDiskOverflow(ui32 numChunksToAdd);

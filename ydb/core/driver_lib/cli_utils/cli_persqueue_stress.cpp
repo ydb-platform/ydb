@@ -45,7 +45,7 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
         pr->SetPartition(config.Partition);
         pr->MutableCmdGetOwnership();
         TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = config.SyncCall(request, reply);
+        NBus::EMessageStatus status = config.SyncCall(request, reply); 
         Y_VERIFY(status == NBus::MESSAGE_OK);
         const auto& result = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         Cerr << result.DebugString() << "\n";
@@ -62,7 +62,7 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
         pr->SetPartition(config.Partition);
         pr->MutableCmdGetMaxSeqNo()->AddSourceId(config.SourceId);
         TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = config.SyncCall(request, reply);
+        NBus::EMessageStatus status = config.SyncCall(request, reply); 
         Y_VERIFY(status == NBus::MESSAGE_OK);
         const auto& result = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         Cerr << result.DebugString() << "\n";
@@ -87,7 +87,7 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
                 totalSize += size;
             }
             TInstant tt = TInstant::Now();
-            status = config.SyncCall(request, reply);
+            status = config.SyncCall(request, reply); 
             if (status != NBus::MESSAGE_OK)
                 Cerr << status << "\n";
             Y_VERIFY(status == NBus::MESSAGE_OK);
@@ -132,7 +132,7 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
                 read->SetCount(config.BatchSize);
                 read->SetClientId("user");
                 TAutoPtr<NBus::TBusMessage> reply;
-                NBus::EMessageStatus status = config.SyncCall(request, reply);
+                NBus::EMessageStatus status = config.SyncCall(request, reply); 
                 Y_VERIFY(status == NBus::MESSAGE_OK);
                 const auto& result = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
                 if (result.GetStatus() != NMsgBusProxy::MSTATUS_OK || result.GetErrorCode() != NPersQueue::NErrorCode::OK) {
@@ -154,7 +154,7 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
                 set->SetOffset(offset);
                 set->SetClientId("user");
 
-                status = config.SyncCall(request, reply);
+                status = config.SyncCall(request, reply); 
                 Y_VERIFY(status == NBus::MESSAGE_OK);
                 if (config.Speed) {
                     TInstant T2 = timestamp + TDuration::MilliSeconds(bytes * 1000 / 1024.0 / config.Speed);

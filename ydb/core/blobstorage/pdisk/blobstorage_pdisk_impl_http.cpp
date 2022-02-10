@@ -197,7 +197,7 @@ void TPDisk::OutputHtmlOwners(TStringStream &str) {
                     TABLEH() { str << "VDiskId"; }
                     TABLEH() { str << "ChunksOwned"; }
                     TABLEH() { str << "CutLogId"; }
-                    TABLEH() { str << "WhiteboardProxyId"; }
+                    TABLEH() { str << "WhiteboardProxyId"; } 
                     TABLEH() { str << "CurLsnToKeep"; }
                     TABLEH() { str << "FirstNonceToKeep"; }
                     TABLEH() { str << "AskedToCutLogAt"; }
@@ -213,7 +213,7 @@ void TPDisk::OutputHtmlOwners(TStringStream &str) {
                             TABLED() { str << data.VDiskId.ToStringWOGeneration(); }
                             TABLED() { str << chunksOwned[owner]; }
                             TABLED() { str << data.CutLogId.ToString(); }
-                            TABLED() { str << data.WhiteboardProxyId; }
+                            TABLED() { str << data.WhiteboardProxyId; } 
                             TABLED() { str << data.CurrentFirstLsnToKeep; }
                             TABLED() { str << SysLogFirstNoncesToKeep.FirstNonceToKeep[owner]; }
                             TABLED() { str << data.AskedToCutLogAt; }

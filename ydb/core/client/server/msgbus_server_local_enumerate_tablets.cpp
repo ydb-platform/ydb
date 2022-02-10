@@ -9,8 +9,8 @@ namespace {
 }
 
 template <typename ResponseType>
-class TMessageBusLocalEnumerateTablets: public TMessageBusLocalServiceRequest<TMessageBusLocalEnumerateTablets<ResponseType>, NKikimrServices::TActivity::FRONT_ENUMERATE_TABLETS> {
-    using TBase = TMessageBusLocalServiceRequest<TMessageBusLocalEnumerateTablets<ResponseType>, NKikimrServices::TActivity::FRONT_ENUMERATE_TABLETS>;
+class TMessageBusLocalEnumerateTablets: public TMessageBusLocalServiceRequest<TMessageBusLocalEnumerateTablets<ResponseType>, NKikimrServices::TActivity::FRONT_ENUMERATE_TABLETS> { 
+    using TBase = TMessageBusLocalServiceRequest<TMessageBusLocalEnumerateTablets<ResponseType>, NKikimrServices::TActivity::FRONT_ENUMERATE_TABLETS>; 
     ui64 DomainUid;
     ui32 NodeId;
     TTabletTypes::EType TabletType;

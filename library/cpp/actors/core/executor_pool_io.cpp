@@ -133,19 +133,19 @@ namespace NActors {
         for (ui32 i = 0; i != PoolThreads; ++i)
             Threads[i].Thread->Join();
     }
-
-    void TIOExecutorPool::GetCurrentStats(TExecutorPoolStats& /*poolStats*/, TVector<TExecutorThreadStats>& statsCopy) const {
-        statsCopy.resize(PoolThreads + 1);
-        // Save counters from the pool object
-        statsCopy[0] = TExecutorThreadStats();
-        statsCopy[0].Aggregate(Stats);
-        // Per-thread stats
-        for (size_t i = 0; i < PoolThreads; ++i) {
-            Threads[i].Thread->GetCurrentStats(statsCopy[i + 1]);
-        }
-    }
-
-    TString TIOExecutorPool::GetName() const {
-        return PoolName;
-    }
+ 
+    void TIOExecutorPool::GetCurrentStats(TExecutorPoolStats& /*poolStats*/, TVector<TExecutorThreadStats>& statsCopy) const { 
+        statsCopy.resize(PoolThreads + 1); 
+        // Save counters from the pool object 
+        statsCopy[0] = TExecutorThreadStats(); 
+        statsCopy[0].Aggregate(Stats); 
+        // Per-thread stats 
+        for (size_t i = 0; i < PoolThreads; ++i) { 
+            Threads[i].Thread->GetCurrentStats(statsCopy[i + 1]); 
+        } 
+    } 
+ 
+    TString TIOExecutorPool::GetName() const { 
+        return PoolName; 
+    } 
 }

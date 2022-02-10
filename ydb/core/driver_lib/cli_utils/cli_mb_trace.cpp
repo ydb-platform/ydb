@@ -44,9 +44,9 @@ int MessageBusTrace(TCommandConfig &cmdConf, int argc, char** argv) {
     } else {
         NMsgBusProxy::TBusMessageBusTraceRequest *request(new NMsgBusProxy::TBusMessageBusTraceRequest());
         if (messageBusTraceConfig.Command == "start") {
-            request->Record.SetCommand(NKikimrClient::TMessageBusTraceRequest::START);
+            request->Record.SetCommand(NKikimrClient::TMessageBusTraceRequest::START); 
         } else if (messageBusTraceConfig.Command == "stop") {
-            request->Record.SetCommand(NKikimrClient::TMessageBusTraceRequest::STOP);
+            request->Record.SetCommand(NKikimrClient::TMessageBusTraceRequest::STOP); 
         }
         if (messageBusTraceConfig.Path)
             request->Record.SetPath(messageBusTraceConfig.Path);
@@ -57,7 +57,7 @@ int MessageBusTrace(TCommandConfig &cmdConf, int argc, char** argv) {
         switch (status) {
         case NBus::MESSAGE_OK:
             {
-                const NKikimrClient::TMessageBusTraceStatus &response = static_cast<NMsgBusProxy::TBusMessageBusTraceStatus *>(reply.Get())->Record;
+                const NKikimrClient::TMessageBusTraceStatus &response = static_cast<NMsgBusProxy::TBusMessageBusTraceStatus *>(reply.Get())->Record; 
 //                Cout << "status: " << response.GetStatus() << Endl;
 //                Cout << "status transcript: " << static_cast<NMsgBusProxy::EResponseStatus>(response.GetStatus()) << Endl;
                 Cout << "trace active: " << response.GetTraceActive() << Endl;

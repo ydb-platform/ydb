@@ -64,16 +64,16 @@ namespace NActors {
             }
 
             bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
-                return serializer->WriteString(&Blob);
+                return serializer->WriteString(&Blob); 
             }
 
             static IEventBase* Load(TEventSerializedData* bufs) noexcept {
-                return new TEvBlob(bufs->GetString());
+                return new TEvBlob(bufs->GetString()); 
             }
-
-            bool IsSerializable() const override {
-                return true;
-            }
+ 
+            bool IsSerializable() const override { 
+                return true; 
+            } 
         };
 
         struct TSystem {
@@ -94,9 +94,9 @@ namespace NActors {
                 Gone,        // Generic notification of actor death
                 TrackActor,
                 UntrackActor,
-                InvokeResult,
-                CoroTimeout,
-                InvokeQuery,
+                InvokeResult, 
+                CoroTimeout, 
+                InvokeQuery, 
                 End,
 
                 // Compatibility section
@@ -139,33 +139,33 @@ namespace NActors {
             };
             const ui32 SourceType;
             const EReason Reason;
-            const bool Unsure;
-            const TString Data;
+            const bool Unsure; 
+            const TString Data; 
 
-            TEvUndelivered(ui32 sourceType, ui32 reason, bool unsure = false)
+            TEvUndelivered(ui32 sourceType, ui32 reason, bool unsure = false) 
                 : SourceType(sourceType)
                 , Reason(static_cast<EReason>(reason))
-                , Unsure(unsure)
-                , Data(MakeData(sourceType, reason))
-            {}
+                , Unsure(unsure) 
+                , Data(MakeData(sourceType, reason)) 
+            {} 
 
             TString ToStringHeader() const override;
             bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override;
             static IEventBase* Load(TEventSerializedData* bufs);
-            bool IsSerializable() const override;
+            bool IsSerializable() const override; 
 
-            ui32 CalculateSerializedSize() const override { return 2 * sizeof(ui32); }
-
+            ui32 CalculateSerializedSize() const override { return 2 * sizeof(ui32); } 
+ 
             static void Out(IOutputStream& o, EReason x);
-
-        private:
-            static TString MakeData(ui32 sourceType, ui32 reason) {
-                TString s = TString::Uninitialized(sizeof(ui32) + sizeof(ui32));
+ 
+        private: 
+            static TString MakeData(ui32 sourceType, ui32 reason) { 
+                TString s = TString::Uninitialized(sizeof(ui32) + sizeof(ui32)); 
                 char *p = s.Detach();
                 WriteUnaligned<ui32>(p + 0, sourceType);
                 WriteUnaligned<ui32>(p + 4, reason);
-                return s;
-            }
+                return s; 
+            } 
         };
 
         struct TEvCompleted: public TEventBase<TEvCompleted, TSystem::Completed> {
@@ -209,8 +209,8 @@ namespace NActors {
             DEFINE_SIMPLE_LOCAL_EVENT(TEvGone, "System: TEvGone")
         };
 
-        struct TEvInvokeResult;
-
+        struct TEvInvokeResult; 
+ 
         using TEvPoisonPill = TEvPoison; // Legacy name, deprecated
         using TEvActorDied = TEvGone;
     };

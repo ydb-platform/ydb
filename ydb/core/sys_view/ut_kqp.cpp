@@ -137,18 +137,18 @@ public:
         RowIterator = row.begin();
     }
 
-    bool SkipNull() {
-        if (RowIterator->IsNull()) {
-            ++RowIterator;
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    void Null() {
+    bool SkipNull() { 
+        if (RowIterator->IsNull()) { 
+            ++RowIterator; 
+            return true; 
+        } else { 
+            return false; 
+        } 
+    } 
+ 
+    void Null() { 
         const auto& value = *RowIterator++;
-        UNIT_ASSERT(value.IsNull());
+        UNIT_ASSERT(value.IsNull()); 
     }
 
     void Bool(bool expected) {
@@ -157,12 +157,12 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(value.AsBool(), expected);
     }
 
-    void Uint64(ui64 expected, bool orNull = false) {
-        if (!orNull || !SkipNull()) {
-            const auto& value = ExtractOptional(*RowIterator++);
-            UNIT_ASSERT(value.IsUint64());
-            UNIT_ASSERT_VALUES_EQUAL(value.AsUint64(), expected);
-        }
+    void Uint64(ui64 expected, bool orNull = false) { 
+        if (!orNull || !SkipNull()) { 
+            const auto& value = ExtractOptional(*RowIterator++); 
+            UNIT_ASSERT(value.IsUint64()); 
+            UNIT_ASSERT_VALUES_EQUAL(value.AsUint64(), expected); 
+        } 
     }
 
     void Uint64Greater(ui64 expected) {
@@ -630,7 +630,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.String("data"); // Type
         check.Uint64(0); // UpdateBytes
         check.Uint64(0); // UpdateRows
-        check.Null(); // UserSID
+        check.Null(); // UserSID 
     }
 
     Y_UNIT_TEST(PartitionStatsTtlFields) {
@@ -880,11 +880,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     ReadCentric,
                     SharedWithOS,
                     Status,
-                    StatusChangeTimestamp,
+                    StatusChangeTimestamp, 
                     TotalSize,
-                    Type,
-                    ExpectedSlotCount,
-                    NumActiveSlots
+                    Type, 
+                    ExpectedSlotCount, 
+                    NumActiveSlots 
                 FROM `/Root/.sys/ds_pdisks`;
             )").GetValueSync();
 
@@ -900,7 +900,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 15);
+        TYsonFieldChecker check(ysonString, 15); 
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
@@ -912,11 +912,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Bool(false); // ReadCentric
         check.Bool(false); // SharedWithOS
         check.String("ACTIVE"); // Status
-        check.Null(); // StatusChangeTimestamp
+        check.Null(); // StatusChangeTimestamp 
         check.Uint64(0u); // TotalSize
         check.String("ROT"); // Type
-        check.Uint64(16); // ExpectedSlotCount
-        check.Uint64(2); // NumActiveSlots
+        check.Uint64(16); // ExpectedSlotCount 
+        check.Uint64(2); // NumActiveSlots 
     }
 
     Y_UNIT_TEST(VSlotsFields) {
@@ -941,7 +941,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     Status,
                     VDisk,
                     VSlotId
-                FROM `/Root/.sys/ds_vslots` WHERE GroupId >= 0x80000000;
+                FROM `/Root/.sys/ds_vslots` WHERE GroupId >= 0x80000000; 
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -956,10 +956,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 12);
+        TYsonFieldChecker check(ysonString, 12); 
 
-        check.Uint64(0u, true); // AllocatedSize
-        check.Uint64(0u, true); // AvailableSize
+        check.Uint64(0u, true); // AllocatedSize 
+        check.Uint64(0u, true); // AvailableSize 
         check.Uint64(0u); // FailDomain
         check.Uint64(0u); // FailRealm
         check.Uint64(1u); // GroupGeneration
@@ -967,7 +967,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.String("Default"); // Kind
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(1u); // PDiskId
-        check.String("INIT_PENDING"); // Status
+        check.String("INIT_PENDING"); // Status 
         check.Uint64(0u); // VDisk
         check.Uint64(1000u); // VSlotId
     }
@@ -993,8 +993,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     LifeCyclePhase,
                     PutTabletLogLatency,
                     PutUserDataLatency,
-                    StoragePoolId
-                FROM `/Root/.sys/ds_groups` WHERE GroupId >= 0x80000000;
+                    StoragePoolId 
+                FROM `/Root/.sys/ds_groups` WHERE GroupId >= 0x80000000; 
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1009,7 +1009,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 12);
+        TYsonFieldChecker check(ysonString, 12); 
 
         check.Uint64(0u); // AllocatedSize
         check.Uint64(0u); // AvailableSize
@@ -1017,11 +1017,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(0u); // EncryptionMode
         check.String("none"); // ErasureSpecies
         check.Uint64(1u); // Generation
-        check.Null(); // GetFastLatency
+        check.Null(); // GetFastLatency 
         check.Uint64(2181038080u); // GroupId
         check.Uint64(0u); // LifeCyclePhase
-        check.Null(); // PutTabletLogLatency
-        check.Null(); // PutUserDataLatency
+        check.Null(); // PutTabletLogLatency 
+        check.Null(); // PutUserDataLatency 
         check.Uint64(2u); // StoragePoolId
     }
 
@@ -1070,8 +1070,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.String("test"); // Kind
         check.String("/Root:test"); // Name
         check.Uint64(1u); // NumGroups
-        check.Null(); // PathId
-        check.Null(); // SchemeshardId
+        check.Null(); // PathId 
+        check.Null(); // SchemeshardId 
         check.Uint64(2u); // StoragePoolId
         check.String("Default"); // VDiskKind
     }
@@ -1341,7 +1341,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 16);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 16); 
 
             THashSet<TString> names;
             for (const auto& child : children) {

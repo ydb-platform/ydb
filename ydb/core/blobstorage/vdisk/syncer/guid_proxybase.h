@@ -25,7 +25,7 @@ namespace NKikimr {
 
 
         // override these functions to get required functionality
-        virtual std::unique_ptr<TEvBlobStorage::TEvVSyncGuid> GenerateRequest() = 0;
+        virtual std::unique_ptr<TEvBlobStorage::TEvVSyncGuid> GenerateRequest() = 0; 
         virtual void HandleReply(const TActorContext &ctx,
                                  const NKikimrBlobStorage::TEvVSyncGuidResult &record) = 0;
 
@@ -42,7 +42,7 @@ namespace NKikimr {
             // we don't use cookie, because in general any response is OK
 
             // track delivery and subscribe on session
-            ctx.Send(TargetServiceId, GenerateRequest().release(),
+            ctx.Send(TargetServiceId, GenerateRequest().release(), 
                      IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 
             Become(&TThis::StateFunc);
@@ -139,28 +139,28 @@ namespace NKikimr {
             TargetServiceId = info->GetActorId(shortTarget);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvInterconnect::TEvNodeDisconnected, Handle)
-            HFunc(TEvents::TEvUndelivered, Handle)
-            HFunc(TEvBlobStorage::TEvVSyncGuidResult, Handle)
-            IgnoreFunc(TEvInterconnect::TEvNodeConnected)
-            HFunc(TEvVGenerationChange, Handle)
-        )
+        STRICT_STFUNC(StateFunc, 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            HFunc(TEvInterconnect::TEvNodeDisconnected, Handle) 
+            HFunc(TEvents::TEvUndelivered, Handle) 
+            HFunc(TEvBlobStorage::TEvVSyncGuidResult, Handle) 
+            IgnoreFunc(TEvInterconnect::TEvNodeConnected) 
+            HFunc(TEvVGenerationChange, Handle) 
+        ) 
 
-        STRICT_STFUNC(StateSleep,
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            IgnoreFunc(TEvInterconnect::TEvNodeDisconnected)
-            IgnoreFunc(TEvents::TEvUndelivered)
-            IgnoreFunc(TEvBlobStorage::TEvVSyncGuidResult)
-            CFunc(TEvents::TEvWakeup::EventType, HandleWakeup)
-            IgnoreFunc(TEvInterconnect::TEvNodeConnected)
-            HFunc(TEvVGenerationChange, Handle)
-        )
+        STRICT_STFUNC(StateSleep, 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+            IgnoreFunc(TEvInterconnect::TEvNodeDisconnected) 
+            IgnoreFunc(TEvents::TEvUndelivered) 
+            IgnoreFunc(TEvBlobStorage::TEvVSyncGuidResult) 
+            CFunc(TEvents::TEvWakeup::EventType, HandleWakeup) 
+            IgnoreFunc(TEvInterconnect::TEvNodeConnected) 
+            HFunc(TEvVGenerationChange, Handle) 
+        ) 
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_SYNC_WRITE_VDISK_GUID_PROXY;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_SYNC_WRITE_VDISK_GUID_PROXY; 
         }
 
         TVDiskGuidProxyBase(TIntrusivePtr<TVDiskContext> vctx,

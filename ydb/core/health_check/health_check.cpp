@@ -1475,37 +1475,37 @@ public:
 
         if (pDiskInfo.HasState()) {
             switch (pDiskInfo.GetState()) {
-                case NKikimrBlobStorage::TPDiskState::Normal:
+                case NKikimrBlobStorage::TPDiskState::Normal: 
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                     break;
-                case NKikimrBlobStorage::TPDiskState::Initial:
-                case NKikimrBlobStorage::TPDiskState::InitialFormatRead:
-                case NKikimrBlobStorage::TPDiskState::InitialSysLogRead:
-                case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead:
+                case NKikimrBlobStorage::TPDiskState::Initial: 
+                case NKikimrBlobStorage::TPDiskState::InitialFormatRead: 
+                case NKikimrBlobStorage::TPDiskState::InitialSysLogRead: 
+                case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead: 
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
-                                         TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo.GetState()),
+                                         TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo.GetState()), 
                                          "pdisk-state");
                     break;
-                case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
-                case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
-                case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError:
-                case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
-                case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
-                case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
-                case NKikimrBlobStorage::TPDiskState::OpenFileError:
-                case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
-                case NKikimrBlobStorage::TPDiskState::DeviceIoError:
-                case NKikimrBlobStorage::TPDiskState::Missing:
-                case NKikimrBlobStorage::TPDiskState::Timeout:
-                case NKikimrBlobStorage::TPDiskState::NodeDisconnected:
-                case NKikimrBlobStorage::TPDiskState::Unknown:
+                case NKikimrBlobStorage::TPDiskState::InitialFormatReadError: 
+                case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError: 
+                case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError: 
+                case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError: 
+                case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError: 
+                case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError: 
+                case NKikimrBlobStorage::TPDiskState::OpenFileError: 
+                case NKikimrBlobStorage::TPDiskState::ChunkQuotaError: 
+                case NKikimrBlobStorage::TPDiskState::DeviceIoError: 
+                case NKikimrBlobStorage::TPDiskState::Missing: 
+                case NKikimrBlobStorage::TPDiskState::Timeout: 
+                case NKikimrBlobStorage::TPDiskState::NodeDisconnected: 
+                case NKikimrBlobStorage::TPDiskState::Unknown: 
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                         TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo.GetState()),
+                                         TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo.GetState()), 
                                          "pdisk-state");
                     break;
-                case NKikimrBlobStorage::TPDiskState::Reserved14:
-                case NKikimrBlobStorage::TPDiskState::Reserved15:
-                case NKikimrBlobStorage::TPDiskState::Reserved16:
+                case NKikimrBlobStorage::TPDiskState::Reserved14: 
+                case NKikimrBlobStorage::TPDiskState::Reserved15: 
+                case NKikimrBlobStorage::TPDiskState::Reserved16: 
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown PDisk state");
                     break;
             }

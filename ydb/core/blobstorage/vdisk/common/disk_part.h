@@ -12,7 +12,7 @@
 // FIXME: only for TIngressCache (put it to vdisk/common)
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
-
+ 
 namespace NKikimr {
 
     ///////////////////////////////////////////////////////////////////////////////////////
@@ -61,16 +61,16 @@ namespace NKikimr {
 
         TDiskPart(const NKikimrVDiskData::TDiskPart& pb)
             : TDiskPart(pb.GetChunkIdx(), pb.GetOffset(), pb.GetSize())
-        {}
-
-        explicit operator NKikimrVDiskData::TDiskPart() const {
-            NKikimrVDiskData::TDiskPart proto;
-            proto.SetChunkIdx(ChunkIdx);
-            proto.SetOffset(Offset);
-            proto.SetSize(Size);
-            return proto;
-        }
-
+        {} 
+ 
+        explicit operator NKikimrVDiskData::TDiskPart() const { 
+            NKikimrVDiskData::TDiskPart proto; 
+            proto.SetChunkIdx(ChunkIdx); 
+            proto.SetOffset(Offset); 
+            proto.SetSize(Size); 
+            return proto; 
+        } 
+ 
         void SerializeToProto(NKikimrVDiskData::TDiskPart &pb) const {
             pb.SetChunkIdx(ChunkIdx);
             pb.SetOffset(Offset);
@@ -148,10 +148,10 @@ namespace NKikimr {
         inline bool operator ==(const TDiskPart &x) const {
             return ChunkIdx == x.ChunkIdx && Offset == x.Offset && Size == x.Size;
         }
-
-        inline bool operator !=(const TDiskPart &x) const {
-            return ChunkIdx != x.ChunkIdx || Offset != x.Offset || Size != x.Size;
-        }
+ 
+        inline bool operator !=(const TDiskPart &x) const { 
+            return ChunkIdx != x.ChunkIdx || Offset != x.Offset || Size != x.Size; 
+        } 
     };
 #pragma pack(pop)
 
@@ -186,11 +186,11 @@ namespace NKikimr {
             Vec.push_back(p);
         }
 
-        template<typename T>
-        void Append(const T& other) {
-            Vec.insert(Vec.end(), other.begin(), other.end());
-        }
-
+        template<typename T> 
+        void Append(const T& other) { 
+            Vec.insert(Vec.end(), other.begin(), other.end()); 
+        } 
+ 
         void SerializeToProto(NKikimrVDiskData::TDiskPartVec &pb) const {
             for (const auto &x : Vec) {
                 auto p = pb.AddDiskParts();

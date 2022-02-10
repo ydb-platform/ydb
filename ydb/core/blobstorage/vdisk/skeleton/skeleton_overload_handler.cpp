@@ -12,13 +12,13 @@ namespace NKikimr {
     //////////////////////////////////////////////////////////////////////////
     class TEmergencyQueue {
         struct TItem {
-            std::unique_ptr<IEventHandle> Ev;
+            std::unique_ptr<IEventHandle> Ev; 
 
             TItem() = default;
-
-            template<typename T>
-            TItem(TAutoPtr<TEventHandle<T>> ev)
-                : Ev(ev.Release())
+ 
+            template<typename T> 
+            TItem(TAutoPtr<TEventHandle<T>> ev) 
+                : Ev(ev.Release()) 
             {}
         };
 
@@ -95,7 +95,7 @@ namespace NKikimr {
         void Process(const TActorContext &ctx) {
             auto item = Queue.Head();
             Y_VERIFY(item);
-            TAutoPtr<IEventHandle> ev = item->Ev.release();
+            TAutoPtr<IEventHandle> ev = item->Ev.release(); 
             Queue.Pop();
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvVMovedPatch: {
@@ -152,7 +152,7 @@ namespace NKikimr {
     TOverloadHandler::TOverloadHandler(
             const TIntrusivePtr<TVDiskContext> &vctx,
             const TPDiskCtxPtr &pdiskCtx,
-            std::shared_ptr<THull> hull,
+            std::shared_ptr<THull> hull, 
             NMonGroup::TSkeletonOverloadGroup &&mon,
             TVMovedPatchHandler &&vMovedPatch,
             TVPatchStartHandler &&vPatchStart,
@@ -164,7 +164,7 @@ namespace NKikimr {
         , Mon(std::move(mon))
         , EmergencyQueue(new TEmergencyQueue(Mon, std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
                 std::move(vMultiPut), std::move(loc), std::move(aoput)))
-        , DynamicPDiskWeightsManager(std::make_shared<TDynamicPDiskWeightsManager>(vctx, pdiskCtx))
+        , DynamicPDiskWeightsManager(std::make_shared<TDynamicPDiskWeightsManager>(vctx, pdiskCtx)) 
     {}
 
     TOverloadHandler::~TOverloadHandler() {}

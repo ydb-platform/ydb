@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NTenantSlotBroker {
 
-static const TString ANY_DATA_CENTER = "";
+static const TString ANY_DATA_CENTER = ""; 
 constexpr char ANY_SLOT_TYPE[] = "";
 
 constexpr char PIN_DATA_CENTER[] = "pinned";

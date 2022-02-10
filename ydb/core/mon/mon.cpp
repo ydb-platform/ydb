@@ -28,8 +28,8 @@ namespace NActors {
     ////////////////////////////////////////////////////////////////////////////////
     class TMonRequest : public NActors::TActor<TMonRequest> {
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::ACTORLIB_COMMON;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::ACTORLIB_COMMON; 
         }
 
         TMonRequest(const TActorId &targetActorId, IMonHttpRequest& request,

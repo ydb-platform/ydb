@@ -58,8 +58,8 @@ public:
         }
 
         for (ui32 i = 1; i <= NumNodes; ++i) {
-            auto& portMap = tiSettings ? specificNodePortMap[i] : nodeToPortMap;
-            Nodes.emplace(i, MakeHolder<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig));
+            auto& portMap = tiSettings ? specificNodePortMap[i] : nodeToPortMap; 
+            Nodes.emplace(i, MakeHolder<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig)); 
         }
     }
 
@@ -74,10 +74,10 @@ public:
         return Nodes[nodeId]->RegisterActor(actor);
     }
 
-    TActorId InterconnectProxy(ui32 peerNodeId, ui32 nodeId) {
-        return Nodes[nodeId]->InterconnectProxy(peerNodeId);
-    }
-
+    TActorId InterconnectProxy(ui32 peerNodeId, ui32 nodeId) { 
+        return Nodes[nodeId]->InterconnectProxy(peerNodeId); 
+    } 
+ 
     void KillActor(ui32 nodeId, const TActorId& id) {
         Nodes[nodeId]->Send(id, new NActors::TEvents::TEvPoisonPill);
     }

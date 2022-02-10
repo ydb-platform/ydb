@@ -61,8 +61,8 @@ protected:
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::VIEWER_HANDLER; 
     }
 
     TJsonWhiteboardRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)

@@ -41,9 +41,9 @@ namespace NKikimr {
         const ui32 Handoff;
         const ui32 BarrierIngressValueMask;
         const ui32 BarrierIngressDomainMask;
-        const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
+        const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology; 
 
-        static TIngressCachePtr Create(std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+        static TIngressCachePtr Create(std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
                                        const TVDiskIdShort &vdisk);
 
     private:
@@ -53,8 +53,8 @@ namespace NKikimr {
                       ui32 disksInDomain,
                       ui32 handoff,
                       ui32 barrierIngressValueMask,
-                      ui32 barrierIngressDomainMask,
-                      std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology);
+                      ui32 barrierIngressDomainMask, 
+                      std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology); 
     };
 
 
@@ -68,21 +68,21 @@ namespace NKikimr {
     public:
         typedef std::pair<NMatrix::TVectorType, NMatrix::TVectorType> TPairOfVectors;
 
-        enum class EMode {
-            GENERIC,
-            MIRROR3OF4,
-        };
-        static EMode IngressMode(TBlobStorageGroupType gtype);
-
+        enum class EMode { 
+            GENERIC, 
+            MIRROR3OF4, 
+        }; 
+        static EMode IngressMode(TBlobStorageGroupType gtype); 
+ 
         TIngress() = default;
         // explicit constructor
         explicit TIngress(ui64 rawData);
 
-        bool KeepUnconditionally(EMode ingressMode) const;
-        void SetKeep(EMode ingressMode, ECollectMode mode);
-        int GetCollectMode(EMode ingressMode) const;
+        bool KeepUnconditionally(EMode ingressMode) const; 
+        void SetKeep(EMode ingressMode, ECollectMode mode); 
+        int GetCollectMode(EMode ingressMode) const; 
         // Returns vector of parts we have heard about, i.e. main_vec | handoff1 | ... | handoffN
-        NMatrix::TVectorType PartsWeKnowAbout(TBlobStorageGroupType gtype) const;
+        NMatrix::TVectorType PartsWeKnowAbout(TBlobStorageGroupType gtype) const; 
         // Returns vector of parts we MUST have locally according to Ingress, i.e. parts we have
         // written locally or recovered after crash
         NMatrix::TVectorType PartsWeMustHaveLocally(const TBlobStorageGroupInfo::TTopology *top,
@@ -92,12 +92,12 @@ namespace NKikimr {
         TPairOfVectors HandoffParts(const TBlobStorageGroupInfo::TTopology *top,
                                     const TVDiskIdShort &vdisk,
                                     const TLogoBlobID &id) const;
-        NMatrix::TVectorType LocalParts(TBlobStorageGroupType gtype) const;
-        NMatrix::TVectorType KnownParts(TBlobStorageGroupType gtype, ui8 nodeId) const;
+        NMatrix::TVectorType LocalParts(TBlobStorageGroupType gtype) const; 
+        NMatrix::TVectorType KnownParts(TBlobStorageGroupType gtype, ui8 nodeId) const; 
         // Returns main replica for this LogoBlob with PartId != 0
         static TVDiskIdShort GetMainReplica(const TBlobStorageGroupInfo::TTopology *top, const TLogoBlobID &id);
         // Make a copy of ingress w/o local bits
-        TIngress CopyWithoutLocal(TBlobStorageGroupType gtype) const;
+        TIngress CopyWithoutLocal(TBlobStorageGroupType gtype) const; 
         void DeleteHandoff(const TBlobStorageGroupInfo::TTopology *top,
                            const TVDiskIdShort &vdisk,
                            const TLogoBlobID &id);
@@ -139,10 +139,10 @@ namespace NKikimr {
                                     const TVDiskIdShort &vdisk,
                                     const TLogoBlobID &id);
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // mirror-3of4 support
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        // mirror-3of4 support 
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+ 
     private:
         ui64 Data = 0;
         // Data layout:
@@ -153,7 +153,7 @@ namespace NKikimr {
         // create ingress from LogoBlobID id (fills in main or handoff ingress bits
         // and local bits optionally)
         static TMaybe<TIngress> CreateIngressInternal(
-                                    TBlobStorageGroupType gtype,
+                                    TBlobStorageGroupType gtype, 
                                     const ui8 nodeId,           // Ingress for _this_ node
                                     const TLogoBlobID &id,      // LogoBlobID
                                     const bool setUpLocalBits); // Setup data also
@@ -203,7 +203,7 @@ namespace NKikimr {
     // gc commands, etc.
     ////////////////////////////////////////////////////////////////////////////
     struct TLogoBlobFilter {
-        TLogoBlobFilter(const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
+        TLogoBlobFilter(const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top, 
                         const TVDiskIdShort &vdisk)
             : Top(top)
             , VDisk(vdisk)
@@ -216,7 +216,7 @@ namespace NKikimr {
             return Top->BelongsToSubgroup(VDisk, id.Hash());
         }
 
-        std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
+        std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top; 
         const TVDiskIdShort VDisk;
     };
 
@@ -225,10 +225,10 @@ namespace NKikimr {
         bool Check(const T &) const {
             return true;
         }
-        template <class T1, class T2>
-        bool Check(const T1&, const T2&) const {
-            return true;
-        }
+        template <class T1, class T2> 
+        bool Check(const T1&, const T2&) const { 
+            return true; 
+        } 
         template <class T1, class T2>
         bool Check(const T1&, const T2&, bool) const {
             return true;

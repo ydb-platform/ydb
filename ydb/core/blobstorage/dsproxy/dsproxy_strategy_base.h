@@ -26,10 +26,10 @@ protected:
             TBlobStorageGroupInfo::EBlobState *optimisticState, TBlobStorageGroupInfo::EBlobState *altruisticState,
             bool considerSlowAsError);
     bool IsUnrecoverableAltruistic(TBlobStorageGroupInfo::EBlobState recoveryState);
-    std::optional<EStrategyOutcome> SetAbsentForUnrecoverableAltruistic(TBlobStorageGroupInfo::EBlobState recoveryState, TBlobState &state);
-    std::optional<EStrategyOutcome> ProcessOptimistic(TBlobStorageGroupInfo::EBlobState altruisticState,
+    std::optional<EStrategyOutcome> SetAbsentForUnrecoverableAltruistic(TBlobStorageGroupInfo::EBlobState recoveryState, TBlobState &state); 
+    std::optional<EStrategyOutcome> ProcessOptimistic(TBlobStorageGroupInfo::EBlobState altruisticState, 
             TBlobStorageGroupInfo::EBlobState optimisticState, bool isDryRun, TBlobState &state);
-    std::optional<EStrategyOutcome> ProcessPessimistic(const TBlobStorageGroupInfo &info, TBlobStorageGroupInfo::EBlobState pessimisticState,
+    std::optional<EStrategyOutcome> ProcessPessimistic(const TBlobStorageGroupInfo &info, TBlobStorageGroupInfo::EBlobState pessimisticState, 
             bool doVerify, TBlobState &state);
     void AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &groupDiskRequests, TLogoBlobID &fullId, ui32 partIdx,
             TBlobState::TDisk &disk, TIntervalSet<i32> &intervalSet, const char *logMarker);

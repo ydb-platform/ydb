@@ -238,8 +238,8 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
     };
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_PROXY_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::KQP_PROXY_ACTOR; 
     }
 
     TKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
@@ -320,9 +320,9 @@ public:
 
     void Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev) {
         if (const auto& node = ev->Get()->Node) {
-            SelfDataCenterId = node->Location.GetDataCenterId();
+            SelfDataCenterId = node->Location.GetDataCenterId(); 
         } else {
-            SelfDataCenterId = TString();
+            SelfDataCenterId = TString(); 
         }
 
         NodeResources.SetNodeId(SelfId().NodeId());
@@ -1283,7 +1283,7 @@ private:
     TLocalSessionsRegistry LocalSessions;
 
     bool ServerWorkerBalancerComplete = false;
-    std::optional<TString> SelfDataCenterId;
+    std::optional<TString> SelfDataCenterId; 
     TVector<NKikimrKqp::TKqpProxyNodeResources> PeerProxyNodeResources;
     bool ResourcesPublishScheduled = false;
     TString PublishBoardPath;

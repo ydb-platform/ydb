@@ -45,19 +45,19 @@ inline TActorId MakeBlobStorageVDiskID(ui32 node, ui32 pDiskID, ui32 vDiskSlotID
     return TActorId(node, TStringBuf(x, 12));
 }
 
-inline std::tuple<ui32, ui32, ui32> DecomposeVDiskServiceId(const TActorId& actorId) {
-    Y_VERIFY(actorId.IsService());
-    const TStringBuf serviceId = actorId.ServiceId();
-    const ui8 *ptr = reinterpret_cast<const ui8*>(serviceId.data());
-    Y_VERIFY(serviceId.size() == 12);
-    Y_VERIFY(memcmp(ptr, "bsvd", 4) == 0);
-    const ui32 nodeId = actorId.NodeId();
-    const ui32 pdiskId = (ui32)ptr[4] | (ui32)ptr[5] << 8 | (ui32)ptr[6] << 16 | (ui32)ptr[7] << 24;
-    const ui32 vslotId = (ui32)ptr[8] | (ui32)ptr[9] << 8 | (ui32)ptr[10] << 16 | (ui32)ptr[11] << 24;
-    Y_VERIFY_DEBUG(actorId == MakeBlobStorageVDiskID(nodeId, pdiskId, vslotId));
-    return {nodeId, pdiskId, vslotId};
-}
-
+inline std::tuple<ui32, ui32, ui32> DecomposeVDiskServiceId(const TActorId& actorId) { 
+    Y_VERIFY(actorId.IsService()); 
+    const TStringBuf serviceId = actorId.ServiceId(); 
+    const ui8 *ptr = reinterpret_cast<const ui8*>(serviceId.data()); 
+    Y_VERIFY(serviceId.size() == 12); 
+    Y_VERIFY(memcmp(ptr, "bsvd", 4) == 0); 
+    const ui32 nodeId = actorId.NodeId(); 
+    const ui32 pdiskId = (ui32)ptr[4] | (ui32)ptr[5] << 8 | (ui32)ptr[6] << 16 | (ui32)ptr[7] << 24; 
+    const ui32 vslotId = (ui32)ptr[8] | (ui32)ptr[9] << 8 | (ui32)ptr[10] << 16 | (ui32)ptr[11] << 24; 
+    Y_VERIFY_DEBUG(actorId == MakeBlobStorageVDiskID(nodeId, pdiskId, vslotId)); 
+    return {nodeId, pdiskId, vslotId}; 
+} 
+ 
 inline TActorId MakeBlobStoragePDiskID(ui32 node, ui32 pDiskID) {
     char x[12] = {'b','s','p','d','i','s','k', 0};
     x[8] = (char)pDiskID;

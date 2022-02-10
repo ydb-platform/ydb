@@ -209,10 +209,10 @@ public:                                                                         
                 COUNTER_INIT(ReplUnreplicatedVDisks, false);
                 COUNTER_INIT(ReplUnreplicatedBlobs, false);
                 COUNTER_INIT(ReplVGetBytesReceived, true);
-                COUNTER_INIT(ReplCurrentNumUnrecoveredPhantomBlobs, false);
-                COUNTER_INIT(ReplCurrentNumUnrecoveredNonPhantomBlobs, false);
-                COUNTER_INIT(ReplNumUnrecoveredPhantomBlobs, false);
-                COUNTER_INIT(ReplNumUnrecoveredNonPhantomBlobs, false);
+                COUNTER_INIT(ReplCurrentNumUnrecoveredPhantomBlobs, false); 
+                COUNTER_INIT(ReplCurrentNumUnrecoveredNonPhantomBlobs, false); 
+                COUNTER_INIT(ReplNumUnrecoveredPhantomBlobs, false); 
+                COUNTER_INIT(ReplNumUnrecoveredNonPhantomBlobs, false); 
             }
 
             COUNTER_DEF(SyncerVSyncMessagesSent);
@@ -231,10 +231,10 @@ public:                                                                         
             COUNTER_DEF(ReplUnreplicatedVDisks);
             COUNTER_DEF(ReplUnreplicatedBlobs);
             COUNTER_DEF(ReplVGetBytesReceived);
-            COUNTER_DEF(ReplCurrentNumUnrecoveredPhantomBlobs);
-            COUNTER_DEF(ReplCurrentNumUnrecoveredNonPhantomBlobs);
-            COUNTER_DEF(ReplNumUnrecoveredPhantomBlobs);
-            COUNTER_DEF(ReplNumUnrecoveredNonPhantomBlobs);
+            COUNTER_DEF(ReplCurrentNumUnrecoveredPhantomBlobs); 
+            COUNTER_DEF(ReplCurrentNumUnrecoveredNonPhantomBlobs); 
+            COUNTER_DEF(ReplNumUnrecoveredPhantomBlobs); 
+            COUNTER_DEF(ReplNumUnrecoveredNonPhantomBlobs); 
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

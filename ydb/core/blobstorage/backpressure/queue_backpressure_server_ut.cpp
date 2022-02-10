@@ -1,4 +1,4 @@
-#include "queue_backpressure_server.h"
+#include "queue_backpressure_server.h" 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/null.h>
@@ -18,36 +18,36 @@ namespace NKikimr {
         Y_UNIT_TEST(CreateDelete) {
             TQueueBackpressure<ui64> qb(true, 100u, 10u);
 
-            TInstant now = Now();
-            TActorId actorId(1, 1, 1, 1);
-            qb.Push(5, actorId, TMessageId(0, 0), 1, now);
-            qb.Push(5, actorId, TMessageId(0, 1), 1, now);
-            qb.Push(5, actorId, TMessageId(0, 2), 1, now);
-            qb.Push(5, actorId, TMessageId(0, 3), 1, now);
-            qb.Processed(actorId, TMessageId(0, 0), 1, now);
-            qb.Push(5, actorId, TMessageId(0, 4), 1, now);
-            qb.Processed(actorId, TMessageId(0, 2), 1, now);
-            qb.Processed(actorId, TMessageId(0, 1), 1, now);
-            qb.Push(5, actorId, TMessageId(0, 4), 1, now);
-            qb.Output(STR, now);
+            TInstant now = Now(); 
+            TActorId actorId(1, 1, 1, 1); 
+            qb.Push(5, actorId, TMessageId(0, 0), 1, now); 
+            qb.Push(5, actorId, TMessageId(0, 1), 1, now); 
+            qb.Push(5, actorId, TMessageId(0, 2), 1, now); 
+            qb.Push(5, actorId, TMessageId(0, 3), 1, now); 
+            qb.Processed(actorId, TMessageId(0, 0), 1, now); 
+            qb.Push(5, actorId, TMessageId(0, 4), 1, now); 
+            qb.Processed(actorId, TMessageId(0, 2), 1, now); 
+            qb.Processed(actorId, TMessageId(0, 1), 1, now); 
+            qb.Push(5, actorId, TMessageId(0, 4), 1, now); 
+            qb.Output(STR, now); 
         }
 
 
         Y_UNIT_TEST(IncorrectMessageId) {
             TQueueBackpressure<ui64> qb(true, 100u, 10u);
 
-            TInstant now = Now();
-            TActorId actorId(1, 1, 1, 1);
-            qb.Push(5, actorId, TMessageId(0, 0), 1, now);
-            qb.Push(5, actorId, TMessageId(0, 1), 1, now);
-            auto feedback = qb.Push(5, actorId, TMessageId(0, 1), 1, now);
+            TInstant now = Now(); 
+            TActorId actorId(1, 1, 1, 1); 
+            qb.Push(5, actorId, TMessageId(0, 0), 1, now); 
+            qb.Push(5, actorId, TMessageId(0, 1), 1, now); 
+            auto feedback = qb.Push(5, actorId, TMessageId(0, 1), 1, now); 
             TString res = "{Status# 4 Notify# 1 ActualWindowSize# 2 MaxWindowSize# 20 "
-                                "ExpectedMsgId# [1 2] FailedMsgId# [0 1]}";
+                                "ExpectedMsgId# [1 2] FailedMsgId# [0 1]}"; 
             TStringStream str;
             feedback.Output(str);
             STR << res << "\n";
             STR << str.Str() << "\n";
-            UNIT_ASSERT_STRINGS_EQUAL(str.Str(), res);
+            UNIT_ASSERT_STRINGS_EQUAL(str.Str(), res); 
         }
 
 
@@ -62,26 +62,26 @@ namespace NKikimr {
                 : Id(id)
                 , MsgId()
                 , State(true)
-                , ActorId(1, 1, Id, 1)
+                , ActorId(1, 1, Id, 1) 
             {}
 
             TFeedback Work(TQueueBackpressure<ui64> &qb) {
-                TInstant now = Now();
+                TInstant now = Now(); 
                 if (State) {
                     State = !State;
-                    return qb.Push(Id, ActorId, MsgId, 1, now);
+                    return qb.Push(Id, ActorId, MsgId, 1, now); 
                 } else {
                     State = !State;
-                    const TMessageId res = MsgId;
-                    ++MsgId.MsgId;
-                    return qb.Processed(ActorId, res, 1, now);
+                    const TMessageId res = MsgId; 
+                    ++MsgId.MsgId; 
+                    return qb.Processed(ActorId, res, 1, now); 
                 }
             }
 
             ui64 Id;
             TMessageId MsgId;
             bool State;
-            TActorId ActorId;
+            TActorId ActorId; 
         };
 
         struct TInFlightClient : public IClient {
@@ -91,19 +91,19 @@ namespace NKikimr {
                 , MaxInFlight(maxInFlight)
                 , InFlight(0)
                 , FullLoadObtained(false)
-                , ActorId(1, 1, Id, 1)
+                , ActorId(1, 1, Id, 1) 
             {}
 
             TFeedback Work(TQueueBackpressure<ui64> &qb) {
-                TInstant now = Now();
+                TInstant now = Now(); 
                 if (!FullLoadObtained) {
                     // full load
                     while (true) {
-                        TFeedback res = qb.Push(Id, ActorId, MsgId, 1, now);
+                        TFeedback res = qb.Push(Id, ActorId, MsgId, 1, now); 
                         if (Good(res.first.Status)) {
                             VERBOSE_STR << "UNDERLOAD: Push OK MsgId# " << MsgId.ToString() << "\n";
                             InFlight++;
-                            MsgId.MsgId++;
+                            MsgId.MsgId++; 
                             if (InFlight == MaxInFlight) {
                                 FullLoadObtained = true;
                                 return res;
@@ -115,18 +115,18 @@ namespace NKikimr {
                     }
                 } else {
                     if (InFlight == MaxInFlight) {
-                        const TMessageId temp(MsgId.SequenceId, MsgId.MsgId - InFlight);
-                        auto res = qb.Processed(ActorId, temp, 1, now);
+                        const TMessageId temp(MsgId.SequenceId, MsgId.MsgId - InFlight); 
+                        auto res = qb.Processed(ActorId, temp, 1, now); 
                         Y_VERIFY(Good(res.first.Status));
-                        VERBOSE_STR << "LOAD: Processed: MsgId# " << temp.ToString() << "\n";
+                        VERBOSE_STR << "LOAD: Processed: MsgId# " << temp.ToString() << "\n"; 
                         InFlight--;
                         return res;
                     } else {
-                        auto res = qb.Push(Id, ActorId, MsgId, 1, now);
+                        auto res = qb.Push(Id, ActorId, MsgId, 1, now); 
                         Y_VERIFY(Good(res.first.Status));
                         VERBOSE_STR << "LOAD: Push: MsgId# " << MsgId.ToString() << "\n";
                         InFlight++;
-                        MsgId.MsgId++;
+                        MsgId.MsgId++; 
                         return res;
                     }
                 }
@@ -137,7 +137,7 @@ namespace NKikimr {
             const ui32 MaxInFlight;
             ui32 InFlight;
             bool FullLoadObtained;
-            TActorId ActorId;
+            TActorId ActorId; 
         };
 
 
@@ -150,14 +150,14 @@ namespace NKikimr {
                 clients.emplace_back(new TTrivialClient(i));
             }
 
-            TInstant now = Now();
+            TInstant now = Now(); 
             for (i = 0; i < 1000000; i++) {
                 for (auto &c : clients) {
                     c->Work(qb);
                 }
                 if (i % 100000 == 0) {
                     STR << "=========================\n";
-                    qb.Output(STR, now);
+                    qb.Output(STR, now); 
                 }
             }
 
@@ -176,8 +176,8 @@ namespace NKikimr {
         Y_UNIT_TEST(PerfInFlight) {
             TQueueBackpressure<ui64> qb(true, 100u, 10u);
 
-            TInstant now = Now();
-
+            TInstant now = Now(); 
+ 
             TVector<IClientPtr> clients;
             clients.emplace_back(new TInFlightClient(0, 30));
             clients.emplace_back(new TInFlightClient(1, 10));
@@ -189,22 +189,22 @@ namespace NKikimr {
                 }
                 if (i % 100000 == 0) {
                     STR << "=========================\n";
-                    qb.Output(STR, now);
+                    qb.Output(STR, now); 
                 }
             }
 
             TStringStream s;
-            qb.Output(s, now);
+            qb.Output(s, now); 
             TString res = "MaxCost# 100 ActualCost# 38 activeWindows# 2 fadingWindows# 0 "
                                 "frozenWindows# 0 deadWindows# 0\n"
-                            "GlobalStat: NSuccess# 1000038 NWindowUpdate# 400005 NProcessed# 1000000 "
+                            "GlobalStat: NSuccess# 1000038 NWindowUpdate# 400005 NProcessed# 1000000 " 
                                 "NIncorrectMsgId# 0 NHighWatermarkOverflow# 0\n"
                             "ClientId# 0 ExpectedMsgId# [0 500029] Cost# 29 LowWatermark# 20 HighWatermark# 76 "
                                 "CostChangeUntilFrozenCountdown# 20 CostChangeUntilDeathCountdown# 30\n"
                             "ClientId# 1 ExpectedMsgId# [0 500009] Cost# 9 LowWatermark# 20 HighWatermark# 23 "
                                 "CostChangeUntilFrozenCountdown# 20 CostChangeUntilDeathCountdown# 30\n";
             STR << s.Str() << "\n";
-            UNIT_ASSERT_STRINGS_EQUAL(s.Str(), res);
+            UNIT_ASSERT_STRINGS_EQUAL(s.Str(), res); 
         }
     }
 

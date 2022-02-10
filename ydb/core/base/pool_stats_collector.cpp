@@ -44,9 +44,9 @@ private:
         MiniKQLPoolStats.Update();
 
         TVector<std::tuple<TString, double, ui32>> pools;
-        for (const auto& pool : PoolCounters) {
+        for (const auto& pool : PoolCounters) { 
             pools.emplace_back(pool.Name, pool.Usage, pool.Threads);
-        }
+        } 
 
         ctx.Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId()), new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(pools));
     }

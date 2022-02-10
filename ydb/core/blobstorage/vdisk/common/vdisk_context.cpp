@@ -21,26 +21,26 @@ namespace NKikimr {
 
     TVDiskContext::TVDiskContext(
                 const TActorId &vdiskActorId,
-                std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
                 const TIntrusivePtr<NMonitoring::TDynamicCounters>& vdiskCounters,
                 const TVDiskID &selfVDisk,
                 TActorSystem *as, // as can be nullptr for tests
-                TPDiskCategory::EDeviceType type,
-                bool donorMode,
-                TReplQuoter::TPtr replPDiskReadQuoter,
-                TReplQuoter::TPtr replPDiskWriteQuoter,
-                TReplQuoter::TPtr replNodeRequestQuoter,
-                TReplQuoter::TPtr replNodeResponseQuoter)
+                TPDiskCategory::EDeviceType type, 
+                bool donorMode, 
+                TReplQuoter::TPtr replPDiskReadQuoter, 
+                TReplQuoter::TPtr replPDiskWriteQuoter, 
+                TReplQuoter::TPtr replNodeRequestQuoter, 
+                TReplQuoter::TPtr replNodeResponseQuoter) 
         : TBSProxyContext(vdiskCounters->GetSubgroup("subsystem", "memhull"))
         , VDiskActorId(vdiskActorId)
         , Top(std::move(top))
         , VDiskCounters(vdiskCounters)
         , VDiskMemCounters(vdiskCounters->GetSubgroup("subsystem", "memhull"))
         , Histograms(VDiskCounters, type)
-        , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(VDiskCounters, "subsystem", "interface"))
+        , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(VDiskCounters, "subsystem", "interface")) 
         , GroupId(selfVDisk.GroupID)
         , ShortSelfVDisk(selfVDisk)
-        , VDiskLogPrefix(GenerateVDiskLogPrefix(selfVDisk, donorMode))
+        , VDiskLogPrefix(GenerateVDiskLogPrefix(selfVDisk, donorMode)) 
         , NodeId(as ? as->NodeId : 0)
         , FreshIndex(VDiskMemCounters->GetCounter("MemTotal:FreshIndex"))
         , FreshData(VDiskMemCounters->GetCounter("MemTotal:FreshData"))
@@ -53,10 +53,10 @@ namespace NKikimr {
         , Replication(VDiskMemCounters->GetCounter("MemTotal:Replication"))
         , SyncLogCache(VDiskMemCounters->GetCounter("MemTotal:SyncLogCache"))
         , ActorSystem(as)
-        , ReplPDiskReadQuoter(std::move(replPDiskReadQuoter))
-        , ReplPDiskWriteQuoter(std::move(replPDiskWriteQuoter))
-        , ReplNodeRequestQuoter(std::move(replNodeRequestQuoter))
-        , ReplNodeResponseQuoter(std::move(replNodeResponseQuoter))
+        , ReplPDiskReadQuoter(std::move(replPDiskReadQuoter)) 
+        , ReplPDiskWriteQuoter(std::move(replPDiskWriteQuoter)) 
+        , ReplNodeRequestQuoter(std::move(replNodeRequestQuoter)) 
+        , ReplNodeResponseQuoter(std::move(replNodeResponseQuoter)) 
         , OutOfSpaceState(Top->GetTotalVDisksNum(), Top->GetOrderNumber(ShortSelfVDisk))
         , Logger(as ? ActorSystemLogger(as) : DevNullLogger())
     {

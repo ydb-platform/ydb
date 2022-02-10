@@ -12,11 +12,11 @@ namespace NKikimr {
     class THugeBlobCtx;
     IActor *CreateHugeStatActor(
             TIntrusivePtr<THullCtx> hullCtx,
-            const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
+            const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx, 
             const TActorId &parentId,
             THullDsSnap &&fullSnap,
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
-            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result);
+            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result); 
 
 } // NKikimr
 

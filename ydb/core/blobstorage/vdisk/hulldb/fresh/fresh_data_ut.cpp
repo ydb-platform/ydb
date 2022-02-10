@@ -12,15 +12,15 @@
 
 namespace NKikimr {
 
-    static std::shared_ptr<TRopeArena> Arena = std::make_shared<TRopeArena>(&TRopeArenaBackend::Allocate);
-
+    static std::shared_ptr<TRopeArena> Arena = std::make_shared<TRopeArena>(&TRopeArenaBackend::Allocate); 
+ 
     Y_UNIT_TEST_SUITE(TBlobStorageHullFresh) {
 
         ////////////////////////////////////////////////////////////////////////////////////////
         // Definitions
         ////////////////////////////////////////////////////////////////////////////////////////
         typedef TFreshData<TKeyLogoBlob, TMemRecLogoBlob> TFreshData;
-        typedef std::shared_ptr<TFreshData> TFreshDataPtr;
+        typedef std::shared_ptr<TFreshData> TFreshDataPtr; 
         static const ui32 ChunkSize = 8u << 20u;
         static const ui32 Level0MaxSstsAtOnce = 8u;
         static const ui32 BufSize = 64u << 20u;
@@ -51,27 +51,27 @@ namespace NKikimr {
             TMemRecLogoBlob MemRec3;
             TFreshDataPtr Fresh;
 
-            std::unique_ptr<TFreshData::TFreshDataSnapshot> Snap3;
-            std::unique_ptr<TFreshData::TFreshDataSnapshot> Snap10;
+            std::unique_ptr<TFreshData::TFreshDataSnapshot> Snap3; 
+            std::unique_ptr<TFreshData::TFreshDataSnapshot> Snap10; 
 
             TDatasetSimple() {
                 LogoBlob1 = TLogoBlobID(0, 1, 1, 0, sizeof(Data), 0, 1);
                 LogoBlob2 = TLogoBlobID(0, 1, 2, 0, sizeof(Data), 0, 1);
                 LogoBlob3 = TLogoBlobID(0, 2, 1, 0, sizeof(Data), 0, 1);
 
-                Fresh = std::make_shared<TFreshData>(GetLevelIndexSetting(), CreateDefaultTimeProvider(), Arena);
+                Fresh = std::make_shared<TFreshData>(GetLevelIndexSetting(), CreateDefaultTimeProvider(), Arena); 
 
                 // several puts
                 PutToFresh(1, LogoBlob1);
                 PutToFresh(2, LogoBlob2);
                 PutToFresh(3, LogoBlob3);
 
-                Snap3 = std::make_unique<TFreshData::TFreshDataSnapshot>(Fresh->GetSnapshot());
-                Snap10 = std::make_unique<TFreshData::TFreshDataSnapshot>(Fresh->GetSnapshot());
+                Snap3 = std::make_unique<TFreshData::TFreshDataSnapshot>(Fresh->GetSnapshot()); 
+                Snap10 = std::make_unique<TFreshData::TFreshDataSnapshot>(Fresh->GetSnapshot()); 
             }
 
             void PutToFresh(ui64 lsn, const TLogoBlobID &key) {
-                TRope buffer(Data);
+                TRope buffer(Data); 
                 Fresh->PutLogoBlobWithData(lsn, TKeyLogoBlob(key), key.PartId(), TIngress(), std::move(buffer));
             }
         };
@@ -86,7 +86,7 @@ namespace NKikimr {
                 PutToFresh(5, LogoBlob1);
                 PutToFresh(6, LogoBlob2);
                 PutToFresh(7, LogoBlob3);
-                Snap10 = std::make_unique<TFreshData::TFreshDataSnapshot>(Fresh->GetSnapshot());
+                Snap10 = std::make_unique<TFreshData::TFreshDataSnapshot>(Fresh->GetSnapshot()); 
             }
         };
 
@@ -190,7 +190,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(SolomonStandCrash) {
             TFreshDataPtr fresh(new TFreshData(GetLevelIndexSetting(),
-                CreateDefaultTimeProvider(), Arena));
+                CreateDefaultTimeProvider(), Arena)); 
 
             auto putFunc = [] (TFreshDataPtr fresh, ui64 tabletID, ui32 gen, ui32 step, ui64 lsn) {
                 TMemRecLogoBlob memRec;
@@ -243,7 +243,7 @@ namespace NKikimr {
 
             {
                 TInstant delStart = TAppData::TimeProvider->Now();
-                fresh.reset();
+                fresh.reset(); 
                 TInstant delStop = TAppData::TimeProvider->Now();
                 STR << "Data delete: " << (delStop - delStart).ToString() << "\n";
             }
@@ -324,7 +324,7 @@ namespace NKikimr {
             }
             std::sort(vec.begin(), vec.end());
 
-            auto result = std::make_shared<TFreshAppendix<TKeyLogoBlob, TMemRecLogoBlob>>(ctx.MemConsumer);
+            auto result = std::make_shared<TFreshAppendix<TKeyLogoBlob, TMemRecLogoBlob>>(ctx.MemConsumer); 
             result->Reserve(elems);
             for (const auto x : vec) {
                 result->Add(TKeyLogoBlob(x), ctx.MemRec);
@@ -352,7 +352,7 @@ namespace NKikimr {
                 // built fresh data
                 TFreshDataPtr FreshData;
                 // fresh data snapshot at nth percent
-                std::unique_ptr<TFreshData::TFreshDataSnapshot> SnapPercent;
+                std::unique_ptr<TFreshData::TFreshDataSnapshot> SnapPercent; 
             };
 
             TFreshBuilder(ui64 elems, ui64 appendixBatchSize, bool appendixCompaction, ui64 percentValidLsns)
@@ -388,11 +388,11 @@ namespace NKikimr {
 
                     // take snapshot
                     if (elems == SnapshotCutoffLsn) {
-                        result.SnapPercent = std::make_unique<TFreshData::TFreshDataSnapshot>(fresh->GetSnapshot());
+                        result.SnapPercent = std::make_unique<TFreshData::TFreshDataSnapshot>(fresh->GetSnapshot()); 
                     }
                 }
                 if (!result.SnapPercent) {
-                    result.SnapPercent = std::make_unique<TFreshData::TFreshDataSnapshot>(fresh->GetSnapshot());
+                    result.SnapPercent = std::make_unique<TFreshData::TFreshDataSnapshot>(fresh->GetSnapshot()); 
                 }
                 TInstant stopTime = TAppData::TimeProvider->Now();
                 STR << "Build Fresh from Appendix(compact="<< AppendixCompaction <<"): "
@@ -413,11 +413,11 @@ namespace NKikimr {
                     fresh->Put(lsn++, TKeyLogoBlob(dataGenerator.Next()), ctx.MemRec);
                     // take snapshot
                     if (elems == SnapshotCutoffLsn) {
-                        result.SnapPercent = std::make_unique<TFreshData::TFreshDataSnapshot>(fresh->GetSnapshot());
+                        result.SnapPercent = std::make_unique<TFreshData::TFreshDataSnapshot>(fresh->GetSnapshot()); 
                     }
                 }
                 if (!result.SnapPercent) {
-                    result.SnapPercent = std::make_unique<TFreshData::TFreshDataSnapshot>(fresh->GetSnapshot());
+                    result.SnapPercent = std::make_unique<TFreshData::TFreshDataSnapshot>(fresh->GetSnapshot()); 
                 }
 
                 TInstant stopTime = TAppData::TimeProvider->Now();

@@ -18,12 +18,12 @@ SRCS(
     bind_channel_storage_pool.proto
     blobstorage.proto
     blobstorage_controller.proto
-    blobstorage_disk.proto
-    blobstorage_disk_color.proto
+    blobstorage_disk.proto 
+    blobstorage_disk_color.proto 
     blobstorage_pdisk_config.proto
     blobstorage_vdisk_config.proto
-    blobstorage_vdisk_internal.proto
-    blobstorage_config.proto
+    blobstorage_vdisk_internal.proto 
+    blobstorage_config.proto 
     blockstore_config.proto
     filestore_config.proto
     bootstrapper.proto
@@ -31,7 +31,7 @@ SRCS(
     channel_purpose.proto
     cms.proto
     config.proto
-    config_units.proto
+    config_units.proto 
     console.proto
     console_base.proto
     console_config.proto
@@ -50,7 +50,7 @@ SRCS(
     counters_schemeshard.proto
     counters_sequenceshard.proto
     counters_sysview_processor.proto
-    counters_testshard.proto
+    counters_testshard.proto 
     counters_tx_proxy.proto
     counters_mediator.proto
     counters.proto
@@ -106,7 +106,7 @@ SRCS(
     tablet_tx.proto
     tenant_pool.proto
     tenant_slot_broker.proto
-    test_shard.proto
+    test_shard.proto 
     tracing.proto
     tablet_tracing_signals.proto
     node_whiteboard.proto
@@ -117,7 +117,7 @@ SRCS(
     tx_proxy.proto
     tx_scheme.proto
     tx_sequenceshard.proto
-    pdiskfit.proto
+    pdiskfit.proto 
     pqconfig.proto
     auth.proto
     key.proto

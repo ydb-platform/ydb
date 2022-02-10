@@ -170,13 +170,13 @@ public:
             , Fields(fields)
         {}
 
-        TPartProtoKey(const TPartProtoKey& other)
-            : Element(other.Element)
-            , Fields(other.Fields)
-        {
-            *this = other;
-        }
-
+        TPartProtoKey(const TPartProtoKey& other) 
+            : Element(other.Element) 
+            , Fields(other.Fields) 
+        { 
+            *this = other; 
+        } 
+ 
         bool operator ==(const TPartProtoKey& other) const {
             Y_VERIFY(Fields == other.Fields);
             for (const FieldDescriptor* field : Fields) {

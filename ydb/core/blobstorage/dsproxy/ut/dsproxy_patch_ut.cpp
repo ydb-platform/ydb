@@ -270,8 +270,8 @@ NKikimrProto::EReplyStatus GetVMovedPatchResultStatus(EMovedPatchCase movedCase)
 
 template <typename THandle, typename TEventHolder>
 void SendByHandle(TTestBasicRuntime &runtime, const THandle &oldHandle, TEventHolder &&ev) {
-    auto handle = std::make_unique<IEventHandle>(oldHandle->Sender, oldHandle->Recipient, ev.release(), oldHandle->Flags, oldHandle->Cookie);
-    runtime.Send(handle.release());
+    auto handle = std::make_unique<IEventHandle>(oldHandle->Sender, oldHandle->Recipient, ev.release(), oldHandle->Flags, oldHandle->Cookie); 
+    runtime.Send(handle.release()); 
 }
 
 void ReceivePatchResult(TTestBasicRuntime &runtime, const TTestArgs &args, NKikimrProto::EReplyStatus status) {
@@ -296,9 +296,9 @@ void ConductGet(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCa
     UNIT_ASSERT_VALUES_EQUAL(get->Queries[0].Id, args.OriginalId);
     UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, args.PatchedId.Hash());
 
-    std::unique_ptr<TEvBlobStorage::TEvGetResult> getResult;
+    std::unique_ptr<TEvBlobStorage::TEvGetResult> getResult; 
     if (resultStatus == NKikimrProto::OK) {
-        getResult = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, 1, args.CurrentGroupId);
+        getResult = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, 1, args.CurrentGroupId); 
         if (naiveCase == ENaivePatchCase::ErrorOnGetItem) {
             getResult->Responses[0].Id = args.OriginalId;
             getResult->Responses[0].Status = NKikimrProto::ERROR;
@@ -308,7 +308,7 @@ void ConductGet(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCa
             getResult->Responses[0].Status = NKikimrProto::OK;
         }
     } else {
-        getResult = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::ERROR, 0, args.CurrentGroupId);
+        getResult = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::ERROR, 0, args.CurrentGroupId); 
     }
 
     SendByHandle(runtime, handle, std::move(getResult));
@@ -338,7 +338,7 @@ void ConductPut(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCa
     TString patchedBuffer = MakePatchedBuffer(args);
     UNIT_ASSERT_VALUES_EQUAL(put->Buffer, patchedBuffer);
 
-    std::unique_ptr<TEvBlobStorage::TEvPutResult> putResult = std::make_unique<TEvBlobStorage::TEvPutResult>(
+    std::unique_ptr<TEvBlobStorage::TEvPutResult> putResult = std::make_unique<TEvBlobStorage::TEvPutResult>( 
             resultStatus, args.PatchedId, args.StatusFlags, args.CurrentGroupId, args.ApproximateFreeSpaceShare);
     SendByHandle(runtime, handle, std::move(putResult));
     CTEST << "ConductPut: Finish\n";
@@ -369,7 +369,7 @@ void ConductVPatchStart(TTestBasicRuntime &runtime, const TDSProxyEnv &env, cons
 
     TInstant now = runtime.GetCurrentTime();
     UNIT_ASSERT(startRecord.HasCookie());
-    std::unique_ptr<TEvBlobStorage::TEvVPatchFoundParts> foundParts = std::make_unique<TEvBlobStorage::TEvVPatchFoundParts>(
+    std::unique_ptr<TEvBlobStorage::TEvVPatchFoundParts> foundParts = std::make_unique<TEvBlobStorage::TEvVPatchFoundParts>( 
             status, args.OriginalId, args.PatchedId, vdisk, startRecord.GetCookie(), now, "", &startRecord,
             nullptr, nullptr, nullptr, NWilson::TTraceId(), 0);
     for (auto partId : parts) {
@@ -404,7 +404,7 @@ void ConductVPatchDiff(TTestBasicRuntime &runtime, const TDSProxyEnv &env, const
 
     TInstant now = runtime.GetCurrentTime();
     UNIT_ASSERT(diffRecord.HasCookie());
-    std::unique_ptr<TEvBlobStorage::TEvVPatchResult> result = std::make_unique<TEvBlobStorage::TEvVPatchResult>(
+    std::unique_ptr<TEvBlobStorage::TEvVPatchResult> result = std::make_unique<TEvBlobStorage::TEvVPatchResult>( 
             resultStatus, args.OriginalId, args.PatchedId, vdisk, diffRecord.GetCookie(), now,
             &diffRecord, nullptr, nullptr, nullptr,NWilson::TTraceId(), 0);
     result->SetStatusFlagsAndFreeSpace(args.StatusFlags, args.ApproximateFreeSpaceShare);
@@ -447,7 +447,7 @@ void ConductVMovedPatch(TTestBasicRuntime &runtime, const TTestArgs &args, EMove
 
     TVDiskID vDiskId = VDiskIDFromVDiskID(vPatchRecord.GetVDiskID());
     TOutOfSpaceStatus oos(args.StatusFlags, args.ApproximateFreeSpaceShare);
-    std::unique_ptr<TEvBlobStorage::TEvVMovedPatchResult> vPatchResult = std::make_unique<TEvBlobStorage::TEvVMovedPatchResult>(
+    std::unique_ptr<TEvBlobStorage::TEvVMovedPatchResult> vPatchResult = std::make_unique<TEvBlobStorage::TEvVMovedPatchResult>( 
             resultStatus, args.OriginalId, args.PatchedId, vDiskId, expectedCookie, oos,
             TAppData::TimeProvider->Now(), 0, &vPatchRecord, nullptr, nullptr, nullptr, NWilson::TTraceId(), 0, TString());
 
@@ -517,11 +517,11 @@ TEvBlobStorage::TEvPatch::TPtr CreatePatch(TTestBasicRuntime &runtime, const TDS
         diffs[diffIdx].Buffer = diff.Buffer;
     }
     TInstant deadline = runtime.GetCurrentTime() + TDuration::Seconds(5);
-    std::unique_ptr<TEvBlobStorage::TEvPatch> patch = std::make_unique<TEvBlobStorage::TEvPatch>(
+    std::unique_ptr<TEvBlobStorage::TEvPatch> patch = std::make_unique<TEvBlobStorage::TEvPatch>( 
             args.OriginalGroupId, args.OriginalId, args.PatchedId, args.MaskForCookieBruteForcing, std::move(diffs),
             args.Diffs.size(), deadline);
     TEvBlobStorage::TEvPatch::TPtr ev(static_cast<TEventHandle<TEvBlobStorage::TEvPatch>*>(
-            new IEventHandle(env.FakeProxyActorId, env.FakeProxyActorId, patch.release())));
+            new IEventHandle(env.FakeProxyActorId, env.FakeProxyActorId, patch.release()))); 
     return ev;
 }
 
@@ -529,8 +529,8 @@ void RunNaivePatchTest(TTestBasicRuntime &runtime, const TTestArgs &args, ENaive
     TDSProxyEnv env;
     env.Configure(runtime, args.GType, args.CurrentGroupId, 0);
     TEvBlobStorage::TEvPatch::TPtr patch = CreatePatch(runtime, env, args);
-    std::unique_ptr<IActor> patchActor = env.CreatePatchRequestActor(patch, false);
-    runtime.Register(patchActor.release());
+    std::unique_ptr<IActor> patchActor = env.CreatePatchRequestActor(patch, false); 
+    runtime.Register(patchActor.release()); 
     ConductNaivePatch(runtime, args, naiveCase);
 }
 
@@ -538,8 +538,8 @@ void RunMovedPatchTest(TTestBasicRuntime &runtime, const TTestArgs &args, EMoved
     TDSProxyEnv env;
     env.Configure(runtime, args.GType, args.CurrentGroupId, 0);
     TEvBlobStorage::TEvPatch::TPtr patch = CreatePatch(runtime, env, args);
-    std::unique_ptr<IActor> patchActor = env.CreatePatchRequestActor(patch, true);
-    runtime.Register(patchActor.release());
+    std::unique_ptr<IActor> patchActor = env.CreatePatchRequestActor(patch, true); 
+    runtime.Register(patchActor.release()); 
     ConductMovedPatch(runtime, env, args, movedCase);
 }
 
@@ -547,8 +547,8 @@ void RunVPatchTest(TTestBasicRuntime &runtime, const TTestArgs &args, EVPatchCas
     TDSProxyEnv env;
     env.Configure(runtime, args.GType, args.CurrentGroupId, 0);
     TEvBlobStorage::TEvPatch::TPtr patch = CreatePatch(runtime, env, args);
-    std::unique_ptr<IActor> patchActor = env.CreatePatchRequestActor(patch, true);
-    runtime.Register(patchActor.release());
+    std::unique_ptr<IActor> patchActor = env.CreatePatchRequestActor(patch, true); 
+    runtime.Register(patchActor.release()); 
     ConductVPatch(runtime, env, args, vpatchCase);
 }
 
@@ -741,8 +741,8 @@ void RunFaultToleranceBlock4Plus2(TTestBasicRuntime &runtime, const TTestArgs &a
     TDSProxyEnv env;
     env.Configure(runtime, args.GType, args.CurrentGroupId, 0);
     TEvBlobStorage::TEvPatch::TPtr patch = CreatePatch(runtime, env, args);
-    std::unique_ptr<IActor> patchActor = env.CreatePatchRequestActor(patch, true);
-    runtime.Register(patchActor.release());
+    std::unique_ptr<IActor> patchActor = env.CreatePatchRequestActor(patch, true); 
+    runtime.Register(patchActor.release()); 
     ConductFaultTolerance(runtime, env, args, GetFaultToleranceCaseForBlock4Plus2(env, args));
 }
 
@@ -750,8 +750,8 @@ void RunFaultToleranceMirror3dc(TTestBasicRuntime &runtime, const TTestArgs &arg
     TDSProxyEnv env;
     env.Configure(runtime, args.GType, args.CurrentGroupId, 0);
     TEvBlobStorage::TEvPatch::TPtr patch = CreatePatch(runtime, env, args);
-    std::unique_ptr<IActor> patchActor = env.CreatePatchRequestActor(patch, true);
-    runtime.Register(patchActor.release());
+    std::unique_ptr<IActor> patchActor = env.CreatePatchRequestActor(patch, true); 
+    runtime.Register(patchActor.release()); 
     ConductFaultTolerance(runtime, env, args, GetFaultToleranceCaseForMirror3dc(env, args));
 }
 

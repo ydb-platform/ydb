@@ -93,7 +93,7 @@ namespace NKikimr {
             }
 
             const bool noSync = !gcOnlySynced;
-            if (val.Ingress.IsQuorum(ingrCache) || noSync || key.Hard) {
+            if (val.Ingress.IsQuorum(ingrCache) || noSync || key.Hard) { 
                 if (CurrentBarrier.Empty() ||
                         std::make_tuple(CurrentBarrier->CollectGen, CurrentBarrier->CollectStep) <=
                         std::make_tuple(val.BarrierValue.CollectGen, val.BarrierValue.CollectStep)) {

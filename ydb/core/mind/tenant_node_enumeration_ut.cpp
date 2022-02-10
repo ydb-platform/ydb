@@ -40,8 +40,8 @@ void CheckAddTenant(TTenantTestRuntime &runtime, const TString &tenant, TEvLocal
 
 Y_UNIT_TEST_SUITE(TEnumerationTest) {
     Y_UNIT_TEST(TestPublish) {
-        return;
-
+        return; 
+ 
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
 
         CheckAddTenant(runtime, TENANT1_1_NAME, TEvLocal::TEvTenantStatus::STARTED, 5);
@@ -53,13 +53,13 @@ Y_UNIT_TEST_SUITE(TEnumerationTest) {
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
                                    {TENANT1_1_NAME, 5, 1, 1},
-                                   {TENANT1_2_NAME, 1, 1, 1}}});
+                                   {TENANT1_2_NAME, 1, 1, 1}}}); 
 
         runtime.Register(CreateTenantNodeEnumerationPublisher(), 0);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1000));
 
         TActorId sender = runtime.AllocateEdgeActor();
-        runtime.Register(CreateTenantNodeEnumerationLookup(sender, "/" + DOMAIN1_NAME));
+        runtime.Register(CreateTenantNodeEnumerationLookup(sender, "/" + DOMAIN1_NAME)); 
 
         TAutoPtr<IEventHandle> handle;
         const auto event = runtime.GrabEdgeEvent<TEvTenantNodeEnumerator::TEvLookupResult>(handle);

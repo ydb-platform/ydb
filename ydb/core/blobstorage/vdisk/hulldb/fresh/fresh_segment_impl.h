@@ -170,12 +170,12 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     TFreshIndexAndData<TKey, TMemRec>::TFreshIndexAndData(
             THullCtxPtr hullCtx,
-            std::shared_ptr<TRopeArena> arena)
+            std::shared_ptr<TRopeArena> arena) 
         : TBase(TDeleteInBatchPool(hullCtx->VCtx->ActorSystem))
         , HullCtx(hullCtx)
         , Index(new TFreshIndex(hullCtx->VCtx))
         , FreshDataMemConsumer(hullCtx->VCtx->FreshData)
-        , Arena(std::move(arena))
+        , Arena(std::move(arena)) 
     {}
 
     template <class TKey, class TMemRec>
@@ -191,68 +191,68 @@ namespace NKikimr {
         LastLsn = lsn;
     }
 
-    template <typename TKey, typename TMemRec>
-    inline void TFreshIndexAndData<TKey, TMemRec>::PutLogoBlobWithData(ui64 /*lsn*/, const TKey& /*key*/, ui8 /*partId*/,
-            const TIngress& /*ingress*/, TRope /*buffer*/) {
-        static_assert(!std::is_same_v<TKey, TKeyLogoBlob>, "not implemented");
-    }
-
-    template <>
+    template <typename TKey, typename TMemRec> 
+    inline void TFreshIndexAndData<TKey, TMemRec>::PutLogoBlobWithData(ui64 /*lsn*/, const TKey& /*key*/, ui8 /*partId*/, 
+            const TIngress& /*ingress*/, TRope /*buffer*/) { 
+        static_assert(!std::is_same_v<TKey, TKeyLogoBlob>, "not implemented"); 
+    } 
+ 
+    template <> 
     inline void TFreshIndexAndData<TKeyLogoBlob, TMemRecLogoBlob>::PutLogoBlobWithData(ui64 lsn,
             const TKeyLogoBlob &key, ui8 partId, const TIngress &ingress, TRope buffer) {
-        TMemRecLogoBlob memRec(ingress);
-        const size_t before = Arena->GetSize();
-        buffer = TRope::CopySpaceOptimized(std::move(buffer), 128, *Arena);
+        TMemRecLogoBlob memRec(ingress); 
+        const size_t before = Arena->GetSize(); 
+        buffer = TRope::CopySpaceOptimized(std::move(buffer), 128, *Arena); 
         const ui64 fullDataSize = key.LogoBlobID().BlobSize();
-        TRope blob = TDiskBlob::Create(fullDataSize, partId, HullCtx->VCtx->Top->GType.TotalPartCount(), std::move(buffer), *Arena);
-        const size_t after = Arena->GetSize();
-        const size_t delta = after - before;
+        TRope blob = TDiskBlob::Create(fullDataSize, partId, HullCtx->VCtx->Top->GType.TotalPartCount(), std::move(buffer), *Arena); 
+        const size_t after = Arena->GetSize(); 
+        const size_t delta = after - before; 
         FreshDataMemConsumer.Add(delta);
-        const ui32 blobSize = blob.GetSize();
-
-        // create additional extent if existing one has exhausted
-        if (LastRopeExtentSize == RopeExtentSize) {
-            RopeExtents.emplace_back();
-            LastRopeExtentSize = 0;
-        }
-
-        // get the last extent and put the rope to its end
-        Y_VERIFY(RopeExtents);
-        auto& extent = RopeExtents.back();
-        TRope& rope = extent[LastRopeExtentSize++];
-        rope = std::move(blob);
-
-        // calculate buffer id from the rope address; the address is immutable during fresh segment lifetime, so we can
-        // use it directly
-        uintptr_t bufferId = reinterpret_cast<uintptr_t>(&rope);
-        Y_VERIFY((bufferId & 0x7) == 0);
-        bufferId >>= 3;
-        Y_VERIFY(bufferId < (ui64(1) << 62));
-        memRec.SetMemBlob(bufferId, blobSize);
-
-        Put(lsn, key, memRec);
-    }
-
-    template <>
+        const ui32 blobSize = blob.GetSize(); 
+ 
+        // create additional extent if existing one has exhausted 
+        if (LastRopeExtentSize == RopeExtentSize) { 
+            RopeExtents.emplace_back(); 
+            LastRopeExtentSize = 0; 
+        } 
+ 
+        // get the last extent and put the rope to its end 
+        Y_VERIFY(RopeExtents); 
+        auto& extent = RopeExtents.back(); 
+        TRope& rope = extent[LastRopeExtentSize++]; 
+        rope = std::move(blob); 
+ 
+        // calculate buffer id from the rope address; the address is immutable during fresh segment lifetime, so we can 
+        // use it directly 
+        uintptr_t bufferId = reinterpret_cast<uintptr_t>(&rope); 
+        Y_VERIFY((bufferId & 0x7) == 0); 
+        bufferId >>= 3; 
+        Y_VERIFY(bufferId < (ui64(1) << 62)); 
+        memRec.SetMemBlob(bufferId, blobSize); 
+ 
+        Put(lsn, key, memRec); 
+    } 
+ 
+    template <> 
     inline const TRope& TFreshIndexAndData<TKeyLogoBlob, TMemRecLogoBlob>::GetLogoBlobData(const TMemPart& memPart) const {
-        const TRope& rope = *reinterpret_cast<const TRope*>(memPart.BufferId << 3);
-        Y_VERIFY(rope.GetSize() == memPart.Size);
-        return rope;
-    }
-
+        const TRope& rope = *reinterpret_cast<const TRope*>(memPart.BufferId << 3); 
+        Y_VERIFY(rope.GetSize() == memPart.Size); 
+        return rope; 
+    } 
+ 
     template <class TKey, class TMemRec>
     inline const TRope& TFreshIndexAndData<TKey, TMemRec>::GetLogoBlobData(const TMemPart& /*memPart*/) const {
-        Y_FAIL("invalid call");
-    }
-
-    template <class TKey, class TMemRec>
+        Y_FAIL("invalid call"); 
+    } 
+ 
+    template <class TKey, class TMemRec> 
     void TFreshIndexAndData<TKey, TMemRec>::Put(ui64 lsn, const TKey &key, const TMemRec &memRec) {
         auto type = memRec.GetType();
         auto dataSize = memRec.DataSize();
         switch (type) {
             case TBlobType::MemBlob:
                 Y_VERIFY(dataSize);
-                MemDataSize += AlignUp(dataSize, 8u);
+                MemDataSize += AlignUp(dataSize, 8u); 
                 break;
             case TBlobType::DiskBlob:
                 Y_VERIFY(!memRec.HasData());
@@ -270,17 +270,17 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     void TFreshIndexAndData<TKey, TMemRec>::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
         using TIterator = typename TFreshIndex::TIterator;
-        TIterator it(Index.get());
+        TIterator it(Index.get()); 
         it.SeekToFirst();
         while (it.Valid()) {
             const TMemRec &memRec = it.GetValue().MemRec;
             if (memRec.GetType() == TBlobType::HugeBlob) {
                 TDiskDataExtractor extr;
                 const TDiskPart& part = memRec.GetDiskData(&extr, nullptr)->SwearOne();
-                if (part.Size) {
-                    Y_VERIFY(part.ChunkIdx);
-                    chunks.insert(part.ChunkIdx);
-                }
+                if (part.Size) { 
+                    Y_VERIFY(part.ChunkIdx); 
+                    chunks.insert(part.ChunkIdx); 
+                } 
             }
             it.Next();
         }
@@ -289,7 +289,7 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     void TFreshIndexAndData<TKey, TMemRec>::GetHugeBlobs(TSet<TDiskPart> &hugeBlobs) const {
         using TIterator = typename TFreshIndex::TIterator;
-        TIterator it(Index.get());
+        TIterator it(Index.get()); 
         it.SeekToFirst();
         while (it.Valid()) {
             const TMemRec &memRec = it.GetValue().MemRec;
@@ -329,7 +329,7 @@ namespace NKikimr {
             while (cursor.Valid() && key == cursor.GetValue().Key) {
                 ui64 cursorLsn = cursor.GetValue().Lsn;
                 if (cursorLsn <= Lsn)
-                    PutToMerger(cursor.GetValue().MemRec, cursorLsn, merger);
+                    PutToMerger(cursor.GetValue().MemRec, cursorLsn, merger); 
                 cursor.Next();
             }
         }
@@ -351,7 +351,7 @@ namespace NKikimr {
         // dump all data of the segment accessible by this iterator
         void DumpAll(IOutputStream &str) const {
             str << "=== Fresh (lsn=" << Lsn << ")===\n";
-            TIterator it(Seg->Index.get());
+            TIterator it(Seg->Index.get()); 
             it.SeekToFirst();
             while (it.Valid()) {
                 const auto &item = it.GetValue();
@@ -378,15 +378,15 @@ namespace NKikimr {
         }
 
         template <class TRecordMerger>
-        void PutToMerger(const TMemRec &memRec, ui64 lsn, TRecordMerger *merger) {
-            TKey key = It.GetValue().Key;
-            if (merger->HaveToMergeData() && memRec.HasData() && memRec.GetType() == TBlobType::MemBlob) {
-                const TMemPart p = memRec.GetMemData();
-                const TRope& rope = Seg->GetLogoBlobData(p);
-                merger->AddFromFresh(memRec, &rope, key, lsn);
-            } else {
-                merger->AddFromFresh(memRec, nullptr, key, lsn);
-            }
+        void PutToMerger(const TMemRec &memRec, ui64 lsn, TRecordMerger *merger) { 
+            TKey key = It.GetValue().Key; 
+            if (merger->HaveToMergeData() && memRec.HasData() && memRec.GetType() == TBlobType::MemBlob) { 
+                const TMemPart p = memRec.GetMemData(); 
+                const TRope& rope = Seg->GetLogoBlobData(p); 
+                merger->AddFromFresh(memRec, &rope, key, lsn); 
+            } else { 
+                merger->AddFromFresh(memRec, nullptr, key, lsn); 
+            } 
         }
     };
 
@@ -467,7 +467,7 @@ namespace NKikimr {
 
         void SeekToFirst() {
             if (Seg) {
-                It = TIterator(Seg->Index.get());
+                It = TIterator(Seg->Index.get()); 
                 It.SeekToFirst();
                 if (!It.Valid())
                     return;
@@ -482,7 +482,7 @@ namespace NKikimr {
                 bool fromCache = SeekCache.Search(key, It);
                 if (!fromCache) {
                     typename TFreshIndex::TIdxKey idxKey(0, key, TMemRec());
-                    It = TIterator(Seg->Index.get());
+                    It = TIterator(Seg->Index.get()); 
                     It.SeekTo(idxKey);
                     if (It.Valid() && !HasSatisfyingValues())
                         Next();
@@ -539,11 +539,11 @@ namespace NKikimr {
         void Seek(const TKey &key) {
             if (Seg) {
                 typename TFreshIndex::TIdxKey idxKey(0, key, TMemRec());
-                It = TIterator(Seg->Index.get());
+                It = TIterator(Seg->Index.get()); 
                 It.SeekTo(idxKey);
                 if (!It.Valid()) {
                     // i.e. end
-                    It = TIterator(Seg->Index.get());
+                    It = TIterator(Seg->Index.get()); 
                     It.SeekToLast();
                     if (It.Valid()) {
                         ToTheChainStart();
@@ -664,63 +664,63 @@ namespace NKikimr {
         using TContType = TFreshSegmentSnapshot;
 
         TIteratorWOMerge(const THullCtxPtr &hullCtx, const TContType *data)
-            : It(hullCtx, data)
+            : It(hullCtx, data) 
         {}
 
         TIteratorWOMerge(const TIteratorWOMerge &) = default;
         TIteratorWOMerge &operator=(const TIteratorWOMerge &) = default;
 
         bool Valid() const {
-            return !Recs.empty();
+            return !Recs.empty(); 
         }
 
         void Next() {
-            if (!Recs.empty()) {
-                Recs.pop_back();
-                if (!Recs.empty()) {
-                    return; // more records to go with the current key
-                }
-            }
-
-            if (!It.Valid()) {
-                return;
-            }
-
-            struct {
-                std::vector<std::pair<TKey, TMemRec>>& Recs;
-
-                void AddFromSegment(const TMemRec&, const TDiskPart*, const TKey&, ui64) {
-                    Y_VERIFY_DEBUG(false, "should not be called");
-                }
-
-                void AddFromFresh(const TMemRec& memRec, const TRope* /*data*/, const TKey& key, ui64 /*lsn*/) {
-                    Recs.emplace_back(key, memRec);
-                }
-
-                static constexpr bool HaveToMergeData() { return false; }
-            } m{Recs};
-
-            It.PutToMerger(&m);
-            It.Next();
+            if (!Recs.empty()) { 
+                Recs.pop_back(); 
+                if (!Recs.empty()) { 
+                    return; // more records to go with the current key 
+                } 
+            } 
+ 
+            if (!It.Valid()) { 
+                return; 
+            } 
+ 
+            struct { 
+                std::vector<std::pair<TKey, TMemRec>>& Recs; 
+ 
+                void AddFromSegment(const TMemRec&, const TDiskPart*, const TKey&, ui64) { 
+                    Y_VERIFY_DEBUG(false, "should not be called"); 
+                } 
+ 
+                void AddFromFresh(const TMemRec& memRec, const TRope* /*data*/, const TKey& key, ui64 /*lsn*/) { 
+                    Recs.emplace_back(key, memRec); 
+                } 
+ 
+                static constexpr bool HaveToMergeData() { return false; } 
+            } m{Recs}; 
+ 
+            It.PutToMerger(&m); 
+            It.Next(); 
         }
 
         void SeekToFirst() {
-            Recs.clear();
-            It.SeekToFirst();
-            Next();
+            Recs.clear(); 
+            It.SeekToFirst(); 
+            Next(); 
         }
 
         TKey GetUnmergedKey() const {
-            return Recs.back().first;
+            return Recs.back().first; 
         }
 
         TMemRec GetUnmergedMemRec() const {
-            return Recs.back().second;
+            return Recs.back().second; 
         }
 
     private:
-        TForwardIterator It; // generic merging iterator
-        std::vector<std::pair<TKey, TMemRec>> Recs;
+        TForwardIterator It; // generic merging iterator 
+        std::vector<std::pair<TKey, TMemRec>> Recs; 
     };
 
     template <class TKey, class TMemRec>

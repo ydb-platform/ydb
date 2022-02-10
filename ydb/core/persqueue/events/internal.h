@@ -322,7 +322,7 @@ struct TEvPQ {
         : Cookie(cookie)
         {}
         ui64 Cookie;
-        NKikimrClient::TResponse Response;
+        NKikimrClient::TResponse Response; 
     };
 
     struct TEvInitComplete : public TEventLocal<TEvInitComplete, EvInitComplete> {

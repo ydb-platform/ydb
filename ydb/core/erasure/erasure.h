@@ -1,7 +1,7 @@
 #pragma once
-
-#include <array>
-
+ 
+#include <array> 
+ 
 #include <ydb/core/debug/valgrind_check.h>
 #include <ydb/core/util/yverify_stream.h>
 
@@ -238,9 +238,9 @@ struct TErasureType {
         Erasure4Plus2Stripe = 6,
         Erasure3Plus2Stripe = 7,
 
-        ErasureMirror3Plus2 = 8,
-        ErasureMirror3dc = 9,
-
+        ErasureMirror3Plus2 = 8, 
+        ErasureMirror3dc = 9, 
+ 
         Erasure4Plus3Block = 10,
         Erasure4Plus3Stripe = 11,
         Erasure3Plus3Block = 12,
@@ -251,9 +251,9 @@ struct TErasureType {
         Erasure2Plus2Block = 16,
         Erasure2Plus2Stripe = 17,
 
-        ErasureMirror3of4 = 18,
-
-        ErasureSpeciesCount = 19
+        ErasureMirror3of4 = 18, 
+ 
+        ErasureSpeciesCount = 19 
     };
 
     static const char *ErasureSpeciesToStr(EErasureSpecies es);

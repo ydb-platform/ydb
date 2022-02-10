@@ -38,8 +38,8 @@ class TBrowse : public TActorBootstrapped<TBrowse> {
 public:
     IViewer::TBrowseContext BrowseContext;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::VIEWER_HANDLER; 
     }
 
     TBrowse(const IViewer* viewer, const TActorId& owner, const TString& path, const TString& userToken)
@@ -391,8 +391,8 @@ protected:
     THashSet<ui32> PDisks;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::VIEWER_HANDLER; 
     }
 
     TBrowseTabletsCommon(const TActorId& owner, const IViewer::TBrowseContext& browseContext)

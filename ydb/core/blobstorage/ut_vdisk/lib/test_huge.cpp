@@ -42,7 +42,7 @@ protected:
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 class TSimpleScenary : public IScenary {
     int State;
-
+ 
 public:
     TSimpleScenary(const TAllVDisks::TVDiskInstance &vDiskInstance)
         : IScenary(vDiskInstance)
@@ -58,9 +58,9 @@ public:
                 const TLogoBlobID logoBlobId(0, 1, 10, 0, abcdefghkj.size(), 0, 1);
                 ctx.Send(HugeKeeperId,
                          new TEvHullWriteHugeBlob(TActorId(), 0, logoBlobId, TIngress(),
-                                TRope(abcdefghkj),
-                                false, NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
-                                std::make_unique<TEvBlobStorage::TEvVPutResult>()));
+                                TRope(abcdefghkj), 
+                                false, NKikimrBlobStorage::EPutHandleClass::AsyncBlob, 
+                                std::make_unique<TEvBlobStorage::TEvVPutResult>())); 
                 State = 1;
                 return false;
             }
@@ -80,7 +80,7 @@ public:
         const auto *msg = ev->Get();
 
         const bool slotIsUsed = true;
-        const ui64 recLsn = 100500; // FIXME: write to log actually
+        const ui64 recLsn = 100500; // FIXME: write to log actually 
         ctx.Send(HugeKeeperId, new TEvHullHugeBlobLogged(msg->WriteId, msg->HugeBlob, recLsn, slotIsUsed));
         State = 2;
     }
@@ -115,16 +115,16 @@ struct THugeModuleContext {
 class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryActor> {
     using TStartingPoints = TMap<TLogSignature, NPDisk::TLogRecord>;
 
-    std::shared_ptr<THugeModuleContext> HmCtx;
-    ui64 Lsn = 0;
-    std::shared_ptr<THullHugeKeeperPersState> RepairedHuge;
+    std::shared_ptr<THugeModuleContext> HmCtx; 
+    ui64 Lsn = 0; 
+    std::shared_ptr<THullHugeKeeperPersState> RepairedHuge; 
 
     friend class TActorBootstrapped<THugeModuleRecoveryActor>;
 
     void Bootstrap(const TActorContext &ctx) {
         auto &vDiskInstance = HmCtx->Conf->VDisks->Get(0);
         HmCtx->Config = vDiskInstance.Cfg;
-        HmCtx->VCtx.Reset(new TVDiskContext(ctx.SelfID, HmCtx->Conf->GroupInfo->PickTopology(), HmCtx->Counters,
+        HmCtx->VCtx.Reset(new TVDiskContext(ctx.SelfID, HmCtx->Conf->GroupInfo->PickTopology(), HmCtx->Counters, 
                 vDiskInstance.VDiskID, ctx.ExecutorThread.ActorSystem, TPDiskCategory::DEVICE_TYPE_UNKNOWN));
 
         TVDiskID selfVDiskID = HmCtx->Conf->GroupInfo->GetVDiskId(HmCtx->VCtx->ShortSelfVDisk);
@@ -144,7 +144,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
         TStartingPoints::const_iterator it;
         it = startingPoints.find(TLogSignature::SignatureHugeBlobEntryPoint);
         if (it == startingPoints.end()) {
-            RepairedHuge = std::make_shared<THullHugeKeeperPersState>(
+            RepairedHuge = std::make_shared<THullHugeKeeperPersState>( 
                         HmCtx->VCtx,
                         HmCtx->PDiskCtx->Dsk->ChunkSize,
                         HmCtx->PDiskCtx->Dsk->AppendBlockSize,
@@ -154,7 +154,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
                         HmCtx->Config->HugeBlobOverhead,
                         HmCtx->Config->HugeBlobsFreeChunkReservation,
                         HmCtx->Config->HugeBlobOldMapCompatible,
-                        logFunc);
+                        logFunc); 
         } else {
             // read existing one
             const ui64 lsn = it->second.Lsn;
@@ -163,7 +163,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
                 return false;
             }
 
-            RepairedHuge = std::make_shared<THullHugeKeeperPersState>(
+            RepairedHuge = std::make_shared<THullHugeKeeperPersState>( 
                         HmCtx->VCtx,
                         HmCtx->PDiskCtx->Dsk->ChunkSize,
                         HmCtx->PDiskCtx->Dsk->AppendBlockSize,
@@ -173,14 +173,14 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
                         HmCtx->Config->HugeBlobOverhead,
                         HmCtx->Config->HugeBlobsFreeChunkReservation,
                         HmCtx->Config->HugeBlobOldMapCompatible,
-                        lsn, entryPoint, logFunc);
+                        lsn, entryPoint, logFunc); 
         }
 
         return true;
     }
 
     void Handle(NPDisk::TEvYardInitResult::TPtr &ev, const TActorContext &ctx) {
-        const auto &m = ev->Get();
+        const auto &m = ev->Get(); 
         NKikimrProto::EReplyStatus status = m->Status;
         Y_VERIFY(status == NKikimrProto::OK, "Status# %s ErrorReason# %s",
                 NKikimrProto::EReplyStatus_Name(status).c_str(), m->ErrorReason.c_str());
@@ -194,24 +194,24 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
         // start reading log
         ctx.Send(HmCtx->PDiskCtx->PDiskId,
             new NPDisk::TEvReadLog(HmCtx->PDiskCtx->Dsk->Owner, HmCtx->PDiskCtx->Dsk->OwnerRound));
-    }
+    } 
 
-    void Handle(NPDisk::TEvReadLogResult::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NPDisk::TEvReadLogResult::TPtr &ev, const TActorContext &ctx) { 
         const auto &m = ev->Get();
         NKikimrProto::EReplyStatus status = m->Status;
         Y_VERIFY(status == NKikimrProto::OK, "Status# %s ErrorReason# %s",
                 NKikimrProto::EReplyStatus_Name(status).c_str(), m->ErrorReason.c_str());
-        if (m->Results) {
-            const ui64 lsn = m->Results.back().Lsn;
-            Y_VERIFY(lsn > Lsn);
-            Lsn = lsn;
-        }
+        if (m->Results) { 
+            const ui64 lsn = m->Results.back().Lsn; 
+            Y_VERIFY(lsn > Lsn); 
+            Lsn = lsn; 
+        } 
 
-        if (!m->IsEndOfLog) {
+        if (!m->IsEndOfLog) { 
             return (void)ctx.Send(HmCtx->PDiskCtx->PDiskId,
                 new NPDisk::TEvReadLog(HmCtx->PDiskCtx->Dsk->Owner, HmCtx->PDiskCtx->Dsk->OwnerRound,
                         m->NextPosition));
-        }
+        } 
 
         Finish(ctx);
     }
@@ -228,7 +228,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
         TLogCutterCtx logCutterCtx = {HmCtx->VCtx, HmCtx->PDiskCtx, HmCtx->LsnMngr, HmCtx->Config, HmCtx->LoggerID};
         HmCtx->LogCutterID = ctx.ExecutorThread.RegisterActor(CreateRecoveryLogCutter(std::move(logCutterCtx)));
         RepairedHuge->FinishRecovery(ctx);
-        auto hugeKeeperCtx = std::make_shared<THugeKeeperCtx>(HmCtx->VCtx, HmCtx->PDiskCtx, HmCtx->LsnMngr,
+        auto hugeKeeperCtx = std::make_shared<THugeKeeperCtx>(HmCtx->VCtx, HmCtx->PDiskCtx, HmCtx->LsnMngr, 
                 HmCtx->MainID, HmCtx->LoggerID, HmCtx->LogCutterID, "{}");
         TAutoPtr<IActor> hugeKeeperActor(CreateHullHugeBlobKeeper(hugeKeeperCtx, RepairedHuge));
         HmCtx->HugeKeeperID = ctx.ExecutorThread.RegisterActor(hugeKeeperActor.Release());
@@ -244,7 +244,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
     )
 
 public:
-    THugeModuleRecoveryActor(std::shared_ptr<THugeModuleContext> hmCtx)
+    THugeModuleRecoveryActor(std::shared_ptr<THugeModuleContext> hmCtx) 
         : TActorBootstrapped<THugeModuleRecoveryActor>()
         , HmCtx(hmCtx)
     {}
@@ -254,7 +254,7 @@ public:
 // THugeModuleTestActor
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 class THugeModuleTestActor : public TActorBootstrapped<THugeModuleTestActor> {
-    std::shared_ptr<THugeModuleContext> HmCtx;
+    std::shared_ptr<THugeModuleContext> HmCtx; 
     TAutoPtr<IScenary> Scenary;
 
     friend class TActorBootstrapped<THugeModuleTestActor>;
@@ -300,7 +300,7 @@ class THugeModuleTestActor : public TActorBootstrapped<THugeModuleTestActor> {
 public:
     THugeModuleTestActor(TConfiguration *conf, TAutoPtr<IScenary> scenary)
         : TActorBootstrapped<THugeModuleTestActor>()
-        , HmCtx(std::make_shared<THugeModuleContext>(conf))
+        , HmCtx(std::make_shared<THugeModuleContext>(conf)) 
         , Scenary(scenary)
     {}
 };

@@ -29,7 +29,7 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 
 import "google/protobuf/descriptor.proto";
 
-package NKikimrClient;
+package NKikimrClient; 
 option java_package = "ru.yandex.kikimr.proto";
 
 message TEnumValueHint {
@@ -180,11 +180,11 @@ message TResponse {
     // TTabletStateRequest
     repeated NKikimrWhiteboard.TTabletStateInfo TabletStateInfo = 500;
 
-    // TSchemeDescribe
+    // TSchemeDescribe 
     optional NKikimrSchemeOp.TPathDescription PathDescription = 600;
     optional string Path = 601;
 
-    // TSchemeOperation
+    // TSchemeOperation 
     optional TFlatTxId FlatTxId = 700;
 
     // TPersQueueRequest
@@ -204,7 +204,7 @@ message TResponse {
     repeated TKeyValueResponse.TCopyRangeResult CopyRangeResult = 907;
     repeated TKeyValueResponse.TConcatResult ConcatResult = 908;
     repeated TKeyValueResponse.TGetStatusResult GetStatusResult = 909;
-    optional TKeyValueResponse.TTrimLeakedBlobsResult TrimLeakedBlobsResult = 910;
+    optional TKeyValueResponse.TTrimLeakedBlobsResult TrimLeakedBlobsResult = 910; 
     optional TKeyValueResponse.TSetExecutorFastLogPolicyResult SetExecutorFastLogPolicyResult = 911;
 
     // THiveCreateTablet
@@ -233,8 +233,8 @@ message TResponse {
 
     // TTabletCountersRequest
     optional NKikimrTabletBase.TTabletCounters TabletCounters = 1020;
-
-    // TBlobStorageConfigRequest
+ 
+    // TBlobStorageConfigRequest 
     optional NKikimrBlobStorage.TConfigResponse BlobStorageConfigResponse = 1030;
 
     optional TResolveNodeResponse ResolveNodeResponse = 1040;
@@ -428,14 +428,14 @@ message TFlatTxPollOptions {
     optional uint32 Timeout = 1 [default = 1000]; // ms
 };
 
-message TSchemeOperation {
+message TSchemeOperation { 
     optional NKikimrTxUserProxy.TTransaction Transaction = 1;
     optional TFlatTxPollOptions PollOptions = 10;
     optional string SecurityToken = 5;
 };
 
 
-message TSchemeDescribe {
+message TSchemeDescribe { 
     optional string Path = 1;
     optional uint64 PathId = 2;
     optional uint64 SchemeshardId = 3;
@@ -456,38 +456,38 @@ message TFlatDescribeResponse {
     repeated Ydb.Issue.IssueMessage Issues = 8;
 };
 
-message TSchemeOperationStatus {
+message TSchemeOperationStatus { 
     optional TFlatTxId FlatTxId = 1;
     optional TFlatTxPollOptions PollOptions = 10;
 };
+ 
+message TBsTestLoadRequest { 
+    repeated uint32 NodeId = 1; 
+    optional NKikimrBlobStorage.TEvTestLoadRequest Event = 2; 
+}; 
+ 
+message TBsTestLoadResponse { 
+    message TItem { 
+        optional uint32 NodeId = 1; 
+        optional uint32 Status = 2; 
+        optional string ErrorReason = 3; 
+    }; 
+    repeated TItem Items = 1; 
+}; 
 
-message TBsTestLoadRequest {
-    repeated uint32 NodeId = 1;
-    optional NKikimrBlobStorage.TEvTestLoadRequest Event = 2;
-};
-
-message TBsTestLoadResponse {
-    message TItem {
-        optional uint32 NodeId = 1;
-        optional uint32 Status = 2;
-        optional string ErrorReason = 3;
-    };
-    repeated TItem Items = 1;
-};
-
-message TBsGetRequest {
-    optional uint32 GroupId = 1;
-    oneof Query {
-        NKikimrProto.TLogoBlobID Extreme = 2;
-    };
-};
-
-message TBsGetResponse {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional bytes Buffer = 2;
-    optional string ErrorDescription = 3;
-};
-
+message TBsGetRequest { 
+    optional uint32 GroupId = 1; 
+    oneof Query { 
+        NKikimrProto.TLogoBlobID Extreme = 2; 
+    }; 
+}; 
+ 
+message TBsGetResponse { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
+    optional bytes Buffer = 2; 
+    optional string ErrorDescription = 3; 
+}; 
+ 
 message TJsonSettings {
     optional bool UI64AsString = 1 [default = false];
 };
@@ -499,8 +499,8 @@ message TJSON {
 };
 
 message TChooseProxyRequest {
-    optional uint32 DataCenterNum = 1;
-    optional string DataCenter = 3;
+    optional uint32 DataCenterNum = 1; 
+    optional string DataCenter = 3; 
     optional bool PreferLocalProxy = 2 [default = false];
 }
 
@@ -509,11 +509,11 @@ message TWhoAmI {
     optional string SecurityToken = 5;
 }
 
-message TBlobStorageConfigRequest {
-    optional uint32 Domain = 1;
+message TBlobStorageConfigRequest { 
+    optional uint32 Domain = 1; 
     optional NKikimrBlobStorage.TConfigRequest Request = 2;
-    optional string SecurityToken = 3;
-}
+    optional string SecurityToken = 3; 
+} 
 
 message TDrainNodeRequest {
     optional uint32 NodeID = 1;
@@ -536,10 +536,10 @@ message TNodeRegistrationRequest {
     optional uint32 Port = 2;
     optional string ResolveHost = 3;
     optional string Address = 4;
-    optional NActorsInterconnect.TNodeLocation Location = 5;
+    optional NActorsInterconnect.TNodeLocation Location = 5; 
     optional string DomainPath = 6;
     optional bool FixedNodeId = 7;
-    optional string Path = 8;
+    optional string Path = 8; 
 }
 
 message TNodeRegistrationResponse {
@@ -548,8 +548,8 @@ message TNodeRegistrationResponse {
     optional string DomainPath = 3;
     optional uint64 Expire = 4;
     repeated NKikimrNodeBroker.TNodeInfo Nodes = 5;
-    optional uint64 ScopeTabletId = 6;
-    optional uint64 ScopePathId = 7;
+    optional uint64 ScopeTabletId = 6; 
+    optional uint64 ScopePathId = 7; 
 }
 
 message TCmsRequest {
@@ -673,32 +673,32 @@ message TS3ListingResponse {
     optional uint32 KeySuffixSize = 4;              // Number of key columns starting from path and up to the end
     optional uint32 ErrorCode = 5;                  // Extended error code from NTXProxy::TResultStatus::EStatus enum
 }
-
-message TInterconnectDebug {
-    optional string Name = 1;
-    optional uint32 Channel = 2;
-    repeated uint32 Hops = 3;
-    optional uint32 SizeMin = 4;
-    optional uint32 SizeMax = 5;
-    optional uint32 InFlyMax = 6;
-    optional uint64 IntervalMin = 7;
-    optional uint64 IntervalMax = 8;
-    optional bool SoftLoad = 9;
-    optional uint64 Duration = 10;
-    optional bool UseProtobufWithPayload = 11;
-    optional string ServicePool = 12;
-
-    optional uint32 ClosePeerSocketNodeId = 100;
-    optional uint32 CloseInputSessionNodeId = 101;
-    optional uint32 PoisonSessionNodeId = 102;
-
-    optional uint32 NumSlowpokeActors = 200;
-    optional uint32 PoolId = 201;
-    optional uint64 SleepMin = 202;
-    optional uint64 SleepMax = 203;
-    optional uint64 RescheduleMin = 204;
-    optional uint64 RescheduleMax = 205;
-}
+ 
+message TInterconnectDebug { 
+    optional string Name = 1; 
+    optional uint32 Channel = 2; 
+    repeated uint32 Hops = 3; 
+    optional uint32 SizeMin = 4; 
+    optional uint32 SizeMax = 5; 
+    optional uint32 InFlyMax = 6; 
+    optional uint64 IntervalMin = 7; 
+    optional uint64 IntervalMax = 8; 
+    optional bool SoftLoad = 9; 
+    optional uint64 Duration = 10; 
+    optional bool UseProtobufWithPayload = 11; 
+    optional string ServicePool = 12; 
+ 
+    optional uint32 ClosePeerSocketNodeId = 100; 
+    optional uint32 CloseInputSessionNodeId = 101; 
+    optional uint32 PoisonSessionNodeId = 102; 
+ 
+    optional uint32 NumSlowpokeActors = 200; 
+    optional uint32 PoolId = 201; 
+    optional uint64 SleepMin = 202; 
+    optional uint64 SleepMax = 203; 
+    optional uint64 RescheduleMin = 204; 
+    optional uint64 RescheduleMax = 205; 
+} 
 
 message TConsoleRequest {
     oneof Request {
@@ -743,33 +743,33 @@ message TConsoleResponse {
     optional NKikimrConsole.TStatus Status = 100;
 }
 
-message TTestShardControlRequest {
-    message TSizeInterval {
-        optional uint64 Weight = 1; // nonzero
-        optional uint32 Min = 2;
-        optional uint32 Max = 3;
-        optional bool Inline = 4; // if true, then keys are stored as inline values of KV tablet rows
-    }
-    message TTimeInterval { // Poisson distribution of events
-        optional uint64 Weight = 1; // nonzero
-        optional double Frequency = 2; // events per second
-        optional uint32 MaxIntervalMs = 3; // max interval between two events in milliseconds
-    }
-    message TCmdInitialize {
-        optional string StorageServerHost = 1; // location of storage server containing tablet actual state
-        optional int32 StorageServerPort = 2; // part of storage server location
-        optional uint64 MaxDataBytes = 3; // when total length of stored keys reaches MaxDataBytes...
-        optional uint64 MinDataBytes = 4; // then random keys are collected until total length drops below MinDataBytes
-        optional uint32 MaxInFlight = 5;
-        repeated TSizeInterval Sizes = 6; // distrubution of generated value size
-        repeated TTimeInterval WritePeriods = 7; // time between two events
-    }
-
-    optional uint64 TabletId = 1;
-    oneof Command {
-        TCmdInitialize Initialize = 2;
-    }
-}
-
-message TTestShardControlResponse {
-}
+message TTestShardControlRequest { 
+    message TSizeInterval { 
+        optional uint64 Weight = 1; // nonzero 
+        optional uint32 Min = 2; 
+        optional uint32 Max = 3; 
+        optional bool Inline = 4; // if true, then keys are stored as inline values of KV tablet rows 
+    } 
+    message TTimeInterval { // Poisson distribution of events 
+        optional uint64 Weight = 1; // nonzero 
+        optional double Frequency = 2; // events per second 
+        optional uint32 MaxIntervalMs = 3; // max interval between two events in milliseconds 
+    } 
+    message TCmdInitialize { 
+        optional string StorageServerHost = 1; // location of storage server containing tablet actual state 
+        optional int32 StorageServerPort = 2; // part of storage server location 
+        optional uint64 MaxDataBytes = 3; // when total length of stored keys reaches MaxDataBytes... 
+        optional uint64 MinDataBytes = 4; // then random keys are collected until total length drops below MinDataBytes 
+        optional uint32 MaxInFlight = 5; 
+        repeated TSizeInterval Sizes = 6; // distrubution of generated value size 
+        repeated TTimeInterval WritePeriods = 7; // time between two events 
+    } 
+ 
+    optional uint64 TabletId = 1; 
+    oneof Command { 
+        TCmdInitialize Initialize = 2; 
+    } 
+} 
+ 
+message TTestShardControlResponse { 
+} 

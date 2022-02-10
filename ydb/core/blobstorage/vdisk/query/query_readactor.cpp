@@ -15,10 +15,10 @@ namespace NKikimr {
     class TTReadBatcherActor : public TActorBootstrapped<TTReadBatcherActor> {
         TReadBatcherCtxPtr Ctx;
         const TActorId NotifyID;
-        std::shared_ptr<TReadBatcherResult> Result;
+        std::shared_ptr<TReadBatcherResult> Result; 
         const ui8 Priority;
-        NWilson::TTraceId TraceId;
-        const bool IsRepl;
+        NWilson::TTraceId TraceId; 
+        const bool IsRepl; 
         ui32 Counter = 0;
 
         friend class TActorBootstrapped<TTReadBatcherActor>;
@@ -27,32 +27,32 @@ namespace NKikimr {
             Become(&TThis::StateFunc);
             Y_VERIFY_DEBUG(!Result->GlueReads.empty());
 
-            TReplQuoter::TPtr quoter;
-            if (IsRepl) {
-                quoter = Ctx->VCtx->ReplPDiskReadQuoter;
-            }
-
+            TReplQuoter::TPtr quoter; 
+            if (IsRepl) { 
+                quoter = Ctx->VCtx->ReplPDiskReadQuoter; 
+            } 
+ 
             // make read requests
             for (TGlueReads::iterator it = Result->GlueReads.begin(), e = Result->GlueReads.end(); it != e; ++it) {
-                // cookie for this request
-                void *cookie = &*it;
-
-                // generate wilson event with query details
-                WILSON_TRACE_FROM_ACTOR(ctx, *this, &TraceId, EvChunkReadSent, ChunkIdx = it->Part.ChunkIdx,
-                        Offset = it->Part.Offset, Size = it->Part.Size, YardCookie = cookie);
-
-                // create request
-                std::unique_ptr<NPDisk::TEvChunkRead> msg(new NPDisk::TEvChunkRead(Ctx->PDiskCtx->Dsk->Owner,
+                // cookie for this request 
+                void *cookie = &*it; 
+ 
+                // generate wilson event with query details 
+                WILSON_TRACE_FROM_ACTOR(ctx, *this, &TraceId, EvChunkReadSent, ChunkIdx = it->Part.ChunkIdx, 
+                        Offset = it->Part.Offset, Size = it->Part.Size, YardCookie = cookie); 
+ 
+                // create request 
+                std::unique_ptr<NPDisk::TEvChunkRead> msg(new NPDisk::TEvChunkRead(Ctx->PDiskCtx->Dsk->Owner, 
                             Ctx->PDiskCtx->Dsk->OwnerRound, it->Part.ChunkIdx, it->Part.Offset, it->Part.Size,
                             Priority, cookie));
-
+ 
                 LOG_DEBUG(ctx, BS_VDISK_GET,
                     VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD(%p): %s", this, msg->ToString().data()));
-
-                // send request
-                TReplQuoter::QuoteMessage(quoter, std::make_unique<IEventHandle>(Ctx->PDiskCtx->PDiskId, SelfId(),
-                    msg.release(), 0, 0, nullptr, TraceId.SeparateBranch()), it->Part.Size);
-
+ 
+                // send request 
+                TReplQuoter::QuoteMessage(quoter, std::make_unique<IEventHandle>(Ctx->PDiskCtx->PDiskId, SelfId(), 
+                    msg.release(), 0, 0, nullptr, TraceId.SeparateBranch()), it->Part.Size); 
+ 
                 Counter++;
             }
         }
@@ -62,38 +62,38 @@ namespace NKikimr {
                 VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD FINISHED(%p): actualReadN# %" PRIu32
                     " origReadN# %" PRIu32, this, ui32(Result->GlueReads.size()),
                     ui32(Result->DiskDataItemPtrs.size())));
-            ctx.Send(NotifyID, new TEvents::TEvCompleted(), 0, 0, std::move(TraceId));
+            ctx.Send(NotifyID, new TEvents::TEvCompleted(), 0, 0, std::move(TraceId)); 
             Die(ctx);
         }
 
         void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) {
             TString message;
-            const NKikimrProto::EReplyStatus status = ev->Get()->Status;
-            if (status != NKikimrProto::OK) {
-                TStringStream str;
-                str << "{TEvChunkReadResult# " << ev->Get()->ToString() << " GlueReads# [";
+            const NKikimrProto::EReplyStatus status = ev->Get()->Status; 
+            if (status != NKikimrProto::OK) { 
+                TStringStream str; 
+                str << "{TEvChunkReadResult# " << ev->Get()->ToString() << " GlueReads# ["; 
                 for (auto it = Result->GlueReads.begin(); it != Result->GlueReads.end(); ++it) {
                     str << (it != Result->GlueReads.begin() ? " " : "") << it->Part.ToString();
-                }
-                str << "] OrigEv# " << Ctx->OrigEv->Get()->ToString() << " DataItems# [";
+                } 
+                str << "] OrigEv# " << Ctx->OrigEv->Get()->ToString() << " DataItems# ["; 
                 for (auto it = Result->DataItems.begin(); it != Result->DataItems.end(); ++it) {
                     str << (it != Result->DataItems.begin() ? " " : "") << it->ToString();
-                }
-                str << "]}";
-                message = str.Str();
-            }
-            if (status != NKikimrProto::CORRUPTED) {
-                CHECK_PDISK_RESPONSE_MSG(Ctx->VCtx, ev, ctx, message);
-            }
+                } 
+                str << "]}"; 
+                message = str.Str(); 
+            } 
+            if (status != NKikimrProto::CORRUPTED) { 
+                CHECK_PDISK_RESPONSE_MSG(Ctx->VCtx, ev, ctx, message); 
+            } 
 
             NPDisk::TEvChunkReadResult *msg = ev->Get();
-            WILSON_TRACE_FROM_ACTOR(ctx, *this, &TraceId, EvChunkReadResultReceived, YardCookie = msg->Cookie,
-                    MergedNode = std::move(ev->TraceId));
+            WILSON_TRACE_FROM_ACTOR(ctx, *this, &TraceId, EvChunkReadResultReceived, YardCookie = msg->Cookie, 
+                    MergedNode = std::move(ev->TraceId)); 
 
-            TGlueRead *glueRead = static_cast<TGlueRead *>(msg->Cookie);
+            TGlueRead *glueRead = static_cast<TGlueRead *>(msg->Cookie); 
             glueRead->Data = std::move(msg->Data);
-            glueRead->Success = status == NKikimrProto::OK;
-
+            glueRead->Success = status == NKikimrProto::OK; 
+ 
             Counter--;
             if (Counter == 0)
                 Finish(ctx);
@@ -104,44 +104,44 @@ namespace NKikimr {
             TThis::Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc,
-            HFunc(NPDisk::TEvChunkReadResult, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-        )
+        STRICT_STFUNC(StateFunc, 
+            HFunc(NPDisk::TEvChunkReadResult, Handle) 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
+        ) 
 
         PDISK_TERMINATE_STATE_FUNC_DEF;
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_READ_BATCHER;
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::BS_READ_BATCHER; 
         }
 
         TTReadBatcherActor(
                 TReadBatcherCtxPtr ctx,
                 const TActorId notifyID,
-                std::shared_ptr<TReadBatcherResult> result,
+                std::shared_ptr<TReadBatcherResult> result, 
                 ui8 priority,
-                NWilson::TTraceId traceId,
-                bool isRepl)
+                NWilson::TTraceId traceId, 
+                bool isRepl) 
             : TActorBootstrapped<TTReadBatcherActor>()
             , Ctx(ctx)
             , NotifyID(notifyID)
             , Result(std::move(result))
             , Priority(priority)
-            , TraceId(std::move(traceId))
-            , IsRepl(isRepl)
+            , TraceId(std::move(traceId)) 
+            , IsRepl(isRepl) 
         {}
     };
 
     IActor *CreateReadBatcherActor(
         TReadBatcherCtxPtr ctx,
         const TActorId notifyID,
-        std::shared_ptr<TReadBatcherResult> result,
+        std::shared_ptr<TReadBatcherResult> result, 
         ui8 priority,
-        NWilson::TTraceId traceId,
-        bool isRepl)
+        NWilson::TTraceId traceId, 
+        bool isRepl) 
     {
-        return new TTReadBatcherActor(ctx, notifyID, result, priority, std::move(traceId), isRepl);
+        return new TTReadBatcherActor(ctx, notifyID, result, priority, std::move(traceId), isRepl); 
     }
 
 } // NKikimr

@@ -2058,7 +2058,7 @@ EChangeState DoGetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces,
 
     if (start->GetBloom() & 1ULL) {
         bool maybe = false;
-        for (const auto& repl : replaces) {
+        for (const auto& repl : replaces) { 
             if (repl.second && !repl.first->Dead()) {
                 if (TExprNode::Argument != repl.first->Type()) {
                     maybe = true;

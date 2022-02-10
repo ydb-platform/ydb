@@ -34,15 +34,15 @@ namespace NKikimr {
         // TQuorumTracker
         // The class tracks responses from other vdisks in group to obtain quorum
         ///////////////////////////////////////////////////////////////////////////
-        class TQuorumTracker {
+        class TQuorumTracker { 
         public:
             TQuorumTracker(const TVDiskIdShort &selfVDisk,
-                           std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                           std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
                            bool includeMyFailDomain)
                 : Top(std::move(top))
                 , MyFailDomainOrderNumber(Top->GetFailDomainOrderNumber(selfVDisk))
                 , IncludeMyFailDomain(includeMyFailDomain)
-                , SyncedDisks(Top.get())
+                , SyncedDisks(Top.get()) 
                 , Erasure(Top->GType.GetErasure())
             {
             }
@@ -50,22 +50,22 @@ namespace NKikimr {
             void Update(const TVDiskIdShort &vdisk) {
                 Debug.Update(vdisk);
                 if (IncludeMyFailDomain || Top->GetFailDomainOrderNumber(vdisk) != MyFailDomainOrderNumber) {
-                    SyncedDisks |= TBlobStorageGroupInfo::TGroupVDisks(Top.get(), vdisk);
+                    SyncedDisks |= TBlobStorageGroupInfo::TGroupVDisks(Top.get(), vdisk); 
                 }
             }
 
             bool HasQuorum() const {
                 const auto& checker = Top->GetQuorumChecker();
-                return checker.CheckQuorumForGroup(SyncedDisks);
+                return checker.CheckQuorumForGroup(SyncedDisks); 
             }
 
             void Clear() {
                 Debug.Clear();
-                SyncedDisks = TBlobStorageGroupInfo::TGroupVDisks(Top.get());
+                SyncedDisks = TBlobStorageGroupInfo::TGroupVDisks(Top.get()); 
             }
 
             void Output(IOutputStream &str) const {
-                str << "{Debug# " << Debug.ToString() << "}";
+                str << "{Debug# " << Debug.ToString() << "}"; 
             }
 
             TString ToString() const {
@@ -75,14 +75,14 @@ namespace NKikimr {
             }
 
         private:
-            const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
-            const ui32 MyFailDomainOrderNumber;
+            const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top; 
+            const ui32 MyFailDomainOrderNumber; 
             const bool IncludeMyFailDomain;
             TQuorumTrackerDebug Debug;
-            TBlobStorageGroupInfo::TGroupVDisks SyncedDisks;
-
-        public:
-            const TBlobStorageGroupType::EErasureSpecies Erasure;
+            TBlobStorageGroupInfo::TGroupVDisks SyncedDisks; 
+ 
+        public: 
+            const TBlobStorageGroupType::EErasureSpecies Erasure; 
         };
 
     } // NSync

@@ -18,8 +18,8 @@ class TJsonWhoAmI : public TActorBootstrapped<TJsonWhoAmI> {
     NMon::TEvHttpInfo::TPtr Event;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::VIEWER_HANDLER; 
     }
 
     TJsonWhoAmI(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)

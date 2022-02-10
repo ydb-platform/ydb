@@ -1,21 +1,21 @@
-#include "queue.h"
-
-namespace NKikimr::NBsQueue {
-
-TBlobStorageQueue::TBlobStorageQueue(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, TString& logPrefix,
-        const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, ui32 interconnectChannel,
+#include "queue.h" 
+ 
+namespace NKikimr::NBsQueue { 
+ 
+TBlobStorageQueue::TBlobStorageQueue(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, TString& logPrefix, 
+        const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, ui32 interconnectChannel, 
         const TBlobStorageGroupType& gType, NMonitoring::TCountableBase::EVisibility visibility)
-    : Queues(bspctx)
-    , WindowSize(0)
-    , InFlightCost(0)
-    , NextMsgId(0)
-    , CurrentSequenceId(1)
-    , LogPrefix(logPrefix)
+    : Queues(bspctx) 
+    , WindowSize(0) 
+    , InFlightCost(0) 
+    , NextMsgId(0) 
+    , CurrentSequenceId(1) 
+    , LogPrefix(logPrefix) 
     , CostModel(2000, 100000000, 50000000, 540000, 540000, 500000, gType) // default cost model
-    , BSProxyCtx(bspctx)
-    , ClientId(clientId)
-    , BytesWaiting(0)
-    , InterconnectChannel(interconnectChannel)
+    , BSProxyCtx(bspctx) 
+    , ClientId(clientId) 
+    , BytesWaiting(0) 
+    , InterconnectChannel(interconnectChannel) 
     // use parent group visibility
     , QueueWaitingItems(counters->GetCounter("QueueWaitingItems", false, visibility))
     , QueueWaitingBytes(counters->GetCounter("QueueWaitingBytes", false, visibility))
@@ -38,327 +38,327 @@ TBlobStorageQueue::TBlobStorageQueue(const TIntrusivePtr<NMonitoring::TDynamicCo
     , QueueDeserializedItems(counters->GetCounter("QueueDeserializedItems", true, visibility))
     , QueueDeserializedBytes(counters->GetCounter("QueueDeserializedBytes", true, visibility))
     , QueueSize(counters->GetCounter("QueueSize", false, visibility))
-{}
-
-TBlobStorageQueue::~TBlobStorageQueue() {
-    SetMaxWindowSize(0);
-    for (TItemList *queue : {&Queues.Waiting, &Queues.InFlight, &Queues.Unused}) {
-        for (TItem& item : *queue) {
-            SetItemQueue(item, EItemQueue::NotSet);
-        }
-    }
-}
-
+{} 
+ 
+TBlobStorageQueue::~TBlobStorageQueue() { 
+    SetMaxWindowSize(0); 
+    for (TItemList *queue : {&Queues.Waiting, &Queues.InFlight, &Queues.Unused}) { 
+        for (TItem& item : *queue) { 
+            SetItemQueue(item, EItemQueue::NotSet); 
+        } 
+    } 
+} 
+ 
 void TBlobStorageQueue::UpdateCostModel(TInstant now, const NKikimrBlobStorage::TVDiskCostSettings& settings,
         const TBlobStorageGroupType& type) {
     TCostModel newCostModel(settings, type);
-    if (newCostModel != CostModel) {
-        CostModel = std::move(newCostModel);
-        InvalidateCosts();
-    }
-    CostSettingsUpdate = now + TDuration::Minutes(1);
-}
-
-void TBlobStorageQueue::InvalidateCosts() {
-    for (TItem& item : Queues.Waiting) {
-        item.DirtyCost = true;
-    }
-    for (TItem& item : Queues.InFlight) {
-        item.DirtyCost = true;
-    }
-}
-
-bool TBlobStorageQueue::SetMaxWindowSize(ui64 maxWindowSize) {
-    if (WindowSize != maxWindowSize) {
-        *QueueWindowSize += (i64)(maxWindowSize - WindowSize);
-        WindowSize = maxWindowSize;
-        return true;
-    } else {
-        return false;
-    }
-}
-
-void TBlobStorageQueue::SetItemQueue(TItem& item, EItemQueue newQueue) {
-    switch (item.Queue) {
-        case EItemQueue::NotSet:
-            break;
-
-        case EItemQueue::Waiting:
-            --*QueueWaitingItems;
-            *QueueWaitingBytes -= item.GetByteSize();
-            BytesWaiting -= item.GetByteSize();
-            break;
-
-        case EItemQueue::InFlight:
-            --*QueueInFlightItems;
-            *QueueInFlightBytes -= item.GetByteSize();
-            *QueueInFlightCost -= item.Cost;
-            break;
-    }
-
-    item.Queue = newQueue;
-    switch (newQueue) {
-        case EItemQueue::NotSet:
-            break;
-
-        case EItemQueue::Waiting:
-            ++*QueueWaitingItems;
-            *QueueWaitingBytes += item.GetByteSize();
-            BytesWaiting += item.GetByteSize();
-            break;
-
-        case EItemQueue::InFlight:
-            ++*QueueInFlightItems;
-            *QueueInFlightBytes += item.GetByteSize();
-            *QueueInFlightCost += item.Cost;
-            break;
-    }
-}
-
+    if (newCostModel != CostModel) { 
+        CostModel = std::move(newCostModel); 
+        InvalidateCosts(); 
+    } 
+    CostSettingsUpdate = now + TDuration::Minutes(1); 
+} 
+ 
+void TBlobStorageQueue::InvalidateCosts() { 
+    for (TItem& item : Queues.Waiting) { 
+        item.DirtyCost = true; 
+    } 
+    for (TItem& item : Queues.InFlight) { 
+        item.DirtyCost = true; 
+    } 
+} 
+ 
+bool TBlobStorageQueue::SetMaxWindowSize(ui64 maxWindowSize) { 
+    if (WindowSize != maxWindowSize) { 
+        *QueueWindowSize += (i64)(maxWindowSize - WindowSize); 
+        WindowSize = maxWindowSize; 
+        return true; 
+    } else { 
+        return false; 
+    } 
+} 
+ 
+void TBlobStorageQueue::SetItemQueue(TItem& item, EItemQueue newQueue) { 
+    switch (item.Queue) { 
+        case EItemQueue::NotSet: 
+            break; 
+ 
+        case EItemQueue::Waiting: 
+            --*QueueWaitingItems; 
+            *QueueWaitingBytes -= item.GetByteSize(); 
+            BytesWaiting -= item.GetByteSize(); 
+            break; 
+ 
+        case EItemQueue::InFlight: 
+            --*QueueInFlightItems; 
+            *QueueInFlightBytes -= item.GetByteSize(); 
+            *QueueInFlightCost -= item.Cost; 
+            break; 
+    } 
+ 
+    item.Queue = newQueue; 
+    switch (newQueue) { 
+        case EItemQueue::NotSet: 
+            break; 
+ 
+        case EItemQueue::Waiting: 
+            ++*QueueWaitingItems; 
+            *QueueWaitingBytes += item.GetByteSize(); 
+            BytesWaiting += item.GetByteSize(); 
+            break; 
+ 
+        case EItemQueue::InFlight: 
+            ++*QueueInFlightItems; 
+            *QueueInFlightBytes += item.GetByteSize(); 
+            *QueueInFlightCost += item.Cost; 
+            break; 
+    } 
+} 
+ 
 void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, IActor *actor) {
-    const TInstant now = ctx.Now();
-
-    const bool sendMeCostSettings = now >= CostSettingsUpdate;
-
-    for (auto it = Queues.Waiting.begin(); !Paused && it != Queues.Waiting.end(); ) {
-        Y_VERIFY(it == Queues.Waiting.begin());
-        TItem& item = *it;
-
-        // check if deadline occured
-        if (now >= item.Deadline) {
-            ReplyWithError(item, NKikimrProto::DEADLINE, "deadline exceeded", ctx);
-            it = EraseItem(Queues.Waiting, it);
-            continue;
-        }
-
-        // update item parameters
-        item.MsgId = NextMsgId;
-        item.SequenceId = CurrentSequenceId;
-
-        // update item's cost if it is dirty
-        if (item.DirtyCost) {
-            item.Cost = CostModel.CalculateCost(item.CostEssence);
-            item.DirtyCost = false;
-        }
-
-        const bool postpone = InFlightCost + item.Cost > WindowSize && InFlightCount();
-
-        auto getTypeName = [&]() -> TString {
-            switch (item.Event.GetType()) {
-#define TYPE_CASE(X) case X::EventType: return #X;
+    const TInstant now = ctx.Now(); 
+ 
+    const bool sendMeCostSettings = now >= CostSettingsUpdate; 
+ 
+    for (auto it = Queues.Waiting.begin(); !Paused && it != Queues.Waiting.end(); ) { 
+        Y_VERIFY(it == Queues.Waiting.begin()); 
+        TItem& item = *it; 
+ 
+        // check if deadline occured 
+        if (now >= item.Deadline) { 
+            ReplyWithError(item, NKikimrProto::DEADLINE, "deadline exceeded", ctx); 
+            it = EraseItem(Queues.Waiting, it); 
+            continue; 
+        } 
+ 
+        // update item parameters 
+        item.MsgId = NextMsgId; 
+        item.SequenceId = CurrentSequenceId; 
+ 
+        // update item's cost if it is dirty 
+        if (item.DirtyCost) { 
+            item.Cost = CostModel.CalculateCost(item.CostEssence); 
+            item.DirtyCost = false; 
+        } 
+ 
+        const bool postpone = InFlightCost + item.Cost > WindowSize && InFlightCount(); 
+ 
+        auto getTypeName = [&]() -> TString { 
+            switch (item.Event.GetType()) { 
+#define TYPE_CASE(X) case X::EventType: return #X; 
                 TYPE_CASE(TEvBlobStorage::TEvVMovedPatch)
-                TYPE_CASE(TEvBlobStorage::TEvVPut)
-                TYPE_CASE(TEvBlobStorage::TEvVMultiPut)
-                TYPE_CASE(TEvBlobStorage::TEvVGet)
-                TYPE_CASE(TEvBlobStorage::TEvVBlock)
-                TYPE_CASE(TEvBlobStorage::TEvVGetBlock)
-                TYPE_CASE(TEvBlobStorage::TEvVCollectGarbage)
-                TYPE_CASE(TEvBlobStorage::TEvVGetBarrier)
-                TYPE_CASE(TEvBlobStorage::TEvVStatus)
-#undef TYPE_CASE
-                default:
-                    return Sprintf("0x%08" PRIx32, item.Event.GetType());
-            }
-        };
-
-        QLOG_DEBUG_S("BSQ25", "sending"
-                << " T# " << getTypeName()
-                << " SequenceId# " << item.SequenceId
-                << " MsgId# " << item.MsgId
-                << " Cookie# " << item.QueueCookie
-                << " InFlightCost# " << InFlightCost
-                << " Cost# " << item.Cost
-                << " WindowSize# " << WindowSize
-                << " InFlightCount# " << InFlightCount()
-                << " Postpone# " << (postpone ? "true" : "false")
-                << " SendMeCostSettings# " << (sendMeCostSettings ? "true" : "false"));
-
-        // check if window has enough space for such item
-        if (postpone) {
-            // can't send more items now
-            QLOG_DEBUG_S("BSQ26", "Queue overflow: InFlightCost# " << InFlightCost << " WindowSize# "
-                << WindowSize << " item.Cost# " << item.Cost << " InFlightCount# " << InFlightCount());
-            ++*QueueOverflow;
-            break;
-        }
-        InFlightCost += item.Cost;
-
-        // move item to in-flight queue
-        SetItemQueue(item, EItemQueue::InFlight);
-        const bool inserted = InFlightLookup.emplace(std::make_pair(item.SequenceId, item.MsgId), it).second;
-        Y_VERIFY(inserted);
-        Queues.InFlight.splice(Queues.InFlight.end(), Queues.Waiting, it++);
-        ++*QueueItemsSent;
-
-        // send item
-        WILSON_TRACE_FROM_ACTOR(ctx, *actor, &item.TraceId, EvBlobStorageQueueForward,
-            InQueueWaitingItems = GetItemsWaiting(), InQueueWaitingBytes = GetBytesWaiting());
-        item.Event.SendToVDisk(ctx, remoteVDisk, item.QueueCookie, item.MsgId, item.SequenceId, sendMeCostSettings,
-                item.TraceId.Clone(), ClientId, item.ProcessingTimer);
-
-        // update counters as far as item got sent
-        ++NextMsgId;
-    }
-}
-
-void TBlobStorageQueue::ReplyWithError(TItem& item, NKikimrProto::EReplyStatus status, const TString& errorReason,
-        const TActorContext& ctx) {
-    const TDuration processingTime = TDuration::Seconds(item.ProcessingTimer.Passed());
-    QLOG_INFO_S("BSQ03", "Reply error type# " << item.Event.GetType()
-        << " status# " << NKikimrProto::EReplyStatus_Name(status)
-        << " errorReason# " << '"' << EscapeC(errorReason) << '"'
-        << " cookie# " << item.Event.GetCookie()
-        << " processingTime# " << processingTime);
-
-    ctx.Send(item.Event.GetSender(), item.Event.MakeErrorReply(status, errorReason, QueueDeserializedItems,
-            QueueDeserializedBytes), 0, item.Event.GetCookie());
-
-    ++*QueueItemsRejected;
-}
-
-bool TBlobStorageQueue::Expecting(ui64 msgId, ui64 sequenceId) const {
-    return InFlightLookup.count(std::make_pair(sequenceId, msgId));
-}
-
+                TYPE_CASE(TEvBlobStorage::TEvVPut) 
+                TYPE_CASE(TEvBlobStorage::TEvVMultiPut) 
+                TYPE_CASE(TEvBlobStorage::TEvVGet) 
+                TYPE_CASE(TEvBlobStorage::TEvVBlock) 
+                TYPE_CASE(TEvBlobStorage::TEvVGetBlock) 
+                TYPE_CASE(TEvBlobStorage::TEvVCollectGarbage) 
+                TYPE_CASE(TEvBlobStorage::TEvVGetBarrier) 
+                TYPE_CASE(TEvBlobStorage::TEvVStatus) 
+#undef TYPE_CASE 
+                default: 
+                    return Sprintf("0x%08" PRIx32, item.Event.GetType()); 
+            } 
+        }; 
+ 
+        QLOG_DEBUG_S("BSQ25", "sending" 
+                << " T# " << getTypeName() 
+                << " SequenceId# " << item.SequenceId 
+                << " MsgId# " << item.MsgId 
+                << " Cookie# " << item.QueueCookie 
+                << " InFlightCost# " << InFlightCost 
+                << " Cost# " << item.Cost 
+                << " WindowSize# " << WindowSize 
+                << " InFlightCount# " << InFlightCount() 
+                << " Postpone# " << (postpone ? "true" : "false") 
+                << " SendMeCostSettings# " << (sendMeCostSettings ? "true" : "false")); 
+ 
+        // check if window has enough space for such item 
+        if (postpone) { 
+            // can't send more items now 
+            QLOG_DEBUG_S("BSQ26", "Queue overflow: InFlightCost# " << InFlightCost << " WindowSize# " 
+                << WindowSize << " item.Cost# " << item.Cost << " InFlightCount# " << InFlightCount()); 
+            ++*QueueOverflow; 
+            break; 
+        } 
+        InFlightCost += item.Cost; 
+ 
+        // move item to in-flight queue 
+        SetItemQueue(item, EItemQueue::InFlight); 
+        const bool inserted = InFlightLookup.emplace(std::make_pair(item.SequenceId, item.MsgId), it).second; 
+        Y_VERIFY(inserted); 
+        Queues.InFlight.splice(Queues.InFlight.end(), Queues.Waiting, it++); 
+        ++*QueueItemsSent; 
+ 
+        // send item 
+        WILSON_TRACE_FROM_ACTOR(ctx, *actor, &item.TraceId, EvBlobStorageQueueForward, 
+            InQueueWaitingItems = GetItemsWaiting(), InQueueWaitingBytes = GetBytesWaiting()); 
+        item.Event.SendToVDisk(ctx, remoteVDisk, item.QueueCookie, item.MsgId, item.SequenceId, sendMeCostSettings, 
+                item.TraceId.Clone(), ClientId, item.ProcessingTimer); 
+ 
+        // update counters as far as item got sent 
+        ++NextMsgId; 
+    } 
+} 
+ 
+void TBlobStorageQueue::ReplyWithError(TItem& item, NKikimrProto::EReplyStatus status, const TString& errorReason, 
+        const TActorContext& ctx) { 
+    const TDuration processingTime = TDuration::Seconds(item.ProcessingTimer.Passed()); 
+    QLOG_INFO_S("BSQ03", "Reply error type# " << item.Event.GetType() 
+        << " status# " << NKikimrProto::EReplyStatus_Name(status) 
+        << " errorReason# " << '"' << EscapeC(errorReason) << '"' 
+        << " cookie# " << item.Event.GetCookie() 
+        << " processingTime# " << processingTime); 
+ 
+    ctx.Send(item.Event.GetSender(), item.Event.MakeErrorReply(status, errorReason, QueueDeserializedItems, 
+            QueueDeserializedBytes), 0, item.Event.GetCookie()); 
+ 
+    ++*QueueItemsRejected; 
+} 
+ 
+bool TBlobStorageQueue::Expecting(ui64 msgId, ui64 sequenceId) const { 
+    return InFlightLookup.count(std::make_pair(sequenceId, msgId)); 
+} 
+ 
 bool TBlobStorageQueue::OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TActorId *outSender, ui64 *outCookie,
-        TDuration *processingTime) {
-    const auto lookupIt = InFlightLookup.find(std::make_pair(sequenceId, msgId));
-    Y_VERIFY(lookupIt != InFlightLookup.end());
-    const TItemList::iterator it = lookupIt->second;
-
-    Y_VERIFY(cookie == it->QueueCookie || cookie == 0);
-
-    Y_VERIFY(InFlightCost >= it->Cost);
-    InFlightCost -= it->Cost;
-
-    const bool discard = it->Discarded;
-
-    *outSender = it->Event.GetSender();
-    *outCookie = it->Event.GetCookie();
-    *processingTime = TDuration::Seconds(it->ProcessingTimer.Passed());
-    LWTRACK(DSQueueVPutResultRecieved, it->Event.GetOrbit(), processingTime->SecondsFloat() * 1e3,
-            it->Event.GetByteSize(), discard);
-
-    InFlightLookup.erase(lookupIt);
-    EraseItem(Queues.InFlight, it);
-
-    // unpause execution when InFlight queue gets empty
-    if (!InFlightLookup) {
-        Paused = false;
-    }
-
-    ++*QueueItemsProcessed;
-    return !discard;
-}
-
-void TBlobStorageQueue::Unwind(ui64 failedMsgId, ui64 failedSequenceId, ui64 expectedMsgId, ui64 expectedSequenceId) {
-    // find item in the InFlight queue; it MUST exist in that queue
-    const auto lookupIt = InFlightLookup.find(std::make_pair(failedSequenceId, failedMsgId));
-    Y_VERIFY(lookupIt != InFlightLookup.end());
-    TItemList::iterator it = lookupIt->second;
-
-    // process items
-    ui64 cost = 0;
-    for (auto x = it; x != Queues.InFlight.end(); ) {
-        const ui32 erased = InFlightLookup.erase(std::make_pair(x->SequenceId, x->MsgId));
-        Y_VERIFY(erased);
-        cost += x->Cost; // count item's cost
-        if (x->Discarded) {
-            if (x == it) {
-                ++it; // advance starting iterator as the item pointed to is being erased
-            }
-            x = EraseItem(Queues.InFlight, x);
-        } else {
-            SetItemQueue(*x, EItemQueue::Waiting);
-            ++x;
-        }
-    }
-    Y_VERIFY(cost <= InFlightCost);
-    InFlightCost -= cost;
-
-    // splice items into waiting queue's front
-    Queues.Waiting.splice(Queues.Waiting.begin(), Queues.InFlight, it, Queues.InFlight.end());
-
-    // adjust correct sequence ids
-    NextMsgId = expectedMsgId;
-    CurrentSequenceId = expectedSequenceId;
-
-    // pause execution if we have something unanswered
-    Paused = static_cast<bool>(InFlightLookup);
-}
-
-void TBlobStorageQueue::DrainQueue(NKikimrProto::EReplyStatus status, const TString& errorReason, const TActorContext &ctx) {
-    // remove all items from in-flight map
-    InFlightCost = 0;
-
-    // ACHTUNG: We may expect that if we drop the messages from the queue,
-    //          then we can safely restart from that point
-
-    auto flushQueue = [&](TItemList& queue) {
-        for (auto it = queue.begin(); it != queue.end(); it = EraseItem(queue, it)) {
-            if (!it->Discarded) {
-                ReplyWithError(*it, status, errorReason, ctx);
-            }
-        }
-    };
-
-    flushQueue(Queues.InFlight);
-    flushQueue(Queues.Waiting);
-    InFlightLookup.clear();
-
-    Paused = false;
-}
-
-void TBlobStorageQueue::OnConnect() {
-    SetMaxWindowSize(1000000000); // default value is one second
-    CostSettingsUpdate = TInstant::Zero(); // request cost model update in first message
-}
-
-TBlobStorageQueue::TItemList::iterator TBlobStorageQueue::EraseItem(TItemList& queue, TItemList::iterator it) {
-    SetItemQueue(*it, EItemQueue::NotSet);
-    TItemList::iterator nextIter = std::next(it);
-    if (Queues.Unused.size() < MaxUnusedItems) {
-        Queues.Unused.splice(Queues.Unused.end(), queue, it);
-        it->TSenderNode::UnLink();
-        it->Event.Discard();
-    } else {
-        queue.erase(it);
-        --*QueueSize;
-    }
-    return nextIter;
-}
-
+        TDuration *processingTime) { 
+    const auto lookupIt = InFlightLookup.find(std::make_pair(sequenceId, msgId)); 
+    Y_VERIFY(lookupIt != InFlightLookup.end()); 
+    const TItemList::iterator it = lookupIt->second; 
+ 
+    Y_VERIFY(cookie == it->QueueCookie || cookie == 0); 
+ 
+    Y_VERIFY(InFlightCost >= it->Cost); 
+    InFlightCost -= it->Cost; 
+ 
+    const bool discard = it->Discarded; 
+ 
+    *outSender = it->Event.GetSender(); 
+    *outCookie = it->Event.GetCookie(); 
+    *processingTime = TDuration::Seconds(it->ProcessingTimer.Passed()); 
+    LWTRACK(DSQueueVPutResultRecieved, it->Event.GetOrbit(), processingTime->SecondsFloat() * 1e3, 
+            it->Event.GetByteSize(), discard); 
+ 
+    InFlightLookup.erase(lookupIt); 
+    EraseItem(Queues.InFlight, it); 
+ 
+    // unpause execution when InFlight queue gets empty 
+    if (!InFlightLookup) { 
+        Paused = false; 
+    } 
+ 
+    ++*QueueItemsProcessed; 
+    return !discard; 
+} 
+ 
+void TBlobStorageQueue::Unwind(ui64 failedMsgId, ui64 failedSequenceId, ui64 expectedMsgId, ui64 expectedSequenceId) { 
+    // find item in the InFlight queue; it MUST exist in that queue 
+    const auto lookupIt = InFlightLookup.find(std::make_pair(failedSequenceId, failedMsgId)); 
+    Y_VERIFY(lookupIt != InFlightLookup.end()); 
+    TItemList::iterator it = lookupIt->second; 
+ 
+    // process items 
+    ui64 cost = 0; 
+    for (auto x = it; x != Queues.InFlight.end(); ) { 
+        const ui32 erased = InFlightLookup.erase(std::make_pair(x->SequenceId, x->MsgId)); 
+        Y_VERIFY(erased); 
+        cost += x->Cost; // count item's cost 
+        if (x->Discarded) { 
+            if (x == it) { 
+                ++it; // advance starting iterator as the item pointed to is being erased 
+            } 
+            x = EraseItem(Queues.InFlight, x); 
+        } else { 
+            SetItemQueue(*x, EItemQueue::Waiting); 
+            ++x; 
+        } 
+    } 
+    Y_VERIFY(cost <= InFlightCost); 
+    InFlightCost -= cost; 
+ 
+    // splice items into waiting queue's front 
+    Queues.Waiting.splice(Queues.Waiting.begin(), Queues.InFlight, it, Queues.InFlight.end()); 
+ 
+    // adjust correct sequence ids 
+    NextMsgId = expectedMsgId; 
+    CurrentSequenceId = expectedSequenceId; 
+ 
+    // pause execution if we have something unanswered 
+    Paused = static_cast<bool>(InFlightLookup); 
+} 
+ 
+void TBlobStorageQueue::DrainQueue(NKikimrProto::EReplyStatus status, const TString& errorReason, const TActorContext &ctx) { 
+    // remove all items from in-flight map 
+    InFlightCost = 0; 
+ 
+    // ACHTUNG: We may expect that if we drop the messages from the queue, 
+    //          then we can safely restart from that point 
+ 
+    auto flushQueue = [&](TItemList& queue) { 
+        for (auto it = queue.begin(); it != queue.end(); it = EraseItem(queue, it)) { 
+            if (!it->Discarded) { 
+                ReplyWithError(*it, status, errorReason, ctx); 
+            } 
+        } 
+    }; 
+ 
+    flushQueue(Queues.InFlight); 
+    flushQueue(Queues.Waiting); 
+    InFlightLookup.clear(); 
+ 
+    Paused = false; 
+} 
+ 
+void TBlobStorageQueue::OnConnect() { 
+    SetMaxWindowSize(1000000000); // default value is one second 
+    CostSettingsUpdate = TInstant::Zero(); // request cost model update in first message 
+} 
+ 
+TBlobStorageQueue::TItemList::iterator TBlobStorageQueue::EraseItem(TItemList& queue, TItemList::iterator it) { 
+    SetItemQueue(*it, EItemQueue::NotSet); 
+    TItemList::iterator nextIter = std::next(it); 
+    if (Queues.Unused.size() < MaxUnusedItems) { 
+        Queues.Unused.splice(Queues.Unused.end(), queue, it); 
+        it->TSenderNode::UnLink(); 
+        it->Event.Discard(); 
+    } else { 
+        queue.erase(it); 
+        --*QueueSize; 
+    } 
+    return nextIter; 
+} 
+ 
 void TBlobStorageQueue::Prune(const TActorId& sender) {
-    TSenderMap::TIterator it = SenderToItems.LowerBound(sender);
-    while (it != SenderToItems.End()) {
-        TItem& item = static_cast<TItem&>(*it++);
-        if (item.Event.GetSender() != sender) {
-            break;
-        }
-        switch (item.Queue) {
-            case EItemQueue::Waiting:
-                EraseItem(Queues.Waiting, item.Iterator);
-                break;
-
-            case EItemQueue::InFlight:
-                item.Discard();
-                break;
-
-            default:
-                Y_FAIL("incorrect item queue state");
-        }
-        ++*QueueItemsPruned;
-    }
-}
-
-TMaybe<TDuration> TBlobStorageQueue::GetWorstRequestProcessingTime() const {
-    if (Queues.InFlight.size()) {
-        return TDuration::Seconds(Queues.InFlight.front().ProcessingTimer.Passed());
-    } else if (Queues.Waiting.size()) {
-        return TDuration::Seconds(Queues.Waiting.front().ProcessingTimer.Passed());
-    } else {
-        return {};
-    }
-}
-
-} // NKikimr::NBsQueue
+    TSenderMap::TIterator it = SenderToItems.LowerBound(sender); 
+    while (it != SenderToItems.End()) { 
+        TItem& item = static_cast<TItem&>(*it++); 
+        if (item.Event.GetSender() != sender) { 
+            break; 
+        } 
+        switch (item.Queue) { 
+            case EItemQueue::Waiting: 
+                EraseItem(Queues.Waiting, item.Iterator); 
+                break; 
+ 
+            case EItemQueue::InFlight: 
+                item.Discard(); 
+                break; 
+ 
+            default: 
+                Y_FAIL("incorrect item queue state"); 
+        } 
+        ++*QueueItemsPruned; 
+    } 
+} 
+ 
+TMaybe<TDuration> TBlobStorageQueue::GetWorstRequestProcessingTime() const { 
+    if (Queues.InFlight.size()) { 
+        return TDuration::Seconds(Queues.InFlight.front().ProcessingTimer.Passed()); 
+    } else if (Queues.Waiting.size()) { 
+        return TDuration::Seconds(Queues.Waiting.front().ProcessingTimer.Passed()); 
+    } else { 
+        return {}; 
+    } 
+} 
+ 
+} // NKikimr::NBsQueue 

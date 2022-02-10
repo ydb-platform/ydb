@@ -1122,7 +1122,7 @@ void TPDisk::InitiateReadSysLog(const TActorId &pDiskActor) {
     ui8 *formatSectors = evReadFormatResult->FormatSectors.Get();
     BlockDevice->PreadAsync(formatSectors, formatSectorsSize, 0,
         new TCompletionEventSender(this, pDiskActor, evReadFormatResult.Release()), TReqId(TReqId::InitialFormatRead, 0), {});
-    *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatRead;
+    *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatRead; 
     *Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingFormatRead;
     InitPhase = EInitPhase::ReadingSysLog;
 }
@@ -1136,13 +1136,13 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             << " Marker# BPD01");
         switch (InitPhase) {
             case EInitPhase::ReadingSysLog:
-                *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogReadError;
+                *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogReadError; 
                 *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
                 *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialSysLogRead;
                 errStr << "Error in initial sys log read" << Endl;
                 break;
             case EInitPhase::ReadingLog:
-                *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError;
+                *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError; 
                 *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
                 *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialCommonLogRead;
                 errStr << "Error in initial common log read" << Endl;
@@ -1162,7 +1162,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             ProcessChunk0(evReadLogResult);
 
             if (InitialSysLogWritePosition == 0) {
-                *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogParseError;
+                *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogParseError; 
                 *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
                 *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialSysLogParse;
                 ActorSystem->Send(pDiskActor, new TEvLogInitResult(false,
@@ -1170,7 +1170,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 return;
             }
             // Parse the main log to obtain busy/free chunk lists
-            *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialCommonLogRead;
+            *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialCommonLogRead; 
             *Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingCommonLogRead;
             ReadAndParseMainLog(pDiskActor);
             InitPhase = EInitPhase::ReadingLog;
@@ -1180,7 +1180,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
         {
             InitialLogPosition = evReadLogResult.NextPosition;
             if (InitialLogPosition == TLogPosition{0, 0}) {
-                *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError;
+                *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError; 
                 *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
                 *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialCommonLogParse;
                 ActorSystem->Send(pDiskActor, new TEvLogInitResult(false,
@@ -1255,7 +1255,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 bool isOk = Keeper.Reset(params, errorReason);
 
                 if (!isOk) {
-                    *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::ChunkQuotaError;
+                    *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::ChunkQuotaError; 
                     *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
                     *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorCalculatingChunkQuotas;
                     ActorSystem->Send(pDiskActor, new TEvLogInitResult(false, errorReason));
@@ -1275,7 +1275,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             InitPhase = EInitPhase::Initialized;
             if (!InitCommonLogger()) {
                 // TODO: report red zone
-                *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::CommonLoggerInitError;
+                *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::CommonLoggerInitError; 
                 *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
                 *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorCommonLoggerInit;
                 ActorSystem->Send(pDiskActor, new TEvLogInitResult(false, "Error in common logger init"));
@@ -1283,7 +1283,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             }
 
             // Now it's ok to write both logs and data.
-            *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::Normal;
+            *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::Normal; 
             *Mon.PDiskBriefState = TPDiskMon::TPDisk::OK;
             *Mon.PDiskDetailedState = TPDiskMon::TPDisk::EverythingIsOk;
 

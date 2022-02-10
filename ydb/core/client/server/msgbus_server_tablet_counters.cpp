@@ -7,7 +7,7 @@ namespace {
     const ui64 DefaultTimeout = 90000;
 }
 
-class TMessageBusTabletCounters : public TMessageBusSimpleTabletRequest<TMessageBusTabletCounters, TEvTablet::TEvGetCountersResponse, NKikimrServices::TActivity::FRONT_GETCOUNTERS> {
+class TMessageBusTabletCounters : public TMessageBusSimpleTabletRequest<TMessageBusTabletCounters, TEvTablet::TEvGetCountersResponse, NKikimrServices::TActivity::FRONT_GETCOUNTERS> { 
     NKikimrClient::TTabletCountersRequest Request;
 public:
     TMessageBusTabletCounters(TBusMessageContext &msg, NKikimrClient::TTabletCountersRequest &request, ui64 tabletId,

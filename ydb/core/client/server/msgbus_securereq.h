@@ -29,7 +29,7 @@ public:
     {}
 };
 
-template <typename TDerived, typename TTabletReplyEvent, NKikimrServices::TActivity::EType Activity>
+template <typename TDerived, typename TTabletReplyEvent, NKikimrServices::TActivity::EType Activity> 
 class TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>> :
         public TSecureRequestActor<
         TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>,

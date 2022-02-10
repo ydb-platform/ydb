@@ -27,7 +27,7 @@ TAppData::TAppData(
     , BusMonPage(nullptr)
     , Icb(new TControlBoard())
     , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry(Icb))
-    , StaticBlobStorageConfig(new NKikimrBlobStorage::TNodeWardenServiceSet)
+    , StaticBlobStorageConfig(new NKikimrBlobStorage::TNodeWardenServiceSet) 
     , KikimrShouldContinue(kikimrShouldContinue)
 {}
 
@@ -44,7 +44,7 @@ TAppData::TDefaultTabletTypes::TDefaultTabletTypes()
     , Hive(TTabletTypes::Hive)
     , SysViewProcessor(TTabletTypes::SysViewProcessor)
     , ColumnShard(TTabletTypes::COLUMNSHARD)
-    , TestShard(TTabletTypes::TestShard)
+    , TestShard(TTabletTypes::TestShard) 
     , SequenceShard(TTabletTypes::SequenceShard)
     , ReplicationController(TTabletTypes::ReplicationController)
 {

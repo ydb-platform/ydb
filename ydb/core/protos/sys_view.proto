@@ -159,13 +159,13 @@ message TPDiskInfo {
     optional uint64 AvailableSize = 8;
     optional uint64 TotalSize = 9;
     reserved 10;
-    reserved 11;
+    reserved 11; 
     optional string StatusV2 = 12;
-    optional uint64 StatusChangeTimestamp = 13;
-    optional uint64 EnforcedDynamicSlotSize = 14;
-    optional uint32 ExpectedSlotCount = 15;
-    optional uint32 NumActiveSlots = 16;
-    optional uint64 Category = 17;
+    optional uint64 StatusChangeTimestamp = 13; 
+    optional uint64 EnforcedDynamicSlotSize = 14; 
+    optional uint32 ExpectedSlotCount = 15; 
+    optional uint32 NumActiveSlots = 16; 
+    optional uint64 Category = 17; 
     // metrics ?
     // physical location ?
     // config ?
@@ -198,16 +198,16 @@ message TVSlotInfo {
     reserved 1;
     optional uint32 GroupId = 2;
     optional uint32 GroupGeneration = 3;
-    optional uint32 FailRealm = 4;
+    optional uint32 FailRealm = 4; 
     optional uint32 FailDomain = 5;
     optional uint32 VDisk = 6;
     optional uint64 AllocatedSize = 7;
     optional uint64 AvailableSize = 8;
     reserved 9;
-    reserved 10;
+    reserved 10; 
     optional string StatusV2 = 12;
     optional string Kind = 13;
-    optional bool IsBeingDeleted = 14;
+    optional bool IsBeingDeleted = 14; 
     // metrics ?
 }
 
@@ -241,8 +241,8 @@ message TGroupInfo {
     optional uint32 LifeCyclePhase = 6;
     optional uint64 AllocatedSize = 7;
     optional uint64 AvailableSize = 8;
-    reserved 9;
-    reserved 10;
+    reserved 9; 
+    reserved 10; 
     optional bool SeenOperational = 11;
     optional string ErasureSpeciesV2 = 12;
     optional uint64 PutTabletLogLatency = 13;
@@ -289,8 +289,8 @@ message TStoragePoolInfo {
     optional uint64 PathId = 9;
     optional string ErasureSpeciesV2 = 10;
     optional string VDiskKindV2 = 12;
-    optional string PDiskFilter = 13;
-    optional bytes PDiskFilterData = 14;
+    optional string PDiskFilter = 13; 
+    optional bytes PDiskFilterData = 14; 
     // metrics ?
 }
 
@@ -311,25 +311,25 @@ message TEvGetStoragePoolsResponse {
     repeated TStoragePoolEntry Entries = 1;
 }
 
-message TStorageStatsEntry {
-    reserved 1;
-    optional string PDiskFilter = 2;
-    optional string ErasureSpecies = 3;
-    optional uint32 CurrentGroupsCreated = 4;
-    optional uint64 CurrentAllocatedSize = 5;
-    optional uint64 CurrentAvailableSize = 6;
-    optional uint32 AvailableGroupsToCreate = 7;
-    optional uint64 AvailableSizeToCreate = 8; // total space of newly created groups, if they would've been created
-    optional bytes PDiskFilterData = 9;
-}
-
-message TEvGetStorageStatsRequest {
-}
-
-message TEvGetStorageStatsResponse {
-    repeated TStorageStatsEntry Entries = 1;
-}
-
+message TStorageStatsEntry { 
+    reserved 1; 
+    optional string PDiskFilter = 2; 
+    optional string ErasureSpecies = 3; 
+    optional uint32 CurrentGroupsCreated = 4; 
+    optional uint64 CurrentAllocatedSize = 5; 
+    optional uint64 CurrentAvailableSize = 6; 
+    optional uint32 AvailableGroupsToCreate = 7; 
+    optional uint64 AvailableSizeToCreate = 8; // total space of newly created groups, if they would've been created 
+    optional bytes PDiskFilterData = 9; 
+} 
+ 
+message TEvGetStorageStatsRequest { 
+} 
+ 
+message TEvGetStorageStatsResponse { 
+    repeated TStorageStatsEntry Entries = 1; 
+} 
+ 
 message TTabletEntry {
     optional fixed64 TabletId = 1;
     optional uint32 FollowerId = 2;

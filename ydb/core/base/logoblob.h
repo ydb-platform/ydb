@@ -55,21 +55,21 @@ namespace NKikimr {
             memcpy(Raw.X, raw, 3 * sizeof(ui64));
         }
 
-        static TLogoBlobID PrevFull(const TLogoBlobID& id, ui32 size) {
-            Y_VERIFY(!id.PartId());
-            ui64 tablet = id.TabletID();
-            ui32 channel = id.Channel();
-            ui32 generation = id.Generation();
-            ui32 step = id.Step();
-            ui32 cookie = id.Cookie();
-            // decrement tuple and check for overflow condition
-            const bool overflow = ((--cookie &= MaxCookie) == MaxCookie) && (--step == Max<ui32>()) &&
-                (--generation == Max<ui32>()) && ((--channel &= MaxChannel) == MaxChannel) &&
-                (--tablet == Max<ui64>());
-            Y_VERIFY(!overflow);
-            return TLogoBlobID(tablet, generation, step, channel, size, cookie);
-        }
-
+        static TLogoBlobID PrevFull(const TLogoBlobID& id, ui32 size) { 
+            Y_VERIFY(!id.PartId()); 
+            ui64 tablet = id.TabletID(); 
+            ui32 channel = id.Channel(); 
+            ui32 generation = id.Generation(); 
+            ui32 step = id.Step(); 
+            ui32 cookie = id.Cookie(); 
+            // decrement tuple and check for overflow condition 
+            const bool overflow = ((--cookie &= MaxCookie) == MaxCookie) && (--step == Max<ui32>()) && 
+                (--generation == Max<ui32>()) && ((--channel &= MaxChannel) == MaxChannel) && 
+                (--tablet == Max<ui64>()); 
+            Y_VERIFY(!overflow); 
+            return TLogoBlobID(tablet, generation, step, channel, size, cookie); 
+        } 
+ 
         static TLogoBlobID Make(ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie,
                 ui32 crcMode) {
             TLogoBlobID id;

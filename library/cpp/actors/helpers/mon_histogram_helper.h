@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
+ 
 #include <util/string/cast.h>
 
 namespace NActors {
@@ -14,8 +14,8 @@ namespace NActors {
             {
             }
 
-            THistogramCounterHelper(const THistogramCounterHelper&) = default;
-
+            THistogramCounterHelper(const THistogramCounterHelper&) = default; 
+ 
             void Init(NMonitoring::TDynamicCounters* group, const TString& baseName, const TString& unit,
                 ui64 firstBucket, ui64 bucketCnt, bool useSensorLabelName = true)
             {

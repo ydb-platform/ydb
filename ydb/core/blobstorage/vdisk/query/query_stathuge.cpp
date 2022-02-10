@@ -22,7 +22,7 @@ namespace NKikimr {
             CalculateUsedHugeChunks(str, prettyPrint);
 
             Result->SetResult(str.Str());
-            SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, 0);
+            SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, 0); 
             ctx.Send(ParentId, new TEvents::TEvActorDied);
             TThis::Die(ctx);
         }
@@ -36,18 +36,18 @@ namespace NKikimr {
 
         THugeStatActor(
                 TIntrusivePtr<THullCtx> hullCtx,
-                const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
+                const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx, 
                 const TActorId &parentId,
                 THullDsSnap &&fullSnap,
                 TEvBlobStorage::TEvVDbStat::TPtr &ev,
-                std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result)
+                std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result) 
             : TActorBootstrapped<THugeStatActor>()
             , HullCtx(std::move(hullCtx))
             , HugeBlobCtx(hugeBlobCtx)
             , ParentId(parentId)
             , FullSnap(std::move(fullSnap))
             , Ev(ev)
-            , Result(std::move(result))
+            , Result(std::move(result)) 
         {}
 
     private:
@@ -55,11 +55,11 @@ namespace NKikimr {
         class TAggr;
 
         TIntrusivePtr<THullCtx> HullCtx;
-        std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
+        std::shared_ptr<THugeBlobCtx> HugeBlobCtx; 
         const TActorId ParentId;
         THullDsSnap FullSnap;
         TEvBlobStorage::TEvVDbStat::TPtr Ev;
-        std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> Result;
+        std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> Result; 
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -111,7 +111,7 @@ namespace NKikimr {
             // slotSize -> TAggrSlotInfo
             using TAggrBySlotSize = TMap<ui32, TAggrSlotInfo>;
             IOutputStream &Str;
-            const std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
+            const std::shared_ptr<THugeBlobCtx> HugeBlobCtx; 
             const bool Pretty;
             const ui32 ChunkSize;
             TPerChunkMap Map;
@@ -310,7 +310,7 @@ namespace NKikimr {
         public:
             TChunksMap(
                     IOutputStream &str,
-                    const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
+                    const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx, 
                     const bool pretty,
                     ui32 chunkSize)
                 : Str(str)
@@ -349,7 +349,7 @@ namespace NKikimr {
         TChunksMap ChunksMap;
 
     public:
-        TAggr(IOutputStream &str, const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx, bool pretty, ui32 chunkSize)
+        TAggr(IOutputStream &str, const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx, bool pretty, ui32 chunkSize) 
             : ChunksMap(str, hugeBlobCtx, pretty, chunkSize)
         {}
 
@@ -396,12 +396,12 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateHugeStatActor(
             TIntrusivePtr<THullCtx> hullCtx,
-            const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
+            const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx, 
             const TActorId &parentId,
             THullDsSnap &&fullSnap,
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
-            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result) {
-        return new THugeStatActor(std::move(hullCtx), hugeBlobCtx, parentId, std::move(fullSnap), ev, std::move(result));
+            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result) { 
+        return new THugeStatActor(std::move(hullCtx), hugeBlobCtx, parentId, std::move(fullSnap), ev, std::move(result)); 
     }
 
 } // NKikimr

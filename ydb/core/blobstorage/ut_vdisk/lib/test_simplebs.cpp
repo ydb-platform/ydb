@@ -147,11 +147,11 @@ void SendReadRequests(const TActorContext &ctx) {
     // read logoblobs
     const TVector<TDataItem> &ds = DataSetPtr->ToVector();
 
-    for (ui32 i = 0; i < 3; ++i) {
-        auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, {ds.at(i).Id});
-        ctx.Send(VDiskInfo.ActorID, req.release());
-    }
+    for (ui32 i = 0; i < 3; ++i) { 
+        auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(), 
+                NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, {ds.at(i).Id}); 
+        ctx.Send(VDiskInfo.ActorID, req.release()); 
+    } 
 
     ExpectedSet.Put(ds.at(0).Id, NKikimrProto::OK, ds.at(0).Data);
     ExpectedSet.Put(ds.at(1).Id, NKikimrProto::OK, ds.at(1).Data);
@@ -167,10 +167,10 @@ void SendReadRequests(const TActorContext &ctx) {
     // read logoblobs
     const TVector<TDataItem> &ds = DataSetPtr->ToVector();
 
-    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
-            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
-            {ds.at(0).Id, ds.at(1).Id, ds.at(2).Id});
-    ctx.Send(VDiskInfo.ActorID, req.release());
+    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(), 
+            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, 
+            {ds.at(0).Id, ds.at(1).Id, ds.at(2).Id}); 
+    ctx.Send(VDiskInfo.ActorID, req.release()); 
 
     ExpectedSet.Put(ds.at(0).Id, NKikimrProto::OK, ds.at(0).Data);
     ExpectedSet.Put(ds.at(1).Id, NKikimrProto::OK, ds.at(1).Data);
@@ -186,10 +186,10 @@ void SendReadRequests(const TActorContext &ctx) {
     // read logoblobs
     const TVector<TDataItem> &ds = DataSetPtr->ToVector();
 
-    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
-            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
-            {ds.at(0).Id, ds.at(2).Id});
-    ctx.Send(VDiskInfo.ActorID, req.release());
+    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(), 
+            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, 
+            {ds.at(0).Id, ds.at(2).Id}); 
+    ctx.Send(VDiskInfo.ActorID, req.release()); 
 
     ExpectedSet.Put(ds.at(0).Id, NKikimrProto::OK, ds.at(0).Data);
     ExpectedSet.Put(ds.at(2).Id, NKikimrProto::OK, ds.at(2).Data);
@@ -204,10 +204,10 @@ void SendReadRequests(const TActorContext &ctx) {
     // use shift/size to read parts of logoblobs
     const TVector<TDataItem> &ds = DataSetPtr->ToVector();
 
-    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
-            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
-            {{ds.at(0).Id, 2, 5}, {ds.at(1).Id, 0, 3}, {ds.at(2).Id, 2, 1}});
-    ctx.Send(VDiskInfo.ActorID, req.release());
+    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(), 
+            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, 
+            {{ds.at(0).Id, 2, 5}, {ds.at(1).Id, 0, 3}, {ds.at(2).Id, 2, 1}}); 
+    ctx.Send(VDiskInfo.ActorID, req.release()); 
 
     ExpectedSet.Put(ds.at(0).Id, NKikimrProto::OK, ds.at(0).Data.substr(2, 5));//"cdefg"
     ExpectedSet.Put(ds.at(1).Id, NKikimrProto::OK, ds.at(1).Data.substr(0, 3));//"pqr"
@@ -225,10 +225,10 @@ void SendReadRequests(const TActorContext &ctx) {
     // use shift/size to read parts of logoblobs
     const TVector<TDataItem> &ds = DataSetPtr->ToVector();
 
-    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
-            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
-            {{ds.at(0).Id, 65u << 10u, 5}, {ds.at(1).Id, 0, 65u << 10u}});
-    ctx.Send(VDiskInfo.ActorID, req.release());
+    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(), 
+            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, 
+            {{ds.at(0).Id, 65u << 10u, 5}, {ds.at(1).Id, 0, 65u << 10u}}); 
+    ctx.Send(VDiskInfo.ActorID, req.release()); 
 
     ExpectedSet.Put(ds.at(0).Id, NKikimrProto::ERROR, "");
     ExpectedSet.Put(ds.at(1).Id, NKikimrProto::ERROR, "");
@@ -237,42 +237,42 @@ void SendReadRequests(const TActorContext &ctx) {
 }
 SIMPLE_TEST_END(TSimple3Put1SeqSubsError, TBasePutAllFromDataSet)
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+SIMPLE_TEST_BEGIN(TSimple3Put1GetMissingKey, TBasePutAllFromDataSet) 
+void SendReadRequests(const TActorContext &ctx) { 
+    // use shift/size to read parts of logoblobs 
+
+    TLogoBlobID key(10, 1, 1, 0, 10, 0, 1); 
+ 
+    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(), 
+            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, {key}); 
+    ctx.Send(VDiskInfo.ActorID, req.release()); 
+ 
+    ExpectedSet.Put(key, NKikimrProto::NODATA, ""); 
+ 
+    Counter = 1; 
+} 
+SIMPLE_TEST_END(TSimple3Put1GetMissingKey, TBasePutAllFromDataSet) 
+ 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-SIMPLE_TEST_BEGIN(TSimple3Put1GetMissingKey, TBasePutAllFromDataSet)
-void SendReadRequests(const TActorContext &ctx) {
-    // use shift/size to read parts of logoblobs
-
-    TLogoBlobID key(10, 1, 1, 0, 10, 0, 1);
-
-    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
-            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, {key});
-    ctx.Send(VDiskInfo.ActorID, req.release());
-
-    ExpectedSet.Put(key, NKikimrProto::NODATA, "");
-
-    Counter = 1;
-}
-SIMPLE_TEST_END(TSimple3Put1GetMissingKey, TBasePutAllFromDataSet)
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-SIMPLE_TEST_BEGIN(TSimple3Put1GetMissingPart, TBasePutAllFromDataSet)
-void SendReadRequests(const TActorContext &ctx) {
-    // use shift/size to read parts of logoblobs
+SIMPLE_TEST_BEGIN(TSimple3Put1GetMissingPart, TBasePutAllFromDataSet) 
+void SendReadRequests(const TActorContext &ctx) { 
+    // use shift/size to read parts of logoblobs 
     const TVector<TDataItem> &ds = DataSetPtr->ToVector();
-
-    TLogoBlobID key(ds.at(0).Id, 2);
-
-    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
-            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, {key});
-    ctx.Send(VDiskInfo.ActorID, req.release());
-
-    ExpectedSet.Put(key, NKikimrProto::NODATA, "");
-
-    Counter = 1;
-}
-SIMPLE_TEST_END(TSimple3Put1GetMissingPart, TBasePutAllFromDataSet)
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+ 
+    TLogoBlobID key(ds.at(0).Id, 2); 
+ 
+    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(), 
+            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, {key}); 
+    ctx.Send(VDiskInfo.ActorID, req.release()); 
+ 
+    ExpectedSet.Put(key, NKikimrProto::NODATA, ""); 
+ 
+    Counter = 1; 
+} 
+SIMPLE_TEST_END(TSimple3Put1GetMissingPart, TBasePutAllFromDataSet) 
+ 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
 SIMPLE_TEST_BEGIN(TSimpleHnd6Put1SeqGet, TBasePutAllFromDataSet)
 void SendReadRequests(const TActorContext &ctx) {
     // read logoblobs
@@ -285,15 +285,15 @@ void SendReadRequests(const TActorContext &ctx) {
     TLogoBlobID LogoBlobID1 = TLogoBlobID(ds.at(0).Id, 0);        // LogoBlobID1Part1
     TLogoBlobID LogoBlobID2Part3 = TLogoBlobID(ds.at(3).Id, 3);   // LogoBlobID2Part2
 
-    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
-            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
-            {{LogoBlobID1, 0, 0, &cookie1}, {LogoBlobID2Part3, 0, 0, &cookie2}, {ds.at(4).Id, 0, 0, &cookie3}});
-
-    ctx.Send(VDiskInfo.ActorID, req.release());
+    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(), 
+            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, 
+            {{LogoBlobID1, 0, 0, &cookie1}, {LogoBlobID2Part3, 0, 0, &cookie2}, {ds.at(4).Id, 0, 0, &cookie3}}); 
+ 
+    ctx.Send(VDiskInfo.ActorID, req.release()); 
 
     ExpectedSet.Put(ds.at(0).Id, NKikimrProto::OK, ds.at(0).Data); // LogoBlobID1Part1 "abcdefghkj"
     ExpectedSet.Put(ds.at(1).Id, NKikimrProto::OK, ds.at(1).Data); // LogoBlobID1Part2 "abcdefghkj"
-    ExpectedSet.Put(LogoBlobID2Part3, NKikimrProto::NODATA, "");
+    ExpectedSet.Put(LogoBlobID2Part3, NKikimrProto::NODATA, ""); 
     ExpectedSet.Put(ds.at(4).Id, NKikimrProto::OK, ds.at(4).Data); // LogoBlobID3Part1 "xyz"
 
     Counter = 1;
@@ -308,11 +308,11 @@ void SendReadRequests(const TActorContext &ctx) {
     const TVector<TDataItem> &ds = DataSetPtr->ToVector();
 
     ui64 cookie = 386;
-
-    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
-            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
-            {{ds.at(0).Id, 0, 0, &cookie}});
-    ctx.Send(VDiskInfo.ActorID, req.release());
+ 
+    auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(), 
+            NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, 
+            {{ds.at(0).Id, 0, 0, &cookie}}); 
+    ctx.Send(VDiskInfo.ActorID, req.release()); 
 
     ExpectedSet.Put(ds.at(0).Id, NKikimrProto::OK, ds.at(0).Data);
 
@@ -328,17 +328,17 @@ protected:
 
     virtual void SendReadRequests(const TActorContext &ctx, const TLogoBlobID &from, const TLogoBlobID &to) {
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
-        auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
-                from, to, 10);
-        ctx.Send(VDiskInfo.ActorID, req.release());
+        auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID, TInstant::Max(), 
+                NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, 
+                from, to, 10); 
+        ctx.Send(VDiskInfo.ActorID, req.release()); 
     }
 
     virtual void ExpectedSetAll() {
         const TVector<TDataItem> &ds = DataSetPtr->ToVector();
-        ExpectedSet.Put(ds.at(0).Id.FullID(), NKikimrProto::OK, {});
-        ExpectedSet.Put(ds.at(1).Id.FullID(), NKikimrProto::OK, {});
-        ExpectedSet.Put(ds.at(2).Id.FullID(), NKikimrProto::OK, {});
+        ExpectedSet.Put(ds.at(0).Id.FullID(), NKikimrProto::OK, {}); 
+        ExpectedSet.Put(ds.at(1).Id.FullID(), NKikimrProto::OK, {}); 
+        ExpectedSet.Put(ds.at(2).Id.FullID(), NKikimrProto::OK, {}); 
 
         Counter = 1;
     }
@@ -349,7 +349,7 @@ protected:
 
     virtual void ExpectedSetMiddle() {
         const TVector<TDataItem> &ds = DataSetPtr->ToVector();
-        ExpectedSet.Put(ds.at(1).Id.FullID(), NKikimrProto::OK, {});
+        ExpectedSet.Put(ds.at(1).Id.FullID(), NKikimrProto::OK, {}); 
 
         Counter = 1;
     }
@@ -442,9 +442,9 @@ class TSimpleGetFromEmptyDBActor : public TActorBootstrapped<TSimpleGetFromEmpty
     void Bootstrap(const TActorContext &ctx) {
         Become(&TThis::StateFunc);
 
-        auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, {LogoBlobID1});
-        ctx.Send(VDiskInfo.ActorID, req.release());
+        auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(), 
+                NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, {LogoBlobID1}); 
+        ctx.Send(VDiskInfo.ActorID, req.release()); 
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
@@ -487,9 +487,9 @@ class TRangeGetFromEmptyDBActor : public TActorBootstrapped<TRangeGetFromEmptyDB
         TLogoBlobID from(0, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
         TLogoBlobID to  (0, 0, 0, 0, 0, 0, 1);
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
-        auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, from, to, 10);
-        ctx.Send(VDiskInfo.ActorID, req.release());
+        auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID, TInstant::Max(), 
+                NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, from, to, 10); 
+        ctx.Send(VDiskInfo.ActorID, req.release()); 
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {

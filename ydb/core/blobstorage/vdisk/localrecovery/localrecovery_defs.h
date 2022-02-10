@@ -90,7 +90,7 @@ namespace NKikimr {
         ui64 LogRecPhantomBlob = 0;
         ui64 LogRecAnubisOsirisPut = 0;
         ui64 LogRecAddBulkSst = 0;
-        ui64 LogRecScrub = 0;
+        ui64 LogRecScrub = 0; 
 
 
         // statistics for record dispatching
@@ -119,26 +119,26 @@ namespace NKikimr {
         counter++;                                              \
     }
 
-        DISPATCH_SIGNATURE_FUNC_GEN(LogoBlob, LogRecLogoBlob)
-        DISPATCH_SIGNATURE_FUNC_GEN(Block, LogRecBlock)
-        DISPATCH_SIGNATURE_FUNC_GEN(GC, LogRecGC)
-        DISPATCH_SIGNATURE_FUNC_GEN(SyncLogIdx, LogRecSyncLogIdx)
-        DISPATCH_SIGNATURE_FUNC_GEN(HullLogoBlobsDB, LogRecLogoBlobsDB)
-        DISPATCH_SIGNATURE_FUNC_GEN(HullBlocksDB, LogRecBlocksDB)
-        DISPATCH_SIGNATURE_FUNC_GEN(HullBarriersDB, LogRecBarriersDB)
-        DISPATCH_SIGNATURE_FUNC_GEN(HullCutLog, LogRecCutLog)
-        DISPATCH_SIGNATURE_FUNC_GEN(LocalSyncData, LogRecLocalSyncData)
-        DISPATCH_SIGNATURE_FUNC_GEN(SyncerState, LogRecSyncerState)
-        DISPATCH_SIGNATURE_FUNC_GEN(HandoffDelLogoBlob, LogRecHandoffDel)
-        DISPATCH_SIGNATURE_FUNC_GEN(HugeBlobAllocChunk, LogRecHugeBlobAllocChunk)
-        DISPATCH_SIGNATURE_FUNC_GEN(HugeBlobFreeChunk, LogRecHugeBlobFreeChunk)
-        DISPATCH_SIGNATURE_FUNC_GEN(HugeBlobEntryPoint, LogRecHugeBlobEntryPoint)
-        DISPATCH_SIGNATURE_FUNC_GEN(HugeLogoBlob, LogRecHugeLogoBlob)
-        DISPATCH_SIGNATURE_FUNC_GEN(LogoBlobOpt, LogRecLogoBlobOpt)
-        DISPATCH_SIGNATURE_FUNC_GEN(PhantomBlobs, LogRecPhantomBlob)
-        DISPATCH_SIGNATURE_FUNC_GEN(AnubisOsirisPut, LogRecAnubisOsirisPut)
-        DISPATCH_SIGNATURE_FUNC_GEN(AddBulkSst, LogRecAddBulkSst)
-        DISPATCH_SIGNATURE_FUNC_GEN(Scrub, LogRecScrub)
+        DISPATCH_SIGNATURE_FUNC_GEN(LogoBlob, LogRecLogoBlob) 
+        DISPATCH_SIGNATURE_FUNC_GEN(Block, LogRecBlock) 
+        DISPATCH_SIGNATURE_FUNC_GEN(GC, LogRecGC) 
+        DISPATCH_SIGNATURE_FUNC_GEN(SyncLogIdx, LogRecSyncLogIdx) 
+        DISPATCH_SIGNATURE_FUNC_GEN(HullLogoBlobsDB, LogRecLogoBlobsDB) 
+        DISPATCH_SIGNATURE_FUNC_GEN(HullBlocksDB, LogRecBlocksDB) 
+        DISPATCH_SIGNATURE_FUNC_GEN(HullBarriersDB, LogRecBarriersDB) 
+        DISPATCH_SIGNATURE_FUNC_GEN(HullCutLog, LogRecCutLog) 
+        DISPATCH_SIGNATURE_FUNC_GEN(LocalSyncData, LogRecLocalSyncData) 
+        DISPATCH_SIGNATURE_FUNC_GEN(SyncerState, LogRecSyncerState) 
+        DISPATCH_SIGNATURE_FUNC_GEN(HandoffDelLogoBlob, LogRecHandoffDel) 
+        DISPATCH_SIGNATURE_FUNC_GEN(HugeBlobAllocChunk, LogRecHugeBlobAllocChunk) 
+        DISPATCH_SIGNATURE_FUNC_GEN(HugeBlobFreeChunk, LogRecHugeBlobFreeChunk) 
+        DISPATCH_SIGNATURE_FUNC_GEN(HugeBlobEntryPoint, LogRecHugeBlobEntryPoint) 
+        DISPATCH_SIGNATURE_FUNC_GEN(HugeLogoBlob, LogRecHugeLogoBlob) 
+        DISPATCH_SIGNATURE_FUNC_GEN(LogoBlobOpt, LogRecLogoBlobOpt) 
+        DISPATCH_SIGNATURE_FUNC_GEN(PhantomBlobs, LogRecPhantomBlob) 
+        DISPATCH_SIGNATURE_FUNC_GEN(AnubisOsirisPut, LogRecAnubisOsirisPut) 
+        DISPATCH_SIGNATURE_FUNC_GEN(AddBulkSst, LogRecAddBulkSst) 
+        DISPATCH_SIGNATURE_FUNC_GEN(Scrub, LogRecScrub) 
 
         ///////////////////////////////////////////////////////////////////////////////
         // Log Applied/Skipped items

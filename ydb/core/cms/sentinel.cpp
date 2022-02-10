@@ -94,7 +94,7 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
     PrevState = State;
 
     switch (State) {
-    case NKikimrBlobStorage::TPDiskState::Normal:
+    case NKikimrBlobStorage::TPDiskState::Normal: 
         return EPDiskStatus::ACTIVE;
     default:
         return EPDiskStatus::FAULTY;
@@ -198,9 +198,9 @@ void TClusterMap::AddPDisk(const TPDiskID& id) {
     Y_VERIFY(State->ClusterInfo->HasPDisk(id));
     const auto& location = State->ClusterInfo->Node(id.NodeId).Location;
 
-    ByDataCenter[location.HasKey(TNodeLocation::TKeys::DataCenter) ? location.GetDataCenterId() : ""].insert(id);
-    ByRoom[location.HasKey(TNodeLocation::TKeys::Module) ? location.GetModuleId() : ""].insert(id);
-    ByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id);
+    ByDataCenter[location.HasKey(TNodeLocation::TKeys::DataCenter) ? location.GetDataCenterId() : ""].insert(id); 
+    ByRoom[location.HasKey(TNodeLocation::TKeys::Module) ? location.GetModuleId() : ""].insert(id); 
+    ByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id); 
 }
 
 /// TGuardian
@@ -230,10 +230,10 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
         Y_VERIFY(all.ByDataCenter.contains(kv.first));
 
         if (!kv.first || CheckRatio(kv, all.ByDataCenter, DataCenterRatio)) {
-            result.insert(kv.second.begin(), kv.second.end());
+            result.insert(kv.second.begin(), kv.second.end()); 
         } else {
             LOG_IGNORED(DataCenter);
-            disallowed.insert(kv.second.begin(), kv.second.end());
+            disallowed.insert(kv.second.begin(), kv.second.end()); 
         }
     }
 
@@ -242,7 +242,7 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
 
         if (kv.first && !CheckRatio(kv, all.ByRoom, RoomRatio)) {
             LOG_IGNORED(Room);
-            disallowed.insert(kv.second.begin(), kv.second.end());
+            disallowed.insert(kv.second.begin(), kv.second.end()); 
             EraseNodesIf(result, [&room = kv.second](const TPDiskID& id) {
                 return room.contains(id);
             });
@@ -257,7 +257,7 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
         }
         if (kv.first && !CheckRatio(kv, all.ByRack, RackRatio)) {
             LOG_IGNORED(Rack);
-            disallowed.insert(kv.second.begin(), kv.second.end());
+            disallowed.insert(kv.second.begin(), kv.second.end()); 
             EraseNodesIf(result, [&rack = kv.second](const TPDiskID& id) {
                 return rack.contains(id);
             });
@@ -349,7 +349,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
             ConnectBSC();
         }
 
-        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>(); 
         request->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
         NTabletPipe::SendData(SelfId(), CmsState->BSControllerPipe, request.Release());
     }
@@ -431,24 +431,24 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
 
     static EPDiskState SafePDiskState(EPDiskState state) {
         switch (state) {
-        case NKikimrBlobStorage::TPDiskState::Initial:
-        case NKikimrBlobStorage::TPDiskState::InitialFormatRead:
-        case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
-        case NKikimrBlobStorage::TPDiskState::InitialSysLogRead:
-        case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
-        case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError:
-        case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead:
-        case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
-        case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
-        case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
-        case NKikimrBlobStorage::TPDiskState::Normal:
-        case NKikimrBlobStorage::TPDiskState::OpenFileError:
-        case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
-        case NKikimrBlobStorage::TPDiskState::DeviceIoError:
+        case NKikimrBlobStorage::TPDiskState::Initial: 
+        case NKikimrBlobStorage::TPDiskState::InitialFormatRead: 
+        case NKikimrBlobStorage::TPDiskState::InitialFormatReadError: 
+        case NKikimrBlobStorage::TPDiskState::InitialSysLogRead: 
+        case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError: 
+        case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError: 
+        case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead: 
+        case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError: 
+        case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError: 
+        case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError: 
+        case NKikimrBlobStorage::TPDiskState::Normal: 
+        case NKikimrBlobStorage::TPDiskState::OpenFileError: 
+        case NKikimrBlobStorage::TPDiskState::ChunkQuotaError: 
+        case NKikimrBlobStorage::TPDiskState::DeviceIoError: 
             return state;
         default:
             LOG_C("Unknown pdisk state: " << (ui32)state);
-            return NKikimrBlobStorage::TPDiskState::Unknown;
+            return NKikimrBlobStorage::TPDiskState::Unknown; 
         }
     }
 
@@ -511,7 +511,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         if (!record.PDiskStateInfoSize()) {
             LOG_E("There is no pdisk info"
                 << ": nodeId# " << nodeId);
-            MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Missing);
+            MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Missing); 
         } else {
             for (const auto& info : record.GetPDiskStateInfo()) {
                 auto it = SentinelState->PDisks.find(TPDiskID(nodeId, info.GetPDiskId()));
@@ -528,7 +528,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
                 it->second.AddState(safeState);
             }
 
-            MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Missing, true);
+            MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Missing, true); 
         }
 
         MaybeReply();
@@ -557,11 +557,11 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
 
         switch (reason) {
         case EReason::Disconnected:
-            MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::NodeDisconnected);
+            MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::NodeDisconnected); 
             break;
 
         default:
-            MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Unknown);
+            MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Unknown); 
             break;
         }
 
@@ -575,7 +575,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         while (WaitNodes) {
             const ui32 nodeId = *WaitNodes.begin();
 
-            MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Timeout);
+            MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Timeout); 
             AcceptNodeReply(nodeId);
         }
 
@@ -644,7 +644,7 @@ class TStatusChanger: public TSentinelChildBase<TStatusChanger> {
             ConnectBSC();
         }
 
-        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>(); 
         auto& command = *request->Record.MutableRequest()->AddCommand()->MutableUpdateDriveStatus();
         command.MutableHostKey()->SetNodeId(Id.NodeId);
         command.SetPDiskId(Id.DiskId);

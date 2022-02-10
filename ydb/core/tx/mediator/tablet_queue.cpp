@@ -118,17 +118,17 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             evx.Record.SetMediator(Mediator);
             evx.Record.SetBucket(HashBucket);
             evx.Record.SetTimeBarrier(CommitedStep);
-            TAllocChunkSerializer serializer;
+            TAllocChunkSerializer serializer; 
             const bool success = evx.SerializeToArcadiaStream(&serializer);
-            Y_VERIFY(success);
-            TIntrusivePtr<TEventSerializedData> data = serializer.Release(evx.IsExtendedFormat());
+            Y_VERIFY(success); 
+            TIntrusivePtr<TEventSerializedData> data = serializer.Release(evx.IsExtendedFormat()); 
 
             // todo: we must throttle delivery
             const ui32 sendFlags = IEventHandle::FlagTrackDelivery;
             for (const TActorId &x : TimecastWatches) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
                     << " Mediator# " << Mediator << " SEND to# " << x.ToString() << " " << evx.ToString());
-                ctx.ExecutorThread.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, x, ctx.SelfID, data, 0));
+                ctx.ExecutorThread.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, x, ctx.SelfID, data, 0)); 
             }
         }
     }
@@ -336,8 +336,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR;
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR; 
     }
 
     TTxMediatorTabletQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui64 hashBucket)

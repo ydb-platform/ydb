@@ -63,7 +63,7 @@ namespace NKikimr {
         using TBase = TAtomicRefCountWithDeleterInBatchPool<TFreshIndexAndData<TKey, TMemRec>>;
         using TFreshIndex = ::NKikimr::TFreshIndex<TKey, TMemRec>;
 
-        TFreshIndexAndData(THullCtxPtr hullCtx, std::shared_ptr<TRopeArena> arena);
+        TFreshIndexAndData(THullCtxPtr hullCtx, std::shared_ptr<TRopeArena> arena); 
 
         ui64 InPlaceSizeApproximation() const {
             ui64 index = (sizeof(TKey) + sizeof(TMemRec)) * Inserts + sizeof(TIdxDiskPlaceHolder);
@@ -81,9 +81,9 @@ namespace NKikimr {
         ui64 GetMemDataSize() const { return MemDataSize; }
         ui64 GetHugeDataSize() const { return HugeDataSize; }
 
-        // put newly received item into fresh segment
+        // put newly received item into fresh segment 
         void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer);
-        const TRope& GetLogoBlobData(const TMemPart& memPart) const;
+        const TRope& GetLogoBlobData(const TMemPart& memPart) const; 
         void Put(ui64 lsn, const TKey &key, const TMemRec &memRec);
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
         void GetHugeBlobs(TSet<TDiskPart> &hugeBlobs) const;
@@ -106,19 +106,19 @@ namespace NKikimr {
 
     private:
         THullCtxPtr HullCtx;
-        std::unique_ptr<TFreshIndex> Index;
-
-        static constexpr size_t RopeExtentSize = 4096;
-        using TRopeExtent = std::array<TRope, RopeExtentSize>;
-
+        std::unique_ptr<TFreshIndex> Index; 
+ 
+        static constexpr size_t RopeExtentSize = 4096; 
+        using TRopeExtent = std::array<TRope, RopeExtentSize>; 
+ 
         // Track FreshData memory consumption
         TMemoryConsumerWithDropOnDestroy FreshDataMemConsumer;
-        // arena for small-bounded data allocations
-        std::shared_ptr<TRopeArena> Arena;
-        // a list of extents; only the last one is being filled
-        TList<TRopeExtent> RopeExtents;
-        size_t LastRopeExtentSize = RopeExtentSize;
-
+        // arena for small-bounded data allocations 
+        std::shared_ptr<TRopeArena> Arena; 
+        // a list of extents; only the last one is being filled 
+        TList<TRopeExtent> RopeExtents; 
+        size_t LastRopeExtentSize = RopeExtentSize; 
+ 
         ui64 FirstLsn = ui64(-1);
         ui64 LastLsn = 0;
         ui64 MemDataSize = 0;
@@ -190,10 +190,10 @@ namespace NKikimr {
         // Compact fresh appendix job
         struct TCompactionJob {
             TIntrusivePtr<TThis> FreshSegment;
-            std::shared_ptr<ISTreeCompaction> Job;
+            std::shared_ptr<ISTreeCompaction> Job; 
 
             TCompactionJob() = default;
-            TCompactionJob(TIntrusivePtr<TThis> &&seg, std::shared_ptr<ISTreeCompaction> &&job)
+            TCompactionJob(TIntrusivePtr<TThis> &&seg, std::shared_ptr<ISTreeCompaction> &&job) 
                 : FreshSegment(std::move(seg))
                 , Job(std::move(job))
             {}
@@ -203,16 +203,16 @@ namespace NKikimr {
             TCompactionJob ApplyCompactionResult() {
                 TCompactionJob newJob = FreshSegment->ApplyCompactionResult(Job);
                 FreshSegment.Drop();
-                Job.reset();
+                Job.reset(); 
                 return newJob;
             }
         };
 
-        TFreshSegment(THullCtxPtr hullCtx, ui64 compThreshold, TInstant startTime, std::shared_ptr<TRopeArena> arena)
+        TFreshSegment(THullCtxPtr hullCtx, ui64 compThreshold, TInstant startTime, std::shared_ptr<TRopeArena> arena) 
             : CompThreshold(Max<ui64>(hullCtx->ChunkSize, compThreshold))
             , ChunkSize(hullCtx->ChunkSize)
             , StartTime(startTime)
-            , IndexAndData(MakeIntrusive<TFreshIndexAndData>(hullCtx, std::move(arena)))
+            , IndexAndData(MakeIntrusive<TFreshIndexAndData>(hullCtx, std::move(arena))) 
             , AppendixTree(hullCtx, AppendixTreeStagingCapacity)
         {}
 
@@ -246,7 +246,7 @@ namespace NKikimr {
         }
         const TRope& GetLogoBlobData(const TMemPart& memPart) const { return IndexAndData->GetLogoBlobData(memPart); }
         void Put(ui64 lsn, const TKey &key, const TMemRec &memRec) { return IndexAndData->Put(lsn, key, memRec); }
-        void PutAppendix(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) {
+        void PutAppendix(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) { 
             AppendixTree.AddAppendix(std::move(a), firstLsn, lastLsn);
         }
         void OutputHtml(const TString &which, IOutputStream &str) const;
@@ -254,7 +254,7 @@ namespace NKikimr {
         void GetHugeBlobs(TSet<TDiskPart> &hugeBlobs) const { return IndexAndData->GetHugeBlobs(hugeBlobs); }
         // Appendix Compact/ApplyCompactionResult
         TCompactionJob Compact() { return MkCompactJob(AppendixTree.Compact()); }
-        TCompactionJob ApplyCompactionResult(std::shared_ptr<ISTreeCompaction> cjob) {
+        TCompactionJob ApplyCompactionResult(std::shared_ptr<ISTreeCompaction> cjob) { 
             return MkCompactJob(AppendixTree.ApplyCompactionResult(cjob));
         }
         const TSTreeCompactionStat &GetCompactionStat() const { return AppendixTree.GetCompactionStat(); }
@@ -271,7 +271,7 @@ namespace NKikimr {
         // FIXME: implement TIntrusivePtr with deletion in batch pool
         TFreshAppendixTree<TKey, TMemRec> AppendixTree;
 
-        TCompactionJob MkCompactJob(std::shared_ptr<ISTreeCompaction> &&job) {
+        TCompactionJob MkCompactJob(std::shared_ptr<ISTreeCompaction> &&job) { 
             if (job) {
                 return TCompactionJob(TIntrusivePtr<TThis>(this), std::move(job));
             } else {
@@ -283,25 +283,25 @@ namespace NKikimr {
 
 } // NKikimr
 
-#include "fresh_segment_impl.h"
-
-namespace NKikimr {
-
-    extern template class TFreshIndexAndDataSnapshot<TKeyLogoBlob, TMemRecLogoBlob>;
-    extern template class TFreshIndexAndDataSnapshot<TKeyBarrier, TMemRecBarrier>;
-    extern template class TFreshIndexAndDataSnapshot<TKeyBlock, TMemRecBlock>;
-
-    extern template class TFreshIndexAndData<TKeyLogoBlob, TMemRecLogoBlob>;
-    extern template class TFreshIndexAndData<TKeyBarrier, TMemRecBarrier>;
-    extern template class TFreshIndexAndData<TKeyBlock, TMemRecBlock>;
-
-    extern template class TFreshSegmentSnapshot<TKeyLogoBlob, TMemRecLogoBlob>;
-    extern template class TFreshSegmentSnapshot<TKeyBarrier, TMemRecBarrier>;
-    extern template class TFreshSegmentSnapshot<TKeyBlock, TMemRecBlock>;
-
-    extern template class TFreshSegment<TKeyLogoBlob, TMemRecLogoBlob>;
-    extern template class TFreshSegment<TKeyBarrier, TMemRecBarrier>;
-    extern template class TFreshSegment<TKeyBlock, TMemRecBlock>;
-
- } // NKikimr
-
+#include "fresh_segment_impl.h" 
+ 
+namespace NKikimr { 
+ 
+    extern template class TFreshIndexAndDataSnapshot<TKeyLogoBlob, TMemRecLogoBlob>; 
+    extern template class TFreshIndexAndDataSnapshot<TKeyBarrier, TMemRecBarrier>; 
+    extern template class TFreshIndexAndDataSnapshot<TKeyBlock, TMemRecBlock>; 
+ 
+    extern template class TFreshIndexAndData<TKeyLogoBlob, TMemRecLogoBlob>; 
+    extern template class TFreshIndexAndData<TKeyBarrier, TMemRecBarrier>; 
+    extern template class TFreshIndexAndData<TKeyBlock, TMemRecBlock>; 
+ 
+    extern template class TFreshSegmentSnapshot<TKeyLogoBlob, TMemRecLogoBlob>; 
+    extern template class TFreshSegmentSnapshot<TKeyBarrier, TMemRecBarrier>; 
+    extern template class TFreshSegmentSnapshot<TKeyBlock, TMemRecBlock>; 
+ 
+    extern template class TFreshSegment<TKeyLogoBlob, TMemRecLogoBlob>; 
+    extern template class TFreshSegment<TKeyBarrier, TMemRecBarrier>; 
+    extern template class TFreshSegment<TKeyBlock, TMemRecBlock>; 
+ 
+ } // NKikimr 
+ 

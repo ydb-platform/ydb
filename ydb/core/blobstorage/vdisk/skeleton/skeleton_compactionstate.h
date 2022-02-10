@@ -12,7 +12,7 @@ namespace NKikimr {
             bool CompactLogoBlobs = false;
             bool CompactBlocks = false;
             bool CompactBarriers = false;
-            TEvCompactVDisk::EMode Mode;
+            TEvCompactVDisk::EMode Mode; 
             TActorId ClientId;
             ui64 ClientCookie = 0;
             std::unique_ptr<TEvCompactVDiskResult> Reply;

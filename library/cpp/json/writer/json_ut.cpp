@@ -186,25 +186,25 @@ Y_UNIT_TEST_SUITE(JsonWriter) {
         buf.WriteString("</>");
         UNIT_ASSERT_STRINGS_EQUAL("\"\\u003C/\\u003E\"", buf.Str());
     }
-
+ 
     Y_UNIT_TEST(FloatFormatting) {
-        NJsonWriter::TBuf buf(NJsonWriter::HEM_DONT_ESCAPE_HTML);
-        buf.BeginList()
-            .WriteFloat(0.12345678987654321f)
-            .WriteDouble(0.12345678987654321)
-            .WriteFloat(0.315501, PREC_NDIGITS, 3)
-            .WriteFloat(244.13854, PREC_NDIGITS, 4)
-            .WriteFloat(10385.8324, PREC_POINT_DIGITS, 2)
-            .BeginObject()
+        NJsonWriter::TBuf buf(NJsonWriter::HEM_DONT_ESCAPE_HTML); 
+        buf.BeginList() 
+            .WriteFloat(0.12345678987654321f) 
+            .WriteDouble(0.12345678987654321) 
+            .WriteFloat(0.315501, PREC_NDIGITS, 3) 
+            .WriteFloat(244.13854, PREC_NDIGITS, 4) 
+            .WriteFloat(10385.8324, PREC_POINT_DIGITS, 2) 
+            .BeginObject() 
             .WriteKey("1")
             .WriteDouble(1111.71, PREC_POINT_DIGITS, 0)
             .WriteKey("2")
             .WriteDouble(1111.71, PREC_NDIGITS, 1)
-            .EndObject()
+            .EndObject() 
             .EndList();
-        const char exp[] = "[0.123457,0.1234567899,0.316,244.1,10385.83,{\"1\":1112,\"2\":1e+03}]";
-        UNIT_ASSERT_STRINGS_EQUAL(exp, buf.Str());
-    }
+        const char exp[] = "[0.123457,0.1234567899,0.316,244.1,10385.83,{\"1\":1112,\"2\":1e+03}]"; 
+        UNIT_ASSERT_STRINGS_EQUAL(exp, buf.Str()); 
+    } 
 
     Y_UNIT_TEST(NanFormatting) {
         {

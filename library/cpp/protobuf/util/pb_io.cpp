@@ -2,16 +2,16 @@
 
 #include <library/cpp/binsaver/bin_saver.h>
 #include <library/cpp/string_utils/base64/base64.h>
-
+ 
 #include <google/protobuf/message.h>
 #include <google/protobuf/messagext.h>
 #include <google/protobuf/text_format.h>
-
+ 
 #include <util/generic/string.h>
 #include <util/stream/file.h>
 #include <util/stream/str.h>
 #include <util/string/cast.h>
-
+ 
 namespace NProtoBuf {
 
     class TEnumIdValuePrinter : public google::protobuf::TextFormat::FastFieldValuePrinter {
@@ -97,10 +97,10 @@ void SerializeToTextFormat(const NProtoBuf::Message& m, IOutputStream& out) {
     NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
 
     if (!NProtoBuf::TextFormat::Print(m, &adaptor)) {
-        ythrow yexception() << "SerializeToTextFormat failed on Print";
+        ythrow yexception() << "SerializeToTextFormat failed on Print"; 
     }
-}
-
+} 
+ 
 void SerializeToTextFormat(const NProtoBuf::Message& m, const TString& fileName) {
     /* TUnbufferedFileOutput is unbuffered, but TCopyingOutputStreamAdaptor adds
      * a buffer on top of it. */
@@ -167,8 +167,8 @@ bool TryParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
     }
 
     return true;
-}
-
+} 
+ 
 bool TryParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
                             const EParseFromTextFormatOptions options) {
     try {

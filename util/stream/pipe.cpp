@@ -33,17 +33,17 @@ public:
 
 TPipeBase::TPipeBase(const TString& command, const char* mode)
     : Impl_(new TImpl(command, mode))
-{
-}
-
+{ 
+} 
+ 
 TPipeBase::~TPipeBase() = default;
-
+ 
 TPipeInput::TPipeInput(const TString& command)
     : TPipeBase(command, "r")
 {
 }
 
-size_t TPipeInput::DoRead(void* buf, size_t len) {
+size_t TPipeInput::DoRead(void* buf, size_t len) { 
     if (Impl_->Pipe_ == nullptr) {
         return 0;
     }
@@ -59,8 +59,8 @@ size_t TPipeInput::DoRead(void* buf, size_t len) {
         }
     }
     return bytesRead;
-}
-
+} 
+ 
 TPipeOutput::TPipeOutput(const TString& command)
     : TPipeBase(command, "w")
 {

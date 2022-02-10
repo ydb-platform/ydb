@@ -18,15 +18,15 @@
     #include <time.h>
     #include <io.h>
     #include "dirent_win.h"
-
+ 
 // these live in mktemp_system.cpp
 extern "C" int mkstemps(char* path, int slen);
 char* mkdtemp(char* path);
-
+ 
 #else
     #ifdef _sun_
         #include <alloca.h>
-
+ 
 char* mkdtemp(char* path);
     #endif
     #include <unistd.h>
@@ -44,7 +44,7 @@ int mkpath(char* path, int mode = 0777);
 TString GetHomeDir();
 
 void MakeDirIfNotExist(const char* path, int mode = 0777);
-
+ 
 inline void MakeDirIfNotExist(const TString& path, int mode = 0777) {
     MakeDirIfNotExist(path.data(), mode);
 }
@@ -60,7 +60,7 @@ char GetDirectorySeparator();
 const char* GetDirectorySeparatorS();
 
 void RemoveDirWithContents(TString dirName);
-
+ 
 const char* GetFileNameComponent(const char* f);
 
 inline TString GetFileNameComponent(const TString& f) {

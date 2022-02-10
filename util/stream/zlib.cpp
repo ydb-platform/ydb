@@ -348,11 +348,11 @@ void TZLibCompress::TDestruct::Destroy(TImpl* impl) {
 }
 
 TZLibCompress::~TZLibCompress() {
-    try {
-        Finish();
-    } catch (...) {
+    try { 
+        Finish(); 
+    } catch (...) { 
         // ¯\_(ツ)_/¯
-    }
+    } 
 }
 
 void TZLibCompress::DoWrite(const void* buf, size_t size) {

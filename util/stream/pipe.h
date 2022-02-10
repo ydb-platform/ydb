@@ -46,11 +46,11 @@ public:
      * @param command                   Command line to start a process with.
      */
     TPipeInput(const TString& command);
-
+ 
 private:
     size_t DoRead(void* buf, size_t len) override;
 };
-
+ 
 /**
  * Output stream that binds to a standard input stream of a newly started process.
  *
@@ -74,8 +74,8 @@ public:
 
 private:
     void DoWrite(const void* buf, size_t len) override;
-};
-
+}; 
+ 
 class TPipedBase {
 protected:
     TPipedBase(PIPEHANDLE fd);

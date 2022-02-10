@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
     // this ut is unix-only, port to win using %TEMP%
     Y_UNIT_TEST(TestInterrupt) {
         TString tmpfile = TString("shellcommand_ut.interrupt.") + ToString(RandomNumber<ui32>());
-
+ 
         TShellCommandOptions options;
         options.SetAsync(true);
         options.SetQuoteArguments(false);

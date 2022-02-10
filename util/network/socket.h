@@ -14,10 +14,10 @@
 
 #include <cerrno>
 
-#ifndef INET_ADDRSTRLEN
+#ifndef INET_ADDRSTRLEN 
     #define INET_ADDRSTRLEN 16
-#endif
-
+#endif 
+ 
 #if defined(_unix_)
     #define get_host_error() h_errno
 #elif defined(_win_)
@@ -46,15 +46,15 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept;
     #else
         #define poll(fds, nfds, timeout) WSAPoll(fds, nfds, timeout)
     #endif
-
+ 
 int inet_aton(const char* cp, struct in_addr* inp);
-
+ 
     #define get_host_error() WSAGetLastError()
 
     #define SHUT_RD SD_RECEIVE
     #define SHUT_WR SD_SEND
     #define SHUT_RDWR SD_BOTH
-
+ 
     #define INFTIM (-1)
 #endif
 

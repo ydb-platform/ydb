@@ -258,19 +258,19 @@ IInputStream& NPrivate::StdInStream() noexcept {
 
 // helper functions
 
-static inline bool IsStdDelimiter(char c) {
+static inline bool IsStdDelimiter(char c) { 
     return (c == '\0') || (c == ' ') || (c == '\r') || (c == '\n') || (c == '\t');
 }
 
 static void ReadUpToDelimiter(IInputStream& i, TString& s) {
     char c;
     while (i.ReadChar(c)) { // skip delimiters
-        if (!IsStdDelimiter(c)) {
+        if (!IsStdDelimiter(c)) { 
             s += c;
             break;
         }
     }
-    while (i.ReadChar(c) && !IsStdDelimiter(c)) { // read data (with trailing delimiter)
+    while (i.ReadChar(c) && !IsStdDelimiter(c)) { // read data (with trailing delimiter) 
         s += c;
     }
 }
@@ -279,7 +279,7 @@ static void ReadUpToDelimiter(IInputStream& i, TString& s) {
 
 template <>
 void In<TString>(IInputStream& i, TString& s) {
-    s.resize(0);
+    s.resize(0); 
     ReadUpToDelimiter(i, s);
 }
 

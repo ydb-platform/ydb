@@ -72,7 +72,7 @@ bool IsTrue(const TStringBuf v) noexcept {
         "da"};
     return IsCaseInsensitiveAnyOf(v, trueOptions);
 }
-
+ 
 bool IsFalse(const TStringBuf v) noexcept {
     static constexpr std::array<TStringBuf, 7> falseOptions{
         "false",
@@ -83,4 +83,4 @@ bool IsFalse(const TStringBuf v) noexcept {
         "0",
         "net"};
     return IsCaseInsensitiveAnyOf(v, falseOptions);
-}
+} 

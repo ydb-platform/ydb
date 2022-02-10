@@ -10,8 +10,8 @@
 #include <util/generic/list.h>
 #include <util/generic/maybe.h>
 #include <util/generic/bitmap.h>
-#include <util/generic/variant.h>
-#include <util/generic/ylimits.h>
+#include <util/generic/variant.h> 
+#include <util/generic/ylimits.h> 
 #include <util/memory/blob.h>
 #include <util/digest/murmur.h>
 
@@ -404,13 +404,13 @@ public:
     template <class T1, size_t N>
     int Add(const chunk_id, std::array<T1, N>* pData) {
         if (HasNonTrivialSerializer<T1>(0u)) {
-            for (size_t i = 0; i < N; ++i)
-                Add(1, &(*pData)[i]);
-        } else {
+            for (size_t i = 0; i < N; ++i) 
+                Add(1, &(*pData)[i]); 
+        } else { 
             DataChunk((void*)pData->data(), pData->size() * sizeof(T1));
-        }
-        return 0;
-    }
+        } 
+        return 0; 
+    } 
 
     template <size_t N>
     int Add(const chunk_id, std::bitset<N>* pData) {
@@ -451,46 +451,46 @@ public:
         return 0;
     }
 
-    template <class TVariantClass>
-    struct TLoadFromTypeFromListHelper {
-        template <class T0, class... TTail>
-        static void Do(IBinSaver& binSaver, ui32 typeIndex, TVariantClass* pData) {
-            if constexpr (sizeof...(TTail) == 0) {
-                Y_ASSERT(typeIndex == 0);
-                T0 chunk;
-                binSaver.Add(2, &chunk);
-                *pData = std::move(chunk);
-            } else {
-                if (typeIndex == 0) {
-                    Do<T0>(binSaver, 0, pData);
-                } else {
-                    Do<TTail...>(binSaver, typeIndex - 1, pData);
-                }
-            }
-        }
-    };
-
-    template <class... TVariantTypes>
+    template <class TVariantClass> 
+    struct TLoadFromTypeFromListHelper { 
+        template <class T0, class... TTail> 
+        static void Do(IBinSaver& binSaver, ui32 typeIndex, TVariantClass* pData) { 
+            if constexpr (sizeof...(TTail) == 0) { 
+                Y_ASSERT(typeIndex == 0); 
+                T0 chunk; 
+                binSaver.Add(2, &chunk); 
+                *pData = std::move(chunk); 
+            } else { 
+                if (typeIndex == 0) { 
+                    Do<T0>(binSaver, 0, pData); 
+                } else { 
+                    Do<TTail...>(binSaver, typeIndex - 1, pData); 
+                } 
+            } 
+        } 
+    }; 
+ 
+    template <class... TVariantTypes> 
     int Add(const chunk_id, std::variant<TVariantTypes...>* pData) {
         static_assert(std::variant_size_v<std::variant<TVariantTypes...>> < Max<ui32>());
-
-        ui32 index;
-        if (IsReading()) {
-            Add(1, &index);
+ 
+        ui32 index; 
+        if (IsReading()) { 
+            Add(1, &index); 
             TLoadFromTypeFromListHelper<std::variant<TVariantTypes...>>::template Do<TVariantTypes...>(
-                *this,
-                index,
-                pData
-            );
-        } else {
-            index = pData->index(); // type cast is safe because of static_assert check above
-            Add(1, &index);
+                *this, 
+                index, 
+                pData 
+            ); 
+        } else { 
+            index = pData->index(); // type cast is safe because of static_assert check above 
+            Add(1, &index); 
             std::visit([&](auto& dst) -> void { Add(2, &dst); }, *pData);
-        }
-        return 0;
-    }
-
-
+        } 
+        return 0; 
+    } 
+ 
+ 
     void AddPolymorphicBase(chunk_id, IObjectBase* pObject) {
         (*pObject) & (*this);
     }
@@ -504,9 +504,9 @@ public:
         else
             StoreObject(pData->GetBarePtr());
     }
-    template <class T, class TPolicy>
-    int Add(const chunk_id, TMaybe<T, TPolicy>* pData) {
-        TMaybe<T, TPolicy>& data = *pData;
+    template <class T, class TPolicy> 
+    int Add(const chunk_id, TMaybe<T, TPolicy>* pData) { 
+        TMaybe<T, TPolicy>& data = *pData; 
         if (IsReading()) {
             bool defined = false;
             Add(1, &defined);
@@ -585,23 +585,23 @@ struct TRegisterSaveLoadType {
 #define REGISTER_SAVELOAD_CLASS(N, name) \
     BASIC_REGISTER_CLASS(name)           \
     static TRegisterSaveLoadType<name> init##name##N(N);
-
+ 
 // using TObj/TRef on forward declared templ class will not work
 // but multiple registration with same id is allowed
 #define REGISTER_SAVELOAD_TEMPL1_CLASS(N, className, T) \
     static TRegisterSaveLoadType<className<T>> init##className##T##N(N);
-
+ 
 #define REGISTER_SAVELOAD_TEMPL2_CLASS(N, className, T1, T2)    \
     typedef className<T1, T2> temp##className##T1##_##T2##temp; \
     static TRegisterSaveLoadType<className<T1, T2>> init##className##T1##_##T2##N(N);
-
+ 
 #define REGISTER_SAVELOAD_TEMPL3_CLASS(N, className, T1, T2, T3)           \
     typedef className<T1, T2, T3> temp##className##T1##_##T2##_##T3##temp; \
     static TRegisterSaveLoadType<className<T1, T2, T3>> init##className##T1##_##T2##_##T3##N(N);
-
+ 
 #define REGISTER_SAVELOAD_NM_CLASS(N, nmspace, className) \
     BASIC_REGISTER_CLASS(nmspace::className)              \
-    static TRegisterSaveLoadType<nmspace::className> init_##nmspace##_##name##N(N);
+    static TRegisterSaveLoadType<nmspace::className> init_##nmspace##_##name##N(N); 
 
 #define REGISTER_SAVELOAD_NM2_CLASS(N, nmspace1, nmspace2, className) \
     BASIC_REGISTER_CLASS(nmspace1::nmspace2::className)              \

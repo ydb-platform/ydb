@@ -40,31 +40,31 @@
     UNIT_ASSERT_VALUES_EQUAL(TryIntFromStringForCheck<base>(IntToString<base>(val), result), false); \
     UNIT_ASSERT_VALUES_EQUAL(result, def);
 
-template <class A>
-struct TRet {
+template <class A> 
+struct TRet { 
     template <int base>
     inline A IntFromStringForCheck(const TString& str) {
-        return IntFromString<A, base>(str);
-    }
+        return IntFromString<A, base>(str); 
+    } 
 
     template <int base>
     inline bool TryIntFromStringForCheck(const TString& str, A& result) {
         return TryIntFromString<base>(str, result);
     }
 
-    template <class B>
+    template <class B> 
     inline void CheckOK(B v) {
         UNIT_ASSERT_VALUES_EQUAL(FromString<A>(ToString(v)), v); // char
         UNIT_ASSERT_VALUES_EQUAL(FromString<A>(ToWtring(v)), v); // wide char
         HEX_MACROS_MAP(OK_HEX_CHECK, A, v);
-    }
+    } 
 
-    template <class B>
+    template <class B> 
     inline void CheckExc(B v) {
         UNIT_ASSERT_EXCEPTION(FromString<A>(ToString(v)), yexception); // char
         UNIT_ASSERT_EXCEPTION(FromString<A>(ToWtring(v)), yexception); // wide char
         HEX_MACROS_MAP(EXC_HEX_CHECK, A, v);
-    }
+    } 
 
     template <class B>
     inline void CheckTryOK(B v) {
@@ -89,16 +89,16 @@ struct TRet {
 
         TRY_HEX_MACROS_MAP(TRY_FAIL_HEX_CHECK, A, v, convV, defaultV);
     }
-};
-
-template <>
-struct TRet<bool> {
-    template <class B>
+}; 
+ 
+template <> 
+struct TRet<bool> { 
+    template <class B> 
     inline void CheckOK(B v) {
         UNIT_ASSERT_VALUES_EQUAL(FromString<bool>(ToString(v)), v);
-    }
-
-    template <class B>
+    } 
+ 
+    template <class B> 
     inline void CheckTryOK(B v) {
         B convV;
         UNIT_ASSERT_VALUES_EQUAL(TryFromString<bool>(ToString(v), convV), true);
@@ -107,8 +107,8 @@ struct TRet<bool> {
 
     template <class B>
     inline void CheckExc(B v) {
-        UNIT_ASSERT_EXCEPTION(FromString<bool>(ToString(v)), yexception);
-    }
+        UNIT_ASSERT_EXCEPTION(FromString<bool>(ToString(v)), yexception); 
+    } 
 
     template <class B>
     inline void CheckTryFail(B v) {
@@ -117,13 +117,13 @@ struct TRet<bool> {
         UNIT_ASSERT_VALUES_EQUAL(TryFromString<bool>(ToString(v), convV), false);
         UNIT_ASSERT_VALUES_EQUAL(defaultV, convV);
     }
-};
-
-template <class A>
-inline TRet<A> F() {
-    return TRet<A>();
-};
-
+}; 
+ 
+template <class A> 
+inline TRet<A> F() { 
+    return TRet<A>(); 
+}; 
+ 
 #if 0
 template <class T>
 inline void CheckConvertToBuffer(const T& value, const size_t size, const TString& canonValue) {
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         test1(bool, false);
         test2(bool, "");
         test2(bool, "a");
-
+ 
         test2(ui8, -1);
         test1(i8, -1);
         test1(i8, SCHAR_MAX);

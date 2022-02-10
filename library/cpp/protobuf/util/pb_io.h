@@ -1,8 +1,8 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/generic/fwd.h>
 #include <util/generic/flags.h>
-
+ 
 struct IBinSaver;
 
 namespace google {
@@ -10,11 +10,11 @@ namespace google {
         class Message;
     }
 }
-
+ 
 namespace NProtoBuf {
     using Message = ::google::protobuf::Message;
 }
-
+ 
 class IInputStream;
 class IOutputStream;
 
@@ -69,7 +69,7 @@ void ParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
 // NOTE: will read `in` till the end.
 void ParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
                          const EParseFromTextFormatOptions options = {});
-
+ 
 /* @return              `true` if parsing was successfull and `false` otherwise.
  *
  * @see `ParseFromTextFormat`

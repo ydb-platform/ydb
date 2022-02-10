@@ -7,10 +7,10 @@ TNullIO& NPrivate::StdNullStream() noexcept {
 }
 
 TNullInput::TNullInput() noexcept {
-}
-
+} 
+ 
 TNullInput::~TNullInput() = default;
-
+ 
 size_t TNullInput::DoRead(void*, size_t) {
     return 0;
 }
@@ -24,7 +24,7 @@ size_t TNullInput::DoNext(const void**, size_t) {
 }
 
 TNullOutput::TNullOutput() noexcept = default;
-
+ 
 TNullOutput::~TNullOutput() = default;
 
 void TNullOutput::DoWrite(const void* /*buf*/, size_t /*len*/) {

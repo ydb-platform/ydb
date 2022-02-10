@@ -23,7 +23,7 @@ library
 7. The library **MUST** be accompanied by `README.md` file and a brief description of the project.
 
 8. The library **MUST** be accompanied by unit-tests.
-
+ 
 9. CPU- or/and RAM-bound algorithms **SHOULD** provide benchmarks.
 
 10. There **MUST** be no trade secrets of Yandex in `library/`: anything that can cause harm on publishing as OpenSource. For example:

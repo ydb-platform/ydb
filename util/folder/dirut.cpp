@@ -375,12 +375,12 @@ char GetDirectorySeparator() {
 const char* GetDirectorySeparatorS() {
     return LOCSLASH_S;
 }
-
+ 
 void RemoveDirWithContents(TString dirName) {
-    SlashFolderLocal(dirName);
-
+    SlashFolderLocal(dirName); 
+ 
     TDirIterator dir(dirName, TDirIterator::TOptions(FTS_NOSTAT));
-
+ 
     for (auto it = dir.begin(); it != dir.end(); ++it) {
         switch (it->fts_info) {
             case FTS_F:
@@ -392,8 +392,8 @@ void RemoveDirWithContents(TString dirName) {
                     ythrow TSystemError() << "error while removing " << it->fts_path;
                 break;
         }
-    }
-}
+    } 
+} 
 
 int mkpath(char* path, int mode) {
     return NFs::MakeDirectoryRecursive(path, NFs::EFilePermission(mode)) ? 0 : -1;

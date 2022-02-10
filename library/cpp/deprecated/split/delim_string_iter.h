@@ -1,13 +1,13 @@
 #pragma once
-
+ 
 #include <util/generic/algorithm.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>
 #include <util/system/yassert.h>
-
+ 
 #include <iterator>
-
+ 
 class TDelimStringIter {
 public:
     using value_type = TStringBuf;
@@ -20,7 +20,7 @@ public:
         : TDelimStringIter(TStringBuf(begin, strEnd), delim)
     {
     }
-
+ 
     inline TDelimStringIter(TStringBuf str, TStringBuf delim)
         : IsValid(true)
         , Str(str)
@@ -33,7 +33,7 @@ public:
         : IsValid(false)
     {
     }
-
+ 
     inline explicit operator bool() const {
         return IsValid;
     }
@@ -43,32 +43,32 @@ public:
         if (Current.end() != Str.end()) {
             Str.Skip(Current.length() + Delim.length());
             UpdateCurrent();
-        } else {
+        } else { 
             Str.Clear();
             Current.Clear();
-            IsValid = false;
-        }
-        return *this;
-    }
-
+            IsValid = false; 
+        } 
+        return *this; 
+    } 
+ 
     inline void operator+=(size_t n) {
         for (; n > 0; --n) {
-            ++(*this);
-        }
-    }
-
+            ++(*this); 
+        } 
+    } 
+ 
     inline bool operator==(const TDelimStringIter& rhs) const {
         return (IsValid == rhs.IsValid) && (!IsValid || (Current.begin() == rhs.Current.begin()));
-    }
-
+    } 
+ 
     inline bool operator!=(const TDelimStringIter& rhs) const {
         return !(*this == rhs);
-    }
-
+    } 
+ 
     inline TStringBuf operator*() const {
         return Current;
-    }
-
+    } 
+ 
     inline const TStringBuf* operator->() const {
         return &Current;
     }
@@ -76,23 +76,23 @@ public:
     // Get & advance
     template <class T>
     inline bool TryNext(T& t) {
-        if (IsValid) {
+        if (IsValid) { 
             t = FromString<T>(Current);
-            operator++();
-            return true;
-        } else {
-            return false;
-        }
-    }
-
+            operator++(); 
+            return true; 
+        } else { 
+            return false; 
+        } 
+    } 
+ 
     template <class T>
     inline TDelimStringIter& Next(T& t) // Get & advance
-    {
-        if (!TryNext(t))
-            ythrow yexception() << "No valid field";
-        return *this;
-    }
-
+    { 
+        if (!TryNext(t)) 
+            ythrow yexception() << "No valid field"; 
+        return *this; 
+    } 
+ 
     template <class T>
     inline T GetNext() {
         T res;
@@ -102,24 +102,24 @@ public:
 
     inline const char* GetBegin() const {
         return Current.begin();
-    }
-
+    } 
+ 
     inline const char* GetEnd() const {
         return Current.end();
-    }
-
+    } 
+ 
     inline bool Valid() const {
-        return IsValid;
-    }
-
+        return IsValid; 
+    } 
+ 
     // contents from next token to the end of string
     inline TStringBuf Cdr() const {
         return Str.SubStr(Current.length() + Delim.length());
-    }
-
+    } 
+ 
     inline TDelimStringIter IterEnd() const {
         return TDelimStringIter();
-    }
+    } 
 
 private:
     inline void UpdateCurrent() {
@@ -134,8 +134,8 @@ private:
     TStringBuf Str;
     TStringBuf Current;
     TStringBuf Delim;
-};
-
+}; 
+ 
 //example: for (TStringBuf field: TDelimStroka(line, "@@")) { ... }
 struct TDelimStroka {
     TStringBuf S;
@@ -158,15 +158,15 @@ struct TDelimStroka {
 
 inline TDelimStringIter begin_delim(const TString& str, TStringBuf delim) {
     return TDelimStringIter(str, delim);
-}
-
+} 
+ 
 inline TDelimStringIter begin_delim(TStringBuf str, TStringBuf delim) {
     return TDelimStringIter(str.begin(), str.end(), delim);
-}
-
+} 
+ 
 inline TDelimStringIter end_delim(const TString& /*str*/, TStringBuf /*delim*/) {
     return TDelimStringIter();
-}
+} 
 
 class TKeyValueDelimStringIter {
 public:

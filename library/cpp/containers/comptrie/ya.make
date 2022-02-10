@@ -3,11 +3,11 @@ LIBRARY()
 OWNER(velavokr)
 
 SRCS(
-    array_with_size.h
-    chunked_helpers_trie.h
-    comptrie.h
+    array_with_size.h 
+    chunked_helpers_trie.h 
+    comptrie.h 
     comptrie_packer.h
-    comptrie_trie.h
+    comptrie_trie.h 
     first_symbol_iterator.h
     key_selector.h
     leaf_skipper.h

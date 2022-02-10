@@ -244,7 +244,7 @@ RECURSE(
     numa
     nvidia
     odpi
-    onnx
+    onnx 
     opencl-headers
     opencv
     opencv/modules

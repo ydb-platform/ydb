@@ -14,28 +14,28 @@ using TIpHost = ui32;
 /// Port number in host format
 using TIpPort = ui16;
 
-/*
+/* 
  * ipStr is in 'ddd.ddd.ddd.ddd' format
  * returns IPv4 address in inet format
  */
-static inline TIpHost IpFromString(const char* ipStr) {
-    in_addr ia;
+static inline TIpHost IpFromString(const char* ipStr) { 
+    in_addr ia; 
 
-    if (inet_aton(ipStr, &ia) == 0) {
+    if (inet_aton(ipStr, &ia) == 0) { 
         ythrow TSystemError() << "Failed to convert (" << ipStr << ") to ip address";
-    }
+    } 
 
-    return (ui32)ia.s_addr;
-}
-
+    return (ui32)ia.s_addr; 
+} 
+ 
 static inline char* IpToString(TIpHost ip, char* buf, size_t len) {
     if (!inet_ntop(AF_INET, (void*)&ip, buf, (socklen_t)len)) {
         ythrow TSystemError() << "Failed to get ip address string";
-    }
-
+    } 
+ 
     return buf;
-}
-
+} 
+ 
 static inline TString IpToString(TIpHost ip) {
     char buf[INET_ADDRSTRLEN];
 

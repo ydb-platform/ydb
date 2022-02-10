@@ -30,7 +30,7 @@ namespace {
                 Level = 0;
             }
         }
-
+ 
         IOutputStream* Out;
         int Level;
     };

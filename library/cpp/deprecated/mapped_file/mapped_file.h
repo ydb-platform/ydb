@@ -59,7 +59,7 @@ public:
         return (Map_ ? Map_->MappedSize() : 0);
     }
 
-    void* getData(size_t pos = 0) const {
+    void* getData(size_t pos = 0) const { 
         Y_ASSERT(!Map_ || (pos <= getSize()));
         return (Map_ ? (void*)((unsigned char*)Map_->Ptr() + pos) : nullptr);
     }

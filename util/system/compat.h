@@ -12,8 +12,8 @@
 
 #if defined(_win_)
     #include <process.h>
-#endif
-
+#endif 
+ 
 extern "C" {
 #if defined(_win_)
     using pid_t = int;
@@ -34,8 +34,8 @@ extern "C" {
 
 #ifndef HAVE_NATIVE_GETPROGNAME
     const char* getprogname();
-#endif
-
+#endif 
+ 
 #if defined(_MSC_VER)
     void err(int e, const char* m, ...);
     void errx(int e, const char* m, ...);

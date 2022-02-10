@@ -3,7 +3,7 @@
 #include "new.h"
 #include "range.h"
 #include "shared_range.h"
-
+ 
 #include <type_traits>
 
 namespace NYT {
@@ -244,7 +244,7 @@ public:
     //! Creates a reference for a part of existing range.
     TSharedMutableRef Slice(void* begin, void* end) const;
 };
-
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_CLASS(TSharedRefArrayImpl)
@@ -378,7 +378,7 @@ size_t GetByteSize(const std::vector<T>& parts);
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-
+ 
 #define REF_INL_H_
 #include "ref-inl.h"
 #undef REF_INL_H_

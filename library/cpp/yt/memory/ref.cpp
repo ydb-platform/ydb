@@ -1,14 +1,14 @@
-#include "ref.h"
+#include "ref.h" 
 #include "blob.h"
-
+ 
 #include <library/cpp/ytalloc/api/ytalloc.h>
 
 #include <util/system/info.h>
 
 namespace NYT {
 
-////////////////////////////////////////////////////////////////////////////////
-
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 namespace NDetail {
 
 // N.B. We would prefer these arrays to be zero sized

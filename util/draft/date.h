@@ -110,20 +110,20 @@ inline bool operator==(const TDate& left, const TDate& right) {
 }
 
 inline int operator-(const TDate& left, const TDate& right) {
-    if (left < right) { 
-        return -(right - left); 
-    } 
+    if (left < right) {
+        return -(right - left);
+    }
     return static_cast<int>((left.Timestamp + SECONDS_IN_DAY / 2 - right.Timestamp) / SECONDS_IN_DAY);
-} 
- 
+}
+
 inline IInputStream& operator>>(IInputStream& left, TDate& right) {
     TString stroka;
-    left >> stroka; 
-    TDate date(stroka.c_str()); 
-    right = date; 
-    return left; 
-} 
- 
+    left >> stroka;
+    TDate date(stroka.c_str());
+    right = date;
+    return left;
+}
+
 inline IOutputStream& operator<<(IOutputStream& left, const TDate& right) {
     return left << right.ToStroka();
 }

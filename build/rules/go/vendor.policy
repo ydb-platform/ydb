@@ -461,9 +461,9 @@ ALLOW .* -> vendor/go.mongodb.org/mongo-driver
 # Package for comparing Go values in tests
 ALLOW .* -> vendor/github.com/google/go-cmp
 
-# CORS is a net/http handler implementing Cross Origin Resource Sharing W3 specification 
-ALLOW .* -> vendor/github.com/rs/cors 
- 
+# CORS is a net/http handler implementing Cross Origin Resource Sharing W3 specification
+ALLOW .* -> vendor/github.com/rs/cors
+
 # read and write from the serial port as a stream of bytes
 ALLOW .* -> vendor/github.com/tarm/serial
 

@@ -19,8 +19,8 @@ enum class EMappingMode {
     Locked
 };
 
-/// @addtogroup BLOBs 
-/// @{ 
+/// @addtogroup BLOBs
+/// @{
 class TBlob {
 public:
     class TBase {
@@ -148,7 +148,7 @@ public:
     /*
      * Some stl-like methods
      */
- 
+
     /// Returns a const reference to the data array.
     /// result type is const ui8* which is not consistent with Data method above
     /// but it's consistent with operator[], Begin and End methods below
@@ -323,4 +323,4 @@ private:
     TStorage S_;
 };
 
-/// @} 
+/// @}

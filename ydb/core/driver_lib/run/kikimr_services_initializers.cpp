@@ -2109,8 +2109,8 @@ void TSqsServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
                 TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
         }
 
-        Factories->SqsAuthFactory->Initialize( 
-            setup->LocalServices, *appData, Config.GetSqsConfig()); 
+        Factories->SqsAuthFactory->Initialize(
+            setup->LocalServices, *appData, Config.GetSqsConfig());
     }
 }
 

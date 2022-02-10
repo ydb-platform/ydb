@@ -855,14 +855,14 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
 
-    AppData->SqsAuthFactory = ModuleFactories 
-        ? ModuleFactories->SqsAuthFactory.get() 
-        : nullptr; 
- 
-    AppData->FolderServiceFactory = ModuleFactories 
-        ? ModuleFactories->FolderServiceFactory 
-        : nullptr; 
- 
+    AppData->SqsAuthFactory = ModuleFactories
+        ? ModuleFactories->SqsAuthFactory.get()
+        : nullptr;
+
+    AppData->FolderServiceFactory = ModuleFactories
+        ? ModuleFactories->FolderServiceFactory
+        : nullptr;
+
     AppData->Counters = Counters;
     AppData->Mon = Monitoring.Get();
     AppData->BusMonPage = BusMonPage.Get();

@@ -193,8 +193,8 @@ namespace NActors {
 
         TInterconnectSetup Interconnect;
 
-        using TLocalServices = TVector<std::pair<TActorId, TActorSetupCmd>>; 
-        TLocalServices LocalServices; 
+        using TLocalServices = TVector<std::pair<TActorId, TActorSetupCmd>>;
+        TLocalServices LocalServices;
 
         ui32 GetExecutorsCount() const {
             return Executors ? ExecutorsCount : CpuManager.GetExecutorsCount();

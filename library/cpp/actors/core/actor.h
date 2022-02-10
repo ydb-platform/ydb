@@ -356,11 +356,11 @@ namespace NActors {
             return Send(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie, std::move(traceId));
         }
 
-        template <class TEvent, class ... TEventArgs> 
-        bool Send(TActorId recipient, TEventArgs&& ... args) const { 
-            return Send(recipient, MakeHolder<TEvent>(std::forward<TEventArgs>(args)...)); 
-        } 
- 
+        template <class TEvent, class ... TEventArgs>
+        bool Send(TActorId recipient, TEventArgs&& ... args) const {
+            return Send(recipient, MakeHolder<TEvent>(std::forward<TEventArgs>(args)...));
+        }
+
         void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
         void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;

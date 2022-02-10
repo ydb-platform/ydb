@@ -13,13 +13,13 @@ public:
     virtual bool IsValid() const = 0;
 };
 
-using TCredentialsProviderPtr = std::shared_ptr<ICredentialsProvider>; 
- 
+using TCredentialsProviderPtr = std::shared_ptr<ICredentialsProvider>;
+
 class ICoreFacility;
 class ICredentialsProviderFactory {
 public:
     virtual ~ICredentialsProviderFactory() = default;
-    virtual TCredentialsProviderPtr CreateProvider() const = 0; 
+    virtual TCredentialsProviderPtr CreateProvider() const = 0;
     // !!!Experimental!!!
     virtual TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const {
         Y_UNUSED(facility);
@@ -28,8 +28,8 @@ public:
     virtual TStringType GetClientIdentity() const = 0;
 };
 
-using TCredentialsProviderFactoryPtr = std::shared_ptr<ICredentialsProviderFactory>; 
- 
+using TCredentialsProviderFactoryPtr = std::shared_ptr<ICredentialsProviderFactory>;
+
 std::shared_ptr<ICredentialsProviderFactory> CreateInsecureCredentialsProviderFactory();
 std::shared_ptr<ICredentialsProviderFactory> CreateOAuthCredentialsProviderFactory(const TStringType& token);
 

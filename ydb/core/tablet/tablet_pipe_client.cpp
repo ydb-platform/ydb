@@ -694,10 +694,10 @@ namespace NTabletPipe {
         TActivationContext::Send(ev);
     }
 
-    void SendData(TActorId self, TActorId clientId, THolder<IEventBase>&& payload, ui64 cookie) { 
-        SendData(self, clientId, payload.Release(), cookie); 
-    } 
- 
+    void SendData(TActorId self, TActorId clientId, THolder<IEventBase>&& payload, ui64 cookie) {
+        SendData(self, clientId, payload.Release(), cookie);
+    }
+
     void SendDataWithSeqNo(TActorId self, TActorId clientId, IEventBase *payload, ui64 seqNo, ui64 cookie) {
         auto event = MakeHolder<TEvTabletPipe::TEvMessage>(self, THolder<IEventBase>(payload));
         event->SetSeqNo(seqNo);

@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     factories->YqAuditServiceFactory = NYq::CreateMockYqAuditServiceActor;
     factories->YdbCredentialProviderFactory = NKikimr::CreateYdbCredentialsProviderFactory;
     factories->IoContextFactory = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();
-    factories->SqsAuthFactory = std::make_shared<NKikimr::NSQS::TAuthFactory>(); 
+    factories->SqsAuthFactory = std::make_shared<NKikimr::NSQS::TAuthFactory>();
 
     return ParameterizedMain(argc, argv, std::move(factories));
 }

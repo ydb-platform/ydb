@@ -31,7 +31,7 @@ namespace NMonitoring {
                              const TString& title,
                              TIntrusivePtr<TDynamicCounters> counters,
                              TOutputCallback outputCallback = nullptr)
-            : TPreMonPage(path, title) 
+            : TPreMonPage(path, title)
             , Counters(counters)
             , OutputCallback(outputCallback)
         {

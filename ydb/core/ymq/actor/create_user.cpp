@@ -2,7 +2,7 @@
 #include "error.h"
 #include "schema.h"
 
-#include <ydb/core/ymq/base/helpers.h> 
+#include <ydb/core/ymq/base/helpers.h>
 
 namespace NKikimr::NSQS {
 

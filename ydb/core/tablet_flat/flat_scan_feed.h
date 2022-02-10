@@ -344,9 +344,9 @@ namespace NTable {
             LoadingParts = 0;
             if (Subset.ColdParts) {
                 for (const auto& part : Subset.ColdParts) {
-                    auto partView = LoadPart(part); 
-                    if (partView) { 
-                        LoadedParts.push_back(std::move(partView)); 
+                    auto partView = LoadPart(part);
+                    if (partView) {
+                        LoadedParts.push_back(std::move(partView));
                         continue;
                     }
                     ++LoadingParts;
@@ -363,24 +363,24 @@ namespace NTable {
             // Assume subset is immutable and only construct levels once
             if (!Levels && (Subset.Flatten || LoadedParts)) {
                 Levels.Reset(new TLevels(nulls));
-                TVector<const TPartView*> parts; 
+                TVector<const TPartView*> parts;
                 parts.reserve(Subset.Flatten.size() + LoadedParts.size());
-                for (const auto& partView : Subset.Flatten) { 
-                    Y_VERIFY(partView.Part, "Missing part in subset"); 
-                    Y_VERIFY(partView.Slices, "Missing part slices in subset"); 
-                    parts.push_back(&partView); 
+                for (const auto& partView : Subset.Flatten) {
+                    Y_VERIFY(partView.Part, "Missing part in subset");
+                    Y_VERIFY(partView.Slices, "Missing part slices in subset");
+                    parts.push_back(&partView);
                 }
-                for (const auto& partView : LoadedParts) { 
-                    Y_VERIFY(partView.Part, "Missing part in subset"); 
-                    Y_VERIFY(partView.Slices, "Missing part slices in subset"); 
-                    parts.push_back(&partView); 
+                for (const auto& partView : LoadedParts) {
+                    Y_VERIFY(partView.Part, "Missing part in subset");
+                    Y_VERIFY(partView.Slices, "Missing part slices in subset");
+                    parts.push_back(&partView);
                 }
                 std::sort(parts.begin(), parts.end(),
-                    [](const TPartView* a, const TPartView* b) { 
+                    [](const TPartView* a, const TPartView* b) {
                         return a->Epoch() < b->Epoch();
                     });
-                for (const auto* partView : parts) { 
-                    Levels->AddContiguous(partView->Part, partView->Slices); 
+                for (const auto* partView : parts) {
+                    Levels->AddContiguous(partView->Part, partView->Slices);
                 }
             }
 
@@ -498,7 +498,7 @@ namespace NTable {
 
         IPages* CurrentEnv = nullptr;
 
-        TVector<TPartView> LoadedParts; 
+        TVector<TPartView> LoadedParts;
         size_t LoadingParts = 0;
 
         THolder<TLevels> Levels;

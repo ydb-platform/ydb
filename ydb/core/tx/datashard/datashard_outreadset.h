@@ -1,14 +1,14 @@
 #pragma once
 
-#include <ydb/core/tx/tx_processing.h> 
+#include <ydb/core/tx/tx_processing.h>
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
-class TDataShard; 
+class TDataShard;
 
 ///
 struct TReadSetKey {
@@ -47,9 +47,9 @@ struct TReadSetKey {
 ///
 class TOutReadSets {
 public:
-    friend class TDataShard; 
+    friend class TDataShard;
 
-    TOutReadSets(TDataShard * self) 
+    TOutReadSets(TDataShard * self)
         : Self(self)
     {}
 
@@ -72,7 +72,7 @@ private:
     void UpdateMonCounter() const;
 
 private:
-    TDataShard * Self; 
+    TDataShard * Self;
     THashMap<ui64, TReadSetKey> CurrentReadSets;      // SeqNo -> Info
     THashMap<TReadSetKey, ui64> CurrentReadSetInfos;  // Info -> SeqNo
     THashSet<ui64> AckedSeqno;

@@ -1,7 +1,7 @@
 #pragma once
 #include <util/stream/output.h>
-#include <ydb/public/api/protos/ydb_persqueue_v1.pb.h> 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h> 
+#include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 
 
 namespace NYdb::NPersQueue {

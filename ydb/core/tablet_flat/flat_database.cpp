@@ -10,8 +10,8 @@
 #include "flat_part_shrink.h"
 #include "flat_util_misc.h"
 #include "flat_sausage_grind.h"
-#include <ydb/core/util/pb.h> 
-#include <ydb/core/scheme_types/scheme_type_registry.h> 
+#include <ydb/core/util/pb.h>
+#include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <util/generic/cast.h>
 
 
@@ -21,8 +21,8 @@
 namespace NKikimr {
 namespace NTable {
 
-TDatabase::TDatabase(TDatabaseImpl *databaseImpl) noexcept 
-    : DatabaseImpl(databaseImpl ? databaseImpl : new TDatabaseImpl(0, new TScheme, nullptr)) 
+TDatabase::TDatabase(TDatabaseImpl *databaseImpl) noexcept
+    : DatabaseImpl(databaseImpl ? databaseImpl : new TDatabaseImpl(0, new TScheme, nullptr))
     , NoMoreReadsFlag(true)
 {
 
@@ -32,7 +32,7 @@ TDatabase::~TDatabase() { }
 
 const TScheme& TDatabase::GetScheme() const noexcept
 {
-    return *DatabaseImpl->Scheme; 
+    return *DatabaseImpl->Scheme;
 }
 
 TIntrusiveConstPtr<TRowScheme> TDatabase::GetRowScheme(ui32 table) const noexcept
@@ -192,14 +192,14 @@ bool TDatabase::Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
     return res.Ready == EReady::Data;
 }
 
-void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, TRowVersion rowVersion) 
+void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, TRowVersion rowVersion)
 {
     Y_VERIFY_DEBUG(rowVersion != TRowVersion::Max(), "Updates cannot have v{max} as row version");
 
     Redo->EvUpdate(table, rop, key, ops, rowVersion);
 }
 
-void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, ui64 txId) 
+void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, ui64 txId)
 {
     Redo->EvUpdateTx(table, rop, key, ops, txId);
 }
@@ -223,7 +223,7 @@ void TDatabase::RemoveRowVersions(ui32 table, const TRowVersion& lower, const TR
 
 const TRowVersionRanges& TDatabase::GetRemovedRowVersions(ui32 table) const
 {
-    if (auto& wrap = DatabaseImpl->Get(table, false)) { 
+    if (auto& wrap = DatabaseImpl->Get(table, false)) {
         return wrap->GetRemovedRowVersions();
     }
 
@@ -239,18 +239,18 @@ void TDatabase::Begin(TTxStamp stamp, IPages& env)
 {
     Y_VERIFY(!Redo, "Transaction already in progress");
     Y_VERIFY(!Env);
-    Annex = new TAnnex(*DatabaseImpl->Scheme); 
-    Redo = new NRedo::TWriter{ Annex.Get(), DatabaseImpl->AnnexByteLimit() }; 
-    Change = MakeHolder<TChange>(Stamp = stamp, DatabaseImpl->Serial() + 1); 
+    Annex = new TAnnex(*DatabaseImpl->Scheme);
+    Redo = new NRedo::TWriter{ Annex.Get(), DatabaseImpl->AnnexByteLimit() };
+    Change = MakeHolder<TChange>(Stamp = stamp, DatabaseImpl->Serial() + 1);
     Env = &env;
     NoMoreReadsFlag = false;
 }
 
-TPartView TDatabase::GetPartView(ui32 tableId, const TLogoBlobID &bundle) const { 
-    return Require(tableId)->GetPartView(bundle); 
+TPartView TDatabase::GetPartView(ui32 tableId, const TLogoBlobID &bundle) const {
+    return Require(tableId)->GetPartView(bundle);
 }
 
-TVector<TPartView> TDatabase::GetTableParts(ui32 tableId) const { 
+TVector<TPartView> TDatabase::GetTableParts(ui32 tableId) const {
     return Require(tableId)->GetAllParts();
 }
 
@@ -258,7 +258,7 @@ TVector<TIntrusiveConstPtr<TColdPart>> TDatabase::GetTableColdParts(ui32 tableId
     return Require(tableId)->GetColdParts();
 }
 
-void TDatabase::EnumerateTableParts(ui32 tableId, const std::function<void(const TPartView&)>& callback) const { 
+void TDatabase::EnumerateTableParts(ui32 tableId, const std::function<void(const TPartView&)>& callback) const {
     Require(tableId)->EnumerateParts(std::move(callback));
 }
 
@@ -271,7 +271,7 @@ void TDatabase::EnumerateTableTxStatusParts(ui32 tableId, const std::function<vo
 }
 
 void TDatabase::EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const {
-    DatabaseImpl->EnumerateTxStatusParts(callback); 
+    DatabaseImpl->EnumerateTxStatusParts(callback);
 }
 
 ui64 TDatabase::GetTableMemSize(ui32 tableId, TEpoch epoch) const {
@@ -296,15 +296,15 @@ ui64 TDatabase::EstimateRowSize(ui32 tableId) const {
 
 const TDbStats& TDatabase::Counters() const noexcept
 {
-    return DatabaseImpl->Stats; 
+    return DatabaseImpl->Stats;
 }
 
 TDatabase::TChg TDatabase::Head(ui32 table) const noexcept
 {
     if (table == Max<ui32>()) {
-        return { DatabaseImpl->Serial(), TEpoch::Max() }; 
+        return { DatabaseImpl->Serial(), TEpoch::Max() };
     } else {
-        auto &wrap = DatabaseImpl->Get(table, true); 
+        auto &wrap = DatabaseImpl->Get(table, true);
 
         return { wrap.Serial, wrap->Head() };
     }
@@ -312,14 +312,14 @@ TDatabase::TChg TDatabase::Head(ui32 table) const noexcept
 
 TString TDatabase::SnapshotToLog(ui32 table, TTxStamp stamp)
 {
-    auto scn = DatabaseImpl->Serial() + 1; 
-    auto epoch = DatabaseImpl->Get(table, true)->Snapshot(); 
+    auto scn = DatabaseImpl->Serial() + 1;
+    auto epoch = DatabaseImpl->Get(table, true)->Snapshot();
 
-    DatabaseImpl->Rewind(scn); 
+    DatabaseImpl->Rewind(scn);
 
     return
         NRedo::TWriter{ }
-            .EvBegin(ui32(ECompatibility::Head), ui32(ECompatibility::Edge), scn, stamp) 
+            .EvBegin(ui32(ECompatibility::Head), ui32(ECompatibility::Edge), scn, stamp)
             .EvFlush(table, stamp, epoch).Dump();
 }
 
@@ -348,7 +348,7 @@ TAutoPtr<TSubset> TDatabase::Subset(ui32 table, TEpoch before, TRawVals from, TR
         if (shrink.Put(subset->Flatten, from, to).Skipped) {
             return nullptr; /* Cannot shrink due to lack of some pages */
         } else {
-            subset->Flatten = std::move(shrink.PartView); 
+            subset->Flatten = std::move(shrink.PartView);
         }
     }
 
@@ -367,32 +367,32 @@ TBundleSlicesMap TDatabase::LookupSlices(ui32 table, TArrayRef<const TLogoBlobID
 
 void TDatabase::ReplaceSlices(ui32 table, TBundleSlicesMap slices)
 {
-    return DatabaseImpl->ReplaceSlices(table, std::move(slices)); 
+    return DatabaseImpl->ReplaceSlices(table, std::move(slices));
 }
 
 void TDatabase::Replace(ui32 table, TArrayRef<const TPartView> partViews, const TSubset &subset)
 {
-    return DatabaseImpl->Replace(table, partViews, subset); 
+    return DatabaseImpl->Replace(table, partViews, subset);
 }
 
 void TDatabase::ReplaceTxStatus(ui32 table, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> txStatus, const TSubset &subset)
 {
-    return DatabaseImpl->ReplaceTxStatus(table, txStatus, subset); 
+    return DatabaseImpl->ReplaceTxStatus(table, txStatus, subset);
 }
 
-void TDatabase::Merge(ui32 table, TPartView partView) 
+void TDatabase::Merge(ui32 table, TPartView partView)
 {
-    return DatabaseImpl->Merge(table, std::move(partView)); 
+    return DatabaseImpl->Merge(table, std::move(partView));
 }
 
 void TDatabase::Merge(ui32 table, TIntrusiveConstPtr<TColdPart> part)
 {
-    return DatabaseImpl->Merge(table, std::move(part)); 
+    return DatabaseImpl->Merge(table, std::move(part));
 }
 
 void TDatabase::Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart> txStatus)
 {
-    return DatabaseImpl->Merge(table, std::move(txStatus)); 
+    return DatabaseImpl->Merge(table, std::move(txStatus));
 }
 
 TAlter& TDatabase::Alter()
@@ -405,15 +405,15 @@ TAlter& TDatabase::Alter()
 
 void TDatabase::DebugDumpTable(ui32 table, IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const {
     str << "Table " << table << Endl;
-    if (auto &wrap = DatabaseImpl->Get(table, false)) 
+    if (auto &wrap = DatabaseImpl->Get(table, false))
         wrap->DebugDump(str, Env, typeRegistry);
     else
         str << "unknown" << Endl;
 }
 
 void TDatabase::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const {
-    for (const auto& it: DatabaseImpl->Scheme->Tables) { 
-        if (DatabaseImpl->Get(it.first, false)) { 
+    for (const auto& it: DatabaseImpl->Scheme->Tables) {
+        if (DatabaseImpl->Get(it.first, false)) {
             str << "======= " << it.second.Name << " ======\n";
             DebugDumpTable(it.first, str, typeRegistry);
         }
@@ -421,7 +421,7 @@ void TDatabase::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& type
 }
 
 TKeyRangeCache* TDatabase::DebugGetTableErasedKeysCache(ui32 table) const {
-    if (auto &wrap = DatabaseImpl->Get(table, false)) { 
+    if (auto &wrap = DatabaseImpl->Get(table, false)) {
         return wrap->GetErasedKeysCache();
     } else {
         return nullptr;
@@ -440,13 +440,13 @@ bool TDatabase::ValidateCommit(TString &err)
     return true;
 }
 
-TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator *cookieAllocator) 
+TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator *cookieAllocator)
 {
     TempIterators.clear();
 
     if (IteratedTables) {
         for (ui32 table : IteratedTables) {
-            if (auto& wrap = DatabaseImpl->Get(table, false)) { 
+            if (auto& wrap = DatabaseImpl->Get(table, false)) {
                 if (auto* cache = wrap->GetErasedKeysCache()) {
                     cache->CollectGarbage();
                 }
@@ -464,13 +464,13 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
                 Commit(...). Read KIKIMR-5366 for details and progress. */
 
         const_cast<TTxStamp&>(Change->Stamp) = stamp;
-        const_cast<ui64&>(Change->Serial) = DatabaseImpl->Serial() + 1; 
+        const_cast<ui64&>(Change->Serial) = DatabaseImpl->Serial() + 1;
 
         NRedo::TWriter prefix{ };
 
         {
-            const ui32 head = ui32(ECompatibility::Head); 
-            const ui32 edge = ui32(ECompatibility::Edge); 
+            const ui32 head = ui32(ECompatibility::Head);
+            const ui32 edge = ui32(ECompatibility::Edge);
 
             prefix.EvBegin(head, edge,  Change->Serial, Change->Stamp);
         }
@@ -478,14 +478,14 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
         const auto offset = prefix.Bytes(); /* useful payload starts here */
 
         if (auto annex = Annex->Unwrap()) {
-            Y_VERIFY(cookieAllocator, "Have to provide TCookieAllocator with enabled annex"); 
+            Y_VERIFY(cookieAllocator, "Have to provide TCookieAllocator with enabled annex");
 
-            TVector<NPageCollection::TGlobId> blobs; 
+            TVector<NPageCollection::TGlobId> blobs;
 
             blobs.reserve(annex.size());
 
             for (auto &one: annex) {
-                auto glob = cookieAllocator->Do(one.GId.Logo.Channel(), one.Data.size()); 
+                auto glob = cookieAllocator->Do(one.GId.Logo.Channel(), one.Data.size());
 
                 blobs.emplace_back(one.GId = glob);
 
@@ -493,15 +493,15 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
             }
 
             prefix.EvAnnex(blobs);
-            DatabaseImpl->Assign(std::move(annex)); 
+            DatabaseImpl->Assign(std::move(annex));
         }
 
-        DatabaseImpl->Switch(Stamp); 
+        DatabaseImpl->Switch(Stamp);
 
         if (Alter_) {
             auto delta = Alter_->Flush();
 
-            if (DatabaseImpl->Apply(*delta, &prefix)) 
+            if (DatabaseImpl->Apply(*delta, &prefix))
                 Y_PROTOBUF_SUPPRESS_NODISCARD delta->SerializeToString(&Change->Scheme);
         }
 
@@ -515,20 +515,20 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
         Change->Redo = prefix.Dump();
 
         for (auto &entry: prefix.Unwrap())
-            DatabaseImpl->ApplyRedo(entry); 
+            DatabaseImpl->ApplyRedo(entry);
 
         for (const auto& xpair : Change->RemovedRowVersions) {
-            if (auto& wrap = DatabaseImpl->Get(xpair.first, false)) { 
+            if (auto& wrap = DatabaseImpl->Get(xpair.first, false)) {
                 for (const auto& range : xpair.second) {
                     wrap->RemoveRowVersions(range.Lower, range.Upper);
                 }
             }
         }
 
-        Change->Garbage = std::move(DatabaseImpl->Garbage); 
-        Change->Deleted = std::move(DatabaseImpl->Deleted); 
-        Change->Affects = DatabaseImpl->GrabAffects(); 
-        Change->Annex = DatabaseImpl->GrabAnnex(); 
+        Change->Garbage = std::move(DatabaseImpl->Garbage);
+        Change->Deleted = std::move(DatabaseImpl->Deleted);
+        Change->Affects = DatabaseImpl->GrabAffects();
+        Change->Annex = DatabaseImpl->GrabAnnex();
 
         if (Change->Redo.size() == offset && !Change->Affects) {
             std::exchange(Change->Redo, { }); /* omit complete NOOP redo */
@@ -538,10 +538,10 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
             Y_Fail(
                 NFmt::Do(*Change) << " produced " << (Change->Redo.size() - offset)
                 << "b of non technical redo without leaving effects on data");
-        } else if (Change->Serial != DatabaseImpl->Serial()) { 
+        } else if (Change->Serial != DatabaseImpl->Serial()) {
             Y_Fail(
                 NFmt::Do(*Change) << " serial diverged from current db "
-                << DatabaseImpl->Serial() << " after rolling up redo log"); 
+                << DatabaseImpl->Serial() << " after rolling up redo log");
         } else if (Change->Deleted.size() != Change->Garbage.size()) {
             Y_Fail(NFmt::Do(*Change) << " has inconsistent garbage data");
         }
@@ -557,7 +557,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
 
 TTable* TDatabase::Require(ui32 table) const noexcept
 {
-    return DatabaseImpl->Get(table, true).Self.Get(); 
+    return DatabaseImpl->Get(table, true).Self.Get();
 }
 
 TGarbage TDatabase::RollUp(TTxStamp stamp, TArrayRef<const char> delta, TArrayRef<const char> redo,
@@ -565,28 +565,28 @@ TGarbage TDatabase::RollUp(TTxStamp stamp, TArrayRef<const char> delta, TArrayRe
 {
     Y_VERIFY(!annex || redo, "Annex have to be rolled up with redo log");
 
-    DatabaseImpl->Switch(stamp); 
+    DatabaseImpl->Switch(stamp);
 
     if (delta) {
         TSchemeChanges changes;
         bool parseOk = ParseFromStringNoSizeLimit(changes, delta);
         Y_VERIFY(parseOk);
 
-        DatabaseImpl->Apply(changes, nullptr); 
+        DatabaseImpl->Apply(changes, nullptr);
     }
 
     if (redo) {
-        DatabaseImpl->Assign(std::move(annex)); 
-        DatabaseImpl->ApplyRedo(redo); 
-        DatabaseImpl->GrabAnnex(); 
+        DatabaseImpl->Assign(std::move(annex));
+        DatabaseImpl->ApplyRedo(redo);
+        DatabaseImpl->GrabAnnex();
     }
 
-    return std::move(DatabaseImpl->Garbage); 
+    return std::move(DatabaseImpl->Garbage);
 }
 
 void TDatabase::RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper)
 {
-    if (auto& wrap = DatabaseImpl->Get(table, false)) { 
+    if (auto& wrap = DatabaseImpl->Get(table, false)) {
         wrap->RemoveRowVersions(lower, upper);
     }
 }

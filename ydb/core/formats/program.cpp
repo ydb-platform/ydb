@@ -9,11 +9,11 @@
 #include <util/system/yassert.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h> 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h> 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h> 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/result.h> 
-#include <ydb/core/util/yverify_stream.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
+#include <ydb/core/util/yverify_stream.h>
 
 namespace NKikimr::NArrow {
 

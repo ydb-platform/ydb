@@ -3,9 +3,9 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-#include <ydb/core/yq/libs/config/protos/common.pb.h> 
-#include <ydb/core/yq/libs/config/protos/control_plane_storage.pb.h> 
-#include <ydb/core/yq/libs/shared_resources/shared_resources.h> 
+#include <ydb/core/yq/libs/config/protos/common.pb.h>
+#include <ydb/core/yq/libs/config/protos/control_plane_storage.pb.h>
+#include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/yq/libs/actors/logging/log.h>
 
 #define CPS_LOG_D(s) \

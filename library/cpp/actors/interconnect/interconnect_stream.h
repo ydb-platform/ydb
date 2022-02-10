@@ -77,7 +77,7 @@ namespace NInterconnect {
         ~TSecureSocketContext();
 
     public:
-        using TPtr = std::shared_ptr<TSecureSocketContext>; 
+        using TPtr = std::shared_ptr<TSecureSocketContext>;
     };
 
     class TSecureSocket : public TStreamSocket {

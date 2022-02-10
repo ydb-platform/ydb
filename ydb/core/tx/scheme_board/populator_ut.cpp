@@ -1,10 +1,10 @@
 #include "events.h"
 #include "ut_helpers.h"
 
-#include <ydb/core/base/pathid.h> 
-#include <ydb/core/base/tablet_types.h> 
-#include <ydb/core/protos/services.pb.h> 
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h> 
+#include <ydb/core/base/pathid.h>
+#include <ydb/core/base/tablet_types.h>
+#include <ydb/core/protos/services.pb.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/testing/unittest/registar.h>

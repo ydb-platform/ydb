@@ -1,16 +1,16 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/flat_database.h> 
+#include <ydb/core/tablet_flat/flat_database.h>
 
 #include <util/generic/hash.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TRowsCache {
     struct TRow {
         NTable::EReady Ready;
-        NTable::ERowOp Rop; 
+        NTable::ERowOp Rop;
         THashMap<NTable::TTag, TString> Cells;
     };
 
@@ -24,7 +24,7 @@ public:
         TArrayRef<const TRawTypeValue> key, const THashMap<NTable::TTag, NTable::TPos>& keyTagToPos,
         TArrayRef<const NTable::TTag> tags, NTable::TRowState& rowState, const TRowVersion& readVersion);
 
-    void UpdateCachedRow(ui32 tid, NTable::ERowOp rop, 
+    void UpdateCachedRow(ui32 tid, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates);
 
 private:
@@ -32,5 +32,5 @@ private:
 
 }; // TRowsCache
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

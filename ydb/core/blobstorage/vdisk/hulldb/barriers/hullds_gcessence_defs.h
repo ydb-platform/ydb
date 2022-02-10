@@ -1,60 +1,60 @@
-#pragma once 
- 
-#include "defs.h" 
-#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h> 
- 
+#pragma once
+
+#include "defs.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
+
 #include <library/cpp/actors/util/named_tuple.h>
 
-namespace NKikimr { 
-    namespace NGc { 
- 
-        ////////////////////////////////////////////////////////////////////////////////////////// 
-        // TKeepStatus 
-        ////////////////////////////////////////////////////////////////////////////////////////// 
-        struct TKeepStatus { 
-            // We need this index item (possibly for some internal reasons, 
-            // for instance to compact all records for the given key before deletion) 
-            bool KeepIndex; 
-            // We need this item together with data, client can use it 
-            bool KeepData; 
-            // Technical flag 'is we need to keep this item by barrier 
-            // (dispite keep/don't keep flags)' 
-            bool KeepByBarrier; 
- 
-            TKeepStatus(bool keepIndex, bool keepData, bool keepByBarrier) 
-                : KeepIndex(keepIndex) 
-                , KeepData(keepData) 
-                , KeepByBarrier(keepByBarrier) 
-            { 
-                Y_VERIFY_DEBUG(keepIndex >= keepData); 
-            } 
- 
-            TKeepStatus(bool keepWholeRecord) 
-                : KeepIndex(keepWholeRecord) 
-                , KeepData(keepWholeRecord) 
-                , KeepByBarrier(keepWholeRecord) 
-            {} 
- 
-            TKeepStatus(const TKeepStatus &) = default; 
-            TKeepStatus &operator=(const TKeepStatus &) = default; 
- 
-            bool operator==(const TKeepStatus &s) const { 
-                return KeepIndex == s.KeepIndex && 
-                    KeepData == s.KeepData && 
-                    KeepByBarrier == s.KeepByBarrier; 
-            } 
- 
-            bool KeepItem() const { 
-                Y_VERIFY(KeepIndex >= KeepData); 
-                return KeepIndex; 
-            } 
- 
+namespace NKikimr {
+    namespace NGc {
+
+        //////////////////////////////////////////////////////////////////////////////////////////
+        // TKeepStatus
+        //////////////////////////////////////////////////////////////////////////////////////////
+        struct TKeepStatus {
+            // We need this index item (possibly for some internal reasons,
+            // for instance to compact all records for the given key before deletion)
+            bool KeepIndex;
+            // We need this item together with data, client can use it
+            bool KeepData;
+            // Technical flag 'is we need to keep this item by barrier
+            // (dispite keep/don't keep flags)'
+            bool KeepByBarrier;
+
+            TKeepStatus(bool keepIndex, bool keepData, bool keepByBarrier)
+                : KeepIndex(keepIndex)
+                , KeepData(keepData)
+                , KeepByBarrier(keepByBarrier)
+            {
+                Y_VERIFY_DEBUG(keepIndex >= keepData);
+            }
+
+            TKeepStatus(bool keepWholeRecord)
+                : KeepIndex(keepWholeRecord)
+                , KeepData(keepWholeRecord)
+                , KeepByBarrier(keepWholeRecord)
+            {}
+
+            TKeepStatus(const TKeepStatus &) = default;
+            TKeepStatus &operator=(const TKeepStatus &) = default;
+
+            bool operator==(const TKeepStatus &s) const {
+                return KeepIndex == s.KeepIndex &&
+                    KeepData == s.KeepData &&
+                    KeepByBarrier == s.KeepByBarrier;
+            }
+
+            bool KeepItem() const {
+                Y_VERIFY(KeepIndex >= KeepData);
+                return KeepIndex;
+            }
+
             void Output(IOutputStream &str) {
-                str << "[index# " << KeepIndex << " data# " << KeepData 
-                    << " barrier# " << KeepByBarrier << "]"; 
-            } 
-        }; 
- 
+                str << "[index# " << KeepIndex << " data# " << KeepData
+                    << " barrier# " << KeepByBarrier << "]";
+            }
+        };
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // TBarrierKey -- structure that identifies entity for the garbage collector, that is tablet id and channel
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -97,7 +97,7 @@ namespace NKikimr {
             }
         };
 
-        ////////////////////////////////////////////////////////////////////////////////////////// 
+        //////////////////////////////////////////////////////////////////////////////////////////
         // TBarrier
         //////////////////////////////////////////////////////////////////////////////////////////
         struct TBarrier
@@ -135,7 +135,7 @@ namespace NKikimr {
             }
 
             void Output(IOutputStream& str) const {
-                str << "Issued:[" << BarrierGen << ":" << BarrierGenCounter << "]" << " -> Collect:[" << CollectGen << ":" << CollectStep << "]"; 
+                str << "Issued:[" << BarrierGen << ":" << BarrierGenCounter << "]" << " -> Collect:[" << CollectGen << ":" << CollectStep << "]";
             }
 
             TString ToString() const {
@@ -146,9 +146,9 @@ namespace NKikimr {
         };
 
         //////////////////////////////////////////////////////////////////////////////////////////
-        // TFindResult 
-        ////////////////////////////////////////////////////////////////////////////////////////// 
-        struct TFindResult { 
+        // TFindResult
+        //////////////////////////////////////////////////////////////////////////////////////////
+        struct TFindResult {
             bool EntryFound;
             TBarrier SoftBarrier;
             TBarrier HardBarrier;
@@ -162,35 +162,35 @@ namespace NKikimr {
                 , SoftBarrier(soft)
                 , HardBarrier(hard)
             {}
-        }; 
- 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        // TBuildStat 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        struct TBuildStat { 
-            ui64 SkipNum = 0; 
-            ui64 AddNum = 0; 
-            ui64 NotSyncedNum = 0; 
-            TStringStream DbgStream; 
- 
+        };
+
+        //////////////////////////////////////////////////////////////////////////////////////
+        // TBuildStat
+        //////////////////////////////////////////////////////////////////////////////////////
+        struct TBuildStat {
+            ui64 SkipNum = 0;
+            ui64 AddNum = 0;
+            ui64 NotSyncedNum = 0;
+            TStringStream DbgStream;
+
             void Init(const THullCtxPtr &hullCtx, int debugLevel) {
                 if (debugLevel > 0) {
                     DbgStream << hullCtx->VCtx->VDiskLogPrefix;
                 }
             }
-        }; 
- 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        // TEssence 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        class TEssence; 
- 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        // CompleteDelCmd 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        inline bool CompleteDelCmd(ui32 collectGeneration, ui32 collectStep) { 
-            return collectGeneration == Max<ui32>() && collectStep == Max<ui32>(); 
-        } 
- 
-    } // NGc 
-} // NKikimr 
+        };
+
+        //////////////////////////////////////////////////////////////////////////////////////
+        // TEssence
+        //////////////////////////////////////////////////////////////////////////////////////
+        class TEssence;
+
+        //////////////////////////////////////////////////////////////////////////////////////
+        // CompleteDelCmd
+        //////////////////////////////////////////////////////////////////////////////////////
+        inline bool CompleteDelCmd(ui32 collectGeneration, ui32 collectStep) {
+            return collectGeneration == Max<ui32>() && collectStep == Max<ui32>();
+        }
+
+    } // NGc
+} // NKikimr

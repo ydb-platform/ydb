@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/protos/blobstorage.pb.h> 
+#include <ydb/core/protos/blobstorage.pb.h>
 
 #include <util/datetime/base.h>
 

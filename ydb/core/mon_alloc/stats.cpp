@@ -1,7 +1,7 @@
 #include "stats.h"
 #include "tcmalloc.h"
 
-#include <ydb/core/base/counters.h> 
+#include <ydb/core/base/counters.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

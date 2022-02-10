@@ -3,7 +3,7 @@
 #include "schemeshard_path_describer.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/base/subdomain.h> 
+#include <ydb/core/base/subdomain.h>
 
 namespace {
 

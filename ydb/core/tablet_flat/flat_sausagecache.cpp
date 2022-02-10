@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-TPrivatePageCache::TPage::TPage(ui32 size, ui32 pageId, TInfo* info) 
+TPrivatePageCache::TPage::TPage(ui32 size, ui32 pageId, TInfo* info)
     : LoadState(LoadStateNo)
     , CacheGeneration(TCacheCacheConfig::CacheGenNone)
     , Sticky(false)
@@ -16,16 +16,16 @@ TPrivatePageCache::TPage::TPage(ui32 size, ui32 pageId, TInfo* info)
 {}
 
 TPrivatePageCache::TInfo::TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
-    : Id(pageCollection->Label()) 
-    , PageCollection(std::move(pageCollection)) 
+    : Id(pageCollection->Label())
+    , PageCollection(std::move(pageCollection))
     , Users(0)
 {
-    PageMap.resize(PageCollection->Total()); 
+    PageMap.resize(PageCollection->Total());
 }
 
-TPrivatePageCache::TInfo::TInfo(const TInfo &info) 
+TPrivatePageCache::TInfo::TInfo(const TInfo &info)
     : Id(info.Id)
-    , PageCollection(info.PageCollection) 
+    , PageCollection(info.PageCollection)
     , Users(info.Users)
 {
     PageMap.resize(info.PageMap.size());
@@ -42,15 +42,15 @@ TPrivatePageCache::TInfo::TInfo(const TInfo &info)
     }
 }
 
-TPrivatePageCache::TPrivatePageCache(const TCacheCacheConfig &cacheConfig, bool prepareForSharedCache) 
+TPrivatePageCache::TPrivatePageCache(const TCacheCacheConfig &cacheConfig, bool prepareForSharedCache)
     : Cache(cacheConfig)
     , PrepareForSharedCache(prepareForSharedCache)
 {
 }
 
-void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) { 
-    auto itpair = PageCollections.insert(decltype(PageCollections)::value_type(info->Id, info)); 
-    Y_VERIFY(itpair.second, "double registration of page collection is forbidden. logic flaw?"); 
+void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
+    auto itpair = PageCollections.insert(decltype(PageCollections)::value_type(info->Id, info));
+    Y_VERIFY(itpair.second, "double registration of page collection is forbidden. logic flaw?");
     ++Stats.TotalCollections;
 
     TPage* evicted = nullptr;
@@ -76,10 +76,10 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
     ++info->Users;
 }
 
-TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(TLogoBlobID id) { 
+TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(TLogoBlobID id) {
     // todo: amortize destruction cost (how?)
-    auto it = PageCollections.find(id); 
-    Y_VERIFY(it != PageCollections.end(), "trying to forget unknown page collection. logic flaw?"); 
+    auto it = PageCollections.find(id);
+    Y_VERIFY(it != PageCollections.end(), "trying to forget unknown page collection. logic flaw?");
     TIntrusivePtr<TInfo> info = it->second;
 
     TPage::TWaitQueuePtr ret;
@@ -88,10 +88,10 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(
         Y_VERIFY_DEBUG(page);
 
         if (page->LoadState == TPage::LoadStateRequested) {
-            while (TPrivatePageCacheWaitPad *x = page->WaitQueue->Pop()) { 
+            while (TPrivatePageCacheWaitPad *x = page->WaitQueue->Pop()) {
                 if (0 == x->Dec()) {
                     if (!ret)
-                        ret = new TPrivatePageCache::TPage::TWaitQueue; 
+                        ret = new TPrivatePageCache::TPage::TWaitQueue;
                     ret->Push(x);
                 }
             }
@@ -107,25 +107,25 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(
         }
     }
 
-    UnlockPageCollection(id); 
+    UnlockPageCollection(id);
 
     return ret;
 }
 
-void TPrivatePageCache::LockPageCollection(TLogoBlobID id) { 
-    auto it = PageCollections.find(id); 
-    Y_VERIFY(it != PageCollections.end(), "trying to lock unknown page collection. logic flaw?"); 
+void TPrivatePageCache::LockPageCollection(TLogoBlobID id) {
+    auto it = PageCollections.find(id);
+    Y_VERIFY(it != PageCollections.end(), "trying to lock unknown page collection. logic flaw?");
     ++it->second->Users;
 }
 
-bool TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) { 
-    auto it = PageCollections.find(id); 
-    Y_VERIFY(it != PageCollections.end(), "trying to unlock unknown page collection. logic flaw?"); 
+bool TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
+    auto it = PageCollections.find(id);
+    Y_VERIFY(it != PageCollections.end(), "trying to unlock unknown page collection. logic flaw?");
     TIntrusivePtr<TInfo> info = it->second;
 
     --info->Users;
 
-    // Completely forget page collection if no users remain. 
+    // Completely forget page collection if no users remain.
     if (!info->Users) {
         for (const auto& kv : info->PageMap) {
             auto* page = kv.second.Get();
@@ -149,7 +149,7 @@ bool TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
         }
 
         info->PageMap.clear();
-        PageCollections.erase(it); 
+        PageCollections.erase(it);
         ToTouchShared.erase(id);
         --Stats.TotalCollections;
     }
@@ -157,19 +157,19 @@ bool TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
     return !info->Users;
 }
 
-THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> TPrivatePageCache::GetPrepareSharedTouched() { 
+THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> TPrivatePageCache::GetPrepareSharedTouched() {
     return std::move(ToTouchShared);
 }
 
-TPrivatePageCache::TInfo* TPrivatePageCache::Info(TLogoBlobID id) { 
-    auto *x = PageCollections.FindPtr(id); 
+TPrivatePageCache::TInfo* TPrivatePageCache::Info(TLogoBlobID id) {
+    auto *x = PageCollections.FindPtr(id);
     if (x)
         return x->Get();
     else
         return nullptr;
 }
 
-void TPrivatePageCache::Touch(TPage *page) { 
+void TPrivatePageCache::Touch(TPage *page) {
     if (!page->Sticky) {
         switch (page->LoadState) {
         case TPage::LoadStateNo:
@@ -182,13 +182,13 @@ void TPrivatePageCache::Touch(TPage *page) {
     }
 }
 
-void TPrivatePageCache::Touch(ui32 pageId, TInfo *info) { 
+void TPrivatePageCache::Touch(ui32 pageId, TInfo *info) {
     if (auto* page = info->GetPage(pageId)) {
         Touch(page);
     }
 }
 
-void TPrivatePageCache::MarkSticky(ui32 pageId, TInfo *collectionInfo) { 
+void TPrivatePageCache::MarkSticky(ui32 pageId, TInfo *collectionInfo) {
     TPage *page = collectionInfo->EnsurePage(pageId);
     if (Y_LIKELY(!page->Sticky)) {
         // N.B. the call site that marks pages as sticky starts to load them
@@ -204,10 +204,10 @@ void TPrivatePageCache::MarkSticky(ui32 pageId, TInfo *collectionInfo) {
     }
 }
 
-TIntrusivePtr<TPrivatePageCachePinPad> TPrivatePageCache::Pin(ui32 pageId, TInfo *info) { 
+TIntrusivePtr<TPrivatePageCachePinPad> TPrivatePageCache::Pin(ui32 pageId, TInfo *info) {
     TPage *page = info->EnsurePage(pageId);
     if (!page->PinPad) {
-        page->PinPad = new TPrivatePageCachePinPad(); 
+        page->PinPad = new TPrivatePageCachePinPad();
         Stats.PinnedSetSize += page->Size;
 
         // N.B. it's ok not to call Touch here, because pinned pages don't have
@@ -221,7 +221,7 @@ TIntrusivePtr<TPrivatePageCachePinPad> TPrivatePageCache::Pin(ui32 pageId, TInfo
     return page->PinPad;
 }
 
-void TPrivatePageCache::Unpin(ui32 pageId, TPrivatePageCachePinPad *pad, TInfo *info) { 
+void TPrivatePageCache::Unpin(ui32 pageId, TPrivatePageCachePinPad *pad, TInfo *info) {
     TPage *page = info->GetPage(pageId);
     if (page && page->PinPad.Get() == pad) {
         if (page->PinPad.RefCount() == 1) {
@@ -250,7 +250,7 @@ void TPrivatePageCache::Unpin(ui32 pageId, TPrivatePageCachePinPad *pad, TInfo *
     }
 }
 
-std::pair<ui32, ui64> TPrivatePageCache::Load(TVector<ui32> &pages, TPrivatePageCacheWaitPad *waitPad, TInfo *info) { 
+std::pair<ui32, ui64> TPrivatePageCache::Load(TVector<ui32> &pages, TPrivatePageCacheWaitPad *waitPad, TInfo *info) {
     ui32 blocksToRequest = 0;
     ui64 bytesToRequest = 0;
 
@@ -294,7 +294,7 @@ std::pair<ui32, ui64> TPrivatePageCache::Load(TVector<ui32> &pages, TPrivatePage
     return std::make_pair(blocksToRequest, bytesToRequest);
 }
 
-bool TPrivatePageCache::Restore(TPage *page) { 
+bool TPrivatePageCache::Restore(TPage *page) {
     if (page->LoadState == TPage::LoadStateNo && page->SharedPending) {
         page->LoadState = TPage::LoadStateLoaded;
         return true;
@@ -319,7 +319,7 @@ bool TPrivatePageCache::Restore(TPage *page) {
     return false;
 }
 
-const TSharedData* TPrivatePageCache::Lookup(ui32 pageId, TInfo *info) { 
+const TSharedData* TPrivatePageCache::Lookup(ui32 pageId, TInfo *info) {
     TPage *page = info->GetPage(pageId);
     if (!page)
         return { };
@@ -331,7 +331,7 @@ const TSharedData* TPrivatePageCache::Lookup(ui32 pageId, TInfo *info) {
     return page->GetBody();
 }
 
-TSharedPageRef TPrivatePageCache::LookupShared(ui32 pageId, TInfo *info) { 
+TSharedPageRef TPrivatePageCache::LookupShared(ui32 pageId, TInfo *info) {
     TPage *page = info->GetPage(pageId);
     if (!page)
         return { };
@@ -343,8 +343,8 @@ TSharedPageRef TPrivatePageCache::LookupShared(ui32 pageId, TInfo *info) {
     return page->GetShared();
 }
 
-TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock( 
-        NSharedCache::TEvResult::TLoaded&& loaded, TInfo *info) 
+TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock(
+        NSharedCache::TEvResult::TLoaded&& loaded, TInfo *info)
 {
     Y_VERIFY_DEBUG(loaded.Page && loaded.Page.IsUsed());
     TPage *page = info->EnsurePage(loaded.PageId);
@@ -369,7 +369,7 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock(
 
     TPage::TWaitQueuePtr ret;
     if (page->WaitQueue) {
-        while (TPrivatePageCacheWaitPad *x = page->WaitQueue->Pop()) { 
+        while (TPrivatePageCacheWaitPad *x = page->WaitQueue->Pop()) {
             if (0 == x->Dec()) {
                 if (!ret)
                     ret = new TPage::TWaitQueue();
@@ -388,14 +388,14 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock(
     return ret;
 }
 
-void TPrivatePageCache::UpdateCacheSize(ui64 cacheSize) { 
+void TPrivatePageCache::UpdateCacheSize(ui64 cacheSize) {
     Cache.UpdateCacheSize(cacheSize);
 }
 
-THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache::DetachPrivatePageCache() { 
-    THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> ret; 
+THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache::DetachPrivatePageCache() {
+    THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> ret;
 
-    for (const auto &xpair : PageCollections) { 
+    for (const auto &xpair : PageCollections) {
         TIntrusivePtr<TInfo> info(new TInfo(*xpair.second));
         ret.insert(std::make_pair(xpair.first, info));
     }
@@ -403,7 +403,7 @@ THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache
     return ret;
 }
 
-void TPrivatePageCache::Evict(TPage *pages) { 
+void TPrivatePageCache::Evict(TPage *pages) {
     if (pages == nullptr)
         return;
 

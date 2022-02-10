@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(Network) {
             return;
         }
 
-        TVector<TBindResult> r = BindOnPort(FixedPort, false).second; 
+        TVector<TBindResult> r = BindOnPort(FixedPort, false).second;
         UNIT_ASSERT_VALUES_EQUAL(size_t(2), r.size());
 
         for (TVector<TBindResult>::iterator i = r.begin(); i != r.end(); ++i) {
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(Network) {
     }
 
     Y_UNIT_TEST(BindOnPortRandom) {
-        TVector<TBindResult> r = BindOnPort(0, false).second; 
+        TVector<TBindResult> r = BindOnPort(0, false).second;
         UNIT_ASSERT_VALUES_EQUAL(size_t(2), r.size());
 
         for (TVector<TBindResult>::iterator i = r.begin(); i != r.end(); ++i) {
@@ -58,8 +58,8 @@ Y_UNIT_TEST_SUITE(Network) {
     }
 
     Y_UNIT_TEST(BindOnBusyPort) {
-        auto r = BindOnPort(0, false); 
+        auto r = BindOnPort(0, false);
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS(BindOnPort(r.first, false), TSystemError, "failed to bind on port " + ToString(r.first)); 
+        UNIT_ASSERT_EXCEPTION_CONTAINS(BindOnPort(r.first, false), TSystemError, "failed to bind on port " + ToString(r.first));
     }
 }

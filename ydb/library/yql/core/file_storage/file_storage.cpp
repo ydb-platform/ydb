@@ -6,8 +6,8 @@
 
 #include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
 
-#include <ydb/library/yql/utils/fetch/fetch.h> 
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/fetch/fetch.h>
+#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/log/context.h>
 #include <ydb/library/yql/utils/multi_resource_lock.h>
 #include <ydb/library/yql/utils/md5_stream.h>

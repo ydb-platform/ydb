@@ -3,7 +3,7 @@
 #include "console_configs_manager.h"
 #include "console_tenants_manager.h"
 
-#include <ydb/core/base/path.h> 
+#include <ydb/core/base/path.h>
 
 namespace NKikimr {
 namespace NConsole {

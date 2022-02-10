@@ -4,7 +4,7 @@
 #include <library/cpp/actors/core/event_local.h>
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
-#include <ydb/core/util/time_series_vec.h> 
+#include <ydb/core/util/time_series_vec.h>
 
 namespace NKikimr {
 

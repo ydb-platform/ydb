@@ -2,8 +2,8 @@
 
 #include "chacha_vec.h"
 #include "secured_block.h"
-#include <ydb/core/blobstorage/crypto/ut/ut_helpers.h> 
-#include <ydb/core/blobstorage/crypto/ut/chacha_test_vectors.h> 
+#include <ydb/core/blobstorage/crypto/ut/ut_helpers.h>
+#include <ydb/core/blobstorage/crypto/ut/chacha_test_vectors.h>
 
 
 Y_UNIT_TEST_SUITE(TChaChaVec)

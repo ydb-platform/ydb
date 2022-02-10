@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/scheme/scheme_tabledefs.h> 
+#include <ydb/core/scheme/scheme_tabledefs.h>
 
 namespace NKikimr {
 

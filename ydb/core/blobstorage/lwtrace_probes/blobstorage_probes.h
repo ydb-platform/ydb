@@ -1,6 +1,6 @@
 #pragma once
 
-//#include <ydb/core/protos/base.pb.h> 
+//#include <ydb/core/protos/base.pb.h>
 
 #include <library/cpp/lwtrace/all.h>
 
@@ -102,7 +102,7 @@ struct TEventTypeField {
     PROBE(VDiskRecoveryLogWriterVPutIsSent, GROUPS("VDisk"), \
       TYPES(ui32, ui64), \
       NAMES("owner", "lsn")) \
-    PROBE(VDiskSkeletonRecordLogged, GROUPS("VDisk"), \ 
+    PROBE(VDiskSkeletonRecordLogged, GROUPS("VDisk"), \
       TYPES(ui64), \
       NAMES("lsn")) \
     PROBE(DSProxyBlobPutTactics, GROUPS("DSProxyRequest", "DSProxy"), \

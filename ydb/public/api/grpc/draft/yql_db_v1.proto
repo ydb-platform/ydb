@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package Yq.Private.V1;
 
-import "ydb/public/api/protos/draft/yq_private.proto"; 
+import "ydb/public/api/protos/draft/yq_private.proto";
 
 service YqPrivateTaskService {
     // gets new task

@@ -5,16 +5,16 @@
 #include "flat_sausage_slicer.h"
 #include "flat_bio_eggs.h"
 
-#include <ydb/core/tablet_flat/flat_executor.pb.h> 
+#include <ydb/core/tablet_flat/flat_executor.pb.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
     class TLogicAlter {
     public:
-        TLogicAlter(TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies) 
+        TLogicAlter(TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)
             : Cookies(cookies)
-            , Slicer(1, Cookies.Get(), NBlockIO::BlockSize) 
+            , Slicer(1, Cookies.Get(), NBlockIO::BlockSize)
         {
 
         }
@@ -26,9 +26,9 @@ namespace NTabletFlatExecutor {
 
         ui64 LogBytes() const noexcept { return Bytes; }
 
-        void RestoreLog(const NPageCollection::TLargeGlobId &largeGlobId) noexcept 
+        void RestoreLog(const NPageCollection::TLargeGlobId &largeGlobId) noexcept
         {
-            largeGlobId.MaterializeTo(Log), Bytes += largeGlobId.Bytes; 
+            largeGlobId.MaterializeTo(Log), Bytes += largeGlobId.Bytes;
         }
 
         void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap) noexcept
@@ -43,16 +43,16 @@ namespace NTabletFlatExecutor {
             Cookies->Switch(commit.Step, true /* require step switch */);
 
             if (alter) {
-                auto largeGlobId = Slicer.Do(commit.Refs, std::move(alter), false); 
+                auto largeGlobId = Slicer.Do(commit.Refs, std::move(alter), false);
 
-                largeGlobId.MaterializeTo(commit.GcDelta.Created); 
-                RestoreLog(largeGlobId); 
+                largeGlobId.MaterializeTo(commit.GcDelta.Created);
+                RestoreLog(largeGlobId);
             }
         }
 
     protected:
-        TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies; 
-        NPageCollection::TSlicer Slicer; 
+        TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
+        NPageCollection::TSlicer Slicer;
         ui64 Bytes = 0;
         TList<TLogoBlobID> Log;
     };

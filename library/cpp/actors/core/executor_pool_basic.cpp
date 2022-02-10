@@ -144,7 +144,7 @@ namespace NActors {
                     }
                 }
             } else {
-                AtomicSet(threadCtx.WaitingFlag, TThreadCtx::WS_BLOCKED); 
+                AtomicSet(threadCtx.WaitingFlag, TThreadCtx::WS_BLOCKED);
                 do {
                     hpnow = GetCycleCountFast();
                     elapsed += hpnow - hpstart;

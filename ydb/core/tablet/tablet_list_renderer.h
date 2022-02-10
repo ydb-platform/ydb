@@ -1,7 +1,7 @@
 #pragma once
 
 #include "node_tablet_monitor.h"
-#include <ydb/core/tablet/tablet_sys.h> 
+#include <ydb/core/tablet/tablet_sys.h>
 
 namespace NKikimr {
 namespace NNodeTabletMonitor {

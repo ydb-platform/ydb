@@ -40,8 +40,8 @@
         typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
         HandleFunc(*x, ctx);                                                        \
         break;                                                                      \
-    } 
- 
+    }
+
 #define hTemplFunc(TEvType, HandleFunc)                                             \
     case TEvType::EventType: {                                                      \
         typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \

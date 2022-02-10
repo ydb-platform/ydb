@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/protos/msgbus_pq.pb.h> 
+#include <ydb/core/protos/msgbus_pq.pb.h>
 
 namespace NKikimr {
 

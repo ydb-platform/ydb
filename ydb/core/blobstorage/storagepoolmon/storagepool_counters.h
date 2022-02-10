@@ -2,10 +2,10 @@
 
 #include "defs.h"
 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/base/group_stat.h> 
-#include <ydb/core/blobstorage/base/common_latency_hist_bounds.h> 
-#include <ydb/core/mon/mon.h> 
+#include <ydb/core/base/counters.h>
+#include <ydb/core/base/group_stat.h>
+#include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
+#include <ydb/core/mon/mon.h>
 
 #include <util/generic/bitops.h>
 #include <util/generic/ptr.h>

@@ -1,7 +1,7 @@
 #include "kqp_metadata_loader.h"
 #include "kqp_ic_gateway_actors.h"
 
-#include <ydb/core/base/path.h> 
+#include <ydb/core/base/path.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>

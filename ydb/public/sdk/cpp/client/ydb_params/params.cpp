@@ -1,8 +1,8 @@
 #include "params.h"
 #include "impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/fatal_error_handlers/handlers.h> 
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/fatal_error_handlers/handlers.h>
 
 #include <util/generic/map.h>
 #include <util/string/builder.h>

@@ -1,6 +1,6 @@
 #include "kqp_host_impl.h"
 
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <google/protobuf/text_format.h>
 

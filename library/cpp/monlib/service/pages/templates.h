@@ -1,10 +1,10 @@
-#pragma once 
- 
-#include <util/stream/output.h> 
+#pragma once
+
+#include <util/stream/output.h>
 #include <util/system/defaults.h>
- 
+
 #define WITH_SCOPED(var, value) WITH_SCOPED_I(var, value, Y_GENERATE_UNIQUE_ID(WITH_SCOPED_LABEL_))
- 
+
 #define WITH_SCOPED_I(var, value, label) \
     if (auto var = (value)) {              \
         Y_UNUSED(var);                   \
@@ -12,7 +12,7 @@
     } else                               \
     label                                \
         :
- 
+
 #define TAG(name) WITH_SCOPED(tmp, NMonitoring::name(__stream))
 #define TAG_CLASS(name, cls) WITH_SCOPED(tmp, NMonitoring::name(__stream, cls))
 #define TAG_CLASS_STYLE(name, cls, style) WITH_SCOPED(tmp, NMonitoring::name(__stream, {{"class", cls}, {"style", style}}))
@@ -21,7 +21,7 @@
 #define TAG_ATTRS(name, ...) WITH_SCOPED(tmp, NMonitoring::name(__stream, ##__VA_ARGS__))
 
 #define HTML(str) WITH_SCOPED(__stream, NMonitoring::TOutputStreamRef(str))
- 
+
 #define HEAD() TAG(THead)
 #define BODY() TAG(TBody)
 #define HTML_TAG() TAG(THtml)
@@ -51,7 +51,7 @@
 #define LABEL_CLASS_FOR(cls, for0) TAG_CLASS_FOR(TLabelC, cls, for0)
 #define SPAN_CLASS(cls) TAG_CLASS(TSpanC, cls)
 #define SPAN_CLASS_STYLE(cls, style) TAG_CLASS_STYLE(TSpanC, cls, style)
- 
+
 #define PARA() TAG(TPara)
 #define PARA_CLASS(cls) TAG_CLASS(TPara, cls)
 
@@ -67,7 +67,7 @@
 #define H5_CLASS(cls) TAG_CLASS(TH5, cls)
 #define H6() TAG(TH6)
 #define H6_CLASS(cls) TAG_CLASS(TH6, cls)
- 
+
 #define SMALL() TAG(TSMALL)
 #define STRONG() TAG(TSTRONG)
 
@@ -77,7 +77,7 @@
 #define UL_CLASS(cls) TAG_CLASS(TULIST, cls)
 #define OL() TAG(TOLIST)
 #define OL_CLASS(cls) TAG_CLASS(TOLIST, cls)
- 
+
 #define DL() TAG(DLIST)
 #define DL_CLASS(cls) TAG_CLASS(DLIST, cls)
 #define DT() TAG(DTERM)
@@ -88,16 +88,16 @@
 #define CAPTION() TAG(TCaption)
 #define CAPTION_CLASS(cls) CAPTION_CLASS(TCaption, cls)
 
-#define HTML_OUTPUT_PARAM(str, param) str << #param << ": " << param << "<br/>" 
-#define HTML_OUTPUT_TIME_PARAM(str, param) str << #param << ": " << ToStringLocalTimeUpToSeconds(param) << "<br/>" 
- 
+#define HTML_OUTPUT_PARAM(str, param) str << #param << ": " << param << "<br/>"
+#define HTML_OUTPUT_TIME_PARAM(str, param) str << #param << ": " << ToStringLocalTimeUpToSeconds(param) << "<br/>"
+
 #define COLLAPSED_BUTTON_CONTENT(targetId, buttonText) \
     WITH_SCOPED(tmp, NMonitoring::TCollapsedButton(__stream, targetId, buttonText))
- 
+
 #define HREF(path) \
     WITH_SCOPED(tmp, NMonitoring::THref(__stream, path))
 
-namespace NMonitoring { 
+namespace NMonitoring {
     struct THref {
         THref(IOutputStream& str, TStringBuf path)
             : Str(str)
@@ -117,16 +117,16 @@ namespace NMonitoring {
     };
 
     template <const char* tag>
-    struct TTag { 
+    struct TTag {
         TTag(IOutputStream& str, TStringBuf cls = "", TStringBuf for0 = "", TStringBuf id = "")
-            : Str(str) 
-        { 
+            : Str(str)
+        {
             Str << "<" << tag;
- 
+
             if (!cls.empty()) {
                 Str << " class=\"" << cls << "\"";
             }
- 
+
             if (!for0.empty()) {
                 Str << " for=\"" << for0 << "\"";
             }
@@ -135,8 +135,8 @@ namespace NMonitoring {
                 Str << "id=\"" << id << "\"";
             }
             Str << ">";
-        } 
- 
+        }
+
         TTag(IOutputStream& str, std::initializer_list<std::pair<TStringBuf, TStringBuf>> attributes)
             : Str(str)
         {
@@ -149,44 +149,44 @@ namespace NMonitoring {
             Str << ">";
         }
 
-        ~TTag() { 
+        ~TTag() {
             try {
                 Str << "</" << tag << ">";
             } catch (...) {
             }
-        } 
- 
+        }
+
         explicit inline operator bool() const noexcept {
             return true; // just to work with WITH_SCOPED
         }
 
         IOutputStream& Str;
-    }; 
- 
-    // a nice class for creating collapsable regions of html output 
-    struct TCollapsedButton { 
+    };
+
+    // a nice class for creating collapsable regions of html output
+    struct TCollapsedButton {
         TCollapsedButton(IOutputStream& str, const TString& targetId, const TString& buttonText)
-            : Str(str) 
-        { 
-            Str << "<button type='button' class='btn' data-toggle='collapse' data-target='#" << targetId << "'>" 
-                << buttonText << "</button>"; 
-            Str << "<div id='" << targetId << "' class='collapse'>"; 
-        } 
- 
-        ~TCollapsedButton() { 
-            try { 
-                Str << "</div>"; 
+            : Str(str)
+        {
+            Str << "<button type='button' class='btn' data-toggle='collapse' data-target='#" << targetId << "'>"
+                << buttonText << "</button>";
+            Str << "<div id='" << targetId << "' class='collapse'>";
+        }
+
+        ~TCollapsedButton() {
+            try {
+                Str << "</div>";
             } catch (...) {
             }
-        } 
- 
+        }
+
         explicit inline operator bool() const noexcept {
             return true; // just to work with WITH_SCOPED
         }
 
         IOutputStream& Str;
-    }; 
- 
+    };
+
     struct TOutputStreamRef {
         TOutputStreamRef(IOutputStream& str)
             : Str(str)
@@ -234,31 +234,31 @@ namespace NMonitoring {
     extern const char DListTag[3];
     extern const char DTermTag[3];
     extern const char DDescTag[3];
- 
+
     typedef TTag<HtmlTag> THtml;
     typedef TTag<HeadTag> THead;
     typedef TTag<BodyTag> TBody;
-    typedef TTag<DivTag> TDiv; 
-    typedef TTag<TableTag> TTable; 
-    typedef TTag<TableHeadTag> TTableHead; 
-    typedef TTag<TableBodyTag> TTableBody; 
-    typedef TTag<TableRTag> TTableR; 
-    typedef TTag<TableDTag> TTableD; 
-    typedef TTag<TableHTag> TTableH; 
-    typedef TTag<FormTag> TFormC; 
-    typedef TTag<LabelTag> TLabelC; 
-    typedef TTag<SpanTag> TSpanC; 
-    typedef TTag<CaptionTag> TCaption; 
+    typedef TTag<DivTag> TDiv;
+    typedef TTag<TableTag> TTable;
+    typedef TTag<TableHeadTag> TTableHead;
+    typedef TTag<TableBodyTag> TTableBody;
+    typedef TTag<TableRTag> TTableR;
+    typedef TTag<TableDTag> TTableD;
+    typedef TTag<TableHTag> TTableH;
+    typedef TTag<FormTag> TFormC;
+    typedef TTag<LabelTag> TLabelC;
+    typedef TTag<SpanTag> TSpanC;
+    typedef TTag<CaptionTag> TCaption;
     typedef TTag<PreTag> TPre;
-    typedef TTag<ParaTag> TPara; 
+    typedef TTag<ParaTag> TPara;
     typedef TTag<H1Tag> TH1;
     typedef TTag<H2Tag> TH2;
     typedef TTag<H3Tag> TH3;
     typedef TTag<H4Tag> TH4;
     typedef TTag<H5Tag> TH5;
     typedef TTag<H6Tag> TH6;
-    typedef TTag<SmallTag> TSMALL; 
-    typedef TTag<StrongTag> TSTRONG; 
+    typedef TTag<SmallTag> TSMALL;
+    typedef TTag<StrongTag> TSTRONG;
     typedef TTag<ListTag> TLIST;
     typedef TTag<UListTag> TULIST;
     typedef TTag<OListTag> TOLIST;

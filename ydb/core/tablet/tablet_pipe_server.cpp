@@ -1,4 +1,4 @@
-#include <ydb/core/base/tablet_pipe.h> 
+#include <ydb/core/base/tablet_pipe.h>
 #include <library/cpp/actors/core/executor_thread.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/interconnect.h>

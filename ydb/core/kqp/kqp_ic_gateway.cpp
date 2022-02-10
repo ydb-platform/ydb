@@ -2,27 +2,27 @@
 #include "kqp_impl.h"
 #include "kqp_metadata_loader.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/path.h> 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/base/kikimr_issue.h> 
-#include <ydb/core/client/minikql_compile/mkql_compile_service.h> 
-#include <ydb/core/cms/console/configs_dispatcher.h> 
-#include <ydb/core/engine/mkql_engine_flat.h> 
-#include <ydb/core/engine/mkql_proto.h> 
-#include <ydb/core/kqp/common/kqp_gateway.h> 
-#include <ydb/core/kqp/executer/kqp_executer.h> 
-#include <ydb/core/kqp/rm/kqp_snapshot_manager.h> 
-#include <ydb/core/kqp/provider/yql_kikimr_gateway.h> 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
-#include <ydb/core/grpc_services/table_profiles.h> 
-#include <ydb/core/grpc_services/table_settings.h> 
-#include <ydb/core/grpc_services/local_rpc/local_rpc.h> 
-#include <ydb/core/ydb_convert/column_families.h> 
-#include <ydb/core/ydb_convert/ydb_convert.h> 
-#include <ydb/library/aclib/aclib.h> 
-#include <ydb/public/lib/base/msgbus_status.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/core/client/minikql_compile/mkql_compile_service.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/kqp/common/kqp_gateway.h>
+#include <ydb/core/kqp/executer/kqp_executer.h>
+#include <ydb/core/kqp/rm/kqp_snapshot_manager.h>
+#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/grpc_services/table_profiles.h>
+#include <ydb/core/grpc_services/table_settings.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/ydb_convert/column_families.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/public/lib/base/msgbus_status.h>
 
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
@@ -70,7 +70,7 @@ static NThreading::TFuture<TResult> NotImplemented() {
 }
 
 struct TAppConfigResult : public IKqpGateway::TGenericResult {
-    std::shared_ptr<const NKikimrConfig::TAppConfig> Config; 
+    std::shared_ptr<const NKikimrConfig::TAppConfig> Config;
 };
 
 

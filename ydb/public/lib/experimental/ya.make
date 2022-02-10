@@ -10,10 +10,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/scheme 
-    ydb/public/api/grpc/draft 
-    ydb/public/sdk/cpp/client/ydb_proto 
-    ydb/public/sdk/cpp/client/ydb_table 
+    ydb/core/scheme
+    ydb/public/api/grpc/draft
+    ydb/public/sdk/cpp/client/ydb_proto
+    ydb/public/sdk/cpp/client/ydb_table
 )
 
 END()

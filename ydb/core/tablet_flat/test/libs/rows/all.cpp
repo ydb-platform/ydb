@@ -2,9 +2,9 @@
 #include "cook.h"
 #include "mass.h"
 
-#include <ydb/core/tablet_flat/flat_row_scheme.h> 
-#include <ydb/core/tablet_flat/flat_row_misc.h> 
-#include <ydb/core/scheme/scheme_type_registry.h> 
+#include <ydb/core/tablet_flat/flat_row_scheme.h>
+#include <ydb/core/tablet_flat/flat_row_misc.h>
+#include <ydb/core/scheme/scheme_type_registry.h>
 
 namespace NKikimr {
 namespace NTable {

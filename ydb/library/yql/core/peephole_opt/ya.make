@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    vvvv 
+    vvvv
     g:yql
     g:yql_ydb_core
 )
@@ -17,6 +17,6 @@ PEERDIR(
     ydb/library/yql/core/type_ann
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 END()

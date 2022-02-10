@@ -1,9 +1,9 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h> 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h> 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernel.h> 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h> 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernel.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include "func_common.h"
 #include <cstdlib>
 #include <type_traits>

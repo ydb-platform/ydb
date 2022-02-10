@@ -6,12 +6,12 @@
 #include "params.h"
 #include "serviceid.h"
 
-#include <ydb/core/ymq/base/helpers.h> 
-#include <ydb/core/ymq/base/limits.h> 
-#include <ydb/core/ymq/actor/sha256.h> 
-#include <ydb/core/ymq/proto/records.pb.h> 
+#include <ydb/core/ymq/base/helpers.h>
+#include <ydb/core/ymq/base/limits.h>
+#include <ydb/core/ymq/actor/sha256.h>
+#include <ydb/core/ymq/proto/records.pb.h>
 
-#include <ydb/public/lib/value/value.h> 
+#include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <util/random/random.h>

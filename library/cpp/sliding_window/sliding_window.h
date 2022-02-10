@@ -1,26 +1,26 @@
-#pragma once 
- 
+#pragma once
+
 #include <util/datetime/base.h>
 #include <util/generic/vector.h>
 #include <util/system/guard.h>
 #include <util/system/mutex.h>
 #include <util/system/types.h>
 #include <util/system/yassert.h>
- 
+
 #include <functional>
 #include <limits>
- 
+
 namespace NSlidingWindow {
     namespace NPrivate {
         template <class TValueType_, class TCmp, TValueType_ initialValue> // std::less for max, std::greater for min
         struct TMinMaxOperationImpl {
             using TValueType = TValueType_;
             using TValueVector = TVector<TValueType>;
- 
+
             static constexpr TValueType InitialValue() {
                 return initialValue;
             }
- 
+
             // Updates value in current bucket and returns window value
             static TValueType UpdateBucket(TValueType windowValue, TValueVector& buckets, size_t index, TValueType newVal) {
                 Y_ASSERT(index < buckets.size());
@@ -34,7 +34,7 @@ namespace NSlidingWindow {
                 }
                 return windowValue;
             }
- 
+
             static TValueType ClearBuckets(TValueType windowValue, TValueVector& buckets, const size_t firstElemIndex, const size_t bucketsToClear) {
                 Y_ASSERT(!buckets.empty());
                 Y_ASSERT(firstElemIndex < buckets.size());
@@ -72,7 +72,7 @@ namespace NSlidingWindow {
         };
 
     }
- 
+
     template <class TValueType>
     using TMaxOperation = NPrivate::TMinMaxOperationImpl<TValueType, std::less<TValueType>, std::numeric_limits<TValueType>::min()>;
 
@@ -111,7 +111,7 @@ namespace NSlidingWindow {
             return windowValue;
         }
     };
- 
+
     /////////////////////////////////////////////////////////////////////////////////////////
     // TSlidingWindow
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -121,7 +121,7 @@ namespace NSlidingWindow {
         using TValueType = typename TOperation::TValueType;
         using TValueVector = TVector<TValueType>;
         using TSizeType = typename TValueVector::size_type;
- 
+
     public:
         TSlidingWindow(const TDuration& length, TSizeType partsNum)
             : Mutex()
@@ -133,7 +133,7 @@ namespace NSlidingWindow {
             , MicroSecondsPerBucket(length.MicroSeconds() / partsNum)
         {
         }
- 
+
         TSlidingWindow(const TSlidingWindow& w)
             : Mutex()
         {
@@ -175,20 +175,20 @@ namespace NSlidingWindow {
         TValueType GetValue() const {
             TGuard<TMutexImpl> guard(&Mutex);
             return WindowValue;
-        } 
- 
+        }
+
     private:
         void UpdateCurrentBucket(TValueType val) {
             const TSizeType arraySize = Buckets.size();
             const TSizeType pos = (FirstElem + arraySize - 1) % arraySize;
             WindowValue = TOperation::UpdateBucket(WindowValue, Buckets, pos, val);
         }
- 
+
         void AdvanceTime(const TInstant& time) {
             if (time < PeriodStart + Length) {
                 return;
             }
- 
+
             if (PeriodStart.MicroSeconds() == 0) {
                 PeriodStart = time - Length;
                 return;

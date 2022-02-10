@@ -1,6 +1,6 @@
-#include <ydb/core/kqp/proxy/kqp_proxy_service.h> 
-#include <ydb/core/base/location.h> 
-#include <ydb/core/protos/kqp.pb.h> 
+#include <ydb/core/kqp/proxy/kqp_proxy_service.h>
+#include <ydb/core/base/location.h>
+#include <ydb/core/protos/kqp.pb.h>
 
 #include <util/generic/vector.h>
 #include <util/stream/output.h>

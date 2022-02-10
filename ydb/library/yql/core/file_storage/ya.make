@@ -24,10 +24,10 @@ PEERDIR(
     library/cpp/threading/future
     library/cpp/regex/pcre
     library/cpp/uri
-    ydb/library/yql/core/file_storage/proto 
-    ydb/library/yql/utils 
+    ydb/library/yql/core/file_storage/proto
+    ydb/library/yql/utils
     ydb/library/yql/utils/log
-    ydb/library/yql/utils/fetch 
+    ydb/library/yql/utils/fetch
 )
 
 END()

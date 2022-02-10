@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/tx/datashard)
 
-OWNER(g:kikimr) 
+OWNER(g:kikimr)
 
 FORK_SUBTESTS()
 
@@ -23,9 +23,9 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/testlib
     ydb/core/tx
-    ydb/library/yql/public/udf/service/exception_policy 
-    ydb/public/lib/yson_value 
-    ydb/public/sdk/cpp/client/ydb_result 
+    ydb/library/yql/public/udf/service/exception_policy
+    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/client/ydb_result
 )
 
 YQL_LAST_ABI_VERSION()

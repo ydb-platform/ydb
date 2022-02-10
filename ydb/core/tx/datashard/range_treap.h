@@ -7,7 +7,7 @@
 #include <util/random/random.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
     template<class TValue>
     struct TRangeTreapDefaultValueTraits {
@@ -580,5 +580,5 @@ namespace NDataShard {
         THashMap<TValue, TIntrusiveList<TNode>> Values;
     };
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

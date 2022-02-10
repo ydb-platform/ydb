@@ -1,7 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 namespace NYql {

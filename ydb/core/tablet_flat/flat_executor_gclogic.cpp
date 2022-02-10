@@ -1,15 +1,15 @@
 #include "flat_executor_gclogic.h"
 #include "flat_bio_eggs.h"
-#include <ydb/core/base/tablet.h> 
+#include <ydb/core/base/tablet.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies) 
+TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)
     : TabletStorageInfo(std::move(info))
     , Cookies(cookies)
     , Generation(Cookies->Gen)
-    , Slicer(1, Cookies.Get(), NBlockIO::BlockSize) 
+    , Slicer(1, Cookies.Get(), NBlockIO::BlockSize)
     , SnapshotStep(0)
     , PrevSnapshotStep(0)
     , ConfirmedOnSendStep(0)

@@ -1,6 +1,6 @@
 #include "value.h"
 
-#include <ydb/library/yql/minikql/dom/node.h> 
+#include <ydb/library/yql/minikql/dom/node.h>
 
 namespace NYql::NJsonPath {
 
@@ -379,5 +379,5 @@ void TValue::UnpackInnerValue() {
     }
 }
 
-} 
- 
+}
+

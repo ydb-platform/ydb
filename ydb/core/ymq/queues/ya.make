@@ -1,5 +1,5 @@
 OWNER(
-    g:kikimr 
+    g:kikimr
     g:sqs
 )
 

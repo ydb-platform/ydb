@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/blobstorage/base/wilson_events.h> 
+#include <ydb/core/blobstorage/base/wilson_events.h>
 
 #include "blobstorage_pdisk.h"
 #include "blobstorage_pdisk_gate.h"

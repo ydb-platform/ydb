@@ -1,7 +1,7 @@
 #pragma once
 #include <unordered_map>
 #include <util/string/vector.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include "wb_filter.h"
 #include "wb_group.h"
 

@@ -1,15 +1,15 @@
-#pragma once 
- 
-#include "actor.h" 
+#pragma once
+
+#include "actor.h"
 #include "log_iface.h"
-#include <util/generic/vector.h> 
+#include <util/generic/vector.h>
 #include <util/digest/murmur.h>
 #include <util/random/easy.h>
- 
-namespace NActors { 
-    namespace NLog { 
+
+namespace NActors {
+    namespace NLog {
         inline const char* PriorityToString(EPrio priority) {
-            switch (priority) { 
+            switch (priority) {
                 case EPrio::Emerg:
                     return "EMERG";
                 case EPrio::Alert:
@@ -30,21 +30,21 @@ namespace NActors {
                     return "TRACE";
                 default:
                     return "UNKNOWN";
-            } 
-        } 
- 
-        // You can structure your program to have multiple logical components. 
-        // In this case you can set different log priorities for different 
-        // components. And you can change component's priority while system 
-        // is running. Suspect a component has a bug? Turn DEBUG priority level on 
-        // for this component. 
-        static const int InvalidComponent = -1; 
- 
-        // Functions converts EComponent id to string 
+            }
+        }
+
+        // You can structure your program to have multiple logical components.
+        // In this case you can set different log priorities for different
+        // components. And you can change component's priority while system
+        // is running. Suspect a component has a bug? Turn DEBUG priority level on
+        // for this component.
+        static const int InvalidComponent = -1;
+
+        // Functions converts EComponent id to string
         using EComponentToStringFunc = std::function<const TString&(EComponent)>;
         ;
- 
-        // Log settings 
+
+        // Log settings
         struct TComponentSettings {
             union {
                 struct {
@@ -76,14 +76,14 @@ namespace NActors {
             TDuration ThrottleDelay;
             TArrayHolder<TAtomic> ComponentInfo;
             TVector<TString> ComponentNames;
-            EComponent MinVal; 
-            EComponent MaxVal; 
-            EComponent Mask; 
-            EPriority DefPriority; 
+            EComponent MinVal;
+            EComponent MaxVal;
+            EComponent Mask;
+            EPriority DefPriority;
             EPriority DefSamplingPriority;
             ui32 DefSamplingRate;
             bool UseLocalTimestamps;
- 
+
             enum ELogFormat {
                 PLAIN_FULL_FORMAT,
                 PLAIN_SHORT_FORMAT,
@@ -94,21 +94,21 @@ namespace NActors {
             TString ClusterName;
             TString MessagePrefix;
 
-            // The best way to provide minVal, maxVal and func is to have 
-            // protobuf enumeration of components. In this case protoc 
-            // automatically generates YOURTYPE_MIN, YOURTYPE_MAX and 
-            // YOURTYPE_Name for you. 
+            // The best way to provide minVal, maxVal and func is to have
+            // protobuf enumeration of components. In this case protoc
+            // automatically generates YOURTYPE_MIN, YOURTYPE_MAX and
+            // YOURTYPE_Name for you.
             TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
                       EComponent minVal, EComponent maxVal, EComponentToStringFunc func,
                       EPriority defPriority, EPriority defSamplingPriority = PRI_DEBUG,
                       ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000);
- 
+
             TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
                       EPriority defPriority, EPriority defSamplingPriority = PRI_DEBUG,
                       ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000);
 
-            void Append(EComponent minVal, EComponent maxVal, EComponentToStringFunc func); 
- 
+            void Append(EComponent minVal, EComponent maxVal, EComponentToStringFunc func);
+
             template <typename T>
             void Append(T minVal, T maxVal, const TString& (*func)(T)) {
                 Append(
@@ -121,7 +121,7 @@ namespace NActors {
             }
 
             inline bool Satisfies(EPriority priority, EComponent component, ui64 sampleBy = 0) const {
-                // by using Mask we don't get outside of array boundaries 
+                // by using Mask we don't get outside of array boundaries
                 TComponentSettings settings = GetComponentSettings(component);
                 if (priority > settings.Raw.X.Level) {
                     if (priority > settings.Raw.X.SamplingLevel) {
@@ -141,8 +141,8 @@ namespace NActors {
                     // priority <= log level ==> log
                     return true;
                 }
-            } 
- 
+            }
+
             inline TComponentSettings GetComponentSettings(EComponent component) const {
                 Y_VERIFY_DEBUG((component & Mask) == component);
                 // by using Mask we don't get outside of array boundaries
@@ -152,15 +152,15 @@ namespace NActors {
             const char* ComponentName(EComponent component) const {
                 Y_VERIFY_DEBUG((component & Mask) == component);
                 return ComponentNames[component & Mask].data();
-            } 
- 
+            }
+
             int SetLevel(EPriority priority, EComponent component, TString& explanation);
             int SetSamplingLevel(EPriority priority, EComponent component, TString& explanation);
             int SetSamplingRate(ui32 sampling, EComponent component, TString& explanation);
             EComponent FindComponent(const TStringBuf& componentName) const;
-            static int PowerOf2Mask(int val); 
-            static bool IsValidPriority(EPriority priority); 
-            bool IsValidComponent(EComponent component); 
+            static int PowerOf2Mask(int val);
+            static bool IsValidPriority(EPriority priority);
+            bool IsValidComponent(EComponent component);
             void SetAllowDrop(bool val);
             void SetThrottleDelay(TDuration value);
             void SetUseLocalTimestamps(bool value);
@@ -169,8 +169,8 @@ namespace NActors {
             int SetLevelImpl(
                 const TString& name, bool isSampling,
                 EPriority priority, EComponent component, TString& explanation);
-        }; 
- 
+        };
+
     }
- 
+
 }

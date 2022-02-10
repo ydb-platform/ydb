@@ -4,7 +4,7 @@ OWNER(
 )
 
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd") 
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 TEST_SRCS(
     sqs_requests_client.py
@@ -44,8 +44,8 @@ ELSE()
 ENDIF()
 
 DEPENDS(
-    ydb/apps/ydbd 
-    ydb/core/ymq/client/bin 
+    ydb/apps/ydbd
+    ydb/core/ymq/client/bin
 )
 
 PEERDIR(

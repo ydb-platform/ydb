@@ -1,6 +1,6 @@
 #pragma once
 #include "config.h"
-#include "factories.h" 
+#include "factories.h"
 #include "service_initializer.h"
 
 #include <library/cpp/actors/core/actorsystem.h>
@@ -8,17 +8,17 @@
 #include <library/cpp/actors/interconnect/poller_tcp.h>
 #include <library/cpp/actors/util/should_continue.h>
 #include <library/cpp/grpc/server/grpc_server.h>
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/statestorage.h> 
-#include <ydb/core/scheme_types/scheme_types.h> 
-#include <ydb/core/formats/factory.h> 
-#include <ydb/public/lib/base/msgbus.h> 
-#include <ydb/core/client/server/grpc_server.h> 
-#include <ydb/core/kqp/kqp.h> 
-#include <ydb/core/tablet/node_tablet_monitor.h> 
-#include <ydb/core/tablet/tablet_setup.h> 
-#include <ydb/core/ymq/http/http.h> 
-#include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/scheme_types/scheme_types.h>
+#include <ydb/core/formats/factory.h>
+#include <ydb/public/lib/base/msgbus.h>
+#include <ydb/core/client/server/grpc_server.h>
+#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/tablet/node_tablet_monitor.h>
+#include <ydb/core/tablet/tablet_setup.h>
+#include <ydb/core/ymq/http/http.h>
+#include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -29,7 +29,7 @@ protected:
     static TProgramShouldContinue KikimrShouldContinue;
     static void OnTerminate(int);
 
-    std::shared_ptr<TModuleFactories> ModuleFactories; 
+    std::shared_ptr<TModuleFactories> ModuleFactories;
     TIntrusivePtr<NScheme::TTypeRegistry> TypeRegistry;
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<TFormatFactory> FormatFactory;
@@ -37,7 +37,7 @@ protected:
 
     TAutoPtr<TMon> Monitoring;
     NMonitoring::TDynamicCounterPtr Counters;
-    NMonitoring::TIndexMonPage *ActorsMonPage = nullptr; 
+    NMonitoring::TIndexMonPage *ActorsMonPage = nullptr;
 
     bool EnabledGrpcService = false;
     bool GracefulShutdownSupported = false;
@@ -63,7 +63,7 @@ protected:
     std::shared_ptr<TLogBackend> LogBackend;
     TAutoPtr<TActorSystem> ActorSystem;
 
-    TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {}); 
+    TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {});
 
     virtual ~TKikimrRunner();
 
@@ -110,11 +110,11 @@ public:
     virtual void BusyLoop();
     virtual void KikimrStop(bool graceful);
 
-    static TIntrusivePtr<TKikimrRunner> CreateKikimrRunner( 
-            const TKikimrRunConfig& runConfig, 
-            std::shared_ptr<TModuleFactories> factories); 
+    static TIntrusivePtr<TKikimrRunner> CreateKikimrRunner(
+            const TKikimrRunConfig& runConfig,
+            std::shared_ptr<TModuleFactories> factories);
 };
 
-int MainRun(const TKikimrRunConfig &runConfig, std::shared_ptr<TModuleFactories> factories); 
+int MainRun(const TKikimrRunConfig &runConfig, std::shared_ptr<TModuleFactories> factories);
 
 }

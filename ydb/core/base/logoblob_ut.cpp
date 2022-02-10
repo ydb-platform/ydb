@@ -1,29 +1,29 @@
-#include "defs.h" 
-#include "logoblob.h" 
+#include "defs.h"
+#include "logoblob.h"
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/generic/ptr.h> 
- 
-namespace NKikimr { 
+#include <util/generic/ptr.h>
+
+namespace NKikimr {
     Y_UNIT_TEST_SUITE(TLogoBlobTest) {
- 
+
         Y_UNIT_TEST(LogoBlobParse) {
-            TLogoBlobID id; 
+            TLogoBlobID id;
             TString explanation;
-            bool res = false; 
- 
+            bool res = false;
+
             res = TLogoBlobID::Parse(id, "[               0:1:2:0:0:0:0]", explanation);
             UNIT_ASSERT(res && id == TLogoBlobID(0, 1, 2, 0, 0, 0));
- 
+
             res = TLogoBlobID::Parse(id, "[               0:1:2:0:0:0:0", explanation);
             UNIT_ASSERT(!res && explanation == "Can't find trailing ']' after part id");
- 
+
             res = TLogoBlobID::Parse(id, "[               0:1:2:0:0 v:0:0", explanation);
-            UNIT_ASSERT(!res && explanation == "Can't find trailing ':' after cookie"); 
- 
+            UNIT_ASSERT(!res && explanation == "Can't find trailing ':' after cookie");
+
             res = TLogoBlobID::Parse(id, "[               0:1:2:0:0  :0:0]", explanation);
-            UNIT_ASSERT(res); 
+            UNIT_ASSERT(res);
         }
- 
+
         Y_UNIT_TEST(LogoBlobCompare) {
             bool res = false;
 
@@ -71,48 +71,48 @@ namespace NKikimr {
             UNIT_ASSERT(res);
 
             UNIT_ASSERT(left.IsSameBlob(TLogoBlobID(1, 0x30002C2D, 0x50005F6F, 1, 0x3333, 0x0001A01B, 1)));
-        } 
- 
+        }
+
         Y_UNIT_TEST(LogoBlobSort) {
             TVector<TLogoBlobID> vec;
-            vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 110, 20)); 
-            vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 109, 21)); 
-            vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 108, 22)); 
-            vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 107, 23)); 
-            vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 106, 24)); 
- 
-            vec.emplace_back(TLogoBlobID(42, 1, 1, 0, 100, 15)); 
-            vec.emplace_back(TLogoBlobID(42, 1, 2, 0, 100, 19)); 
-            vec.emplace_back(TLogoBlobID(42, 1, 3, 0, 100, 16)); 
-            vec.emplace_back(TLogoBlobID(42, 1, 1, 3, 100, 17)); 
-            vec.emplace_back(TLogoBlobID(42, 1, 2, 3, 100, 18)); 
-            vec.emplace_back(TLogoBlobID(42, 2, 0, 0, 100, 20)); 
- 
+            vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 110, 20));
+            vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 109, 21));
+            vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 108, 22));
+            vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 107, 23));
+            vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 106, 24));
+
+            vec.emplace_back(TLogoBlobID(42, 1, 1, 0, 100, 15));
+            vec.emplace_back(TLogoBlobID(42, 1, 2, 0, 100, 19));
+            vec.emplace_back(TLogoBlobID(42, 1, 3, 0, 100, 16));
+            vec.emplace_back(TLogoBlobID(42, 1, 1, 3, 100, 17));
+            vec.emplace_back(TLogoBlobID(42, 1, 2, 3, 100, 18));
+            vec.emplace_back(TLogoBlobID(42, 2, 0, 0, 100, 20));
+
             Sort(vec.begin(), vec.end());
- 
-            TStringStream str; 
-            for (const auto &x : vec) { 
-                str << x.ToString() << "\n"; 
-            } 
- 
-            // sorted by: TabletId, Channel, Generation, Step, Cookie, BlobSize 
+
+            TStringStream str;
+            for (const auto &x : vec) {
+                str << x.ToString() << "\n";
+            }
+
+            // sorted by: TabletId, Channel, Generation, Step, Cookie, BlobSize
             TString result =
-            "[42:1:1:0:15:100:0]\n" 
-            "[42:1:2:0:19:100:0]\n" 
-            "[42:1:3:0:16:100:0]\n" 
-            "[42:2:0:0:20:100:0]\n" 
-            "[42:1:1:3:17:100:0]\n" 
-            "[42:1:2:3:18:100:0]\n" 
-            "[66:1:0:0:20:110:0]\n" 
-            "[66:1:0:0:21:109:0]\n" 
-            "[66:1:0:0:22:108:0]\n" 
-            "[66:1:0:0:23:107:0]\n" 
-            "[66:1:0:0:24:106:0]\n"; 
- 
-            UNIT_ASSERT_STRINGS_EQUAL(result, str.Str()); 
-        } 
-    } 
- 
+            "[42:1:1:0:15:100:0]\n"
+            "[42:1:2:0:19:100:0]\n"
+            "[42:1:3:0:16:100:0]\n"
+            "[42:2:0:0:20:100:0]\n"
+            "[42:1:1:3:17:100:0]\n"
+            "[42:1:2:3:18:100:0]\n"
+            "[66:1:0:0:20:110:0]\n"
+            "[66:1:0:0:21:109:0]\n"
+            "[66:1:0:0:22:108:0]\n"
+            "[66:1:0:0:23:107:0]\n"
+            "[66:1:0:0:24:106:0]\n";
+
+            UNIT_ASSERT_STRINGS_EQUAL(result, str.Str());
+        }
+    }
+
     Y_UNIT_TEST_SUITE(TLogoBlobIdHashTest) {
         Y_UNIT_TEST(SimpleTest) {
     //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie
@@ -199,4 +199,4 @@ namespace NKikimr {
 
     }
 
-} // NKikimr 
+} // NKikimr

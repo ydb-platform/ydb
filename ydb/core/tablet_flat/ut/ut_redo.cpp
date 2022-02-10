@@ -1,5 +1,5 @@
-#include <ydb/core/tablet_flat/test/libs/table/test_dbase.h> 
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_dbase.h>
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/resource/resource.h>
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(Redo) {
             } else if (3 == serial) {
                 me.Iter(1).Has(foo).Has(bar);
             } else if (4 == serial) {
-                /* Table flush (snapshot) event received with scheme updates */ 
+                /* Table flush (snapshot) event received with scheme updates */
 
                 UNIT_ASSERT(me->Subset(1, TEpoch::Max(), { }, { })->Head == TEpoch::FromIndex(2));
 

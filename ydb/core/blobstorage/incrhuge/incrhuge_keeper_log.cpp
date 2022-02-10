@@ -1,9 +1,9 @@
 #include "incrhuge_keeper_log.h"
 #include "incrhuge_keeper.h"
-#include <ydb/core/protos/blobstorage_vdisk_internal.pb.h> 
+#include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 
 #include <google/protobuf/text_format.h>
-#include <util/generic/variant.h> 
+#include <util/generic/variant.h>
 
 namespace NKikimr {
     namespace NIncrHuge {
@@ -440,10 +440,10 @@ namespace NKikimr {
             commit.FirstLsnToKeep = GetFirstLsnToKeep(item.Entrypoint ? EEntrypointType::Chunks : EEntrypointType::None);
 
             // issue log record
-            TLsnSeg seg(item.Lsn, item.Lsn); 
+            TLsnSeg seg(item.Lsn, item.Lsn);
             ctx.Send(Keeper.State.Settings.PDiskActorId, new NPDisk::TEvLog(Keeper.State.PDiskParams->Owner,
                     Keeper.State.PDiskParams->OwnerRound, TLogSignature::SignatureIncrHugeChunks, commit, data,
-                    seg, Keeper.RegisterYardCallback(MakeCallback(std::move(callback))))); 
+                    seg, Keeper.RegisterYardCallback(MakeCallback(std::move(callback)))));
 
             if (item.Entrypoint) {
                 ProcessedChunksWithoutEntrypoint = 0;
@@ -658,10 +658,10 @@ namespace NKikimr {
             commit.FirstLsnToKeep = GetFirstLsnToKeep(item.Entrypoint ? EEntrypointType::Deletes : EEntrypointType::None);
 
             // send record to logger
-            TLsnSeg seg(item.Lsn, item.Lsn); 
+            TLsnSeg seg(item.Lsn, item.Lsn);
             ctx.Send(Keeper.State.Settings.PDiskActorId, new NPDisk::TEvLog(Keeper.State.PDiskParams->Owner,
                     Keeper.State.PDiskParams->OwnerRound, TLogSignature::SignatureIncrHugeDeletes, commit, data,
-                    seg, Keeper.RegisterYardCallback(MakeCallback(std::move(callback))))); 
+                    seg, Keeper.RegisterYardCallback(MakeCallback(std::move(callback)))));
         }
 
         void TLogger::ApplyLogDeleteItem(TDeleteQueueItem& item, NKikimrProto::EReplyStatus status, IEventBase *msg,

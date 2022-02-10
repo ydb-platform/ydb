@@ -1,6 +1,6 @@
 #include "url_query.h"
 
-#include <ydb/library/yql/public/udf/udf_type_printer.h> 
+#include <ydb/library/yql/public/udf/udf_type_printer.h>
 
 #include <util/string/split.h>
 

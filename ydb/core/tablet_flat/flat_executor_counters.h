@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/tablet/tablet_counters.h> 
+#include <ydb/core/tablet/tablet_counters.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -9,12 +9,12 @@ namespace NTabletFlatExecutor {
     XX(DB_TX_IN_FLY, "ExecutorTxInFly") \
     XX(LOG_REDO_COUNT, "LogRedoItems") \
     XX(LOG_REDO_MEMORY, "LogRedoMemory") \
-    XX(LOG_REDO_SOLIDS, "LogRedoLargeGlobIds") \ 
+    XX(LOG_REDO_SOLIDS, "LogRedoLargeGlobIds") \
     XX(LOG_ALTER_BYTES, "LogAlterBytes") \
     XX(LOG_SNAP_BYTES, "LogSnapBytes") \
     XX(LOG_RIVER_LEVEL, "LogRiverLevel") \
-    XX(DB_WARM_OPS, "DbMemTableOps") \ 
-    XX(DB_WARM_BYTES, "DbMemTableBytes") \ 
+    XX(DB_WARM_OPS, "DbMemTableOps") \
+    XX(DB_WARM_BYTES, "DbMemTableBytes") \
     XX(DB_ROWS_ERASE, "DbRowsErase") \
     XX(DB_ROWS_TOTAL, "DbRowsTotal") \
     XX(DB_META_BYTES, "DbMetaBytes") \
@@ -23,8 +23,8 @@ namespace NTabletFlatExecutor {
     XX(DB_BYKEY_BYTES, "DbByKeyBytes") \
     XX(DB_PLAIN_BYTES, "DbPlainBytes") \
     XX(DB_CODED_BYTES, "DbCodedBytes") \
-    XX(DB_ELOBS_BYTES, "DbELargeObjsBytes") \ 
-    XX(DB_ELOBS_ITEMS, "DbELargeObjsItems") \ 
+    XX(DB_ELOBS_BYTES, "DbELargeObjsBytes") \
+    XX(DB_ELOBS_ITEMS, "DbELargeObjsItems") \
     XX(DB_OUTER_BYTES, "DbOuterBytes") \
     XX(DB_OUTER_ITEMS, "DbOuterItems") \
     XX(DB_DATA_BYTES, "DbDataBytes") \
@@ -35,8 +35,8 @@ namespace NTabletFlatExecutor {
     XX(DB_UNIQUE_ROWS_TOTAL, "DbUniqueRowsTotal") \
     XX(DB_UNIQUE_PLAIN_BYTES, "DbUniquePlainBytes") \
     XX(DB_UNIQUE_CODED_BYTES, "DbUniqueCodedBytes") \
-    XX(DB_UNIQUE_ELOBS_BYTES, "DbUniqueELargeObjsBytes") \ 
-    XX(DB_UNIQUE_ELOBS_ITEMS, "DbUniqueELargeObjsItems") \ 
+    XX(DB_UNIQUE_ELOBS_BYTES, "DbUniqueELargeObjsBytes") \
+    XX(DB_UNIQUE_ELOBS_ITEMS, "DbUniqueELargeObjsItems") \
     XX(DB_UNIQUE_OUTER_BYTES, "DbUniqueOuterBytes") \
     XX(DB_UNIQUE_OUTER_ITEMS, "DbUniqueOuterItems") \
     XX(DB_UNIQUE_KEEP_BYTES, "DbUniqueKeepBytes") \
@@ -46,7 +46,7 @@ namespace NTabletFlatExecutor {
     XX(GC_BARRIERS_ACTIVE, "GcBarriersActive") \
     XX(CACHE_FRESH_SIZE, "CacheFreshSize") \
     XX(CACHE_STAGING_SIZE, "CacheStagingSize") \
-    XX(CACHE_WARM_SIZE, "CacheMemTableSize") \ 
+    XX(CACHE_WARM_SIZE, "CacheMemTableSize") \
     XX(CACHE_PINNED_SET, "CachePinned") \
     XX(CACHE_PINNED_LOAD, "CachePinnedLoad") \
     XX(CACHE_TOTAL_COLLECTIONS, "CacheTotalCollections") \
@@ -76,8 +76,8 @@ namespace NTabletFlatExecutor {
     XX(COMP_BYTES_READ, "CompactionBytesRead") \
     XX(COMP_BLOBS_READ, "CompactionBlobsRead") \
     XX(DB_ANNEX_ITEMS_GROW, "DbAnnexItemsGrow") \
-    XX(DB_ELOBS_ITEMS_GROW, "DbELargeObjsItemsGrow") \ 
-    XX(DB_ELOBS_ITEMS_GONE, "DbELargeObjsItemsGone") \ 
+    XX(DB_ELOBS_ITEMS_GROW, "DbELargeObjsItemsGrow") \
+    XX(DB_ELOBS_ITEMS_GONE, "DbELargeObjsItemsGone") \
     XX(DB_REDO_WRITTEN_BYTES, "DbRedoWrittenBytes") \
     XX(DB_ANNEX_WRITTEN_BYTES, "DbAnnexWrittenBytes") \
     XX(TX_COUNT_ALL, "Tx(all)") \

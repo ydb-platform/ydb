@@ -2,7 +2,7 @@
 
 #include "flat_row_eggs.h"
 #include "flat_row_nulls.h"
-#include <ydb/core/scheme/scheme_tablecell.h> 
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <util/generic/xrange.h>
 
 namespace NKikimr {

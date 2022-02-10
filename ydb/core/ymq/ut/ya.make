@@ -1,5 +1,5 @@
 OWNER(
-    g:kikimr 
+    g:kikimr
     g:sqs
 )
 
@@ -11,9 +11,9 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/ymq/base 
-    ydb/core/ymq/http 
-    ydb/library/http_proxy/error 
+    ydb/core/ymq/base
+    ydb/core/ymq/http
+    ydb/library/http_proxy/error
 )
 
 END()

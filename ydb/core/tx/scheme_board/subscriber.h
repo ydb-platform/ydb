@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/base/pathid.h> 
+#include <ydb/core/base/pathid.h>
 
 #include <util/generic/string.h>
 

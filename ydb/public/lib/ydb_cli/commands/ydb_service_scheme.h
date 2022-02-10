@@ -3,11 +3,11 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h> 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
-#include <ydb/public/lib/ydb_cli/common/format.h> 
-#include <ydb/public/lib/ydb_cli/common/pretty_table.h> 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h> 
+#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
 namespace NYdb {
 namespace NConsoleClient {

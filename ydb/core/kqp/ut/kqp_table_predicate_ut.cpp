@@ -1,7 +1,7 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h> 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h> 
+#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/ast/yql_expr.h>

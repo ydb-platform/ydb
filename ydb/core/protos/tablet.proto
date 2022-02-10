@@ -1,5 +1,5 @@
-import "ydb/core/protos/base.proto"; 
-import "ydb/core/protos/tablet_counters.proto"; 
+import "ydb/core/protos/base.proto";
+import "ydb/core/protos/tablet_counters.proto";
 
 package NKikimrTabletBase;
 option java_package = "ru.yandex.kikimr.proto";

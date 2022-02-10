@@ -1,9 +1,9 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/grpc/server/grpc_server.h>
 
-namespace NKikimr { 
- 
+namespace NKikimr {
+
 // Parameterize YDB binary with grpc services registry
 class TGrpcServiceFactory {
 private:
@@ -79,4 +79,4 @@ public:
     }
 };
 
-} // NKikimr 
+} // NKikimr

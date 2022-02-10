@@ -6,11 +6,11 @@
 #include "services.h"
 
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
-#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h> 
-#include <ydb/core/mind/tenant_pool.h> 
-#include <ydb/core/protos/cms.pb.h> 
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+#include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/protos/cms.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>

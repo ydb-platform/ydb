@@ -4,7 +4,7 @@
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
@@ -512,7 +512,7 @@ TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) {
         }
         if (!IsTypeSupportedInMergeCn(colType->Cast<TDataExprType>())) {
             ctx.AddError(TIssue(ctx.GetPosition(column.Pos()),
-                TStringBuilder() << "Unsupported type " << colType->Cast<TDataExprType>()->GetName() 
+                TStringBuilder() << "Unsupported type " << colType->Cast<TDataExprType>()->GetName()
                 << " for column '" << column.Column().StringValue() << "' in Merge connection."));
             return TStatus::Error;
         }
@@ -908,7 +908,7 @@ bool IsMergeConnectionApplicable(const TVector<const TTypeAnnotationNode*>& sort
         if (sortKeyType->GetKind() == ETypeAnnotationKind::Optional) {
             sortKeyType = sortKeyType->Cast<TOptionalExprType>()->GetItemType();
         }
-        if (sortKeyType->GetKind() != ETypeAnnotationKind::Data 
+        if (sortKeyType->GetKind() != ETypeAnnotationKind::Data
             || !IsTypeSupportedInMergeCn(sortKeyType->Cast<TDataExprType>())) {
             return false;
         }

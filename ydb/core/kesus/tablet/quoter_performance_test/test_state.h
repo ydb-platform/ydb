@@ -1,6 +1,6 @@
 #pragma once
 #include "options.h"
-#include <ydb/core/kesus/tablet/ut_helpers.h> 
+#include <ydb/core/kesus/tablet/ut_helpers.h>
 
 #include <util/generic/ptr.h>
 #include <util/system/mutex.h>

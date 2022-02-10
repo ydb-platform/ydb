@@ -2,10 +2,10 @@
 
 #include "endpoint_pool.h"
 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h>
 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_client/client.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/core_facility/core_facility.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_client/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/core_facility/core_facility.h>
 
 namespace NYdb {
 

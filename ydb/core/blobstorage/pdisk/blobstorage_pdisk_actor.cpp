@@ -1,4 +1,4 @@
-#include <ydb/library/pdisk_io/buffers.h> 
+#include <ydb/library/pdisk_io/buffers.h>
 #include "blobstorage_pdisk_completion_impl.h"
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
@@ -13,17 +13,17 @@
 #include "blobstorage_pdisk_util_cputimer.h"
 #include "blobstorage_pdisk_writer.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/blobstorage/base/html.h> 
-#include <ydb/core/blobstorage/base/wilson_events.h> 
-#include <ydb/core/blobstorage/base/blobstorage_events.h> 
-#include <ydb/core/blobstorage/crypto/secured_block.h> 
-#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h> 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
-#include <ydb/core/protos/base.pb.h> 
-#include <ydb/core/protos/services.pb.h> 
-#include <ydb/library/schlab/mon/mon.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/blobstorage/base/html.h>
+#include <ydb/core/blobstorage/base/wilson_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/crypto/secured_block.h>
+#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/protos/base.pb.h>
+#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/schlab/mon/mon.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -735,7 +735,7 @@ public:
     }
 
     void Handle(NPDisk::TEvYardControl::TPtr &ev) {
-        const NPDisk::TEvYardControl &evControl = *ev->Get(); 
+        const NPDisk::TEvYardControl &evControl = *ev->Get();
         switch (evControl.Action) {
         case TEvYardControl::Brake:
             InitError("Received TEvYardControl::Brake");
@@ -755,9 +755,9 @@ public:
             break;
         default:
             auto* request = PDisk->ReqCreator.CreateFromEv<TYardControl>(evControl, ev->Sender);
-            PDisk->InputRequest(request); 
+            PDisk->InputRequest(request);
             break;
-        } 
+        }
     }
 
     void Handle(NPDisk::TEvAskForCutLog::TPtr &ev) {

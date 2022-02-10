@@ -1,5 +1,5 @@
 OWNER(
-    g:kikimr 
+    g:kikimr
     g:sqs
 )
 
@@ -11,8 +11,8 @@ SRCS(
 
 PEERDIR(
     library/cpp/getopt
-    ydb/core/ymq/client/cpp 
-    ydb/core/ymq/proto 
+    ydb/core/ymq/client/cpp
+    ydb/core/ymq/proto
 )
 
 END()

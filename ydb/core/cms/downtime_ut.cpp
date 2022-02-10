@@ -4,7 +4,7 @@
 #include "downtime.h"
 #include "ut_helpers.h"
 
-#include <ydb/core/blobstorage/base/blobstorage_events.h> 
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -1,7 +1,7 @@
 OWNER(g:kikimr)
 
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd") 
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(USE_IN_MEMORY_PDISKS=true)
 TEST_SRCS(
     test_base.py
@@ -14,7 +14,7 @@ TIMEOUT(600)
 SIZE(MEDIUM)
 
 DEPENDS(
-    ydb/apps/ydbd 
+    ydb/apps/ydbd
 )
 
 DATA (

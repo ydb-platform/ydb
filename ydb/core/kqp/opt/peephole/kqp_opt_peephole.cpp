@@ -1,15 +1,15 @@
 #include "kqp_opt_peephole_rules.h"
 
-#include <ydb/core/kqp/common/kqp_yql.h> 
-#include <ydb/core/kqp/opt/kqp_opt_impl.h> 
-#include <ydb/library/naming_conventions/naming_conventions.h> 
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/library/naming_conventions/naming_conventions.h>
 
 #include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h> 
+#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 
 #include <util/generic/size_literals.h>

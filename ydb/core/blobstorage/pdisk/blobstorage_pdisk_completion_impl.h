@@ -6,7 +6,7 @@
 #include "blobstorage_pdisk_requestimpl.h"
 #include "blobstorage_pdisk_util_signal_event.h"
 
-#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h> 
+#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 

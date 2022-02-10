@@ -1,5 +1,5 @@
 #include "group_stat_aggregator.h"
-#include <ydb/core/base/group_stat.h> 
+#include <ydb/core/base/group_stat.h>
 
 using namespace NKikimr;
 using namespace NActors;

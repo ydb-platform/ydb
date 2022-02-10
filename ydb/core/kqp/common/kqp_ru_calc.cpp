@@ -1,10 +1,10 @@
 #include "kqp_ru_calc.h"
 
-#include <ydb/core/protos/kqp_stats.pb.h> 
+#include <ydb/core/protos/kqp_stats.pb.h>
 
-#include <ydb/core/kqp/executer/kqp_executer_stats.h> 
+#include <ydb/core/kqp/executer/kqp_executer_stats.h>
 
-#include <ydb/core/kqp/kqp.h> 
+#include <ydb/core/kqp/kqp.h>
 
 #include <util/generic/size_literals.h>
 

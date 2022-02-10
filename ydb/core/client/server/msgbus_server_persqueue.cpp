@@ -5,9 +5,9 @@
 #include "msgbus_server_pq_metarequest.h"
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <ydb/core/persqueue/events/global.h> 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <util/generic/is_in.h>
 
@@ -240,7 +240,7 @@ void TPersQueueBaseRequestProcessor::Handle(TEvPersQueue::TEvResponse::TPtr& ev,
 
 void TPersQueueBaseRequestProcessor::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
     Y_VERIFY(ListNodes);
-    NodesInfo.reset(new TNodesInfo(ev->Release())); 
+    NodesInfo.reset(new TNodesInfo(ev->Release()));
     if (ReadyToCreateChildren()) {
         if (CreateChildren(ctx)) {
             return;
@@ -260,12 +260,12 @@ void TPersQueueBaseRequestProcessor::HandleTimeout(const TActorContext& ctx) {
 }
 
 
-void TPersQueueBaseRequestProcessor::GetTopicsListOrThrow(const ::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& requests, THashMap<TString, std::shared_ptr<THashSet<ui64>>>& partitionsToRequest) { 
+void TPersQueueBaseRequestProcessor::GetTopicsListOrThrow(const ::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& requests, THashMap<TString, std::shared_ptr<THashSet<ui64>>>& partitionsToRequest) {
     for (const auto& topicRequest : requests) {
         if (topicRequest.GetTopic().empty()) {
             throw std::runtime_error("TopicRequest must have Topic field.");
         }
-        std::shared_ptr<THashSet<ui64>> partitionsToRequestOnTopic(new THashSet<ui64>()); // nonconst 
+        std::shared_ptr<THashSet<ui64>> partitionsToRequestOnTopic(new THashSet<ui64>()); // nonconst
         partitionsToRequest[topicRequest.GetTopic()] = partitionsToRequestOnTopic;
         for (ui32 partition : topicRequest.GetPartition()) {
             const bool inserted = partitionsToRequestOnTopic->insert(partition).second;
@@ -317,7 +317,7 @@ void TPersQueueBaseRequestProcessor::Handle(
 }
 
 bool TPersQueueBaseRequestProcessor::ReadyToCreateChildren() const {
-    return SchemeCacheResponse && (!ListNodes || NodesInfo.get() != nullptr); 
+    return SchemeCacheResponse && (!ListNodes || NodesInfo.get() != nullptr);
 }
 
 bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {

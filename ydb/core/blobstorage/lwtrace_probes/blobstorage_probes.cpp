@@ -1,6 +1,6 @@
 #include "blobstorage_probes.h"
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_request_id.h> 
-#include <ydb/core/base/blobstorage.h> 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_request_id.h>
+#include <ydb/core/base/blobstorage.h>
 
 LWTRACE_DEFINE_PROVIDER(BLOBSTORAGE_PROVIDER);
 LWTRACE_DEFINE_PROVIDER(FAIL_INJECTION_PROVIDER);

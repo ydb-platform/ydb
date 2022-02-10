@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h> 
-#include <ydb/core/kqp/provider/yql_kikimr_provider.h> 
+#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
@@ -9,7 +9,7 @@
 namespace NYql {
 namespace NNodes {
 
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h> 
+#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h>
 
 class TKiDataSource : public NGenerated::TKiDataSourceStub<TExprBase, TCallable, TCoAtom> {
 public:
@@ -68,7 +68,7 @@ public:
         bool withVirtualColumns = false) const;
 };
 
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h> 
+#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h>
 
 template<typename TParent>
 class TNodeBuilder<TParent, TKiColumnRangeTuple> : public NGenerated::TKiColumnRangeTupleBuilder<TParent>

@@ -1,6 +1,6 @@
 #include "statestorage_impl.h"
 #include "tabletid.h"
-#include <ydb/core/protos/services.pb.h> 
+#include <ydb/core/protos/services.pb.h>
 #include <library/cpp/actors/core/interconnect.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>

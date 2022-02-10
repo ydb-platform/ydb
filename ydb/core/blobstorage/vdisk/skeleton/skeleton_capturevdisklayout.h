@@ -13,7 +13,7 @@ namespace NKikimr {
             : Ev(ev)
             , Snap(std::move(snap))
         {}
- 
+
         void Bootstrap() {
             auto res = std::make_unique<TRes>();
 

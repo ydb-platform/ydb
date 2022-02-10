@@ -1,7 +1,7 @@
-#include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h> 
+#include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
 
-#include <ydb/public/api/grpc/ydb_coordination_v1.grpc.pb.h> 
-#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h> 
+#include <ydb/public/api/grpc/ydb_coordination_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 
 #include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>

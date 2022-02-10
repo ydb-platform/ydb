@@ -45,7 +45,7 @@ namespace NCompGen {
             ui64 compactionId,
             THolder<TCompactionParams> params,
             THolder<TCompactionResult> result) override;
-        void PartMerged(TPartView part, ui32 level) override; 
+        void PartMerged(TPartView part, ui32 level) override;
         void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) override;
         TCompactionChanges PartsRemoved(TArrayRef<const TLogoBlobID> parts) override;
         TCompactionState SnapshotState() override;
@@ -81,30 +81,30 @@ namespace NCompGen {
 
             TStats() = default;
 
-            explicit TStats(const TPartView& partView) { 
-                for (const auto& slice : *partView.Slices) { 
+            explicit TStats(const TPartView& partView) {
+                for (const auto& slice : *partView.Slices) {
                     // N.B. very old slice data may have Max<ui64>() rows
                     // Make sure TotalRows never overflows in such rare cases
                     ui64 delta = Min(slice.Rows(), Max<ui64>() - TotalRows);
                     TotalRows += delta;
                 }
 
-                ui64 partRows = partView->Stat.Rows; 
-                ui64 partDrops = partView->Stat.Drops; 
+                ui64 partRows = partView->Stat.Rows;
+                ui64 partDrops = partView->Stat.Drops;
 
                 // Assume worst case: every drop has a hidden row that won't go away
-                partDrops -= Min(partDrops, partView->Stat.HiddenRows); 
+                partDrops -= Min(partDrops, partView->Stat.HiddenRows);
 
                 if (TotalRows >= partRows) {
                     // N.B. this also handles Max<ui64>() if it ever happens
                     TotalRows = partRows;
                     DroppedRows = partDrops;
-                    BackingSize = partView->BackingSize(); 
+                    BackingSize = partView->BackingSize();
                 } else if (TotalRows > 0) {
                     // Calculate proportional dropped rows based on used rows
                     DroppedRows = (partDrops * TotalRows + partRows - 1) / partRows;
                     // Calculate proportional data size based on used rows
-                    BackingSize = (partView->BackingSize() * TotalRows + partRows - 1) / partRows; 
+                    BackingSize = (partView->BackingSize() * TotalRows + partRows - 1) / partRows;
                 }
             }
 
@@ -147,14 +147,14 @@ namespace NCompGen {
         };
 
         struct TPartInfo {
-            TPartInfo(TPartView partView) 
-                : PartView(std::move(partView)) 
-                , Label(PartView->Label) 
-                , Epoch(PartView->Epoch) 
-                , Stats(PartView) 
+            TPartInfo(TPartView partView)
+                : PartView(std::move(partView))
+                , Label(PartView->Label)
+                , Epoch(PartView->Epoch)
+                , Stats(PartView)
             { }
 
-            const TPartView PartView; 
+            const TPartView PartView;
             const TLogoBlobID Label;
             const TEpoch Epoch;
             const TStats Stats;

@@ -1,6 +1,6 @@
 #pragma once
 #include <util/string/vector.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 namespace NKikimr {
 namespace NViewer {

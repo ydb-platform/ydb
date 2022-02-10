@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/pqconfig.pb.h> 
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/datetime/base.h>
 

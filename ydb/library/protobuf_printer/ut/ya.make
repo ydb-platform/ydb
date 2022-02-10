@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/protobuf_printer) 
+UNITTEST_FOR(ydb/library/protobuf_printer)
 
 OWNER(g:kikimr)
 

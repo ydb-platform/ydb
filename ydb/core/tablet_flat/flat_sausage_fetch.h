@@ -2,15 +2,15 @@
 
 #include "flat_sausage_gut.h"
 
-#include <ydb/core/base/shared_data.h> 
+#include <ydb/core/base/shared_data.h>
 
 namespace NKikimr {
-namespace NPageCollection { 
+namespace NPageCollection {
 
     struct TFetch {
         TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<ui32> pages)
             : Cookie(cookie)
-            , PageCollection(std::move(pageCollection)) 
+            , PageCollection(std::move(pageCollection))
             , Pages(std::move(pages))
         {
 
@@ -20,7 +20,7 @@ namespace NPageCollection {
         {
             out
                 << "Fetch{" << Pages.size() << " pages"
-                << " " << PageCollection->Label() << "}"; 
+                << " " << PageCollection->Label() << "}";
         }
 
         const ui64 Cookie = Max<ui64>();
@@ -29,10 +29,10 @@ namespace NPageCollection {
         TVector<ui32> Pages;
     };
 
-    struct TLoadedPage { 
-        TLoadedPage() = default; 
+    struct TLoadedPage {
+        TLoadedPage() = default;
 
-        TLoadedPage(ui32 page, TSharedData data) 
+        TLoadedPage(ui32 page, TSharedData data)
             : PageId(page)
             , Data(std::move(data))
         {

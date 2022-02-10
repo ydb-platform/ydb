@@ -3,7 +3,7 @@
 #include "common.h"
 #include "persqueue_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h> 
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 
 #include <util/generic/buffer.h>
 

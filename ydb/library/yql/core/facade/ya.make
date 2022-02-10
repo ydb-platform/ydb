@@ -14,11 +14,11 @@ PEERDIR(
     library/cpp/time_provider
     library/cpp/yson
     library/cpp/yson/node
-    ydb/library/yql/core/extract_predicate 
-    ydb/library/yql/core/file_storage 
-    ydb/library/yql/core/services 
-    ydb/library/yql/sql 
-    ydb/library/yql/utils/log 
+    ydb/library/yql/core/extract_predicate
+    ydb/library/yql/core/file_storage
+    ydb/library/yql/core/services
+    ydb/library/yql/sql
+    ydb/library/yql/utils/log
     ydb/library/yql/core
     ydb/library/yql/core/type_ann
     ydb/library/yql/providers/common/config
@@ -29,6 +29,6 @@ PEERDIR(
     ydb/library/yql/providers/result/provider
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 END()

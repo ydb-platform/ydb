@@ -5,23 +5,23 @@
 #include "flat_sausage_gut.h"
 
 namespace NKikimr {
-namespace NPageCollection { 
+namespace NPageCollection {
 
-    class TPageCollection: public IPageCollection { 
+    class TPageCollection: public IPageCollection {
     public:
-        TPageCollection() = delete; 
+        TPageCollection() = delete;
 
-        TPageCollection(TLargeGlobId largeGlobId, TSharedData raw) 
-            : LargeGlobId(largeGlobId) 
-            , Meta(std::move(raw), LargeGlobId.Group) 
+        TPageCollection(TLargeGlobId largeGlobId, TSharedData raw)
+            : LargeGlobId(largeGlobId)
+            , Meta(std::move(raw), LargeGlobId.Group)
         {
-            if (!Meta.Raw || LargeGlobId.Bytes != Meta.Raw.size() || LargeGlobId.Group == TLargeGlobId::InvalidGroup) 
-                Y_FAIL("Invalid TLargeGlobId of page collection meta blob"); 
+            if (!Meta.Raw || LargeGlobId.Bytes != Meta.Raw.size() || LargeGlobId.Group == TLargeGlobId::InvalidGroup)
+                Y_FAIL("Invalid TLargeGlobId of page collection meta blob");
         }
 
         const TLogoBlobID& Label() const noexcept override
         {
-            return LargeGlobId.Lead; 
+            return LargeGlobId.Lead;
         }
 
         ui32 Total() const noexcept override
@@ -67,7 +67,7 @@ namespace NPageCollection {
             }
         }
 
-        const TLargeGlobId LargeGlobId; 
+        const TLargeGlobId LargeGlobId;
         const TMeta Meta;
     };
 }

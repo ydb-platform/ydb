@@ -1,24 +1,24 @@
-UNITTEST_FOR(ydb/core/blobstorage/vdisk/repl) 
- 
-OWNER(g:kikimr) 
- 
-FORK_SUBTESTS() 
- 
+UNITTEST_FOR(ydb/core/blobstorage/vdisk/repl)
+
+OWNER(g:kikimr)
+
+FORK_SUBTESTS()
+
 TIMEOUT(600)
- 
+
 SIZE(MEDIUM)
- 
-PEERDIR( 
+
+PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
-    ydb/core/base 
-    ydb/core/blobstorage 
-    ydb/core/erasure 
-) 
- 
-SRCS( 
+    ydb/core/base
+    ydb/core/blobstorage
+    ydb/core/erasure
+)
+
+SRCS(
     blobstorage_hullreplwritesst_ut.cpp
-    blobstorage_replrecoverymachine_ut.cpp 
-) 
- 
-END() 
+    blobstorage_replrecoverymachine_ut.cpp
+)
+
+END()

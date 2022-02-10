@@ -1,6 +1,6 @@
-#include <ydb/core/driver_lib/cli_config_base/config_base.h> 
+#include <ydb/core/driver_lib/cli_config_base/config_base.h>
 #include "cli_cmd_config.h"
-#include <ydb/public/lib/deprecated/client/msgbus_client.h> 
+#include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <util/system/env.h>
 
 namespace NKikimr {

@@ -45,7 +45,7 @@ public:
             Counters, BSProxyCtx, ClientId, "test", 0, true, TDuration::Seconds(60), FlowRecord,
             NMonitoring::TCountableBase::EVisibility::Public));
         IssuePutRequest();
-        Become(&TThis::StateFunc); 
+        Become(&TThis::StateFunc);
     }
 
     void IssuePutRequest() {

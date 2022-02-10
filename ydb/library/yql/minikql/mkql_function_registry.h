@@ -2,9 +2,9 @@
 
 #include "mkql_function_metadata.h"
 
-#include <ydb/library/yql/public/udf/udf_counter.h> 
-#include <ydb/library/yql/public/udf/udf_registrator.h> 
-#include <ydb/library/yql/public/udf/udf_type_builder.h> 
+#include <ydb/library/yql/public/udf/udf_counter.h>
+#include <ydb/library/yql/public/udf/udf_registrator.h>
+#include <ydb/library/yql/public/udf/udf_type_builder.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
@@ -146,5 +146,5 @@ const TStringBuf StaticModulePrefix(TStringBuf("<static>::"));
 
 void FillStaticModules(IMutableFunctionRegistry& registry);
 
-} // namespace NMiniKQL 
+} // namespace NMiniKQL
 } // namespace NKikimr

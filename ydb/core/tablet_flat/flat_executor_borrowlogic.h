@@ -4,15 +4,15 @@
 #include "flat_exec_commit.h"
 #include "flat_executor_tx_env.h"
 #include "flat_sausage_slicer.h"
-#include <ydb/core/tablet_flat/flat_executor.pb.h> 
+#include <ydb/core/tablet_flat/flat_executor.pb.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
 class TExecutorBorrowLogic {
     const ui64 SelfTabletId;
-    TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies; 
-    NPageCollection::TSlicer Slicer; 
+    TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
+    NPageCollection::TSlicer Slicer;
     ui64 KeepBytes = 0;
 
     struct TBorrowedPartInfo {
@@ -78,7 +78,7 @@ class TExecutorBorrowLogic {
     bool CheckLoanCompletion(const TLogoBlobID &metaId, TBorrowedPartInfo &storedInfo, ui32 step);
 
 public:
-    TExecutorBorrowLogic(TAutoPtr<NPageCollection::TSteppedCookieAllocator>); 
+    TExecutorBorrowLogic(TAutoPtr<NPageCollection::TSteppedCookieAllocator>);
 
     TTabletStorageInfo* StorageInfoFor(const TLogoBlobID &blobId) {
         auto it = ReferencedStorageInfos.find(blobId.TabletID());
@@ -101,7 +101,7 @@ public:
     // called on loaner at moment of attaching part
     void LoanBundle(
         const TLogoBlobID &bundleId,
-        TPageCollectionTxEnv::TLoanBundle &loaned, 
+        TPageCollectionTxEnv::TLoanBundle &loaned,
         TLogCommit *commit);
 
     // called on loaner at moment of attaching part
@@ -113,7 +113,7 @@ public:
     // called on lender
     void UpdateBorrow(
         const TLogoBlobID &bundleId,
-        TPageCollectionTxEnv::TBorrowUpdate &borrowUpdate, 
+        TPageCollectionTxEnv::TBorrowUpdate &borrowUpdate,
         TLogCommit *commit);
 
     // confirmation for loaner

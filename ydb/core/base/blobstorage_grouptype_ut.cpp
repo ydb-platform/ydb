@@ -1,4 +1,4 @@
-#include <ydb/core/blobstorage/defs.h> 
+#include <ydb/core/blobstorage/defs.h>
 
 #include "blobstorage_grouptype.h"
 
@@ -8,12 +8,12 @@
 
 namespace NKikimr {
 
-#define STR Cnull 
- 
+#define STR Cnull
+
 Y_UNIT_TEST_SUITE(TBlobStorageGroupTypeTest) {
 
     Y_UNIT_TEST(TestCorrectLayout) {
-        TBlobStorageGroupType groupType(TBlobStorageGroupType::Erasure3Plus1Stripe); 
+        TBlobStorageGroupType groupType(TBlobStorageGroupType::Erasure3Plus1Stripe);
 
         ui32 blobSubgroupSize = groupType.BlobSubgroupSize();
         ui32 totalPartCount = groupType.TotalPartCount();
@@ -125,21 +125,21 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupTypeTest) {
     }
 
     Y_UNIT_TEST(OutputInfoAboutErasureSpecies) {
-        for (int i = TErasureType::ErasureNone; i < TErasureType::ErasureSpeciesCount; i++) { 
-            auto es = (TErasureType::EErasureSpecies)i; 
-            TBlobStorageGroupType groupType(es); 
-            STR << groupType.ToString() << ":\n"; 
-            STR << "  ParityParts:                " << groupType.ParityParts() << "\n"; 
-            STR << "  DataParts:                  " << groupType.DataParts() << "\n"; 
-            STR << "  TotalPartCount:             " << groupType.TotalPartCount() << "\n"; 
-            STR << "  MinimalRestorablePartCount: " << groupType.MinimalRestorablePartCount() << "\n"; 
-            STR << "  MinimalBlockSize:           " << groupType.MinimalBlockSize() << "\n"; 
-            STR << "  Prime:                      " << groupType.Prime() << "\n"; 
-            STR << "  BlobSubgroupSize:           " << groupType.BlobSubgroupSize() << "\n"; 
-            STR << "  Handoff:                    " << groupType.Handoff() << "\n"; 
-        } 
-    } 
- 
+        for (int i = TErasureType::ErasureNone; i < TErasureType::ErasureSpeciesCount; i++) {
+            auto es = (TErasureType::EErasureSpecies)i;
+            TBlobStorageGroupType groupType(es);
+            STR << groupType.ToString() << ":\n";
+            STR << "  ParityParts:                " << groupType.ParityParts() << "\n";
+            STR << "  DataParts:                  " << groupType.DataParts() << "\n";
+            STR << "  TotalPartCount:             " << groupType.TotalPartCount() << "\n";
+            STR << "  MinimalRestorablePartCount: " << groupType.MinimalRestorablePartCount() << "\n";
+            STR << "  MinimalBlockSize:           " << groupType.MinimalBlockSize() << "\n";
+            STR << "  Prime:                      " << groupType.Prime() << "\n";
+            STR << "  BlobSubgroupSize:           " << groupType.BlobSubgroupSize() << "\n";
+            STR << "  Handoff:                    " << groupType.Handoff() << "\n";
+        }
+    }
+
 }
 
 } // namespace NKikimr

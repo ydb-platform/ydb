@@ -1,16 +1,16 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h> 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h> 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h> 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h> 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h> 
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h> 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h> 
-#include <ydb/public/lib/yson_value/ydb_yson_value.h> 
+#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -2613,7 +2613,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL(op.Ready(), true);
             UNIT_ASSERT_VALUES_EQUAL(op.Status().GetStatus(), EStatus::SUCCESS);
             auto meta = op.Metadata();
-            UNIT_ASSERT_VALUES_EQUAL(meta.State, NYdb::NTable::EBuildIndexState::Done); 
+            UNIT_ASSERT_VALUES_EQUAL(meta.State, NYdb::NTable::EBuildIndexState::Done);
             UNIT_ASSERT_DOUBLES_EQUAL(meta.Progress, 100, 0.001);
 
             UNIT_ASSERT_VALUES_EQUAL(meta.Path, "/Root/Test");
@@ -2624,7 +2624,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
             auto result2 = operationClient.Get<NYdb::NTable::TBuildIndexOperation>(result.GetList()[0].Id()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result2.Status().GetStatus(), EStatus::SUCCESS, result2.Status().GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().State, NYdb::NTable::EBuildIndexState::Done); 
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().State, NYdb::NTable::EBuildIndexState::Done);
             UNIT_ASSERT_DOUBLES_EQUAL(result2.Metadata().Progress, 100, 0.001);
 
             UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().Path, "/Root/Test");
@@ -2873,9 +2873,9 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 2);
                     UNIT_ASSERT(stats.query_phases(1).table_access(0).updates().bytes() > 1);
                     UNIT_ASSERT(stats.query_phases(1).cpu_time_us() > 0);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), 
+                    UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(),
                         stats.query_phases(0).cpu_time_us() + stats.query_phases(1).cpu_time_us());
-                    UNIT_ASSERT_VALUES_EQUAL(stats.total_duration_us(), 
+                    UNIT_ASSERT_VALUES_EQUAL(stats.total_duration_us(),
                         stats.query_phases(0).duration_us() + stats.query_phases(1).duration_us());
                 }
             }
@@ -2948,9 +2948,9 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).deletes().rows(), 2);
                     UNIT_ASSERT(stats.query_phases(1).cpu_time_us() > 0);
                     // Totals
-                    UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), 
+                    UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(),
                         stats.query_phases(0).cpu_time_us() + stats.query_phases(1).cpu_time_us());
-                    UNIT_ASSERT_VALUES_EQUAL(stats.total_duration_us(), 
+                    UNIT_ASSERT_VALUES_EQUAL(stats.total_duration_us(),
                         stats.query_phases(0).duration_us() + stats.query_phases(1).duration_us());
                 }
             }

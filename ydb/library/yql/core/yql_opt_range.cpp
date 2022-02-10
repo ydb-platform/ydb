@@ -2,7 +2,7 @@
 #include "yql_opt_utils.h"
 #include "yql_expr_type_annotation.h"
 
-#include <ydb/library/yql/public/udf/tz/udf_tz.h> 
+#include <ydb/library/yql/public/udf/tz/udf_tz.h>
 
 namespace NYql {
 namespace {

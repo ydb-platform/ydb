@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    ddoarn 
+    ddoarn
     pnv1
     g:kikimr
 )
@@ -14,8 +14,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/base 
-    ydb/core/protos 
+    ydb/core/base
+    ydb/core/protos
 )
 
 END()

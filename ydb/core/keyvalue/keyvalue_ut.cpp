@@ -1,8 +1,8 @@
 #include "defs.h"
 #include "keyvalue.h"
 #include "keyvalue_state.h"
-#include <ydb/public/lib/base/msgbus.h> 
-#include <ydb/core/testlib/tablet_helpers.h> 
+#include <ydb/public/lib/base/msgbus.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
 

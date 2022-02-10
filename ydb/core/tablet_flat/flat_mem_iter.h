@@ -9,8 +9,8 @@
 #include "flat_part_iface.h"
 #include "flat_page_label.h"
 #include "flat_table_committed.h"
-#include <ydb/core/scheme/scheme_tablecell.h> 
-#include <ydb/core/scheme/scheme_type_id.h> 
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_type_id.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -19,12 +19,12 @@ namespace NTable {
     public:
         using TCells = TArrayRef<const TCell>;
 
-        TMemIt(const TMemTable* memTable, 
+        TMemIt(const TMemTable* memTable,
                 TIntrusiveConstPtr<TKeyNulls> nulls,
                 const TRemap* remap,
                 IPages *env,
                 NMem::TTreeIterator iterator)
-            : MemTable(memTable) 
+            : MemTable(memTable)
             , Nulls(std::move(nulls))
             , Remap(remap)
             , Env(env)
@@ -37,7 +37,7 @@ namespace NTable {
         }
 
         static TAutoPtr<TMemIt> Make(
-                const TMemTable& memTable, 
+                const TMemTable& memTable,
                 const NMem::TTreeSnapshot& snapshot,
                 TCells key,
                 ESeek seek,
@@ -46,7 +46,7 @@ namespace NTable {
                 IPages *env,
                 EDirection direction = EDirection::Forward) noexcept
         {
-            auto *iter = new TMemIt(&memTable, std::move(nulls), remap, env, snapshot.Iterator()); 
+            auto *iter = new TMemIt(&memTable, std::move(nulls), remap, env, snapshot.Iterator());
 
             switch (direction) {
                 case EDirection::Forward:
@@ -128,7 +128,7 @@ namespace NTable {
         {
             Y_VERIFY_DEBUG(IsValid());
 
-            const ui32 len = MemTable->Scheme->Keys->Size(); 
+            const ui32 len = MemTable->Scheme->Keys->Size();
             const auto *key = RowIt.GetKey();
 
             if (len >= Nulls->BasicTypes().size()) {
@@ -307,30 +307,30 @@ namespace NTable {
         }
 
     private:
-        void ApplyColumn(TRowState& row, const NMem::TColumnUpdate &up) const noexcept 
+        void ApplyColumn(TRowState& row, const NMem::TColumnUpdate &up) const noexcept
         {
             const auto pos = Remap->Has(up.Tag);
-            auto op = TCellOp::By(up.Op); 
+            auto op = TCellOp::By(up.Op);
 
             if (!pos || row.IsFinalized(pos)) {
                 /* Out of remap or row slot is already filled */
-            } else if (op == ELargeObj::Inline) { 
+            } else if (op == ELargeObj::Inline) {
                 row.Set(pos, op, up.Value);
-            } else if (op != ELargeObj::Extern) { 
-                Y_FAIL("Got an unknown ELargeObj reference type"); 
+            } else if (op != ELargeObj::Extern) {
+                Y_FAIL("Got an unknown ELargeObj reference type");
             } else {
                 const auto ref = up.Value.AsValue<ui64>();
 
-                if (auto blob = Env->Locate(MemTable, ref, up.Tag)) { 
+                if (auto blob = Env->Locate(MemTable, ref, up.Tag)) {
                     const auto got = NPage::THello().Read(**blob);
 
                     Y_VERIFY(got == NPage::ECodec::Plain && got.Version == 0);
 
-                    row.Set(pos, { ECellOp(op), ELargeObj::Inline }, TCell(*got)); 
+                    row.Set(pos, { ECellOp(op), ELargeObj::Inline }, TCell(*got));
                 } else {
-                    op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId); 
+                    op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
 
-                    row.Set(pos, op, TCell::Make(MemTable->GetBlobs()->Get(ref).GId)); 
+                    row.Set(pos, op, TCell::Make(MemTable->GetBlobs()->Get(ref).GId));
                 }
             }
         }
@@ -348,7 +348,7 @@ namespace NTable {
         }
 
     public:
-        const TMemTable *MemTable = nullptr; 
+        const TMemTable *MemTable = nullptr;
         const TIntrusiveConstPtr<TKeyNulls> Nulls;
         const TRemap* Remap = nullptr;
         IPages * const Env = nullptr;

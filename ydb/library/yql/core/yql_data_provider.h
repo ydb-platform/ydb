@@ -3,7 +3,7 @@
 #include "yql_graph_transformer.h"
 #include "yql_callable_names.h"
 
-#include <ydb/library/yql/public/udf/udf_validate.h> 
+#include <ydb/library/yql/public/udf/udf_validate.h>
 
 #include <library/cpp/yson/writer.h>
 

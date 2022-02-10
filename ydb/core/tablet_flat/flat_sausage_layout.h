@@ -1,11 +1,11 @@
 #pragma once
 
-#include <ydb/core/base/logoblob.h> 
+#include <ydb/core/base/logoblob.h>
 
 namespace NKikimr {
-namespace NPageCollection { 
+namespace NPageCollection {
 
-    /* Page collection binary layout (integers are little endian): 
+    /* Page collection binary layout (integers are little endian):
 
       RAW := THeader
             , { Blobs * TBlobId }

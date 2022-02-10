@@ -16,7 +16,7 @@ from . import kikimr_config
 from . import kikimr_node_interface
 from . import kikimr_cluster_interface
 
-import ydb.core.protos.blobstorage_config_pb2 as bs 
+import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
 from library.python import resource
 

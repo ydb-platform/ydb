@@ -13,7 +13,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/lib/scheme_types 
+    ydb/public/lib/scheme_types
 )
 
 END()

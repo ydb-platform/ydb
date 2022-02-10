@@ -1,5 +1,5 @@
 LIBRARY()
- 
+
 OWNER(g:kikimr)
 
 SRCS(
@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/wilson 
+    ydb/library/wilson
 )
 
 END()

@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections 
+    ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections
 )
 
 END()

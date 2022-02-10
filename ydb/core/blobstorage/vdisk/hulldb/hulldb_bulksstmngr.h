@@ -1,16 +1,16 @@
 #pragma once
 
 #include "defs.h"
-#include <ydb/core/blobstorage/vdisk/common/disk_part.h> 
-#include <ydb/core/blobstorage/base/utility.h> 
+#include <ydb/core/blobstorage/vdisk/common/disk_part.h>
+#include <ydb/core/blobstorage/base/utility.h>
 
 #include <util/generic/set.h>
 
 namespace NKikimr {
 
-    class TPDiskCtx; 
-    using TPDiskCtxPtr = std::shared_ptr<TPDiskCtx>; 
- 
+    class TPDiskCtx;
+    using TPDiskCtxPtr = std::shared_ptr<TPDiskCtx>;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TBulkFormedSstInfo
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -59,11 +59,11 @@ namespace NKikimr {
             , LastBlobLsn(lastBlobLsn)
             , EntryPoint(entryPoint)
             , RemovedFromIndex(false)
-        { 
-            Y_VERIFY(firstBlobLsn && lastBlobLsn && !entryPoint.Empty(), 
-                    "firstBlobLsn# %" PRIu64 " lastBlobLsn# %" PRIu64 " entryPoint# %s", 
-                    firstBlobLsn, lastBlobLsn, entryPoint.ToString().data()); 
-        } 
+        {
+            Y_VERIFY(firstBlobLsn && lastBlobLsn && !entryPoint.Empty(),
+                    "firstBlobLsn# %" PRIu64 " lastBlobLsn# %" PRIu64 " entryPoint# %s",
+                    firstBlobLsn, lastBlobLsn, entryPoint.ToString().data());
+        }
 
         TBulkFormedSstInfo(const NKikimrVDiskData::TBulkFormedSstInfo& proto)
             : FirstBlobLsn(proto.GetFirstBlobLsn())
@@ -71,10 +71,10 @@ namespace NKikimr {
             , EntryPoint(proto.GetEntryPoint())
             , RemovedFromIndex(proto.GetRemovedFromIndex())
         {
-            Y_VERIFY(FirstBlobLsn && LastBlobLsn && !EntryPoint.Empty(), 
-                    "FirstBlobLsn# %" PRIu64 " LastBlobLsn# %" PRIu64 " EntryPoint# %s", 
-                    FirstBlobLsn, LastBlobLsn, EntryPoint.ToString().data()); 
- 
+            Y_VERIFY(FirstBlobLsn && LastBlobLsn && !EntryPoint.Empty(),
+                    "FirstBlobLsn# %" PRIu64 " LastBlobLsn# %" PRIu64 " EntryPoint# %s",
+                    FirstBlobLsn, LastBlobLsn, EntryPoint.ToString().data());
+
             const auto& chunkIds = proto.GetChunkIds();
             ChunkIds.reserve(proto.ChunkIdsSize());
             ChunkIds.insert(ChunkIds.end(), chunkIds.begin(), chunkIds.end());
@@ -118,7 +118,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TBulkFormedSstInfoSet
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    class TBulkFormedSstInfoSet { 
+    class TBulkFormedSstInfoSet {
     public:
         TBulkFormedSstInfoSet() = default;
         TBulkFormedSstInfoSet(const NKikimrVDiskData::TBulkFormedSstInfoSet& pb);
@@ -133,21 +133,21 @@ namespace NKikimr {
         void AddBulkFormedSst(ui64 firstLsn, ui64 lastLsn, const TDiskPart& entryPoint);
 
         // create actor which loads bulk-formed segments necessary for SyncLog recovery
-        IActor *CreateLoaderActor(TVDiskContextPtr vctx, TPDiskCtxPtr pdiskCtx, ui64 syncLogMaxLsnStored, 
+        IActor *CreateLoaderActor(TVDiskContextPtr vctx, TPDiskCtxPtr pdiskCtx, ui64 syncLogMaxLsnStored,
             const TActorId& localRecoveryActorId);
 
         void SerializeToProto(NKikimrVDiskData::TBulkFormedSstInfoSet &pb) const;
         static bool ConvertToProto(NKikimrVDiskData::TBulkFormedSstInfoSet &pb, const char *begin, const char *end);
 
         // finds bulk-formed segment that is still in index; it is identified by its entrypoint and it must exist
-        const TBulkFormedSstInfo& FindIntactBulkFormedSst(const TDiskPart& entryPoint) const; 
+        const TBulkFormedSstInfo& FindIntactBulkFormedSst(const TDiskPart& entryPoint) const;
         TBulkFormedSstInfo& FindIntactBulkFormedSst(const TDiskPart& entryPoint);
 
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
- 
-    private: 
-        TVector<TBulkFormedSstInfo> BulkFormedSsts; 
-        const TBulkFormedSstInfo& FindIntactBulkFormedSstPrivate(const TDiskPart& entryPoint) const; 
+
+    private:
+        TVector<TBulkFormedSstInfo> BulkFormedSsts;
+        const TBulkFormedSstInfo& FindIntactBulkFormedSstPrivate(const TDiskPart& entryPoint) const;
     };
 
 } // NKikimr

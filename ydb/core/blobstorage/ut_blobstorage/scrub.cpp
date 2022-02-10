@@ -1,5 +1,5 @@
-#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h> 
-#include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h> 
+#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
 
         env.SetScrubPeriodicity(TDuration::Seconds(60));
         env.Sim(TDuration::Seconds(60));
- 
+
         ui32 nodeId, pdiskId;
         std::tie(nodeId, pdiskId, std::ignore) = DecomposeVDiskServiceId(vdiskActorId);
         auto it = env.PDiskMockStates.find(std::make_pair(nodeId, pdiskId));

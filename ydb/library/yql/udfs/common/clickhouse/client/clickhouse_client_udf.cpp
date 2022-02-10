@@ -1,5 +1,5 @@
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
-#include <ydb/library/yql/public/udf/udf_type_printer.h> 
+#include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <ydb/library/yql/public/udf/udf_type_printer.h>
 #include <ydb/library/yql/utils/utf8.h>
 
 #include <Poco/Util/Application.h>

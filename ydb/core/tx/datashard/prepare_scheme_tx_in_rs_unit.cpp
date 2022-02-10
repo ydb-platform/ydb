@@ -3,11 +3,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TPrepareSchemeTxInRSUnit : public TExecutionUnit {
 public:
-    TPrepareSchemeTxInRSUnit(TDataShard &dataShard, 
+    TPrepareSchemeTxInRSUnit(TDataShard &dataShard,
                              TPipeline &pipeline);
     ~TPrepareSchemeTxInRSUnit() override;
 
@@ -21,7 +21,7 @@ public:
 private:
 };
 
-TPrepareSchemeTxInRSUnit::TPrepareSchemeTxInRSUnit(TDataShard &dataShard, 
+TPrepareSchemeTxInRSUnit::TPrepareSchemeTxInRSUnit(TDataShard &dataShard,
                                                    TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::PrepareSchemeTxInRS, false, dataShard, pipeline)
 {
@@ -57,11 +57,11 @@ void TPrepareSchemeTxInRSUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreatePrepareSchemeTxInRSUnit(TDataShard &dataShard, 
+THolder<TExecutionUnit> CreatePrepareSchemeTxInRSUnit(TDataShard &dataShard,
                                                       TPipeline &pipeline)
 {
     return THolder(new TPrepareSchemeTxInRSUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

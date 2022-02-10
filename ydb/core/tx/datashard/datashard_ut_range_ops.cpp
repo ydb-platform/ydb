@@ -1,6 +1,6 @@
 #include "datashard_ut_common.h"
 
-#include <ydb/core/tx/datashard/range_ops.h> 
+#include <ydb/core/tx/datashard/range_ops.h>
 
 namespace NKikimr {
 

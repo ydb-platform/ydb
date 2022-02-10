@@ -2,9 +2,9 @@
 #include "kqp_planner_strategy.h"
 #include "kqp_shards_resolver.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/kqp/rm/kqp_rm.h> 
-#include <ydb/core/kqp/rm/kqp_resource_estimation.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/rm/kqp_rm.h>
+#include <ydb/core/kqp/rm/kqp_resource_estimation.h>
 
 #include <util/generic/set.h>
 

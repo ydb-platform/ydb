@@ -368,7 +368,7 @@ size_t TValue::Size() const {
     return 0;
 }
 
-NScheme::TTypeId TValue::GetDataType() const { 
+NScheme::TTypeId TValue::GetDataType() const {
     // TODO: support for complex types
     Y_ASSERT(Type.GetKind() == NKikimrMiniKQL::ETypeKind::Data);
     return Type.GetData().GetScheme();
@@ -430,7 +430,7 @@ template <> TString TValue::GetTypeText<TFormatCxx>(const TFormatCxx& format) co
     case NKikimrMiniKQL::ETypeKind::Void:
         return "void";
     case NKikimrMiniKQL::ETypeKind::Data:
-        return NScheme::TypeName(GetDataType()); 
+        return NScheme::TypeName(GetDataType());
     case NKikimrMiniKQL::ETypeKind::Optional:
         return "optional<" + TValue::Create(Null, Type.GetOptional().GetItem()).GetTypeText<TFormatCxx>(format) + ">";
     case NKikimrMiniKQL::ETypeKind::List:

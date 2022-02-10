@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h> 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h> 
+#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/logger/log.h>
@@ -516,10 +516,10 @@ struct TReadSessionEvent {
                      const TString& partitionKey,
                      const TString& explicitHash);
 
-            virtual ~IMessage() = default; 
+            virtual ~IMessage() = default;
         protected:
             TString Data;
- 
+
             TPartitionStream::TPtr PartitionStream;
             TString PartitionKey;
             TString ExplicitHash;

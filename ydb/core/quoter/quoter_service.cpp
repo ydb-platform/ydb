@@ -3,7 +3,7 @@
 #include "kesus_quoter_proxy.h"
 #include "probes.h"
 
-#include <ydb/core/base/counters.h> 
+#include <ydb/core/base/counters.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <cmath>

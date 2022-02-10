@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/base/logoblob.h> 
+#include <ydb/core/base/logoblob.h>
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
 

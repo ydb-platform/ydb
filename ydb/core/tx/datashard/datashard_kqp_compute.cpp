@@ -1,10 +1,10 @@
 #include "datashard_kqp_compute.h"
 #include "range_ops.h"
 
-#include <ydb/core/kqp/runtime/kqp_transport.h> 
-#include <ydb/core/kqp/runtime/kqp_read_table.h> 
-#include <ydb/core/kqp/runtime/kqp_scan_data.h> 
-#include <ydb/core/tx/datashard/datashard_impl.h> 
+#include <ydb/core/kqp/runtime/kqp_transport.h>
+#include <ydb/core/kqp/runtime/kqp_read_table.h>
+#include <ydb/core/kqp/runtime/kqp_scan_data.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
 
 #include <ydb/library/yql/minikql/mkql_node.h>
 

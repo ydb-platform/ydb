@@ -1,9 +1,9 @@
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h> 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h> 
+#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 
-#include <ydb/core/tx/datashard/datashard.h> 
-#include <ydb/core/client/flat_ut_client.h> 
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/client/flat_ut_client.h>
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -11,7 +11,7 @@
 
 #include <util/thread/factory.h>
 
-#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h> 
+#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
 using namespace NYdb;
 using namespace NYdb::NTable;
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
         Cerr << "Index table has " << shardsBefore << " shards" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(shardsBefore, 1);
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0); 
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
 
         // Set low CPU usage threshold for robustness

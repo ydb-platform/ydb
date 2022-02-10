@@ -12,13 +12,13 @@ from google.protobuf import text_format
 import logging
 
 from datetime import date, datetime
-from ydb.public.api.protos import ydb_table_pb2 
-from ydb.public.api.protos import ydb_scheme_pb2 
+from ydb.public.api.protos import ydb_table_pb2
+from ydb.public.api.protos import ydb_scheme_pb2
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 import ydb
-from ydb.public.api.protos import ydb_status_codes_pb2 
+from ydb.public.api.protos import ydb_status_codes_pb2
 
 
 logger = logging.getLogger(__name__)

@@ -3,15 +3,15 @@
 #include "rpc_calls.h"
 #include "rpc_common.h"
 
-#include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h> 
-#include <ydb/library/yql/public/udf/udf_types.h> 
-#include <ydb/library/yql/minikql/dom/yson.h> 
-#include <ydb/library/yql/minikql/dom/json.h> 
+#include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
+#include <ydb/library/yql/public/udf/udf_types.h>
+#include <ydb/library/yql/minikql/dom/yson.h>
+#include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/utils/utf8.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
-#include <ydb/library/binary_json/write.h> 
-#include <ydb/library/dynumber/dynumber.h> 
+#include <ydb/library/binary_json/write.h>
+#include <ydb/library/dynumber/dynumber.h>
 
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>

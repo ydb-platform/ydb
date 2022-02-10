@@ -1,9 +1,9 @@
 #include "datashard_impl.h"
-#include <ydb/core/tablet_flat/flat_stat_table.h> 
-#include <ydb/core/tablet_flat/flat_dbase_sz_env.h> 
+#include <ydb/core/tablet_flat/flat_stat_table.h>
+#include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 
 class TAsyncTableStatsBuilder : public TActorBootstrapped<TAsyncTableStatsBuilder> {
@@ -28,7 +28,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        THolder<TDataShard::TEvPrivate::TEvAsyncTableStats> ev = MakeHolder<TDataShard::TEvPrivate::TEvAsyncTableStats>(); 
+        THolder<TDataShard::TEvPrivate::TEvAsyncTableStats> ev = MakeHolder<TDataShard::TEvPrivate::TEvAsyncTableStats>();
         ev->TableId = TableId;
         ev->IndexSize = IndexSize;
         ev->StatsUpdateTime = StatsUpdateTime;
@@ -62,13 +62,13 @@ private:
 };
 
 
-class TDataShard::TTxGetTableStats : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxGetTableStats : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvGetTableStats::TPtr Ev;
     TAutoPtr<TEvDataShard::TEvGetTableStatsResult> Result;
 
 public:
-    TTxGetTableStats(TDataShard* ds, TEvDataShard::TEvGetTableStats::TPtr ev) 
+    TTxGetTableStats(TDataShard* ds, TEvDataShard::TEvGetTableStats::TPtr ev)
         : TBase(ds)
         , Ev(ev)
     {}
@@ -161,7 +161,7 @@ private:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx) { 
+void TDataShard::Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx) {
     Executor()->Execute(new TTxGetTableStats(this, ev), ctx);
 }
 
@@ -175,7 +175,7 @@ void ListTableNames(const TTables& tables, TStringBuilder& names) {
     }
 }
 
-void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorContext& ctx) { 
+void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorContext& ctx) {
     ui64 tableId = ev->Get()->TableId;
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt at datashard %" PRIu64, TabletID());
 
@@ -223,13 +223,13 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
 }
 
 
-class TDataShard::TTxInitiateStatsUpdate : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxInitiateStatsUpdate : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvGetTableStats::TPtr Ev;
     TAutoPtr<TEvDataShard::TEvGetTableStatsResult> Result;
 
 public:
-    TTxInitiateStatsUpdate(TDataShard* ds) 
+    TTxInitiateStatsUpdate(TDataShard* ds)
         : TBase(ds)
     {}
 
@@ -342,7 +342,7 @@ public:
     }
 };
 
-void TDataShard::UpdateTableStats(const TActorContext &ctx) { 
+void TDataShard::UpdateTableStats(const TActorContext &ctx) {
     if (StatisticsDisabled)
         return;
 
@@ -393,7 +393,7 @@ void TDataShard::UpdateFullCompactionTsMetric(TUserTable::TStats& stats) {
     stats.HoursSinceFullCompaction = newHours;
 }
 
-void TDataShard::CollectCpuUsage(const TActorContext &ctx) { 
+void TDataShard::CollectCpuUsage(const TActorContext &ctx) {
     auto* metrics = Executor()->GetResourceMetrics();
     TInstant now = AppData(ctx)->TimeProvider->Now();
 

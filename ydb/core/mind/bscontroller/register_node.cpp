@@ -1,6 +1,6 @@
 #include "impl.h"
 
-#include <ydb/core/blobstorage/base/utility.h> 
+#include <ydb/core/blobstorage/base/utility.h>
 #include "config.h"
 
 namespace NKikimr::NBsController {

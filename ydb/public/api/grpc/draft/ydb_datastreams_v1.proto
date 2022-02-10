@@ -3,7 +3,7 @@ option cc_enable_arenas = true;
 
 package Ydb.DataStreams.V1;
 
-import "ydb/public/api/protos/draft/datastreams.proto"; 
+import "ydb/public/api/protos/draft/datastreams.proto";
 
 
 option java_package = "com.yandex.ydb.datastreams.v1";

@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/columnshard/blob.h> 
+#include <ydb/core/tx/columnshard/blob.h>
 #include <util/generic/set.h>
 
 #include "defs.h"

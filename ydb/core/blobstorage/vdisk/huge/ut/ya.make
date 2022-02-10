@@ -1,29 +1,29 @@
-UNITTEST_FOR(ydb/core/blobstorage/vdisk/huge) 
- 
-OWNER(g:kikimr) 
- 
-FORK_SUBTESTS() 
- 
+UNITTEST_FOR(ydb/core/blobstorage/vdisk/huge)
+
+OWNER(g:kikimr)
+
+FORK_SUBTESTS()
+
 TIMEOUT(600)
- 
+
 SIZE(MEDIUM)
- 
-PEERDIR( 
+
+PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
-    ydb/core/base 
-    ydb/core/blobstorage 
-    ydb/core/blobstorage/groupinfo 
-    ydb/core/erasure 
-) 
- 
-SRCS( 
-    blobstorage_hullhugedefs_ut.cpp 
-    blobstorage_hullhugeheap_ctx_ut.cpp 
-    blobstorage_hullhugeheap_ut.cpp 
-    blobstorage_hullhugerecovery_ut.cpp 
-    blobstorage_hullhuge_ut.cpp 
-    top_ut.cpp 
-) 
- 
-END() 
+    ydb/core/base
+    ydb/core/blobstorage
+    ydb/core/blobstorage/groupinfo
+    ydb/core/erasure
+)
+
+SRCS(
+    blobstorage_hullhugedefs_ut.cpp
+    blobstorage_hullhugeheap_ctx_ut.cpp
+    blobstorage_hullhugeheap_ut.cpp
+    blobstorage_hullhugerecovery_ut.cpp
+    blobstorage_hullhuge_ut.cpp
+    top_ut.cpp
+)
+
+END()

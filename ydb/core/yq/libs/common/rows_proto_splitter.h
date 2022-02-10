@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/public/api/protos/ydb_value.pb.h> 
+#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 namespace NYq {
@@ -16,9 +16,9 @@ public:
         const Ydb::ResultSet& resultSet,
         const ui64 chunkLimit,
         const ui64 headerProtoByteSize = 0,
-        const ui64 maxRowsCountPerChunk = 100'000 
-    ); 
- 
+        const ui64 maxRowsCountPerChunk = 100'000
+    );
+
     void MakeNewChunk(Ydb::ResultSet& resultSet, ui64& chunkRowsCounter, ui64& chunkSize);
 
     TString CheckLimits(ui64 curRowBytes, size_t rowInd);

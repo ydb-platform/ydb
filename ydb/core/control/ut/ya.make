@@ -1,14 +1,14 @@
-OWNER( 
-    va-kuznecov 
-    g:kikimr 
-) 
- 
-UNITTEST_FOR(ydb/core/control) 
+OWNER(
+    va-kuznecov
+    g:kikimr
+)
+
+UNITTEST_FOR(ydb/core/control)
 
 FORK_SUBTESTS()
 
 TIMEOUT(600)
- 
+
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -16,9 +16,9 @@ PEERDIR(
     library/cpp/actors/interconnect
     library/cpp/testing/unittest
     util
-    ydb/core/base 
-    ydb/core/mind 
-    ydb/core/mon 
+    ydb/core/base
+    ydb/core/mind
+    ydb/core/mon
 )
 
 SRCS(

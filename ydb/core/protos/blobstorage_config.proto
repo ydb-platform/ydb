@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-import "ydb/core/protos/blobstorage_disk.proto"; 
-import "ydb/core/protos/blobstorage_disk_color.proto"; 
-import "ydb/core/protos/blobstorage_pdisk_config.proto"; 
+import "ydb/core/protos/blobstorage_disk.proto";
+import "ydb/core/protos/blobstorage_disk_color.proto";
+import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "library/cpp/actors/protos/interconnect.proto";
 
-package NKikimrBlobStorage; 
+package NKikimrBlobStorage;
 
 // Enum defining PDisk underlying drive type (rotational or solid state)
 enum EPDiskType {

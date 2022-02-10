@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/library/yql/public/udf/udf_value.h> 
+#include <ydb/library/yql/public/udf/udf_value.h>
 
 namespace NKikimr {
 using namespace NUdf;

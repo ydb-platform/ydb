@@ -8,7 +8,7 @@
 #include <library/cpp/containers/flat_hash/flat_hash.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 /**
  * TDependencyTracker - tracks dependencies between operations
@@ -82,7 +82,7 @@ private:
     };
 
 public:
-    TDependencyTracker(TDataShard* self) 
+    TDependencyTracker(TDataShard* self)
         : Self(self)
         , DefaultLogic(*this)
         , MvccLogic(*this)
@@ -122,7 +122,7 @@ private:
     const TDependencyTrackingLogic& GetTrackingLogic() const noexcept;
 
 private:
-    TDataShard* Self; 
+    TDataShard* Self;
     // Temporary vectors for building dependencies
     TKeys TmpRead;
     TKeys TmpWrite;
@@ -154,5 +154,5 @@ private:
     const TMvccDependencyTrackingLogic MvccLogic;
 };
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

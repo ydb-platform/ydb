@@ -6,18 +6,18 @@
 #include "log_acc.h"
 #include "group_sessions.h"
 
-#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h> 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h> 
-#include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h> 
-#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h> 
-#include <ydb/core/blobstorage/base/batched_vec.h> 
-#include <ydb/core/blobstorage/base/blobstorage_events.h> 
-#include <ydb/core/blobstorage/base/transparent.h> 
-#include <ydb/core/blobstorage/base/wilson_events.h> 
-#include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h> 
+#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
+#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
+#include <ydb/core/blobstorage/base/batched_vec.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/transparent.h>
+#include <ydb/core/blobstorage/base/wilson_events.h>
+#include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <library/cpp/actors/core/interconnect.h>
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/group_stat.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/group_stat.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash_set.h>
 
@@ -164,7 +164,7 @@ public:
     }
 
     TActorId GetVDiskActorId(const TVDiskIdShort &shortId) const {
-        return Info->GetActorId(shortId); 
+        return Info->GetActorId(shortId);
     }
 
     template<typename TEvent>

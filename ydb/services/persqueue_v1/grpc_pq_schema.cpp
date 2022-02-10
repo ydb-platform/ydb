@@ -1,12 +1,12 @@
 #include "grpc_pq_schema.h"
 #include "grpc_pq_actor.h"
 
-#include <ydb/core/grpc_services/grpc_helper.h> 
-#include <ydb/core/tx/scheme_board/cache.h> 
-#include <ydb/core/ydb_convert/ydb_convert.h> 
+#include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/tx/scheme_board/cache.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <ydb/library/persqueue/obfuscate/obfuscate.h> 
-#include <ydb/library/persqueue/topic_parser/topic_parser.h> 
+#include <ydb/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <algorithm>
 

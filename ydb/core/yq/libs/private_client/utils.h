@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/public/lib/yq/yq.h> 
-#include <ydb/public/lib/yq/helpers.h> 
+#include <ydb/public/lib/yq/yq.h>
+#include <ydb/public/lib/yq/helpers.h>
 
 namespace NYq {
 

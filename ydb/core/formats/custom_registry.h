@@ -1,5 +1,5 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 
 namespace cp = ::arrow::compute;
 

@@ -6,8 +6,8 @@ OWNER(
 )
 
 PEERDIR(
-    ydb/core/base 
-    ydb/core/protos 
+    ydb/core/base
+    ydb/core/protos
 )
 
 SRCS(
@@ -15,7 +15,7 @@ SRCS(
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+)

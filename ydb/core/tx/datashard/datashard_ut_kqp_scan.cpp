@@ -1,8 +1,8 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
-#include <ydb/core/kqp/executer/kqp_executer.h> 
-#include <ydb/core/tx/datashard/datashard.h> 
-#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h> 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/executer/kqp_executer.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -11,7 +11,7 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 using namespace NYdb::NScripting;
 using namespace Tests;
-using namespace NKikimr::NDataShard::NKqpHelpers; 
+using namespace NKikimr::NDataShard::NKqpHelpers;
 
 namespace {
 
@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
 
     /*
-     * Start scan on shard with amount of rows bigger then ScanData capacity (~ 10 ScanData's to 
+     * Start scan on shard with amount of rows bigger then ScanData capacity (~ 10 ScanData's to
      * complete scan). Event capture filter will pass only first ScanData from one table actor and will
      * kill tablet after that. So in order to complete scan ComputeActor need to handle scan restart after
      * each ScanData.

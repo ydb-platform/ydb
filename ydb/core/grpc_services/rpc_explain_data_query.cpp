@@ -4,7 +4,7 @@
 #include "rpc_kqp_base.h"
 #include "rpc_common.h"
 
-#include <ydb/core/protos/console_config.pb.h> 
+#include <ydb/core/protos/console_config.pb.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>

@@ -1,6 +1,6 @@
 #include "read_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h> 
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 
 namespace NYdb::NPersQueue {
 
@@ -21,11 +21,11 @@ TReadSessionEvent::TDataReceivedEvent::TMessageInformation::TMessageInformation(
     , WriteTime(writeTime)
     , Ip(ip)
     , Meta(meta)
-    , UncompressedSize(uncompressedSize) 
+    , UncompressedSize(uncompressedSize)
 {}
 
 static void DebugStringImpl(const TReadSessionEvent::TDataReceivedEvent::TMessageInformation& info, TStringBuilder& ret) {
-    ret << " Information: {" 
+    ret << " Information: {"
         << " Offset: " << info.Offset
         << " SeqNo: " << info.SeqNo
         << " MessageGroupId: \"" << info.MessageGroupId << "\""
@@ -69,7 +69,7 @@ static void DebugStringImpl(TStringBuilder& ret,
     if (codec) {
         ret << " Codec: " << codec.value();
     }
-    serializeInformationFunc(ret); 
+    serializeInformationFunc(ret);
     ret << " }";
 }
 

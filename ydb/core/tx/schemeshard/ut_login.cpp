@@ -1,5 +1,5 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h> 
-#include <ydb/library/login/login.h> 
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/library/login/login.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;

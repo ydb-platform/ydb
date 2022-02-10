@@ -10,9 +10,9 @@
 #include <library/cpp/actors/core/memory_track.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
-TValidatedDataTx::TValidatedDataTx(TDataShard *self, 
+TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    TTransactionContext &txc,
                                    const TActorContext &ctx,
                                    const TStepOrder &stepTxId,
@@ -339,7 +339,7 @@ TActiveTransaction::TActiveTransaction(const TBasicOpInfo &op,
     FillTxData(dataTx);
 }
 
-TActiveTransaction::TActiveTransaction(TDataShard *self, 
+TActiveTransaction::TActiveTransaction(TDataShard *self,
                                        TTransactionContext &txc,
                                        const TActorContext &ctx,
                                        const TBasicOpInfo &op,
@@ -370,7 +370,7 @@ void TActiveTransaction::FillTxData(TValidatedDataTx::TPtr dataTx)
         SetStreamSink(DataTx->GetSink());
 }
 
-void TActiveTransaction::FillTxData(TDataShard *self, 
+void TActiveTransaction::FillTxData(TDataShard *self,
                                     TTransactionContext &txc,
                                     const TActorContext &ctx,
                                     const TActorId &target,
@@ -410,7 +410,7 @@ void TActiveTransaction::FillTxData(TDataShard *self,
     TrackMemory();
 }
 
-TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self, 
+TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
                                                        TTransactionContext &txc,
                                                        const TActorContext &ctx)
 {
@@ -561,11 +561,11 @@ void TActiveTransaction::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBas
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "tx " << GetTxId() << " released its data");
 }
 
-void TActiveTransaction::DbStoreLocksAccessLog(TDataShard * self, 
+void TActiveTransaction::DbStoreLocksAccessLog(TDataShard * self,
                                                TTransactionContext &txc,
                                                const TActorContext &ctx)
 {
-    using Schema = TDataShard::Schema; 
+    using Schema = TDataShard::Schema;
 
     NIceDb::TNiceDb db(txc.DB);
     TVector<TSysTables::TLocksTable::TLock> vec;
@@ -580,11 +580,11 @@ void TActiveTransaction::DbStoreLocksAccessLog(TDataShard * self,
                 << " in " << self->TabletID());
 }
 
-void TActiveTransaction::DbStoreArtifactFlags(TDataShard * self, 
+void TActiveTransaction::DbStoreArtifactFlags(TDataShard * self,
                                               TTransactionContext &txc,
                                               const TActorContext &ctx)
 {
-    using Schema = TDataShard::Schema; 
+    using Schema = TDataShard::Schema;
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::TxArtifacts>().Key(GetTxId())
@@ -604,7 +604,7 @@ ui64 TActiveTransaction::GetMemoryConsumption() const {
 }
 
 ERestoreDataStatus TActiveTransaction::RestoreTxData(
-        TDataShard *self, 
+        TDataShard *self,
         TTransactionContext &txc,
         const TActorContext &ctx)
 {
@@ -686,7 +686,7 @@ void TActiveTransaction::FinalizeDataTxPlan()
 
 class TFinalizeDataTxPlanUnit : public TExecutionUnit {
 public:
-    TFinalizeDataTxPlanUnit(TDataShard &dataShard, TPipeline &pipeline) 
+    TFinalizeDataTxPlanUnit(TDataShard &dataShard, TPipeline &pipeline)
         : TExecutionUnit(EExecutionUnitKind::FinalizeDataTxPlan, false, dataShard, pipeline)
     { }
 
@@ -725,7 +725,7 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateFinalizeDataTxPlanUnit(TDataShard &dataShard, TPipeline &pipeline) { 
+THolder<TExecutionUnit> CreateFinalizeDataTxPlanUnit(TDataShard &dataShard, TPipeline &pipeline) {
     return THolder(new TFinalizeDataTxPlanUnit(dataShard, pipeline));
 }
 

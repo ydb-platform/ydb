@@ -4,9 +4,9 @@
 
 #include <library/cpp/actors/interconnect/events_local.h>
 #include <library/cpp/actors/core/actor.h>
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/base/domain.h> 
-#include <ydb/core/protos/node_broker.pb.h> 
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/domain.h>
+#include <ydb/core/protos/node_broker.pb.h>
 
 /**
  * Node Broker tablet is used to allocate Node IDs for dynamic cluster nodes.

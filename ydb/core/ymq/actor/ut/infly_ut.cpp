@@ -1,4 +1,4 @@
-#include <ydb/core/ymq/actor/infly.h> 
+#include <ydb/core/ymq/actor/infly.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -6,10 +6,10 @@ OWNER(
 )
 
 PEERDIR(
-    ydb/core/base 
-    ydb/core/engine/minikql 
-    ydb/core/protos 
-    ydb/core/tablet_flat 
+    ydb/core/base
+    ydb/core/engine/minikql
+    ydb/core/protos
+    ydb/core/tablet_flat
     ydb/core/tx/replication/ydb_proxy
     ydb/core/util
     ydb/core/ydb_convert

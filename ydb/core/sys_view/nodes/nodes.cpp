@@ -1,9 +1,9 @@
 #include "nodes.h"
 
-#include <ydb/core/sys_view/common/events.h> 
-#include <ydb/core/sys_view/common/schema.h> 
-#include <ydb/core/sys_view/common/scan_actor_base_impl.h> 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
+#include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/scan_actor_base_impl.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 

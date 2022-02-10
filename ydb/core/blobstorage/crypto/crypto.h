@@ -4,14 +4,14 @@
 #include <util/system/types.h>
 
 #if (defined(_win_) || defined(_arm64_))
-#include <ydb/core/blobstorage/crypto/chacha.h> 
-#include <ydb/core/blobstorage/crypto/poly1305.h> 
+#include <ydb/core/blobstorage/crypto/chacha.h>
+#include <ydb/core/blobstorage/crypto/poly1305.h>
 #define ChaChaVec ChaCha
 #define Poly1305Vec Poly1305
 #define CHACHA_BPI 1
 #else
-#include <ydb/core/blobstorage/crypto/chacha_vec.h> 
-#include <ydb/core/blobstorage/crypto/poly1305_vec.h> 
+#include <ydb/core/blobstorage/crypto/chacha_vec.h>
+#include <ydb/core/blobstorage/crypto/poly1305_vec.h>
 #endif
 
 // Use ENABLE_ENCRYPTION switch for testing purposes only!

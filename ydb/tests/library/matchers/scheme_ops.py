@@ -16,7 +16,7 @@ from ydb.tests.library.common.protobuf_ss import RegisterTenant, DropTenantReque
 from ydb.tests.library.common.protobuf_ss import CreateTopicRequest, DropTopicRequest, AlterTopicRequest
 from ydb.tests.library.matchers.response_matchers import DynamicFieldsProtobufMatcher
 
-import ydb.core.protos.flat_scheme_op_pb2 as flat_scheme_op 
+import ydb.core.protos.flat_scheme_op_pb2 as flat_scheme_op
 
 logger = logging.getLogger(__name__)
 

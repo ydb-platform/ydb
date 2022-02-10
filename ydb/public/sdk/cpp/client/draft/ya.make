@@ -11,14 +11,14 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/api/grpc/draft 
-    ydb/public/sdk/cpp/client/ydb_table 
-    ydb/public/sdk/cpp/client/ydb_types/operation 
-    ydb/public/sdk/cpp/client/ydb_value 
+    ydb/public/api/grpc/draft
+    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/client/ydb_types/operation
+    ydb/public/sdk/cpp/client/ydb_value
 )
 
 END()
 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+RECURSE_FOR_TESTS(
+    ut
+)

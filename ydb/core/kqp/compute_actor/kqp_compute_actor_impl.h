@@ -2,8 +2,8 @@
 
 #include "kqp_compute_actor.h"
 
-#include <ydb/core/kqp/runtime/kqp_channel_storage.h> 
-#include <ydb/core/kqp/runtime/kqp_tasks_runner.h> 
+#include <ydb/core/kqp/runtime/kqp_channel_storage.h>
+#include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 
 
 namespace NKikimr {

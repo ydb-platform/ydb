@@ -16,21 +16,21 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    library/cpp/threading/future 
-    ydb/core/base 
-    ydb/core/engine 
-    ydb/core/kqp/provider 
-    ydb/core/scheme 
+    library/cpp/threading/future
+    ydb/core/base
+    ydb/core/engine
+    ydb/core/kqp/provider
+    ydb/core/scheme
     ydb/library/yql/ast
     ydb/library/yql/core
     ydb/library/yql/minikql
     ydb/library/yql/providers/common/mkql
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
-END() 
+END()
 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+RECURSE_FOR_TESTS(
+    ut
+)

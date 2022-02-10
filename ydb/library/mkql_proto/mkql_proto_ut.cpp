@@ -1,6 +1,6 @@
 #include "mkql_proto.h"
 
-#include <ydb/library/mkql_proto/ut/helpers/helpers.h> 
+#include <ydb/library/mkql_proto/ut/helpers/helpers.h>
 
 using namespace std::string_view_literals;
 

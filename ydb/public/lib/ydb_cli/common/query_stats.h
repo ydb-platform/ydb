@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_table/query_stats/stats.h> 
+#include <ydb/public/sdk/cpp/client/ydb_table/query_stats/stats.h>
 
 namespace NYdb {
 namespace NConsoleClient {

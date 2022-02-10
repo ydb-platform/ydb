@@ -127,13 +127,13 @@ TIntrusivePtr<TDynamicCounters> TDynamicCounters::GetSubgroup(const TString& nam
     }
     return res;
 }
- 
+
 TIntrusivePtr<TDynamicCounters> TDynamicCounters::FindSubgroup(const TString& name, const TString& value) const {
     TReadGuard g(Lock);
     const auto it = Counters.find({name, value});
     return it != Counters.end() ? AsDynamicCounters(it->second) : nullptr;
-} 
- 
+}
+
 void TDynamicCounters::RemoveSubgroup(const TString& name, const TString& value) {
     auto g = LockForUpdate("RemoveSubgroup", name, value);
     if (const auto it = Counters.find({name, value}); it != Counters.end() && AsDynamicCounters(it->second)) {
@@ -189,8 +189,8 @@ void TDynamicCounters::OutputHtml(IOutputStream& os) const {
             OutputPlainText(os);
         }
     }
-} 
- 
+}
+
 void TDynamicCounters::EnumerateSubgroups(const std::function<void(const TString& name, const TString& value)>& output) const {
     TReadGuard g(Lock);
     for (const auto& [key, value] : Counters) {
@@ -202,24 +202,24 @@ void TDynamicCounters::EnumerateSubgroups(const std::function<void(const TString
 
 void TDynamicCounters::OutputPlainText(IOutputStream& os, const TString& indent) const {
     auto snap = ReadSnapshot();
-    // mark private records in plain text output 
-    auto outputVisibilityMarker = [] (EVisibility vis) { 
-        return vis == EVisibility::Private ? "\t[PRIVATE]" : ""; 
-    }; 
+    // mark private records in plain text output
+    auto outputVisibilityMarker = [] (EVisibility vis) {
+        return vis == EVisibility::Private ? "\t[PRIVATE]" : "";
+    };
 
     for (const auto& [key, value] : snap) {
         if (const auto counter = AsCounter(value)) {
             os << indent
                << key.LabelName << '=' << key.LabelValue
                << ": " << counter->Val()
-               << outputVisibilityMarker(counter->Visibility()) 
+               << outputVisibilityMarker(counter->Visibility())
                << '\n';
         } else if (const auto histogram = AsHistogram(value)) {
             os << indent
                << key.LabelName << '=' << key.LabelValue
-               << ":" 
-               << outputVisibilityMarker(histogram->Visibility()) 
-               << "\n"; 
+               << ":"
+               << outputVisibilityMarker(histogram->Visibility())
+               << "\n";
 
             auto snapshot = histogram->Snapshot();
             for (ui32 i = 0, count = snapshot->Count(); i < count; i++) {

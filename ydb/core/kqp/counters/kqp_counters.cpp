@@ -1,10 +1,10 @@
 #include "kqp_counters.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/protos/issue_id.pb.h> 
-#include <ydb/core/sys_view/service/db_counters.h> 
-#include <ydb/core/sys_view/service/sysview_service.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/protos/issue_id.pb.h>
+#include <ydb/core/sys_view/service/db_counters.h>
+#include <ydb/core/sys_view/service/sysview_service.h>
 
 #include <library/cpp/actors/core/log.h>
 

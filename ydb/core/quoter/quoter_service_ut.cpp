@@ -1,10 +1,10 @@
 #include "quoter_service.h"
 
-#include <ydb/core/kesus/tablet/events.h> 
-#include <ydb/core/testlib/basics/appdata.h> 
-#include <ydb/core/testlib/basics/helpers.h> 
-#include <ydb/core/testlib/tablet_helpers.h> 
-#include <ydb/core/testlib/test_client.h> 
+#include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/helpers.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/test_client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                     }, TDuration::Max())));
 
             THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
-            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success); 
+            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
 
             runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
                 new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                     }, TDuration::Seconds(1))));
 
             reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
-            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success); 
+            UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
         }
     }
 

@@ -1,11 +1,11 @@
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
-#include <ydb/core/tablet_flat/test/libs/table/model/large.h> 
-#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_comp.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_mixer.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_make.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_envs.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_wreck.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
+#include <ydb/core/tablet_flat/test/libs/table/model/large.h>
+#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_comp.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_mixer.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_make.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_envs.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_wreck.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -119,16 +119,16 @@ Y_UNIT_TEST_SUITE(TCompaction) {
 
         auto middle =
             TPartCook(lay, { false, 4096 }, { }, TEpoch::FromIndex(2))
-                .AddOpN(ERowOp::Erase, 2_u64) 
-                .AddOpN(ERowOp::Erase, 3_u64) 
-                .AddOpN(ERowOp::Reset, 4_u64, 9_u32, nullptr) 
+                .AddOpN(ERowOp::Erase, 2_u64)
+                .AddOpN(ERowOp::Erase, 3_u64)
+                .AddOpN(ERowOp::Reset, 4_u64, 9_u32, nullptr)
                 .Finish();
 
         auto upper =
             TPartCook(lay, { false, 4096 }, { }, TEpoch::FromIndex(3))
-                .AddOpN(ERowOp::Erase, 2_u64) 
-                .AddOpN(ERowOp::Upsert, 3_u64, ECellOp::Empty, nullptr) 
-                .AddOpN(ERowOp::Upsert, 4_u64, ECellOp::Empty, ECellOp::Reset) 
+                .AddOpN(ERowOp::Erase, 2_u64)
+                .AddOpN(ERowOp::Upsert, 3_u64, ECellOp::Empty, nullptr)
+                .AddOpN(ERowOp::Upsert, 4_u64, ECellOp::Empty, ECellOp::Reset)
                 .Finish();
 
         { /* full parts merge, check final results only */
@@ -139,13 +139,13 @@ Y_UNIT_TEST_SUITE(TCompaction) {
             TCheckIt
                 (born, { nullptr, 0 }, nullptr, true /* expand defaults */)
                 .To(20).Seek({ }, ESeek::Lower).Is(EReady::Data)
-                .To(21).IsOpN(ERowOp::Upsert, 1_u64, 1_u32, 1_u32) 
+                .To(21).IsOpN(ERowOp::Upsert, 1_u64, 1_u32, 1_u32)
                 .Next()
-                .To(22).IsOpN(ERowOp::Reset, 3_u64, ECellOp::Empty, nullptr) 
-                .To(23).IsOpN(ERowOp::Reset, 3_u64, 5_u32, nullptr) 
+                .To(22).IsOpN(ERowOp::Reset, 3_u64, ECellOp::Empty, nullptr)
+                .To(23).IsOpN(ERowOp::Reset, 3_u64, 5_u32, nullptr)
                 .Next()
-                .To(24).IsOpN(ERowOp::Reset, 4_u64, 9_u32, ECellOp::Empty) 
-                .To(25).IsOpN(ERowOp::Reset, 4_u64, 9_u32, 7_u32) 
+                .To(24).IsOpN(ERowOp::Reset, 4_u64, 9_u32, ECellOp::Empty)
+                .To(25).IsOpN(ERowOp::Reset, 4_u64, 9_u32, 7_u32)
                 .To(29).Next().Is(EReady::Gone);
         }
 
@@ -157,13 +157,13 @@ Y_UNIT_TEST_SUITE(TCompaction) {
             TCheckIt
                 (born, { nullptr, 0 }, nullptr, true /* expand defaults */)
                 .To(30).Seek({ }, ESeek::Lower).Is(EReady::Data)
-                .To(31).IsOpN(ERowOp::Erase, 2_u64, ECellOp::Empty, ECellOp::Empty) 
+                .To(31).IsOpN(ERowOp::Erase, 2_u64, ECellOp::Empty, ECellOp::Empty)
                 .Next()
-                .To(32).IsOpN(ERowOp::Reset, 3_u64, ECellOp::Empty, nullptr) 
-                .To(33).IsOpN(ERowOp::Reset, 3_u64, 5_u32, nullptr) 
+                .To(32).IsOpN(ERowOp::Reset, 3_u64, ECellOp::Empty, nullptr)
+                .To(33).IsOpN(ERowOp::Reset, 3_u64, 5_u32, nullptr)
                 .Next()
-                .To(34).IsOpN(ERowOp::Reset, 4_u64, 9_u32, ECellOp::Reset) 
-                .To(35).IsOpN(ERowOp::Reset, 4_u64, 9_u32, 7_u32) 
+                .To(34).IsOpN(ERowOp::Reset, 4_u64, 9_u32, ECellOp::Reset)
+                .To(35).IsOpN(ERowOp::Reset, 4_u64, 9_u32, 7_u32)
                 .To(39).Next().Is(EReady::Gone);
         }
     }

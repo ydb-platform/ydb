@@ -1,6 +1,6 @@
 #include "schemeshard_impl.h"
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/protos/sys_view.pb.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/sys_view.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

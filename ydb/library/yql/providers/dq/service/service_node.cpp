@@ -1,6 +1,6 @@
 #include "service_node.h"
 
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/common/metrics/metrics_registry.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 

@@ -2,9 +2,9 @@
 
 #include "schemeshard_identificators.h"
 
-#include <ydb/core/actorlib_impl/long_timer.h> 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/util/operation_queue.h> 
+#include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/util/operation_queue.h>
 
 // TODO: this is a good candidate for core/util, but since
 // it uses actorlib_impl, which depends on core/util, it
@@ -105,7 +105,7 @@ struct TShardCompactionInfo {
         // use it as update rather than real assignment
         SearchHeight = rhs.SearchHeight;
         return *this;
-    } 
+    }
 
     size_t Hash() const {
         return ShardIdx.Hash();

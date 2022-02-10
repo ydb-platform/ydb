@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb/core/yq/libs/config/protos/yq_config.pb.h> 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
-#include <ydb/core/yq/libs/events/events.h> 
+#include <ydb/core/yq/libs/config/protos/yq_config.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/core/yq/libs/events/events.h>
 
-#include <ydb/library/security/ydb_credentials_provider_factory.h> 
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>

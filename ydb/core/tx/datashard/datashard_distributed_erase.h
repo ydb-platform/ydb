@@ -2,14 +2,14 @@
 
 #include "defs.h"
 
-#include <ydb/core/scheme/scheme_tabledefs.h> 
+#include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
 #include <util/stream/str.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using TKeyMap = TVector<std::pair<ui32, ui32>>; // index to main
 using TIndexes = THashMap<TTableId, TKeyMap>;
@@ -32,5 +32,5 @@ static TBitMapType DeserializeBitMap(const TString& serialized) {
     return bitmap;
 }
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

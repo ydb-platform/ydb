@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/protos/config.pb.h> 
-#include <ydb/public/api/protos/ydb_issue_message.pb.h> 
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 

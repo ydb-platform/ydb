@@ -1,9 +1,9 @@
 #include "server.h"
 #include "quota_requester.h"
-#include <ydb/core/quoter/quoter_service.h> 
-#include <ydb/core/quoter/quoter_service_impl.h> 
+#include <ydb/core/quoter/quoter_service.h>
+#include <ydb/core/quoter/quoter_service_impl.h>
 
-#include <ydb/core/kesus/tablet/events.h> 
+#include <ydb/core/kesus/tablet/events.h>
 
 namespace NKikimr {
 

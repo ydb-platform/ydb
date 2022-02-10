@@ -1,10 +1,10 @@
 #include "read_speed_limiter.h"
 #include "event_helpers.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/persqueue/percentile_counter.h> 
-#include <ydb/library/persqueue/topic_parser/topic_parser.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/actors/core/log.h>
 

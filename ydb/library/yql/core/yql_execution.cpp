@@ -2,7 +2,7 @@
 #include "yql_expr_optimize.h"
 #include "yql_opt_proposed_by_data.h"
 
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <util/string/builder.h>

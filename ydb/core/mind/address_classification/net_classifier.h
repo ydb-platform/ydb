@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/base/events.h> 
-#include <ydb/core/util/address_classifier.h> 
+#include <ydb/core/base/events.h>
+#include <ydb/core/util/address_classifier.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/actorid.h>

@@ -7,12 +7,12 @@
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
 
-#include <ydb/library/yql/utils/log/log.h> 
-#include <ydb/library/yql/public/udf/udf_types.h> 
+#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/public/udf/udf_types.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 
-#include <ydb/public/lib/experimental/ydb_clickhouse_internal.h> 
-#include <ydb/public/lib/experimental/ydb_experimental.h> 
+#include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
+#include <ydb/public/lib/experimental/ydb_experimental.h>
 
 namespace NYql {
 

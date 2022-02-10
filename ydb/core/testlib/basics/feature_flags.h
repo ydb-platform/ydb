@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/base/feature_flags.h> 
+#include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
 

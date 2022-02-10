@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/engine/mkql_keys.h> 
-#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h> 
-#include <ydb/core/protos/kqp_physical.pb.h> 
-#include <ydb/core/scheme/scheme_tabledefs.h> 
+#include <ydb/core/engine/mkql_keys.h>
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <ydb/library/yql/minikql/mkql_node.h>
 

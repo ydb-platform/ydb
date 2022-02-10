@@ -3,8 +3,8 @@
 #include "sponge.h"
 #include "logger.h"
 
-#include <ydb/core/tablet_flat/defs.h> 
-#include <ydb/core/tablet_flat/test/libs/rows/mass.h> 
+#include <ydb/core/tablet_flat/defs.h>
+#include <ydb/core/tablet_flat/test/libs/rows/mass.h>
 
 namespace NKikimr {
 namespace NTable {

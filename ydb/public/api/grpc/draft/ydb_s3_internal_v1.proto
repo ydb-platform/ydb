@@ -3,7 +3,7 @@ syntax = "proto3";
 package Ydb.S3Internal.V1;
 option java_package = "com.yandex.ydb.s3_internal.v1";
 
-import "ydb/public/api/protos/ydb_s3_internal.proto"; 
+import "ydb/public/api/protos/ydb_s3_internal.proto";
 
 service S3InternalService {
     rpc S3Listing(S3Internal.S3ListingRequest) returns (S3Internal.S3ListingResponse);

@@ -3,7 +3,7 @@
 #include "yson.h"
 #include "json.h"
 
-#include <ydb/library/yql/public/udf/udf_type_inspection.h> 
+#include <ydb/library/yql/public/udf/udf_type_inspection.h>
 
 #include <util/string/builder.h>
 

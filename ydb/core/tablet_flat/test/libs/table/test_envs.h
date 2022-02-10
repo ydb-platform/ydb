@@ -1,12 +1,12 @@
 #pragma once
 
 #include "test_part.h"
-#include <ydb/core/tablet_flat/flat_table_misc.h> 
-#include <ydb/core/tablet_flat/flat_fwd_cache.h> 
-#include <ydb/core/tablet_flat/flat_fwd_blobs.h> 
-#include <ydb/core/tablet_flat/flat_fwd_warmed.h> 
-#include <ydb/core/tablet_flat/flat_row_scheme.h> 
-#include <ydb/core/tablet_flat/util_fmt_abort.h> 
+#include <ydb/core/tablet_flat/flat_table_misc.h>
+#include <ydb/core/tablet_flat/flat_fwd_cache.h>
+#include <ydb/core/tablet_flat/flat_fwd_blobs.h>
+#include <ydb/core/tablet_flat/flat_fwd_warmed.h>
+#include <ydb/core/tablet_flat/flat_row_scheme.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <util/generic/cast.h>
 #include <util/generic/set.h>
@@ -15,7 +15,7 @@ namespace NKikimr {
 namespace NTable {
 namespace NTest {
 
-    enum class ELargeObjNeed { 
+    enum class ELargeObjNeed {
         Has = 0,
         Yes = 1,
         No = 2,
@@ -24,20 +24,20 @@ namespace NTest {
     struct TNoEnv : public TTestEnv {
         TNoEnv() = default;
 
-        TNoEnv(bool pages, ELargeObjNeed lobs) : Pages(pages) , Lobs(lobs) { } 
+        TNoEnv(bool pages, ELargeObjNeed lobs) : Pages(pages) , Lobs(lobs) { }
 
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override 
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
         {
-            return TTestEnv::Locate(memTable, ref, tag); 
+            return TTestEnv::Locate(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override 
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
         {
-            const bool pass = Lobs == ELargeObjNeed::Has; 
-            const bool need = Lobs == ELargeObjNeed::Yes; 
+            const bool pass = Lobs == ELargeObjNeed::Has;
+            const bool need = Lobs == ELargeObjNeed::Yes;
 
             return
-                pass ? TTestEnv::Locate(part, ref, lob) : TResult{need, nullptr }; 
+                pass ? TTestEnv::Locate(part, ref, lob) : TResult{need, nullptr };
         }
 
         const TSharedData* TryGetPage(const TPart *part, TPageId ref, TGroupId groupId) override
@@ -46,7 +46,7 @@ namespace NTest {
         }
 
         bool Pages = false;
-        ELargeObjNeed Lobs = ELargeObjNeed::Yes; 
+        ELargeObjNeed Lobs = ELargeObjNeed::Yes;
     };
 
     template<typename TRandom>
@@ -82,12 +82,12 @@ namespace NTest {
             }
         }
 
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override 
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
         {
-            return TTestEnv::Locate(memTable, ref, tag); 
+            return TTestEnv::Locate(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override 
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
         {
             if (ShouldPass((const void*)part->Large.Get(), ref)) {
                 return TTestEnv::Locate(part, ref, lob);
@@ -140,29 +140,29 @@ namespace NTest {
         using TSlot = ui32;
         using TSlotVec = TSmallVec<TSlot>;
 
-        struct TPageLoadingQueue : private NFwd::IPageLoadingQueue { 
-            TPageLoadingQueue(TIntrusiveConstPtr<TStore> store, ui32 room, TAutoPtr<NFwd::IPageLoadingLogic> line) 
+        struct TPageLoadingQueue : private NFwd::IPageLoadingQueue {
+            TPageLoadingQueue(TIntrusiveConstPtr<TStore> store, ui32 room, TAutoPtr<NFwd::IPageLoadingLogic> line)
                 : Room(room)
                 , Store(std::move(store))
-                , PageLoadingLogic(line) 
+                , PageLoadingLogic(line)
             {
 
             }
 
-            TResult DoLoad(ui32 page, ui64 lower, ui64 upper) noexcept 
+            TResult DoLoad(ui32 page, ui64 lower, ui64 upper) noexcept
             {
                 if (std::exchange(Grow, false))
-                    PageLoadingLogic->Forward(this, upper); 
+                    PageLoadingLogic->Forward(this, upper);
 
                 for (auto &seq: Fetch) {
-                    NPageCollection::TLoadedPage page(seq, *Store->GetPage(Room, seq)); 
+                    NPageCollection::TLoadedPage page(seq, *Store->GetPage(Room, seq));
 
-                    PageLoadingLogic->Apply({ &page, 1 }); /* will move data */ 
+                    PageLoadingLogic->Apply({ &page, 1 }); /* will move data */
                 }
 
                 Fetch.clear();
 
-                auto got = PageLoadingLogic->Handle(this, page, lower); 
+                auto got = PageLoadingLogic->Handle(this, page, lower);
 
                 Y_VERIFY((Grow = got.Grow) || Fetch || got.Page);
 
@@ -170,7 +170,7 @@ namespace NTest {
             }
 
         private:
-            ui64 AddToQueue(TPageId pageId, ui16 /* type */) noexcept override 
+            ui64 AddToQueue(TPageId pageId, ui16 /* type */) noexcept override
             {
                 Fetch.push_back(pageId);
 
@@ -181,7 +181,7 @@ namespace NTest {
             const ui32 Room = Max<ui32>();
             TVector<TPageId> Fetch;
             TIntrusiveConstPtr<TStore> Store;
-            TAutoPtr<NFwd::IPageLoadingLogic> PageLoadingLogic; 
+            TAutoPtr<NFwd::IPageLoadingLogic> PageLoadingLogic;
             bool Grow = false;
         };
 
@@ -199,87 +199,87 @@ namespace NTest {
             : AheadLo(raLo)
             , AheadHi(raHi)
             , Edge(edge)
-            , MemTable(new NFwd::TMemTableHandler(keys, edge, nullptr)) 
+            , MemTable(new NFwd::TMemTableHandler(keys, edge, nullptr))
         {
 
         }
 
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override 
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
         {
             return
-                MemTable 
-                    ? MemTable->Locate(memTable, ref, tag) 
-                    : MemTableRefLookup(memTable, ref, tag); 
+                MemTable
+                    ? MemTable->Locate(memTable, ref, tag)
+                    : MemTableRefLookup(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override 
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
         {
-            auto* partStore = CheckedCast<const TPartStore*>(part); 
+            auto* partStore = CheckedCast<const TPartStore*>(part);
 
-            if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) { 
-                Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}"); 
+            if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
+                Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
             }
 
-            const auto room = (lob == ELargeObj::Extern) 
-                ? partStore->Store->GetExternRoom() 
-                : partStore->Store->GetOuterRoom(); 
+            const auto room = (lob == ELargeObj::Extern)
+                ? partStore->Store->GetExternRoom()
+                : partStore->Store->GetOuterRoom();
 
             return Get(part, room).DoLoad(ref, AheadLo, AheadHi);
         }
 
         const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
         {
-            auto* partStore = CheckedCast<const TPartStore*>(part); 
+            auto* partStore = CheckedCast<const TPartStore*>(part);
 
-            Y_VERIFY(groupId.Index < partStore->Store->GetGroupCount()); 
+            Y_VERIFY(groupId.Index < partStore->Store->GetGroupCount());
 
-            ui32 room = (groupId.Historic ? partStore->Store->GetRoomCount() : 0) + groupId.Index; 
+            ui32 room = (groupId.Historic ? partStore->Store->GetRoomCount() : 0) + groupId.Index;
             return Get(part, room).DoLoad(pageId, AheadLo, AheadHi).Page;
         }
 
     private:
-        TPageLoadingQueue& Get(const TPart *part, ui32 room) noexcept 
+        TPageLoadingQueue& Get(const TPart *part, ui32 room) noexcept
         {
-            auto* partStore = CheckedCast<const TPartStore*>(part); 
+            auto* partStore = CheckedCast<const TPartStore*>(part);
 
             auto& slots = Parts[part];
             if (slots.empty()) {
-                slots.reserve(partStore->Store->GetRoomCount() + part->HistoricIndexes.size()); 
-                for (ui32 room : xrange(partStore->Store->GetRoomCount())) { 
-                    if (room < partStore->Store->GetGroupCount()) { 
+                slots.reserve(partStore->Store->GetRoomCount() + part->HistoricIndexes.size());
+                for (ui32 room : xrange(partStore->Store->GetRoomCount())) {
+                    if (room < partStore->Store->GetGroupCount()) {
                         NPage::TGroupId groupId(room);
-                        slots.push_back(Settle(partStore, room, new NFwd::TCache(partStore->GetGroupIndex(groupId)))); 
-                    } else if (room == partStore->Store->GetOuterRoom()) { 
-                        slots.push_back(Settle(partStore, room, MakeOuter(partStore))); 
-                    } else if (room == partStore->Store->GetExternRoom()) { 
-                        slots.push_back(Settle(partStore, room, MakeExtern(partStore))); 
+                        slots.push_back(Settle(partStore, room, new NFwd::TCache(partStore->GetGroupIndex(groupId))));
+                    } else if (room == partStore->Store->GetOuterRoom()) {
+                        slots.push_back(Settle(partStore, room, MakeOuter(partStore)));
+                    } else if (room == partStore->Store->GetExternRoom()) {
+                        slots.push_back(Settle(partStore, room, MakeExtern(partStore)));
                     } else {
                         Y_FAIL("Don't know how to work with room %" PRIu32, room);
                     }
                 }
                 for (ui32 group : xrange(part->HistoricIndexes.size())) {
                     NPage::TGroupId groupId(group, true);
-                    slots.push_back(Settle(partStore, group, new NFwd::TCache(partStore->GetGroupIndex(groupId)))); 
+                    slots.push_back(Settle(partStore, group, new NFwd::TCache(partStore->GetGroupIndex(groupId))));
                 }
             }
 
             Y_VERIFY(room < slots.size());
 
-            return Queues.at(slots[room]); 
+            return Queues.at(slots[room]);
         }
 
-        TSlot Settle(const TPartStore *part, ui16 room, NFwd::IPageLoadingLogic *line) 
+        TSlot Settle(const TPartStore *part, ui16 room, NFwd::IPageLoadingLogic *line)
         {
             if (line) {
-                Queues.emplace_back(part->Store, room, line); 
+                Queues.emplace_back(part->Store, room, line);
 
-                return Queues.size() - 1; 
+                return Queues.size() - 1;
             } else {
                 return Max<TSlot>(); /* Will fail on access in Head(...) */
             }
         }
 
-        NFwd::IPageLoadingLogic* MakeExtern(const TPartStore *part) const noexcept 
+        NFwd::IPageLoadingLogic* MakeExtern(const TPartStore *part) const noexcept
         {
             if (auto &large = part->Large) {
                 Y_VERIFY(part->Blobs, "Part has frames but not blobs");
@@ -291,7 +291,7 @@ namespace NTest {
                 return nullptr;
         }
 
-        NFwd::IPageLoadingLogic* MakeOuter(const TPart *part) const noexcept 
+        NFwd::IPageLoadingLogic* MakeOuter(const TPart *part) const noexcept
         {
             if (auto &small = part->Small) {
                 TVector<ui32> edge(small->Stats().Tags.size(), Max<ui32>());
@@ -305,9 +305,9 @@ namespace NTest {
         const ui64 AheadLo = 0;
         const ui64 AheadHi = 0;
         const ui32 Edge = Max<ui32>();
-        TDeque<TPageLoadingQueue> Queues; 
+        TDeque<TPageLoadingQueue> Queues;
         TMap<const TPart*, TSlotVec> Parts;
-        TAutoPtr<NFwd::TMemTableHandler> MemTable;   /* Wrapper for memable blobs    */ 
+        TAutoPtr<NFwd::TMemTableHandler> MemTable;   /* Wrapper for memable blobs    */
     };
 
 }

@@ -10,7 +10,7 @@
 
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h> 
+#include <ydb/library/yql/public/udf/udf_data_type.h>
 
 #include <library/cpp/string_utils/levenshtein_diff/levenshtein_diff.h>
 #include <library/cpp/enumbitset/enumbitset.h>

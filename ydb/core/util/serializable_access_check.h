@@ -1,35 +1,35 @@
-#pragma once 
- 
-#include "defs.h" 
- 
-///////////////////////////////////////////////////////////// 
-// TSerializableAccessChecker is used for checking that 
-// methods of some class are never called from different threads 
-// in parallel. Usage pattern is the following: 
-// 
-// class T { 
-//     void f() { 
-//         auto m = Guard(Lock); 
-//         ... do something ... 
-//     } 
-// private: 
-//     TSerializableAccessChecker Lock; 
-// }; 
-///////////////////////////////////////////////////////////// 
-struct TSerializableAccessChecker { 
-    TSerializableAccessChecker() 
+#pragma once
+
+#include "defs.h"
+
+/////////////////////////////////////////////////////////////
+// TSerializableAccessChecker is used for checking that
+// methods of some class are never called from different threads
+// in parallel. Usage pattern is the following:
+//
+// class T {
+//     void f() {
+//         auto m = Guard(Lock);
+//         ... do something ...
+//     }
+// private:
+//     TSerializableAccessChecker Lock;
+// };
+/////////////////////////////////////////////////////////////
+struct TSerializableAccessChecker {
+    TSerializableAccessChecker()
         : Locked(0)
-    {} 
- 
-    void Acquire() { 
+    {}
+
+    void Acquire() {
         Y_VERIFY(AtomicGet(Locked) == 0);
         AtomicSet(Locked, 1);
-    } 
- 
-    void Release() { 
+    }
+
+    void Release() {
         Y_VERIFY(AtomicGet(Locked) == 1);
         AtomicSet(Locked, 0);
-    } 
-private: 
+    }
+private:
     TAtomic Locked;
-}; 
+};

@@ -19,36 +19,36 @@
 #include "progress_queue.h"
 #include "read_iterator.h"
 
-#include <ydb/core/tx/time_cast/time_cast.h> 
-#include <ydb/core/tx/tx_processing.h> 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
+#include <ydb/core/tx/time_cast/time_cast.h>
+#include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/base/kikimr_issue.h> 
-#include <ydb/core/engine/mkql_engine_flat_host.h> 
-#include <ydb/core/tablet/pipe_tracker.h> 
-#include <ydb/core/tablet/tablet_exception.h> 
-#include <ydb/core/tablet/tablet_pipe_client_cache.h> 
-#include <ydb/core/tablet/tablet_counters.h> 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
-#include <ydb/core/tablet_flat/flat_page_iface.h> 
-#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
-#include <ydb/core/protos/tx.pb.h> 
-#include <ydb/core/protos/tx_datashard.pb.h> 
-#include <ydb/core/protos/subdomains.pb.h> 
-#include <ydb/core/protos/counters_datashard.pb.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/core/engine/mkql_engine_flat_host.h>
+#include <ydb/core/tablet/pipe_tracker.h>
+#include <ydb/core/tablet/tablet_exception.h>
+#include <ydb/core/tablet/tablet_pipe_client_cache.h>
+#include <ydb/core/tablet/tablet_counters.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tablet_flat/flat_page_iface.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/protos/tx.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/protos/counters_datashard.pb.h>
 
-#include <ydb/public/api/protos/ydb_status_codes.pb.h> 
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
 
 #include <util/string/join.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 extern TStringBuf SnapshotTransferReadSetMagic;
 
@@ -106,7 +106,7 @@ private:
 // Base class for non-Transactional scans of DataShard data
 class INoTxScan : public NTable::IScan {
 public:
-    virtual void OnFinished(TDataShard* self) = 0; 
+    virtual void OnFinished(TDataShard* self) = 0;
 };
 
 struct TReadWriteVersions {
@@ -130,12 +130,12 @@ enum class TSwitchState {
     DONE
 };
 
-class TDataShardEngineHost; 
+class TDataShardEngineHost;
 struct TSetupSysLocks;
 
 ///
-class TDataShard 
-    : public TActor<TDataShard> 
+class TDataShard
+    : public TActor<TDataShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
 {
     class TTxStopGuard;
@@ -204,28 +204,28 @@ class TDataShard
     class TTxUploadRows;
     class TTxEraseRows;
 
-    ITransaction *CreateTxMonitoring(TDataShard *self, 
+    ITransaction *CreateTxMonitoring(TDataShard *self,
                                      NMon::TEvRemoteHttpInfo::TPtr ev);
-    ITransaction *CreateTxGetInfo(TDataShard *self, 
+    ITransaction *CreateTxGetInfo(TDataShard *self,
                                   TEvDataShard::TEvGetInfoRequest::TPtr ev);
-    ITransaction *CreateTxListOperations(TDataShard *self, 
+    ITransaction *CreateTxListOperations(TDataShard *self,
                                          TEvDataShard::TEvListOperationsRequest::TPtr ev);
-    ITransaction *CreateTxGetOperation(TDataShard *self, 
+    ITransaction *CreateTxGetOperation(TDataShard *self,
                                        TEvDataShard::TEvGetOperationRequest::TPtr ev);
 
     ITransaction *CreateTxMonitoringCleanupBorrowedParts(
-            TDataShard *self, 
+            TDataShard *self,
             NMon::TEvRemoteHttpInfo::TPtr ev);
 
     ITransaction *CreateTxMonitoringResetSchemaVersion(
-            TDataShard *self, 
+            TDataShard *self,
             NMon::TEvRemoteHttpInfo::TPtr ev);
 
     friend class TDataShardMiniKQLFactory;
     friend class TDataTransactionProcessor;
     friend class TSchemeTransactionProcessor;
     friend class TScanTransactionProcessor;
-    friend class TDataShardEngineHost; 
+    friend class TDataShardEngineHost;
     friend class TTxS3Listing;
     friend class TExecuteKqpScanTxUnit;
     friend class TTableScan;
@@ -234,7 +234,7 @@ class TDataShard
     friend class TTransQueue;
     friend class TOutReadSets;
     friend class TPipeline;
-    friend class TLocksDataShardAdapter<TDataShard>; 
+    friend class TLocksDataShardAdapter<TDataShard>;
     friend class TActiveTransaction;
     friend class TValidatedDataTx;
     friend class TEngineBay;
@@ -1062,7 +1062,7 @@ public:
         return NKikimrServices::TActivity::TX_DATASHARD_ACTOR;
     }
 
-    TDataShard(const TActorId &tablet, TTabletStorageInfo *info); 
+    TDataShard(const TActorId &tablet, TTabletStorageInfo *info);
 
 
     void PrepareAndSaveOutReadSets(ui64 step,
@@ -1085,23 +1085,23 @@ public:
                     ui64 txId);
     void FillSplitTrajectory(ui64 origin, NKikimrTx::TBalanceTrackList& tracks);
 
-    void SetCounter(NDataShard::ESimpleCounters counter, ui64 num) const { 
+    void SetCounter(NDataShard::ESimpleCounters counter, ui64 num) const {
         TabletCounters->Simple()[counter].Set(num);
     }
 
-    void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const { 
+    void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {
         TabletCounters->Cumulative()[counter].Increment(num);
     }
 
-    void IncCounter(NDataShard::EPercentileCounters counter, ui64 num) const { 
+    void IncCounter(NDataShard::EPercentileCounters counter, ui64 num) const {
         TabletCounters->Percentile()[counter].IncrementFor(num);
     }
 
-    void IncCounter(NDataShard::EPercentileCounters counter, const TDuration& latency) const { 
+    void IncCounter(NDataShard::EPercentileCounters counter, const TDuration& latency) const {
         TabletCounters->Percentile()[counter].IncrementFor(latency.MilliSeconds());
     }
 
-    static NDataShard::ECumulativeCounters NotEnoughMemoryCounter(ui64 count) { 
+    static NDataShard::ECumulativeCounters NotEnoughMemoryCounter(ui64 count) {
         if (count == 1)
             return COUNTER_TX_NOT_ENOUGH_MEMORY_1;
         if (count == 2)
@@ -2107,7 +2107,7 @@ protected:
     }
 
     void Enqueue(STFUNC_SIG) override {
-        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateInit unhandled event type: " << ev->GetTypeRewrite() 
+        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateInit unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
     }
 
@@ -2119,7 +2119,7 @@ protected:
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
-                LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite() 
+                LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
             }
             break;
@@ -2230,7 +2230,7 @@ protected:
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                           "TDataShard::StateWork unhandled event type: "<< ev->GetTypeRewrite() 
+                           "TDataShard::StateWork unhandled event type: "<< ev->GetTypeRewrite()
                            << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
             }
             break;
@@ -2250,7 +2250,7 @@ protected:
             HFuncTraced(TEvTabletPipe::TEvServerDisconnected, Handle);
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
-                LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite() 
+                LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
             }
             break;
@@ -2264,7 +2264,7 @@ protected:
             hFunc(TEvents::TEvGone, Handle);
             HFuncTraced(TEvTablet::TEvTabletDead, HandleTabletDead);
         default:
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::BrokenState at tablet " << TabletID() 
+            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::BrokenState at tablet " << TabletID()
                        << " unhandled event type: " << ev->GetTypeRewrite()
                        << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
             ctx.Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown));

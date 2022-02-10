@@ -1,7 +1,7 @@
 #include "defs.h"
 #include "filter.h"
 #include "indexed_read_data.h"
-#include <ydb/core/formats/arrow_helpers.h> 
+#include <ydb/core/formats/arrow_helpers.h>
 
 namespace NKikimr::NOlap {
 

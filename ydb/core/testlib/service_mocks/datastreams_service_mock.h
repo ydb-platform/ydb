@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h> 
+#include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
 #include "access_service_mock.h"
 #include "datastreams_service_mock.h"
 

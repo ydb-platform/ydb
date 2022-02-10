@@ -4,10 +4,10 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <ydb/core/base/tablet_resolver.h> 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/location.h> 
+#include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/location.h>
 
 //TODO: add here bucket counter for speed - find out borders from grpc
 ////////////////////////////////////////////
@@ -38,7 +38,7 @@ class TChooseProxyActorImpl : public TActorBootstrapped<TChooseProxyActorImpl> {
     TVector<ui32> Nodes;
     THashMap<ui32, TString> NodeNames;
     THashMap<ui32, TString> NodeDataCenter;
-    THashMap<ui32, std::shared_ptr<TEvGRpcProxyStatus::TEvGetStatusResponse>> PerNodeResponse; 
+    THashMap<ui32, std::shared_ptr<TEvGRpcProxyStatus::TEvGetStatusResponse>> PerNodeResponse;
 
 
 public:
@@ -128,7 +128,7 @@ public:
 
     void HandleResponse(TEvGRpcProxyStatus::TEvGetStatusResponse::TPtr &ev, const TActorContext &ctx) {
         ui64 nodeId = ev->Cookie;
-        PerNodeResponse[nodeId].reset(ev->Release().Release()); 
+        PerNodeResponse[nodeId].reset(ev->Release().Release());
         NodeResponseReceived(ctx);
     }
 
@@ -322,7 +322,7 @@ class TChooseProxyActor : public TActorBootstrapped<TChooseProxyActor>, public N
     THolder<NMsgBusProxy::TBusChooseProxy> Request;
     THashMap<ui32, TString> NodeNames;
     THashMap<ui32, TString> NodeDataCenter;
-    THashMap<ui32, std::shared_ptr<TEvGRpcProxyStatus::TEvGetStatusResponse>> PerNodeResponse; 
+    THashMap<ui32, std::shared_ptr<TEvGRpcProxyStatus::TEvGetStatusResponse>> PerNodeResponse;
 
 
 public:

@@ -1,6 +1,6 @@
 #include "grpc_client.h"
 
-#include <ydb/core/protos/grpc.grpc.pb.h> 
+#include <ydb/core/protos/grpc.grpc.pb.h>
 
 #include <util/system/thread.h>
 #include <util/system/mutex.h>

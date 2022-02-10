@@ -1,11 +1,11 @@
 #include "datashard_ut_common.h"
 
-#include <ydb/core/scheme/scheme_tabledefs.h> 
+#include <ydb/core/scheme/scheme_tabledefs.h>
 
 
 namespace NKikimr {
 
-using namespace NKikimr::NDataShard; 
+using namespace NKikimr::NDataShard;
 
 Y_UNIT_TEST_SUITE(TxKeys) {
 

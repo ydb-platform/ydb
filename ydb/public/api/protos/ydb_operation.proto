@@ -4,10 +4,10 @@ option cc_enable_arenas = true;
 import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
 
-import "ydb/public/api/protos/annotations/validation.proto"; 
-import "ydb/public/api/protos/ydb_common.proto"; 
-import "ydb/public/api/protos/ydb_issue_message.proto"; 
-import "ydb/public/api/protos/ydb_status_codes.proto"; 
+import "ydb/public/api/protos/annotations/validation.proto";
+import "ydb/public/api/protos/ydb_common.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
 
 package Ydb.Operations;
 

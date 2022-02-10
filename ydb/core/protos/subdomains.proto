@@ -1,6 +1,6 @@
-import "ydb/core/protos/bind_channel_storage_pool.proto"; 
-import "ydb/public/api/protos/ydb_cms.proto"; 
-import "ydb/library/login/protos/login.proto"; 
+import "ydb/core/protos/bind_channel_storage_pool.proto";
+import "ydb/public/api/protos/ydb_cms.proto";
+import "ydb/library/login/protos/login.proto";
 
 package NKikimrSubDomains;
 

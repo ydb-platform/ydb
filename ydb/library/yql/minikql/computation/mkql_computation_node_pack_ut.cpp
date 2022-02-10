@@ -9,7 +9,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
 
-#include <ydb/library/yql/public/udf/udf_value.h> 
+#include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/ylimits.h>

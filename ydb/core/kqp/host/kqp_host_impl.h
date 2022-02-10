@@ -2,8 +2,8 @@
 
 #include "kqp_host.h"
 
-#include <ydb/core/kqp/common/kqp_transform.h> 
-#include <ydb/core/kqp/prepare/kqp_prepare.h> 
+#include <ydb/core/kqp/common/kqp_transform.h>
+#include <ydb/core/kqp/prepare/kqp_prepare.h>
 
 namespace NKikimr {
 namespace NKqp {

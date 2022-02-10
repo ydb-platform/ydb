@@ -1,11 +1,11 @@
-#include <ydb/core/tablet_flat/util_fmt_desc.h> 
-#include <ydb/core/tablet_flat/util_fmt_flat.h> 
-#include <ydb/core/tablet_flat/flat_redo_player.h> 
-#include <ydb/core/tablet_flat/flat_executor.pb.h> 
-#include <ydb/core/tablet_flat/flat_part_overlay.h> 
-#include <ydb/core/protos/scheme_log.pb.h> 
-#include <ydb/core/protos/tablet.pb.h> 
-#include <ydb/core/util/pb.h> 
+#include <ydb/core/tablet_flat/util_fmt_desc.h>
+#include <ydb/core/tablet_flat/util_fmt_flat.h>
+#include <ydb/core/tablet_flat/flat_redo_player.h>
+#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/flat_part_overlay.h>
+#include <ydb/core/protos/scheme_log.pb.h>
+#include <ydb/core/protos/tablet.pb.h>
+#include <ydb/core/util/pb.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/blockcodecs/codecs.h>
@@ -19,7 +19,7 @@ namespace NTest {
 
     struct TNames {
 
-        static const char* Do(ERowOp rop) 
+        static const char* Do(ERowOp rop)
         {
             static const std::array<const char*, 6> names { {
                 "Absent",
@@ -93,7 +93,7 @@ namespace NTest {
                 Out << " | " << (*one).Group << " : " << (*one).Logo << Endl;
         }
 
-        void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion rowVersion) noexcept 
+        void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion rowVersion) noexcept
         {
             ui32 keyBytes = 0, opsBytes = 0;
 
@@ -119,7 +119,7 @@ namespace NTest {
             }
         }
 
-        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId) noexcept 
+        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId) noexcept
         {
             ui32 keyBytes = 0, opsBytes = 0;
 
@@ -204,9 +204,9 @@ namespace NTest {
         Cerr << " | Table " << part.GetTable() << " level " << part.GetCompactionLevel() << Endl;
         for (auto& bundle : part.GetBundles()) {
             Cerr << " | + bundle";
-            for (auto& pageCollection : bundle.GetPageCollections()) { 
-                Y_VERIFY(pageCollection.HasLargeGlobId(), "Found a page collection without a largeGlobId"); 
-                Cerr << " " << LogoBlobIDFromLogoBlobID(pageCollection.GetLargeGlobId().GetLead()); 
+            for (auto& pageCollection : bundle.GetPageCollections()) {
+                Y_VERIFY(pageCollection.HasLargeGlobId(), "Found a page collection without a largeGlobId");
+                Cerr << " " << LogoBlobIDFromLogoBlobID(pageCollection.GetLargeGlobId().GetLead());
             }
             Cerr << Endl;
             if (bundle.HasLegacy() || bundle.HasOpaque()) {

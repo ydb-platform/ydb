@@ -4,8 +4,8 @@
 #include "flat_page_iface.h"
 #include "util_basics.h"
 
-#include <ydb/core/base/localdb.h> 
-#include <ydb/core/protos/scheme_log.pb.h> 
+#include <ydb/core/base/localdb.h>
+#include <ydb/core/protos/scheme_log.pb.h>
 
 #include <util/generic/map.h>
 #include <util/generic/hash_set.h>
@@ -30,7 +30,7 @@ public:
         DefaultChannel = 1,
     };
 
-    struct TRoom /* Storage unit settings (page collection) */ { 
+    struct TRoom /* Storage unit settings (page collection) */ {
         TRoom() = default;
 
         TRoom(ui32 channel)
@@ -47,7 +47,7 @@ public:
                 && Outer == room.Outer;
         }
 
-        ui8 Main = DefaultChannel;      /* Primary channel for page collection  */ 
+        ui8 Main = DefaultChannel;      /* Primary channel for page collection  */
         ui8 Blobs = DefaultChannel;     /* Channel for external blobs   */
         ui8 Outer = DefaultChannel;     /* Channel for outer values pack*/
     };

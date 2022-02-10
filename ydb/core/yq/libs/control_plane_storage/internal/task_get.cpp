@@ -4,8 +4,8 @@
 
 #include <util/datetime/base.h>
 
-#include <ydb/core/yq/libs/control_plane_storage/schema.h> 
-#include <ydb/core/yq/libs/db_schema/db_schema.h> 
+#include <ydb/core/yq/libs/control_plane_storage/schema.h>
+#include <ydb/core/yq/libs/db_schema/db_schema.h>
 
 namespace NYq {
 

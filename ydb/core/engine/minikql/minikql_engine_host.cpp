@@ -1,11 +1,11 @@
 #include "minikql_engine_host.h"
 
-#include <ydb/core/tablet_flat/flat_dbase_sz_env.h> 
-#include <ydb/core/tablet_flat/flat_row_state.h> 
-#include <ydb/core/tablet_flat/flat_table_stats.h> 
+#include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
+#include <ydb/core/tablet_flat/flat_row_state.h>
+#include <ydb/core/tablet_flat/flat_table_stats.h>
 #include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/core/tx/datashard/sys_tables.h> 
+#include <ydb/core/tx/datashard/sys_tables.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -864,7 +864,7 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
         const TUpdateCommand& upd = commands[i];
         Y_VERIFY(upd.Operation == TKeyDesc::EColumnOperation::Set); // TODO[serxa]: support inplace update in update row
         NScheme::TTypeId vtype = Scheme.GetColumnInfo(tableInfo, upd.Column)->PType;
-        ops.emplace_back(upd.Column, NTable::ECellOp::Set, 
+        ops.emplace_back(upd.Column, NTable::ECellOp::Set,
             upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtype));
         valueBytes += upd.Value.IsNull() ? 1 : upd.Value.Size();
     }
@@ -875,13 +875,13 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
             collector->SetReadVersion(GetReadVersion(tableId));
         }
 
-        if (!collector->Collect(tableId, NTable::ERowOp::Upsert, key, ops)) { 
+        if (!collector->Collect(tableId, NTable::ERowOp::Upsert, key, ops)) {
             collector->Reset();
             throw TNotReadyTabletException();
         }
     }
 
-    Db.Update(localTid, NTable::ERowOp::Upsert, key, ops, GetWriteVersion(tableId)); 
+    Db.Update(localTid, NTable::ERowOp::Upsert, key, ops, GetWriteVersion(tableId));
 
     Settings.KeyAccessSampler->AddSample(tableId, row);
     Counters.NUpdateRow++;
@@ -903,13 +903,13 @@ void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>
             collector->SetReadVersion(GetReadVersion(tableId));
         }
 
-        if (!collector->Collect(tableId, NTable::ERowOp::Erase, key, {})) { 
+        if (!collector->Collect(tableId, NTable::ERowOp::Erase, key, {})) {
             collector->Reset();
             throw TNotReadyTabletException();
         }
     }
 
-    Db.Update(localTid, NTable::ERowOp::Erase, key, { }, GetWriteVersion(tableId)); 
+    Db.Update(localTid, NTable::ERowOp::Erase, key, { }, GetWriteVersion(tableId));
 
     Settings.KeyAccessSampler->AddSample(tableId, row);
     Counters.NEraseRow++;

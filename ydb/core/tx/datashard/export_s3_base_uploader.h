@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 #include "datashard.h"
@@ -6,10 +6,10 @@
 #include "export_s3.h"
 #include "s3_common.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/protos/flat_scheme_op.pb.h> 
-#include <ydb/core/protos/services.pb.h> 
-#include <ydb/core/wrappers/s3_wrapper.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/services.pb.h>
+#include <ydb/core/wrappers/s3_wrapper.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
@@ -19,7 +19,7 @@
 #include <util/string/builder.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace Aws::S3;
 using namespace Aws;
@@ -461,7 +461,7 @@ private:
 
 }; // TS3UploaderBase
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr
 
 #endif // KIKIMR_DISABLE_S3_OPS

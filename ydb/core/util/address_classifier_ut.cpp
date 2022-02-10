@@ -1,4 +1,4 @@
-#include <ydb/core/util/address_classifier.h> 
+#include <ydb/core/util/address_classifier.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

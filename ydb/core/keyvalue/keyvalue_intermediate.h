@@ -2,12 +2,12 @@
 #include "defs.h"
 #include "keyvalue_key_range.h"
 #include "keyvalue_request_stat.h"
-#include <ydb/core/base/logoblob.h> 
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/protos/base.pb.h> 
-#include <ydb/core/protos/msgbus_kv.pb.h> 
-#include <ydb/core/protos/msgbus.pb.h> 
-#include <ydb/core/keyvalue/protos/events.pb.h> 
+#include <ydb/core/base/logoblob.h>
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/protos/base.pb.h>
+#include <ydb/core/protos/msgbus_kv.pb.h>
+#include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/keyvalue/protos/events.pb.h>
 
 namespace NKikimr {
 namespace NKeyValue {

@@ -1,9 +1,9 @@
-UNITTEST_FOR(ydb/services/rate_limiter) 
+UNITTEST_FOR(ydb/services/rate_limiter)
 
-OWNER( 
-    galaxycrab 
-    g:kikimr 
-) 
+OWNER(
+    galaxycrab
+    g:kikimr
+)
 
 SIZE(MEDIUM)
 
@@ -12,9 +12,9 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/testlib 
-    ydb/public/sdk/cpp/client/ydb_coordination 
-    ydb/public/sdk/cpp/client/ydb_rate_limiter 
+    ydb/core/testlib
+    ydb/public/sdk/cpp/client/ydb_coordination
+    ydb/public/sdk/cpp/client/ydb_rate_limiter
 )
 
 YQL_LAST_ABI_VERSION()

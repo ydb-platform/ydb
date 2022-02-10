@@ -1,5 +1,5 @@
-#include "mon.h" 
- 
+#include "mon.h"
+
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/mon.h>
@@ -12,55 +12,55 @@
 #include <library/cpp/monlib/dynamic_counters/page.h>
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/string_utils/url/url.h>
-#include <util/system/event.h> 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/monitoring_provider.h> 
-#include <ydb/core/base/ticket_parser.h> 
- 
-namespace NActors { 
- 
-    using namespace NMonitoring; 
- 
+#include <util/system/event.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/monitoring_provider.h>
+#include <ydb/core/base/ticket_parser.h>
+
+namespace NActors {
+
+    using namespace NMonitoring;
+
     using THttpResponsePtr = THolder<NMon::IEvHttpInfoRes>;
 
-    //////////////////////////////////////////////////////////////////////////////// 
-    // MON REQUEST 
-    //////////////////////////////////////////////////////////////////////////////// 
-    class TMonRequest : public NActors::TActor<TMonRequest> { 
-    public: 
+    ////////////////////////////////////////////////////////////////////////////////
+    // MON REQUEST
+    ////////////////////////////////////////////////////////////////////////////////
+    class TMonRequest : public NActors::TActor<TMonRequest> {
+    public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::ACTORLIB_COMMON;
         }
 
         TMonRequest(const TActorId &targetActorId, IMonHttpRequest& request,
                     NThreading::TPromise<THttpResponsePtr> result, const TVector<TString> &sids, TMon::TRequestAuthorizer authorizer)
-            : TActor(&TMonRequest::StateFunc) 
-            , TargetActorId(targetActorId) 
-            , Request(request) 
+            : TActor(&TMonRequest::StateFunc)
+            , TargetActorId(targetActorId)
+            , Request(request)
             , Result(result)
             , AllowedSIDs(sids)
             , Authorizer(authorizer)
-        { 
-        } 
- 
+        {
+        }
+
         ~TMonRequest() {
             if (!Result.HasValue()) {
                 Result.SetValue(nullptr);
             }
         }
 
-        STFUNC(StateFunc) { 
-            switch (ev->GetTypeRewrite()) { 
-                HFunc(TEvents::TEvBootstrap, HandleBootstrap); 
-                HFunc(TEvents::TEvPoisonPill, HandlePoisonPill); 
-                HFunc(TEvents::TEvWakeup, HandleWakeup); 
+        STFUNC(StateFunc) {
+            switch (ev->GetTypeRewrite()) {
+                HFunc(TEvents::TEvBootstrap, HandleBootstrap);
+                HFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
+                HFunc(TEvents::TEvWakeup, HandleWakeup);
                 HFunc(TEvents::TEvUndelivered, HandleUndelivered);
-                HFunc(NMon::IEvHttpInfoRes, HandleInfoRes); 
+                HFunc(NMon::IEvHttpInfoRes, HandleInfoRes);
                 HFunc(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult, Handle);
-            } 
-        } 
- 
-        void HandleBootstrap(TEvents::TEvBootstrap::TPtr &, const TActorContext &ctx) { 
+            }
+        }
+
+        void HandleBootstrap(TEvents::TEvBootstrap::TPtr &, const TActorContext &ctx) {
             if (Request.GetMethod() == HTTP_METHOD_OPTIONS) {
                 return ReplyOptionsResultAndDie(ctx);
             }
@@ -73,17 +73,17 @@ namespace NActors {
                 }
             }
             SendRequest(ctx);
-        } 
- 
-        void HandlePoisonPill(TEvents::TEvPoisonPill::TPtr &, const TActorContext &ctx) { 
+        }
+
+        void HandlePoisonPill(TEvents::TEvPoisonPill::TPtr &, const TActorContext &ctx) {
             Die(ctx);
-        } 
- 
+        }
+
         void HandleWakeup(TEvents::TEvWakeup::TPtr &, const TActorContext &ctx) {
             Result.SetValue(nullptr);
             Die(ctx);
-        } 
- 
+        }
+
         void HandleUndelivered(TEvents::TEvUndelivered::TPtr &, const TActorContext &ctx) {
             ReplyActorUnavailableAndDie(ctx);
         }
@@ -91,8 +91,8 @@ namespace NActors {
         void HandleInfoRes(NMon::IEvHttpInfoRes::TPtr &ev, const NActors::TActorContext &ctx) {
             Result.SetValue(THolder<NMon::IEvHttpInfoRes>(ev->Release().Release()));
             Die(ctx);
-        } 
- 
+        }
+
         void Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr &ev, const TActorContext &ctx) {
             const NKikimr::TEvTicketParser::TEvAuthorizeTicketResult &result(*ev->Get());
             if (result.Error) {
@@ -212,20 +212,20 @@ namespace NActors {
 
         virtual TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId &self, const TActorId& parentId) override {
             Y_UNUSED(parentId);
-            return new NActors::IEventHandle(self, self, new TEvents::TEvBootstrap(), 0); 
-        } 
- 
-    protected: 
+            return new NActors::IEventHandle(self, self, new TEvents::TEvBootstrap(), 0);
+        }
+
+    protected:
         TActorId TargetActorId;
         IMonHttpRequest& Request;
         NThreading::TPromise<THttpResponsePtr> Result;
         const TVector<TString> &AllowedSIDs;
         TMon::TRequestAuthorizer Authorizer;
         TString User;
-    }; 
- 
- 
-    //////////////////////////////////////////////////////////////////////////////// 
+    };
+
+
+    ////////////////////////////////////////////////////////////////////////////////
     // HTML results page
     ////////////////////////////////////////////////////////////////////////////////
     class THtmlResultMonPage: public THtmlMonPage {
@@ -324,43 +324,43 @@ namespace NActors {
 
 
     ////////////////////////////////////////////////////////////////////////////////
-    // ACTOR MONITORING PAGE 
+    // ACTOR MONITORING PAGE
     // Encapsulates a request to an actor
-    //////////////////////////////////////////////////////////////////////////////// 
+    ////////////////////////////////////////////////////////////////////////////////
     class TActorMonPage: public IMonPage {
-    public: 
+    public:
         TActorMonPage(const TString &path, const TString &title, const TString &host, bool preTag,
                       TActorSystem *actorSystem, const TActorId &actorId, const TVector<TString> &sids,
                       TMon::TRequestAuthorizer authorizer)
             : IMonPage(path, title)
             , Host(host)
             , PreTag(preTag)
-            , ActorSystem(actorSystem) 
-            , TargetActorId(actorId) 
+            , ActorSystem(actorSystem)
+            , TargetActorId(actorId)
             , AllowedSIDs(sids)
             , Authorizer(std::move(authorizer))
-        { 
-        } 
- 
+        {
+        }
+
         void Output(IMonHttpRequest &request) override {
             auto promise = NThreading::NewPromise<THttpResponsePtr>();
             auto future = promise.GetFuture();
- 
+
             ActorSystem->Register(new TMonRequest(TargetActorId, request, promise, AllowedSIDs, Authorizer));
 
             THttpResponsePtr result = future.ExtractValue(TDuration::Max());
 
             if (result) {
                 Output(request, *result);
-            } else { 
+            } else {
                 TStringStream out;
-                out << "Error: timeout. We were not able to receive response from '" 
+                out << "Error: timeout. We were not able to receive response from '"
                     << Title << "'.\n";
                 Output(request, NMon::TEvHttpInfoRes(out.Str()));
-            } 
-        } 
- 
-    private: 
+            }
+        }
+
+    private:
         void Output(IMonHttpRequest &request, const NMon::IEvHttpInfoRes &result) const {
             if (result.GetContentType() == NMon::IEvHttpInfoRes::Html) {
                 THtmlResultMonPage resultPage(Path, Title, Host, PreTag, result);
@@ -374,54 +374,54 @@ namespace NActors {
     private:
         TString Host;
         bool PreTag;
-        TActorSystem *ActorSystem; 
+        TActorSystem *ActorSystem;
         TActorId TargetActorId;
         const TVector<TString> AllowedSIDs;
         TMon::TRequestAuthorizer Authorizer;
-    }; 
- 
- 
-    //////////////////////////////////////////////////////////////////////////////// 
-    // TMON CLASS 
-    //////////////////////////////////////////////////////////////////////////////// 
+    };
+
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // TMON CLASS
+    ////////////////////////////////////////////////////////////////////////////////
     TMon::TMon(TMon::TConfig config)
         : TBase(config.Port, config.Address, config.Threads, config.Title)
         , Config(std::move(config))
-    { 
-    } 
- 
-    TMon::~TMon() { 
+    {
+    }
+
+    TMon::~TMon() {
         Stop();
-    } 
- 
-    void TMon::Start() { 
+    }
+
+    void TMon::Start() {
         TBase::Register(new TIndexRedirectMonPage(IndexMonPage));
-        TBase::Register(new NMonitoring::TVersionMonPage); 
+        TBase::Register(new NMonitoring::TVersionMonPage);
         TBase::Register(new NMonitoring::TTablesorterCssMonPage);
         TBase::Register(new NMonitoring::TTablesorterJsMonPage);
 
         NLwTraceMonPage::RegisterPages((TBase*)this);
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(ACTORLIB_PROVIDER));
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(MONITORING_PROVIDER));
-        TBase::Start(); 
-    } 
- 
+        TBase::Start();
+    }
+
     void TMon::Stop() {
         IndexMonPage->ClearPages(); // it's required to avoid loop-reference
         TBase::Stop();
     }
 
-    void TMon::Register(NMonitoring::IMonPage *page) { 
-        TBase::Register(page); 
+    void TMon::Register(NMonitoring::IMonPage *page) {
+        TBase::Register(page);
         TBase::SortPages();
-    } 
- 
+    }
+
     TIndexMonPage *TMon::RegisterIndexPage(const TString &path, const TString &title) {
         auto page = TBase::RegisterIndexPage(path, title);
         TBase::SortPages();
         return page;
-    } 
- 
+    }
+
     IMonPage *TMon::RegisterActorPage(TIndexMonPage *index, const TString &relPath,
         const TString &title, bool preTag, TActorSystem *actorSystem, const TActorId &actorId, bool useAuth) {
         return RegisterActorPage({
@@ -452,24 +452,24 @@ namespace NActors {
             Register(page);
         }
 
-        return page; 
-    } 
- 
+        return page;
+    }
+
     IMonPage *TMon::RegisterCountersPage(const TString &path, const TString &title, TIntrusivePtr<TDynamicCounters> counters) {
         TDynamicCountersPage* page = new TDynamicCountersPage(path, title, counters);
         page->SetUnknownGroupPolicy(EUnknownGroupPolicy::Ignore);
         Register(page);
-        return page; 
-    } 
- 
+        return page;
+    }
+
     IMonPage *TMon::FindPage(const TString &relPath) {
-        return TBase::FindPage(relPath); 
-    } 
- 
+        return TBase::FindPage(relPath);
+    }
+
     TIndexMonPage *TMon::FindIndexPage(const TString &relPath) {
-        return TBase::FindIndexPage(relPath); 
-    } 
- 
+        return TBase::FindIndexPage(relPath);
+    }
+
     void TMon::OutputIndexPage(IOutputStream& out) {
         if (Config.RedirectMainPageTo) {
             // XXX manual http response construction
@@ -531,4 +531,4 @@ namespace NActors {
         }
     }
 
-} // NActors 
+} // NActors

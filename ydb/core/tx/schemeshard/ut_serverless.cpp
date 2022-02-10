@@ -1,7 +1,7 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h> 
-#include <ydb/core/tx/schemeshard/schemeshard_private.h> 
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 
-#include <ydb/core/metering/metering.h> 
+#include <ydb/core/metering/metering.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;

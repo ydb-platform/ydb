@@ -1,6 +1,6 @@
-#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h> 
-#include <ydb/core/blobstorage/dsproxy/dsproxy.h> 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h> 
+#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <util/system/condvar.h>
 #include <util/system/info.h>
 

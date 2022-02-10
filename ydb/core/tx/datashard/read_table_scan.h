@@ -1,10 +1,10 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/tablet_flat/flat_scan_iface.h> 
+#include <ydb/core/tablet_flat/flat_scan_iface.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TReadTableProd : public IDestructable {
 public:
@@ -24,5 +24,5 @@ TAutoPtr<NTable::IScan> CreateReadTableScan(ui64 txId,
                                         TActorId sink,
                                         TActorId dataShard);
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

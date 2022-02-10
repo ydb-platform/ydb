@@ -1,4 +1,4 @@
-OWNER(g:yq) 
+OWNER(g:yq)
 
 LIBRARY()
 
@@ -12,9 +12,9 @@ SRCS(
 PEERDIR(
     library/cpp/grpc/client
     library/cpp/threading/future
-    ydb/library/yql/providers/common/structured_token 
-    ydb/library/yql/providers/common/token_accessor/grpc 
-    ydb/public/sdk/cpp/client/ydb_types/credentials 
+    ydb/library/yql/providers/common/structured_token
+    ydb/library/yql/providers/common/token_accessor/grpc
+    ydb/public/sdk/cpp/client/ydb_types/credentials
 )
 
 END()

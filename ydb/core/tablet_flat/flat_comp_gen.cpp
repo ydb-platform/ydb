@@ -93,12 +93,12 @@ TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushFron
     Y_VERIFY(TakenHeadParts == 0,
         "Attempting to prepend part to generation that has taken head parts");
 
-    if (Parts.empty() || Parts.front().Epoch != partView->Epoch) { 
+    if (Parts.empty() || Parts.front().Epoch != partView->Epoch) {
         // This part becomes a new epoch edge
         ++PartEpochCount;
     }
 
-    auto& front = Parts.emplace_front(std::move(partView)); 
+    auto& front = Parts.emplace_front(std::move(partView));
     Stats += front.Stats;
     StatsPerTablet[front.Label.TabletID()] += front.Stats;
     return front;
@@ -108,7 +108,7 @@ TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushBack
     Y_VERIFY(CompactingTailParts == 0,
         "Attempting to append part to generation that has compacting tail parts");
 
-    if (Parts.empty() || Parts.back().Epoch != partView->Epoch) { 
+    if (Parts.empty() || Parts.back().Epoch != partView->Epoch) {
         // This part will become a new epoch edge
         ++PartEpochCount;
     } else if (Parts.size() == TakenHeadParts) {
@@ -117,7 +117,7 @@ TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushBack
         --TakenHeadPartEpochCount;
     }
 
-    auto& back = Parts.emplace_back(std::move(partView)); 
+    auto& back = Parts.emplace_back(std::move(partView));
     Stats += back.Stats;
     StatsPerTablet[back.Label.TabletID()] += back.Stats;
     return back;
@@ -207,12 +207,12 @@ void TGenCompactionStrategy::Start(TCompactionState state) {
     CachedGarbageRowVersion = TRowVersion::Min();
     CachedGarbageBytes = 0;
 
-    for (auto& partView : Backend->TableParts(Table)) { 
-        auto label = partView->Label; 
-        ui32 level = state.PartLevels.Value(partView->Label, 255); 
+    for (auto& partView : Backend->TableParts(Table)) {
+        auto label = partView->Label;
+        ui32 level = state.PartLevels.Value(partView->Label, 255);
         Y_VERIFY(level > 0 && level <= Generations.size() || level == 255);
         auto& parts = level == 255 ? FinalParts : Generations.at(level - 1).Parts;
-        parts.emplace_back(std::move(partView)); 
+        parts.emplace_back(std::move(partView));
         KnownParts[label] = level;
     }
 
@@ -594,11 +594,11 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
     auto& newParts = result->Parts;
 
     TStats newStats;
-    for (const auto& partView : newParts) { 
-        Y_VERIFY_DEBUG(partView->Epoch == result->Epoch); 
-        Y_VERIFY_DEBUG(!KnownParts.contains(partView->Label), 
-            "New part %s is already known", partView->Label.ToString().data()); 
-        newStats += TStats(partView); 
+    for (const auto& partView : newParts) {
+        Y_VERIFY_DEBUG(partView->Epoch == result->Epoch);
+        Y_VERIFY_DEBUG(!KnownParts.contains(partView->Label),
+            "New part %s is already known", partView->Label.ToString().data());
+        newStats += TStats(partView);
     }
 
     ui32 target = generation != 255 ? generation : Generations.size();
@@ -636,13 +636,13 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
     changes.NewPartsLevel = target == Generations.size() ? 255 : target + 1;
 
     if (newParts) {
-        for (const auto& partView : newParts) { 
-            KnownParts[partView->Label] = changes.NewPartsLevel; 
+        for (const auto& partView : newParts) {
+            KnownParts[partView->Label] = changes.NewPartsLevel;
         }
 
         if (target == Generations.size()) {
             for (auto it = newParts.rbegin(); it != newParts.rend(); ++it) {
-                auto& partView = *it; 
+                auto& partView = *it;
                 auto& front = FinalParts.emplace_front(std::move(partView));
                 if (CachedGarbageRowVersion && front.PartView->GarbageStats) {
                     front.GarbageBytes = front.PartView->GarbageStats->GetGarbageBytes(CachedGarbageRowVersion);
@@ -654,7 +654,7 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
             if (target != generation) {
                 Y_VERIFY(!newGen.Parts || result->Epoch <= newGen.Parts.back().Epoch);
                 for (auto it = newParts.begin(); it != newParts.end(); ++it) {
-                    auto& partView = *it; 
+                    auto& partView = *it;
                     auto& back = newGen.PushBack(std::move(partView));
                     if (CachedGarbageRowVersion && back.PartView->GarbageStats) {
                         back.GarbageBytes = back.PartView->GarbageStats->GetGarbageBytes(CachedGarbageRowVersion);
@@ -664,7 +664,7 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
             } else {
                 Y_VERIFY(!newGen.Parts || result->Epoch >= newGen.Parts.front().Epoch);
                 for (auto it = newParts.rbegin(); it != newParts.rend(); ++it) {
-                    auto& partView = *it; 
+                    auto& partView = *it;
                     auto& front = newGen.PushFront(std::move(partView));
                     if (CachedGarbageRowVersion && front.PartView->GarbageStats) {
                         front.GarbageBytes = front.PartView->GarbageStats->GetGarbageBytes(CachedGarbageRowVersion);
@@ -743,7 +743,7 @@ void TGenCompactionStrategy::CheckForcedGenCompactionNeeded() {
     // we already planned compaction
     if (ForcedState != EForcedState::None || ForcedMemCompactionId)
         return;
- 
+
     if (CurrentForcedGenCompactionId <= FinishedForcedGenCompactionId) {
         CurrentForcedGenCompactionId = 0;
         return;
@@ -756,7 +756,7 @@ void TGenCompactionStrategy::CheckForcedGenCompactionNeeded() {
         CurrentForcedGenCompactionId = 0;
         return;
     }
- 
+
     ForcedState = EForcedState::Pending;
     CheckGeneration(Generations.size());
     if (Generations.size() > 1) {
@@ -766,10 +766,10 @@ void TGenCompactionStrategy::CheckForcedGenCompactionNeeded() {
     }
 }
 
-void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) { 
+void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
     Y_VERIFY(level == 255, "Unexpected level of the merged part");
 
-    const auto label = partView->Label; 
+    const auto label = partView->Label;
 
     // Remove the old part data from our model (since it may have been changed)
     if (KnownParts.contains(label)) {
@@ -795,7 +795,7 @@ void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
         }
 
         // Make sure we use an up to date part info
-        partView = Backend->TablePart(Table, label); 
+        partView = Backend->TablePart(Table, label);
     }
 
     KnownParts[label] = level;
@@ -1321,7 +1321,7 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
                     --skip;
                     continue;
                 }
-                params->Parts.emplace_back(part.PartView); 
+                params->Parts.emplace_back(part.PartView);
                 extra.Add(part.Stats.BackingSize);
                 ++gen.CompactingTailParts;
             }
@@ -1356,7 +1356,7 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
                     break;
                 }
 
-                params->Parts.emplace_back(part.PartView); 
+                params->Parts.emplace_back(part.PartView);
                 extra.Add(part.Stats.BackingSize);
                 ++nextGen.TakenHeadParts;
                 nextGen.TakenHeadBackingSize += part.Stats.BackingSize;
@@ -1367,7 +1367,7 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
     } else {
         Y_VERIFY(generation == Generations.size() || generation == 255);
         for (auto& part : FinalParts) {
-            params->Parts.emplace_back(part.PartView); 
+            params->Parts.emplace_back(part.PartView);
             extra.Add(part.Stats.BackingSize);
         }
         for (const auto& part : ColdParts) {

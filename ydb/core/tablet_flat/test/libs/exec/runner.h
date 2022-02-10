@@ -8,15 +8,15 @@
 #include "warden.h"
 #include "helper.h"
 
-#include <ydb/core/base/statestorage_impl.h> 
-#include <ydb/core/base/tablet_resolver.h> 
-#include <ydb/core/tablet/resource_broker.h> 
-#include <ydb/core/tablet_flat/shared_sausagecache.h> 
-#include <ydb/core/protos/services.pb.h> 
+#include <ydb/core/base/statestorage_impl.h>
+#include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/tablet/resource_broker.h>
+#include <ydb/core/tablet_flat/shared_sausagecache.h>
+#include <ydb/core/protos/services.pb.h>
 #include <library/cpp/time_provider/time_provider.h>
 
-#include <ydb/core/tablet_flat/test/libs/rows/tool.h> 
-#include <ydb/core/testlib/actors/test_runtime.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/tool.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
 
 #include <util/generic/xrange.h>
 
@@ -177,16 +177,16 @@ namespace NFake {
                 RunOn(2, MakeBlobStorageNodeWardenID(NodeId), actor, EMail::Simple);
             }
 
-            { /*_ Shared page collection cache service, used by executor */ 
-                auto egg = MakeIntrusive<TSharedPageCacheConfig>(); 
+            { /*_ Shared page collection cache service, used by executor */
+                auto egg = MakeIntrusive<TSharedPageCacheConfig>();
 
                 egg->CacheConfig = new TCacheCacheConfig(conf.Shared, nullptr, nullptr, nullptr);
                 egg->TotalAsyncQueueInFlyLimit = conf.AsyncQueue;
                 egg->TotalScanQueueInFlyLimit = conf.ScanQueue;
 
-                auto *actor =  CreateSharedPageCache(egg.Get()); 
+                auto *actor =  CreateSharedPageCache(egg.Get());
 
-                RunOn(3, MakeSharedPageCacheId(0), actor, EMail::ReadAsFilled); 
+                RunOn(3, MakeSharedPageCacheId(0), actor, EMail::ReadAsFilled);
             }
         }
 

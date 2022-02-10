@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/mon/mon.h> 
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/mon/mon.h>
 
 #include <library/cpp/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/tests_data.h>

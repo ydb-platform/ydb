@@ -24,10 +24,10 @@ namespace NRedo {
             }
         };
 
-        struct TResult { 
-            TResult() = default; 
+        struct TResult {
+            TResult() = default;
 
-            TResult(ui32 ref) : Ref(ref) { } 
+            TResult(ui32 ref) : Ref(ref) { }
 
             explicit operator bool() const noexcept
             {
@@ -45,7 +45,7 @@ namespace NRedo {
          */
 
         virtual TLimit Limit(ui32 table) noexcept = 0;
-        virtual TResult Place(ui32 table, TTag, TArrayRef<const char>) noexcept = 0; 
+        virtual TResult Place(ui32 table, TTag, TArrayRef<const char>) noexcept = 0;
     };
 
     class TWriter {
@@ -105,7 +105,7 @@ namespace NRedo {
             return Push(TString(NUtil::NBin::ToByte(evBegin), size), size);
         }
 
-        TWriter& EvAnnex(TArrayRef<const NPageCollection::TGlobId> blobs) 
+        TWriter& EvAnnex(TArrayRef<const NPageCollection::TGlobId> blobs)
         {
             using namespace  NUtil::NBin;
 
@@ -126,8 +126,8 @@ namespace NRedo {
         template<class TCallback>
         TWriter& EvUpdate(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, ERedo tag, ui32 tailSize, TCallback&& tailCallback, bool isDelta = false)
         {
-            if (TCellOp::HaveNoOps(rop) && ops) { 
-                Y_FAIL("Given ERowOp cannot have update operations"); 
+            if (TCellOp::HaveNoOps(rop) && ops) {
+                Y_FAIL("Given ERowOp cannot have update operations");
             } else if (key.size() + ops.size() > Max<ui16>()) {
                 Y_FAIL("Too large key or too many operations in one ops");
             }
@@ -150,7 +150,7 @@ namespace NRedo {
             return Push(std::move(out.Str()), size);
         }
 
-        TWriter& EvUpdate(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, TRowVersion rowVersion) 
+        TWriter& EvUpdate(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, TRowVersion rowVersion)
         {
             if (rowVersion > TRowVersion::Min()) {
                 return EvUpdate(table, rop, key, ops, ERedo::UpdateV, sizeof(TEvUpdateV), [&](auto& out) {
@@ -164,7 +164,7 @@ namespace NRedo {
             }
         }
 
-        TWriter& EvUpdateTx(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, ui64 txId) 
+        TWriter& EvUpdateTx(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, ui64 txId)
         {
             return EvUpdate(table, rop, key, ops, ERedo::UpdateTx, sizeof(TEvUpdateTx),
                 [&](auto& out) {
@@ -297,33 +297,33 @@ namespace NRedo {
         void Write(IOut &out, TOpsRef ops, ui32 table, const IAnnex::TLimit &limit) const noexcept
         {
             for (const auto &one: ops) {
-                /* Log enty cannot represent this ECellOp types with payload */ 
+                /* Log enty cannot represent this ECellOp types with payload */
 
-                Y_VERIFY(!(one.Value && TCellOp::HaveNoPayload(one.Op))); 
+                Y_VERIFY(!(one.Value && TCellOp::HaveNoPayload(one.Op)));
 
-                /* Log entry cannot recover nulls written as ECellOp::Set with 
+                /* Log entry cannot recover nulls written as ECellOp::Set with
                     null cell. Nulls was encoded with hacky TypeId = 0, but
-                    the correct way is to use ECellOp::Null. 
+                    the correct way is to use ECellOp::Null.
                  */
 
                 const ui16 type = one.Value ? one.Value.Type() : 0;
 
-                auto cellOp = one.NormalizedCellOp(); 
+                auto cellOp = one.NormalizedCellOp();
 
-                if (cellOp != ELargeObj::Inline) { 
-                    Y_FAIL("User supplied cell value has an invalid ECellOp"); 
+                if (cellOp != ELargeObj::Inline) {
+                    Y_FAIL("User supplied cell value has an invalid ECellOp");
                 } else if (auto got = Place(table, limit, one.Tag, one.AsRef())) {
                     const auto payload = NUtil::NBin::ToRef(got.Ref);
 
-                    Write(out, cellOp = ELargeObj::Extern, one.Tag, type, payload); 
+                    Write(out, cellOp = ELargeObj::Extern, one.Tag, type, payload);
 
                 } else {
-                    Write(out, cellOp, one.Tag, type, one.Value.AsRef()); 
+                    Write(out, cellOp, one.Tag, type, one.Value.AsRef());
                 }
             }
         }
 
-        IAnnex::TResult Place(ui32 table, const IAnnex::TLimit &limit, TTag tag, TArrayRef<const char> raw) const noexcept 
+        IAnnex::TResult Place(ui32 table, const IAnnex::TLimit &limit, TTag tag, TArrayRef<const char> raw) const noexcept
         {
             if (Annex && table != Max<ui32>() && limit.IsExtern(raw.size())) {
                 return Annex->Place(table, tag, raw);
@@ -332,9 +332,9 @@ namespace NRedo {
             }
         }
 
-        static void Write(IOut &out, TCellOp cellOp, TTag tag, ui16 type, TArrayRef<const char> raw) 
+        static void Write(IOut &out, TCellOp cellOp, TTag tag, ui16 type, TArrayRef<const char> raw)
         {
-            TUpdate up = { cellOp, tag, { type , ui32(raw.size()) } }; 
+            TUpdate up = { cellOp, tag, { type , ui32(raw.size()) } };
 
             Write(out, &up, sizeof(up));
             Write(out, raw.data(), raw.size());

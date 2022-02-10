@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/base/defs.h> 
+#include <ydb/core/base/defs.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 // Allows to Cancel transaction by TabletID and TxId
 struct TCancelTxFailPoint {

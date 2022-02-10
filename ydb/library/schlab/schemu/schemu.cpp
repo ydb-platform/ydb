@@ -1,6 +1,6 @@
 #include "schemu.h"
-#include <ydb/library/schlab/schine/job_kind.h> 
-#include <ydb/library/schlab/schoot/schoot_gen_cfg.h> 
+#include <ydb/library/schlab/schine/job_kind.h>
+#include <ydb/library/schlab/schoot/schoot_gen_cfg.h>
 #include <util/stream/str.h>
 #include <util/string/printf.h>
 

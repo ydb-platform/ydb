@@ -9,13 +9,13 @@
 #include <util/generic/bitmap.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TExecuteDistributedEraseTxUnit : public TExecutionUnit {
     using IChangeCollector = NMiniKQL::IChangeCollector;
 
 public:
-    TExecuteDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) 
+    TExecuteDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::ExecuteDistributedEraseTx, false, self, pipeline)
     {
     }
@@ -120,7 +120,7 @@ public:
             }
 
             if (changeCollector) {
-                if (!changeCollector->Collect(fullTableId, NTable::ERowOp::Erase, key, {})) { 
+                if (!changeCollector->Collect(fullTableId, NTable::ERowOp::Erase, key, {})) {
                     changeCollector->Reset();
                     pageFault = true;
                 }
@@ -131,7 +131,7 @@ public:
             }
 
             DataShard.SysLocksTable().BreakLock(fullTableId, keyCells.GetCells());
-            txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion); 
+            txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion);
         }
 
         return !pageFault;
@@ -141,9 +141,9 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateExecuteDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) { 
+THolder<TExecutionUnit> CreateExecuteDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) {
     return THolder(new TExecuteDistributedEraseTxUnit(self, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

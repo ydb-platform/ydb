@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/flat_table_subset.h> 
-#include <ydb/core/tablet_flat/flat_iterator.h> 
-#include <ydb/core/tablet_flat/flat_row_scheme.h> 
+#include <ydb/core/tablet_flat/flat_table_subset.h>
+#include <ydb/core/tablet_flat/flat_iterator.h>
+#include <ydb/core/tablet_flat/flat_row_scheme.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -21,16 +21,16 @@ namespace NTest {
             , Snapshot(snapshot)
             , Levels(Scheme->Keys)
         {
-            TVector<const TPartView*> parts; 
+            TVector<const TPartView*> parts;
             parts.reserve(Flatten.size());
-            for (auto &partView: Flatten) { 
-                Y_VERIFY(partView.Part, "Creating TWrapIter without a part"); 
-                Y_VERIFY(partView.Slices, "Creating TWrapIter without slices"); 
-                Y_VERIFY(!partView.Screen, "Creating TWrapIter with a screen"); 
-                parts.push_back(&partView); 
+            for (auto &partView: Flatten) {
+                Y_VERIFY(partView.Part, "Creating TWrapIter without a part");
+                Y_VERIFY(partView.Slices, "Creating TWrapIter without slices");
+                Y_VERIFY(!partView.Screen, "Creating TWrapIter with a screen");
+                parts.push_back(&partView);
             }
             std::sort(parts.begin(), parts.end(),
-                [](const TPartView* a, const TPartView* b) { 
+                [](const TPartView* a, const TPartView* b) {
                     return a->Epoch() < b->Epoch();
                 });
             for (auto *p: parts) {

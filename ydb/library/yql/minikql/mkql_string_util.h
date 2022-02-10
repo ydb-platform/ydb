@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/udf/udf_value.h> 
+#include <ydb/library/yql/public/udf/udf_value.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

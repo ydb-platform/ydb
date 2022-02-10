@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/core/protos/pqconfig.pb.h> 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h> 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h> 
+#include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/logger/log.h>

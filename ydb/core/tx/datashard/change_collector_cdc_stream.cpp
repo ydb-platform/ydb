@@ -1,10 +1,10 @@
 #include "change_collector_cdc_stream.h"
 #include "datashard_impl.h"
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NMiniKQL;
 using namespace NTable;
@@ -45,10 +45,10 @@ namespace {
 
     const TRowState* NullIfErased(const TRowState* state) {
         switch (state->GetRowState()) {
-        case ERowOp::Upsert: 
-        case ERowOp::Reset: 
+        case ERowOp::Upsert:
+        case ERowOp::Reset:
             return state;
-        case ERowOp::Erase: 
+        case ERowOp::Erase:
             return nullptr;
         default:
             Y_FAIL_S("Unexpected row op: " << static_cast<ui8>(state->GetRowState()));
@@ -88,7 +88,7 @@ void TCdcStreamChangeCollector::SetReadVersion(const TRowVersion& readVersion) {
     ReadVersion = readVersion;
 }
 
-bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop, 
+bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates)
 {
     Y_VERIFY_S(Self->IsUserTable(tableId), "Unknown table: " << tableId);
@@ -102,9 +102,9 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         << ", tags# " << keyTags.size());
 
     switch (rop) {
-    case ERowOp::Upsert: 
-    case ERowOp::Erase: 
-    case ERowOp::Reset: 
+    case ERowOp::Upsert:
+    case ERowOp::Erase:
+    case ERowOp::Reset:
         break;
     default:
         Y_FAIL_S("Unsupported row op: " << static_cast<ui8>(rop));
@@ -170,7 +170,7 @@ TMaybe<TRowState> TCdcStreamChangeCollector::GetCurrentState(ui32 tid, TArrayRef
     return row;
 }
 
-TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowOp rop, 
+TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowOp rop,
         const THashMap<TTag, TPos>& tagToPos, const THashMap<TTag, TUpdateOp>& updates)
 {
     TRowState newState;
@@ -179,20 +179,20 @@ TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowO
     newState.Touch(rop);
 
     switch (rop) {
-    case ERowOp::Upsert: 
-    case ERowOp::Reset: 
+    case ERowOp::Upsert:
+    case ERowOp::Reset:
         for (const auto [tag, pos] : tagToPos) {
             auto it = updates.find(tag);
             if (it != updates.end()) {
                 newState.Set(pos, it->second.Op, it->second.AsCell());
-            } else if (rop == ERowOp::Upsert) { 
+            } else if (rop == ERowOp::Upsert) {
                 newState.Set(pos, oldState.GetOp(pos), oldState.Get(pos));
             } else {
-                newState.Set(pos, ECellOp::Null, TCell()); 
+                newState.Set(pos, ECellOp::Null, TCell());
             }
         }
         break;
-    case ERowOp::Erase: 
+    case ERowOp::Erase:
         break;
     default:
         Y_FAIL("unreachable");
@@ -202,7 +202,7 @@ TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowO
     return newState;
 }
 
-void TCdcStreamChangeCollector::Persist(const TPathId& pathId, ERowOp rop, 
+void TCdcStreamChangeCollector::Persist(const TPathId& pathId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates)
 {
     NKikimrChangeExchange::TChangeRecord::TDataChange body;
@@ -210,7 +210,7 @@ void TCdcStreamChangeCollector::Persist(const TPathId& pathId, ERowOp rop,
     TBaseChangeCollector::Persist(TChangeRecord::EKind::CdcDataChange, pathId, body);
 }
 
-void TCdcStreamChangeCollector::Persist(const TPathId& pathId, ERowOp rop, 
+void TCdcStreamChangeCollector::Persist(const TPathId& pathId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags,
         const TRowState* oldState, const TRowState* newState, TArrayRef<const TTag> valueTags)
 {
@@ -223,5 +223,5 @@ void TCdcStreamChangeCollector::Persist(const TPathId& pathId, ERowOp rop,
     TBaseChangeCollector::Persist(TChangeRecord::EKind::CdcDataChange, pathId, body);
 }
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

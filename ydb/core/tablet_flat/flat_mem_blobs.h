@@ -4,7 +4,7 @@
 #include "flat_sausage_fetch.h"
 #include "util_store.h"
 
-#include <ydb/core/base/shared_data.h> 
+#include <ydb/core/base/shared_data.h>
 
 #include <util/generic/ptr.h>
 
@@ -13,7 +13,7 @@ namespace NTable {
 namespace NMem {
 
     class TBlobs : private TNonCopyable {
-        using TStore = NUtil::TConcurrentStore<NPageCollection::TMemGlob>; 
+        using TStore = NUtil::TConcurrentStore<NPageCollection::TMemGlob>;
 
     public:
         explicit TBlobs(ui64 head)
@@ -40,24 +40,24 @@ namespace NMem {
             return Head + Store.size();
         }
 
-        const NPageCollection::TMemGlob& GetRaw(ui64 index) const noexcept 
+        const NPageCollection::TMemGlob& GetRaw(ui64 index) const noexcept
         {
             return Store[index];
         }
 
-        const NPageCollection::TMemGlob& Get(ui64 ref) const noexcept 
+        const NPageCollection::TMemGlob& Get(ui64 ref) const noexcept
         {
-            Y_VERIFY(ref >= Head && ref < Tail(), "ELargeObj ref is out of cache"); 
+            Y_VERIFY(ref >= Head && ref < Tail(), "ELargeObj ref is out of cache");
 
             return Store[ref - Head];
         }
 
-        ui64 Push(const NPageCollection::TMemGlob &glob) noexcept 
+        ui64 Push(const NPageCollection::TMemGlob &glob) noexcept
         {
             return Push(glob.GId, glob.Data);
         }
 
-        ui64 Push(const NPageCollection::TGlobId& glob, TSharedData data) noexcept 
+        ui64 Push(const NPageCollection::TGlobId& glob, TSharedData data) noexcept
         {
             Y_VERIFY(glob.Logo.BlobSize(), "Blob cannot have zero bytes");
 
@@ -67,7 +67,7 @@ namespace NMem {
             return Head + (Store.size() - 1);
         }
 
-        void Assign(TArrayRef<NPageCollection::TLoadedPage> pages) noexcept 
+        void Assign(TArrayRef<NPageCollection::TLoadedPage> pages) noexcept
         {
             for (auto &one : pages) {
                 Y_VERIFY(one.PageId < Store.size());

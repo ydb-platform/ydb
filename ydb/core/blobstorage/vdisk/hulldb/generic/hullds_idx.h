@@ -1,161 +1,161 @@
-#pragma once 
- 
-#include "defs.h" 
-#include "hullds_sstslice.h" 
-#include "hullds_idxsnap.h" 
-#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_settings.h> 
- 
-namespace NKikimr { 
- 
-    ///////////////////////////////////////////////////////////////////////////////////////// 
-    // TLevelIndexBase 
-    ////////////////////////////////////////////////////////////////////////////////////////// 
-    class TLevelIndexBase : public TThrRefBase { 
-    public: 
-        TLevelIndexBase(const TLevelIndexSettings &settings); 
- 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        // Compaction state of TLevelIndex 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        enum ELevelCompState { 
-            StateNoComp = 0,        // default initial state 
-            StateCompPolicyAtWork,  // compaction policy is working 
-            StateCompInProgress,    // level compaction 
-            StateWaitCommit         // wait for commit to disk 
-        }; 
- 
-        static const char *LevelCompStateToStr(ELevelCompState s); 
-        ELevelCompState GetCompState() const; 
-        TString GetCompStateStr(ui32 readsInFlight, ui32 writesInFlight) const; 
-        void SetCompState(ELevelCompState state); 
-        static bool CheckEntryPoint(const char *begin, const char *end, size_t keySizeOf, ui32 signature, 
-                                    TString &explanation); 
-        static bool CheckBulkFormedSegments(const char *begin, const char *end); 
-        // Convert OLD data format to new protobuf format 
-        static void ConvertToProto(NKikimrVDiskData::TLevelIndex &pb, 
-                                   const char *begin, 
-                                   const char *end, 
-                                   size_t keySizeOf); 
-    public: 
-        const TLevelIndexSettings Settings; 
-    private: 
-        ELevelCompState LevelCompState = StateNoComp; 
-        TInstant StartTime; 
-    }; 
- 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    // TCompactedLsn 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    class TCompactedLsn { 
-    public: 
-        TCompactedLsn(const TCompactedLsn &) = default; 
-        TCompactedLsn &operator=(const TCompactedLsn &) = default; 
- 
-        TCompactedLsn() { 
-            // empty entry point case; this is good, we start an empty db 
-            ExplicitlySet = true; 
-            Lsn = TOptLsn::NotSet; 
-        } 
- 
-        TCompactedLsn(const NKikimrVDiskData::TLevelIndex &pb) { 
-            if (pb.HasCompactedLsn()) { 
-                // good case, conversion has been performed or initially good database 
-                ExplicitlySet = true; 
-                Derived = false; 
-                Lsn = TOptLsn::CreateFromAny(pb.GetCompactedLsn()); 
-            } else { 
-                // old database, conversion has not been performed, because there was 
-                // no any fresh compaction yet 
-                ExplicitlySet = false; 
-                Derived = false; 
-                Lsn = TOptLsn::NotSet; 
-            } 
-        } 
- 
-        bool Valid() const { 
-            return ExplicitlySet || Derived; 
-        } 
- 
-        void SerializeToProto(NKikimrVDiskData::TLevelIndex &pb) const { 
-            Y_VERIFY(Valid()); 
-            if (ExplicitlySet) { 
-                // we save current value iff if was explicitly set 
-                pb.SetCompactedLsn(Lsn.Value()); 
-            } 
-        } 
- 
-        void Update(ui64 lsn) { 
-            Y_VERIFY(lsn > 0 && Valid()); 
-            ExplicitlySet = true; 
-            Lsn.SetMax(lsn); 
-        } 
- 
-        // this method is for backward compatibility support; normally we 
-        // initialize Lsn from NKikimrVDiskData::TLevelIndex.CompactedLsn, 
-        // otherwise we fall back to old incorrect method of selecting 
-        // max lsn in index 
-        void UpdateWithObsoleteLastCompactedLsn(TOptLsn m) { 
-            if (ExplicitlySet) { 
-                // NOTE: normally expression 'm <= Lsn' would be true, but unfortunately 
-                //       we can't put a VERIFY here, because we saw this real situation: 
-                //       1. VDisk doesn't have any records in fresh, it starts as an empty db 
-                //       2. VDisk gets only repl SSTs from other VDisks; they are being put 
-                //          to Level 0 with REPL flag 
-                //       3. Later VDisk compacts them from Level 0 to, say, Level 1 and 
-                //          they gen COMP flag 
-                //       4. On restart we calculate LastCompactedLsn lsn that would be not 0, 
-                //          because REPL SSTs had some none 0 lsns 
-                //       5. Crash! This lsn (m) is larger than Lsn (which is actually not set) 
-                // 
-                // Conclusion: only saving LastCompactedLsn explicitly works. Other fork of 
-                //  code is for migration only 
-            } else { 
-                Derived = true; 
-                Lsn = m; 
-            } 
-        } 
- 
-        TString ToString() const { 
-            TStringStream str; 
-            auto b = [] (bool b) { return b ? "true" : "false"; }; 
-            str << "[ExplicitlySet# " << b(ExplicitlySet) << " Derived# " << b(Derived) << " Lsn# " << Lsn << "]"; 
-            return str.Str(); 
-        } 
- 
-        bool operator < (ui64 lsn) const { Y_VERIFY(Valid()); return Lsn < lsn; } 
-        bool operator <=(ui64 lsn) const { Y_VERIFY(Valid()); return Lsn <= lsn; } 
-        bool operator > (ui64 lsn) const { Y_VERIFY(Valid()); return Lsn > lsn; } 
-        bool operator >=(ui64 lsn) const { Y_VERIFY(Valid()); return Lsn >= lsn; } 
- 
-    private: 
-        // all log records <= Lsn have been compacted 
-        TOptLsn Lsn = TOptLsn::NotSet; 
-        // current value of Lsn was explicitly set by fresh compaction 
-        bool ExplicitlySet = false; 
-        // current value of Lsn was derived from level index state 
-        bool Derived = false; 
-    }; 
- 
-    inline bool operator <=(ui64 lsn, const TCompactedLsn &cl) { 
-        return cl >= lsn; 
-    } 
- 
- 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    // TLevelIndex 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    template <class TKey, class TMemRec> 
-    class TLevelIndex : public TLevelIndexBase { 
-    public: 
-        typedef NKikimr::TFreshSegment<TKey, TMemRec> TFreshSegment; 
-        typedef NKikimr::TFreshData<TKey, TMemRec> TFreshData; 
-        typedef NKikimr::TFreshDataSnapshot<TKey, TMemRec> TFreshDataSnapshot; 
-        typedef NKikimr::TLevelSlice<TKey, TMemRec> TLevelSlice; 
-        typedef TIntrusivePtr<TLevelSlice> TLevelSlicePtr; 
-        typedef NKikimr::TLevelIndexSnapshot<TKey, TMemRec> TLevelIndexSnapshot; 
-        typedef NKikimr::TLevelSegment<TKey, TMemRec> TLevelSegment; 
-        typedef NKikimr::TFreshAppendix<TKey, TMemRec> TFreshAppendix; 
- 
+#pragma once
+
+#include "defs.h"
+#include "hullds_sstslice.h"
+#include "hullds_idxsnap.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_settings.h>
+
+namespace NKikimr {
+
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // TLevelIndexBase
+    //////////////////////////////////////////////////////////////////////////////////////////
+    class TLevelIndexBase : public TThrRefBase {
+    public:
+        TLevelIndexBase(const TLevelIndexSettings &settings);
+
+        //////////////////////////////////////////////////////////////////////////////////////
+        // Compaction state of TLevelIndex
+        //////////////////////////////////////////////////////////////////////////////////////
+        enum ELevelCompState {
+            StateNoComp = 0,        // default initial state
+            StateCompPolicyAtWork,  // compaction policy is working
+            StateCompInProgress,    // level compaction
+            StateWaitCommit         // wait for commit to disk
+        };
+
+        static const char *LevelCompStateToStr(ELevelCompState s);
+        ELevelCompState GetCompState() const;
+        TString GetCompStateStr(ui32 readsInFlight, ui32 writesInFlight) const;
+        void SetCompState(ELevelCompState state);
+        static bool CheckEntryPoint(const char *begin, const char *end, size_t keySizeOf, ui32 signature,
+                                    TString &explanation);
+        static bool CheckBulkFormedSegments(const char *begin, const char *end);
+        // Convert OLD data format to new protobuf format
+        static void ConvertToProto(NKikimrVDiskData::TLevelIndex &pb,
+                                   const char *begin,
+                                   const char *end,
+                                   size_t keySizeOf);
+    public:
+        const TLevelIndexSettings Settings;
+    private:
+        ELevelCompState LevelCompState = StateNoComp;
+        TInstant StartTime;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // TCompactedLsn
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    class TCompactedLsn {
+    public:
+        TCompactedLsn(const TCompactedLsn &) = default;
+        TCompactedLsn &operator=(const TCompactedLsn &) = default;
+
+        TCompactedLsn() {
+            // empty entry point case; this is good, we start an empty db
+            ExplicitlySet = true;
+            Lsn = TOptLsn::NotSet;
+        }
+
+        TCompactedLsn(const NKikimrVDiskData::TLevelIndex &pb) {
+            if (pb.HasCompactedLsn()) {
+                // good case, conversion has been performed or initially good database
+                ExplicitlySet = true;
+                Derived = false;
+                Lsn = TOptLsn::CreateFromAny(pb.GetCompactedLsn());
+            } else {
+                // old database, conversion has not been performed, because there was
+                // no any fresh compaction yet
+                ExplicitlySet = false;
+                Derived = false;
+                Lsn = TOptLsn::NotSet;
+            }
+        }
+
+        bool Valid() const {
+            return ExplicitlySet || Derived;
+        }
+
+        void SerializeToProto(NKikimrVDiskData::TLevelIndex &pb) const {
+            Y_VERIFY(Valid());
+            if (ExplicitlySet) {
+                // we save current value iff if was explicitly set
+                pb.SetCompactedLsn(Lsn.Value());
+            }
+        }
+
+        void Update(ui64 lsn) {
+            Y_VERIFY(lsn > 0 && Valid());
+            ExplicitlySet = true;
+            Lsn.SetMax(lsn);
+        }
+
+        // this method is for backward compatibility support; normally we
+        // initialize Lsn from NKikimrVDiskData::TLevelIndex.CompactedLsn,
+        // otherwise we fall back to old incorrect method of selecting
+        // max lsn in index
+        void UpdateWithObsoleteLastCompactedLsn(TOptLsn m) {
+            if (ExplicitlySet) {
+                // NOTE: normally expression 'm <= Lsn' would be true, but unfortunately
+                //       we can't put a VERIFY here, because we saw this real situation:
+                //       1. VDisk doesn't have any records in fresh, it starts as an empty db
+                //       2. VDisk gets only repl SSTs from other VDisks; they are being put
+                //          to Level 0 with REPL flag
+                //       3. Later VDisk compacts them from Level 0 to, say, Level 1 and
+                //          they gen COMP flag
+                //       4. On restart we calculate LastCompactedLsn lsn that would be not 0,
+                //          because REPL SSTs had some none 0 lsns
+                //       5. Crash! This lsn (m) is larger than Lsn (which is actually not set)
+                //
+                // Conclusion: only saving LastCompactedLsn explicitly works. Other fork of
+                //  code is for migration only
+            } else {
+                Derived = true;
+                Lsn = m;
+            }
+        }
+
+        TString ToString() const {
+            TStringStream str;
+            auto b = [] (bool b) { return b ? "true" : "false"; };
+            str << "[ExplicitlySet# " << b(ExplicitlySet) << " Derived# " << b(Derived) << " Lsn# " << Lsn << "]";
+            return str.Str();
+        }
+
+        bool operator < (ui64 lsn) const { Y_VERIFY(Valid()); return Lsn < lsn; }
+        bool operator <=(ui64 lsn) const { Y_VERIFY(Valid()); return Lsn <= lsn; }
+        bool operator > (ui64 lsn) const { Y_VERIFY(Valid()); return Lsn > lsn; }
+        bool operator >=(ui64 lsn) const { Y_VERIFY(Valid()); return Lsn >= lsn; }
+
+    private:
+        // all log records <= Lsn have been compacted
+        TOptLsn Lsn = TOptLsn::NotSet;
+        // current value of Lsn was explicitly set by fresh compaction
+        bool ExplicitlySet = false;
+        // current value of Lsn was derived from level index state
+        bool Derived = false;
+    };
+
+    inline bool operator <=(ui64 lsn, const TCompactedLsn &cl) {
+        return cl >= lsn;
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // TLevelIndex
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <class TKey, class TMemRec>
+    class TLevelIndex : public TLevelIndexBase {
+    public:
+        typedef NKikimr::TFreshSegment<TKey, TMemRec> TFreshSegment;
+        typedef NKikimr::TFreshData<TKey, TMemRec> TFreshData;
+        typedef NKikimr::TFreshDataSnapshot<TKey, TMemRec> TFreshDataSnapshot;
+        typedef NKikimr::TLevelSlice<TKey, TMemRec> TLevelSlice;
+        typedef TIntrusivePtr<TLevelSlice> TLevelSlicePtr;
+        typedef NKikimr::TLevelIndexSnapshot<TKey, TMemRec> TLevelIndexSnapshot;
+        typedef NKikimr::TLevelSegment<TKey, TMemRec> TLevelSegment;
+        typedef NKikimr::TFreshAppendix<TKey, TMemRec> TFreshAppendix;
+
         static constexpr ui32 GetSignature() {
             if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
                 return 0x5567FEDC;
@@ -167,266 +167,266 @@ namespace NKikimr {
                 static_assert(!std::is_same_v<TKey, TKey>, "invalid TKey");
             }
         }
- 
+
         static constexpr ui32 Signature = GetSignature();
         static constexpr size_t KeySizeOf = sizeof(TKey);
 
-    private: 
+    private:
         std::shared_ptr<TLevelIndexCtx> Ctx;
-        TFreshData Fresh; 
- 
-    public: 
-        TLevelSlicePtr CurSlice; 
-        TList<TIntrusivePtr<TLevelSegment>> UncommittedReplSegments; 
- 
+        TFreshData Fresh;
+
+    public:
+        TLevelSlicePtr CurSlice;
+        TList<TIntrusivePtr<TLevelSegment>> UncommittedReplSegments;
+
         TActorId LIActor;
-        ui64 CurEntryPointLsn = ui64(-1); 
-        ui64 PrevEntryPointLsn = ui64(-1); 
- 
-        TAtomic FreshCompWritesInFlight = 0; 
-        TAtomic HullCompReadsInFlight = 0; 
-        TAtomic HullCompWritesInFlight = 0; 
- 
-        TIntrusivePtr<TDelayedHugeBlobDeleterInfo> DelayedHugeBlobDeleterInfo; 
+        ui64 CurEntryPointLsn = ui64(-1);
+        ui64 PrevEntryPointLsn = ui64(-1);
+
+        TAtomic FreshCompWritesInFlight = 0;
+        TAtomic HullCompReadsInFlight = 0;
+        TAtomic HullCompWritesInFlight = 0;
+
+        TIntrusivePtr<TDelayedHugeBlobDeleterInfo> DelayedHugeBlobDeleterInfo;
         std::shared_ptr<TLevelIndexActorCtx> ActorCtx;
- 
-    private: 
-        // it is used for allocation unique id to a new sst 
-        TAtomic NextSstId = 0; 
-        // Is index loaded into memory 
-        bool Loaded = false; 
-        // The compacted data stretches for some diapason of lsns, actually from 0 and up to 
-        // CompactedLsn. We use CompactedLsn at recovery to determine what logs records 
-        // have to be ignored 
-        TCompactedLsn CompactedLsn; 
-        // Takes snapshot of the database, actorSystem must be provided, if actorSystem is null, 
-        // optimization applies; 
-        // This function is private and must not be called directly 
-        TLevelIndexSnapshot PrivateGetSnapshot(TActorSystem *actorSystemToNotifyLevelIndex) { 
-            Y_VERIFY_DEBUG(Loaded); 
-            return TLevelIndexSnapshot(CurSlice, Fresh.GetSnapshot(), CurSlice->Level0CurSstsNum(), 
-                    actorSystemToNotifyLevelIndex, DelayedHugeBlobDeleterInfo); 
-        } 
- 
-    public: 
-        void Output(IOutputStream &str) const { 
-            str << "{Db# " << TKey::Name() 
-                << " CurEntryPointLsn# " << CurEntryPointLsn 
-                << " PrevEntryPointLsn# " << PrevEntryPointLsn 
-                << " CompactedLsn# " << CompactedLsn.ToString() 
-                << "}"; 
-        } 
- 
-        TString ToString() const { 
-            TStringStream str; 
-            Output(str); 
-            return str.Str(); 
-        } 
- 
-        // Constructors just create corresponding structures in memory from entryPoint record or from nothing; 
-        // nothing is loaded into memory from disk, use TLevelIndexLoader for bringing index to memory 
-        TLevelIndex(const TLevelIndexSettings &settings, std::shared_ptr<TRopeArena> arena)
-            : TLevelIndexBase(settings) 
-            , Ctx(std::make_shared<TLevelIndexCtx>())
-            , Fresh(settings, TAppData::TimeProvider, std::move(arena))
-            , CurSlice(MakeIntrusive<TLevelSlice>(settings, Ctx)) 
-            , DelayedHugeBlobDeleterInfo(new TDelayedHugeBlobDeleterInfo) 
-            , ActorCtx(std::make_shared<TLevelIndexActorCtx>())
-            , CompactedLsn() 
-        {} 
- 
-        TLevelIndex(const TLevelIndexSettings &settings, 
-                    const NKikimrVDiskData::TLevelIndex &pb, 
-                    ui64 entryPointLsn,
-                    std::shared_ptr<TRopeArena> arena)
-            : TLevelIndexBase(settings) 
-            , Ctx(std::make_shared<TLevelIndexCtx>())
-            , Fresh(settings, TAppData::TimeProvider, std::move(arena))
-            , CurSlice(MakeIntrusive<TLevelSlice>(settings, Ctx, pb)) 
-            , CurEntryPointLsn(entryPointLsn) 
-            , DelayedHugeBlobDeleterInfo(new TDelayedHugeBlobDeleterInfo) 
-            , ActorCtx(std::make_shared<TLevelIndexActorCtx>())
-            , NextSstId(pb.GetNextSstId()) 
-            , CompactedLsn(pb) 
-        {} 
- 
-        ~TLevelIndex() 
-        {} 
- 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        // Snapshot 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        // you can't read from TLevelIndex directly, take a snapshot instead 
-        TLevelIndexSnapshot GetSnapshot(TActorSystem *as); 
- 
-        TLevelIndexSnapshot GetIndexSnapshot() { 
-            return PrivateGetSnapshot(nullptr); 
-        } 
- 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        // Operations with Fresh 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        void PutToFresh(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer) { 
+
+    private:
+        // it is used for allocation unique id to a new sst
+        TAtomic NextSstId = 0;
+        // Is index loaded into memory
+        bool Loaded = false;
+        // The compacted data stretches for some diapason of lsns, actually from 0 and up to
+        // CompactedLsn. We use CompactedLsn at recovery to determine what logs records
+        // have to be ignored
+        TCompactedLsn CompactedLsn;
+        // Takes snapshot of the database, actorSystem must be provided, if actorSystem is null,
+        // optimization applies;
+        // This function is private and must not be called directly
+        TLevelIndexSnapshot PrivateGetSnapshot(TActorSystem *actorSystemToNotifyLevelIndex) {
             Y_VERIFY_DEBUG(Loaded);
-            Fresh.PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer)); 
+            return TLevelIndexSnapshot(CurSlice, Fresh.GetSnapshot(), CurSlice->Level0CurSstsNum(),
+                    actorSystemToNotifyLevelIndex, DelayedHugeBlobDeleterInfo);
         }
 
-        void PutToFresh(ui64 lsn, const TKey &key, const TMemRec &memRec) { 
-            Y_VERIFY_DEBUG(Loaded); 
-            Fresh.Put(lsn, key, memRec); 
-        } 
- 
+    public:
+        void Output(IOutputStream &str) const {
+            str << "{Db# " << TKey::Name()
+                << " CurEntryPointLsn# " << CurEntryPointLsn
+                << " PrevEntryPointLsn# " << PrevEntryPointLsn
+                << " CompactedLsn# " << CompactedLsn.ToString()
+                << "}";
+        }
+
+        TString ToString() const {
+            TStringStream str;
+            Output(str);
+            return str.Str();
+        }
+
+        // Constructors just create corresponding structures in memory from entryPoint record or from nothing;
+        // nothing is loaded into memory from disk, use TLevelIndexLoader for bringing index to memory
+        TLevelIndex(const TLevelIndexSettings &settings, std::shared_ptr<TRopeArena> arena)
+            : TLevelIndexBase(settings)
+            , Ctx(std::make_shared<TLevelIndexCtx>())
+            , Fresh(settings, TAppData::TimeProvider, std::move(arena))
+            , CurSlice(MakeIntrusive<TLevelSlice>(settings, Ctx))
+            , DelayedHugeBlobDeleterInfo(new TDelayedHugeBlobDeleterInfo)
+            , ActorCtx(std::make_shared<TLevelIndexActorCtx>())
+            , CompactedLsn()
+        {}
+
+        TLevelIndex(const TLevelIndexSettings &settings,
+                    const NKikimrVDiskData::TLevelIndex &pb,
+                    ui64 entryPointLsn,
+                    std::shared_ptr<TRopeArena> arena)
+            : TLevelIndexBase(settings)
+            , Ctx(std::make_shared<TLevelIndexCtx>())
+            , Fresh(settings, TAppData::TimeProvider, std::move(arena))
+            , CurSlice(MakeIntrusive<TLevelSlice>(settings, Ctx, pb))
+            , CurEntryPointLsn(entryPointLsn)
+            , DelayedHugeBlobDeleterInfo(new TDelayedHugeBlobDeleterInfo)
+            , ActorCtx(std::make_shared<TLevelIndexActorCtx>())
+            , NextSstId(pb.GetNextSstId())
+            , CompactedLsn(pb)
+        {}
+
+        ~TLevelIndex()
+        {}
+
+        //////////////////////////////////////////////////////////////////////////////////////
+        // Snapshot
+        //////////////////////////////////////////////////////////////////////////////////////
+        // you can't read from TLevelIndex directly, take a snapshot instead
+        TLevelIndexSnapshot GetSnapshot(TActorSystem *as);
+
+        TLevelIndexSnapshot GetIndexSnapshot() {
+            return PrivateGetSnapshot(nullptr);
+        }
+
+        //////////////////////////////////////////////////////////////////////////////////////
+        // Operations with Fresh
+        //////////////////////////////////////////////////////////////////////////////////////
+        void PutToFresh(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer) {
+            Y_VERIFY_DEBUG(Loaded);
+            Fresh.PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer));
+        }
+
+        void PutToFresh(ui64 lsn, const TKey &key, const TMemRec &memRec) {
+            Y_VERIFY_DEBUG(Loaded);
+            Fresh.Put(lsn, key, memRec);
+        }
+
         void PutToFresh(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) {
-            Y_VERIFY_DEBUG(Loaded); 
-            Fresh.PutAppendix(std::move(a), firstLsn, lastLsn); 
-        } 
- 
-        // Fresh Compaction 
-        bool NeedsFreshCompaction(ui64 yardFreeUpToLsn) const { 
-            Y_VERIFY_DEBUG(Loaded); 
-            return Fresh.NeedsCompaction(yardFreeUpToLsn); 
-        } 
- 
-        TIntrusivePtr<TFreshSegment> FindFreshSegmentForCompaction() { 
-            return Fresh.FindSegmentForCompaction(); 
-        } 
+            Y_VERIFY_DEBUG(Loaded);
+            Fresh.PutAppendix(std::move(a), firstLsn, lastLsn);
+        }
+
+        // Fresh Compaction
+        bool NeedsFreshCompaction(ui64 yardFreeUpToLsn) const {
+            Y_VERIFY_DEBUG(Loaded);
+            return Fresh.NeedsCompaction(yardFreeUpToLsn);
+        }
+
+        TIntrusivePtr<TFreshSegment> FindFreshSegmentForCompaction() {
+            return Fresh.FindSegmentForCompaction();
+        }
 
         bool FreshCompactionInProgress() const {
             return Fresh.CompactionInProgress();
         }
 
-        void FreshCompactionFinished() { 
-            Fresh.CompactionFinished(); 
-        } 
-        void FreshCompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment) { 
-            Fresh.CompactionSstCreated(std::move(freshSegment)); 
-        } 
- 
-        // Fresh Appendix Compaction 
-        typename TFreshData::TCompactionJob CompactFreshAppendix() { 
-            return Fresh.CompactAppendix(); 
-        } 
-        ////////////////////////////////////////////////////////////////////////////////////// 
- 
-        ui64 GetFirstLsnToKeep() const { 
-            Y_VERIFY_DEBUG(Loaded); 
-            return Min(Min(CurEntryPointLsn, PrevEntryPointLsn), Fresh.GetFirstLsnToKeep()); 
-        } 
- 
+        void FreshCompactionFinished() {
+            Fresh.CompactionFinished();
+        }
+        void FreshCompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment) {
+            Fresh.CompactionSstCreated(std::move(freshSegment));
+        }
+
+        // Fresh Appendix Compaction
+        typename TFreshData::TCompactionJob CompactFreshAppendix() {
+            return Fresh.CompactAppendix();
+        }
+        //////////////////////////////////////////////////////////////////////////////////////
+
+        ui64 GetFirstLsnToKeep() const {
+            Y_VERIFY_DEBUG(Loaded);
+            return Min(Min(CurEntryPointLsn, PrevEntryPointLsn), Fresh.GetFirstLsnToKeep());
+        }
+
         virtual void LoadCompleted() {
-            Y_VERIFY_DEBUG(!Loaded); 
-            Loaded = true; 
- 
-            // NOTE: compatibility issue, see comment for UpdateWithObsoleteLastCompactedLsn method 
-            TOptLsn m = CurSlice->ObsoleteLastCompactedLsn(); 
-            CompactedLsn.UpdateWithObsoleteLastCompactedLsn(m); 
-        } 
- 
-        // Skip record? This method is used when recovering, those log records, that were already 
-        // compacted must be skipped 
-        bool SkipRecord(ui64 lsn) const { 
-            return lsn <= CompactedLsn; 
-        } 
- 
-        const TCompactedLsn &GetCompactedLsn() const { 
-            return CompactedLsn; 
-        } 
- 
-        void UpdateCompactedLsn(ui64 lsn) { 
-            CompactedLsn.Update(lsn); 
-        } 
- 
-        ui64 AllocSstId() { 
-            return AtomicIncrement(NextSstId); 
-        } 
- 
-        bool Empty() const { 
-            return Fresh.Empty() && CurSlice->Empty(); 
-        } 
- 
-        bool FullyCompacted() const { 
-            return Fresh.Empty() && CurSlice->FullyCompacted(); 
-        } 
- 
-        bool IsWrittenToSstBeforeLsn(ui64 lsn) const { 
-            return Fresh.Empty() || (Fresh.GetFirstLsn() > lsn); 
-        } 
- 
-        TSatisfactionRank GetSatisfactionRank(ESatisfactionRankType s) const { 
-            switch (s) { 
-                case ESatisfactionRankType::Fresh: return Fresh.GetSatisfactionRank(); 
-                case ESatisfactionRankType::Level: return CurSlice->GetSatisfactionRank(); 
-                default: Y_FAIL("Unexpected rank type"); 
-            } 
-        } 
- 
-        void OutputHtml(const TString &name, IOutputStream &str) const; 
-        void OutputHugeStatButton(const TString &name, IOutputStream &str) const; 
-        void OutputQueryDbButton(const TString &name, IOutputStream &str) const; 
- 
-        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const { 
-            // include fresh 
-            Fresh.GetOwnedChunks(chunks); 
-            // include slice 
-            CurSlice->GetOwnedChunks(chunks); 
-        } 
- 
-        void SerializeToProto(NKikimrVDiskData::TLevelIndex &pb) const { 
-            static_assert(sizeof(Signature) == sizeof(ui32), 
-                          "incorrect signature size"); 
-            static_assert(sizeof(NextSstId) == sizeof(ui64), 
-                          "incorrect size of NextSstId field: must be 64 bits wide"); 
- 
-            // write next SST index 
-            ui64 nextSstId = AtomicGet(NextSstId); 
-            pb.SetNextSstId(nextSstId); 
-            CompactedLsn.SerializeToProto(pb); 
-            CurSlice->SerializeToProto(pb); 
- 
-            // add yet uncommitted SSTables into entrypoint 
-            auto& pbLevel0 = *pb.MutableLevel0(); 
-            auto& bulkFormedSstInfoSet = *pb.MutableBulkFormedSstInfoSet(); 
-            for (const TIntrusivePtr<TLevelSegment>& seg : UncommittedReplSegments) { 
-                Y_VERIFY(seg->Info.FirstLsn && seg->Info.LastLsn); 
-                // store level-0 SSTable 
-                seg->SerializeToProto(*pbLevel0.AddSsts()); 
- 
-                // store bulk-formed segment information 
-                auto& bulkSeg = *bulkFormedSstInfoSet.AddSegments(); 
-                bulkSeg.SetFirstBlobLsn(seg->Info.FirstLsn); 
-                bulkSeg.SetLastBlobLsn(seg->Info.LastLsn); 
-                seg->GetEntryPoint().SerializeToProto(*bulkSeg.MutableEntryPoint()); 
-            } 
- 
-        } 
- 
-        void ApplyUncommittedReplSegment(TIntrusivePtr<TLevelSegment>&& seg, const THullCtxPtr &hullCtx) { 
-            // remove this SST from uncommitted list 
-            auto it = std::find(UncommittedReplSegments.begin(), UncommittedReplSegments.end(), seg); 
-            Y_VERIFY(it != UncommittedReplSegments.end()); 
-            UncommittedReplSegments.erase(it); 
- 
-            // create matching entry in bulk-formed segments list 
-            CurSlice->BulkFormedSegments.AddBulkFormedSst(seg->Info.FirstLsn, seg->Info.LastLsn, seg->GetEntryPoint()); 
- 
-            // put SST to level 0 
-            InsertSstAtLevel0(seg, hullCtx); 
-        } 
- 
-        void InsertSstAtLevel0(const TIntrusivePtr<TLevelSegment>& seg, const THullCtxPtr &hullCtx) { 
-            CurSlice->Level0.Put(seg); 
- 
-            // update storage ratio info 
-            if (auto ratio = seg->StorageRatio.Get()) { 
-                CurSlice->LastPublishedRatio += *ratio; 
-                hullCtx->UpdateSpaceCounters(NHullComp::TSstRatio(), *ratio); 
-            } 
-        } 
- 
-        // update statistics about levels 
-        void UpdateLevelStat(NMonGroup::TLsmAllLevelsStat &stat); 
-    }; 
- 
+            Y_VERIFY_DEBUG(!Loaded);
+            Loaded = true;
+
+            // NOTE: compatibility issue, see comment for UpdateWithObsoleteLastCompactedLsn method
+            TOptLsn m = CurSlice->ObsoleteLastCompactedLsn();
+            CompactedLsn.UpdateWithObsoleteLastCompactedLsn(m);
+        }
+
+        // Skip record? This method is used when recovering, those log records, that were already
+        // compacted must be skipped
+        bool SkipRecord(ui64 lsn) const {
+            return lsn <= CompactedLsn;
+        }
+
+        const TCompactedLsn &GetCompactedLsn() const {
+            return CompactedLsn;
+        }
+
+        void UpdateCompactedLsn(ui64 lsn) {
+            CompactedLsn.Update(lsn);
+        }
+
+        ui64 AllocSstId() {
+            return AtomicIncrement(NextSstId);
+        }
+
+        bool Empty() const {
+            return Fresh.Empty() && CurSlice->Empty();
+        }
+
+        bool FullyCompacted() const {
+            return Fresh.Empty() && CurSlice->FullyCompacted();
+        }
+
+        bool IsWrittenToSstBeforeLsn(ui64 lsn) const {
+            return Fresh.Empty() || (Fresh.GetFirstLsn() > lsn);
+        }
+
+        TSatisfactionRank GetSatisfactionRank(ESatisfactionRankType s) const {
+            switch (s) {
+                case ESatisfactionRankType::Fresh: return Fresh.GetSatisfactionRank();
+                case ESatisfactionRankType::Level: return CurSlice->GetSatisfactionRank();
+                default: Y_FAIL("Unexpected rank type");
+            }
+        }
+
+        void OutputHtml(const TString &name, IOutputStream &str) const;
+        void OutputHugeStatButton(const TString &name, IOutputStream &str) const;
+        void OutputQueryDbButton(const TString &name, IOutputStream &str) const;
+
+        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
+            // include fresh
+            Fresh.GetOwnedChunks(chunks);
+            // include slice
+            CurSlice->GetOwnedChunks(chunks);
+        }
+
+        void SerializeToProto(NKikimrVDiskData::TLevelIndex &pb) const {
+            static_assert(sizeof(Signature) == sizeof(ui32),
+                          "incorrect signature size");
+            static_assert(sizeof(NextSstId) == sizeof(ui64),
+                          "incorrect size of NextSstId field: must be 64 bits wide");
+
+            // write next SST index
+            ui64 nextSstId = AtomicGet(NextSstId);
+            pb.SetNextSstId(nextSstId);
+            CompactedLsn.SerializeToProto(pb);
+            CurSlice->SerializeToProto(pb);
+
+            // add yet uncommitted SSTables into entrypoint
+            auto& pbLevel0 = *pb.MutableLevel0();
+            auto& bulkFormedSstInfoSet = *pb.MutableBulkFormedSstInfoSet();
+            for (const TIntrusivePtr<TLevelSegment>& seg : UncommittedReplSegments) {
+                Y_VERIFY(seg->Info.FirstLsn && seg->Info.LastLsn);
+                // store level-0 SSTable
+                seg->SerializeToProto(*pbLevel0.AddSsts());
+
+                // store bulk-formed segment information
+                auto& bulkSeg = *bulkFormedSstInfoSet.AddSegments();
+                bulkSeg.SetFirstBlobLsn(seg->Info.FirstLsn);
+                bulkSeg.SetLastBlobLsn(seg->Info.LastLsn);
+                seg->GetEntryPoint().SerializeToProto(*bulkSeg.MutableEntryPoint());
+            }
+
+        }
+
+        void ApplyUncommittedReplSegment(TIntrusivePtr<TLevelSegment>&& seg, const THullCtxPtr &hullCtx) {
+            // remove this SST from uncommitted list
+            auto it = std::find(UncommittedReplSegments.begin(), UncommittedReplSegments.end(), seg);
+            Y_VERIFY(it != UncommittedReplSegments.end());
+            UncommittedReplSegments.erase(it);
+
+            // create matching entry in bulk-formed segments list
+            CurSlice->BulkFormedSegments.AddBulkFormedSst(seg->Info.FirstLsn, seg->Info.LastLsn, seg->GetEntryPoint());
+
+            // put SST to level 0
+            InsertSstAtLevel0(seg, hullCtx);
+        }
+
+        void InsertSstAtLevel0(const TIntrusivePtr<TLevelSegment>& seg, const THullCtxPtr &hullCtx) {
+            CurSlice->Level0.Put(seg);
+
+            // update storage ratio info
+            if (auto ratio = seg->StorageRatio.Get()) {
+                CurSlice->LastPublishedRatio += *ratio;
+                hullCtx->UpdateSpaceCounters(NHullComp::TSstRatio(), *ratio);
+            }
+        }
+
+        // update statistics about levels
+        void UpdateLevelStat(NMonGroup::TLsmAllLevelsStat &stat);
+    };
+
     ///////////////////////////////////////////////////////////////////////////////////////////
     // Custom implementation of GetSnapshot for every Hull Database (optimization applies)
     ///////////////////////////////////////////////////////////////////////////////////////////
@@ -581,5 +581,5 @@ namespace NKikimr {
     extern template class TLevelIndex<TKeyBarrier, TMemRecBarrier>;
     extern template class TLevelIndex<TKeyBlock, TMemRecBlock>;
 
-} // NKikimr 
- 
+} // NKikimr
+

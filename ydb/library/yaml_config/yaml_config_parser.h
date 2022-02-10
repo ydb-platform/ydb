@@ -9,7 +9,7 @@
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/protobuf/json/json2proto.h>
-#include <ydb/core/protos/config.pb.h> 
+#include <ydb/core/protos/config.pb.h>
 
 
 namespace NKikimr::NYaml {

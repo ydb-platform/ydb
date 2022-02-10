@@ -3,7 +3,7 @@
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include "yql_clickhouse_settings.h"
-#include <ydb/core/yq/libs/db_resolver/db_async_resolver_with_meta.h> 
+#include <ydb/core/yq/libs/db_resolver/db_async_resolver_with_meta.h>
 
 namespace NKikimr::NMiniKQL {
    class IFunctionRegistry;

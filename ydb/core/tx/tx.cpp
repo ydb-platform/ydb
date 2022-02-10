@@ -1,6 +1,6 @@
 #include "tx.h"
 
-#include <ydb/core/base/tx_processing.h> 
+#include <ydb/core/base/tx_processing.h>
 
 namespace NKikimr {
 

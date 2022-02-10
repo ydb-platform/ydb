@@ -1,4 +1,4 @@
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h> 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <util/random/entropy.h>
 #include "cli.h"
 #include "cli_cmds.h"

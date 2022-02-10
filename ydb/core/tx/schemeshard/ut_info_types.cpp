@@ -1,7 +1,7 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h> 
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h> 
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 
-#include <ydb/core/base/compile_time_flags.h> 
+#include <ydb/core/base/compile_time_flags.h>
 
 #include <util/string/strip.h>
 

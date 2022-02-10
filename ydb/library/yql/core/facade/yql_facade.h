@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/core/services/yql_plan.h> 
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h> 
-#include <ydb/library/yql/core/file_storage/file_storage.h> 
+#include <ydb/library/yql/core/services/yql_plan.h>
+#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
+#include <ydb/library/yql/core/file_storage/file_storage.h>
 #include <ydb/library/yql/providers/config/yql_config_provider.h>
 #include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>

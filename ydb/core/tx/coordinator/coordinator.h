@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/tx/tx.h> 
-#include <ydb/core/util/queue_oneone_inplace.h> 
+#include <ydb/core/tx/tx.h>
+#include <ydb/core/util/queue_oneone_inplace.h>
 #include <util/generic/bitmap.h>
 #include <util/generic/set.h>
 #include <util/generic/hash.h>

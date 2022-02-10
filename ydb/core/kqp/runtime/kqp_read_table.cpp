@@ -1,7 +1,7 @@
 #include "kqp_read_table.h"
 #include "kqp_scan_data.h"
 
-#include <ydb/core/engine/mkql_keys.h> 
+#include <ydb/core/engine/mkql_keys.h>
 
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 

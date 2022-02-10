@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:yql) 
+OWNER(g:yql)
 
 SRCS(
     rich_actor.cpp
@@ -8,10 +8,10 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core 
-    ydb/library/yql/providers/common/token_accessor/client 
-    ydb/library/yql/public/types 
-    ydb/library/yql/public/udf 
+    library/cpp/actors/core
+    ydb/library/yql/providers/common/token_accessor/client
+    ydb/library/yql/public/types
+    ydb/library/yql/public/udf
     ydb/library/yql/providers/solomon/proto
 )
 

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_transform.h> 
-#include <ydb/core/kqp/opt/logical/kqp_opt_log.h> 
-#include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h> 
-#include <ydb/core/kqp/opt/physical/kqp_opt_phy.h> 
+#include <ydb/core/kqp/common/kqp_transform.h>
+#include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
+#include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
 
 namespace NKikimr::NKqp::NOpt {
 

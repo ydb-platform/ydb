@@ -1,13 +1,13 @@
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+RECURSE_FOR_TESTS(
+    ut
+)
 
 LIBRARY()
 
-OWNER( 
-    chertus 
-    g:kikimr 
-) 
+OWNER(
+    chertus
+    g:kikimr
+)
 
 SRCS(
     column_engine_logs.cpp
@@ -21,14 +21,14 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/core/base 
-    ydb/core/formats 
-    ydb/core/protos 
-    ydb/core/scheme 
-    ydb/core/tablet 
-    ydb/core/tablet_flat 
+    ydb/core/base
+    ydb/core/formats
+    ydb/core/protos
+    ydb/core/scheme
+    ydb/core/tablet
+    ydb/core/tablet_flat
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 END()

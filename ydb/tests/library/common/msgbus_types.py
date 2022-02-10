@@ -10,7 +10,7 @@ class MessageBusStatus(enum.IntEnum):
 
     See /arcadia/kikimr/core/client/base/msgbus.h
 
-    See /arcadia/ydb/core/protos/msgbus.proto 
+    See /arcadia/ydb/core/protos/msgbus.proto
     """
 
     # These are from /arcadia/kikimr/core/client/base/msgbus.h
@@ -58,7 +58,7 @@ class EMessageStatus(enum.IntEnum):
 @enum.unique
 class EReplyStatus(enum.IntEnum):
     """
-    See /arcadia/ydb/core/protos/base.proto 
+    See /arcadia/ydb/core/protos/base.proto
     """
     OK = 0
     ERROR = 1
@@ -92,7 +92,7 @@ class TStorageStatusFlags(enum.IntEnum):
 @enum.unique
 class SchemeStatus(enum.IntEnum):
     """
-    See /arcadia/ydb/core/protos/flat_tx_scheme.proto 
+    See /arcadia/ydb/core/protos/flat_tx_scheme.proto
     enum EStatus
     """
     StatusSuccess = 0

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/util) 
+UNITTEST_FOR(ydb/core/util)
 
 OWNER(vvvv g:kikimr)
 
@@ -21,7 +21,7 @@ PEERDIR(
 
 SRCS(
     address_classifier_ut.cpp
-    bits_ut.cpp 
+    bits_ut.cpp
     btree_cow_ut.cpp
     btree_ut.cpp
     cache_ut.cpp
@@ -41,7 +41,7 @@ SRCS(
     operation_queue_ut.cpp
     operation_queue_priority_ut.cpp
     page_map_ut.cpp
-    queue_inplace_ut.cpp 
+    queue_inplace_ut.cpp
     queue_oneone_inplace_ut.cpp
     simple_cache_ut.cpp
     time_series_vec_ut.cpp

@@ -1,13 +1,13 @@
 #pragma once
 
-#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h> 
-#include <ydb/core/kqp/common/kqp_gateway.h> 
-#include <ydb/core/kqp/common/kqp_tx_info.h> 
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+#include <ydb/core/kqp/common/kqp_gateway.h>
+#include <ydb/core/kqp/common/kqp_tx_info.h>
 
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h> 
-#include <ydb/core/kqp/provider/yql_kikimr_provider.h> 
+#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 
 namespace NKikimr {
 namespace NKqp {

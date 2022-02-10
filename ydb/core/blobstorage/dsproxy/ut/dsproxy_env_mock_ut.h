@@ -2,14 +2,14 @@
 
 #include "defs.h"
 
-#include <ydb/core/blobstorage/dsproxy/dsproxy.h> 
-#include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h> 
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
 
-#include <ydb/core/blobstorage/base/utility.h> 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h> 
+#include <ydb/core/blobstorage/base/utility.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 
-#include <ydb/core/testlib/basics/runtime.h> 
-#include <ydb/core/testlib/basics/appdata.h> 
+#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

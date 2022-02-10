@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/long_tx_service/public) 
+UNITTEST_FOR(ydb/core/tx/long_tx_service/public)
 
 OWNER(g:kikimr)
 

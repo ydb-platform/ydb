@@ -6,7 +6,7 @@ namespace NKikimr {
 
     struct TScrubContext : TThrRefBase {
         const TIntrusivePtr<TVDiskContext> VCtx;
-        const TPDiskCtxPtr PDiskCtx; 
+        const TPDiskCtxPtr PDiskCtx;
         const TIntrusivePtr<TBlobStorageGroupInfo> Info;
         const TActorId SkeletonId;
         const TActorId LogoBlobsLevelIndexActorId;
@@ -19,7 +19,7 @@ namespace NKikimr {
         const TActorId LoggerId;
         const TActorId LogCutterId;
 
-        TScrubContext(TIntrusivePtr<TVDiskContext> vctx, TPDiskCtxPtr pdiskCtx, 
+        TScrubContext(TIntrusivePtr<TVDiskContext> vctx, TPDiskCtxPtr pdiskCtx,
                 TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId skeletonId, TActorId logoBlobsLevelIndexActorId,
                 ui32 nodeId, ui32 pdiskId, ui32 vslotId, ui64 scrubCookie, ui64 incarnationGuid,
                 const TIntrusivePtr<TLsnMngr> lsnMngr, TActorId loggerId, TActorId logCutterId)

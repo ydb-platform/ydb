@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defs.h" 
+#include "defs.h"
 #include "blobstorage_groupinfo.h"
 
 namespace NKikimr {
@@ -95,15 +95,15 @@ namespace NKikimr {
     };
 
     class TBlobStorageGroupInfo::TRootIteratorBase {
-        const TBlobStorageGroupInfo::TTopology *Topology = nullptr; 
+        const TBlobStorageGroupInfo::TTopology *Topology = nullptr;
         bool AtEnd = false;
 
     public:
         TRootIteratorBase()
         {}
 
-        TRootIteratorBase(const TBlobStorageGroupInfo::TTopology *topology, bool atEnd) 
-            : Topology(topology) 
+        TRootIteratorBase(const TBlobStorageGroupInfo::TTopology *topology, bool atEnd)
+            : Topology(topology)
             , AtEnd(atEnd)
         {}
 
@@ -120,13 +120,13 @@ namespace NKikimr {
         }
 
         auto NestedBegin() const {
-            Y_VERIFY(!AtEnd && Topology); 
-            return Topology->FailRealms.begin(); 
+            Y_VERIFY(!AtEnd && Topology);
+            return Topology->FailRealms.begin();
         }
 
         auto NestedEnd() const {
-            Y_VERIFY(!AtEnd && Topology); 
-            return Topology->FailRealms.end(); 
+            Y_VERIFY(!AtEnd && Topology);
+            return Topology->FailRealms.end();
         }
 
         bool IsAtEnd() const {
@@ -134,12 +134,12 @@ namespace NKikimr {
         }
 
         friend bool operator ==(const TRootIteratorBase& x, const TRootIteratorBase& y) {
-            Y_VERIFY_DEBUG(x.Topology == y.Topology); 
+            Y_VERIFY_DEBUG(x.Topology == y.Topology);
             return x.AtEnd == y.AtEnd;
         }
 
         friend bool operator !=(const TRootIteratorBase& x, const TRootIteratorBase& y) {
-            Y_VERIFY_DEBUG(x.Topology == y.Topology); 
+            Y_VERIFY_DEBUG(x.Topology == y.Topology);
             return x.AtEnd != y.AtEnd;
         }
     };
@@ -238,7 +238,7 @@ namespace NKikimr {
 
     inline TBlobStorageGroupInfo::TVDiskIterator TBlobStorageGroupInfo::FindVDisk(const TVDiskID& vdisk) const {
         Y_VERIFY(vdisk.GroupID == GroupID && vdisk.GroupGeneration == GroupGeneration);
-        const auto realmIt = Topology->FailRealms.begin() + vdisk.FailRealm; 
+        const auto realmIt = Topology->FailRealms.begin() + vdisk.FailRealm;
         const auto domainIt = realmIt->FailDomains.begin() + vdisk.FailDomain;
         const auto vdiskIt = domainIt->VDisks.begin() + vdisk.VDisk;
         return TVDiskIterator(vdiskIt, domainIt, realmIt, Topology.get(), false);
@@ -309,7 +309,7 @@ namespace NKikimr {
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // TBlobStorageGroupInfo iterator builders 
+    // TBlobStorageGroupInfo iterator builders
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     inline TBlobStorageGroupInfo::TFailRealmIterator TBlobStorageGroupInfo::FailRealmsBegin() const {
         return TFailRealmIterator(Topology->FailRealms.begin(), TRootIteratorBase(Topology.get(), false));
@@ -343,41 +343,41 @@ namespace NKikimr {
         return TVDiskRange(VDisksBegin(), VDisksEnd());
     }
 
- 
- 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    // TBlobStorageGroupInfo::TTopology iterator builders 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    inline TBlobStorageGroupInfo::TFailRealmIterator TBlobStorageGroupInfo::TTopology::FailRealmsBegin() const { 
-        return TFailRealmIterator(FailRealms.begin(), TRootIteratorBase(this, false)); 
-    } 
- 
-    inline TBlobStorageGroupInfo::TFailRealmIterator TBlobStorageGroupInfo::TTopology::FailRealmsEnd() const { 
-        return ++TFailRealmIterator(std::prev(FailRealms.end()), TRootIteratorBase(this, false)); 
-    } 
- 
-    inline TBlobStorageGroupInfo::TFailDomainIterator TBlobStorageGroupInfo::TTopology::FailDomainsBegin() const { 
-        return FailRealmsBegin().FailRealmFailDomainsBegin(); 
-    } 
- 
-    inline TBlobStorageGroupInfo::TFailDomainIterator TBlobStorageGroupInfo::TTopology::FailDomainsEnd() const { 
-        return (--FailRealmsEnd()).FailRealmFailDomainsEnd(); 
-    } 
- 
-    inline TBlobStorageGroupInfo::TFailDomainRange TBlobStorageGroupInfo::TTopology::GetFailDomains() const { 
-        return TFailDomainRange(FailDomainsBegin(), FailDomainsEnd()); 
-    } 
- 
-    inline TBlobStorageGroupInfo::TVDiskIterator TBlobStorageGroupInfo::TTopology::VDisksBegin() const { 
-        return FailRealmsBegin().FailRealmVDisksBegin(); 
-    } 
- 
-    inline TBlobStorageGroupInfo::TVDiskIterator TBlobStorageGroupInfo::TTopology::VDisksEnd() const { 
-        return (--FailRealmsEnd()).FailRealmVDisksEnd(); 
-    } 
- 
-    inline TBlobStorageGroupInfo::TVDiskRange TBlobStorageGroupInfo::TTopology::GetVDisks() const { 
-        return TVDiskRange(VDisksBegin(), VDisksEnd()); 
-    } 
- 
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // TBlobStorageGroupInfo::TTopology iterator builders
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    inline TBlobStorageGroupInfo::TFailRealmIterator TBlobStorageGroupInfo::TTopology::FailRealmsBegin() const {
+        return TFailRealmIterator(FailRealms.begin(), TRootIteratorBase(this, false));
+    }
+
+    inline TBlobStorageGroupInfo::TFailRealmIterator TBlobStorageGroupInfo::TTopology::FailRealmsEnd() const {
+        return ++TFailRealmIterator(std::prev(FailRealms.end()), TRootIteratorBase(this, false));
+    }
+
+    inline TBlobStorageGroupInfo::TFailDomainIterator TBlobStorageGroupInfo::TTopology::FailDomainsBegin() const {
+        return FailRealmsBegin().FailRealmFailDomainsBegin();
+    }
+
+    inline TBlobStorageGroupInfo::TFailDomainIterator TBlobStorageGroupInfo::TTopology::FailDomainsEnd() const {
+        return (--FailRealmsEnd()).FailRealmFailDomainsEnd();
+    }
+
+    inline TBlobStorageGroupInfo::TFailDomainRange TBlobStorageGroupInfo::TTopology::GetFailDomains() const {
+        return TFailDomainRange(FailDomainsBegin(), FailDomainsEnd());
+    }
+
+    inline TBlobStorageGroupInfo::TVDiskIterator TBlobStorageGroupInfo::TTopology::VDisksBegin() const {
+        return FailRealmsBegin().FailRealmVDisksBegin();
+    }
+
+    inline TBlobStorageGroupInfo::TVDiskIterator TBlobStorageGroupInfo::TTopology::VDisksEnd() const {
+        return (--FailRealmsEnd()).FailRealmVDisksEnd();
+    }
+
+    inline TBlobStorageGroupInfo::TVDiskRange TBlobStorageGroupInfo::TTopology::GetVDisks() const {
+        return TVDiskRange(VDisksBegin(), VDisksEnd());
+    }
+
 } // NKikimr

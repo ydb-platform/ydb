@@ -23,5 +23,5 @@ namespace NMonitoring {
 
         const bool PreTag;
     };
- 
+
 }

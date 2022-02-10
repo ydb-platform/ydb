@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/blobstorage/crypto) 
+UNITTEST_FOR(ydb/core/blobstorage/crypto)
 
 OWNER(g:kikimr)
 

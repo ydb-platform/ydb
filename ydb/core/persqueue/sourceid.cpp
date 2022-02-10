@@ -1,7 +1,7 @@
 #include "sourceid.h"
 #include "ownerinfo.h"
 
-#include <ydb/core/persqueue/partition.h> 
+#include <ydb/core/persqueue/partition.h>
 
 #include <util/generic/size_literals.h>
 

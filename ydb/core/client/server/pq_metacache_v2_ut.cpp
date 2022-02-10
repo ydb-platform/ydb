@@ -1,12 +1,12 @@
 #include "msgbus_server_pq_metacache.h"
 
-#include <ydb/core/testlib/basics/runtime.h> 
-#include <ydb/core/testlib/test_client.h> 
-#include <ydb/core/testlib/test_pq_client.h> 
-#include <ydb/core/scheme_types/scheme_type_registry.h> 
-#include <ydb/core/tx/scheme_board/cache.h> 
-#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
-#include <ydb/library/persqueue/topic_parser/topic_parser.h> 
+#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/core/testlib/test_pq_client.h>
+#include <ydb/core/scheme_types/scheme_type_registry.h>
+#include <ydb/core/tx/scheme_board/cache.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NMsgBusProxy {
@@ -256,11 +256,11 @@ private:
     TActorId SchemeCacheId;
     TActorId MetaCacheId;
     ui64 Version = 1;
-    std::shared_ptr<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> Client; 
+    std::shared_ptr<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> Client;
 
-    std::shared_ptr<NYdb::TDriver> YdbDriver; 
-    std::shared_ptr<NYdb::NTable::TTableClient> TableClient; 
-    std::shared_ptr<NYdb::NPersQueue::TPersQueueClient> PQClient; 
+    std::shared_ptr<NYdb::TDriver> YdbDriver;
+    std::shared_ptr<NYdb::NTable::TTableClient> TableClient;
+    std::shared_ptr<NYdb::NPersQueue::TPersQueueClient> PQClient;
     TString UpsertTopicQuery = TStringBuilder()
             << "--!syntax_v1\n"
             << "DECLARE $Path as Utf8; DECLARE $Cluster as Utf8; "
@@ -277,4 +277,4 @@ private:
 UNIT_TEST_SUITE_REGISTRATION(TPqMetaCacheV2Test);
 
 }// namespace NTests
-} // namespace NKikimr::NMsgBusProxy 
+} // namespace NKikimr::NMsgBusProxy

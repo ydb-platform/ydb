@@ -18,7 +18,7 @@ namespace NPage {
         Size = Y_LIKELY(size < Max<ui32>()) ? ui32(size) : Max<ui32>();
     }
 
-    THello::TResult THello::Read(TArrayRef<const char> raw, EPage type) const noexcept 
+    THello::TResult THello::Read(TArrayRef<const char> raw, EPage type) const noexcept
     {
         auto label = TDeref<TLabel>::Copy(raw.begin(), 0);
 

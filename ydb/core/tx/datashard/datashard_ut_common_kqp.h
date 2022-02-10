@@ -3,7 +3,7 @@
 #include "datashard_ut_common.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 namespace NKqpHelpers {
 
     inline THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSimpleRequest(
@@ -140,5 +140,5 @@ namespace NKqpHelpers {
     }
 
 } // namespace NKqpHelpers
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

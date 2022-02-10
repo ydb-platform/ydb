@@ -5,7 +5,7 @@
 #include "yql_type_helpers.h"
 
 #include <ydb/library/yql/ast/yql_constraint.h>
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <util/generic/set.h>
 #include <util/string/type.h>

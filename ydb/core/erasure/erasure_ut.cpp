@@ -308,7 +308,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
     Y_UNIT_TEST(TestEo) {
         ui32 species = (ui32)TErasureType::Erasure4Plus2Block;
         {
-            TErasureType groupType((TErasureType::EErasureSpecies)species); 
+            TErasureType groupType((TErasureType::EErasureSpecies)species);
 
             ui32 startingDataSize = 248;
 
@@ -854,7 +854,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
     /*
     Y_UNIT_TEST(TestBlock42PartialRestoreSizeBug1Regression) {
         // Set up the erasure
-        TErasureType groupType(TErasureType::Erasure4Plus2Block); 
+        TErasureType groupType(TErasureType::Erasure4Plus2Block);
 
         // Specify the missing part indexes
         const ui32 maxMissingParts = 2;
@@ -900,7 +900,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
 
     Y_UNIT_TEST(TestBlock42PartialRestoreSizeBug2Regression) {
         // Set up the erasure
-        TErasureType groupType(TErasureType::Erasure4Plus2Block); 
+        TErasureType groupType(TErasureType::Erasure4Plus2Block);
 
         // Specify the missing part indexes
         const ui32 maxMissingParts = 2;
@@ -946,7 +946,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
 
     void TestBlock42PartialRestore(ui32 missingVariant) {
         // Set up the erasure
-        TErasureType groupType(TErasureType::Erasure4Plus2Block); 
+        TErasureType groupType(TErasureType::Erasure4Plus2Block);
 
         // Specify the missing part indexes
         const ui32 maxMissingParts = 2;

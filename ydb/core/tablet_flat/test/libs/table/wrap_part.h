@@ -3,11 +3,11 @@
 #include "test_part.h"
 #include "test_iter.h"
 
-#include <ydb/core/tablet_flat/test/libs/rows/rows.h> 
-#include <ydb/core/tablet_flat/flat_table_part.h> 
-#include <ydb/core/tablet_flat/flat_part_screen.h> 
-#include <ydb/core/tablet_flat/flat_part_iter_multi.h> 
-#include <ydb/core/tablet_flat/flat_stat_part.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/rows.h>
+#include <ydb/core/tablet_flat/flat_table_part.h>
+#include <ydb/core/tablet_flat/flat_part_screen.h>
+#include <ydb/core/tablet_flat/flat_part_iter_multi.h>
+#include <ydb/core/tablet_flat/flat_stat_part.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -142,7 +142,7 @@ namespace NTest {
             TDbTupleRef key = Iter->GetKey();
 
             for (auto &pin: Remap_.KeyPins())
-                State.Set(pin.Pos, ECellOp::Set, key.Columns[pin.Key]); 
+                State.Set(pin.Pos, ECellOp::Set, key.Columns[pin.Key]);
 
             Iter->Apply(State, /* committed */ {});
 

@@ -1,10 +1,10 @@
 #pragma once
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/mon.h>
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/protos/services.pb.h> 
-#include <ydb/core/tablet/tablet_counters_aggregator.h> 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/protos/services.pb.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include "viewer.h"
 
 namespace NKikimr {

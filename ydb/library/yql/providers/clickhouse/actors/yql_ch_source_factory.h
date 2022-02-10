@@ -5,7 +5,7 @@
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
-#include <ydb/library/yql/providers/common/token_accessor/client/factory.h> 
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
 namespace NYql::NDq {
 

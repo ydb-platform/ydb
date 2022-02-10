@@ -1,16 +1,16 @@
 LIBRARY()
 
 OWNER(
-    ilnaz 
+    ilnaz
     svc
     g:kikimr
 )
 
 PEERDIR(
-    ydb/core/base 
-    ydb/core/protos 
-    ydb/core/scheme 
-    ydb/library/aclib 
+    ydb/core/base
+    ydb/core/protos
+    ydb/core/scheme
+    ydb/library/aclib
 )
 
 SRCS(

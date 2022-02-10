@@ -2,11 +2,11 @@
 
 #include "cli_cmd_config.h"
 
-#include <ydb/core/driver_lib/cli_base/cli.h> 
-#include <ydb/core/driver_lib/run/factories.h> 
+#include <ydb/core/driver_lib/cli_base/cli.h>
+#include <ydb/core/driver_lib/run/factories.h>
 
 #include <library/cpp/actors/interconnect/poller_tcp.h>
-#include <ydb/public/lib/deprecated/client/msgbus_client.h> 
+#include <ydb/public/lib/deprecated/client/msgbus_client.h>
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 #include <util/stream/file.h>
@@ -39,7 +39,7 @@ namespace NDriverClient {
     int ActorsysPerfTest(TCommandConfig &cmdConf, int argc, char **argv);
     void HideOptions(NLastGetopt::TOpts& opts, const TString& prefix);
     void HideOptions(NLastGetopt::TOpts& opts);
-    int NewClient(int argc, char** argv, std::shared_ptr<TModuleFactories> factories); 
-    TString NewClientCommandsDescription(std::shared_ptr<TModuleFactories> factories); 
+    int NewClient(int argc, char** argv, std::shared_ptr<TModuleFactories> factories);
+    TString NewClientCommandsDescription(std::shared_ptr<TModuleFactories> factories);
 }
 }

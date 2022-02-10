@@ -9,25 +9,25 @@ namespace NKikimr {
 namespace NTable {
 
     struct TSizeEnv : public IPages {
-        using TInfo = NTabletFlatExecutor::TPrivatePageCache::TInfo; 
+        using TInfo = NTabletFlatExecutor::TPrivatePageCache::TInfo;
 
-        TResult Locate(const TMemTable*, ui64, ui32) noexcept override 
+        TResult Locate(const TMemTable*, ui64, ui32) noexcept override
         {
-            Y_FAIL("IPages::Locate(TMemTable*, ...) shouldn't be used here"); 
+            Y_FAIL("IPages::Locate(TMemTable*, ...) shouldn't be used here");
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override 
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
         {
-            auto *partStore = CheckedCast<const NTable::TPartStore*>(part); 
+            auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return { true, Touch(partStore->Locate(lob, ref), ref) }; 
+            return { true, Touch(partStore->Locate(lob, ref), ref) };
         }
 
         const TSharedData* TryGetPage(const TPart* part, TPageId page, TGroupId groupId) override
         {
-            auto *partStore = CheckedCast<const NTable::TPartStore*>(part); 
+            auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return Touch(partStore->PageCollections.at(groupId.Index).Get(), page); 
+            return Touch(partStore->PageCollections.at(groupId.Index).Get(), page);
         }
 
         ui64 GetSize() const {
@@ -39,7 +39,7 @@ namespace NTable {
         {
             if (Touched[info].insert(page).second) {
                 Pages++;
-                Bytes += info->PageCollection->Page(page).Size; 
+                Bytes += info->PageCollection->Page(page).Size;
             }
 
             return nullptr;

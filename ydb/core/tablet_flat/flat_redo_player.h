@@ -136,7 +136,7 @@ namespace NRedo {
         {
             Y_VERIFY(chunk.size() >= sizeof(TEvAnnex));
 
-            using TGlobId = TStdPad<NPageCollection::TGlobId>; 
+            using TGlobId = TStdPad<NPageCollection::TGlobId>;
 
             auto *ev = reinterpret_cast<const TEvAnnex*>(chunk.data());
             auto *raw = reinterpret_cast<const TGlobId*>(ev + 1);
@@ -223,7 +223,7 @@ namespace NRedo {
             buf += ReadKey(buf, chunk.end() - buf, op->Keys);
             buf += ReadOps(buf, chunk.end() - buf, op->Ops);
 
-            Base.DoUpdate(op->OpHeader.RootId, ERowOp::Upsert, KeyVec, OpsVec, TRowVersion::Min()); 
+            Base.DoUpdate(op->OpHeader.RootId, ERowOp::Upsert, KeyVec, OpsVec, TRowVersion::Min());
         }
 
         void DoEraseLegacy(const TArrayRef<const char> chunk)
@@ -233,7 +233,7 @@ namespace NRedo {
             buf += sizeof(*op);
             buf += ReadKey(buf, chunk.end() - buf, op->Keys);
 
-            Base.DoUpdate(op->OpHeader.RootId, ERowOp::Erase, KeyVec, { }, TRowVersion::Min()); 
+            Base.DoUpdate(op->OpHeader.RootId, ERowOp::Erase, KeyVec, { }, TRowVersion::Min());
         }
 
         void DoFlushLegacy(const TArrayRef<const char> chunk)
@@ -285,10 +285,10 @@ namespace NRedo {
             Y_VERIFY(maxSz >= sizeof(TUpdate), "Buffer to small");
             const TUpdate* up = (const TUpdate*)buf;
             Y_VERIFY(maxSz >= sizeof(TUpdate) + up->Val.Size, "Value size execeeds the buffer size");
-            bool null = TCellOp::HaveNoPayload(up->CellOp) || up->Val.IsNull(); 
-            uo = TUpdateOp(up->Tag, up->CellOp, null ? TRawTypeValue() : TRawTypeValue(up + 1, up->Val.Size, up->Val.TypeId)); 
+            bool null = TCellOp::HaveNoPayload(up->CellOp) || up->Val.IsNull();
+            uo = TUpdateOp(up->Tag, up->CellOp, null ? TRawTypeValue() : TRawTypeValue(up + 1, up->Val.Size, up->Val.TypeId));
 
-            Y_VERIFY(up->CellOp == ELargeObj::Inline || (up->CellOp == ELargeObj::Extern && up->Val.Size == sizeof(ui32))); 
+            Y_VERIFY(up->CellOp == ELargeObj::Inline || (up->CellOp == ELargeObj::Extern && up->Val.Size == sizeof(ui32)));
 
             return sizeof(TUpdate) + up->Val.Size;
         }

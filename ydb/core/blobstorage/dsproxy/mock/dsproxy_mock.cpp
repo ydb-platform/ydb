@@ -1,8 +1,8 @@
 #include "dsproxy_mock.h"
 #include "model.h"
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
-#include <ydb/core/util/stlog.h> 
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/util/stlog.h>
 
 namespace NKikimr {
 

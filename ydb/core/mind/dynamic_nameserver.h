@@ -4,8 +4,8 @@
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <ydb/core/base/domain.h> 
-#include <ydb/core/protos/node_broker.pb.h> 
+#include <ydb/core/base/domain.h>
+#include <ydb/core/protos/node_broker.pb.h>
 
 namespace NKikimr {
 namespace NNodeBroker {

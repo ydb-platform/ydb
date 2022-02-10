@@ -3,7 +3,7 @@
 #include "flat_dbase_scheme.h"
 #include "flat_comp_create.h"
 
-#include <ydb/core/base/appdata.h> 
+#include <ydb/core/base/appdata.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/generic/cast.h>
@@ -119,17 +119,17 @@ void TCompactionLogic::PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, 
                              tableInfo->Policy->SnapshotResourceBrokerTask,
                              tableInfo->Policy->DefaultTaskPriority,
                              inMem.CompactionTask);
-        inMem.State = ECompactionState::SnapshotPending; 
+        inMem.State = ECompactionState::SnapshotPending;
         break;
     case ECompactionState::Pending:
-        inMem.State = ECompactionState::SnapshotPending; 
+        inMem.State = ECompactionState::SnapshotPending;
         break;
     case ECompactionState::PendingBackground:
         // Replace background compaction with regular snapshot task.
         UpdateCompactionTask(tableInfo->Policy->SnapshotResourceBrokerTask,
                              tableInfo->Policy->DefaultTaskPriority,
                              inMem.CompactionTask);
-        inMem.State = ECompactionState::SnapshotPending; 
+        inMem.State = ECompactionState::SnapshotPending;
         break;
     default:
         break;
@@ -148,7 +148,7 @@ ui64 TCompactionLogic::PrepareForceCompaction(ui32 table, EForceCompaction mode)
     TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(table);
     if (!tableInfo)
         return 0;
- 
+
     if (mode == EForceCompaction::Borrowed) {
         // Note: we also schedule mem table compaction below, because tx status may have borrowed data
         tableInfo->Strategy->ScheduleBorrowedCompaction();
@@ -298,7 +298,7 @@ void TCompactionLogic::StopTable(TCompactionLogicState::TTableInfo &table)
     switch (inMem.State) {
         case ECompactionState::Pending:
         case ECompactionState::PendingBackground:
-        case ECompactionState::SnapshotPending: 
+        case ECompactionState::SnapshotPending:
             // We must cancel our own pending task
             Broker->CancelTask(inMem.CompactionTask.TaskId);
             break;
@@ -338,7 +338,7 @@ void TCompactionLogic::StrategyChanging(TCompactionLogicState::TTableInfo &table
     switch (inMem.State) {
         case ECompactionState::Pending:
         case ECompactionState::PendingBackground:
-        case ECompactionState::SnapshotPending: 
+        case ECompactionState::SnapshotPending:
             // Keep currently pending tasks
             break;
 
@@ -350,12 +350,12 @@ void TCompactionLogic::StrategyChanging(TCompactionLogicState::TTableInfo &table
             inMem.State = ECompactionState::Pending;
             break;
 
-        case ECompactionState::SnapshotCompaction: 
+        case ECompactionState::SnapshotCompaction:
             // Compaction has been cancelled, resubmit
             resubmit(
                 table.Policy->SnapshotResourceBrokerTask,
                 table.Policy->DefaultTaskPriority);
-            inMem.State = ECompactionState::SnapshotPending; 
+            inMem.State = ECompactionState::SnapshotPending;
             break;
 
         default:
@@ -478,9 +478,9 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
         edge.Head = NTable::TEpoch::Max();
         break;
 
-    case ECompactionState::SnapshotPending: 
+    case ECompactionState::SnapshotPending:
         inMem.CompactingSteps = inMem.Steps;
-        inMem.State = ECompactionState::SnapshotCompaction; 
+        inMem.State = ECompactionState::SnapshotCompaction;
         edge = tableInfo->SnapRequests.front().Edge;
         break;
 
@@ -536,7 +536,7 @@ TCompactionLogic::HandleCompaction(
             inMem.CompactionTask.TaskId = 0;
             inMem.CompactionTask.CompactionId = 0;
             break;
-        case ECompactionState::SnapshotCompaction: 
+        case ECompactionState::SnapshotCompaction:
             Y_VERIFY(tableInfo->SnapRequests);
             Y_VERIFY(edge == tableInfo->SnapRequests.front().Edge);
             if (ret) {
@@ -561,7 +561,7 @@ TCompactionLogic::HandleCompaction(
                                  tableInfo->Policy->SnapshotResourceBrokerTask,
                                  tableInfo->Policy->DefaultTaskPriority,
                                  inMem.CompactionTask);
-            inMem.State = ECompactionState::SnapshotPending; 
+            inMem.State = ECompactionState::SnapshotPending;
         } else if (tableInfo->ForcedCompactionState == EForcedCompactionState::PendingMem) {
             // There is another memory compaction request
             SubmitCompactionTask(tableId, 0,
@@ -615,10 +615,10 @@ TCompactionLogic::CancelledCompaction(
     HandleCompaction(compactionId, params.Get(), nullptr);
 }
 
-void TCompactionLogic::BorrowedPart(ui32 tableId, NTable::TPartView partView) { 
+void TCompactionLogic::BorrowedPart(ui32 tableId, NTable::TPartView partView) {
     auto *tableInfo = State->Tables.FindPtr(tableId);
     Y_VERIFY(tableInfo);
-    tableInfo->Strategy->PartMerged(std::move(partView), 255); 
+    tableInfo->Strategy->PartMerged(std::move(partView), 255);
 }
 
 void TCompactionLogic::BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part) {

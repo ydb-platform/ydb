@@ -1,7 +1,7 @@
-#pragma once 
+#pragma once
 
-#include <ydb/core/yq/libs/control_plane_storage/events/events.h> 
-#include <ydb/core/yq/libs/events/events.h> 
+#include <ydb/core/yq/libs/control_plane_storage/events/events.h>
+#include <ydb/core/yq/libs/events/events.h>
 
 namespace NYq {
 

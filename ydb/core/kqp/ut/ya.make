@@ -1,9 +1,9 @@
-UNITTEST_FOR(ydb/core/kqp) 
+UNITTEST_FOR(ydb/core/kqp)
 
-OWNER( 
-    spuchin 
-    g:kikimr 
-) 
+OWNER(
+    spuchin
+    g:kikimr
+)
 
 FORK_SUBTESTS()
 
@@ -60,14 +60,14 @@ SRCS(
 
 PEERDIR(
     library/cpp/threading/local_executor
-    ydb/core/client/minikql_compile 
-    ydb/core/kqp 
-    ydb/core/kqp/counters 
-    ydb/core/kqp/host 
-    ydb/core/kqp/provider 
-    ydb/core/kqp/ut/common 
-    ydb/public/sdk/cpp/client/draft 
-    ydb/public/sdk/cpp/client/ydb_proto 
+    ydb/core/client/minikql_compile
+    ydb/core/kqp
+    ydb/core/kqp/counters
+    ydb/core/kqp/host
+    ydb/core/kqp/provider
+    ydb/core/kqp/ut/common
+    ydb/public/sdk/cpp/client/draft
+    ydb/public/sdk/cpp/client/ydb_proto
 )
 
 YQL_LAST_ABI_VERSION()

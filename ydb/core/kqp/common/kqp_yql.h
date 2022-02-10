@@ -2,7 +2,7 @@
 
 #include "kqp_gateway.h"
 
-#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h> 
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 
 namespace NYql {
 

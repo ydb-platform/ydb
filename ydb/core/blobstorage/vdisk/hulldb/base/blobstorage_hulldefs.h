@@ -1,197 +1,197 @@
-#pragma once 
- 
-#include "defs.h" 
-#include "blobstorage_hullstorageratio.h" 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h> 
-#include <ydb/core/blobstorage/vdisk/common/disk_part.h> 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h> 
-#include <util/generic/vector.h> 
-#include <util/generic/buffer.h> 
-#include <util/stream/output.h> 
-#include <util/string/printf.h> 
-#include <util/ysaveload.h> 
- 
-// FIXME: only for TIngressCache (put it to vdisk/common) 
-#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h> 
-#include <ydb/core/protos/blobstorage_vdisk_internal.pb.h> 
+#pragma once
 
-namespace NKikimr { 
- 
-    template <class TKey> 
+#include "defs.h"
+#include "blobstorage_hullstorageratio.h"
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+#include <ydb/core/blobstorage/vdisk/common/disk_part.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
+#include <util/generic/vector.h>
+#include <util/generic/buffer.h>
+#include <util/stream/output.h>
+#include <util/string/printf.h>
+#include <util/ysaveload.h>
+
+// FIXME: only for TIngressCache (put it to vdisk/common)
+#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
+#include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
+
+namespace NKikimr {
+
+    template <class TKey>
     TLogSignature PDiskSignatureForHullDbKey();
- 
-    /////////////////////////////////////////////////////////////////////////////////////// 
+
+    ///////////////////////////////////////////////////////////////////////////////////////
     // TDiskDataExtractor
-    /////////////////////////////////////////////////////////////////////////////////////// 
+    ///////////////////////////////////////////////////////////////////////////////////////
     struct TDiskDataExtractor {
-        TBlobType::EType BlobType = TBlobType::DiskBlob; 
-        const TDiskPart *Begin = nullptr; 
-        const TDiskPart *End = nullptr; 
-        TDiskPart Store; 
- 
-        // set up one part (DiskBlob or HugeBlob) 
-        void Set(TBlobType::EType t, const TDiskPart &part) { 
-            BlobType = t; 
-            Store = part; 
-            Begin = &Store; 
-            End = Begin + 1; 
-        } 
- 
-        // set up many parts (ManyHugeBlobs) 
-        void Set(TBlobType::EType t, const TDiskPart *begin, const TDiskPart *end) { 
-            BlobType = t; 
-            Begin = begin; 
-            End = end; 
-            Store.Clear(); 
-        } 
- 
-        void Clear() { 
-            BlobType = TBlobType::DiskBlob; 
-            Begin = End = nullptr; 
-            Store.Clear(); 
-        } 
- 
-        const TDiskPart &SwearOne() const { 
+        TBlobType::EType BlobType = TBlobType::DiskBlob;
+        const TDiskPart *Begin = nullptr;
+        const TDiskPart *End = nullptr;
+        TDiskPart Store;
+
+        // set up one part (DiskBlob or HugeBlob)
+        void Set(TBlobType::EType t, const TDiskPart &part) {
+            BlobType = t;
+            Store = part;
+            Begin = &Store;
+            End = Begin + 1;
+        }
+
+        // set up many parts (ManyHugeBlobs)
+        void Set(TBlobType::EType t, const TDiskPart *begin, const TDiskPart *end) {
+            BlobType = t;
+            Begin = begin;
+            End = end;
+            Store.Clear();
+        }
+
+        void Clear() {
+            BlobType = TBlobType::DiskBlob;
+            Begin = End = nullptr;
+            Store.Clear();
+        }
+
+        const TDiskPart &SwearOne() const {
             Y_VERIFY_DEBUG(Begin + 1 == End);
-            return *Begin; 
-        } 
- 
+            return *Begin;
+        }
+
         TString ToString() const {
-            if (Begin == End) 
-                return "empty"; 
-            else { 
-                TStringStream str; 
-                bool first = true; 
-                for (const TDiskPart *it = Begin; it != End; ++it) { 
-                    if (first) 
-                        first = false; 
-                    else 
-                        str << " "; 
-                    str << it->ToString(); 
-                } 
-                return str.Str(); 
-            } 
-        } 
- 
- 
-        ui32 GetInplacedDataSize() const { 
-            if (BlobType == TBlobType::DiskBlob && Begin) { 
-                return Begin->Size; 
-            } else { 
-                return 0; 
-            } 
-        } 
- 
-        ui32 GetHugeDataSize() const { 
-            if (BlobType == TBlobType::HugeBlob || BlobType == TBlobType::ManyHugeBlobs) { 
-                ui32 size = 0; 
-                for (const TDiskPart *cur = Begin; cur != End; cur++) { 
-                    size += cur->Size; 
-                } 
-                if (End - Begin > 1) { 
-                    // add outbound expenses 
-                    size += (End - Begin) * sizeof(TDiskPart); 
-                } 
-                return size; 
-            } else { 
-                return 0; 
-            } 
-        } 
-    }; 
- 
-    /////////////////////////////////////////////////////////////////////////////////////// 
-    // TMemPart 
-    /////////////////////////////////////////////////////////////////////////////////////// 
-    struct TMemPart { 
+            if (Begin == End)
+                return "empty";
+            else {
+                TStringStream str;
+                bool first = true;
+                for (const TDiskPart *it = Begin; it != End; ++it) {
+                    if (first)
+                        first = false;
+                    else
+                        str << " ";
+                    str << it->ToString();
+                }
+                return str.Str();
+            }
+        }
+
+
+        ui32 GetInplacedDataSize() const {
+            if (BlobType == TBlobType::DiskBlob && Begin) {
+                return Begin->Size;
+            } else {
+                return 0;
+            }
+        }
+
+        ui32 GetHugeDataSize() const {
+            if (BlobType == TBlobType::HugeBlob || BlobType == TBlobType::ManyHugeBlobs) {
+                ui32 size = 0;
+                for (const TDiskPart *cur = Begin; cur != End; cur++) {
+                    size += cur->Size;
+                }
+                if (End - Begin > 1) {
+                    // add outbound expenses
+                    size += (End - Begin) * sizeof(TDiskPart);
+                }
+                return size;
+            } else {
+                return 0;
+            }
+        }
+    };
+
+    ///////////////////////////////////////////////////////////////////////////////////////
+    // TMemPart
+    ///////////////////////////////////////////////////////////////////////////////////////
+    struct TMemPart {
         ui64 BufferId;
-        ui32 Size; 
- 
+        ui32 Size;
+
         TMemPart(ui64 bufferId, ui32 size)
             : BufferId(bufferId)
-            , Size(size) 
-        {} 
-    }; 
- 
-    /////////////////////////////////////////////////////////////////////////////////////// 
-    // THullCtx 
-    /////////////////////////////////////////////////////////////////////////////////////// 
-    struct THullCtx : public TThrRefBase { 
-        TVDiskContextPtr VCtx; 
-        const TIntrusivePtr<TIngressCache> IngressCache; 
-        const ui32 ChunkSize; 
-        const ui32 CompWorthReadSize; 
-        const bool FreshCompaction; 
-        const bool GCOnlySynced; 
-        const bool AllowKeepFlags; 
-        const bool BarrierValidation; 
-        const ui32 HullSstSizeInChunksFresh; 
-        const ui32 HullSstSizeInChunksLevel; 
-        const double HullCompFreeSpaceThreshold; 
-        const ui32 FreshCompMaxInFlightWrites; 
-        const ui32 HullCompMaxInFlightWrites; 
-        const ui32 HullCompMaxInFlightReads; 
-        const double HullCompReadBatchEfficiencyThreshold; 
-        const TDuration HullCompStorageRatioCalcPeriod; 
-        const TDuration HullCompStorageRatioMaxCalcDuration; 
- 
-        NMonGroup::TLsmHullGroup LsmHullGroup; 
-        NMonGroup::TLsmHullSpaceGroup LsmHullSpaceGroup; 
- 
-        THullCtx( 
-                TVDiskContextPtr vctx, 
-                ui32 chunkSize, 
-                ui32 compWorthReadSize, 
-                bool freshCompaction, 
-                bool gcOnlySynced, 
-                bool allowKeepFlags, 
-                bool barrierValidation, 
-                ui32 hullSstSizeInChunksFresh, 
-                ui32 hullSstSizeInChunksLevel, 
-                double hullCompFreeSpaceThreshold, 
-                ui32 freshCompMaxInFlightWrites, 
-                ui32 hullCompMaxInFlightWrites, 
-                ui32 hullCompMaxInFlightReads, 
-                double hullCompReadBatchEfficiencyThreshold, 
-                TDuration hullCompStorageRatioCalcPeriod, 
-                TDuration hullCompStorageRatioMaxCalcDuration) 
-            : VCtx(std::move(vctx)) 
+            , Size(size)
+        {}
+    };
+
+    ///////////////////////////////////////////////////////////////////////////////////////
+    // THullCtx
+    ///////////////////////////////////////////////////////////////////////////////////////
+    struct THullCtx : public TThrRefBase {
+        TVDiskContextPtr VCtx;
+        const TIntrusivePtr<TIngressCache> IngressCache;
+        const ui32 ChunkSize;
+        const ui32 CompWorthReadSize;
+        const bool FreshCompaction;
+        const bool GCOnlySynced;
+        const bool AllowKeepFlags;
+        const bool BarrierValidation;
+        const ui32 HullSstSizeInChunksFresh;
+        const ui32 HullSstSizeInChunksLevel;
+        const double HullCompFreeSpaceThreshold;
+        const ui32 FreshCompMaxInFlightWrites;
+        const ui32 HullCompMaxInFlightWrites;
+        const ui32 HullCompMaxInFlightReads;
+        const double HullCompReadBatchEfficiencyThreshold;
+        const TDuration HullCompStorageRatioCalcPeriod;
+        const TDuration HullCompStorageRatioMaxCalcDuration;
+
+        NMonGroup::TLsmHullGroup LsmHullGroup;
+        NMonGroup::TLsmHullSpaceGroup LsmHullSpaceGroup;
+
+        THullCtx(
+                TVDiskContextPtr vctx,
+                ui32 chunkSize,
+                ui32 compWorthReadSize,
+                bool freshCompaction,
+                bool gcOnlySynced,
+                bool allowKeepFlags,
+                bool barrierValidation,
+                ui32 hullSstSizeInChunksFresh,
+                ui32 hullSstSizeInChunksLevel,
+                double hullCompFreeSpaceThreshold,
+                ui32 freshCompMaxInFlightWrites,
+                ui32 hullCompMaxInFlightWrites,
+                ui32 hullCompMaxInFlightReads,
+                double hullCompReadBatchEfficiencyThreshold,
+                TDuration hullCompStorageRatioCalcPeriod,
+                TDuration hullCompStorageRatioMaxCalcDuration)
+            : VCtx(std::move(vctx))
             , IngressCache(TIngressCache::Create(VCtx->Top, VCtx->ShortSelfVDisk))
-            , ChunkSize(chunkSize) 
-            , CompWorthReadSize(compWorthReadSize) 
-            , FreshCompaction(freshCompaction) 
-            , GCOnlySynced(gcOnlySynced) 
-            , AllowKeepFlags(allowKeepFlags) 
-            , BarrierValidation(barrierValidation) 
-            , HullSstSizeInChunksFresh(hullSstSizeInChunksFresh) 
-            , HullSstSizeInChunksLevel(hullSstSizeInChunksLevel) 
-            , HullCompFreeSpaceThreshold(hullCompFreeSpaceThreshold) 
-            , FreshCompMaxInFlightWrites(freshCompMaxInFlightWrites) 
-            , HullCompMaxInFlightWrites(hullCompMaxInFlightWrites) 
-            , HullCompMaxInFlightReads(hullCompMaxInFlightReads) 
-            , HullCompReadBatchEfficiencyThreshold(hullCompReadBatchEfficiencyThreshold) 
-            , HullCompStorageRatioCalcPeriod(hullCompStorageRatioCalcPeriod) 
-            , HullCompStorageRatioMaxCalcDuration(hullCompStorageRatioMaxCalcDuration) 
-            , LsmHullGroup(VCtx->VDiskCounters, "subsystem", "lsmhull") 
-            , LsmHullSpaceGroup(VCtx->VDiskCounters, "subsystem", "outofspace") 
-        {} 
- 
-        void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current); 
-    }; 
- 
-    using THullCtxPtr = TIntrusivePtr<THullCtx>; 
- 
-    //////////////////////////////////////////////////////////////////////////// 
-    // TPutRecoveryLogRecOpt 
-    //////////////////////////////////////////////////////////////////////////// 
-    struct TPutRecoveryLogRecOpt { 
-        TLogoBlobID Id; 
+            , ChunkSize(chunkSize)
+            , CompWorthReadSize(compWorthReadSize)
+            , FreshCompaction(freshCompaction)
+            , GCOnlySynced(gcOnlySynced)
+            , AllowKeepFlags(allowKeepFlags)
+            , BarrierValidation(barrierValidation)
+            , HullSstSizeInChunksFresh(hullSstSizeInChunksFresh)
+            , HullSstSizeInChunksLevel(hullSstSizeInChunksLevel)
+            , HullCompFreeSpaceThreshold(hullCompFreeSpaceThreshold)
+            , FreshCompMaxInFlightWrites(freshCompMaxInFlightWrites)
+            , HullCompMaxInFlightWrites(hullCompMaxInFlightWrites)
+            , HullCompMaxInFlightReads(hullCompMaxInFlightReads)
+            , HullCompReadBatchEfficiencyThreshold(hullCompReadBatchEfficiencyThreshold)
+            , HullCompStorageRatioCalcPeriod(hullCompStorageRatioCalcPeriod)
+            , HullCompStorageRatioMaxCalcDuration(hullCompStorageRatioMaxCalcDuration)
+            , LsmHullGroup(VCtx->VDiskCounters, "subsystem", "lsmhull")
+            , LsmHullSpaceGroup(VCtx->VDiskCounters, "subsystem", "outofspace")
+        {}
+
+        void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);
+    };
+
+    using THullCtxPtr = TIntrusivePtr<THullCtx>;
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TPutRecoveryLogRecOpt
+    ////////////////////////////////////////////////////////////////////////////
+    struct TPutRecoveryLogRecOpt {
+        TLogoBlobID Id;
         TString Data;
- 
-        static TString Serialize(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, const TRope &rope); 
+
+        static TString Serialize(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, const TRope &rope);
         bool ParseFromString(const TBlobStorageGroupType &gtype, const TString &data);
         TString ToString() const;
         void Output(IOutputStream &str) const;
-    }; 
- 
-} // NKikimr 
- 
+    };
+
+} // NKikimr
+

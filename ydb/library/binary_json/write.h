@@ -2,7 +2,7 @@
 
 #include "format.h"
 
-#include <ydb/library/yql/minikql/dom/node.h> 
+#include <ydb/library/yql/minikql/dom/node.h>
 
 #include <util/generic/maybe.h>
 
@@ -18,5 +18,5 @@ TMaybe<TBinaryJson> SerializeToBinaryJson(const TStringBuf json);
  */
 TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value);
 
-} 
- 
+}
+

@@ -1,8 +1,8 @@
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tablet/tablet_exception.h> 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
-#include <ydb/core/base/appdata.h> 
+#include <ydb/core/tablet/tablet_exception.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -27,7 +27,7 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
                        "TTxShardStateChanged DoExecute"
                            << "Unknown shardIdx for tabletId,"
                            << ", tabletId: " << tabletId
-                           << ", state: " << DatashardStateName(NDataShard::TShardState::Offline)); 
+                           << ", state: " << DatashardStateName(NDataShard::TShardState::Offline));
             return;
         }
 
@@ -88,7 +88,7 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
             THolder(new TEvDataShard::TEvStateChangedResult(Self->TabletID(), state));
         SideEffects.Send(Ev->Get()->GetSource(), std::move(event));
 
-        if (state == NDataShard::TShardState::Offline) { 
+        if (state == NDataShard::TShardState::Offline) {
             DeleteShard(tabletId, ctx);
             ProgressDependentOperation(tabletId, ctx);
         }

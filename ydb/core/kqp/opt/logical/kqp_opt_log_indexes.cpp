@@ -1,6 +1,6 @@
-#include <ydb/core/kqp/opt/kqp_opt_impl.h> 
-#include <ydb/core/kqp/common/kqp_yql.h> 
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h> 
+#include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 
@@ -32,7 +32,7 @@ TExprBase DoRewriteIndexRead(const TKqlReadTableIndex& read, TExprContext& ctx,
 {
     const bool needDataRead = CheckIndexCovering(read, indexMeta);
 
-    if (read.Range().From().ArgCount() == 0 && read.Range().To().ArgCount() == 0) { 
+    if (read.Range().From().ArgCount() == 0 && read.Range().To().ArgCount() == 0) {
         TString indexName = read.Index().StringValue();
         auto issue = TIssue(ctx.GetPosition(read.Pos()), "Given predicate is not suitable for used index: " + indexName);
         SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, issue);
@@ -53,7 +53,7 @@ TExprBase DoRewriteIndexRead(const TKqlReadTableIndex& read, TExprContext& ctx,
         }
         return ret;
     }
- 
+
     auto keyColumnsList = BuildKeyColumnsList(tableDesc, read.Pos(), ctx);
     auto columns = MergeColumns(keyColumnsList, extraColumns, ctx);
 

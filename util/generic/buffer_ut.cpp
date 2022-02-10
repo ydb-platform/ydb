@@ -41,19 +41,19 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
 
         buf.Append(content, sizeof(content));
         buf.Clear();
- 
+
         UNIT_ASSERT(buf.Capacity() != 0);
- 
+
         buf.Append(content, sizeof(content));
         buf.Reset();
- 
+
         UNIT_ASSERT_EQUAL(buf.Capacity(), 0);
     }
- 
+
     Y_UNIT_TEST(TestResize) {
         char content[] = "some text";
         TBuffer buf;
- 
+
         buf.Resize(10);
         UNIT_ASSERT_VALUES_EQUAL(buf.size(), 10u);
 
@@ -127,23 +127,23 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
 
 #if 0
 Y_UNIT_TEST(TestAlignUp) {
-    char content[] = "some text"; 
-    TBuffer buf; 
- 
-    buf.Append(content, sizeof(content)); 
-    buf.AlignUp(4, '!'); 
- 
-    UNIT_ASSERT(buf.Size() % 4 == 0); 
+    char content[] = "some text";
+    TBuffer buf;
+
+    buf.Append(content, sizeof(content));
+    buf.AlignUp(4, '!');
+
+    UNIT_ASSERT(buf.Size() % 4 == 0);
     UNIT_ASSERT_VALUES_EQUAL(TString(~buf, +buf), "some text!!!");
- 
-    char addContent[] = "1234"; 
-    buf.Append(addContent, sizeof(addContent)); 
-    buf.AlignUp(4, 'X'); 
-    UNIT_ASSERT(buf.Size() % 4 == 0); 
+
+    char addContent[] = "1234";
+    buf.Append(addContent, sizeof(addContent));
+    buf.AlignUp(4, 'X');
+    UNIT_ASSERT(buf.Size() % 4 == 0);
     UNIT_ASSERT_VALUES_EQUAL(TString(~buf, +buf), "some text!!!1234");
-} 
+}
 #endif
- 
+
 #if 0
 Y_UNIT_TEST(TestSpeed) {
     const char data[] = "1234567890qwertyuiop";

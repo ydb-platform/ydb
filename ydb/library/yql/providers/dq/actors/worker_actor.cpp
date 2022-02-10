@@ -4,8 +4,8 @@
 #include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
 
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
-#include <ydb/library/yql/utils/actor_log/log.h> 
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 

@@ -4,11 +4,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TBuildAndWaitDependenciesUnit : public TExecutionUnit {
 public:
-    TBuildAndWaitDependenciesUnit(TDataShard &dataShard, 
+    TBuildAndWaitDependenciesUnit(TDataShard &dataShard,
                                   TPipeline &pipeline);
     ~TBuildAndWaitDependenciesUnit() override;
 
@@ -25,7 +25,7 @@ private:
     void BuildDependencies(const TOperation::TPtr &op);
 };
 
-TBuildAndWaitDependenciesUnit::TBuildAndWaitDependenciesUnit(TDataShard &dataShard, 
+TBuildAndWaitDependenciesUnit::TBuildAndWaitDependenciesUnit(TDataShard &dataShard,
                                                              TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::BuildAndWaitDependencies, false, dataShard, pipeline)
 {
@@ -173,11 +173,11 @@ void TBuildAndWaitDependenciesUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateBuildAndWaitDependenciesUnit(TDataShard &dataShard, 
+THolder<TExecutionUnit> CreateBuildAndWaitDependenciesUnit(TDataShard &dataShard,
                                                            TPipeline &pipeline)
 {
     return THolder(new TBuildAndWaitDependenciesUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

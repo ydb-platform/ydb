@@ -2,7 +2,7 @@
 #include "yql_expr_type_annotation.h"
 #include "yql_expr_optimize.h"
 #include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <util/generic/hash_set.h>
 #include <util/digest/murmur.h>

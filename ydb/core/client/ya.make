@@ -7,23 +7,23 @@ OWNER(
 
 PEERDIR(
     library/cpp/grpc/server
-    ydb/core/base 
-    ydb/core/client/scheme_cache_lib 
-    ydb/core/client/server 
-    ydb/core/engine 
-    ydb/public/lib/deprecated/kicli 
+    ydb/core/base
+    ydb/core/client/scheme_cache_lib
+    ydb/core/client/server
+    ydb/core/engine
+    ydb/public/lib/deprecated/kicli
 )
 
 END()
 
 RECURSE(
-    metadata 
+    metadata
     minikql_compile
-    minikql_result_lib 
-    scheme_cache_lib 
-    server 
+    minikql_result_lib
+    scheme_cache_lib
+    server
 )
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+)

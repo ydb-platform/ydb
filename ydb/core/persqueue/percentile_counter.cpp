@@ -1,7 +1,7 @@
 #include "percentile_counter.h"
 
-#include <ydb/library/persqueue/topic_parser/topic_parser.h> 
-#include <ydb/core/base/counters.h> 
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/base/counters.h>
 
 namespace NKikimr {
 

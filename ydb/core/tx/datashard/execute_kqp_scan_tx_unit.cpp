@@ -3,14 +3,14 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NKqp;
 using namespace NMiniKQL;
 
 class TExecuteKqpScanTxUnit : public TExecutionUnit {
 public:
-    TExecuteKqpScanTxUnit(TDataShard& dataShard, TPipeline& pipeline) 
+    TExecuteKqpScanTxUnit(TDataShard& dataShard, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::ExecuteKqpScanTx, false, dataShard, pipeline) {
     }
 
@@ -48,9 +48,9 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateExecuteKqpScanTxUnit(TDataShard& dataShard, TPipeline& pipeline) { 
+THolder<TExecutionUnit> CreateExecuteKqpScanTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return MakeHolder<TExecuteKqpScanTxUnit>(dataShard, pipeline);
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

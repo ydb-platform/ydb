@@ -1,6 +1,6 @@
 #include "type_codecs.h"
 
-#include <ydb/core/scheme/scheme_types_defs.h> 
+#include <ydb/core/scheme/scheme_types_defs.h>
 #include <util/generic/typetraits.h>
 
 namespace NKikimr {

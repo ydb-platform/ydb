@@ -10,7 +10,7 @@ namespace NTable {
 
     class TKeysEnv : public IPages {
     public:
-        using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo; 
+        using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
 
         TKeysEnv(const TPart *part, TIntrusivePtr<TCache> cache)
             : Part(part)
@@ -18,12 +18,12 @@ namespace NTable {
         {
         }
 
-        TResult Locate(const TMemTable*, ui64, ui32) noexcept override 
+        TResult Locate(const TMemTable*, ui64, ui32) noexcept override
         {
-            Y_FAIL("IPages::Locate(TMemTable*, ...) shouldn't be used here"); 
+            Y_FAIL("IPages::Locate(TMemTable*, ...) shouldn't be used here");
         }
 
-        TResult Locate(const TPart*, ui64, ELargeObj) noexcept override 
+        TResult Locate(const TPart*, ui64, ELargeObj) noexcept override
         {
             Y_FAIL("IPages::Locate(TPart*, ...) shouldn't be used here");
         }
@@ -55,13 +55,13 @@ namespace NTable {
             if (NeedPages) {
                 TVector<TPageId> pages(NeedPages.begin(), NeedPages.end());
                 std::sort(pages.begin(), pages.end());
-                return new NPageCollection::TFetch{ 0, Cache->PageCollection, std::move(pages) }; 
+                return new NPageCollection::TFetch{ 0, Cache->PageCollection, std::move(pages) };
             } else {
                 return nullptr;
             }
         }
 
-        void Save(ui32 cookie, NSharedCache::TEvResult::TLoaded&& loaded) noexcept 
+        void Save(ui32 cookie, NSharedCache::TEvResult::TLoaded&& loaded) noexcept
         {
             if (cookie == 0 && NeedPages.erase(loaded.PageId)) {
                 ExtraPages[loaded.PageId] = TPinnedPageRef(loaded.Page).GetData();
@@ -249,7 +249,7 @@ namespace NTable {
         TRowId RowId = Max<TRowId>();
         TPageId PageId = Max<TPageId>();
         NPage::TIndex::TIter Index;
-        NPage::TDataPage Page; 
+        NPage::TDataPage Page;
         TSmallVec<TCell> Key;
     };
 

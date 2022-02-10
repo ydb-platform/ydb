@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/public/api/protos/ydb_monitoring.pb.h> 
-#include <ydb/core/base/events.h> 
+#include <ydb/public/api/protos/ydb_monitoring.pb.h>
+#include <ydb/core/base/events.h>
 
 namespace NKikimr {
 namespace NHealthCheck {

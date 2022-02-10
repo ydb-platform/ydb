@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    vvvv 
+    vvvv
     g:yql
     g:yql_ydb_core
 )
@@ -60,32 +60,32 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/enumbitset 
-    library/cpp/random_provider 
-    library/cpp/threading/future 
-    library/cpp/time_provider 
-    library/cpp/yson 
-    library/cpp/yson/node 
+    library/cpp/enumbitset
+    library/cpp/random_provider
+    library/cpp/threading/future
+    library/cpp/time_provider
+    library/cpp/yson
+    library/cpp/yson/node
     ydb/library/yql/ast
-    ydb/library/yql/core/file_storage 
-    ydb/library/yql/core/sql_types 
+    ydb/library/yql/core/file_storage
+    ydb/library/yql/core/sql_types
     ydb/library/yql/minikql
-    ydb/library/yql/protos 
-    ydb/library/yql/public/udf 
-    ydb/library/yql/public/udf/tz 
-    ydb/library/yql/sql/settings 
-    ydb/library/yql/utils 
-    ydb/library/yql/utils/log 
+    ydb/library/yql/protos
+    ydb/library/yql/public/udf
+    ydb/library/yql/public/udf/tz
+    ydb/library/yql/sql/settings
+    ydb/library/yql/utils
+    ydb/library/yql/utils/log
     ydb/library/yql/core/expr_nodes
     ydb/library/yql/providers/common/proto
 )
 
 GENERATE_ENUM_SERIALIZATION(yql_data_provider.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(yql_user_data.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(yql_atom_enums.h)
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 END()

@@ -1,16 +1,16 @@
 PROTO_LIBRARY()
 
-OWNER( 
-    xenoxeno 
-    g:kikimr 
-) 
+OWNER(
+    xenoxeno
+    g:kikimr
+)
 
 SRCS(
     viewer.proto
 )
 
 PEERDIR(
-    ydb/core/protos 
+    ydb/core/protos
 )
 
 EXCLUDE_TAGS(GO_PROTO)

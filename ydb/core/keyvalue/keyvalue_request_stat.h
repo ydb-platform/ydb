@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "keyvalue_request_type.h"
-#include <ydb/core/tablet/tablet_metrics.h> 
+#include <ydb/core/tablet/tablet_metrics.h>
 
 namespace NKikimr {
 namespace NKeyValue {

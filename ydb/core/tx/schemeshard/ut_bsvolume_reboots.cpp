@@ -1,7 +1,7 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h> 
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-#include <ydb/core/tx/datashard/datashard.h> 
-#include <ydb/core/protos/flat_scheme_op.pb.h> 
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
            TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "Owner124", 1);
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner124"));
- 
+
         });
-    } 
+    }
 }

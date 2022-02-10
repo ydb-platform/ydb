@@ -34,7 +34,7 @@ namespace NRedo {
             return this;
         }
 
-        TOverhead* Cut(TTxStamp stamp, TGCBlobDelta &gc, ui64 &largeGlobIds) noexcept 
+        TOverhead* Cut(TTxStamp stamp, TGCBlobDelta &gc, ui64 &largeGlobIds) noexcept
         {
             if (!Trace || stamp < Trace.front()->Stamp) {
                 return nullptr;
@@ -51,8 +51,8 @@ namespace NRedo {
                 NUtil::SubSafe(Bytes, (*it)->BytesData());
 
                 if (NUtil::SubSafe((*it)->References, ui32(1)) == 0) {
-                    (*it)->LargeGlobId.MaterializeTo(gc.Deleted); 
-                    NUtil::SubSafe(largeGlobIds, (*it)->BytesLargeGlobId()); 
+                    (*it)->LargeGlobId.MaterializeTo(gc.Deleted);
+                    NUtil::SubSafe(largeGlobIds, (*it)->BytesLargeGlobId());
                 }
             }
             Trace.erase(Trace.begin(), end);

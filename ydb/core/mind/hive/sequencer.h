@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/mind/defs.h> 
-#include <ydb/core/util/tuples.h> 
+#include <ydb/core/mind/defs.h>
+#include <ydb/core/util/tuples.h>
 #include <map>
 #include <list>
 #include <utility>

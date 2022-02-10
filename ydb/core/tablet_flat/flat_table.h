@@ -16,7 +16,7 @@
 #include "flat_sausage_solid.h"
 #include "util_basics.h"
 
-#include <ydb/core/scheme/scheme_tablecell.h> 
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/deque.h>
@@ -33,7 +33,7 @@ class TKeyRangeCache;
 class TTable: public TAtomicRefCount<TTable> {
 public:
     using TOpsRef = TArrayRef<const TUpdateOp>;
-    using TMemGlob = NPageCollection::TMemGlob; 
+    using TMemGlob = NPageCollection::TMemGlob;
 
     struct TStat {
         /*_ In memory (~memtable) data statistics   */
@@ -103,11 +103,11 @@ public:
     void ReplaceTxStatus(TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>>, const TSubset&) noexcept;
 
     /*_ Special interface for clonig flatten part of table for outer usage.
-        Cook some TPartView with Subset(...) method and/or TShrink tool first and 
-        then merge produced TPartView to outer table. 
+        Cook some TPartView with Subset(...) method and/or TShrink tool first and
+        then merge produced TPartView to outer table.
     */
 
-    void Merge(TPartView partView) noexcept; 
+    void Merge(TPartView partView) noexcept;
     void Merge(TIntrusiveConstPtr<TColdPart> part) noexcept;
     void Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept;
     void ProcessCheckTransactions() noexcept;
@@ -122,9 +122,9 @@ public:
      */
     ui64 GetSearchHeight() const noexcept;
 
-    /* Hack for filling external blobs in TMemTable tables with data */ 
+    /* Hack for filling external blobs in TMemTable tables with data */
 
-    TVector<TIntrusiveConstPtr<TMemTable>> GetMemTables() const noexcept; 
+    TVector<TIntrusiveConstPtr<TMemTable>> GetMemTables() const noexcept;
 
     TAutoPtr<TTableIt> Iterate(TRawVals key, TTagsRef tags, IPages* env, ESeek, TRowVersion snapshot) const noexcept;
     TAutoPtr<TTableReverseIt> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek, TRowVersion snapshot) const noexcept;
@@ -136,22 +136,22 @@ public:
                    ui64 itemsLimit, ui64 bytesLimit,
                    EDirection direction, TRowVersion snapshot) const;
 
-    void Update(ERowOp, TRawVals key, TOpsRef, TArrayRef<TMemGlob> apart, TRowVersion rowVersion); 
+    void Update(ERowOp, TRawVals key, TOpsRef, TArrayRef<TMemGlob> apart, TRowVersion rowVersion);
 
-    void UpdateTx(ERowOp, TRawVals key, TOpsRef, TArrayRef<TMemGlob> apart, ui64 txId); 
+    void UpdateTx(ERowOp, TRawVals key, TOpsRef, TArrayRef<TMemGlob> apart, ui64 txId);
     void CommitTx(ui64 txId, TRowVersion rowVersion);
     void RemoveTx(ui64 txId);
 
-    TPartView GetPartView(const TLogoBlobID &bundle) const 
+    TPartView GetPartView(const TLogoBlobID &bundle) const
     {
-        auto *partView = Flatten.FindPtr(bundle); 
+        auto *partView = Flatten.FindPtr(bundle);
 
-        return partView ? *partView : TPartView{ }; 
+        return partView ? *partView : TPartView{ };
     }
 
-    TVector<TPartView> GetAllParts() const 
+    TVector<TPartView> GetAllParts() const
     {
-        TVector<TPartView> parts(Reserve(Flatten.size())); 
+        TVector<TPartView> parts(Reserve(Flatten.size()));
 
         for (auto& x : Flatten) {
             parts.emplace_back(x.second);
@@ -171,7 +171,7 @@ public:
         return parts;
     }
 
-    void EnumerateParts(const std::function<void(const TPartView&)>& callback) const 
+    void EnumerateParts(const std::function<void(const TPartView&)>& callback) const
     {
         for (auto& x : Flatten) {
             callback(x.second);
@@ -244,9 +244,9 @@ public:
         ui64 rows = Stat_.FrozenRows + (Mutable ? Mutable->GetRowCount() : 0);
 
         for (const auto& flat : Flatten) {
-            if (const TPartView &partView = flat.second) { 
-                size += partView->DataSize(); 
-                rows += partView->Index.Rows(); 
+            if (const TPartView &partView = flat.second) {
+                size += partView->DataSize();
+                rows += partView->Index.Rows();
             }
         }
 
@@ -268,15 +268,15 @@ public:
     void FillTxStatusCache(THashMap<TLogoBlobID, TSharedData>& cache) const noexcept;
 
 private:
-    TMemTable& MemTable(); 
-    void AddSafe(TPartView partView); 
+    TMemTable& MemTable();
+    void AddSafe(TPartView partView);
 
-    void AddStat(const TPartView& partView); 
-    void RemoveStat(const TPartView& partView); 
+    void AddStat(const TPartView& partView);
+    void RemoveStat(const TPartView& partView);
 
 private:
     struct TOpenTransaction {
-        THashSet<TIntrusiveConstPtr<TMemTable>> Mem; 
+        THashSet<TIntrusiveConstPtr<TMemTable>> Mem;
         THashSet<TIntrusiveConstPtr<TPart>> Parts;
     };
 
@@ -284,9 +284,9 @@ private:
     TEpoch Epoch; /* Monotonic table change number, with holes */
     ui64 Annexed = 0; /* Monotonic serial of attached external blobs */
     TIntrusiveConstPtr<TRowScheme> Scheme;
-    TIntrusivePtr<TMemTable> Mutable; 
-    TSet<TIntrusiveConstPtr<TMemTable>, TOrderByEpoch<TMemTable>> Frozen; 
-    THashMap<TLogoBlobID, TPartView> Flatten; 
+    TIntrusivePtr<TMemTable> Mutable;
+    TSet<TIntrusiveConstPtr<TMemTable>, TOrderByEpoch<TMemTable>> Frozen;
+    THashMap<TLogoBlobID, TPartView> Flatten;
     THashMap<TLogoBlobID, TIntrusiveConstPtr<TColdPart>> ColdParts;
     THashMap<TLogoBlobID, TIntrusiveConstPtr<TTxStatusPart>> TxStatus;
     TEpoch FlattenEpoch = TEpoch::Min(); /* Current maximum flatten epoch */

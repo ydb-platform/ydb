@@ -1,21 +1,21 @@
-#include <ydb/core/tablet_flat/flat_sausage_align.h> 
-#include <ydb/core/tablet_flat/flat_sausage_meta.h> 
-#include <ydb/core/tablet_flat/flat_sausage_writer.h> 
-#include <ydb/core/tablet_flat/flat_sausage_flow.h> 
-#include <ydb/core/tablet_flat/flat_sausage_solid.h> 
-#include <ydb/core/tablet_flat/flat_sausage_chop.h> 
-#include <ydb/core/tablet_flat/flat_sausage_grind.h> 
-#include <ydb/core/tablet_flat/util_fmt_desc.h> 
+#include <ydb/core/tablet_flat/flat_sausage_align.h>
+#include <ydb/core/tablet_flat/flat_sausage_meta.h>
+#include <ydb/core/tablet_flat/flat_sausage_writer.h>
+#include <ydb/core/tablet_flat/flat_sausage_flow.h>
+#include <ydb/core/tablet_flat/flat_sausage_solid.h>
+#include <ydb/core/tablet_flat/flat_sausage_chop.h>
+#include <ydb/core/tablet_flat/flat_sausage_grind.h>
+#include <ydb/core/tablet_flat/util_fmt_desc.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
 #include <array>
 
 namespace NKikimr {
-namespace NPageCollection { 
+namespace NPageCollection {
 
 namespace {
-    struct TMyPageCollection { 
+    struct TMyPageCollection {
         using TArrayRef = TArrayRef<const TGlobId>;
 
         TMyPageCollection(TArrayRef globs) : Globs(globs) { }
@@ -36,8 +36,8 @@ namespace {
     };
 }
 
-Y_UNIT_TEST_SUITE(NPageCollection) { 
-    using TGlow = TPagesToBlobsConverter<TMeta>; 
+Y_UNIT_TEST_SUITE(NPageCollection) {
+    using TGlow = TPagesToBlobsConverter<TMeta>;
 
     static const std::array<TLogoBlobID, 7> Blobs = {{
         TLogoBlobID(10, 20, 30, 1, 100, 0),
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
 
     TSharedData MakeMeta()
     {
-        NPageCollection::TRecord meta(0); 
+        NPageCollection::TRecord meta(0);
 
         meta.Push(Blobs);
 
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
 
         auto checkGlobs = [&](TVector<TGlob> blobs) {
             for (const auto &one: blobs) {
-                bool pln = TGroupBlobsByCookie::IsInPlane(one.GId.Logo, glob.Logo); 
+                bool pln = TGroupBlobsByCookie::IsInPlane(one.GId.Logo, glob.Logo);
                 bool grp = (one.GId.Group == glob.Group);
                 bool cnl = (one.GId.Logo.Channel() == glob.Logo.Channel());
 
@@ -109,9 +109,9 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
             return blobs.size();
         };
 
-        TCookieAllocator cookieAllocator(10, (ui64(20) << 32) | 30, { 0,  999 }, {{ 1, 777 }}); 
+        TCookieAllocator cookieAllocator(10, (ui64(20) << 32) | 30, { 0,  999 }, {{ 1, 777 }});
 
-        TWriter writer(cookieAllocator, 1 /* channel */, 8192 * 1024); 
+        TWriter writer(cookieAllocator, 1 /* channel */, 8192 * 1024);
 
         const auto r1 = writer.AddPage(chunk1, 1);
         writer.AddInplace(r1, TStringBuf("chunk 1"));
@@ -152,37 +152,37 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         UNIT_ASSERT(l3.Lo.Blob == 2 && l3.Up.Blob == 3);
     }
 
-    Y_UNIT_TEST(PagesToBlobsConverter) 
+    Y_UNIT_TEST(PagesToBlobsConverter)
     {
         const TMeta meta(MakeMeta(), 0);
 
         auto grow = [&meta](const TVector<ui32> pages) {
             TGlow flow(meta, pages);
             flow.Grow(Max<ui64>());
-            return std::move(flow.Queue); 
+            return std::move(flow.Queue);
         };
 
         { /*_ { 1 } lies away of the bounds of one blob */
             const auto ln = grow({ 1 });
 
             UNIT_ASSERT(ln.size() == 1);
-            UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 30, 0, 50 })); 
+            UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 30, 0, 50 }));
         }
 
         { /*_ { 0, 6 } snaps to the start of the single blob */
             const auto ln = grow({ 0, 6 });
 
             UNIT_ASSERT(ln.size() == 2);
-            UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 50, 0, 0 })); 
-            UNIT_ASSERT((ln[1] == TGlow::TReadPortion{ 1, 70, 4, 0 })); 
+            UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 50, 0, 0 }));
+            UNIT_ASSERT((ln[1] == TGlow::TReadPortion{ 1, 70, 4, 0 }));
         }
 
         { /*_ { 3, 8 } snaps to the end of the single blob */
             const auto ln = grow({ 3, 8 });
 
             UNIT_ASSERT(ln.size() == 2);
-            UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 60, 1,  60 })); 
-            UNIT_ASSERT((ln[1] == TGlow::TReadPortion{ 1, 10, 6, 140 })); 
+            UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 60, 1,  60 }));
+            UNIT_ASSERT((ln[1] == TGlow::TReadPortion{ 1, 10, 6, 140 }));
         }
 
         { /*_ { 2 } spans over the bounds of the two blobs */
@@ -190,25 +190,25 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
 
 
             UNIT_ASSERT(ln.size() == 2);
-            UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 20, 0, 80 })); 
-            UNIT_ASSERT((ln[1] == TGlow::TReadPortion{ 0, 60, 1, 0 })); 
+            UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 20, 0, 80 }));
+            UNIT_ASSERT((ln[1] == TGlow::TReadPortion{ 0, 60, 1, 0 }));
         }
 
         { /*_ { 4, 5 } each occupies entire single blob */
             const auto ln = grow({ 4, 5 });
 
             UNIT_ASSERT(ln.size() == 2);
-            UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 40, 2, 0 })); 
-            UNIT_ASSERT((ln[1] == TGlow::TReadPortion{ 1, 60, 3, 0 })); 
+            UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 40, 2, 0 }));
+            UNIT_ASSERT((ln[1] == TGlow::TReadPortion{ 1, 60, 3, 0 }));
         }
 
         { /*_ { 7 } spans over a serveral subsequent blobs */
             const auto ln = grow({ 7 });
 
             UNIT_ASSERT(ln.size() == 3);
-            UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0,  70, 4, 70 })); 
-            UNIT_ASSERT((ln[1] == TGlow::TReadPortion{ 0, 170, 5, 0 })); 
-            UNIT_ASSERT((ln[2] == TGlow::TReadPortion{ 0, 140, 6, 0 })); 
+            UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0,  70, 4, 70 }));
+            UNIT_ASSERT((ln[1] == TGlow::TReadPortion{ 0, 170, 5, 0 }));
+            UNIT_ASSERT((ln[2] == TGlow::TReadPortion{ 0, 140, 6, 0 }));
         }
     }
 
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
 
             if (const auto more = flow.Grow(bytes))
                 for (const auto on : xrange(+more))
-                    used += flow.Queue[more.From + on].Size; 
+                    used += flow.Queue[more.From + on].Size;
 
             return used;
         };
@@ -247,11 +247,11 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
             { TLogoBlobID(1, 2, 3, 1, 20, 5), 7 },
         }};
 
-        const TMyPageCollection myPageCollection(globs); 
+        const TMyPageCollection myPageCollection(globs);
 
-        auto check = [&globs](const TPagesToBlobsConverter<TMyPageCollection> &flow) { 
-            for (auto num : xrange(flow.Queue.size())) { 
-                const auto &brick = flow.Queue.at(num); 
+        auto check = [&globs](const TPagesToBlobsConverter<TMyPageCollection> &flow) {
+            for (auto num : xrange(flow.Queue.size())) {
+                const auto &brick = flow.Queue.at(num);
 
                 UNIT_ASSERT(brick.Slot == num && brick.Blob == num);
                 UNIT_ASSERT(brick.Size == globs[num].Logo.BlobSize());
@@ -262,16 +262,16 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         { /*_ Take the only blob page in middle */
             const ui32 slice1[] = { 3 };
             const ui32 slice2[] = { 4 };
-            auto one = TPagesToBlobsConverter<TMyPageCollection>(myPageCollection, slice1).Grow(7500); 
-            auto two = TPagesToBlobsConverter<TMyPageCollection>(myPageCollection, slice2).Grow(7500); 
+            auto one = TPagesToBlobsConverter<TMyPageCollection>(myPageCollection, slice1).Grow(7500);
+            auto two = TPagesToBlobsConverter<TMyPageCollection>(myPageCollection, slice2).Grow(7500);
 
             UNIT_ASSERT(one && one.From == 0 && one.To == 1);
             UNIT_ASSERT(two && two.From == 0 && two.To == 1);
         }
 
-        { /*_ Read all pages in blobs page collection */ 
+        { /*_ Read all pages in blobs page collection */
             const ui32 slice[] = { 0, 1, 2, 3, 4, 5 };
-            TPagesToBlobsConverter<TMyPageCollection> flow(myPageCollection, slice); 
+            TPagesToBlobsConverter<TMyPageCollection> flow(myPageCollection, slice);
 
             auto one = flow.Grow(7500);
             auto two = flow.Grow(7500);
@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
 
         { /*_ Read with limits on each package */
             const ui32 slice[] = { 0, 1, 2, 3, 4, 5 };
-            TPagesToBlobsConverter<TMyPageCollection> flow(myPageCollection, slice); 
+            TPagesToBlobsConverter<TMyPageCollection> flow(myPageCollection, slice);
 
             auto one = flow.Grow(40);
             auto two = flow.Grow(40);
@@ -315,21 +315,21 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         }};
 
         { /* array of logos with full span */
-            const auto span = TGroupBlobsByCookie(Blobs).Do(); 
+            const auto span = TGroupBlobsByCookie(Blobs).Do();
 
             UNIT_ASSERT(span.size() == 7 && span[0] == Blobs[0]);
         }
 
         { /* tirvial array of zero lengh */
-            const auto span = TGroupBlobsByCookie({ }).Do(); 
+            const auto span = TGroupBlobsByCookie({ }).Do();
 
             UNIT_ASSERT(span.size() == 0);
         }
 
-        { /* dashed aray and largeGlobId parser */ 
-            TGroupBlobsByCookie chop(dash); 
+        { /* dashed aray and largeGlobId parser */
+            TGroupBlobsByCookie chop(dash);
 
-            TVector<TGroupBlobsByCookie::TArray> span; 
+            TVector<TGroupBlobsByCookie::TArray> span;
 
             for (size_t it = 0; it < 4; it++)
                 span.emplace_back(chop.Do());
@@ -339,22 +339,22 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
             UNIT_ASSERT(span[2].size() == 1 && span[2][0] == dash[5]);
             UNIT_ASSERT(span[3].size() == 0);
 
-            const auto largeGlobId = TGroupBlobsByCookie::ToLargeGlobId(span[0]); 
+            const auto largeGlobId = TGroupBlobsByCookie::ToLargeGlobId(span[0]);
 
-            UNIT_ASSERT(largeGlobId.Bytes == 60 && largeGlobId.Lead == dash[0]); 
-            UNIT_ASSERT(TGroupBlobsByCookie::ToLargeGlobId(span[2]).Bytes == 10); 
-            UNIT_ASSERT(TGroupBlobsByCookie::ToLargeGlobId({ }).Bytes == 0); 
+            UNIT_ASSERT(largeGlobId.Bytes == 60 && largeGlobId.Lead == dash[0]);
+            UNIT_ASSERT(TGroupBlobsByCookie::ToLargeGlobId(span[2]).Bytes == 10);
+            UNIT_ASSERT(TGroupBlobsByCookie::ToLargeGlobId({ }).Bytes == 0);
         }
     }
 
-    Y_UNIT_TEST(CookieAllocator) 
+    Y_UNIT_TEST(CookieAllocator)
     {
-        TSteppedCookieAllocator cookieAllocator(1, (ui64(2) << 32) | 1, { 10, 32 }, {{ 3, 999 }}); 
+        TSteppedCookieAllocator cookieAllocator(1, (ui64(2) << 32) | 1, { 10, 32 }, {{ 3, 999 }});
 
-        cookieAllocator.Switch(3, true /* require step switch */); 
+        cookieAllocator.Switch(3, true /* require step switch */);
 
-        { /*_ LargeGlobId spanned over several blobs */ 
-            auto largeGlobId = cookieAllocator.Do(3, 25, 10); 
+        { /*_ LargeGlobId spanned over several blobs */
+            auto largeGlobId = cookieAllocator.Do(3, 25, 10);
             auto itBlobs = largeGlobId.Blobs().begin();
 
             UNIT_ASSERT(largeGlobId.Group == 999 && largeGlobId.BlobCount() == 3);
@@ -364,8 +364,8 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
             UNIT_ASSERT(itBlobs == largeGlobId.Blobs().end());
         }
 
-        { /*_ Trivial largeGlobId occupying one blob */ 
-            auto largeGlobId = cookieAllocator.Do(3, 9, 10); 
+        { /*_ Trivial largeGlobId occupying one blob */
+            auto largeGlobId = cookieAllocator.Do(3, 9, 10);
             auto itBlobs = largeGlobId.Blobs().begin();
 
             UNIT_ASSERT(largeGlobId.Group == 999 && largeGlobId.BlobCount() == 1);
@@ -373,20 +373,20 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
             UNIT_ASSERT(itBlobs == largeGlobId.Blobs().end());
         }
 
-        { /*_ Single blob just after placed largeGlobId */ 
-            auto glob = cookieAllocator.Do(3, 88); 
+        { /*_ Single blob just after placed largeGlobId */
+            auto glob = cookieAllocator.Do(3, 88);
 
             UNIT_ASSERT(glob == TGlobId(TLogoBlobID(1, 2, 3, 3, 88, 16), 999));
         }
 
         { /*_ Continue single blob series, no holes */
-            auto glob = cookieAllocator.Do(3, 26); 
+            auto glob = cookieAllocator.Do(3, 26);
 
             UNIT_ASSERT(glob == TGlobId(TLogoBlobID(1, 2, 3, 3, 26, 17), 999));
         }
 
-        { /*_ Trivial largeGlobId with exact blob size */ 
-            auto largeGlobId = cookieAllocator.Do(3, 10, 10); 
+        { /*_ Trivial largeGlobId with exact blob size */
+            auto largeGlobId = cookieAllocator.Do(3, 10, 10);
             auto itBlobs = largeGlobId.Blobs().begin();
 
             UNIT_ASSERT(largeGlobId.Group == 999 && largeGlobId.BlobCount() == 1);
@@ -394,18 +394,18 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
             UNIT_ASSERT(itBlobs == largeGlobId.Blobs().end());
         }
 
-        cookieAllocator.Switch(6, true /* require step switch*/); 
+        cookieAllocator.Switch(6, true /* require step switch*/);
 
         { /*_ After step switch should reset state */
-            auto glob = cookieAllocator.Do(3, 19); 
+            auto glob = cookieAllocator.Do(3, 19);
 
             UNIT_ASSERT(glob == TGlobId(TLogoBlobID(1, 2, 6, 3, 19, 10), 999));
         }
 
-        cookieAllocator.Switch(6, false /* should allow noop */); 
+        cookieAllocator.Switch(6, false /* should allow noop */);
 
-        { /*_ On NOOP cookieRange state should not be altered */ 
-            auto glob = cookieAllocator.Do(3, 77); 
+        { /*_ On NOOP cookieRange state should not be altered */
+            auto glob = cookieAllocator.Do(3, 77);
 
             UNIT_ASSERT(glob == TGlobId(TLogoBlobID(1, 2, 6, 3, 77, 11), 999));
         }

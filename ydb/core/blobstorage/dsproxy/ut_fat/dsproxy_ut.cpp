@@ -1,25 +1,25 @@
 #include "defs.h"
 
-#include <ydb/core/blobstorage/base/blobstorage_events.h> 
-#include <ydb/core/blobstorage/dsproxy/dsproxy.h> 
-#include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h> 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h> 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h> 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h> 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_config.h> 
-#include <ydb/core/blobstorage/vdisk/vdisk_actor.h> 
-#include <ydb/core/blobstorage/vdisk/vdisk_services.h> 
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
+#include <ydb/core/blobstorage/vdisk/vdisk_actor.h>
+#include <ydb/core/blobstorage/vdisk/vdisk_services.h>
 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/base/tabletid.h> 
-#include <ydb/core/base/tablet.h> 
+#include <ydb/core/base/counters.h>
+#include <ydb/core/base/tabletid.h>
+#include <ydb/core/base/tablet.h>
 
-#include <ydb/core/mon_alloc/profiler.h> 
+#include <ydb/core/mon_alloc/profiler.h>
 
-#include <ydb/core/protos/blobstorage_pdisk_config.pb.h> 
-#include <ydb/core/protos/blobstorage_vdisk_config.pb.h> 
-#include <ydb/core/protos/services.pb.h> 
+#include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
+#include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
+#include <ydb/core/protos/services.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/event_local.h>
@@ -619,7 +619,7 @@ public:
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TActor(&TThis::StateRegister)
         , Proxy(proxy)
-        , ErasureSpecies(bsInfo->Type.GetErasure()) 
+        , ErasureSpecies(bsInfo->Type.GetErasure())
         , BsInfo(bsInfo)
         , TestStep(0)
         , InitStep(0)
@@ -1388,7 +1388,7 @@ class TTestBlobStorageProxyVPutVGet : public TTestBlobStorageProxy {
 
                 VERBOSE_COUT(" Sending TEvVPut");
                 TVDiskID vDiskId(0, 1, 0, vDiskIdx , 0);
-                TBlobStorageGroupType type(ErasureSpecies); 
+                TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
                 type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedTestData2, partSet);
 
@@ -1417,7 +1417,7 @@ class TTestBlobStorageProxyVPutVGet : public TTestBlobStorageProxy {
             }
             case 20:
             {
-                TBlobStorageGroupType type(ErasureSpecies); 
+                TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
                 type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedTestData2, partSet);
                 TEST_RESPONSE(MessageVGetResult, OK, 1, partSet.Parts[0].OwnedString);
@@ -1474,7 +1474,7 @@ class TTestBlobStorageProxyVPutVGetLimit : public TTestBlobStorageProxy {
 
                     TLogoBlobID id(1, 0, i/*step*/, 0, testData2.size(), 0, partIdx + 1);
 
-                    TBlobStorageGroupType type(ErasureSpecies); 
+                    TBlobStorageGroupType type(ErasureSpecies);
                     NKikimr::TDataPartSet partSet;
 
                     TLogoBlobID blobId(1, 0, i/*step*/, 0, testData2.size(), 0);
@@ -1710,7 +1710,7 @@ class TTestBlobStorageProxyVGet : public TTestBlobStorageProxy {
                         }
                     }
                 }
-                TBlobStorageGroupType type(ErasureSpecies); 
+                TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
                 type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedTestData2, partSet);
                 TEST_RESPONSE(MessageVGetResult, OK, 1, partSet.Parts[0].OwnedString);
@@ -1848,7 +1848,7 @@ class TTestBlobStorageProxyVBlockVPutVGet : public TTestBlobStorageProxy {
                 TEST_RESPONSE(MessageVBlockResult, OK, 0, "");
 
                 VERBOSE_COUT(" Sending TEvVPut");
-                TBlobStorageGroupType type(ErasureSpecies); 
+                TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
                 TLogoBlobID logoblobid(1, 1, 1, 0, testData.size(), 3, 1);
                 type.SplitData((TErasureType::ECrcMode)logoblobid.CrcMode(), testData, partSet);
@@ -2592,7 +2592,7 @@ class TTestBlobStorageProxyLongTailDiscoverPut : public TTestBlobStorageProxy {
                     TEST_RESPONSE(MessageVPutResult, OK, 0, "");
                 }
 
-                TBlobStorageGroupType type(ErasureSpecies); 
+                TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
                 TLogoBlobID from0(1, 0, 2 + Iteration/*step*/, 0, testData3.size(), 0);
                 type.SplitData((TErasureType::ECrcMode)from0.CrcMode(), testData3, partSet);
@@ -2642,7 +2642,7 @@ class TTestBlobStorageProxyLongTailDiscoverPut : public TTestBlobStorageProxy {
                     partIdx = 1;
                 }
 
-                TBlobStorageGroupType type(ErasureSpecies); 
+                TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
                 TLogoBlobID from(1, 0, 2 + Iteration/*step*/, 0, testData3.size(), cookie, partIdx + 1);
                 type.SplitData((TErasureType::ECrcMode)from.CrcMode(), testData3, partSet);
@@ -3216,8 +3216,8 @@ class TTestVDiskCompacted : public TTestBlobStorageProxy {
             case 0:
             {
                 TVDiskID vDiskId(0, 1, 0, vDiskIdx , 0);
-                TAutoPtr<TEvBlobStorage::TEvVCompact> vCompact(new TEvBlobStorage::TEvVCompact( 
-                    vDiskId, NKikimrBlobStorage::TEvVCompact::ASYNC)); 
+                TAutoPtr<TEvBlobStorage::TEvVCompact> vCompact(new TEvBlobStorage::TEvVCompact(
+                    vDiskId, NKikimrBlobStorage::TEvVCompact::ASYNC));
                 VERBOSE_COUT("Sending EvVCompact to vDiskIdx: " << vDiskIdx);
                 ctx.Send(Env->VDisks[vDiskIdx], vCompact.Release());
                 break;
@@ -3524,28 +3524,28 @@ public:
 
     void TestGetFail() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestBlobStorageProxyGetFail>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 
     void TestVPutVGet() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestBlobStorageProxyVPutVGet<1>>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 
     void TestVPutVGetLimit() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestBlobStorageProxyVPutVGetLimit<1>>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 
     void TestVPutVGetPersistence() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         ui64 partId = 1;
         ui64 vDiskIdx = 1;
         TTestArgs args{0, erasureSpecies};
@@ -3558,21 +3558,21 @@ public:
 
     void TestVGetNoData() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestBlobStorageProxyVGetFail<1>>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 
     void TestEmptyRange() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestEmptyRange>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 
     void TestProxyGetSingleTimeout() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestBlobStorageProxyPut>(0, erasureSpecies, tempDir().c_str());
         TestBlobStorage<TTestBlobStorageProxyGet>(2, erasureSpecies, tempDir().c_str(), 0, false);
         SectorMapByPath.clear();
@@ -3580,14 +3580,14 @@ public:
 
     void TestProxyGetDoubleTimeout() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyPut>(0, erasureSpecies, tempDir().c_str());
         TestBlobStorage<TTestBlobStorageProxyGetTimeout>(6, erasureSpecies, tempDir().c_str(), 0, false);
         SectorMapByPath.clear();
     }
 
     void TestProxyPutSingleTimeout() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestBlobStorageProxyPut>(2, erasureSpecies, nullptr, 0, false);
         SectorMapByPath.clear();
     }
@@ -3601,14 +3601,14 @@ public:
 
 
     void TestProxyPutDoubleTimeout() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestBlobStorageProxyPutFail>(6, erasureSpecies, nullptr, 0, false);
         SectorMapByPath.clear();
     }
 
     void TestProxyDiscoverSingleTimeout() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestBlobStorageProxyPut>(0, erasureSpecies, tempDir().c_str());
         TestBlobStorage<TTestBlobStorageProxyDiscover>(2, erasureSpecies, tempDir().c_str(), 0, false);
         SectorMapByPath.clear();
@@ -3616,14 +3616,14 @@ public:
 
     void TestEmptyDiscover() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe;
         TestBlobStorage<TTestBlobStorageProxyDiscoverEmpty>(6, erasureSpecies, tempDir().c_str(), 0, false);
         SectorMapByPath.clear();
     }
 
     void TestEmptyDiscoverMaxi() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe;
         TestBlobStorage<TTestBlobStorageProxyDiscoverEmpty>(6, erasureSpecies, tempDir().c_str(), 0, false,
             8, 4);
         SectorMapByPath.clear();
@@ -3631,7 +3631,7 @@ public:
 
     void TestProxyDiscoverDoubleTimeout() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestBlobStorageProxyPut>(0, erasureSpecies, tempDir().c_str());
         TestBlobStorage<TTestBlobStorageProxyDiscoverFail>(6, erasureSpecies, tempDir().c_str(), 0, false);
         SectorMapByPath.clear();
@@ -3639,7 +3639,7 @@ public:
 
     void TestProxyLongTailDiscoverSingleFailure() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe;
         TestBlobStorage<TTestBlobStorageProxyLongTailDiscoverPut>(0, erasureSpecies, tempDir().c_str());
         TestBlobStorage<TTestBlobStorageProxyLongTailDiscover>(0, erasureSpecies, tempDir().c_str());
         for (int i = 0; i < 6; ++i) {
@@ -3650,7 +3650,7 @@ public:
 
     void TestProxyLongTailDiscoverDoubleFailure() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestBlobStorageProxyLongTailDiscoverPut>(0, erasureSpecies, tempDir().c_str());
         TestBlobStorage<TTestBlobStorageProxyLongTailDiscover>(0, erasureSpecies, tempDir().c_str());
         for (int i = 0; i < 4; ++i) {
@@ -3665,40 +3665,40 @@ public:
 
     void TestProxyLongTailDiscover() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe;
         TestBlobStorage<TTestBlobStorageProxyLongTailDiscoverPut>(0, erasureSpecies, tempDir().c_str());
         TestBlobStorage<TTestBlobStorageProxyLongTailDiscover>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 
     void TestProxySimpleDiscover() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe;
         TestBlobStorage<TTestBlobStorageProxySimpleDiscover>(0, erasureSpecies, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestProxySimpleDiscoverNone() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::ErasureNone; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::ErasureNone;
         TestBlobStorage<TTestBlobStorageProxySimpleDiscover>(0, erasureSpecies, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestProxyLongTailDiscoverMaxi() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe;
         TestBlobStorage<TTestBlobStorageProxyLongTailDiscoverPut>(0, erasureSpecies, tempDir().c_str(), 0, false, 8, 4);
         TestBlobStorage<TTestBlobStorageProxyLongTailDiscover>(0, erasureSpecies, tempDir().c_str(), 0, false, 8, 4);
         SectorMapByPath.clear();
     }
 
     void TestProxySimpleDiscoverMaxi() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe;
         TestBlobStorage<TTestBlobStorageProxySimpleDiscover>(0, erasureSpecies, nullptr, 0, false, 8, 4);
         SectorMapByPath.clear();
     }
 
     void TestDoubleEmptyGet() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe;
         TestBlobStorage<TTestBlobStorageProxyEmptyGet>(0, erasureSpecies, nullptr);
         TestBlobStorage<TTestBlobStorageProxyEmptyGet>(0, erasureSpecies, nullptr);
         SectorMapByPath.clear();
@@ -3706,21 +3706,21 @@ public:
 
     void TestPersistence() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe;
         TestBlobStorage<TTestBlobStorageProxyPut>(0, erasureSpecies, tempDir().c_str());
         TestBlobStorage<TTestBlobStorageProxyGet>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 
     void TestBlock() {
-        TestBlobStorage<TTestBlobStorageProxyBlock>(0, TBlobStorageGroupType::Erasure4Plus2Stripe, 
+        TestBlobStorage<TTestBlobStorageProxyBlock>(0, TBlobStorageGroupType::Erasure4Plus2Stripe,
             nullptr);
         SectorMapByPath.clear();
     }
 
     void TestBlockPersistence() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Stripe;
         TestBlobStorage<TTestBlobStorageProxyBlockSet>(0, erasureSpecies, tempDir().c_str());
         TestBlobStorage<TTestBlobStorageProxyBlockCheck>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
@@ -3764,26 +3764,26 @@ public:
     }
 
     void TestHugeCollectGarbage() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestBlobStorageProxyGarbageCollectHuge>(0, erasureSpecies, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestCollectGarbage() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestBlobStorageProxyGarbageCollectComplex>(0, erasureSpecies, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestCollectGarbageAfterLargeData() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TestBlobStorage<TTestBlobStorageProxyGarbageCollectAfterLargeData>(0, erasureSpecies, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestCollectGarbagePersistence() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         VERBOSE_COUT("Phase 0");
         TestBlobStorage<TTestBlobStorageProxyPut>(0, erasureSpecies, tempDir().c_str());
         VERBOSE_COUT("Phase 1");
@@ -3820,7 +3820,7 @@ public:
 
 
     template <int vDiskIdx, int partId>
-    void TestProxyRestoreOnGet(TBlobStorageGroupType::EErasureSpecies erasureSpecies) { 
+    void TestProxyRestoreOnGet(TBlobStorageGroupType::EErasureSpecies erasureSpecies) {
         TTempDir tempDir;
 
         TBlobStorageGroupType type(erasureSpecies);
@@ -3849,7 +3849,7 @@ public:
     }
 
     void TestProxyRestoreOnDiscoverBlock() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block; 
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
         TTempDir tempDir;
         const ui32 vDiskIdx = 2;
         const ui32 handoffVDiskIdx = 1;
@@ -3869,15 +3869,15 @@ public:
     }
 
     void TestProxyRestoreOnGetBlock() {
-        TestProxyRestoreOnGet<2, 1>(TBlobStorageGroupType::Erasure3Plus1Block); 
+        TestProxyRestoreOnGet<2, 1>(TBlobStorageGroupType::Erasure3Plus1Block);
     }
 
     void TestProxyRestoreOnGetStripe() {
-        TestProxyRestoreOnGet<2, 1>(TBlobStorageGroupType::Erasure3Plus1Stripe); 
+        TestProxyRestoreOnGet<2, 1>(TBlobStorageGroupType::Erasure3Plus1Stripe);
     }
 
     void TestProxyRestoreOnGetMirror() {
-        TestProxyRestoreOnGet<2, 1>(TBlobStorageGroupType::ErasureMirror3); 
+        TestProxyRestoreOnGet<2, 1>(TBlobStorageGroupType::ErasureMirror3);
     }
 
     void TestProxyRestoreOnGetMirror3Plus2() {
@@ -3885,87 +3885,87 @@ public:
     }
 
     void TestPartialGetBlock() {
-        TestBlobStorage<TTestBlobStorageProxyPartialGet>(0, TBlobStorageGroupType::Erasure3Plus1Block, 
+        TestBlobStorage<TTestBlobStorageProxyPartialGet>(0, TBlobStorageGroupType::Erasure3Plus1Block,
             nullptr);
         SectorMapByPath.clear();
     }
 
     void TestPartialGetStripe() {
-        TestBlobStorage<TTestBlobStorageProxyPartialGet>(0, TBlobStorageGroupType::Erasure3Plus1Stripe, 
+        TestBlobStorage<TTestBlobStorageProxyPartialGet>(0, TBlobStorageGroupType::Erasure3Plus1Stripe,
             nullptr);
         SectorMapByPath.clear();
     }
 
     void TestPartialGetMirror() {
-        TestBlobStorage<TTestBlobStorageProxyPartialGet>(0, TBlobStorageGroupType::ErasureMirror3, 
+        TestBlobStorage<TTestBlobStorageProxyPartialGet>(0, TBlobStorageGroupType::ErasureMirror3,
             nullptr);
         SectorMapByPath.clear();
     }
 
     void TestPartialGetNone() {
-        TestBlobStorage<TTestBlobStorageProxyPartialGet>(0, TBlobStorageGroupType::ErasureNone, 
+        TestBlobStorage<TTestBlobStorageProxyPartialGet>(0, TBlobStorageGroupType::ErasureNone,
             nullptr);
         SectorMapByPath.clear();
     }
 
     void TestNormal() {
-        TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::Erasure4Plus2Block, 
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::Erasure4Plus2Block,
             nullptr);
         SectorMapByPath.clear();
     }
 
     void TestSingleFailure() {
-        TestBlobStorage<TTestBlobStorageProxyBasic1>(1, TBlobStorageGroupType::Erasure4Plus2Block, 
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(1, TBlobStorageGroupType::Erasure4Plus2Block,
             nullptr);
         SectorMapByPath.clear();
     }
 
     void TestDoubleFailure() {
-        TestBlobStorage<TTestBlobStorageProxyBasic1>(3, TBlobStorageGroupType::Erasure4Plus2Block, 
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(3, TBlobStorageGroupType::Erasure4Plus2Block,
             nullptr);
         SectorMapByPath.clear();
     }
 
     void TestDoubleGroups() {
-        TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::Erasure4Plus2Stripe, 
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::Erasure4Plus2Stripe,
             nullptr, 0, true, 8, 2);
         SectorMapByPath.clear();
     }
 
     void TestTrippleGroups() {
-        TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::Erasure4Plus2Stripe, 
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::Erasure4Plus2Stripe,
             nullptr, 0, true, 8, 3);
         SectorMapByPath.clear();
     }
 
     void TestQuadrupleGroups() {
-        TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::Erasure4Plus2Stripe, 
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::Erasure4Plus2Stripe,
             nullptr, 0, true, 8, 4);
         SectorMapByPath.clear();
     }
 
     void TestNormalMirror() {
-        TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::ErasureMirror3, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::ErasureMirror3, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestSingleFailureMirror() {
-        TestBlobStorage<TTestBlobStorageProxyBasic1>(1, TBlobStorageGroupType::ErasureMirror3, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(1, TBlobStorageGroupType::ErasureMirror3, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestDoubleFailureMirror3Plus2() {
-        TestBlobStorage<TTestBlobStorageProxyBasic1>(3, TBlobStorageGroupType::ErasureMirror3Plus2, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(3, TBlobStorageGroupType::ErasureMirror3Plus2, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestNormalNone() {
-        TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::ErasureNone, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::ErasureNone, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestDoubleFailureStripe4Plus2() {
-        TestBlobStorage<TTestBlobStorageProxyBasic1>(3, TBlobStorageGroupType::Erasure4Plus2Stripe, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(3, TBlobStorageGroupType::Erasure4Plus2Stripe, nullptr);
         SectorMapByPath.clear();
     }
 
@@ -3990,60 +3990,60 @@ public:
     }
 
     void TestVBlockVPutVGet() {
-        TestBlobStorage<TTestBlobStorageProxyVBlockVPutVGet>(0, TBlobStorageGroupType::ErasureNone, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyVBlockVPutVGet>(0, TBlobStorageGroupType::ErasureNone, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestPutGetMany() {
-        TestBlobStorage<TTestBlobStorageProxyPutGetMany>(0, TBlobStorageGroupType::Erasure4Plus2Block, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyPutGetMany>(0, TBlobStorageGroupType::Erasure4Plus2Block, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestPutGetStatusErasureMirror3() {
-        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::ErasureMirror3, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::ErasureMirror3, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestPutGetStatusErasure3Plus1Block() {
-        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure3Plus1Block, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure3Plus1Block, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestPutGetStatusErasure3Plus1Stripe() {
-        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure3Plus1Stripe, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure3Plus1Stripe, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestPutGetStatusErasure4Plus2Block() {
-        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure4Plus2Block, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure4Plus2Block, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestPutGetStatusErasure3Plus2Block() {
-        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure3Plus2Block, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure3Plus2Block, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestPutGetStatusErasure4Plus2Stripe() {
-        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure4Plus2Stripe, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure4Plus2Stripe, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestPutGetStatusErasure3Plus2Stripe() {
-        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure3Plus2Stripe, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure3Plus2Stripe, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestPutGetStatusErasureMirror3Plus2() {
-        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::ErasureMirror3Plus2, nullptr); 
+        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::ErasureMirror3Plus2, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestVPutVCollectVGetRace() {
         TestBlobStorage<TTestBlobStorageProxyVPutVCollectVGetRace>(0, TBlobStorageGroupType::ErasureNone, nullptr);
         SectorMapByPath.clear();
-    } 
- 
+    }
+
     void TestBatchedPutRequestDoesNotContainAHugeBlob() {
         TTestArgs args{0, TBlobStorageGroupType::ErasureNone};
         args.DeviceType = TPDiskCategory::DEVICE_TYPE_NVME;
@@ -4232,17 +4232,17 @@ public:
                     TMailboxType::Revolving, 0);
                 setup2->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(pdiskId, pDiskSetup));
 
-                TVDiskConfig::TBaseInfo baseInfo( 
+                TVDiskConfig::TBaseInfo baseInfo(
                     env->VDiskIds[i],
                     pdiskId,
                     mainKey,
                     i + 1,
                     args.DeviceType,
-                    0, 
-                    NKikimrBlobStorage::TVDiskKind::Default, 
-                    2, 
-                    {}); 
-                TIntrusivePtr<TVDiskConfig> vDiskConfig = new TVDiskConfig(baseInfo); 
+                    0,
+                    NKikimrBlobStorage::TVDiskKind::Default,
+                    2,
+                    {});
+                TIntrusivePtr<TVDiskConfig> vDiskConfig = new TVDiskConfig(baseInfo);
                 vDiskConfig->MaxLogoBlobDataSize = 2u << 20u;
                 vDiskConfig->HullCutLogDuration = TDuration::MilliSeconds(10);
                 vDiskConfig->HullCompSchedulingInterval = TDuration::MilliSeconds(10);
@@ -4252,7 +4252,7 @@ public:
                 vDiskConfig->HullCompLevelRateThreshold = 0.1;
                 vDiskConfig->SkeletonFrontQueueBackpressureCheckMsgId = false;
 
-                IActor* vDisk = CreateVDisk(vDiskConfig, bsInfo, counters); 
+                IActor* vDisk = CreateVDisk(vDiskConfig, bsInfo, counters);
                 TActorSetupCmd vDiskSetup(vDisk, TMailboxType::Revolving, 0);
                 setup2->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->VDisks[i], vDiskSetup));
             }

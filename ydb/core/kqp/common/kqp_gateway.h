@@ -1,11 +1,11 @@
 #pragma once
 
-#include <ydb/core/protos/kqp_physical.pb.h> 
-#include <ydb/core/protos/tx_proxy.pb.h> 
+#include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/tx_proxy.pb.h>
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/common/dq_value.h>
-#include <ydb/core/kqp/provider/yql_kikimr_gateway.h> 
+#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 
 #include <library/cpp/actors/core/actorid.h>
 

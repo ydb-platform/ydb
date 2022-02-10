@@ -4,7 +4,7 @@
 #include <util/generic/array_ref.h>
 
 namespace NKikimr {
-namespace NPageCollection { 
+namespace NPageCollection {
 
     ui32 Checksum(TArrayRef<const char> body) noexcept;
 

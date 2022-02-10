@@ -1,8 +1,8 @@
 #include "datashard_impl.h"
 #include "operation.h"
 
-#include <ydb/core/tablet_flat/flat_stat_table.h> 
-#include <ydb/core/util/pb.h> 
+#include <ydb/core/tablet_flat/flat_stat_table.h>
+#include <ydb/core/util/pb.h>
 
 #include <library/cpp/mime/types/mime.h>
 #include <library/cpp/resource/resource.h>
@@ -10,10 +10,10 @@
 #include <library/cpp/html/pcdata/pcdata.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
-class TDataShard::TTxMonitoringCleanupBorrowedPartsActor 
-    : public TActorBootstrapped<TDataShard::TTxMonitoringCleanupBorrowedPartsActor> 
+class TDataShard::TTxMonitoringCleanupBorrowedPartsActor
+    : public TActorBootstrapped<TDataShard::TTxMonitoringCleanupBorrowedPartsActor>
 {
 public:
     TTxMonitoringCleanupBorrowedPartsActor(
@@ -198,11 +198,11 @@ private:
     THashSet<ui64> WaitingAcks;
 };
 
-class TDataShard::TTxMonitoringCleanupBorrowedParts 
-    : public NTabletFlatExecutor::TTransactionBase<TDataShard> 
+class TDataShard::TTxMonitoringCleanupBorrowedParts
+    : public NTabletFlatExecutor::TTransactionBase<TDataShard>
 {
 public:
-    TTxMonitoringCleanupBorrowedParts(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev) 
+    TTxMonitoringCleanupBorrowedParts(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev)
         : TBase(self)
         , Ev(ev)
     {}
@@ -253,8 +253,8 @@ private:
     bool DryRun = true;
 };
 
-ITransaction* TDataShard::CreateTxMonitoringCleanupBorrowedParts( 
-        TDataShard* self, 
+ITransaction* TDataShard::CreateTxMonitoringCleanupBorrowedParts(
+        TDataShard* self,
         NMon::TEvRemoteHttpInfo::TPtr ev)
 {
     return new TTxMonitoringCleanupBorrowedParts(self, ev);

@@ -3,16 +3,16 @@
 #include "dsproxy_vdisk_mock_ut.h"
 #include "dsproxy_test_state_ut.h"
 
-#include <ydb/core/blobstorage/dsproxy/dsproxy.h> 
-#include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h> 
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
 
-#include <ydb/core/blobstorage/base/utility.h> 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h> 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
-#include <ydb/core/blobstorage/vdisk/query/query_spacetracker.h> 
+#include <ydb/core/blobstorage/base/utility.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/vdisk/query/query_spacetracker.h>
 
-#include <ydb/core/testlib/basics/runtime.h> 
-#include <ydb/core/testlib/basics/appdata.h> 
+#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -285,7 +285,7 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
     SetPredictedDelaysForAllQueues({});
     if (status == NKikimrProto::ERROR || status == NKikimrProto::TRYLATER
             || status == NKikimrProto::TRYLATER_SIZE || status == NKikimrProto::TRYLATER_TIME
-            || status == NKikimrProto::VDISK_ERROR_STATE) { 
+            || status == NKikimrProto::VDISK_ERROR_STATE) {
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
             status, request.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr, nullptr,
             NWilson::TTraceId(), {}, 0U, 0U));

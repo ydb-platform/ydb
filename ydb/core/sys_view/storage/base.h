@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb/core/sys_view/common/events.h> 
-#include <ydb/core/sys_view/common/keys.h> 
-#include <ydb/core/sys_view/common/schema.h> 
-#include <ydb/core/sys_view/common/scan_actor_base_impl.h> 
-#include <ydb/core/base/tablet_pipecache.h> 
+#include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/common/keys.h>
+#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/scan_actor_base_impl.h>
+#include <ydb/core/base/tablet_pipecache.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 

@@ -1,6 +1,6 @@
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_requestimpl.h"
-#include <ydb/core/blobstorage/base/vdisk_priorities.h> 
+#include <ydb/core/blobstorage/base/vdisk_priorities.h>
 
 namespace NKikimr {
 
@@ -249,8 +249,8 @@ void TPDiskMon::IncrementQueueTime(ui8 priorityClass, size_t timeMs) {
         case NPriWrite::HullFresh:
             WriteQueueHullFresh.Increment(timeMs);
         break;
-        case NPriWrite::HullHugeAsyncBlob: 
-        case NPriWrite::HullHugeUserData: 
+        case NPriWrite::HullHugeAsyncBlob:
+        case NPriWrite::HullHugeUserData:
             WriteQueueHullHuge.Increment(timeMs);
         break;
         case NPriWrite::HullComp:
@@ -297,8 +297,8 @@ void TPDiskMon::IncrementResponseTime(ui8 priorityClass, double timeMs, size_t s
             WriteResponseHullFresh.Increment(timeMs);
             WriteHullFreshSizeBytes.Increment(sizeBytes);
         break;
-        case NPriWrite::HullHugeAsyncBlob: 
-        case NPriWrite::HullHugeUserData: 
+        case NPriWrite::HullHugeAsyncBlob:
+        case NPriWrite::HullHugeUserData:
             WriteResponseHullHuge.Increment(timeMs);
             WriteHullHugeSizeBytes.Increment(sizeBytes);
         break;
@@ -405,8 +405,8 @@ TPDiskMon::TIoCounters *TPDiskMon::GetWriteCounter(ui8 priority) {
     switch (priority) {
         case NPriWrite::SyncLog: return &WriteSyncLog;
         case NPriWrite::HullFresh: return &WriteFresh;
-        case NPriWrite::HullHugeAsyncBlob: return &WriteHuge; 
-        case NPriWrite::HullHugeUserData: return &WriteHuge; 
+        case NPriWrite::HullHugeAsyncBlob: return &WriteHuge;
+        case NPriWrite::HullHugeUserData: return &WriteHuge;
         case NPriWrite::HullComp: return &WriteComp;
     }
     return &Unknown;

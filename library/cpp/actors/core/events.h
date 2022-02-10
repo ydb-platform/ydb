@@ -179,15 +179,15 @@ namespace NActors {
 
             DEFINE_SIMPLE_LOCAL_EVENT(TEvCompleted, "System: TEvCompleted")
         };
- 
+
         struct TEvPoisonTaken: public TEventBase<TEvPoisonTaken, TSystem::PoisonTaken> {
             DEFINE_SIMPLE_LOCAL_EVENT(TEvPoisonTaken, "System: TEvPoisonTaken")
         };
- 
+
         struct TEvFlushLog: public TEventBase<TEvFlushLog, TSystem::FlushLog> {
             DEFINE_SIMPLE_LOCAL_EVENT(TEvFlushLog, "System: TEvFlushLog")
         };
- 
+
         struct TEvCallbackException: public TEventPB<TEvCallbackException,
                                                       NActorsProto::TCallbackException,
                                                       TSystem::CallbackException> {
@@ -196,7 +196,7 @@ namespace NActors {
                 Record.SetExceptionMessage(msg);
             }
         };
- 
+
         struct TEvCallbackCompletion: public TEventPB<TEvCallbackCompletion,
                                                        NActorsProto::TActorId,
                                                        TSystem::CallbackCompletion> {

@@ -3,9 +3,9 @@
 #include "log.h"
 #include "queue_schema.h"
 
-#include <ydb/core/ymq/base/constants.h> 
-#include <ydb/core/ymq/base/helpers.h> 
-#include <ydb/core/ymq/base/queue_id.h> 
+#include <ydb/core/ymq/base/constants.h>
+#include <ydb/core/ymq/base/helpers.h>
+#include <ydb/core/ymq/base/queue_id.h>
 
 #include <util/string/join.h>
 #include <util/string/type.h>

@@ -1,4 +1,4 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h> 
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     //RUN: Reboot tablet 9437195 (#44)
     //VERIFY failed:
-    //ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.cpp:289 
+    //ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.cpp:289
     //Handle(): requirement std::make_pair(msg->CollectGeneration, msg->CollectStep) >= barrier.MakeCollectPair() failed
     /*Y_UNIT_TEST(CreateAlterAlterDrop) {
         TTestWithReboots t;

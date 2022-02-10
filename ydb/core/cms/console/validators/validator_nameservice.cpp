@@ -1,7 +1,7 @@
 #include "validator_nameservice.h"
 
-#include <ydb/core/base/localdb.h> 
-#include <ydb/core/protos/console_config.pb.h> 
+#include <ydb/core/base/localdb.h>
+#include <ydb/core/protos/console_config.pb.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
 

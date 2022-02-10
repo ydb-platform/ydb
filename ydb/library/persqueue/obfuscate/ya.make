@@ -1,4 +1,4 @@
-OWNER(g:logbroker) 
+OWNER(g:logbroker)
 
 LIBRARY()
 

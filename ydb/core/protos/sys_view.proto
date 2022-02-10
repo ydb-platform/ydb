@@ -2,7 +2,7 @@ package NKikimrSysView;
 
 option java_package = "ru.yandex.kikimr.proto";
 
-import "ydb/core/protos/tablet.proto"; 
+import "ydb/core/protos/tablet.proto";
 
 message TPartitionStatsKey {
     optional uint64 OwnerId = 1;

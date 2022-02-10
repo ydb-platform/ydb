@@ -1,18 +1,18 @@
 #include "datashard_impl.h"
-#include <ydb/core/formats/factory.h> 
+#include <ydb/core/formats/factory.h>
 #include <util/string/vector.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-class TTxReleaseSnaphotReference : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TTxReleaseSnaphotReference : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
     TSnapshotKey SnapshotKey;
 
 public:
-    TTxReleaseSnaphotReference(TDataShard* self, const TSnapshotKey& snapshotKey) 
-        : TTransactionBase<TDataShard>(self) 
+    TTxReleaseSnaphotReference(TDataShard* self, const TSnapshotKey& snapshotKey)
+        : TTransactionBase<TDataShard>(self)
         , SnapshotKey(snapshotKey)
     {}
 
@@ -153,7 +153,7 @@ public:
         }
 
         TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), Result.Release()));
-        TlsActivationContext->Send(new IEventHandle(DatashardActorId, TActorId(), new TDataShard::TEvPrivate::TEvScanStats(Rows, Bytes))); 
+        TlsActivationContext->Send(new IEventHandle(DatashardActorId, TActorId(), new TDataShard::TEvPrivate::TEvScanStats(Rows, Bytes)));
 
         return this;
     }
@@ -166,7 +166,7 @@ public:
         str << "ReadColumnsScan table: ["<< TableName << "]shard: " << TabletId;
     }
 
-    void OnFinished(TDataShard* self) override { 
+    void OnFinished(TDataShard* self) override {
         if (SnapshotKey) {
             self->Execute(new TTxReleaseSnaphotReference(self, *SnapshotKey));
         }
@@ -174,7 +174,7 @@ public:
 };
 
 
-class TDataShard::TTxReadColumns : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxReadColumns : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvReadColumnsRequest::TPtr Ev;
     TAutoPtr<TEvDataShard::TEvReadColumnsResponse> Result;
@@ -188,7 +188,7 @@ private:
     TRowVersion ReadVersion = TRowVersion::Max();
 
 public:
-    TTxReadColumns(TDataShard* ds, TEvDataShard::TEvReadColumnsRequest::TPtr ev) 
+    TTxReadColumns(TDataShard* ds, TEvDataShard::TEvReadColumnsRequest::TPtr ev)
         : TBase(ds)
         , Ev(ev)
     {
@@ -231,9 +231,9 @@ public:
             if (!ReadVersion.IsMax()) {
                 NIceDb::TNiceDb db(txc.DB);
                 TRowVersion lastCompleteTx;
-                if (!TDataShard::SysGetUi64(db, Schema::Sys_LastCompleteStep, lastCompleteTx.Step)) 
+                if (!TDataShard::SysGetUi64(db, Schema::Sys_LastCompleteStep, lastCompleteTx.Step))
                     return false;
-                if (!TDataShard::SysGetUi64(db, Schema::Sys_LastCompleteTx, lastCompleteTx.TxId)) 
+                if (!TDataShard::SysGetUi64(db, Schema::Sys_LastCompleteTx, lastCompleteTx.TxId))
                     return false;
 
                 if (ReadVersion > lastCompleteTx) {
@@ -446,7 +446,7 @@ public:
                 }
 
                 // Skip erased row
-                if (iter->Row().GetRowState() == NTable::ERowOp::Erase) { 
+                if (iter->Row().GetRowState() == NTable::ERowOp::Erase) {
                     continue;
                 }
 
@@ -507,7 +507,7 @@ private:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx) { 
+void TDataShard::Handle(TEvDataShard::TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx) {
     Executor()->Execute(new TTxReadColumns(this, ev), ctx);
 }
 

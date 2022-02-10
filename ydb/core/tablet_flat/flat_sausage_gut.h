@@ -5,11 +5,11 @@
 #include "util_basics.h"
 
 namespace NKikimr {
-namespace NPageCollection { 
+namespace NPageCollection {
 
-    class IPageCollection : public TAtomicRefCount<IPageCollection> { 
+    class IPageCollection : public TAtomicRefCount<IPageCollection> {
     public:
-        virtual ~IPageCollection() = default; 
+        virtual ~IPageCollection() = default;
 
         virtual const TLogoBlobID& Label() const noexcept = 0;
         virtual ui32 Total() const noexcept = 0;

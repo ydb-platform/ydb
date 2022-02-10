@@ -38,7 +38,7 @@ namespace NTabletFlatExecutor {
         NTable::TTransactionMap<TRowVersion> CommittedTransactions;
         NTable::TTransactionSet RemovedTransactions;
         // The above may contain extra keys, these allow them to be narrowed
-        TVector<TIntrusiveConstPtr<NTable::TMemTable>> Frozen; 
+        TVector<TIntrusiveConstPtr<NTable::TMemTable>> Frozen;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
     };
 

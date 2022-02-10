@@ -3,9 +3,9 @@
 #include "sys_tables.h"
 #include "range_treap.h"
 
-#include <ydb/core/base/row_version.h> 
-#include <ydb/core/protos/counters_datashard.pb.h> 
-#include <ydb/core/tablet/tablet_counters.h> 
+#include <ydb/core/base/row_version.h>
+#include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/tablet/tablet_counters.h>
 
 #include <library/cpp/cache/cache.h>
 #include <util/generic/queue.h>
@@ -15,7 +15,7 @@
 #include <util/system/sanitizers.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 struct TUserTable;
 
@@ -507,5 +507,5 @@ private:
     }
 };
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

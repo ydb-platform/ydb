@@ -1,12 +1,12 @@
 #pragma once
 
-#include "defs.h" 
-#include "blobstorage_readbatch.h" 
-#include "blobstorage_hullcompactdeferredqueue.h" 
-#include <ydb/core/blobstorage/vdisk/handoff/handoff_map.h> 
-#include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst.h> 
-#include <ydb/core/blobstorage/vdisk/hulldb/blobstorage_hullgcmap.h> 
-#include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h> 
+#include "defs.h"
+#include "blobstorage_readbatch.h"
+#include "blobstorage_hullcompactdeferredqueue.h"
+#include <ydb/core/blobstorage/vdisk/handoff/handoff_map.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/blobstorage_hullgcmap.h>
+#include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 
 namespace NKikimr {
 
@@ -95,15 +95,15 @@ namespace NKikimr {
         // MEMBER VARIABLES
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        // basic contexts 
-        THullCtxPtr HullCtx; 
-        TPDiskCtxPtr PDiskCtx; 
+        // basic contexts
+        THullCtxPtr HullCtx;
+        TPDiskCtxPtr PDiskCtx;
 
-        // Group Type 
-        const TBlobStorageGroupType GType; 
- 
+        // Group Type
+        const TBlobStorageGroupType GType;
+
         // pointer to level index
-        const TIntrusivePtr<TLevelIndex> LevelIndex; 
+        const TIntrusivePtr<TLevelIndex> LevelIndex;
 
         // handoff map we use to transform items
         THandoffMapPtr Hmp;
@@ -112,8 +112,8 @@ namespace NKikimr {
         TGcMapIterator GcmpIt;
 
         // LSN range
-        const ui64 FirstLsn = 0; 
-        const ui64 LastLsn = 0; 
+        const ui64 FirstLsn = 0;
+        const ui64 LastLsn = 0;
 
         // level DB iterator
         TIterator It;
@@ -122,7 +122,7 @@ namespace NKikimr {
         const bool IsFresh;
 
         // maximum number of chunks we use per SST
-        ui32 ChunksToUse; 
+        ui32 ChunksToUse;
 
         // chunks currently reserved and not used
         TDeque<TChunkIdx> ReservedChunks;
@@ -149,13 +149,13 @@ namespace NKikimr {
         ui32 InFlightWrites = 0;
 
         // maximum number of such requests
-        ui32 MaxInFlightWrites; 
+        ui32 MaxInFlightWrites;
 
         // number of currently unresponded read requests
         ui32 InFlightReads = 0;
 
         // maximum number of such requests
-        ui32 MaxInFlightReads; 
+        ui32 MaxInFlightReads;
 
         // vector of freed huge blobs
         TDiskPartVec FreedHugeBlobs;
@@ -201,8 +201,8 @@ namespace NKikimr {
         bool IsFirstKey = true;
 
     public:
-        struct TStatistics { 
-            THullCtxPtr HullCtx; 
+        struct TStatistics {
+            THullCtxPtr HullCtx;
             // read/write stat
             ui64 BytesRead = 0;
             ui64 ReadIOPS = 0;
@@ -218,8 +218,8 @@ namespace NKikimr {
             TInstant StartTime;
             TInstant FinishTime;
 
-            TStatistics(THullCtxPtr hullCtx) 
-                : HullCtx(hullCtx) 
+            TStatistics(THullCtxPtr hullCtx)
+                : HullCtx(hullCtx)
                 , CreationTime(TAppData::TimeProvider->Now())
                 , StartTime()
                 , FinishTime()
@@ -246,67 +246,67 @@ namespace NKikimr {
             void Update(const NPDisk::TEvChunkRead *msg) {
                 BytesRead += msg->Size;
                 ReadIOPS++;
-                HullCtx->LsmHullGroup.LsmCompactionBytesRead() += msg->Size; 
+                HullCtx->LsmHullGroup.LsmCompactionBytesRead() += msg->Size;
             }
 
             void Update(const NPDisk::TEvChunkWrite *msg) {
                 ui32 bytes = msg->PartsPtr ? msg->PartsPtr->ByteSize() : 0;
                 BytesWritten += bytes;
                 WriteIOPS++;
-                HullCtx->LsmHullGroup.LsmCompactionBytesWritten() += bytes; 
+                HullCtx->LsmHullGroup.LsmCompactionBytesWritten() += bytes;
             }
         };
 
-        TStatistics Statistics; 
+        TStatistics Statistics;
         TDuration RestoreDeadline;
-        // Partition key is used for splitting resulting SSTs by the PartitionKey if present. Partition key 
-        // is used for compaction policy implementation to limit number of intermediate chunks durint compaction. 
-        std::optional<TKey> PartitionKey; 
+        // Partition key is used for splitting resulting SSTs by the PartitionKey if present. Partition key
+        // is used for compaction policy implementation to limit number of intermediate chunks durint compaction.
+        std::optional<TKey> PartitionKey;
 
     public:
-        THullCompactionWorker(THullCtxPtr hullCtx, 
-                              TPDiskCtxPtr pdiskCtx, 
-                              TIntrusivePtr<TLevelIndex> levelIndex, 
-                              const TIterator& it, 
-                              bool isFresh, 
-                              ui64 firstLsn, 
+        THullCompactionWorker(THullCtxPtr hullCtx,
+                              TPDiskCtxPtr pdiskCtx,
+                              TIntrusivePtr<TLevelIndex> levelIndex,
+                              const TIterator& it,
+                              bool isFresh,
+                              ui64 firstLsn,
                               ui64 lastLsn,
                               TDuration restoreDeadline,
-                              std::optional<TKey> partitionKey) 
-            : HullCtx(std::move(hullCtx)) 
-            , PDiskCtx(std::move(pdiskCtx)) 
-            , GType(HullCtx->VCtx->Top->GType) 
-            , LevelIndex(std::move(levelIndex)) 
-            , FirstLsn(firstLsn) 
-            , LastLsn(lastLsn) 
+                              std::optional<TKey> partitionKey)
+            : HullCtx(std::move(hullCtx))
+            , PDiskCtx(std::move(pdiskCtx))
+            , GType(HullCtx->VCtx->Top->GType)
+            , LevelIndex(std::move(levelIndex))
+            , FirstLsn(firstLsn)
+            , LastLsn(lastLsn)
             , It(it)
             , IsFresh(isFresh)
-            , IndexMerger(GType) 
-            , ReadBatcher(PDiskCtx->Dsk->ReadBlockSize, 
-                    PDiskCtx->Dsk->SeekTimeUs * PDiskCtx->Dsk->ReadSpeedBps / 1000000, 
-                    HullCtx->HullCompReadBatchEfficiencyThreshold) 
+            , IndexMerger(GType)
+            , ReadBatcher(PDiskCtx->Dsk->ReadBlockSize,
+                    PDiskCtx->Dsk->SeekTimeUs * PDiskCtx->Dsk->ReadSpeedBps / 1000000,
+                    HullCtx->HullCompReadBatchEfficiencyThreshold)
             , Arena(&TRopeArenaBackend::Allocate)
             , DeferredItems(Arena, HullCtx->VCtx->Top->GType)
-            , Statistics(HullCtx) 
+            , Statistics(HullCtx)
             , RestoreDeadline(restoreDeadline)
-            , PartitionKey(partitionKey) 
-        { 
-            if (IsFresh) { 
-                ChunksToUse = HullCtx->HullSstSizeInChunksFresh; 
-                MaxInFlightWrites = HullCtx->FreshCompMaxInFlightWrites; 
-                MaxInFlightReads = 0; 
-                ReadsInFlight = nullptr; 
-                WritesInFlight = &LevelIndex->FreshCompWritesInFlight; 
-            } else { 
-                ChunksToUse = HullCtx->HullSstSizeInChunksLevel; 
-                MaxInFlightWrites = HullCtx->HullCompMaxInFlightWrites; 
-                MaxInFlightReads = HullCtx->HullCompMaxInFlightReads; 
-                ReadsInFlight = &LevelIndex->HullCompReadsInFlight; 
-                WritesInFlight = &LevelIndex->HullCompWritesInFlight; 
-            } 
-        } 
+            , PartitionKey(partitionKey)
+        {
+            if (IsFresh) {
+                ChunksToUse = HullCtx->HullSstSizeInChunksFresh;
+                MaxInFlightWrites = HullCtx->FreshCompMaxInFlightWrites;
+                MaxInFlightReads = 0;
+                ReadsInFlight = nullptr;
+                WritesInFlight = &LevelIndex->FreshCompWritesInFlight;
+            } else {
+                ChunksToUse = HullCtx->HullSstSizeInChunksLevel;
+                MaxInFlightWrites = HullCtx->HullCompMaxInFlightWrites;
+                MaxInFlightReads = HullCtx->HullCompMaxInFlightReads;
+                ReadsInFlight = &LevelIndex->HullCompReadsInFlight;
+                WritesInFlight = &LevelIndex->HullCompWritesInFlight;
+            }
+        }
 
-        void Prepare(THandoffMapPtr hmp, TGcMapIterator gcmpIt) { 
+        void Prepare(THandoffMapPtr hmp, TGcMapIterator gcmpIt) {
             Hmp = std::move(hmp);
             GcmpIt = gcmpIt;
             State = EState::GetNextItem;
@@ -543,10 +543,10 @@ namespace NKikimr {
             TransformedItem = nullptr;
             if (GcmpIt.KeepItem()) {
                 const bool keepData = GcmpIt.KeepData();
-                ++(keepData ? Statistics.KeepItemsWithData : Statistics.KeepItemsWOData); 
+                ++(keepData ? Statistics.KeepItemsWithData : Statistics.KeepItemsWOData);
                 TransformedItem = Hmp->Transform(ctx, key, &IndexMerger.GetMemRec(), IndexMerger.GetDataMerger(), keepData);
             } else {
-                ++Statistics.DontKeepItems; 
+                ++Statistics.DontKeepItems;
             }
 
             // collect huge blobs -- we unconditionally delete DeletedData and save SavedData only in case
@@ -570,17 +570,17 @@ namespace NKikimr {
 
                 // create new instance of writer
                 WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
-                        ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, 
-                        (ui32)PDiskCtx->Dsk->ChunkSize, PDiskCtx->Dsk->AppendBlockSize, 
+                        ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
+                        (ui32)PDiskCtx->Dsk->ChunkSize, PDiskCtx->Dsk->AppendBlockSize,
                         (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(), false, ReservedChunks, Arena);
             }
 
-            // if we have PartitionKey, check it is time to split partitions by PartitionKey 
-            if (PartitionKey && !IsFirstKey && PreviousKey < *PartitionKey && TransformedItem->Key >= *PartitionKey && 
-                !WriterPtr->Empty()) { 
-                return ETryProcessItemStatus::FinishSST; 
-            } 
- 
+            // if we have PartitionKey, check it is time to split partitions by PartitionKey
+            if (PartitionKey && !IsFirstKey && PreviousKey < *PartitionKey && TransformedItem->Key >= *PartitionKey &&
+                !WriterPtr->Empty()) {
+                return ETryProcessItemStatus::FinishSST;
+            }
+
             // special logic for fresh: we just put this item into data segment as usual, do not preallocate and then
             // write data
             if (IsFresh) {
@@ -609,7 +609,7 @@ namespace NKikimr {
             if (WriterPtr->PushIndexOnly(TransformedItem->Key, *TransformedItem->MemRec, TransformedItem->DataMerger,
                     inplacedDataSize, &preallocatedLocation)) {
                 // count added item
-                Statistics.ItemAdded(); 
+                Statistics.ItemAdded();
 
                 // if we do generate some small blob, we have to enqueue it in Deferred Items queue and then possibly
                 // issue some reads
@@ -702,7 +702,7 @@ namespace NKikimr {
 
             std::unique_ptr<NPDisk::TEvChunkRead> readMsg;
             while (InFlightReads < MaxInFlightReads && (readMsg = ReadBatcher.GetPendingMessage(
-                            PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, NPriRead::HullComp))) { 
+                            PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, NPriRead::HullComp))) {
                 Statistics.Update(readMsg.get());
                 msgsForYard.push_back(std::move(readMsg));
                 ++InFlightReads;

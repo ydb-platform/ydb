@@ -4,9 +4,9 @@
 #include "kqp_executer_impl.h"
 #include "kqp_executer_stats.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/kqp/kqp.h> 
-#include <ydb/core/kqp/runtime/kqp_transport.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/runtime/kqp_transport.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 

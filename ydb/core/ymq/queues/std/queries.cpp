@@ -1,5 +1,5 @@
 #include "queries.h"
-#include <ydb/core/ymq/base/constants.h> 
+#include <ydb/core/ymq/base/constants.h>
 
 namespace NKikimr::NSQS {
 namespace {

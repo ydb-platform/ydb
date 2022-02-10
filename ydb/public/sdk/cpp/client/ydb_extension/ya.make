@@ -11,7 +11,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/monlib/metrics
-    ydb/public/sdk/cpp/client/ydb_driver 
+    ydb/public/sdk/cpp/client/ydb_driver
 )
 
 END()

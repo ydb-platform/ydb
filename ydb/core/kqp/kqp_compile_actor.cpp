@@ -1,13 +1,13 @@
 #include "kqp_impl.h"
 #include "kqp_metadata_loader.h"
 
-#include <ydb/core/actorlib_impl/long_timer.h> 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/client/minikql_compile/mkql_compile_service.h> 
-#include <ydb/core/kqp/counters/kqp_counters.h> 
-#include <ydb/core/kqp/host/kqp_host.h> 
+#include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/client/minikql_compile/mkql_compile_service.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/host/kqp_host.h>
 
-#include <ydb/library/yql/utils/actor_log/log.h> 
+#include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -17,7 +17,7 @@
 
 #include <util/string/escape.h>
 
-#include <ydb/core/base/cputime.h> 
+#include <ydb/core/base/cputime.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -386,7 +386,7 @@ private:
     TIntrusivePtr<IKqpGateway> Gateway;
     TIntrusivePtr<IKqpHost> KqpHost;
     TIntrusivePtr<IKqpHost::IAsyncQueryResult> AsyncCompileResult;
-    std::shared_ptr<TKqpCompileResult> KqpCompileResult; 
+    std::shared_ptr<TKqpCompileResult> KqpCompileResult;
     std::optional<TString> ReplayMessage;
 };
 

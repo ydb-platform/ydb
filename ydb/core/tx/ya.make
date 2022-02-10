@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    ddoarn 
-    g:kikimr 
-) 
+OWNER(
+    ddoarn
+    g:kikimr
+)
 
 SRCS(
     defs.h
@@ -11,37 +11,37 @@ SRCS(
     tx.h
     tx.cpp
     tx_processing.h
-    tx_proxy_schemereq.cpp 
+    tx_proxy_schemereq.cpp
 )
 
 PEERDIR(
-    library/cpp/actors/core 
-    ydb/core/base 
-    ydb/core/persqueue/config 
-    ydb/core/protos 
-    ydb/core/tablet 
-    ydb/core/tablet_flat 
-    ydb/core/util 
-    ydb/library/aclib 
+    library/cpp/actors/core
+    ydb/core/base
+    ydb/core/persqueue/config
+    ydb/core/protos
+    ydb/core/tablet
+    ydb/core/tablet_flat
+    ydb/core/util
+    ydb/library/aclib
 )
 
 END()
 
 RECURSE(
-    balance_coverage 
+    balance_coverage
     columnshard
-    coordinator 
-    datashard 
+    coordinator
+    datashard
     long_tx_service
-    mediator 
+    mediator
     replication
-    scheme_board 
-    scheme_cache 
-    schemeshard 
+    scheme_board
+    scheme_cache
+    schemeshard
     sequenceproxy
     sequenceshard
-    time_cast 
-    tx_allocator 
-    tx_allocator_client 
-    tx_proxy 
+    time_cast
+    tx_allocator
+    tx_allocator_client
+    tx_proxy
 )

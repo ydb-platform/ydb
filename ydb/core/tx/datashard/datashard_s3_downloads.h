@@ -2,12 +2,12 @@
 
 #include "datashard.h"
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 #include <util/generic/hash.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TS3DownloadsManager {
     using TInfo = TEvDataShard::TEvS3DownloadInfo::TInfo;
@@ -24,5 +24,5 @@ private:
 
 }; // TS3DownloadsManager
 
-}   // namespace NDataShard 
+}   // namespace NDataShard
 }   // namespace NKikimr

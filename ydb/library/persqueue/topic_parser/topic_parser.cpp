@@ -1,6 +1,6 @@
 #include "topic_parser.h"
 
-#include <ydb/core/base/appdata.h> 
+#include <ydb/core/base/appdata.h>
 
 #include <util/folder/path.h>
 

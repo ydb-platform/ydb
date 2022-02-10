@@ -1,7 +1,7 @@
-#include <ydb/core/yq/libs/checkpointing/checkpoint_coordinator.h> 
+#include <ydb/core/yq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/yq/libs/graph_params/proto/graph_params.pb.h>
-#include <ydb/core/testlib/actors/test_runtime.h> 
-#include <ydb/core/testlib/basics/helpers.h> 
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/basics/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/actors/core/executor_pool_basic.h>

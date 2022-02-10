@@ -24,26 +24,26 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/actorlib_impl 
-    ydb/core/base 
-    ydb/core/client/minikql_compile 
-    ydb/core/formats 
-    ydb/core/kqp/common 
-    ydb/core/kqp/compile 
-    ydb/core/kqp/rm 
-    ydb/core/protos 
-    ydb/core/ydb_convert 
-    ydb/library/mkql_proto 
-    ydb/library/mkql_proto/protos 
+    ydb/core/actorlib_impl
+    ydb/core/base
+    ydb/core/client/minikql_compile
+    ydb/core/formats
+    ydb/core/kqp/common
+    ydb/core/kqp/compile
+    ydb/core/kqp/rm
+    ydb/core/protos
+    ydb/core/ydb_convert
+    ydb/library/mkql_proto
+    ydb/library/mkql_proto/protos
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
-END() 
+END()
 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+RECURSE_FOR_TESTS(
+    ut
+)

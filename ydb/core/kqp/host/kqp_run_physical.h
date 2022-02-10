@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_gateway.h> 
-#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h> 
-#include <ydb/core/kqp/prepare/kqp_prepare.h> 
+#include <ydb/core/kqp/common/kqp_gateway.h>
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+#include <ydb/core/kqp/prepare/kqp_prepare.h>
 
 #include <ydb/library/yql/core/yql_graph_transformer.h>
 

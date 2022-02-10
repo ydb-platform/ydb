@@ -1,8 +1,8 @@
 #include "long_tx_service_impl.h"
 
-#include <ydb/core/base/tablet_pipecache.h> 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
-#include <ydb/core/tx/columnshard/columnshard.h> 
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 

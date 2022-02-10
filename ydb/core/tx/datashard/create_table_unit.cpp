@@ -3,11 +3,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TCreateTableUnit : public TExecutionUnit {
 public:
-    TCreateTableUnit(TDataShard &dataShard, 
+    TCreateTableUnit(TDataShard &dataShard,
                      TPipeline &pipeline);
     ~TCreateTableUnit() override;
 
@@ -22,7 +22,7 @@ private:
     TVector<THolder<TEvChangeExchange::TEvAddSender>> AddSenders;
 };
 
-TCreateTableUnit::TCreateTableUnit(TDataShard &dataShard, 
+TCreateTableUnit::TCreateTableUnit(TDataShard &dataShard,
                                    TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::CreateTable, false, dataShard, pipeline)
 {
@@ -95,11 +95,11 @@ void TCreateTableUnit::Complete(TOperation::TPtr, const TActorContext &ctx)
     DataShard.MaybeActivateChangeSender(ctx);
 }
 
-THolder<TExecutionUnit> CreateCreateTableUnit(TDataShard &dataShard, 
+THolder<TExecutionUnit> CreateCreateTableUnit(TDataShard &dataShard,
                                               TPipeline &pipeline)
 {
     return THolder(new TCreateTableUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

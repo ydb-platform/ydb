@@ -9,10 +9,10 @@
 #include "flat_page_blobs.h"
 #include "flat_sausage_solid.h"
 #include "flat_table_committed.h"
-#include <ydb/core/scheme/scheme_tablecell.h> 
-#include <ydb/core/scheme/scheme_type_id.h> 
-#include <ydb/core/util/btree_cow.h> 
-#include <ydb/core/util/yverify_stream.h> 
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_type_id.h>
+#include <ydb/core/util/btree_cow.h>
+#include <ydb/core/util/yverify_stream.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -87,9 +87,9 @@ namespace NMem {
 
     class TMemIt;
 
-    struct TMemTableSnapshot; 
+    struct TMemTableSnapshot;
 
-    class TMemTable : public TThrRefBase { 
+    class TMemTable : public TThrRefBase {
         friend class TMemIt;
 
         template <size_t SizeCap = 512*1024, size_t Overhead = 64>
@@ -120,9 +120,9 @@ namespace NMem {
     public:
         using TTree = NMem::TTree;
         using TOpsRef = TArrayRef<const TUpdateOp>;
-        using TMemGlob = NPageCollection::TMemGlob; 
+        using TMemGlob = NPageCollection::TMemGlob;
 
-        TMemTable(TIntrusiveConstPtr<TRowScheme> scheme, TEpoch epoch, ui64 annex, ui64 chunk = 4032) 
+        TMemTable(TIntrusiveConstPtr<TRowScheme> scheme, TEpoch epoch, ui64 annex, ui64 chunk = 4032)
             : Epoch(epoch)
             , Scheme(scheme)
             , Blobs(annex)
@@ -131,11 +131,11 @@ namespace NMem {
             , Tree(Comparator) // TODO: support TMemoryPool with caching
         {}
 
-        void Update(ERowOp rop, TRawVals key_, TOpsRef ops, TArrayRef<TMemGlob> pages, TRowVersion rowVersion, 
+        void Update(ERowOp rop, TRawVals key_, TOpsRef ops, TArrayRef<TMemGlob> pages, TRowVersion rowVersion,
                     const NTable::TTransactionMap<TRowVersion>& committed)
         {
             Y_VERIFY_DEBUG(
-                rop == ERowOp::Upsert || rop == ERowOp::Erase || rop == ERowOp::Reset, 
+                rop == ERowOp::Upsert || rop == ERowOp::Erase || rop == ERowOp::Reset,
                 "Unexpected row operation");
 
             Y_VERIFY(ops.size() < Max<ui16>(), "Too large update ops array");
@@ -143,7 +143,7 @@ namespace NMem {
             // Filter legacy empty values and re-order them in tag order
             ScratchUpdateTags.clear();
             for (ui32 it = 0; it < ops.size(); ++it) {
-                if (Y_UNLIKELY(ops[it].Op == ECellOp::Empty)) { 
+                if (Y_UNLIKELY(ops[it].Op == ECellOp::Empty)) {
                     // Filter possible empty updates
                     continue;
                 }
@@ -215,7 +215,7 @@ namespace NMem {
                 }
 
                 // See which tags we need to merge from earlier row versions
-                while (mergeFrom && rop == ERowOp::Upsert) { 
+                while (mergeFrom && rop == ERowOp::Upsert) {
                     if (mergeFrom->RowVersion.Step == Max<ui64>()) {
                         if (!committed.Find(mergeFrom->RowVersion.TxId)) {
                             // this item is not committed, skip
@@ -224,8 +224,8 @@ namespace NMem {
                         }
                     }
 
-                    if (mergeFrom->Rop != ERowOp::Upsert) { 
-                        rop = ERowOp::Reset; 
+                    if (mergeFrom->Rop != ERowOp::Upsert) {
+                        rop = ERowOp::Reset;
                     }
 
                     ScratchMergeTagsLast.swap(ScratchMergeTags);
@@ -289,23 +289,23 @@ namespace NMem {
                         actual row scheme that may have some columns already
                         be deleted. So cannot differ here error and booting.
                      */
-                } else if (TCellOp::HaveNoPayload(ops[it].NormalizedCellOp())) { 
-                    /* Payloadless ECellOp types may have zero type value */ 
+                } else if (TCellOp::HaveNoPayload(ops[it].NormalizedCellOp())) {
+                    /* Payloadless ECellOp types may have zero type value */
                 } else if (info->TypeId != ops[it].Value.Type()) {
                     Y_FAIL("Got un unexpected column type in cell update ops");
                 }
 
                 auto cell = ops[it].AsCell();
 
-                if (ops[it].Op == ELargeObj::Extern) { 
-                    /* Transformation REDO ELargeObj to TBlobs reference */ 
+                if (ops[it].Op == ELargeObj::Extern) {
+                    /* Transformation REDO ELargeObj to TBlobs reference */
 
                     const auto ref = Blobs.Push(pages.at(cell.AsValue<ui32>()));
 
                     cell = TCell::Make<ui64>(ref);
 
-                } else if (ops[it].Op != ELargeObj::Inline) { 
-                    Y_FAIL("Got an unexpected ELargeObj reference in update ops"); 
+                } else if (ops[it].Op != ELargeObj::Inline) {
+                    Y_FAIL("Got an unexpected ELargeObj reference in update ops");
                 } else if (!cell.IsInline()) {
                     cell = Clone(cell.Data(), cell.Size());
                 }
@@ -357,7 +357,7 @@ namespace NMem {
         TRowVersion GetMinRowVersion() const noexcept { return MinRowVersion; }
         TRowVersion GetMaxRowVersion() const noexcept { return MaxRowVersion; }
 
-        static TIntrusiveConstPtr<NPage::TExtBlobs> MakeBlobsPage(TArrayRef<const TMemTableSnapshot>); 
+        static TIntrusiveConstPtr<NPage::TExtBlobs> MakeBlobsPage(TArrayRef<const TMemTableSnapshot>);
         void DebugDump(IOutputStream&, const NScheme::TTypeRegistry&) const;
 
         NMem::TTreeSnapshot Snapshot();
@@ -415,7 +415,7 @@ namespace NMem {
 
         NMem::TUpdate* NewUpdate(ui32 cols) noexcept
         {
-            const size_t bytes = sizeof(NMem::TUpdate) + cols * sizeof(NMem::TColumnUpdate); 
+            const size_t bytes = sizeof(NMem::TUpdate) + cols * sizeof(NMem::TColumnUpdate);
 
             return (NMem::TUpdate*)Pool.Allocate(bytes);
         }
@@ -451,8 +451,8 @@ namespace NMem {
         // Temporary buffers to avoid hot path allocations
         using TTagWithPos = std::pair<TTag, ui32>;
         TSmallVec<TTagWithPos> ScratchUpdateTags;
-        std::vector<const NMem::TColumnUpdate*> ScratchMergeTags; 
-        std::vector<const NMem::TColumnUpdate*> ScratchMergeTagsLast; 
+        std::vector<const NMem::TColumnUpdate*> ScratchMergeTags;
+        std::vector<const NMem::TColumnUpdate*> ScratchMergeTagsLast;
     };
 
 }

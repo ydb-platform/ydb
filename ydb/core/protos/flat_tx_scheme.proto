@@ -1,9 +1,9 @@
 import "library/cpp/actors/protos/actors.proto";
-import "ydb/core/protos/base.proto"; 
-import "ydb/core/protos/subdomains.proto"; 
-import "ydb/core/protos/bind_channel_storage_pool.proto"; 
-import "ydb/core/protos/flat_scheme_op.proto"; 
-import "ydb/public/api/protos/ydb_cms.proto"; 
+import "ydb/core/protos/base.proto";
+import "ydb/core/protos/subdomains.proto";
+import "ydb/core/protos/bind_channel_storage_pool.proto";
+import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/public/api/protos/ydb_cms.proto";
 
 package NKikimrScheme;
 option java_package = "ru.yandex.kikimr.proto";

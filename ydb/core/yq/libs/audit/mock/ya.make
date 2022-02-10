@@ -1,4 +1,4 @@
-OWNER(g:yq) 
+OWNER(g:yq)
 
 LIBRARY()
 
@@ -7,8 +7,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/yq/libs/audit/events 
-    ydb/core/yq/libs/config/protos 
+    ydb/core/yq/libs/audit/events
+    ydb/core/yq/libs/config/protos
 )
 
 END()

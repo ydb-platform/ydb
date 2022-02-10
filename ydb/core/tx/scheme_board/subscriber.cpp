@@ -3,11 +3,11 @@
 #include "monitorable_actor.h"
 #include "subscriber.h"
 
-#include <ydb/core/base/statestorage_impl.h> 
-#include <ydb/core/base/tabletid.h> 
-#include <ydb/core/protos/scheme_board.pb.h> 
-#include <ydb/core/protos/services.pb.h> 
-#include <ydb/core/util/yverify_stream.h> 
+#include <ydb/core/base/statestorage_impl.h>
+#include <ydb/core/base/tabletid.h>
+#include <ydb/core/protos/scheme_board.pb.h>
+#include <ydb/core/protos/services.pb.h>
+#include <ydb/core/util/yverify_stream.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

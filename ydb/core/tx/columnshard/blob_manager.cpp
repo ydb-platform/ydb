@@ -4,7 +4,7 @@
 #include "blob_manager_db.h"
 #include "blob_cache.h"
 
-#include <ydb/core/base/blobstorage.h> 
+#include <ydb/core/base/blobstorage.h>
 
 namespace NKikimr::NColumnShard {
 

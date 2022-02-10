@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/formats/replace_key.h> 
+#include <ydb/core/formats/replace_key.h>
 
 namespace NKikimr::NOlap {
 

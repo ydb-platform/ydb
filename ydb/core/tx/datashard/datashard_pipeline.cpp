@@ -4,16 +4,16 @@
 #include "datashard_impl.h"
 #include "datashard_txs.h"
 
-#include <ydb/core/base/compile_time_flags.h> 
-#include <ydb/core/base/cputime.h> 
-#include <ydb/core/tx/balance_coverage/balance_coverage_builder.h> 
+#include <ydb/core/base/compile_time_flags.h>
+#include <ydb/core/base/cputime.h>
+#include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
-#define LOAD_SYS_UI64(db, row, value) if (!TDataShard::SysGetUi64(db, row, value)) return false; 
+#define LOAD_SYS_UI64(db, row, value) if (!TDataShard::SysGetUi64(db, row, value)) return false;
 
-TPipeline::TPipeline(TDataShard * self) 
+TPipeline::TPipeline(TDataShard * self)
     : Self(self)
     , DepTracker(self)
     , ActivePlannedOpsLogicallyCompleteEnd(ActivePlannedOps.end())
@@ -42,7 +42,7 @@ TPipeline::~TPipeline()
 }
 
 bool TPipeline::Load(NIceDb::TNiceDb& db) {
-    using Schema = TDataShard::Schema; 
+    using Schema = TDataShard::Schema;
 
     Y_VERIFY(!SchemaTx);
     LOAD_SYS_UI64(db, Schema::Sys_LastPlannedStep, LastPlannedTx.Step);
@@ -61,7 +61,7 @@ bool TPipeline::Load(NIceDb::TNiceDb& db) {
 }
 
 void TPipeline::PersistConfig(NIceDb::TNiceDb& db) {
-    using Schema = TDataShard::Schema; 
+    using Schema = TDataShard::Schema;
 
     Self->PersistSys(db, Schema::SysPipeline_Flags, Config.Flags);
     Self->PersistSys(db, Schema::SysPipeline_LimitActiveTx, Config.LimitActiveTx);
@@ -632,7 +632,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
 void TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
                               TTransactionContext &txc)
 {
-    using Schema = TDataShard::Schema; 
+    using Schema = TDataShard::Schema;
 
     auto& pb = rs.Record;
     ui64 txId = pb.GetTxId();
@@ -659,7 +659,7 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
                                TTransactionContext &txc,
                                const TActorContext &ctx)
 {
-    using Schema = TDataShard::Schema; 
+    using Schema = TDataShard::Schema;
 
     // No incoming read sets are expected
     if (op->InReadSets().empty()) {
@@ -741,7 +741,7 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
 void TPipeline::RemoveInReadSets(TOperation::TPtr op,
                                  NIceDb::TNiceDb &db)
 {
-    using Schema = TDataShard::Schema; 
+    using Schema = TDataShard::Schema;
 
     for (auto& rs : op->InReadSets()) {
         ui64 from = rs.first.first;
@@ -854,7 +854,7 @@ void TPipeline::MarkOpAsUsingSnapshot(TOperation::TPtr op)
 }
 
 void TPipeline::SaveLastPlannedTx(NIceDb::TNiceDb& db, TStepOrder stepTxId) {
-    using Schema = TDataShard::Schema; 
+    using Schema = TDataShard::Schema;
 
     LastPlannedTx = stepTxId;
     Self->PersistSys(db, Schema::Sys_LastPlannedStep, LastPlannedTx.Step);
@@ -863,7 +863,7 @@ void TPipeline::SaveLastPlannedTx(NIceDb::TNiceDb& db, TStepOrder stepTxId) {
 
 void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx) {
     NIceDb::TNiceDb db(txc.DB);
-    using Schema = TDataShard::Schema; 
+    using Schema = TDataShard::Schema;
 
     if (UtmostCompleteTx < op->GetStepOrder())
         UtmostCompleteTx = op->GetStepOrder();
@@ -907,7 +907,7 @@ void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, 
 }
 
 void TPipeline::PreserveSchema(NIceDb::TNiceDb& db, ui64 step) {
-    using Schema = TDataShard::Schema; 
+    using Schema = TDataShard::Schema;
     if (step > KeepSchemaStep && step != Max<ui64>()) {
         KeepSchemaStep = step;
         Self->PersistSys(db, Schema::Sys_AliveStep, step);
@@ -1074,7 +1074,7 @@ void TPipeline::ProcessDisconnected(ui32 nodeId)
 {
     for (auto &pr : ActiveOps) {
         if (pr.second->HasProcessDisconnectsFlag()) {
-            auto *ev = new TDataShard::TEvPrivate::TEvNodeDisconnected(nodeId); 
+            auto *ev = new TDataShard::TEvPrivate::TEvNodeDisconnected(nodeId);
             pr.second->AddInputEvent(new IEventHandle(Self->SelfId(), Self->SelfId(), ev));
             AddCandidateOp(pr.second);
         }

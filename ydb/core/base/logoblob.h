@@ -53,8 +53,8 @@ namespace NKikimr {
 
         explicit TLogoBlobID(const ui64 raw[3]) {
             memcpy(Raw.X, raw, 3 * sizeof(ui64));
-        } 
- 
+        }
+
         static TLogoBlobID PrevFull(const TLogoBlobID& id, ui32 size) {
             Y_VERIFY(!id.PartId());
             ui64 tablet = id.TabletID();
@@ -220,12 +220,12 @@ namespace NKikimr {
             Raw.N.PartId = partId;
         }
 
-    public: 
-        struct THash { 
+    public:
+        struct THash {
             ui32 operator()(const TLogoBlobID &id) const noexcept {
-                return id.Hash(); 
-            } 
-        }; 
+                return id.Hash();
+            }
+        };
     };
 
     static_assert(sizeof(TLogoBlobID) == 24, "expect sizeof(TLogoBlobID) == 24");
@@ -271,9 +271,9 @@ namespace NKikimr {
 
     TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrProto::TLogoBlobID &proto);
     void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto);
-    void LogoBlobIDVectorFromLogoBlobIDRepeated( 
+    void LogoBlobIDVectorFromLogoBlobIDRepeated(
                 TVector<TLogoBlobID> *to,
-                const ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID> &proto); 
+                const ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID> &proto);
 
     template<typename TIterator>
     void LogoBlobIDRepatedFromLogoBlobIDVector(

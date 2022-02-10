@@ -1,16 +1,16 @@
 LIBRARY()
 
 OWNER(
-    g:yql 
-    g:yql_ydb_core 
+    g:yql
+    g:yql_ydb_core
 )
 
 PEERDIR(
     library/cpp/charset
     library/cpp/enumbitset
-    ydb/library/yql/minikql 
-    ydb/library/yql/public/udf 
-    ydb/library/yql/sql/settings 
+    ydb/library/yql/minikql
+    ydb/library/yql/public/udf
+    ydb/library/yql/sql/settings
     ydb/library/yql/core
     ydb/library/yql/core/issue
     ydb/library/yql/core/issue/protos
@@ -32,7 +32,7 @@ SRCS(
     query.cpp
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(node.h)
 

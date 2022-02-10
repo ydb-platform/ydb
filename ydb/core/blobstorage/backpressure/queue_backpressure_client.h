@@ -1,10 +1,10 @@
-#pragma once 
- 
-#include "defs.h" 
-#include "queue_backpressure_common.h" 
- 
-namespace NKikimr { 
- 
+#pragma once
+
+#include "defs.h"
+#include "queue_backpressure_common.h"
+
+namespace NKikimr {
+
     namespace NBackpressure {
         class TQueueClientId;
     } // NBackpressure
@@ -21,7 +21,7 @@ namespace NKikimr {
             : VDiskId(vDiskId)
             , QueueId(queueId)
             , IsConnected(isConnected)
-        {} 
+        {}
 
         TString ToString() const {
             TStringStream str;
@@ -31,8 +31,8 @@ namespace NKikimr {
             str << "}";
             return str.Str();
         }
-    }; 
- 
+    };
+
     struct TEvRequestProxyQueueState
         : public TEventLocal<TEvRequestProxyQueueState, TEvBlobStorage::EvRequestProxyQueueState>
     {};
@@ -42,5 +42,5 @@ namespace NKikimr {
         const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, const TString& queueName,
         ui32 interconnectChannel, bool local, TDuration watchdogTimeout,
         TIntrusivePtr<NBackpressure::TFlowRecord> &flowRecord, NMonitoring::TCountableBase::EVisibility visibility);
- 
-} // NKikimr 
+
+} // NKikimr

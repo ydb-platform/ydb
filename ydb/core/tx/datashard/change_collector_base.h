@@ -2,16 +2,16 @@
 
 #include "change_record.h"
 
-#include <ydb/core/engine/minikql/change_collector_iface.h> 
-#include <ydb/core/protos/change_exchange.pb.h> 
-#include <ydb/core/tablet_flat/flat_database.h> 
+#include <ydb/core/engine/minikql/change_collector_iface.h>
+#include <ydb/core/protos/change_exchange.pb.h>
+#include <ydb/core/tablet_flat/flat_database.h>
 
 #include <util/generic/maybe.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
-class TDataShard; 
+class TDataShard;
 
 class TBaseChangeCollector: public NMiniKQL::IChangeCollector {
     using TDataChange = NKikimrChangeExchange::TChangeRecord::TDataChange;
@@ -22,16 +22,16 @@ class TBaseChangeCollector: public NMiniKQL::IChangeCollector {
     static void SerializeCells(TSerializedCells& out, const NTable::TRowState& state, TArrayRef<const NTable::TTag> tags);
 
 protected:
-    static void Serialize(TDataChange& out, NTable::ERowOp rop, 
+    static void Serialize(TDataChange& out, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TTag> keyTags, TArrayRef<const NTable::TUpdateOp> updates);
-    static void Serialize(TDataChange& out, NTable::ERowOp rop, 
+    static void Serialize(TDataChange& out, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TTag> keyTags,
         const NTable::TRowState* oldState, const NTable::TRowState* newState, TArrayRef<const NTable::TTag> valueTags);
 
     void Persist(TChangeRecord::EKind kind, const TPathId& pathId, const TDataChange& body);
 
 public:
-    explicit TBaseChangeCollector(TDataShard* self, NTable::TDatabase& db, bool isImmediateTx); 
+    explicit TBaseChangeCollector(TDataShard* self, NTable::TDatabase& db, bool isImmediateTx);
 
     bool NeedToReadKeys() const override;
     void SetReadVersion(const TRowVersion& readVersion) override;
@@ -44,7 +44,7 @@ public:
     // there is no Collect, still abstract
 
 protected:
-    TDataShard* Self; 
+    TDataShard* Self;
     NTable::TDatabase& Db;
 
     TRowVersion WriteVersion;
@@ -54,5 +54,5 @@ protected:
 
 }; // TBaseChangeCollector
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

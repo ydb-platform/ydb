@@ -1,7 +1,7 @@
 #pragma once
 
 #include "cli.h"
-#include <ydb/core/driver_lib/cli_base/cli_cmds.h> 
+#include <ydb/core/driver_lib/cli_base/cli_cmds.h>
 
 namespace NKikimr {
 namespace NDriverClient {

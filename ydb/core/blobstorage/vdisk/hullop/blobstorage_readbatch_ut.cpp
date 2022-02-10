@@ -2,12 +2,12 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
 #include <util/generic/bitmap.h>
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 
 using namespace NKikimr;
 
-#define STR Cnull 
- 
+#define STR Cnull
+
 Y_UNIT_TEST_SUITE(ReadBatcher) {
     Y_UNIT_TEST(Range) {
         TVector<std::pair<ui32, ui32>> ranges;
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(ReadBatcher) {
             NKikimrProto::EReplyStatus status;
             TString data;
             while (batcher.GetResultItem(&serial, &payload, &status, &data)) {
-                STR << serial << Endl; 
+                STR << serial << Endl;
                 UNIT_ASSERT_VALUES_EQUAL(serial, expectedSerial);
                 ++expectedSerial;
                 UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);

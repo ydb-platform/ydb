@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/base/defs.h> 
-#include <ydb/core/base/events.h> 
-#include <ydb/core/protos/msgbus.pb.h> 
-#include <ydb/core/protos/msgbus_pq.pb.h> 
+#include <ydb/core/base/defs.h>
+#include <ydb/core/base/events.h>
+#include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/protos/msgbus_pq.pb.h>
 
 #include <variant>
 

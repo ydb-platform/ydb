@@ -1,9 +1,9 @@
-UNITTEST_FOR(ydb/core/tx/sequenceshard) 
+UNITTEST_FOR(ydb/core/tx/sequenceshard)
 
 OWNER(g:kikimr)
 
 PEERDIR(
-    ydb/core/testlib 
+    ydb/core/testlib
 )
 
 SRCS(

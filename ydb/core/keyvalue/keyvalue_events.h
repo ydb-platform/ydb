@@ -2,8 +2,8 @@
 #include "defs.h"
 #include "keyvalue_intermediate.h"
 #include "keyvalue_request_stat.h"
-#include <ydb/public/lib/base/msgbus.h> 
-#include <ydb/core/keyvalue/protos/events.pb.h> 
+#include <ydb/public/lib/base/msgbus.h>
+#include <ydb/core/keyvalue/protos/events.pb.h>
 
 
 namespace NKikimr {

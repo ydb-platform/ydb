@@ -2,7 +2,7 @@
 
 #include "tablet_counters.h"
 #include "tablet_counters_aggregator.h"
-#include <ydb/core/tablet_flat/defs.h> 
+#include <ydb/core/tablet_flat/defs.h>
 #include <util/string/vector.h>
 #include <util/string/split.h>
 

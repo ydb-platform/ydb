@@ -10,8 +10,8 @@
 #include "base_handler.h"
 #include "walle.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/mon/mon.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/mon/mon.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

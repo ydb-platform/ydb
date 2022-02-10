@@ -3,20 +3,20 @@
 #include "test_steps.h"
 #include "test_comp.h"
 
-#include <ydb/core/tablet_flat/flat_database.h> 
-#include <ydb/core/tablet_flat/flat_dbase_naked.h> 
-#include <ydb/core/tablet_flat/flat_dbase_apply.h> 
-#include <ydb/core/tablet_flat/flat_dbase_change.h> 
-#include <ydb/core/tablet_flat/flat_sausage_grind.h> 
-#include <ydb/core/tablet_flat/flat_util_binary.h> 
-#include <ydb/core/tablet_flat/util_fmt_desc.h> 
+#include <ydb/core/tablet_flat/flat_database.h>
+#include <ydb/core/tablet_flat/flat_dbase_naked.h>
+#include <ydb/core/tablet_flat/flat_dbase_apply.h>
+#include <ydb/core/tablet_flat/flat_dbase_change.h>
+#include <ydb/core/tablet_flat/flat_sausage_grind.h>
+#include <ydb/core/tablet_flat/flat_util_binary.h>
+#include <ydb/core/tablet_flat/util_fmt_desc.h>
 
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
-#include <ydb/core/tablet_flat/test/libs/rows/tool.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_iter.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_envs.h> 
-#include <ydb/core/tablet_flat/test/libs/table/wrap_dbase.h> 
-#include <ydb/core/tablet_flat/test/libs/table/wrap_select.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
+#include <ydb/core/tablet_flat/test/libs/rows/tool.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_iter.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_envs.h>
+#include <ydb/core/tablet_flat/test/libs/table/wrap_dbase.h>
+#include <ydb/core/tablet_flat/test/libs/table/wrap_select.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -30,7 +30,7 @@ namespace NTest {
     struct TDbExec : public TSteps<TDbExec> {
         using TRow = NTest::TRow;
         using TRedoLog = TDeque<TAutoPtr<TChange>>;
-        using TSteppedCookieAllocator = NPageCollection::TSteppedCookieAllocator; 
+        using TSteppedCookieAllocator = NPageCollection::TSteppedCookieAllocator;
 
         using TCheckIter = TChecker<NTest::TWrapDbIter, TDatabase&>;
         using TCheckSelect = TChecker<NTest::TWrapDbSelect, TDatabase&>;
@@ -55,7 +55,7 @@ namespace NTest {
 
             TSchemeModifier(*scheme).Apply(*delta);
 
-            return new TDatabase(new TDatabaseImpl(0, scheme, nullptr)); 
+            return new TDatabase(new TDatabaseImpl(0, scheme, nullptr));
         }
 
         TDbExec() : Base(new TDatabase) { Birth(); }
@@ -98,10 +98,10 @@ namespace NTest {
             return *this;
         }
 
-        TDbExec& Add(ui32 table, const TRow &row, ERowOp rop = ERowOp::Upsert) 
+        TDbExec& Add(ui32 table, const TRow &row, ERowOp rop = ERowOp::Upsert)
         {
             const NTest::TRowTool tool(RowSchemeFor(table));
-            auto pair = tool.Split(row, true, rop != ERowOp::Erase); 
+            auto pair = tool.Split(row, true, rop != ERowOp::Erase);
 
             Base->Update(table, rop, pair.Key, pair.Ops, WriteVersion);
 
@@ -111,12 +111,12 @@ namespace NTest {
         template<typename ... Args>
         inline TDbExec& Put(ui32 table, const TRow &row, const Args& ... left)
         {
-            return Add(table, row, ERowOp::Upsert), Put(table, left...); 
+            return Add(table, row, ERowOp::Upsert), Put(table, left...);
         }
 
         inline TDbExec& Put(ui32 table, const TRow &row)
         {
-            return Add(table, row, ERowOp::Upsert); 
+            return Add(table, row, ERowOp::Upsert);
         }
 
         TDbExec& Apply(const TSchemeChanges &delta)
@@ -191,7 +191,7 @@ namespace NTest {
             auto keys = subset->Scheme->Tags(true /* only keys */);
 
             /* Mocked NFwd emulates real compaction partially: it cannot pass
-                external blobs from TMemTable to TPart by reference, so need to 
+                external blobs from TMemTable to TPart by reference, so need to
                 materialize it on this compaction.
              */
 
@@ -201,11 +201,11 @@ namespace NTest {
 
             Y_VERIFY(!eggs.NoResult(), "Unexpected early termination");
 
-            TVector<TPartView> partViews; 
+            TVector<TPartView> partViews;
             for (auto &part : eggs.Parts)
-                partViews.push_back({ part, nullptr, part->Slices }); 
+                partViews.push_back({ part, nullptr, part->Slices });
 
-            Base->Replace(table, std::move(partViews), *subset); 
+            Base->Replace(table, std::move(partViews), *subset);
 
             return *this;
         }
@@ -235,7 +235,7 @@ namespace NTest {
                     }
                 }
 
-                TAutoPtr<TDatabaseImpl> naked = new TDatabaseImpl({Gen, Step}, scheme, nullptr); 
+                TAutoPtr<TDatabaseImpl> naked = new TDatabaseImpl({Gen, Step}, scheme, nullptr);
 
                 for (auto &change: RedoLog)
                     if (auto &redo = change->Redo) {
@@ -350,7 +350,7 @@ namespace NTest {
     private:
         void Birth() noexcept
         {
-            Annex = new TSteppedCookieAllocator(1, ui64(++Gen) << 32, { 0, 999 }, {{ 1, 7 }}); 
+            Annex = new TSteppedCookieAllocator(1, ui64(++Gen) << 32, { 0, 999 }, {{ 1, 7 }});
         }
 
         TDbExec& DoBegin(bool real) noexcept
@@ -418,7 +418,7 @@ namespace NTest {
         EOnTx OnTx = EOnTx::None;
         TIntrusiveConstPtr<TRowScheme> Scheme;
         TRedoLog RedoLog;
-        TAutoPtr<TSteppedCookieAllocator> Annex; 
+        TAutoPtr<TSteppedCookieAllocator> Annex;
         TRowVersion ReadVersion = TRowVersion::Max();
         TRowVersion WriteVersion = TRowVersion::Min();
     };

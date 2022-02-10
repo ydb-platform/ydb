@@ -1,6 +1,6 @@
 #include "flat_comp_ut_common.h"
 
-#include <ydb/core/tablet_flat/flat_comp_gen.h> 
+#include <ydb/core/tablet_flat/flat_comp_gen.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -1,8 +1,8 @@
 #include "mkql_keys.h"
 
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/core/base/domain.h> 
-#include <ydb/core/scheme_types/scheme_types_defs.h> 
+#include <ydb/core/base/domain.h>
+#include <ydb/core/scheme_types/scheme_types_defs.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/algorithm.h>

@@ -5,17 +5,17 @@
 #include "kqp_partition_helper.h"
 #include "kqp_table_resolver.h"
 
-#include <ydb/core/kqp/common/kqp_ru_calc.h> 
+#include <ydb/core/kqp/common/kqp_ru_calc.h>
 
-#include <ydb/core/actorlib_impl/long_timer.h> 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/kikimr_issue.h> 
-#include <ydb/core/protos/tx_datashard.pb.h> 
-#include <ydb/core/kqp/executer/kqp_tasks_graph.h> 
-#include <ydb/core/kqp/kqp.h> 
-#include <ydb/core/grpc_services/local_rate_limiter.h> 
+#include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/kqp/executer/kqp_tasks_graph.h>
+#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/grpc_services/local_rate_limiter.h>
 
-#include <ydb/library/mkql_proto/mkql_proto.h> 
+#include <ydb/library/mkql_proto/mkql_proto.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>

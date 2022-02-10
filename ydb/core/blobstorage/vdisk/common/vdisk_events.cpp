@@ -1,28 +1,28 @@
-#include "vdisk_events.h" 
-#include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h> 
- 
-namespace NKikimr { 
- 
+#include "vdisk_events.h"
+#include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
+
+namespace NKikimr {
+
     TEvBlobStorage::TEvVPutResult::TEvVPutResult() = default;
 
-    TEvBlobStorage::TEvVPutResult::TEvVPutResult(const NKikimrProto::EReplyStatus status, 
-            const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const ui64 *cookie, TOutOfSpaceStatus oosStatus, 
-            const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVPut *record, 
-            const TActorIDPtr &skeletonFrontIDPtr, const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, 
-            const NVDiskMon::TLtcHistoPtr &histoPtr, const ui64 bufferSizeBytes, NWilson::TTraceId traceId, 
+    TEvBlobStorage::TEvVPutResult::TEvVPutResult(const NKikimrProto::EReplyStatus status,
+            const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const ui64 *cookie, TOutOfSpaceStatus oosStatus,
+            const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVPut *record,
+            const TActorIDPtr &skeletonFrontIDPtr, const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
+            const NVDiskMon::TLtcHistoPtr &histoPtr, const ui64 bufferSizeBytes, NWilson::TTraceId traceId,
             ui64 incarnationGuid, const TString& errorReason)
         : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
                 TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, record, skeletonFrontIDPtr)
-    { 
+    {
         IncrementSize(bufferSizeBytes);
-        Record.SetStatus(status); 
-        LogoBlobIDFromLogoBlobID(logoBlobId, Record.MutableBlobID()); 
-        VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID()); 
-        if (cookie) { 
-            Record.SetCookie(*cookie); 
-        } 
-        Record.SetStatusFlags(oosStatus.Flags); 
-        Record.SetApproximateFreeSpaceShare(oosStatus.ApproximateFreeSpaceShare); 
+        Record.SetStatus(status);
+        LogoBlobIDFromLogoBlobID(logoBlobId, Record.MutableBlobID());
+        VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
+        if (cookie) {
+            Record.SetCookie(*cookie);
+        }
+        Record.SetStatusFlags(oosStatus.Flags);
+        Record.SetApproximateFreeSpaceShare(oosStatus.ApproximateFreeSpaceShare);
         if (record && record->HasTimestamps()) {
             Record.MutableTimestamps()->CopyFrom(record->GetTimestamps());
         }
@@ -32,8 +32,8 @@ namespace NKikimr {
         if (errorReason && status != NKikimrProto::OK) {
             Record.SetErrorReason(errorReason);
         }
-    } 
- 
+    }
+
     void TEvBlobStorage::TEvVPut::StorePayload(const TString& buffer) {
         if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
             AddPayload(TRope(buffer));
@@ -64,4 +64,4 @@ namespace NKikimr {
             return GetPayload(itemIdx);
         }
     }
-} // NKikimr 
+} // NKikimr

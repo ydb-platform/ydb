@@ -1,15 +1,15 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
-import "ydb/public/api/protos/annotations/validation.proto"; 
-import "ydb/public/api/protos/ydb_common.proto"; 
-import "ydb/public/api/protos/ydb_issue_message.proto"; 
-import "ydb/public/api/protos/ydb_operation.proto"; 
-import "ydb/public/api/protos/ydb_query_stats.proto"; 
-import "ydb/public/api/protos/ydb_value.proto"; 
-import "ydb/public/api/protos/ydb_scheme.proto"; 
-import "ydb/public/api/protos/ydb_status_codes.proto"; 
-import "ydb/public/api/protos/ydb_formats.proto"; 
+import "ydb/public/api/protos/annotations/validation.proto";
+import "ydb/public/api/protos/ydb_common.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_query_stats.proto";
+import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/ydb_scheme.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_formats.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
@@ -407,7 +407,7 @@ message CreateTableRequest {
     Ydb.Operations.OperationParams operation_params = 6;
     // List of secondary indexes
     repeated TableIndex indexes = 7;
-    // Table rows time to live settings 
+    // Table rows time to live settings
     TtlSettings ttl_settings = 8;
     // Storage settings for table
     StorageSettings storage_settings = 9;
@@ -464,7 +464,7 @@ message AlterTableRequest {
     Ydb.Operations.OperationParams operation_params = 5;
     // Columns to alter
     repeated ColumnMeta alter_columns = 6;
-    // Setup or remove time to live settings 
+    // Setup or remove time to live settings
     oneof ttl_action {
         TtlSettings set_ttl_settings = 7;
         google.protobuf.Empty drop_ttl_settings = 8;

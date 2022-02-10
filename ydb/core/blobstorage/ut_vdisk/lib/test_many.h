@@ -1,10 +1,10 @@
-#pragma once 
- 
-#include "defs.h" 
-#include "prepare.h" 
+#pragma once
+
+#include "defs.h"
+#include "prepare.h"
 #include "helpers.h"
- 
-/////////////////////////////////////////////////////////////////////////// 
+
+///////////////////////////////////////////////////////////////////////////
 struct TManyPutOneGet {
     const bool WaitForCompaction;
     std::shared_ptr<TVector<TMsgPackInfo>> MsgPacks;
@@ -38,25 +38,25 @@ struct TManyPutOneGet {
 };
 
 ///////////////////////////////////////////////////////////////////////////
-struct TManyPutGet { 
-    const bool WaitForCompaction; 
-    const ui32 MsgNum; 
-    const ui32 MsgSize; 
-    const NKikimrBlobStorage::EPutHandleClass HandleClass; 
-    const ui64 TabletId; 
- 
-    TManyPutGet(bool waitForCompaction, ui32 msgNum, ui32 msgSize, NKikimrBlobStorage::EPutHandleClass cls, ui64 tabletId = 0) 
-        : WaitForCompaction(waitForCompaction) 
-        , MsgNum(msgNum) 
-        , MsgSize(msgSize) 
-        , HandleClass(cls) 
-        , TabletId(tabletId) 
-    {} 
- 
-    void operator ()(TConfiguration *conf); 
-}; 
- 
-/////////////////////////////////////////////////////////////////////////// 
+struct TManyPutGet {
+    const bool WaitForCompaction;
+    const ui32 MsgNum;
+    const ui32 MsgSize;
+    const NKikimrBlobStorage::EPutHandleClass HandleClass;
+    const ui64 TabletId;
+
+    TManyPutGet(bool waitForCompaction, ui32 msgNum, ui32 msgSize, NKikimrBlobStorage::EPutHandleClass cls, ui64 tabletId = 0)
+        : WaitForCompaction(waitForCompaction)
+        , MsgNum(msgNum)
+        , MsgSize(msgSize)
+        , HandleClass(cls)
+        , TabletId(tabletId)
+    {}
+
+    void operator ()(TConfiguration *conf);
+};
+
+///////////////////////////////////////////////////////////////////////////
 struct TManyMultiPutGet {
     const bool WaitForCompaction;
     const ui32 MsgNum;
@@ -79,45 +79,45 @@ struct TManyMultiPutGet {
 };
 
 ///////////////////////////////////////////////////////////////////////////
-struct TManyPutRangeGet { 
-    const bool WaitForCompaction; 
-    const bool IndexOnly; 
-    const ui32 MsgNum; 
-    const ui32 MsgSize; 
-    const NKikimrBlobStorage::EPutHandleClass HandleClass; 
- 
-    TManyPutRangeGet(bool waitForCompaction, bool indexOnly, ui32 msgNum, ui32 msgSize, 
-                     NKikimrBlobStorage::EPutHandleClass cls) 
-        : WaitForCompaction(waitForCompaction) 
-        , IndexOnly(indexOnly) 
-        , MsgNum(msgNum) 
-        , MsgSize(msgSize) 
-        , HandleClass(cls) 
+struct TManyPutRangeGet {
+    const bool WaitForCompaction;
+    const bool IndexOnly;
+    const ui32 MsgNum;
+    const ui32 MsgSize;
+    const NKikimrBlobStorage::EPutHandleClass HandleClass;
+
+    TManyPutRangeGet(bool waitForCompaction, bool indexOnly, ui32 msgNum, ui32 msgSize,
+                     NKikimrBlobStorage::EPutHandleClass cls)
+        : WaitForCompaction(waitForCompaction)
+        , IndexOnly(indexOnly)
+        , MsgNum(msgNum)
+        , MsgSize(msgSize)
+        , HandleClass(cls)
     {
         Y_VERIFY(indexOnly);
     }
- 
-    void operator ()(TConfiguration *conf); 
-}; 
- 
-/////////////////////////////////////////////////////////////////////////// 
-struct TManyPutRangeGet2Channels { 
-    const bool WaitForCompaction; 
-    const bool IndexOnly; 
-    const ui32 MsgNum; 
-    const ui32 MsgSize; 
-    const NKikimrBlobStorage::EPutHandleClass HandleClass; 
- 
-    TManyPutRangeGet2Channels(bool waitForCompaction, bool indexOnly, ui32 msgNum, ui32 msgSize, 
-                              NKikimrBlobStorage::EPutHandleClass cls) 
-        : WaitForCompaction(waitForCompaction) 
-        , IndexOnly(indexOnly) 
-        , MsgNum(msgNum) 
-        , MsgSize(msgSize) 
-        , HandleClass(cls) 
+
+    void operator ()(TConfiguration *conf);
+};
+
+///////////////////////////////////////////////////////////////////////////
+struct TManyPutRangeGet2Channels {
+    const bool WaitForCompaction;
+    const bool IndexOnly;
+    const ui32 MsgNum;
+    const ui32 MsgSize;
+    const NKikimrBlobStorage::EPutHandleClass HandleClass;
+
+    TManyPutRangeGet2Channels(bool waitForCompaction, bool indexOnly, ui32 msgNum, ui32 msgSize,
+                              NKikimrBlobStorage::EPutHandleClass cls)
+        : WaitForCompaction(waitForCompaction)
+        , IndexOnly(indexOnly)
+        , MsgNum(msgNum)
+        , MsgSize(msgSize)
+        , HandleClass(cls)
     {
         Y_VERIFY(indexOnly);
     }
- 
-    void operator ()(TConfiguration *conf); 
-}; 
+
+    void operator ()(TConfiguration *conf);
+};

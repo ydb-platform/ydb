@@ -1,5 +1,5 @@
-#include <ydb/library/dynumber/dynumber.h> 
-#include <ydb/library/dynumber/cast.h> 
+#include <ydb/library/dynumber/dynumber.h>
+#include <ydb/library/dynumber/cast.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -11,7 +11,7 @@ using namespace NKikimr::NDyNumber;
 namespace {
     void TestDyNumber(TStringBuf test) {
         UNIT_ASSERT(IsValidDyNumberString(test));
- 
+
         const auto dyNumber = ParseDyNumberString(test);
         UNIT_ASSERT(dyNumber.Defined());
         UNIT_ASSERT(IsValidDyNumber(*dyNumber));
@@ -30,7 +30,7 @@ namespace {
     template <typename T>
     void TestCast(TStringBuf test, TMaybe<T> value) {
         UNIT_ASSERT_C(IsValidDyNumberString(test), test);
- 
+
         const auto dyNumber = ParseDyNumberString(test);
         UNIT_ASSERT(dyNumber.Defined());
         UNIT_ASSERT(IsValidDyNumber(*dyNumber));

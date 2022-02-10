@@ -1,4 +1,4 @@
-#include <ydb/core/base/ticket_parser.h> 
+#include <ydb/core/base/ticket_parser.h>
 #include "msgbus_server.h"
 #include "msgbus_server_request.h"
 #include "msgbus_server_proxy.h"

@@ -9,8 +9,8 @@
 #include "dsproxy_strategy_restore.h"
 #include "dsproxy_strategy_put_m3dc.h"
 #include "dsproxy_strategy_put_m3of4.h"
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
-#include <ydb/core/blobstorage/base/wilson_events.h> 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <util/generic/set.h>
 
 namespace NKikimr {
@@ -135,12 +135,12 @@ public:
     bool MarkRequest(const TEvent &event, ui32 orderNumber) {
         constexpr bool isVPut = std::is_same_v<TEvent, TEvBlobStorage::TEvVPutResult>;
         constexpr bool isVMultiPut = std::is_same_v<TEvent, TEvBlobStorage::TEvVMultiPutResult>;
-        static_assert(isVPut || isVMultiPut); 
+        static_assert(isVPut || isVMultiPut);
 
         using TCookie = std::conditional_t<isVPut, TBlobCookie, TVMultiPutCookie>;
 
         auto responses = isVPut ? ReceivedVPutResponses : ReceivedVMultiPutResponses;
-        auto putType = std::is_same_v<TCookie, TBlobCookie> ? "TEvVPut" : "TEvVMultiPut"; 
+        auto putType = std::is_same_v<TCookie, TBlobCookie> ? "TEvVPut" : "TEvVMultiPut";
 
         const auto &record = event.Record;
         if (!record.HasCookie()) {
@@ -155,7 +155,7 @@ public:
                     << " cookie# " << ui64(cookie);
             return true;
         }
- 
+
         ui64 requestIdx = cookie.GetRequestIdx();
         if (responses[requestIdx]) {
             ErrorDescription =  TStringBuilder() << putType << "is recieved twice"
@@ -231,7 +231,7 @@ public:
                     << " cookie# " << ui64(cookie);
             return true;
         }
- 
+
         if (IsDone[blobIdx]) {
             return false;
         }
@@ -254,13 +254,13 @@ public:
     }
 
     template <typename TVPutEvent, typename TVPutEventResult>
-    void OnVPutEventResult(TLogContext &logCtx, TActorId sender, TVPutEventResult &ev, 
+    void OnVPutEventResult(TLogContext &logCtx, TActorId sender, TVPutEventResult &ev,
             TDeque<std::unique_ptr<TVPutEvent>> &outVPutEvents, TPutResultVec &outPutResults)
     {
         constexpr bool isVPut = std::is_same_v<TVPutEvent, TEvBlobStorage::TEvVPut>;
         constexpr bool isVMultiPut = std::is_same_v<TVPutEvent, TEvBlobStorage::TEvVMultiPut>;
         static_assert(isVPut || isVMultiPut);
-        auto putType = isVPut ? "TEvVPut" : "TEvVMultiPut"; 
+        auto putType = isVPut ? "TEvVPut" : "TEvVMultiPut";
 
         auto &record = ev.Record;
         Y_VERIFY(record.HasStatus());
@@ -429,7 +429,7 @@ protected:
                 } else if constexpr (isVMultiPut) {
                     outVPutEvents.back()->AddVPut(put.Id, put.Buffer, &cookie);
                 }
- 
+
                 if (put.IsHandoff) {
                     ++HandoffPartsSent;
                 }

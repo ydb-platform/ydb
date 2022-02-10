@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    vvvv 
-    g:yql 
-) 
+OWNER(
+    vvvv
+    g:yql
+)
 
 SRCS(
     yql_factory.h
@@ -37,8 +37,8 @@ SRCS(
 PEERDIR(
     ydb/library/yql/ast
     ydb/library/yql/ast/serialize
-    ydb/library/yql/minikql 
-    ydb/library/yql/minikql/computation 
+    ydb/library/yql/minikql
+    ydb/library/yql/minikql/computation
     ydb/library/yql/core
     ydb/library/yql/core/type_ann
     ydb/library/yql/providers/common/codec
@@ -47,7 +47,7 @@ PEERDIR(
 
 IF (NOT MKQL_DISABLE_CODEGEN)
     PEERDIR(
-        ydb/library/yql/minikql/codegen 
+        ydb/library/yql/minikql/codegen
         contrib/libs/llvm12/lib/IR
         contrib/libs/llvm12/lib/ExecutionEngine/MCJIT
         contrib/libs/llvm12/lib/Linker
@@ -56,11 +56,11 @@ IF (NOT MKQL_DISABLE_CODEGEN)
         contrib/libs/llvm12/lib/Transforms/IPO
     )
 ELSE()
-    CFLAGS( 
-        -DMKQL_DISABLE_CODEGEN 
-    ) 
+    CFLAGS(
+        -DMKQL_DISABLE_CODEGEN
+    )
 ENDIF()
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 END()

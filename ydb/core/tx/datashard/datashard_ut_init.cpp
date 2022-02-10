@@ -1,11 +1,11 @@
 #include "datashard_ut_common.h"
 
-#include <ydb/core/base/tablet.h> 
-#include <ydb/core/scheme/scheme_types_defs.h> 
-#include <ydb/core/testlib/test_client.h> 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
-#include <ydb/core/util/pb.h> 
-#include <ydb/public/lib/deprecated/kicli/kicli.h> 
+#include <ydb/core/base/tablet.h>
+#include <ydb/core/scheme/scheme_types_defs.h>
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/util/pb.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <util/string/printf.h>
 
@@ -68,9 +68,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
 
         auto tabletId = GetTableShards(server, sender, "/Root/table-1")[0];
         auto actorId = ResolveTablet(runtime, tabletId);
-        auto datashard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(actorId)); 
+        auto datashard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(actorId));
 
-        UNIT_ASSERT_EQUAL(datashard->GetSnapshotManager().GetMvccState(), NDataShard::EMvccState::MvccEnabled); 
+        UNIT_ASSERT_EQUAL(datashard->GetSnapshotManager().GetMvccState(), NDataShard::EMvccState::MvccEnabled);
 
         runtime.GetAppData().FeatureFlags.SetEnableMvccForTest(false);
 
@@ -89,11 +89,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         };
 
         actorId = ResolveTablet(runtime, tabletId);
-        datashard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(actorId)); 
+        datashard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(actorId));
 
-        waitFor([&]{ return datashard->GetSnapshotManager().GetMvccState() == NDataShard::EMvccState::MvccDisabled; }, "mvcc disabled"); 
+        waitFor([&]{ return datashard->GetSnapshotManager().GetMvccState() == NDataShard::EMvccState::MvccDisabled; }, "mvcc disabled");
     }
- 
+
     Y_UNIT_TEST(TestGetShardStateAfterInitialization) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         auto event = runtime.GrabEdgeEvent<TEvDataShard::TEvGetShardStateResult>(handle);
         UNIT_ASSERT(event);
         UNIT_ASSERT_EQUAL(event->GetOrigin(), TTestTxConfig::TxTablet0);
-        UNIT_ASSERT_EQUAL(event->GetState(), NDataShard::TShardState::WaitScheme); 
+        UNIT_ASSERT_EQUAL(event->GetState(), NDataShard::TShardState::WaitScheme);
     }
 
     void TestTablePath(bool oldCreate, bool restart)

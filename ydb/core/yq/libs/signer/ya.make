@@ -1,4 +1,4 @@
-OWNER(g:yq) 
+OWNER(g:yq)
 
 LIBRARY()
 
@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/yq/libs/hmac 
+    ydb/core/yq/libs/hmac
 )
 
 END()

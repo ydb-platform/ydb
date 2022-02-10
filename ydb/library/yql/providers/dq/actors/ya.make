@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:yql) 
+OWNER(g:yql)
 
 SRCS(
     compute_actor.cpp
@@ -20,16 +20,16 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/yson
-    ydb/core/base 
-    ydb/library/mkql_proto 
-    ydb/library/yql/core/services 
-    ydb/library/yql/core/services/mounts 
-    ydb/library/yql/core/user_data 
-    ydb/library/yql/utils/actors 
-    ydb/library/yql/utils/backtrace 
-    ydb/library/yql/utils/log 
-    ydb/public/api/protos 
-    ydb/public/lib/yson_value 
+    ydb/core/base
+    ydb/library/mkql_proto
+    ydb/library/yql/core/services
+    ydb/library/yql/core/services/mounts
+    ydb/library/yql/core/user_data
+    ydb/library/yql/utils/actors
+    ydb/library/yql/utils/backtrace
+    ydb/library/yql/utils/log
+    ydb/public/api/protos
+    ydb/public/lib/yson_value
     ydb/library/yql/dq/common
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime

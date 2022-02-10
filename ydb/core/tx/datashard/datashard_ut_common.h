@@ -3,12 +3,12 @@
 #include "datashard.h"
 #include "datashard_impl.h"
 
-#include <ydb/core/engine/mkql_engine_flat.h> 
-#include <ydb/core/kqp/kqp_compute.h> 
-#include <ydb/core/protos/ydb_result_set_old.pb.h> 
-#include <ydb/core/testlib/minikql_compile.h> 
-#include <ydb/core/testlib/tablet_helpers.h> 
-#include <ydb/core/testlib/test_client.h> 
+#include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/kqp/kqp_compute.h>
+#include <ydb/core/protos/ydb_result_set_old.pb.h>
+#include <ydb/core/testlib/minikql_compile.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/test_client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -174,7 +174,7 @@ public:
     ui64 MinStep = 0;
     ui64 MaxStep = Max<ui64>();
 
-    TFakeProxyTx(ui64 txId, const TString& txBody, ui32 flags = NDataShard::TTxFlags::Default) 
+    TFakeProxyTx(ui64 txId, const TString& txBody, ui32 flags = NDataShard::TTxFlags::Default)
         : TxId_(txId)
         , TxKind_(NKikimrTxDataShard::TX_KIND_DATA)
         , TxBody_(txBody)
@@ -200,7 +200,7 @@ public:
     bool IsDataTx() const { return TxKind_ == NKikimrTxDataShard::TX_KIND_DATA; }
     bool IsReadTable() const { return TxKind_ == NKikimrTxDataShard::TX_KIND_SCAN; }
     bool HasErrors() const { return !Errors.empty(); }
-    bool Immediate() const { return IsDataTx() && (ShardsCount_ < 2) && !(TxFlags_ & NDataShard::TTxFlags::ForceOnline); } 
+    bool Immediate() const { return IsDataTx() && (ShardsCount_ < 2) && !(TxFlags_ & NDataShard::TTxFlags::ForceOnline); }
     ui32 ShardsCount() const { return ShardsCount_; }
 
     void SetKindSchema() { TxKind_ = NKikimrTxDataShard::TX_KIND_SCHEME; }
@@ -231,7 +231,7 @@ protected:
 ///
 class TFakeScanTx : public TFakeProxyTx {
 public:
-    TFakeScanTx(ui64 txId, const TString& txBody, ui32 flags = NDataShard::TTxFlags::Default) 
+    TFakeScanTx(ui64 txId, const TString& txBody, ui32 flags = NDataShard::TTxFlags::Default)
         : TFakeProxyTx(txId, txBody, flags)
         , Status(IEngineFlat::EStatus::Unknown)
     {
@@ -253,7 +253,7 @@ private:
 class TFakeMiniKQLProxy {
 public:
     using IEngineFlat = NMiniKQL::IEngineFlat;
-    //using TEvProgressTransaction = NDataShard::TDataShard::TEvPrivate::TEvProgressTransaction; 
+    //using TEvProgressTransaction = NDataShard::TDataShard::TEvPrivate::TEvProgressTransaction;
 
     TFakeMiniKQLProxy(TTester& tester)
         : Tester(tester)
@@ -282,9 +282,9 @@ public:
     }
 
     void Enqueue(const TString& programText, std::function<bool(TFakeProxyTx&)> check = DoNothing,
-                 ui32 flags = NDataShard::TTxFlags::ForceOnline); 
+                 ui32 flags = NDataShard::TTxFlags::ForceOnline);
     void EnqueueScan(const TString& programText, std::function<bool(TFakeProxyTx&)> check = DoNothing,
-                 ui32 flags = NDataShard::TTxFlags::ForceOnline); 
+                 ui32 flags = NDataShard::TTxFlags::ForceOnline);
     void ExecQueue();
 
     static bool DoNothing(TFakeProxyTx&) {

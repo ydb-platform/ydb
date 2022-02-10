@@ -2,10 +2,10 @@
 
 #include "resource.h"
 
-#include <ydb/library/yql/public/udf/udf_value.h> 
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
-#include <ydb/library/yql/minikql/dom/node.h> 
-#include <ydb/library/yql/minikql/dom/json.h> 
+#include <ydb/library/yql/public/udf/udf_value.h>
+#include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <ydb/library/yql/minikql/dom/node.h>
+#include <ydb/library/yql/minikql/dom/json.h>
 
 namespace NJson2Udf {
     using namespace NKikimr;
@@ -109,5 +109,5 @@ namespace NJson2Udf {
     TUnboxedValue TAsJsonNode<TJson>::Interpret(const TUnboxedValue& sourceValue, const IValueBuilder* valueBuilder) {
         return TryParseJsonDom(sourceValue.AsStringRef(), valueBuilder);
     }
-} 
- 
+}
+

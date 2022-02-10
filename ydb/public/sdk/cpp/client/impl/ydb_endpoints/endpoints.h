@@ -5,8 +5,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include <ydb/public/sdk/cpp/client/impl/ydb_stats/stats.h> 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_stats/stats.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h>
 
 namespace NYdb {
 

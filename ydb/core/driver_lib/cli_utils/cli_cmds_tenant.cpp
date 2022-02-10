@@ -3,10 +3,10 @@
 
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h> 
+#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
-#include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h> 
-#include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h> 
+#include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 
 #include <util/string/split.h>
 #include <util/string/join.h>

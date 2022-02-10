@@ -3,7 +3,7 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-#include <ydb/core/base/counters.h> 
+#include <ydb/core/base/counters.h>
 
 namespace NKikimr {
 namespace NGRpcService {

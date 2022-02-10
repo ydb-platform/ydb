@@ -3,8 +3,8 @@
 #include "quoter_resource_tree.h"
 #include "schema.h"
 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/base/appdata.h> 
+#include <ydb/core/base/counters.h>
+#include <ydb/core/base/appdata.h>
 
 #include <util/string/cast.h>
 

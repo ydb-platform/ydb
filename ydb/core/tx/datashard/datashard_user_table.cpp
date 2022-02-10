@@ -1,15 +1,15 @@
 #include "datashard_user_table.h"
 
-#include <ydb/core/base/path.h> 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
+#include <ydb/core/base/path.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
 namespace NKikimr {
- 
-using NTabletFlatExecutor::TTransactionContext; 
- 
-namespace NDataShard { 
+
+using NTabletFlatExecutor::TTransactionContext;
+
+namespace NDataShard {
 
 TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid)
     : LocalTid(localTid)

@@ -1,4 +1,4 @@
-#include <ydb/core/protos/tx_sequenceshard.pb.h> 
+#include <ydb/core/protos/tx_sequenceshard.pb.h>
 
 #include <util/stream/output.h>
 

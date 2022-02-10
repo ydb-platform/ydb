@@ -17,19 +17,19 @@ namespace NKikimr {
         TDelayedHugeBlobDeleterActor(const TActorId &hugeKeeperId,
                 TIntrusivePtr<TDelayedHugeBlobDeleterInfo> info)
             : TActor(&TDelayedHugeBlobDeleterActor::StateFunc)
-            , HugeKeeperId(hugeKeeperId) 
+            , HugeKeeperId(hugeKeeperId)
             , Info(std::move(info))
         {}
 
         void Handle(TEvHullReleaseSnapshot::TPtr& ev, const TActorContext& ctx) {
-            Info->ReleaseSnapshot(ev->Get()->Cookie, ctx, HugeKeeperId); 
+            Info->ReleaseSnapshot(ev->Get()->Cookie, ctx, HugeKeeperId);
         }
 
-        void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) { 
-            Y_UNUSED(ev); 
-            Die(ctx); 
-        } 
- 
+        void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
+            Y_UNUSED(ev);
+            Die(ctx);
+        }
+
         STRICT_STFUNC(StateFunc,
             HFunc(TEvHullReleaseSnapshot, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
@@ -37,8 +37,8 @@ namespace NKikimr {
     };
 
     IActor *CreateDelayedHugeBlobDeleterActor(const TActorId &hugeKeeperId,
-            TIntrusivePtr<TDelayedHugeBlobDeleterInfo> info) { 
-        return new TDelayedHugeBlobDeleterActor(hugeKeeperId, std::move(info)); 
+            TIntrusivePtr<TDelayedHugeBlobDeleterInfo> info) {
+        return new TDelayedHugeBlobDeleterActor(hugeKeeperId, std::move(info));
     }
 
 } // NKikimr

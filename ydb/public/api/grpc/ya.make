@@ -1,15 +1,15 @@
 PROTO_LIBRARY(api-grpc)
- 
+
 MAVEN_GROUP_ID(com.yandex.ydb)
 
 GRPC()
 
-OWNER( 
-    dcherednik 
-    fomichev 
-    vvvv 
-    g:kikimr 
-) 
+OWNER(
+    dcherednik
+    fomichev
+    vvvv
+    g:kikimr
+)
 
 SRCS(
     ydb_auth_v1.proto
@@ -28,7 +28,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/api/protos 
+    ydb/public/api/protos
 )
 
 EXCLUDE_TAGS(GO_PROTO)

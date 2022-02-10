@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/base/logoblob.h> 
+#include <ydb/core/base/logoblob.h>
 
 namespace NKikimr {
 namespace NKeyValue {

@@ -1,14 +1,14 @@
 #include "schemeshard.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
-#include <ydb/core/tablet/tablet_counters_aggregator.h> 
-#include <ydb/core/tablet/tablet_counters_protobuf.h> 
-#include <ydb/core/engine/minikql/flat_local_tx_factory.h> 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/tx_processing.h> 
-#include <ydb/core/engine/mkql_proto.h> 
-#include <ydb/core/sys_view/partition_stats/partition_stats.h> 
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tx_processing.h>
+#include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 
 namespace NKikimr {
@@ -4491,7 +4491,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev, const
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvInitRootShard::TPtr &ev, const TActorContext &ctx) {
-    Execute(CreateTxInitRootCompatibility(ev), ctx); 
+    Execute(CreateTxInitRootCompatibility(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev, const TActorContext &ctx) {

@@ -4,8 +4,8 @@
 #include "events.h"
 #include "storage_pools.h"
 #include "subdomain.h"
-#include <ydb/core/protos/hive.pb.h> 
-#include <ydb/core/base/tablet.h> 
+#include <ydb/core/protos/hive.pb.h>
+#include <ydb/core/base/tablet.h>
 #include <util/stream/str.h>
 
 namespace NKikimr {

@@ -1,24 +1,24 @@
-#pragma once 
- 
-#include "defs.h" 
-#include "blobstorage_replctx.h" 
-#include <ydb/core/blobstorage/base/transparent.h> 
- 
-namespace NKikimr { 
- 
-    namespace NRepl { 
- 
-        //////////////////////////////////////////////////////////////////////////// 
-        // TVDiskProxy -- forward declarations 
-        //////////////////////////////////////////////////////////////////////////// 
-        class TVDiskProxy; 
+#pragma once
+
+#include "defs.h"
+#include "blobstorage_replctx.h"
+#include <ydb/core/blobstorage/base/transparent.h>
+
+namespace NKikimr {
+
+    namespace NRepl {
+
+        ////////////////////////////////////////////////////////////////////////////
+        // TVDiskProxy -- forward declarations
+        ////////////////////////////////////////////////////////////////////////////
+        class TVDiskProxy;
         typedef TIntrusivePtr<TVDiskProxy> TVDiskProxyPtr; // TODO(alexvru): maybe std::unique_ptr?
- 
- 
-        //////////////////////////////////////////////////////////////////////////// 
-        // Data Structures 
-        //////////////////////////////////////////////////////////////////////////// 
- 
+
+
+        ////////////////////////////////////////////////////////////////////////////
+        // Data Structures
+        ////////////////////////////////////////////////////////////////////////////
+
         // A portion of data elements
         class TDataPortion {
             // Data element received from a vdisk or rebuilt by ourselves
@@ -51,7 +51,7 @@ namespace NKikimr {
             {}
 
             TDataPortion(const TDataPortion& other) = delete;
-            TDataPortion& operator =(const TDataPortion& other) = delete; 
+            TDataPortion& operator =(const TDataPortion& other) = delete;
 
             TDataPortion(TDataPortion&& other)
                 : Consumer(other.Consumer)
@@ -140,24 +140,24 @@ namespace NKikimr {
             TMemoryConsumer Consumer;
             TTrackableVector<TDataElement> Items;
             size_t FrontPos;
-        }; 
- 
-        // A portion of data from proxy 
-        struct TNextPortion { 
-            enum EStatus { 
-                Ok = 0, 
-                Eof = 1, 
+        };
+
+        // A portion of data from proxy
+        struct TNextPortion {
+            enum EStatus {
+                Ok = 0,
+                Eof = 1,
                 Error = 2,
                 Unknown = 3
-            }; 
- 
-            EStatus Status; 
-            TDataPortion DataPortion; 
- 
+            };
+
+            EStatus Status;
+            TDataPortion DataPortion;
+
             TNextPortion(EStatus status, TMemoryConsumer&& consumer)
-                : Status(status) 
+                : Status(status)
                 , DataPortion(std::move(consumer))
-            {} 
+            {}
 
             // AppendDataPortion(): add some data from another DataPortion to the end of this one
             void AppendDataPortion(TDataPortion&& from) {
@@ -175,71 +175,71 @@ namespace NKikimr {
                 Status = Unknown;
                 DataPortion.Reset();
             }
-        }; 
- 
-        // Per proxy statistics for VDisk, we can sum up it to obtain total statistics for all proxies 
-        struct TProxyStat { 
-            ui64 VDiskReqs = 0; 
-            ui64 VDiskRespOK = 0; 
+        };
+
+        // Per proxy statistics for VDisk, we can sum up it to obtain total statistics for all proxies
+        struct TProxyStat {
+            ui64 VDiskReqs = 0;
+            ui64 VDiskRespOK = 0;
             ui64 VDiskRespRACE = 0;
             ui64 VDiskRespERROR = 0;
             ui64 VDiskRespDEADLINE = 0;
             ui64 VDiskRespOther = 0;
-            ui64 LogoBlobGotIt = 0; 
-            ui64 LogoBlobNoData = 0; 
-            ui64 LogoBlobNotOK = 0; 
-            ui64 LogoBlobDataSize = 0; 
-            ui64 OverflowedMsgs = 0; 
- 
-            TProxyStat &operator +=(const TProxyStat &stat) { 
-                VDiskReqs += stat.VDiskReqs; 
-                VDiskRespOK += stat.VDiskRespOK; 
+            ui64 LogoBlobGotIt = 0;
+            ui64 LogoBlobNoData = 0;
+            ui64 LogoBlobNotOK = 0;
+            ui64 LogoBlobDataSize = 0;
+            ui64 OverflowedMsgs = 0;
+
+            TProxyStat &operator +=(const TProxyStat &stat) {
+                VDiskReqs += stat.VDiskReqs;
+                VDiskRespOK += stat.VDiskRespOK;
                 VDiskRespRACE += stat.VDiskRespRACE;
                 VDiskRespERROR += stat.VDiskRespERROR;
                 VDiskRespDEADLINE += stat.VDiskRespDEADLINE;
                 VDiskRespOther += stat.VDiskRespOther;
-                LogoBlobGotIt += stat.LogoBlobGotIt; 
-                LogoBlobNoData += stat.LogoBlobNoData; 
-                LogoBlobNotOK += stat.LogoBlobNotOK; 
-                LogoBlobDataSize += stat.LogoBlobDataSize; 
-                OverflowedMsgs += stat.OverflowedMsgs; 
-                return *this; 
-            } 
-        }; 
- 
-    } // NRepl 
- 
- 
-    //////////////////////////////////////////////////////////////////////////// 
-    // Internal Messages 
-    //////////////////////////////////////////////////////////////////////////// 
-    struct TEvReplProxyNext : public TEventLocal<TEvReplProxyNext, TEvBlobStorage::EvReplProxyNext> { 
-        TEvReplProxyNext() 
-        {} 
-    }; 
- 
-    struct TEvReplProxyNextResult : public TEventLocal<TEvReplProxyNextResult, TEvBlobStorage::EvReplProxyNextResult> { 
+                LogoBlobGotIt += stat.LogoBlobGotIt;
+                LogoBlobNoData += stat.LogoBlobNoData;
+                LogoBlobNotOK += stat.LogoBlobNotOK;
+                LogoBlobDataSize += stat.LogoBlobDataSize;
+                OverflowedMsgs += stat.OverflowedMsgs;
+                return *this;
+            }
+        };
+
+    } // NRepl
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Internal Messages
+    ////////////////////////////////////////////////////////////////////////////
+    struct TEvReplProxyNext : public TEventLocal<TEvReplProxyNext, TEvBlobStorage::EvReplProxyNext> {
+        TEvReplProxyNext()
+        {}
+    };
+
+    struct TEvReplProxyNextResult : public TEventLocal<TEvReplProxyNextResult, TEvBlobStorage::EvReplProxyNextResult> {
         TVDiskID VDiskId;
-        NRepl::TNextPortion Portion; 
-        NRepl::TProxyStat Stat; 
+        NRepl::TNextPortion Portion;
+        NRepl::TProxyStat Stat;
         bool HasTransientErrors;
- 
+
         TEvReplProxyNextResult(TVDiskID vdiskId, NRepl::TNextPortion&& portion, const NRepl::TProxyStat &stat,
                 bool hasTransientErrors)
             : VDiskId(vdiskId)
             , Portion(std::move(portion))
-            , Stat(stat) 
+            , Stat(stat)
             , HasTransientErrors(hasTransientErrors)
         {}
-    }; 
- 
-    namespace NRepl { 
- 
-        //////////////////////////////////////////////////////////////////////////// 
-        // TVDiskProxy 
-        //////////////////////////////////////////////////////////////////////////// 
-        class TVDiskProxy : public TThrRefBase { 
-        public: 
+    };
+
+    namespace NRepl {
+
+        ////////////////////////////////////////////////////////////////////////////
+        // TVDiskProxy
+        ////////////////////////////////////////////////////////////////////////////
+        class TVDiskProxy : public TThrRefBase {
+        public:
             struct TScheduledBlob {
                 TLogoBlobID Id;
                 ui32 ExpectedReplySize;
@@ -250,32 +250,32 @@ namespace NKikimr {
                 {}
             };
 
-            enum EState { 
-                Initial = 0, 
-                RunProxy = 1, 
-                Ok = 2, 
-                Eof = 3, 
-                Error = 4 
-            }; 
- 
-            TVDiskProxy( 
+            enum EState {
+                Initial = 0,
+                RunProxy = 1,
+                Ok = 2,
+                Eof = 3,
+                Error = 4
+            };
+
+            TVDiskProxy(
                     std::shared_ptr<TReplCtx> replCtx,
-                    const TVDiskID &vdisk, 
+                    const TVDiskID &vdisk,
                     const TActorId &serviceID);
 
             TActorId Run(const TActorId& parentId);
             void SendNextRequest();
-            void HandleNext(TEvReplProxyNextResult::TPtr &ev); 
+            void HandleNext(TEvReplProxyNextResult::TPtr &ev);
 
-        private: 
-            void HandlePortion(TNextPortion &portion); 
+        private:
+            void HandlePortion(TNextPortion &portion);
 
-        public: 
+        public:
             void Put(const TLogoBlobID &id, ui32 expectedReplySize) {
                 Y_VERIFY_DEBUG(State == Initial);
                 Ids.emplace_back(id, expectedReplySize);
-            } 
- 
+            }
+
             // Next(): advance to next data item
             // Precondition: Valid()
             void Next() {
@@ -314,24 +314,24 @@ namespace NKikimr {
             const TVDiskID VDiskId;
             const TActorId ServiceId;
             TProxyStat Stat;
- 
-        private: 
+
+        private:
             TActorId ParentId;
             TActorId ProxyId;
             TTrackableVector<TScheduledBlob> Ids;
             EState State = Initial;
-            TDataPortion DataPortion; 
+            TDataPortion DataPortion;
             bool HasTransientErrors = false;
- 
-        public: 
-            struct TPtrGreater { 
+
+        public:
+            struct TPtrGreater {
                 bool operator() (const TVDiskProxyPtr &x, const TVDiskProxyPtr &y) const {
                     Y_VERIFY_DEBUG(x->Valid() && y->Valid());
                     return x->GenLogoBlobId() > y->GenLogoBlobId();
                 }
-            }; 
-        }; 
- 
-    } // NRepl 
- 
-} // NKikimr 
+            };
+        };
+
+    } // NRepl
+
+} // NKikimr

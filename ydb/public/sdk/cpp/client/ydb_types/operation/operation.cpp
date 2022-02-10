@@ -1,7 +1,7 @@
 #include "operation.h"
 
-#include <ydb/public/api/protos/ydb_operation.pb.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h> 
+#include <ydb/public/api/protos/ydb_operation.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
 namespace NYdb {
 

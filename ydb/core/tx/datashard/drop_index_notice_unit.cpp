@@ -3,13 +3,13 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TDropIndexNoticeUnit : public TExecutionUnit {
     THolder<TEvChangeExchange::TEvRemoveSender> RemoveSender;
 
 public:
-    TDropIndexNoticeUnit(TDataShard& dataShard, TPipeline& pipeline) 
+    TDropIndexNoticeUnit(TDataShard& dataShard, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::DropIndexNotice, false, dataShard, pipeline)
     { }
 
@@ -68,11 +68,11 @@ public:
 };
 
 THolder<TExecutionUnit> CreateDropIndexNoticeUnit(
-    TDataShard& dataShard, 
+    TDataShard& dataShard,
     TPipeline& pipeline)
 {
     return THolder(new TDropIndexNoticeUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

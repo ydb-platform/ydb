@@ -92,12 +92,12 @@ namespace NTable {
             TConf() = default;
             TConf(bool noe) : NoErased(noe) { }
 
-            bool NoErased   = true; /* Skip ERowOp::Erase'ed rows */ 
+            bool NoErased   = true; /* Skip ERowOp::Erase'ed rows */
 
             /* External blobs below this bytes edge will be materialized
-                and passed as a regular ELargeObj::Inline values in row TCells, 
+                and passed as a regular ELargeObj::Inline values in row TCells,
                 otherwise internal references will be expanded to TGlobId
-                unit (ELargeObj::GlobId) suitable for reads from BS. 
+                unit (ELargeObj::GlobId) suitable for reads from BS.
             */
 
             ui32 LargeEdge = Max<ui32>();

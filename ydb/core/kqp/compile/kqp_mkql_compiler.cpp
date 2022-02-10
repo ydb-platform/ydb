@@ -1,7 +1,7 @@
 #include "kqp_mkql_compiler.h"
 
-#include <ydb/core/kqp/common/kqp_yql.h> 
-#include <ydb/core/scheme/scheme_tabledefs.h> 
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 

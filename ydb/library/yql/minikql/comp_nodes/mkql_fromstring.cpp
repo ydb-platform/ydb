@@ -6,7 +6,7 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h>
 
-#include <ydb/library/yql/public/udf/udf_terminator.h> 
+#include <ydb/library/yql/public/udf/udf_terminator.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
 extern "C" NKikimr::NUdf::TUnboxedValuePod DataFromString(const NKikimr::NUdf::TUnboxedValuePod data, NKikimr::NUdf::EDataSlot slot) {

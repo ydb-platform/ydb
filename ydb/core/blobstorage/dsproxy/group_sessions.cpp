@@ -1,6 +1,6 @@
 #include "group_sessions.h"
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h> 
-#include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h> 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+#include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 
 namespace NKikimr {
 

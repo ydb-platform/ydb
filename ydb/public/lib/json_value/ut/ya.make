@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/public/lib/json_value) 
+UNITTEST_FOR(ydb/public/lib/json_value)
 
 OWNER(
     pnv1
@@ -6,7 +6,7 @@ OWNER(
 )
 
 TIMEOUT(600)
- 
+
 SIZE(MEDIUM)
 
 FORK_SUBTESTS()
@@ -16,9 +16,9 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/json 
+    library/cpp/json
     library/cpp/testing/unittest
-    ydb/public/sdk/cpp/client/ydb_proto 
+    ydb/public/sdk/cpp/client/ydb_proto
 )
 
 END()

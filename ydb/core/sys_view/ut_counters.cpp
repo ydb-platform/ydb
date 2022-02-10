@@ -1,7 +1,7 @@
 #include "ut_common.h"
 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
+#include <ydb/core/base/counters.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 namespace NKikimr {
 namespace NSysView {

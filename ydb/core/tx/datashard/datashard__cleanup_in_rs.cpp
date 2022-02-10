@@ -1,19 +1,19 @@
 #include "datashard_impl.h"
 
-#include <ydb/core/base/tx_processing.h> 
-#include <ydb/core/tablet/tablet_exception.h> 
+#include <ydb/core/base/tx_processing.h>
+#include <ydb/core/tablet/tablet_exception.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
 static const TDuration REMOVAL_INTERVAL = TDuration::Seconds(1);
 constexpr ui64 MAX_RS_TO_REMOVE_IN_SINGLE_TX = 100000;
 
-class TDataShard::TTxRemoveOldInReadSets : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxRemoveOldInReadSets : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxRemoveOldInReadSets(TDataShard *self) 
+    TTxRemoveOldInReadSets(TDataShard *self)
         : TBase(self)
     {
     }
@@ -77,9 +77,9 @@ public:
 private:
 };
 
-class TDataShard::TTxCheckInReadSets : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxCheckInReadSets : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxCheckInReadSets(TDataShard *self) 
+    TTxCheckInReadSets(TDataShard *self)
         : TBase(self)
     {
     }
@@ -155,17 +155,17 @@ public:
 private:
 };
 
-ITransaction *TDataShard::CreateTxCheckInReadSets() 
+ITransaction *TDataShard::CreateTxCheckInReadSets()
 {
     return new TTxCheckInReadSets(this);
 }
 
-void TDataShard::Handle(TEvPrivate::TEvRemoveOldInReadSets::TPtr &ev, 
+void TDataShard::Handle(TEvPrivate::TEvRemoveOldInReadSets::TPtr &ev,
                                const TActorContext &ctx)
 {
     Y_UNUSED(ev);
     Execute(new TTxRemoveOldInReadSets(this), ctx);
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

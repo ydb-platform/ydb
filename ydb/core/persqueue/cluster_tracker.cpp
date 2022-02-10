@@ -1,8 +1,8 @@
 #include "cluster_tracker.h"
 #include "pq_database.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/kqp/kqp.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/kqp.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 

@@ -1,10 +1,10 @@
-UNITTEST_FOR(ydb/services/datastreams) 
+UNITTEST_FOR(ydb/services/datastreams)
 
-OWNER( 
-    g:kikimr 
-    g:yql 
-) 
- 
+OWNER(
+    g:kikimr
+    g:yql
+)
+
 FORK_SUBTESTS()
 
 ENV(PERSQUEUE_NEW_SCHEMECACHE="true")
@@ -19,10 +19,10 @@ SRCS(
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/grpc/client 
+    library/cpp/grpc/client
     library/cpp/svnversion
-    ydb/core/testlib 
-    ydb/services/datastreams 
+    ydb/core/testlib
+    ydb/services/datastreams
 )
 
 YQL_LAST_ABI_VERSION()

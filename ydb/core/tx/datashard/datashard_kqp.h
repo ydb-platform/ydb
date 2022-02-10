@@ -3,13 +3,13 @@
 #include "datashard.h"
 #include "datashard_active_transaction.h"
 
-#include <ydb/core/engine/minikql/minikql_engine_host.h> 
-#include <ydb/core/kqp/runtime/kqp_tasks_runner.h> 
+#include <ydb/core/engine/minikql/minikql_engine_host.h>
+#include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 
 #include <util/generic/ptr.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 bool KqpValidateTransaction(const NKikimrTxDataShard::TKqpTransaction& tx, bool isImmediate,
     ui64 txId, const TActorContext& ctx, bool& hasPersistentChannels);
@@ -38,17 +38,17 @@ bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks);
 
 void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks);
 
-void KqpUpdateDataShardStatCounters(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters); 
+void KqpUpdateDataShardStatCounters(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters);
 
-void KqpFillTxStats(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters, 
+void KqpFillTxStats(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters,
     TEvDataShard::TEvProposeTransactionResult& result);
 
-void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunner, 
+void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunner,
     NMiniKQL::TKqpDatashardComputeContext& computeCtx, const NYql::NDqProto::EDqStatsMode& statsMode,
     TEvDataShard::TEvProposeTransactionResult& result);
 
 NYql::NDq::TDqTaskRunnerMemoryLimits DefaultKqpDataReqMemoryLimits();
 THolder<NYql::NDq::IDqTaskRunnerExecutionContext> DefaultKqpExecutionContext();
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

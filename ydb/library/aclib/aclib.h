@@ -2,7 +2,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/hash_set.h>
 #include <util/datetime/base.h>
-#include <ydb/library/aclib/protos/aclib.pb.h> 
+#include <ydb/library/aclib/protos/aclib.pb.h>
 
 namespace NACLib {
 

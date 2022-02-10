@@ -1,5 +1,5 @@
-from ydb.public.api.protos import ydb_experimental_pb2 
-from ydb.public.api.grpc.draft import ydb_experimental_v1_pb2_grpc 
+from ydb.public.api.protos import ydb_experimental_pb2
+from ydb.public.api.grpc.draft import ydb_experimental_v1_pb2_grpc
 from . import _utilities, issues, convert
 
 

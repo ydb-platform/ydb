@@ -1,5 +1,5 @@
 #include "cli.h"
-#include <ydb/core/actorlib_impl/mad_squirrel.h> 
+#include <ydb/core/actorlib_impl/mad_squirrel.h>
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/actors/core/executor_pool_basic.h>

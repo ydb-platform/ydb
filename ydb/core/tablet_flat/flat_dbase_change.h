@@ -4,16 +4,16 @@
 #include "flat_sausage_solid.h"
 #include "util_fmt_flat.h"
 
-#include <ydb/core/base/row_version.h> 
+#include <ydb/core/base/row_version.h>
 
 namespace NKikimr {
 namespace NTable {
 
     struct TChange {
-        using TMemGlobs = TVector<NPageCollection::TMemGlob>; 
+        using TMemGlobs = TVector<NPageCollection::TMemGlob>;
 
-        struct TSnapshot { 
-            TSnapshot(ui32 table) : Table(table) { } 
+        struct TSnapshot {
+            TSnapshot(ui32 table) : Table(table) { }
 
             ui32 Table = Max<ui32>();
             TEpoch Epoch = TEpoch::Max();
@@ -63,7 +63,7 @@ namespace NTable {
         TVector<ui32> Deleted;  /* Tables deleted in some alter */
         TGarbage Garbage;       /* Wiped tables, ids in Deleted */
 
-        TVector<TSnapshot> Snapshots; 
+        TVector<TSnapshot> Snapshots;
 
         TMap<ui32, TVector<TRemovedRowVersions>> RemovedRowVersions;
 

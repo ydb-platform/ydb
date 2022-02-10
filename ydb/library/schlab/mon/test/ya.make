@@ -1,9 +1,9 @@
 PROGRAM()
 
-OWNER( 
-    serxa 
-    g:kikimr 
-) 
+OWNER(
+    serxa
+    g:kikimr
+)
 
 RESOURCE(
     ../static/schviz-test0.json schlab/schviz-test0.json
@@ -16,7 +16,7 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
     library/cpp/monlib/dynamic_counters
-    ydb/library/schlab/mon 
+    ydb/library/schlab/mon
 )
 
 END()

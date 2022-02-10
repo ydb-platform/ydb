@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h> 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h> 
+#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h>
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>

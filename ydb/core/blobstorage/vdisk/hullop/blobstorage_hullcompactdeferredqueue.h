@@ -1,9 +1,9 @@
 #pragma once
 
-#include "defs.h" 
-#include <ydb/core/blobstorage/vdisk/common/disk_part.h> 
-#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h> 
-#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress_matrix.h> 
+#include "defs.h"
+#include <ydb/core/blobstorage/vdisk/common/disk_part.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
+#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress_matrix.h>
 
 #include <util/generic/queue.h>
 

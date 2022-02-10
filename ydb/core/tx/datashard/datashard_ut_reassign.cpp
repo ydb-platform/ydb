@@ -1,11 +1,11 @@
 #include "datashard_ut_common.h"
 #include "datashard_active_transaction.h"
 
-#include <ydb/core/base/hive.h> 
+#include <ydb/core/base/hive.h>
 
 namespace NKikimr {
 
-using namespace NKikimr::NDataShard; 
+using namespace NKikimr::NDataShard;
 using namespace NSchemeShard;
 using namespace Tests;
 

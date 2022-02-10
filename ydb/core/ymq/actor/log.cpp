@@ -1,6 +1,6 @@
 #include "log.h"
 
-#include <ydb/core/ymq/base/queue_path.h> 
+#include <ydb/core/ymq/base/queue_path.h>
 
 namespace NKikimr::NSQS {
 

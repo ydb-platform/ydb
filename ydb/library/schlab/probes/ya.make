@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    cthulhu 
-    g:kikimr 
-) 
+OWNER(
+    cthulhu
+    g:kikimr
+)
 
 PEERDIR(
     library/cpp/lwtrace

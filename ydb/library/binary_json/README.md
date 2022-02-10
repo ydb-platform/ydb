@@ -1,21 +1,21 @@
 # BinaryJson Design Doc
 
-## Introduction 
+## Introduction
 
-BinaryJson is on-disk binary format for JSON. Its main characteristics are the following: 
-  - Access to values inside JSON document without document parsing; 
-  - Minimal effort to value deserialization. 
+BinaryJson is on-disk binary format for JSON. Its main characteristics are the following:
+  - Access to values inside JSON document without document parsing;
+  - Minimal effort to value deserialization.
 
-## Main Idea 
+## Main Idea
 
-Let's separate storing values of JSON document and document's structure. 
-Document's structure would be represented as sequence of fixed size entries, each entry describes a node in the JSON document. 
-Simple type values would be stored inside these entries, complex type values would be stored in special indexes. 
-We build a dictionary of document's string values to operate string indexes instead of strings themselves. 
+Let's separate storing values of JSON document and document's structure.
+Document's structure would be represented as sequence of fixed size entries, each entry describes a node in the JSON document.
+Simple type values would be stored inside these entries, complex type values would be stored in special indexes.
+We build a dictionary of document's string values to operate string indexes instead of strings themselves.
 
-## Data Structures 
+## Data Structures
 
-BinaryJson contains the following parts: 
+BinaryJson contains the following parts:
 
 ```
 +--------+------+--------------+--------------+
@@ -23,10 +23,10 @@ BinaryJson contains the following parts:
 +--------+------+--------------+--------------+
 ```
 
-- `Header` - metadata about BinaryJson 
-- `Tree` - store documents structure 
-- `String index` - a place to store all string values 
-- `Number index` - a place to store all numbers 
+- `Header` - metadata about BinaryJson
+- `Tree` - store documents structure
+- `String index` - a place to store all string values
+- `Number index` - a place to store all numbers
 
 ### Header
 
@@ -217,4 +217,4 @@ BinaryJson contains the following parts:
 ## Что нужно обсудить
 
 - Структуры `Header`, `Entry`, `Meta` и `SEntry` резервируют 27 бит на хранение сдвигов. Это вводит ограничение на длину хранимого JSON значения: `2^27 = 128 Mb`. Мы не уверены достаточно ли это для всех пользовательских кейсов. Возможно, стоит рассмотреть увеличение размера этих структур (например, использовать `uint64_t`).
-- Структуры `Entry`, `Meta` и `SEntry` резервируют по 5 бит на хранение типа, что даем нам 32 варианта типов. Мы не уверены будет ли этого достаточно для наших целей учитывая что некоторые типы могут иметь параметры (например что-то вроде Decimal). С учетом этого может не хватить расширения структур даже до `uint64_t`. Решением может быть хранить дополнительные `Entry` для некоторых типов, которые будут содержать необходимое описание. К сожалению, сейчас так сделать не получится так как формат полагается на то что все `Entry` имеют фиксированный размер. Возможно, нужно вводить отдельный индекс для сложных типов. 
+- Структуры `Entry`, `Meta` и `SEntry` резервируют по 5 бит на хранение типа, что даем нам 32 варианта типов. Мы не уверены будет ли этого достаточно для наших целей учитывая что некоторые типы могут иметь параметры (например что-то вроде Decimal). С учетом этого может не хватить расширения структур даже до `uint64_t`. Решением может быть хранить дополнительные `Entry` для некоторых типов, которые будут содержать необходимое описание. К сожалению, сейчас так сделать не получится так как формат полагается на то что все `Entry` имеют фиксированный размер. Возможно, нужно вводить отдельный индекс для сложных типов.

@@ -1,11 +1,11 @@
 #include "cli.h"
 
-#include <ydb/core/driver_lib/cli_base/cli_grpc.h> 
+#include <ydb/core/driver_lib/cli_base/cli_grpc.h>
 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h> 
+#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
-#include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h> 
-#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h> 
+#include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 
 #include <library/cpp/protobuf/json/proto2json.h>
 
@@ -62,8 +62,8 @@ struct TCmdPersQueueDiscoverReadSessionClustersConfig final : public TCliCmdConf
     bool IsVerbose = false;
 };
 
- 
-static void PrintGRpcConfigAndRequest(const NGrpc::TGRpcClientConfig& grpcConfig, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest& request) { 
+
+static void PrintGRpcConfigAndRequest(const NGrpc::TGRpcClientConfig& grpcConfig, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest& request) {
     Cerr << "Request endpoint: " << grpcConfig.Locator << " "
          << "timeout: " << grpcConfig.Timeout << " "
          << "max message size: " << grpcConfig.MaxMessageSize << Endl;
@@ -71,8 +71,8 @@ static void PrintGRpcConfigAndRequest(const NGrpc::TGRpcClientConfig& grpcConfig
     Cerr << "Request message: " << NProtobufJson::Proto2Json(request, {}) << Endl;
 }
 
-template <class TConfig> 
-static int MakeRequest(const TConfig& config, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest& request) { 
+template <class TConfig>
+static int MakeRequest(const TConfig& config, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest& request) {
     if (config.ClientConfig.Defined()) {
         if (std::holds_alternative<NGrpc::TGRpcClientConfig>(*config.ClientConfig)) {
             const auto& grpcConfig = std::get<NGrpc::TGRpcClientConfig>(*config.ClientConfig);
@@ -82,17 +82,17 @@ static int MakeRequest(const TConfig& config, const Ydb::PersQueue::ClusterDisco
             }
 
             Ydb::Operations::Operation response;
-            const int res = DoGRpcRequest<Ydb::PersQueue::V1::ClusterDiscoveryService, 
-                Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest, 
-                Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResponse, 
-                decltype(&Ydb::PersQueue::V1::ClusterDiscoveryService::Stub::AsyncDiscoverClusters)>( 
-                    grpcConfig, 
-                    request, 
-                    response, 
-                    &Ydb::PersQueue::V1::ClusterDiscoveryService::Stub::AsyncDiscoverClusters, ""); 
+            const int res = DoGRpcRequest<Ydb::PersQueue::V1::ClusterDiscoveryService,
+                Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest,
+                Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResponse,
+                decltype(&Ydb::PersQueue::V1::ClusterDiscoveryService::Stub::AsyncDiscoverClusters)>(
+                    grpcConfig,
+                    request,
+                    response,
+                    &Ydb::PersQueue::V1::ClusterDiscoveryService::Stub::AsyncDiscoverClusters, "");
 
             if (res == 0) {
-                Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult discoveryResult; 
+                Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult discoveryResult;
                 Y_VERIFY(response.result().UnpackTo(&discoveryResult));
 
                 Y_VERIFY(response.ready()); // there's nothing to wait for
@@ -101,7 +101,7 @@ static int MakeRequest(const TConfig& config, const Ydb::PersQueue::ClusterDisco
                 return 0;
             }
         }
- 
+
     }
 
     return 1;
@@ -127,7 +127,7 @@ int PersQueueDiscoverClustersRequest(TCommandConfig&, int argc, char** argv) {
 
         request.set_minimal_version(0);
 
-        return MakeRequest(config, request); 
+        return MakeRequest(config, request);
     } else if (argv[1] == TStringBuf("read-session")) {
         TCmdPersQueueDiscoverReadSessionClustersConfig config;
         config.Parse(argc - 1, argv + 1);
@@ -145,7 +145,7 @@ int PersQueueDiscoverClustersRequest(TCommandConfig&, int argc, char** argv) {
 
         request.set_minimal_version(0);
 
-        return MakeRequest(config, request); 
+        return MakeRequest(config, request);
     }
 
     Cerr << "Bad commands params" << Endl;
@@ -153,4 +153,4 @@ int PersQueueDiscoverClustersRequest(TCommandConfig&, int argc, char** argv) {
 }
 
 } // namespace NKikimr::NDriverClient
- 
+

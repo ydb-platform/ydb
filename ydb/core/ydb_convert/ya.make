@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:kikimr) 
+OWNER(g:kikimr)
 
 SRCS(
     column_families.cpp
@@ -10,22 +10,22 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/base 
-    ydb/core/engine 
-    ydb/core/protos 
-    ydb/core/scheme 
-    ydb/library/binary_json 
-    ydb/library/dynumber 
-    ydb/library/mkql_proto/protos 
-    ydb/library/yql/minikql/dom 
-    ydb/library/yql/public/udf 
-    ydb/public/api/protos 
+    ydb/core/base
+    ydb/core/engine
+    ydb/core/protos
+    ydb/core/scheme
+    ydb/library/binary_json
+    ydb/library/dynumber
+    ydb/library/mkql_proto/protos
+    ydb/library/yql/minikql/dom
+    ydb/library/yql/public/udf
+    ydb/public/api/protos
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
-END() 
+END()
 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+RECURSE_FOR_TESTS(
+    ut
+)

@@ -8,7 +8,7 @@
 #include <util/string/strip.h>
 #include <util/system/env.h>
 
-#include <ydb/library/security/ydb_credentials_provider_factory.h> 
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 namespace NYq {
 

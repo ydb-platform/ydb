@@ -4,9 +4,9 @@
 #include "rpc_scheme_base.h"
 #include "rpc_common.h"
 
-#include <ydb/core/protos/flat_tx_scheme.pb.h> 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
-#include <ydb/core/ydb_convert/ydb_convert.h> 
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 
 namespace NKikimr {
 namespace NGRpcService {

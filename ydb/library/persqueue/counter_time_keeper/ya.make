@@ -1,10 +1,10 @@
-OWNER(g:logbroker) 
+OWNER(g:logbroker)
 
 LIBRARY()
 
 PEERDIR(
-    library/cpp/actors/protos 
-    ydb/core/protos 
+    library/cpp/actors/protos
+    ydb/core/protos
 )
 
 SRCS(

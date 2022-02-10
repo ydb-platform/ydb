@@ -3,11 +3,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TMakeScanSnapshotUnit : public TExecutionUnit {
 public:
-    TMakeScanSnapshotUnit(TDataShard &dataShard, 
+    TMakeScanSnapshotUnit(TDataShard &dataShard,
                           TPipeline &pipeline);
     ~TMakeScanSnapshotUnit() override;
 
@@ -21,7 +21,7 @@ public:
 private:
 };
 
-TMakeScanSnapshotUnit::TMakeScanSnapshotUnit(TDataShard &dataShard, 
+TMakeScanSnapshotUnit::TMakeScanSnapshotUnit(TDataShard &dataShard,
                                              TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::MakeScanSnapshot, false, dataShard, pipeline)
 {
@@ -78,11 +78,11 @@ void TMakeScanSnapshotUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateMakeScanSnapshotUnit(TDataShard &dataShard, 
+THolder<TExecutionUnit> CreateMakeScanSnapshotUnit(TDataShard &dataShard,
                                                    TPipeline &pipeline)
 {
     return THolder(new TMakeScanSnapshotUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

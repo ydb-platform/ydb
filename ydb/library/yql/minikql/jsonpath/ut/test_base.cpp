@@ -1,6 +1,6 @@
 #include "test_base.h"
 
-#include <ydb/library/binary_json/write.h> 
+#include <ydb/library/binary_json/write.h>
 
 using namespace NKikimr::NBinaryJson;
 
@@ -162,5 +162,5 @@ void TJsonPathTestBase::RunVariablesTestCase(const TString& rawJson, const THash
 
         UNIT_FAIL(message);
     }
-} 
- 
+}
+

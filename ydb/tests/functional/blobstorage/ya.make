@@ -2,7 +2,7 @@ OWNER(g:kikimr)
 
 PY3TEST()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd") 
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TEST_SRCS(
     pdisk_format_info.py
     replication.py
@@ -30,7 +30,7 @@ ENDIF()
 SPLIT_FACTOR(20)
 
 DEPENDS(
-    ydb/apps/ydbd 
+    ydb/apps/ydbd
 )
 
 PEERDIR(

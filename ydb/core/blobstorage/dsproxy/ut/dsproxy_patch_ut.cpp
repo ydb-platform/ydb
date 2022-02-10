@@ -4,8 +4,8 @@
 #include "dsproxy_test_state_ut.h"
 #include "dsproxy_vdisk_mock_ut.h"
 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h> 
-#include <ydb/core/util/stlog.h> 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
+#include <ydb/core/util/stlog.h>
 
 #include <cstring>
 

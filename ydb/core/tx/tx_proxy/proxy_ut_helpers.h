@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/core/protos/flat_scheme_op.pb.h> 
-#include <ydb/core/protos/flat_tx_scheme.pb.h> 
-#include <ydb/core/testlib/test_client.h> 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/testlib/test_client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>

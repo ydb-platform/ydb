@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_gateway.h> 
-#include <ydb/core/protos/kqp.pb.h> 
+#include <ydb/core/kqp/common/kqp_gateway.h>
+#include <ydb/core/protos/kqp.pb.h>
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>

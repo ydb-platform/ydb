@@ -1,6 +1,6 @@
 #include "blob_recovery_impl.h"
 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h> 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h>
 
 namespace NKikimr {
 

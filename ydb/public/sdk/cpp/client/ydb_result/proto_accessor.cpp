@@ -1,6 +1,6 @@
 #include "result.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h> 
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 namespace NYdb {
 

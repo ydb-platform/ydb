@@ -1,8 +1,8 @@
 LIBRARY()
 
 OWNER(
-    g:yql 
-    g:yql_ydb_core 
+    g:yql
+    g:yql_ydb_core
 )
 
 PEERDIR(
@@ -16,6 +16,6 @@ SRCS(
     dq_type_ann.cpp
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 END()

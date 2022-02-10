@@ -6,7 +6,7 @@ package Ydb.YqlInternal;
 option java_package = "com.yandex.ydb.yql_internal";
 option java_outer_classname = "YqlInternalProtos";
 
-import "ydb/public/api/protos/ydb_common.proto"; 
+import "ydb/public/api/protos/ydb_common.proto";
 
 message ExecQuerySettings {
     Ydb.FeatureFlag.Status strict_dml = 1;

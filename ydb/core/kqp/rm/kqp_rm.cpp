@@ -1,12 +1,12 @@
 #include "kqp_rm.h"
 
-#include <ydb/core/base/statestorage.h> 
-#include <ydb/core/cms/console/configs_dispatcher.h> 
-#include <ydb/core/cms/console/console.h> 
-#include <ydb/core/mind/tenant_pool.h> 
-#include <ydb/core/mon/mon.h> 
-#include <ydb/core/tablet/resource_broker.h> 
-#include <ydb/core/kqp/kqp.h> 
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mon/mon.h>
+#include <ydb/core/tablet/resource_broker.h>
+#include <ydb/core/kqp/kqp.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>

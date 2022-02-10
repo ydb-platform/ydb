@@ -1,5 +1,5 @@
 #include "handlers.h"
-#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h> 
+#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 
 namespace NYdb {
 

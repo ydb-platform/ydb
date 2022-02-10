@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/schemeshard) 
+UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 OWNER(
     eivanov89
@@ -6,7 +6,7 @@ OWNER(
 )
 
 FORK_SUBTESTS()
- 
+
 SPLIT_FACTOR(10)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
@@ -19,13 +19,13 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/getopt 
+    library/cpp/getopt
     library/cpp/regex/pcre
-    ydb/core/cms 
-    ydb/core/testlib 
-    ydb/core/tx 
-    ydb/core/tx/schemeshard/ut_helpers 
-    ydb/core/wrappers/ut_helpers 
+    ydb/core/cms
+    ydb/core/testlib
+    ydb/core/tx
+    ydb/core/tx/schemeshard/ut_helpers
+    ydb/core/wrappers/ut_helpers
 )
 
 SRCS(

@@ -4,9 +4,9 @@
 #include "schemeshard_export.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/public/api/protos/ydb_export.pb.h> 
-#include <ydb/public/api/protos/ydb_issue_message.pb.h> 
-#include <ydb/public/api/protos/ydb_status_codes.pb.h> 
+#include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>

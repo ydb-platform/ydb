@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/blobstorage/base/common_latency_hist_bounds.h> 
-#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h> 
-#include <ydb/core/mon/mon.h> 
-#include <ydb/core/protos/node_whiteboard.pb.h> 
+#include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
+#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
+#include <ydb/core/mon/mon.h>
+#include <ydb/core/protos/node_whiteboard.pb.h>
 
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -79,7 +79,7 @@ protected:
     NMonitoring::TDynamicCounters::TCounterPtr Count; // Number of switches to ON state
     NMonitoring::TDynamicCounters::TCounterPtr RedMs; // Time elapsed in ON state
     NMonitoring::TDynamicCounters::TCounterPtr GreenMs; // Time elapsed in OFF state
-private: 
+private:
     ui64 RedCycles = 0;
     ui64 GreenCycles = 0;
     NHPTimer::STime AdvancedTill = 0;

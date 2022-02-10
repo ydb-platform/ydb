@@ -5,9 +5,9 @@
 #include "queue_schema.h"
 #include "serviceid.h"
 
-#include <ydb/core/ymq/base/limits.h> 
-#include <ydb/core/ymq/queues/fifo/schema.h> 
-#include <ydb/core/ymq/queues/std/schema.h> 
+#include <ydb/core/ymq/base/limits.h>
+#include <ydb/core/ymq/queues/fifo/schema.h>
+#include <ydb/core/ymq/queues/std/schema.h>
 
 #include <util/digest/city.h>
 #include <util/generic/utility.h>

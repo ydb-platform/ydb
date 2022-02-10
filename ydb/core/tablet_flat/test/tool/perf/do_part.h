@@ -2,11 +2,11 @@
 
 #include "iface.h"
 
-#include <ydb/core/tablet_flat/flat_row_state.h> 
-#include <ydb/core/tablet_flat/flat_row_scheme.h> 
-#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_writer.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_make.h> 
+#include <ydb/core/tablet_flat/flat_row_state.h>
+#include <ydb/core/tablet_flat/flat_row_scheme.h>
+#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_make.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -19,7 +19,7 @@ namespace NPerf {
                 return Plain + Encoded;
             }
 
-            ui64 Bytes      = 0;    /* Total bytes obtained by rows   */ 
+            ui64 Bytes      = 0;    /* Total bytes obtained by rows   */
             ui64 Plain      = 0;
             ui64 Encoded    = 0;
         };
@@ -56,14 +56,14 @@ namespace NPerf {
 
         static TStats Stats(const TPart &part_) noexcept
         {
-            auto &part = dynamic_cast<const NTest::TPartStore&>(part_); 
+            auto &part = dynamic_cast<const NTest::TPartStore&>(part_);
 
             TStats stats;
 
-            for (auto &page: part.Store->PageCollectionArray(0 /* main room */)) { 
+            for (auto &page: part.Store->PageCollectionArray(0 /* main room */)) {
                 auto got = NPage::THello().Read(page, EPage::Undef);
 
-                if (got == NPage::EPage::DataPage) { 
+                if (got == NPage::EPage::DataPage) {
                     stats.Bytes += page.size();
 
                     if (got == NPage::ECodec::Plain) {

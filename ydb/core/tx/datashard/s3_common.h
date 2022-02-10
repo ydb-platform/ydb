@@ -8,13 +8,13 @@
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/client/ClientConfiguration.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/StorageClass.h>
 
-#include <ydb/core/protos/flat_scheme_op.pb.h> 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <util/string/builder.h>
 #include <util/string/printf.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 inline Aws::Client::ClientConfiguration ConfigFromSettings(const NKikimrSchemeOp::TS3Settings& settings) {
     Aws::Client::ClientConfiguration config;
@@ -100,7 +100,7 @@ public:
 
 }; // TS3Settings
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr
 
 #endif // KIKIMR_DISABLE_S3_OPS

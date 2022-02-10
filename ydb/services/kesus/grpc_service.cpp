@@ -1,19 +1,19 @@
 #include "grpc_service.h"
 
-#include <ydb/core/kesus/proxy/proxy.h> 
-#include <ydb/core/kesus/proxy/events.h> 
-#include <ydb/core/kesus/tablet/events.h> 
+#include <ydb/core/kesus/proxy/proxy.h>
+#include <ydb/core/kesus/proxy/events.h>
+#include <ydb/core/kesus/tablet/events.h>
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/grpc_services/grpc_helper.h> 
-#include <ydb/core/grpc_services/grpc_request_proxy.h> 
-#include <ydb/core/grpc_services/rpc_calls.h> 
-#include <ydb/core/grpc_streaming/grpc_streaming.h> 
-#include <ydb/core/base/ticket_parser.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_streaming/grpc_streaming.h>
+#include <ydb/core/base/ticket_parser.h>
 
 #include <library/cpp/grpc/server/event_callback.h>
 #include <library/cpp/grpc/server/grpc_async_ctx_base.h>
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h> 
+#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

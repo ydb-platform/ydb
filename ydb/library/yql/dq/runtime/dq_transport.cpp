@@ -1,7 +1,7 @@
 #include "dq_transport.h"
 #include "dq_arrow_helpers.h"
 
-#include <ydb/library/mkql_proto/mkql_proto.h> 
+#include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>

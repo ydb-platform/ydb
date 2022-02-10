@@ -2,10 +2,10 @@
 
 #include "tablet_counters_protobuf.h"
 
-#include <ydb/core/protos/counters_schemeshard.pb.h> 
-#include <ydb/core/protos/counters_datashard.pb.h> 
-#include <ydb/core/protos/counters_hive.pb.h> 
-#include <ydb/core/protos/counters_kesus.pb.h> 
+#include <ydb/core/protos/counters_schemeshard.pb.h>
+#include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/protos/counters_hive.pb.h>
+#include <ydb/core/protos/counters_kesus.pb.h>
 
 namespace NKikimr {
 
@@ -19,9 +19,9 @@ THolder<TTabletCountersBase> CreateAppCountersByTabletType(TTabletTypes::EType t
         >>();
     case TTabletTypes::DataShard:
         return MakeHolder<TAppProtobufTabletCounters<
-            NDataShard::ESimpleCounters_descriptor, 
-            NDataShard::ECumulativeCounters_descriptor, 
-            NDataShard::EPercentileCounters_descriptor 
+            NDataShard::ESimpleCounters_descriptor,
+            NDataShard::ECumulativeCounters_descriptor,
+            NDataShard::EPercentileCounters_descriptor
         >>();
     case TTabletTypes::Hive:
         return MakeHolder<TAppProtobufTabletCounters<

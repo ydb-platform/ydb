@@ -1,8 +1,8 @@
 #include "tablet_impl.h"
 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/engine/minikql/flat_local_tx_factory.h> 
-#include <ydb/core/tablet/tablet_counters_protobuf.h> 
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 

@@ -1,6 +1,6 @@
 #include "proxy_private.h"
 
-#include <ydb/core/protos/services.pb.h> 
+#include <ydb/core/protos/services.pb.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -11,8 +11,8 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
-#include <ydb/core/yq/libs/control_plane_storage/events/events.h> 
-#include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h> 
+#include <ydb/core/yq/libs/control_plane_storage/events/events.h>
+#include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 
 #define LOG_E(stream) \
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateWriteTask - ResultId: " << ResultId << ", RequestId: " << RequestId << ", " << stream)

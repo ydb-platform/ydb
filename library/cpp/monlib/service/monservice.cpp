@@ -113,7 +113,7 @@ void TMonService2::Register(TMonPagePtr page) {
 }
 
 TIndexMonPage* TMonService2::RegisterIndexPage(const TString& path, const TString& title) {
-    return IndexMonPage->RegisterIndexPage(path, title); 
+    return IndexMonPage->RegisterIndexPage(path, title);
 }
 
 IMonPage* TMonService2::FindPage(const TString& relativePath) {

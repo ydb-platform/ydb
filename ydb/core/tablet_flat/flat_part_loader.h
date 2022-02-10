@@ -5,8 +5,8 @@
 #include "shared_cache_events.h"
 #include "util_fmt_abort.h"
 #include "util_basics.h"
-#include <ydb/core/tablet_flat/protos/flat_table_part.pb.h> 
-#include <ydb/core/util/pb.h> 
+#include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
+#include <ydb/core/util/pb.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/stream/mem.h>
@@ -20,16 +20,16 @@ namespace NTable {
     public:
         enum class EStage : ui8 {
             Meta,
-            PartView, 
+            PartView,
             Slice,
             Deltas,
             Result,
         };
 
-        using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo; 
+        using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
 
-        TLoader(TPartComponents ou) 
-            : TLoader(TPartStore::Construct(std::move(ou.PageCollectionComponents)), 
+        TLoader(TPartComponents ou)
+            : TLoader(TPartStore::Construct(std::move(ou.PageCollectionComponents)),
                     std::move(ou.Legacy),
                     std::move(ou.Opaque),
                     /* no deltas */ { },
@@ -52,8 +52,8 @@ namespace NTable {
                     case EStage::Meta:
                         StageParseMeta();
                         break;
-                    case EStage::PartView: 
-                        fetch = StageCreatePartView(); 
+                    case EStage::PartView:
+                        fetch = StageCreatePartView();
                         break;
                     case EStage::Slice:
                         fetch = StageSliceBounds();
@@ -82,7 +82,7 @@ namespace NTable {
             return { };
         }
 
-        void Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded>) noexcept; 
+        void Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded>) noexcept;
 
         constexpr static bool NeedIn(EPage page) noexcept
         {
@@ -94,20 +94,20 @@ namespace NTable {
                 || page == EPage::TxIdStats;
         }
 
-        TPartView Result() noexcept 
+        TPartView Result() noexcept
         {
             Y_VERIFY(Stage == EStage::Result);
-            Y_VERIFY(PartView, "Result may only be grabbed once"); 
-            Y_VERIFY(PartView.Slices, "Missing slices in Result stage"); 
-            return std::move(PartView); 
+            Y_VERIFY(PartView, "Result may only be grabbed once");
+            Y_VERIFY(PartView.Slices, "Missing slices in Result stage");
+            return std::move(PartView);
         }
 
-        static TEpoch GrabEpoch(const TPartComponents &pc) 
+        static TEpoch GrabEpoch(const TPartComponents &pc)
         {
-            Y_VERIFY(pc.PageCollectionComponents, "PartComponents should have at least one pageCollectionComponent"); 
-            Y_VERIFY(pc.PageCollectionComponents[0].Packet, "PartComponents should have a parsed meta pageCollectionComponent"); 
+            Y_VERIFY(pc.PageCollectionComponents, "PartComponents should have at least one pageCollectionComponent");
+            Y_VERIFY(pc.PageCollectionComponents[0].Packet, "PartComponents should have a parsed meta pageCollectionComponent");
 
-            const auto &meta = pc.PageCollectionComponents[0].Packet->Meta; 
+            const auto &meta = pc.PageCollectionComponents[0].Packet->Meta;
 
             for (ui32 page = meta.TotalPages(); page--;) {
                 if (meta.GetPageType(page) == ui32(EPage::Schem2)
@@ -121,15 +121,15 @@ namespace NTable {
                 }
             }
 
-            Y_FAIL("Cannot locate part metadata in page collections of PartComponents"); 
+            Y_FAIL("Cannot locate part metadata in page collections of PartComponents");
         }
 
         static TLogoBlobID BlobsLabelFor(const TLogoBlobID &base) noexcept
         {
-            /* By convention IPageCollection blobs label for page collection has the same logo 
+            /* By convention IPageCollection blobs label for page collection has the same logo
                 as the meta logo but Cookie + 1. Blocks writer always make a
-                gap between two subsequent meta TLargeGlobIds thus this value does 
-                not overlap any real TLargeGlobId leader blob. 
+                gap between two subsequent meta TLargeGlobIds thus this value does
+                not overlap any real TLargeGlobId leader blob.
              */
 
             return
@@ -184,7 +184,7 @@ namespace NTable {
         TRowVersion MinRowVersion;
         TRowVersion MaxRowVersion;
         NProto::TRoot Root;
-        TPartView PartView; 
+        TPartView PartView;
         TAutoPtr<TKeysEnv> KeysEnv;
     };
 }}

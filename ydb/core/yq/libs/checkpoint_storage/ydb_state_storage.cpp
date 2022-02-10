@@ -1,10 +1,10 @@
 #include "ydb_state_storage.h"
 
 #include <ydb/core/yq/libs/actors/logging/log.h>
-#include <ydb/core/yq/libs/ydb/util.h> 
-#include <ydb/core/yq/libs/ydb/ydb.h> 
+#include <ydb/core/yq/libs/ydb/util.h>
+#include <ydb/core/yq/libs/ydb/ydb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h> 
+#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
 #include <util/stream/str.h>
 #include <util/string/join.h>

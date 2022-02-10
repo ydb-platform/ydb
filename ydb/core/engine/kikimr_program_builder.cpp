@@ -1,6 +1,6 @@
 #include "kikimr_program_builder.h"
 
-#include <ydb/public/lib/scheme_types/scheme_type_id.h> 
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_node_visitor.h>

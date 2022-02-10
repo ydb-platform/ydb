@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h> 
+#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <google/protobuf/map.h>
 

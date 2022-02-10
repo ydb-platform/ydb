@@ -2,9 +2,9 @@
 
 #include "defs.h"
 
-#include <ydb/core/protos/kesus.pb.h> 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
-#include <ydb/public/api/protos/ydb_coordination.pb.h> 
+#include <ydb/core/protos/kesus.pb.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
 
 namespace NKikimr {
 namespace NKesus {

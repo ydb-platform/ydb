@@ -1,11 +1,11 @@
 #include "datashard_txs.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
-class TDataShard::TTxCleanupTransaction : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxCleanupTransaction : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxCleanupTransaction(TDataShard* self) 
+    TTxCleanupTransaction(TDataShard* self)
         : TTransactionBase(self)
     { }
 
@@ -76,14 +76,14 @@ public:
     }
 };
 
-void TDataShard::ExecuteCleanupTx(const TActorContext& ctx) { 
+void TDataShard::ExecuteCleanupTx(const TActorContext& ctx) {
     Execute(new TTxCleanupTransaction(this), ctx);
 }
 
-void TDataShard::Handle(TEvPrivate::TEvCleanupTransaction::TPtr&, const TActorContext& ctx) { 
+void TDataShard::Handle(TEvPrivate::TEvCleanupTransaction::TPtr&, const TActorContext& ctx) {
     IncCounter(COUNTER_TX_CLEANUP_SCHEDULED);
     ExecuteCleanupTx(ctx);
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

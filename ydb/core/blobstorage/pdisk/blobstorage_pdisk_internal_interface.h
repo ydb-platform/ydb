@@ -1,11 +1,11 @@
 #pragma once
 #include "defs.h"
-#include "blobstorage_pdisk_defs.h" 
+#include "blobstorage_pdisk_defs.h"
 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice.h> 
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice.h>
 
-#include <ydb/library/pdisk_io/buffers.h> 
+#include <ydb/library/pdisk_io/buffers.h>
 #include <library/cpp/actors/core/mon.h>
 
 
@@ -22,7 +22,7 @@ struct TEvWhiteboardReportResult :
     TVector<std::tuple<TActorId, NKikimrWhiteboard::TVDiskStateInfo>> VDiskStateVect;
     THolder<TEvBlobStorage::TEvControllerUpdateDiskStatus> DiskMetrics;
 
-    ~TEvWhiteboardReportResult(); 
+    ~TEvWhiteboardReportResult();
 
     TString ToString() const {
         return ToString(*this);

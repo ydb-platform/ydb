@@ -5,7 +5,7 @@
 #include "flat_boot_blobs.h"
 #include "flat_executor_borrowlogic.h"
 
-#include <ydb/core/util/pb.h> 
+#include <ydb/core/util/pb.h>
 #include <library/cpp/blockcodecs/codecs.h>
 #include <util/generic/xrange.h>
 
@@ -29,8 +29,8 @@ namespace NBoot {
         void Start() noexcept override
         {
             for (auto slot: xrange(Queue.size()))
-                if (const auto &largeGlobId = Queue.at(slot).LargeGlobId) 
-                    Pending += Spawn<TLoadBlobs>(largeGlobId, slot); 
+                if (const auto &largeGlobId = Queue.at(slot).LargeGlobId)
+                    Pending += Spawn<TLoadBlobs>(largeGlobId, slot);
 
             Flush();
         }
@@ -51,7 +51,7 @@ namespace NBoot {
         void Flush() noexcept
         {
             for (TBody *head = nullptr; Queue && *(head = &Queue[0]); ) {
-                Apply(head->LargeGlobId.Lead, Codec->Decode(head->Body)); 
+                Apply(head->LargeGlobId.Lead, Codec->Decode(head->Body));
 
                 ++Skip, Queue.pop_front();
             }

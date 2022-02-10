@@ -1,6 +1,6 @@
 #include "ut_helpers.h"
 
-#include <ydb/core/metering/metering.h> 
+#include <ydb/core/metering/metering.h>
 
 #include <library/cpp/actors/core/event_pb.h>
 

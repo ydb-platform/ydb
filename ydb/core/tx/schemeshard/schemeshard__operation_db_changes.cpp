@@ -2,7 +2,7 @@
 
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tx/tx_processing.h> 
+#include <ydb/core/tx/tx_processing.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

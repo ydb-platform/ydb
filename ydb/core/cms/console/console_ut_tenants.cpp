@@ -1,16 +1,16 @@
 #include "console_tenants_manager.h"
 #include "ut_helpers.h"
 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
-#include <ydb/core/base/path.h> 
-#include <ydb/core/blobstorage/base/blobstorage_events.h> 
-#include <ydb/core/mind/tenant_pool.h> 
-#include <ydb/core/mind/tenant_slot_broker.h> 
-#include <ydb/core/mind/tenant_slot_broker_impl.h> 
-#include <ydb/core/testlib/tablet_helpers.h> 
-#include <ydb/core/testlib/tenant_runtime.h> 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
+#include <ydb/core/base/counters.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mind/tenant_slot_broker.h>
+#include <ydb/core/mind/tenant_slot_broker_impl.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/tenant_runtime.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -2061,7 +2061,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {},
                           SLOT1_TYPE, ZONE1, 1, 1);
 
- 
+
         UNIT_ASSERT(CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name2", "value2"}}));
 
         // Requests with wrong attributes.
@@ -2107,7 +2107,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {},
                           SLOT1_TYPE, ZONE1, 1, 1);
 
- 
+
         UNIT_ASSERT(CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name2", "value2"}}));
 
         CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 0,

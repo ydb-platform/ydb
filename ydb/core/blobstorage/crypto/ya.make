@@ -23,12 +23,12 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    contrib/libs/t1ha 
+    contrib/libs/t1ha
     library/cpp/sse
 )
 
 END()
 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+RECURSE_FOR_TESTS(
+    ut
+)

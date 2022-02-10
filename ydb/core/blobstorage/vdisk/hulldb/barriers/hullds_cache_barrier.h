@@ -1,8 +1,8 @@
 #pragma once
 
-#include "defs.h" 
-#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h> 
- 
+#include "defs.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
+
 namespace NKikimr {
 
     class TBarrierCache {
@@ -47,16 +47,16 @@ namespace NKikimr {
         THashMap<TKey, TValue> Cache;
 
     public:
-        void Build(const THullDs *hullDs) { 
+        void Build(const THullDs *hullDs) {
             // take a snapshot of all barriers; we don't care about LSN's here, because there should be no data in fresh
             // segment at this point of time
-            TBarriersSnapshot snapshot(hullDs->Barriers->GetIndexSnapshot()); 
+            TBarriersSnapshot snapshot(hullDs->Barriers->GetIndexSnapshot());
 
             // create iterator and start traversing the whole barrier database
-            TBarriersSnapshot::TForwardIterator it(hullDs->HullCtx, &snapshot); 
+            TBarriersSnapshot::TForwardIterator it(hullDs->HullCtx, &snapshot);
             it.SeekToFirst();
 
-            TIndexRecordMerger<TKeyBarrier, TMemRecBarrier> merger(hullDs->HullCtx->VCtx->Top->GType); 
+            TIndexRecordMerger<TKeyBarrier, TMemRecBarrier> merger(hullDs->HullCtx->VCtx->Top->GType);
             while (it.Valid()) {
                 it.PutToMerger(&merger);
                 merger.Finish();

@@ -1,198 +1,198 @@
-#pragma once 
- 
-#include "blobstorage_hulldatamerger.h" 
- 
-namespace NKikimr { 
- 
-    //////////////////////////////////////////////////////////////////////////// 
-    // TRecordMergerBase 
-    //////////////////////////////////////////////////////////////////////////// 
-    template <class TKey, class TMemRec> 
-    class TRecordMergerBase { 
-    public: 
-        bool Empty() const { 
-            return MemRecsMerged == 0; 
-        } 
- 
-        const TMemRec &GetMemRec() const { 
+#pragma once
+
+#include "blobstorage_hulldatamerger.h"
+
+namespace NKikimr {
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TRecordMergerBase
+    ////////////////////////////////////////////////////////////////////////////
+    template <class TKey, class TMemRec>
+    class TRecordMergerBase {
+    public:
+        bool Empty() const {
+            return MemRecsMerged == 0;
+        }
+
+        const TMemRec &GetMemRec() const {
             Y_VERIFY_DEBUG(Finished);
-            return MemRec; 
-        } 
- 
-        bool HaveToMergeData() const { 
-            return MergeData; 
-        } 
- 
-        ui32 GetMemRecsMerged() const { 
-            return MemRecsMerged; 
-        } 
- 
-    protected: 
-        const TBlobStorageGroupType GType; 
-        TMemRec MemRec; 
-        ui32 MemRecsMerged; // number of items that took part in a merge for the current key 
-        bool Finished; 
-        const bool MergeData; 
- 
-        TRecordMergerBase(const TBlobStorageGroupType &gtype, bool mergeData) 
-            : GType(gtype) 
-            , MemRec() 
-            , MemRecsMerged(0) 
-            , Finished(false) 
-            , MergeData(mergeData) 
-        {} 
- 
-        void Clear() { 
-            MemRecsMerged = 0; 
-            Finished = false; 
-        } 
- 
+            return MemRec;
+        }
+
+        bool HaveToMergeData() const {
+            return MergeData;
+        }
+
+        ui32 GetMemRecsMerged() const {
+            return MemRecsMerged;
+        }
+
+    protected:
+        const TBlobStorageGroupType GType;
+        TMemRec MemRec;
+        ui32 MemRecsMerged; // number of items that took part in a merge for the current key
+        bool Finished;
+        const bool MergeData;
+
+        TRecordMergerBase(const TBlobStorageGroupType &gtype, bool mergeData)
+            : GType(gtype)
+            , MemRec()
+            , MemRecsMerged(0)
+            , Finished(false)
+            , MergeData(mergeData)
+        {}
+
+        void Clear() {
+            MemRecsMerged = 0;
+            Finished = false;
+        }
+
         void AddBasic(const TMemRec &memRec, const TKey &key) {
-            if (MemRecsMerged == 0) { 
-                MemRec = memRec; 
-                MemRec.SetNoBlob(); 
-            } else { 
+            if (MemRecsMerged == 0) {
+                MemRec = memRec;
+                MemRec.SetNoBlob();
+            } else {
                 MemRec.Merge(memRec, key);
-            } 
-            ++MemRecsMerged; 
-        } 
-    }; 
- 
- 
-    //////////////////////////////////////////////////////////////////////////// 
-    // TIndexRecordMerger 
-    //////////////////////////////////////////////////////////////////////////// 
-    // Valid call sequence: 
-    // Clear(); Add(); ... Add(); Finish(); 
-    // GetMemRec(); GetData(); 
-    template <class TKey, class TMemRec> 
-    class TIndexRecordMerger : public TRecordMergerBase<TKey, TMemRec> { 
-        using TBase = TRecordMergerBase<TKey, TMemRec>; 
-        using TBase::MemRec; 
-        using TBase::GType; 
-        using TBase::Finished; 
-        using TBase::MergeData; 
-        using TBase::Empty; 
-        using TBase::AddBasic; 
- 
-    public: 
-        TIndexRecordMerger(const TBlobStorageGroupType &gtype) 
-            : TBase(gtype, false) 
-        {} 
- 
-        using TBase::Clear; 
-        using TBase::GetMemRec; 
-        using TBase::HaveToMergeData; 
- 
-        void AddFromSegment(const TMemRec &memRec, const TDiskPart* /*outbound*/, const TKey &key, ui64 /*circaLsn*/) { 
-            AddBasic(memRec, key); 
-        } 
- 
+            }
+            ++MemRecsMerged;
+        }
+    };
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TIndexRecordMerger
+    ////////////////////////////////////////////////////////////////////////////
+    // Valid call sequence:
+    // Clear(); Add(); ... Add(); Finish();
+    // GetMemRec(); GetData();
+    template <class TKey, class TMemRec>
+    class TIndexRecordMerger : public TRecordMergerBase<TKey, TMemRec> {
+        using TBase = TRecordMergerBase<TKey, TMemRec>;
+        using TBase::MemRec;
+        using TBase::GType;
+        using TBase::Finished;
+        using TBase::MergeData;
+        using TBase::Empty;
+        using TBase::AddBasic;
+
+    public:
+        TIndexRecordMerger(const TBlobStorageGroupType &gtype)
+            : TBase(gtype, false)
+        {}
+
+        using TBase::Clear;
+        using TBase::GetMemRec;
+        using TBase::HaveToMergeData;
+
+        void AddFromSegment(const TMemRec &memRec, const TDiskPart* /*outbound*/, const TKey &key, ui64 /*circaLsn*/) {
+            AddBasic(memRec, key);
+        }
+
         void AddFromFresh(const TMemRec &memRec, const TRope* /*data*/, const TKey &key, ui64 /*lsn*/) {
-            AddBasic(memRec, key); 
-        } 
- 
-        void Finish() { 
+            AddBasic(memRec, key);
+        }
+
+        void Finish() {
             Y_VERIFY_DEBUG(!Empty());
-            Finished = true; 
-        } 
-    }; 
- 
- 
-    //////////////////////////////////////////////////////////////////////////// 
+            Finished = true;
+        }
+    };
+
+
+    ////////////////////////////////////////////////////////////////////////////
     // TCompactRecordMergerBase
-    //////////////////////////////////////////////////////////////////////////// 
-    // Valid call sequence: 
+    ////////////////////////////////////////////////////////////////////////////
+    // Valid call sequence:
     // Clear(); Add(); ... Add(); Finish()
-    // GetMemRec(); GetData(); 
-    template <class TKey, class TMemRec> 
+    // GetMemRec(); GetData();
+    template <class TKey, class TMemRec>
     class TCompactRecordMergerBase : public TRecordMergerBase<TKey, TMemRec> {
     protected:
-        using TBase = TRecordMergerBase<TKey, TMemRec>; 
-        using TBase::MemRec; 
-        using TBase::GType; 
-        using TBase::Finished; 
-        using TBase::MergeData; 
-        using TBase::Empty; 
-        using TBase::AddBasic; 
- 
-        enum class ELoadData { 
-            NotSet = 0, 
-            LoadData = 1, 
-            DontLoadData = 2 
-        }; 
- 
-    public: 
-        TCompactRecordMergerBase(const TBlobStorageGroupType &gtype) 
-            : TBase(gtype, true) 
-            , MemRecs() 
+        using TBase = TRecordMergerBase<TKey, TMemRec>;
+        using TBase::MemRec;
+        using TBase::GType;
+        using TBase::Finished;
+        using TBase::MergeData;
+        using TBase::Empty;
+        using TBase::AddBasic;
+
+        enum class ELoadData {
+            NotSet = 0,
+            LoadData = 1,
+            DontLoadData = 2
+        };
+
+    public:
+        TCompactRecordMergerBase(const TBlobStorageGroupType &gtype)
+            : TBase(gtype, true)
+            , MemRecs()
             , ProducingSmallBlob(false)
-            , NeedToLoadData(ELoadData::NotSet) 
-        {} 
- 
-        void Clear() { 
-            TBase::Clear(); 
-            MemRecs.clear(); 
+            , NeedToLoadData(ELoadData::NotSet)
+        {}
+
+        void Clear() {
+            TBase::Clear();
+            MemRecs.clear();
             ProducingSmallBlob = false;
-            NeedToLoadData = ELoadData::NotSet; 
-            DataMerger.Clear(); 
-        } 
- 
-        using TBase::GetMemRec; 
-        using TBase::HaveToMergeData; 
- 
-        void SetLoadDataMode(bool loadData) { 
-            NeedToLoadData = loadData ? ELoadData::LoadData : ELoadData::DontLoadData; 
-        } 
- 
-        void AddFromSegment(const TMemRec &memRec, const TDiskPart *outbound, const TKey &key, ui64 circaLsn) { 
-            Y_VERIFY_DEBUG(NeedToLoadData != ELoadData::NotSet); 
-            AddBasic(memRec, key); 
-            switch (memRec.GetType()) { 
-                case TBlobType::DiskBlob: { 
-                    if (memRec.HasData() && NeedToLoadData == ELoadData::LoadData) { 
-                        MemRecs.push_back(memRec); 
-                        ProducingSmallBlob = true;
-                    } 
-                    break; 
-                } 
-                case TBlobType::HugeBlob: 
-                case TBlobType::ManyHugeBlobs: { 
-                    TDiskDataExtractor extr;
-                    memRec.GetDiskData(&extr, outbound); 
-                    const NMatrix::TVectorType v = memRec.GetLocalParts(GType); 
-                    DataMerger.AddHugeBlob(extr.Begin, extr.End, v, circaLsn); 
-                    break; 
-                } 
-                default: 
-                    Y_FAIL("Impossible case");
-            } 
-            VerifyConsistency(memRec, outbound);
-        } 
- 
-        void AddFromFresh(const TMemRec &memRec, const TRope *data, const TKey &key, ui64 lsn) {
-            Y_VERIFY_DEBUG(NeedToLoadData != ELoadData::NotSet); 
+            NeedToLoadData = ELoadData::NotSet;
+            DataMerger.Clear();
+        }
+
+        using TBase::GetMemRec;
+        using TBase::HaveToMergeData;
+
+        void SetLoadDataMode(bool loadData) {
+            NeedToLoadData = loadData ? ELoadData::LoadData : ELoadData::DontLoadData;
+        }
+
+        void AddFromSegment(const TMemRec &memRec, const TDiskPart *outbound, const TKey &key, ui64 circaLsn) {
+            Y_VERIFY_DEBUG(NeedToLoadData != ELoadData::NotSet);
             AddBasic(memRec, key);
-            if (memRec.HasData()) { 
-                if (data) { 
-                    Y_VERIFY(memRec.GetType() == TBlobType::MemBlob || memRec.GetType() == TBlobType::DiskBlob); 
-                    if (NeedToLoadData == ELoadData::LoadData) { 
+            switch (memRec.GetType()) {
+                case TBlobType::DiskBlob: {
+                    if (memRec.HasData() && NeedToLoadData == ELoadData::LoadData) {
+                        MemRecs.push_back(memRec);
+                        ProducingSmallBlob = true;
+                    }
+                    break;
+                }
+                case TBlobType::HugeBlob:
+                case TBlobType::ManyHugeBlobs: {
+                    TDiskDataExtractor extr;
+                    memRec.GetDiskData(&extr, outbound);
+                    const NMatrix::TVectorType v = memRec.GetLocalParts(GType);
+                    DataMerger.AddHugeBlob(extr.Begin, extr.End, v, circaLsn);
+                    break;
+                }
+                default:
+                    Y_FAIL("Impossible case");
+            }
+            VerifyConsistency(memRec, outbound);
+        }
+
+        void AddFromFresh(const TMemRec &memRec, const TRope *data, const TKey &key, ui64 lsn) {
+            Y_VERIFY_DEBUG(NeedToLoadData != ELoadData::NotSet);
+            AddBasic(memRec, key);
+            if (memRec.HasData()) {
+                if (data) {
+                    Y_VERIFY(memRec.GetType() == TBlobType::MemBlob || memRec.GetType() == TBlobType::DiskBlob);
+                    if (NeedToLoadData == ELoadData::LoadData) {
                         DataMerger.AddBlob(TDiskBlob(data, memRec.GetLocalParts(GType), GType, key.LogoBlobID()));
                         ProducingSmallBlob = true;
-                    } else { 
-                        // intentionally do nothing: don't add any data to DataMerger, because we don't need it 
-                    } 
-                } else { 
+                    } else {
+                        // intentionally do nothing: don't add any data to DataMerger, because we don't need it
+                    }
+                } else {
                     Y_VERIFY(memRec.GetType() == TBlobType::HugeBlob);
                     TDiskDataExtractor extr;
-                    memRec.GetDiskData(&extr, nullptr); 
+                    memRec.GetDiskData(&extr, nullptr);
                     const NMatrix::TVectorType v = memRec.GetLocalParts(GType);
-                    DataMerger.AddHugeBlob(extr.Begin, extr.End, v, lsn); 
-                } 
-            } 
+                    DataMerger.AddHugeBlob(extr.Begin, extr.End, v, lsn);
+                }
+            }
             VerifyConsistency(memRec, nullptr);
-        } 
- 
+        }
+
         void VerifyConsistency(const TMemRec& memRec, const TDiskPart *outbound) {
 #ifdef NDEBUG
             return;
@@ -228,56 +228,56 @@ namespace NKikimr {
             }
         }
 
-        void Finish() { 
+        void Finish() {
             Y_VERIFY_DEBUG(!Empty());
             VerifyConsistency();
- 
+
             // in case when we keep data and disk merger contains small blobs, we set up small blob record -- this logic
             // is used in replication and in fresh compaction
             if (NeedToLoadData == ELoadData::LoadData && DataMerger.HasSmallBlobs()) {
                 TDiskPart addr(0, 0, DataMerger.GetDiskBlobRawSize());
                 MemRec.SetDiskBlob(addr);
-            } 
+            }
 
             // clear local bits if we are not going to keep item's data
             if (NeedToLoadData == ELoadData::DontLoadData) {
-                MemRec.ClearLocalParts(GType); 
+                MemRec.ClearLocalParts(GType);
             }
 
-            Finished = true; 
-            MemRec.SetType(DataMerger.GetType()); 
-        } 
- 
-        const TDataMerger *GetDataMerger() const { 
+            Finished = true;
+            MemRec.SetType(DataMerger.GetType());
+        }
+
+        const TDataMerger *GetDataMerger() const {
             Y_VERIFY_DEBUG(Finished);
-            return &DataMerger; 
-        } 
- 
+            return &DataMerger;
+        }
+
     protected:
-        TStackVec<TMemRec, 16> MemRecs; 
+        TStackVec<TMemRec, 16> MemRecs;
         bool ProducingSmallBlob;
-        ELoadData NeedToLoadData; 
-        TDataMerger DataMerger; 
-    }; 
- 
-    //////////////////////////////////////////////////////////////////////////// 
-    // TCompactRecordMergerIndexPass 
-    //////////////////////////////////////////////////////////////////////////// 
+        ELoadData NeedToLoadData;
+        TDataMerger DataMerger;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TCompactRecordMergerIndexPass
+    ////////////////////////////////////////////////////////////////////////////
     template<typename TKey, typename TMemRec>
     class TCompactRecordMergerIndexPass : public TCompactRecordMergerBase<TKey, TMemRec> {
         using TBase = TCompactRecordMergerBase<TKey, TMemRec>;
- 
+
         using ELoadData = typename TBase::ELoadData;
- 
-        using TBase::MemRecs; 
+
+        using TBase::MemRecs;
         using TBase::ProducingSmallBlob;
         using TBase::NeedToLoadData;
         using TBase::DataMerger;
         using TBase::MemRec;
 
     public:
-        TCompactRecordMergerIndexPass(const TBlobStorageGroupType &gtype) 
-            : TBase(gtype) 
+        TCompactRecordMergerIndexPass(const TBlobStorageGroupType &gtype)
+            : TBase(gtype)
         {}
 
         void Finish() {
@@ -293,29 +293,29 @@ namespace NKikimr {
 
         template<typename TCallback>
         void ForEachSmallDiskBlob(TCallback&& callback) {
-            for (const auto& memRec : MemRecs) { 
-                callback(memRec); 
+            for (const auto& memRec : MemRecs) {
+                callback(memRec);
             }
         }
     };
 
-    //////////////////////////////////////////////////////////////////////////// 
-    // TCompactRecordMergerDataPass 
-    //////////////////////////////////////////////////////////////////////////// 
+    ////////////////////////////////////////////////////////////////////////////
+    // TCompactRecordMergerDataPass
+    ////////////////////////////////////////////////////////////////////////////
     template<typename TKey, typename TMemRec>
     class TCompactRecordMergerDataPass : public TCompactRecordMergerBase<TKey, TMemRec> {
         using TBase = TCompactRecordMergerBase<TKey, TMemRec>;
 
         using TBase::ProducingSmallBlob;
-        using TBase::MemRecs; 
+        using TBase::MemRecs;
         using TBase::MemRec;
         using TBase::DataMerger;
-        using TBase::GType; 
+        using TBase::GType;
         using TBase::SetLoadDataMode;
 
     public:
-        TCompactRecordMergerDataPass(const TBlobStorageGroupType &gtype) 
-            : TBase(gtype) 
+        TCompactRecordMergerDataPass(const TBlobStorageGroupType &gtype)
+            : TBase(gtype)
         {
             SetLoadDataMode(true);
         }
@@ -338,9 +338,9 @@ namespace NKikimr {
 
             // add all read small blobs into blob merger
             const size_t count = ReadSmallBlobs.size();
-            Y_VERIFY(count == +MemRecs, "count# %zu +MemRecs# %zu", count, +MemRecs); 
+            Y_VERIFY(count == +MemRecs, "count# %zu +MemRecs# %zu", count, +MemRecs);
             for (size_t i = 0; i < count; ++i) {
-                const TMemRec& memRec = MemRecs[i]->GetMemRec(); 
+                const TMemRec& memRec = MemRecs[i]->GetMemRec();
                 const TString& buffer = ReadSmallBlobs[i];
                 Y_VERIFY(buffer.size() == memRec.DataSize());
                 DataMerger.AddBlob(TDiskBlob(buffer.data(), buffer.size(), memRec.GetLocalParts(GType)));
@@ -355,7 +355,7 @@ namespace NKikimr {
 
             // ensure that we have generated correct DiskBlob with full set of declared parts
             const TDiskBlob& blob = DataMerger.GetDiskBlobMerger().GetDiskBlob();
-            Y_VERIFY(blob.GetParts() == MemRec.GetLocalParts(GType)); 
+            Y_VERIFY(blob.GetParts() == MemRec.GetLocalParts(GType));
             Y_VERIFY(MemRec.GetType() == TBlobType::DiskBlob);
         }
 
@@ -364,140 +364,140 @@ namespace NKikimr {
     };
 
 
-    //////////////////////////////////////////////////////////////////////////// 
-    // TRecordMergerCallback 
-    //////////////////////////////////////////////////////////////////////////// 
-    template <class TKey, class TMemRec, class TCallback> 
-    class TRecordMergerCallback : public TRecordMergerBase<TKey, TMemRec> { 
-        using TBase = TRecordMergerBase<TKey, TMemRec>; 
-        using TBase::MemRec; 
-        using TBase::GType; 
-        using TBase::Finished; 
-        using TBase::Empty; 
-        using TBase::AddBasic; 
- 
-    public: 
-        TRecordMergerCallback(TCallback *callback, const TBlobStorageGroupType &gtype) 
-            : TBase(gtype, true) 
-            , Callback(callback) 
-            , LastWriteWinsMerger(gtype.TotalPartCount()) 
-        { 
-            Clear(); 
-        } 
- 
-        void Clear() { 
-            TBase::Clear(); 
-            LastWriteWinsMerger.Clear(); 
-        } 
- 
-        void AddFromSegment(const TMemRec &memRec, const TDiskPart *outbound, const TKey &key, ui64 circaLsn) { 
-            AddBasic(memRec, key); 
+    ////////////////////////////////////////////////////////////////////////////
+    // TRecordMergerCallback
+    ////////////////////////////////////////////////////////////////////////////
+    template <class TKey, class TMemRec, class TCallback>
+    class TRecordMergerCallback : public TRecordMergerBase<TKey, TMemRec> {
+        using TBase = TRecordMergerBase<TKey, TMemRec>;
+        using TBase::MemRec;
+        using TBase::GType;
+        using TBase::Finished;
+        using TBase::Empty;
+        using TBase::AddBasic;
+
+    public:
+        TRecordMergerCallback(TCallback *callback, const TBlobStorageGroupType &gtype)
+            : TBase(gtype, true)
+            , Callback(callback)
+            , LastWriteWinsMerger(gtype.TotalPartCount())
+        {
+            Clear();
+        }
+
+        void Clear() {
+            TBase::Clear();
+            LastWriteWinsMerger.Clear();
+        }
+
+        void AddFromSegment(const TMemRec &memRec, const TDiskPart *outbound, const TKey &key, ui64 circaLsn) {
+            AddBasic(memRec, key);
             TDiskDataExtractor extr;
-            memRec.GetDiskData(&extr, outbound); 
-            const NMatrix::TVectorType v = memRec.GetLocalParts(GType); 
-            ui32 n = extr.End - extr.Begin; 
-            switch (n) { 
-                case 0: break; 
-                case 1: { 
-                    if (memRec.GetType() == TBlobType::DiskBlob) { 
-                        // don't deduplicate inplaced data 
-                        const TDiskPart &data = extr.SwearOne(); 
-                        if (data.ChunkIdx && data.Size) { 
-                            (*Callback)(data, v); 
-                        } 
-                    } else if (memRec.GetType() == TBlobType::HugeBlob) { 
-                        Y_VERIFY(v.CountBits() == 1u); 
-                        // deduplicate huge blob 
-                        LastWriteWinsMerger.Add(extr.SwearOne(), v, circaLsn); 
-                    } else { 
-                        Y_FAIL("Unexpected case"); 
-                    } 
- 
-                    break; 
-                } 
-                default: { 
-                    // many blobs 
-                    Y_VERIFY(memRec.GetType() == TBlobType::ManyHugeBlobs); 
-                    const TDiskPart *dataPtr = extr.Begin; 
-                    ui8 i = v.FirstPosition(); 
-                    while (i != v.GetSize() && dataPtr != extr.End) { 
+            memRec.GetDiskData(&extr, outbound);
+            const NMatrix::TVectorType v = memRec.GetLocalParts(GType);
+            ui32 n = extr.End - extr.Begin;
+            switch (n) {
+                case 0: break;
+                case 1: {
+                    if (memRec.GetType() == TBlobType::DiskBlob) {
+                        // don't deduplicate inplaced data
+                        const TDiskPart &data = extr.SwearOne();
+                        if (data.ChunkIdx && data.Size) {
+                            (*Callback)(data, v);
+                        }
+                    } else if (memRec.GetType() == TBlobType::HugeBlob) {
+                        Y_VERIFY(v.CountBits() == 1u);
+                        // deduplicate huge blob
+                        LastWriteWinsMerger.Add(extr.SwearOne(), v, circaLsn);
+                    } else {
+                        Y_FAIL("Unexpected case");
+                    }
+
+                    break;
+                }
+                default: {
+                    // many blobs
+                    Y_VERIFY(memRec.GetType() == TBlobType::ManyHugeBlobs);
+                    const TDiskPart *dataPtr = extr.Begin;
+                    ui8 i = v.FirstPosition();
+                    while (i != v.GetSize() && dataPtr != extr.End) {
                         NMatrix::TVectorType onePart(0, v.GetSize());
-                        onePart.Set(i); 
-                        // deduplicate every huge blob 
-                        LastWriteWinsMerger.Add(*dataPtr, onePart, circaLsn); 
-                        i = v.NextPosition(i); 
-                        dataPtr++; 
-                    } 
-                    break; 
-                } 
-            } 
-        } 
- 
+                        onePart.Set(i);
+                        // deduplicate every huge blob
+                        LastWriteWinsMerger.Add(*dataPtr, onePart, circaLsn);
+                        i = v.NextPosition(i);
+                        dataPtr++;
+                    }
+                    break;
+                }
+            }
+        }
+
         void AddFromFresh(const TMemRec &memRec, const TRope *data, const TKey &key, ui64 lsn) {
             AddBasic(memRec, key);
-            if (memRec.HasData()) { 
-                const NMatrix::TVectorType v = memRec.GetLocalParts(GType); 
-                if (data) { 
-                    Y_VERIFY(memRec.GetType() == TBlobType::MemBlob); 
-                    // we have in-memory data in a rope, it always wins among other data, 
-                    // so we call Callback immediately and remove any data for this local part 
-                    // from LastWriteWinsMerger 
-                    (*Callback)(TDiskBlob(data, v, GType, key.LogoBlobID())); 
-                } else { 
-                    Y_VERIFY(memRec.GetType() == TBlobType::HugeBlob && v.CountBits() == 1u); 
+            if (memRec.HasData()) {
+                const NMatrix::TVectorType v = memRec.GetLocalParts(GType);
+                if (data) {
+                    Y_VERIFY(memRec.GetType() == TBlobType::MemBlob);
+                    // we have in-memory data in a rope, it always wins among other data,
+                    // so we call Callback immediately and remove any data for this local part
+                    // from LastWriteWinsMerger
+                    (*Callback)(TDiskBlob(data, v, GType, key.LogoBlobID()));
+                } else {
+                    Y_VERIFY(memRec.GetType() == TBlobType::HugeBlob && v.CountBits() == 1u);
                     TDiskDataExtractor extr;
-                    memRec.GetDiskData(&extr, nullptr); 
-                    // deduplicate huge blob 
-                    LastWriteWinsMerger.Add(extr.SwearOne(), v, lsn); 
-                } 
-            } 
-        } 
- 
-        void Finish() { 
+                    memRec.GetDiskData(&extr, nullptr);
+                    // deduplicate huge blob
+                    LastWriteWinsMerger.Add(extr.SwearOne(), v, lsn);
+                }
+            }
+        }
+
+        void Finish() {
             Y_VERIFY_DEBUG(!Empty());
-            LastWriteWinsMerger.Finish(Callback); 
-            Finished = true; 
-        } 
- 
-    private: 
-        class TLastWriteWins { 
-        public: 
-            TLastWriteWins(ui8 vecSize) 
-                : ResParts(0, vecSize) 
+            LastWriteWinsMerger.Finish(Callback);
+            Finished = true;
+        }
+
+    private:
+        class TLastWriteWins {
+        public:
+            TLastWriteWins(ui8 vecSize)
+                : ResParts(0, vecSize)
             {}
- 
-            void Add(const TDiskPart &diskPart, NMatrix::TVectorType v, ui64 circaLsn) { 
-                Y_VERIFY_DEBUG(v.CountBits() == 1u); 
+
+            void Add(const TDiskPart &diskPart, NMatrix::TVectorType v, ui64 circaLsn) {
+                Y_VERIFY_DEBUG(v.CountBits() == 1u);
                 const ui8 idx = v.FirstPosition();
                 TResItem& item = Res[idx];
                 if (item.CircaLsn < circaLsn) {
                     item = {circaLsn, diskPart};
-                } 
+                }
                 ResParts.Set(idx);
-            } 
- 
-            void Finish(TCallback *callback) { 
-                for (ui8 i = ResParts.FirstPosition(); i != ResParts.GetSize(); i = ResParts.NextPosition(i)) { 
+            }
+
+            void Finish(TCallback *callback) {
+                for (ui8 i = ResParts.FirstPosition(); i != ResParts.GetSize(); i = ResParts.NextPosition(i)) {
                     (*callback)(Res[i].Part, NMatrix::TVectorType::MakeOneHot(i, ResParts.GetSize()));
-                } 
-            } 
- 
-            void Clear() { 
+                }
+            }
+
+            void Clear() {
                 Res.fill(TResItem());
-                ResParts.Clear(); 
-            } 
- 
-        private: 
+                ResParts.Clear();
+            }
+
+        private:
             struct TResItem {
-                ui64 CircaLsn = 0; 
+                ui64 CircaLsn = 0;
                 TDiskPart Part;
             };
-            NMatrix::TVectorType ResParts; 
+            NMatrix::TVectorType ResParts;
             std::array<TResItem, 8> Res;
-        }; 
- 
-        TCallback *Callback; 
-        TLastWriteWins LastWriteWinsMerger; 
-    }; 
- 
-} // NKikimr 
+        };
+
+        TCallback *Callback;
+        TLastWriteWins LastWriteWinsMerger;
+    };
+
+} // NKikimr

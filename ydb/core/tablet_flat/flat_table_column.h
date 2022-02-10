@@ -2,7 +2,7 @@
 
 #include "flat_row_column.h"
 
-#include <ydb/core/scheme/scheme_tablecell.h> 
+#include <ydb/core/scheme/scheme_tablecell.h>
 
 namespace NKikimr {
 namespace NTable {

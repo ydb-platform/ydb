@@ -6,7 +6,7 @@
 #include "sql_query.h"
 #include "sql_value.h"
 
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
+#include <ydb/library/yql/public/udf/udf_helpers.h>
 
 namespace NJson2Udf {
     SIMPLE_MODULE(TJson2Module,

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h> 
+#include <ydb/library/yql/public/udf/udf_data_type.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event_local.h>

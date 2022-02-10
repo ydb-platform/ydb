@@ -1,7 +1,7 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include "grpc_connections.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h> 
+#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 
 namespace NYdb {
 

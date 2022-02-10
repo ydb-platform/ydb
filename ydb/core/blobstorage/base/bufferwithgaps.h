@@ -1,9 +1,9 @@
 #pragma once
 
-#include "defs.h" 
+#include "defs.h"
 #include <util/generic/string.h>
 #include <util/generic/set.h>
-#include <util/generic/map.h> 
+#include <util/generic/map.h>
 #include <util/generic/vector.h>
 #include <util/generic/algorithm.h>
 
@@ -42,9 +42,9 @@ namespace NKikimr {
             , IsCommited(false)
         {}
 
-        TBufferWithGaps(TBufferWithGaps &&) = default; 
-        TBufferWithGaps &operator=(TBufferWithGaps &&) = default; 
- 
+        TBufferWithGaps(TBufferWithGaps &&) = default;
+        TBufferWithGaps &operator=(TBufferWithGaps &&) = default;
+
         void AddGap(ui32 begin, ui32 end) {
             // ensure gaps never overlap
             ui32 size = end - begin;

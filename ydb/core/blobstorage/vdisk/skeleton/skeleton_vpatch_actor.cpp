@@ -1,7 +1,7 @@
 #include "skeleton_vpatch_actor.h"
 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_response.h> 
-#include <ydb/core/util/stlog.h> 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
+#include <ydb/core/util/stlog.h>
 
 #include <util/generic/serialized_enum.h>
 

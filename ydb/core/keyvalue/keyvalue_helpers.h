@@ -3,7 +3,7 @@
 #include "keyvalue_item_type.h"
 #include "keyvalue_key_header.h"
 #include "keyvalue_simple_db.h"
-#include <ydb/core/base/logoblob.h> 
+#include <ydb/core/base/logoblob.h>
 
 namespace NKikimr {
 namespace NKeyValue {

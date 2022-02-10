@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(g:yql) 
+OWNER(g:yql)
 
 PEERDIR(
-    ydb/core/kqp 
+    ydb/core/kqp
     ydb/library/yql/utils/failure_injector
     ydb/library/yql/providers/common/config
     ydb/library/yql/providers/common/gateway
@@ -16,7 +16,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/worker_manager/interface
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 SRCS(
     local_worker_manager.cpp

@@ -1,6 +1,6 @@
 #include "client.h"
 
-#include <ydb/public/lib/deprecated/client/grpc_client.h> 
+#include <ydb/public/lib/deprecated/client/grpc_client.h>
 
 #include <util/generic/yexception.h>
 #include <util/string/join.h>

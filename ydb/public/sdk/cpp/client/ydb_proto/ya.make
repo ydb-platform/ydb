@@ -10,9 +10,9 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/api/grpc/draft 
-    ydb/public/api/protos 
-    ydb/public/lib/operation_id/protos 
+    ydb/public/api/grpc/draft
+    ydb/public/api/protos
+    ydb/public/lib/operation_id/protos
     ydb/library/yql/public/issue/protos
 )
 

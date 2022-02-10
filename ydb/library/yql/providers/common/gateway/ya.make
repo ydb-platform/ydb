@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    spuchin 
-    g:yql_ydb_core 
-) 
+OWNER(
+    spuchin
+    g:yql_ydb_core
+)
 
 SRCS(
     yql_provider_gateway.h
@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/threading/future 
+    library/cpp/threading/future
     ydb/library/yql/ast
 )
 

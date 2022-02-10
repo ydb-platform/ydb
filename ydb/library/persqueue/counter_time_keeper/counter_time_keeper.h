@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/tablet/tablet_counters.h> 
+#include <ydb/core/tablet/tablet_counters.h>
 
 #include <util/system/hp_timer.h>
 

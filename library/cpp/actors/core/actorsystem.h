@@ -6,7 +6,7 @@
 #include "balancer.h"
 #include "config.h"
 #include "event.h"
-#include "log_settings.h" 
+#include "log_settings.h"
 #include "scheduler_cookie.h"
 #include "mon_stats.h"
 
@@ -233,7 +233,7 @@ namespace NActors {
         mutable TTicketLock ScheduleLock;
 
         friend class TExecutorThread;
- 
+
         THolder<TActorSystemSetup> SystemSetup;
         TActorId DefSelfID;
         void* AppData0;
@@ -331,7 +331,7 @@ namespace NActors {
 
         TActorId LookupLocalService(const TActorId& x) const;
         TActorId RegisterLocalService(const TActorId& serviceId, const TActorId& actorId);
- 
+
         ui32 GetMaxActivityType() const {
             return SystemSetup ? SystemSetup->MaxActivityType : 1;
         }
@@ -339,7 +339,7 @@ namespace NActors {
         TInstant Timestamp() const {
             return TInstant::MicroSeconds(RelaxedLoad(&CurrentTimestamp));
         }
- 
+
         TMonotonic Monotonic() const {
             return TMonotonic::MicroSeconds(RelaxedLoad(&CurrentMonotonic));
         }

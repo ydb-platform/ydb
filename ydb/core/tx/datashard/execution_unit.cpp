@@ -3,10 +3,10 @@
 #include "datashard_impl.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
-                                            TDataShard &dataShard, 
+                                            TDataShard &dataShard,
                                             TPipeline &pipeline)
 {
     switch (kind) {
@@ -257,5 +257,5 @@ TOutputOpData::TResultPtr &TExecutionUnit::BuildResult(TOperation::TPtr op,
     return op->Result();
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

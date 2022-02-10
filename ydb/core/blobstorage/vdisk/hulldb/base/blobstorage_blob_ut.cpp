@@ -1,8 +1,8 @@
-#include "blobstorage_blob.h" 
+#include "blobstorage_blob.h"
 #include <library/cpp/testing/unittest/registar.h>
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
     TIntrusivePtr<IRopeChunkBackend> AllocateArena() {
         return TRopeAlignedBuffer::Allocate(65536);
     }
@@ -12,7 +12,7 @@ namespace NKikimr {
     const TBlobStorageGroupType GType(TBlobStorageGroupType::ErasureNone);
 
     Y_UNIT_TEST_SUITE(TBlobStorageDiskBlob) {
- 
+
         Y_UNIT_TEST(CreateFromDistinctParts) {
             const ui8 totalParts = MaxTotalPartCount;
             const ui32 partSize = 6;
@@ -55,83 +55,83 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(CreateIterate) {
-            ui8 partId = 2; 
+            ui8 partId = 2;
             TString data("abcdefgh");
             TRope buf = TDiskBlob::Create(16, partId, 3, TRope(data), Arena);
             NMatrix::TVectorType localParts(0, 3);
-            localParts.Set(partId - 1); 
+            localParts.Set(partId - 1);
             TDiskBlob blob(&buf, localParts, GType, TLogoBlobID(0, 0, 0, 0, data.size(), 0));
-            for (TDiskBlob::TPartIterator it = blob.begin(), e = blob.end(); it != e; ++it) { 
-                UNIT_ASSERT(it.GetPartId() == partId); 
+            for (TDiskBlob::TPartIterator it = blob.begin(), e = blob.end(); it != e; ++it) {
+                UNIT_ASSERT(it.GetPartId() == partId);
                 UNIT_ASSERT(it.GetPart().ConvertToString() == data);
-            } 
-        } 
- 
+            }
+        }
+
         Y_UNIT_TEST(Merge) {
             TString data("abcdefgh");
- 
-            // blob1 
-            ui8 partId1 = 1; 
+
+            // blob1
+            ui8 partId1 = 1;
             TRope buf1 = TDiskBlob::Create(16, partId1, 8, TRope(data), Arena);
             NMatrix::TVectorType localParts1(0, 3);
-            localParts1.Set(partId1 - 1); 
+            localParts1.Set(partId1 - 1);
             TDiskBlob blob1(&buf1, localParts1, GType, TLogoBlobID(0, 0, 0, 0, data.size(), 0));
- 
-            // blob2 
-            ui8 partId2 = 3; 
+
+            // blob2
+            ui8 partId2 = 3;
             TRope buf2 = TDiskBlob::Create(16, partId2, 8, TRope(data), Arena);
             NMatrix::TVectorType localParts2(0, 3);
-            localParts2.Set(partId2 - 1); 
+            localParts2.Set(partId2 - 1);
             TDiskBlob blob2(&buf2, localParts2, GType, TLogoBlobID(0, 0, 0, 0, data.size(), 0));
- 
-            // merge vars 
-            TDiskBlobMerger merger; 
+
+            // merge vars
+            TDiskBlobMerger merger;
             TVector<ui8> ppp;
             TVector<ui8> resPpp;
-            resPpp.push_back(1); 
-            resPpp.push_back(3); 
+            resPpp.push_back(1);
+            resPpp.push_back(3);
             NMatrix::TVectorType resParts(0, 3);
-            resParts.Set(partId1 - 1); 
-            resParts.Set(partId2 - 1); 
- 
-            // merge 1 (natural order) 
-            { 
-                UNIT_ASSERT(merger.Empty()); 
-                merger.Add(blob1); 
-                UNIT_ASSERT(!merger.Empty()); 
-                merger.Add(blob2); 
-                UNIT_ASSERT(!merger.Empty()); 
+            resParts.Set(partId1 - 1);
+            resParts.Set(partId2 - 1);
+
+            // merge 1 (natural order)
+            {
+                UNIT_ASSERT(merger.Empty());
+                merger.Add(blob1);
+                UNIT_ASSERT(!merger.Empty());
+                merger.Add(blob2);
+                UNIT_ASSERT(!merger.Empty());
                 const TDiskBlob& blob = merger.GetDiskBlob();
-                UNIT_ASSERT(resParts == blob.GetParts()); 
-                for (TDiskBlob::TPartIterator it = blob.begin(), e = blob.end(); it != e; ++it) { 
-                    ppp.push_back(it.GetPartId()); 
+                UNIT_ASSERT(resParts == blob.GetParts());
+                for (TDiskBlob::TPartIterator it = blob.begin(), e = blob.end(); it != e; ++it) {
+                    ppp.push_back(it.GetPartId());
                     UNIT_ASSERT_VALUES_EQUAL(blob.GetPartSize(it.GetPartId() - 1), data.size());
                     UNIT_ASSERT(it.GetPart().ConvertToString() == data);
-                } 
-                UNIT_ASSERT(ppp == resPpp); 
-            } 
- 
-            // clear 
-            merger.Clear(); 
-            ppp.clear(); 
- 
-            // merge 2 (reverse order) 
-            { 
-                UNIT_ASSERT(merger.Empty()); 
-                merger.Add(blob2); 
-                UNIT_ASSERT(!merger.Empty()); 
-                merger.Add(blob1); 
-                UNIT_ASSERT(!merger.Empty()); 
+                }
+                UNIT_ASSERT(ppp == resPpp);
+            }
+
+            // clear
+            merger.Clear();
+            ppp.clear();
+
+            // merge 2 (reverse order)
+            {
+                UNIT_ASSERT(merger.Empty());
+                merger.Add(blob2);
+                UNIT_ASSERT(!merger.Empty());
+                merger.Add(blob1);
+                UNIT_ASSERT(!merger.Empty());
                 const TDiskBlob& blob = merger.GetDiskBlob();
-                UNIT_ASSERT(resParts == blob.GetParts()); 
-                for (TDiskBlob::TPartIterator it = blob.begin(), e = blob.end(); it != e; ++it) { 
-                    ppp.push_back(it.GetPartId()); 
+                UNIT_ASSERT(resParts == blob.GetParts());
+                for (TDiskBlob::TPartIterator it = blob.begin(), e = blob.end(); it != e; ++it) {
+                    ppp.push_back(it.GetPartId());
                     UNIT_ASSERT(blob.GetPartSize(it.GetPartId() - 1) == data.size());
                     UNIT_ASSERT(it.GetPart().ConvertToString() == data);
-                } 
-                UNIT_ASSERT(ppp == resPpp); 
-            } 
-        } 
+                }
+                UNIT_ASSERT(ppp == resPpp);
+            }
+        }
 
         Y_UNIT_TEST(FilterMask) {
             const ui8 numParts = 6;
@@ -173,6 +173,6 @@ namespace NKikimr {
                 }
             }
         }
-    } 
- 
-} // NKikimr 
+    }
+
+} // NKikimr

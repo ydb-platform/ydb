@@ -1,10 +1,10 @@
 #pragma once
 
 #include "helpers.h"
-#include <ydb/core/blobstorage/crypto/default.h> 
-#include <ydb/core/blobstorage/nodewarden/node_warden.h> 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h> 
-#include <ydb/core/testlib/actors/test_runtime.h> 
+#include <ydb/core/blobstorage/crypto/default.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
 #include <google/protobuf/text_format.h>
 
 #include <util/folder/dirut.h>
@@ -99,8 +99,8 @@ namespace NKikimr {
                 conf->SectorMaps[PDiskPath] = SectorMap;
             }
 
-            auto baseInfo = TVDiskConfig::TBaseInfo::SampleForTests(); 
-            TIntrusivePtr<TVDiskConfig> vDisk = conf->AllVDiskKinds->MakeVDiskConfig(baseInfo); 
+            auto baseInfo = TVDiskConfig::TBaseInfo::SampleForTests();
+            TIntrusivePtr<TVDiskConfig> vDisk = conf->AllVDiskKinds->MakeVDiskConfig(baseInfo);
             vDisk->AdvanceEntryPointTimeout = TDuration::Seconds(5);
             vDisk->RecoveryLogCutterFirstDuration = TDuration::Seconds(3);
             vDisk->RecoveryLogCutterRegularDuration = TDuration::Seconds(5);

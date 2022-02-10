@@ -1,20 +1,20 @@
 LIBRARY()
 
-OWNER( 
-    a-romanov 
-    g:yql 
-) 
+OWNER(
+    a-romanov
+    g:yql
+)
 
 PROVIDES(YqlServicePolicy)
 
-SRCS( 
-    udf_service.cpp 
-) 
-
-PEERDIR(
-    ydb/library/yql/public/udf 
+SRCS(
+    udf_service.cpp
 )
 
-YQL_LAST_ABI_VERSION() 
+PEERDIR(
+    ydb/library/yql/public/udf
+)
+
+YQL_LAST_ABI_VERSION()
 
 END()

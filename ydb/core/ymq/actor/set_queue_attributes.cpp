@@ -5,10 +5,10 @@
 #include "params.h"
 #include "serviceid.h"
 
-#include <ydb/core/ymq/base/limits.h> 
-#include <ydb/core/ymq/base/dlq_helpers.h> 
-#include <ydb/core/ymq/base/queue_attributes.h> 
-#include <ydb/public/lib/value/value.h> 
+#include <ydb/core/ymq/base/limits.h>
+#include <ydb/core/ymq/base/dlq_helpers.h>
+#include <ydb/core/ymq/base/queue_attributes.h>
+#include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/scheme/scheme.h>
 

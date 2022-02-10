@@ -1,8 +1,8 @@
 #include "ydb_proxy.h"
 
-#include <ydb/core/protos/replication.pb.h> 
-#include <ydb/core/testlib/test_client.h> 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
+#include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

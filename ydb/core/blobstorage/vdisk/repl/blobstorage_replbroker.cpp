@@ -1,6 +1,6 @@
 #include "blobstorage_replbroker.h"
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
-#include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h> 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/queue.h>
 

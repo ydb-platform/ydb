@@ -17,19 +17,19 @@
 namespace NKikimr {
 namespace NTable {
 
-    class TDatabaseImpl  { 
+    class TDatabaseImpl  {
 
-        struct TArgs { 
+        struct TArgs {
             ui32 Table;
             TEpoch Head;
             TTxStamp Edge;
         };
 
-        struct TTableWrapper { 
-            TTableWrapper() = default; 
-            TTableWrapper(const TTableWrapper&) = delete; 
+        struct TTableWrapper {
+            TTableWrapper() = default;
+            TTableWrapper(const TTableWrapper&) = delete;
 
-            TTableWrapper(TArgs args) 
+            TTableWrapper(TArgs args)
                 : Table(args.Table)
                 , Self(new TTable(args.Head))
                 , Edge(args.Edge)
@@ -57,17 +57,17 @@ namespace NTable {
                 const auto &stat = Self->Stat();
 
                 if (enter) {
-                    aggr.MemTableWaste += Self->GetMemWaste(); 
-                    aggr.MemTableBytes += Self->GetMemSize(); 
-                    aggr.MemTableOps += Self->GetOpsCount(); 
+                    aggr.MemTableWaste += Self->GetMemWaste();
+                    aggr.MemTableBytes += Self->GetMemSize();
+                    aggr.MemTableOps += Self->GetOpsCount();
                     aggr.Parts += stat.Parts;
                     for (const auto& kv : stat.PartsPerTablet) {
                         aggr.PartsPerTablet[kv.first] += kv.second;
                     }
                 } else {
-                    NUtil::SubSafe(aggr.MemTableWaste, Self->GetMemWaste()); 
-                    NUtil::SubSafe(aggr.MemTableBytes, Self->GetMemSize()); 
-                    NUtil::SubSafe(aggr.MemTableOps, Self->GetOpsCount()); 
+                    NUtil::SubSafe(aggr.MemTableWaste, Self->GetMemWaste());
+                    NUtil::SubSafe(aggr.MemTableBytes, Self->GetMemSize());
+                    NUtil::SubSafe(aggr.MemTableOps, Self->GetOpsCount());
                     for (const auto& kv : stat.PartsPerTablet) {
                         // Note: we don't cleanup old tablets, because
                         // usually there is a very small number of them
@@ -88,9 +88,9 @@ namespace NTable {
         using TInfo = TScheme::TTableInfo;
         using TOps = TArrayRef<const TUpdateOp>;
         using TModifier = TSchemeModifier;
-        using TMemGlob = NPageCollection::TMemGlob; 
+        using TMemGlob = NPageCollection::TMemGlob;
 
-        TDatabaseImpl(TTxStamp weak, TAutoPtr<TScheme> scheme, const TEdges *edges) 
+        TDatabaseImpl(TTxStamp weak, TAutoPtr<TScheme> scheme, const TEdges *edges)
             : Weak(weak)
             , Redo(*this)
             , Scheme(scheme)
@@ -109,7 +109,7 @@ namespace NTable {
             return Serial_;
         }
 
-        TTableWrapper& Get(ui32 table, bool require) noexcept 
+        TTableWrapper& Get(ui32 table, bool require) noexcept
         {
             auto *wrap = Tables.FindPtr(table);
 
@@ -123,7 +123,7 @@ namespace NTable {
             return std::exchange(Serial_, Max(Serial_, serial));
         }
 
-        TDatabaseImpl& Switch(TTxStamp stamp) noexcept 
+        TDatabaseImpl& Switch(TTxStamp stamp) noexcept
         {
             if (std::exchange(Stamp, stamp) > stamp)
                 Y_FAIL("Executor tx stamp cannot go to the past");
@@ -136,7 +136,7 @@ namespace NTable {
 
         void Assign(TVector<TMemGlob> annex) noexcept
         {
-            Y_VERIFY(!Annex, "Annex has been already attached to TDatabaseImpl"); 
+            Y_VERIFY(!Annex, "Annex has been already attached to TDatabaseImpl");
 
             Annex = std::move(annex);
         }
@@ -155,7 +155,7 @@ namespace NTable {
             auto &wrap = Get(tid, true);
 
             wrap.Aggr(Stats, false /* leave */);
-            wrap->Replace(partViews, subset); 
+            wrap->Replace(partViews, subset);
             wrap.Aggr(Stats, true /* enter */);
         }
 
@@ -168,12 +168,12 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void Merge(ui32 tid, TPartView partView) noexcept 
+        void Merge(ui32 tid, TPartView partView) noexcept
         {
             auto &wrap = Get(tid, true);
 
             wrap.Aggr(Stats, false /* leave */);
-            wrap->Merge(std::move(partView)); 
+            wrap->Merge(std::move(partView));
             wrap.Aggr(Stats, true /* enter */);
         }
 
@@ -208,7 +208,7 @@ namespace NTable {
             }
         }
 
-        TDatabaseImpl& ApplyRedo(TArrayRef<const char> plain) noexcept 
+        TDatabaseImpl& ApplyRedo(TArrayRef<const char> plain) noexcept
         {
             return Redo.Replay(plain), *this;
         }
@@ -240,7 +240,7 @@ namespace NTable {
             Large = Max(Large, Scheme->Redo.Annex);
         }
 
-        TTableWrapper& MakeTable(ui32 table, TSnapEdge edge) noexcept 
+        TTableWrapper& MakeTable(ui32 table, TSnapEdge edge) noexcept
         {
             if (edge.TxStamp == Max<ui64>()) {
                 Y_FAIL("Cannot make table on undefined TxStamp edge");
@@ -257,7 +257,7 @@ namespace NTable {
                 edge.Head = TEpoch(i64(head));
             }
 
-            TArgs args{ table, edge.Head, edge.TxStamp }; 
+            TArgs args{ table, edge.Head, edge.TxStamp };
 
             auto result = Tables.emplace(table, args);
 
@@ -350,50 +350,50 @@ namespace NTable {
             }
         }
 
-        void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion rowVersion) noexcept 
+        void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion rowVersion) noexcept
         {
             auto &wrap = Touch(tid);
 
-            NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste()); 
-            NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize()); 
+            NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
+            NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
             wrap->Update(rop, key, ops, Annex, rowVersion);
-            Stats.MemTableWaste += wrap->GetMemWaste(); 
-            Stats.MemTableBytes += wrap->GetMemSize(); 
-            Stats.MemTableOps += 1; 
+            Stats.MemTableWaste += wrap->GetMemWaste();
+            Stats.MemTableBytes += wrap->GetMemSize();
+            Stats.MemTableOps += 1;
         }
 
-        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId) noexcept 
+        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId) noexcept
         {
             auto &wrap = Touch(tid);
 
-            NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste()); 
-            NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize()); 
+            NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
+            NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
             wrap->UpdateTx(rop, key, ops, Annex, txId);
-            Stats.MemTableWaste += wrap->GetMemWaste(); 
-            Stats.MemTableBytes += wrap->GetMemSize(); 
-            Stats.MemTableOps += 1; 
+            Stats.MemTableWaste += wrap->GetMemWaste();
+            Stats.MemTableBytes += wrap->GetMemSize();
+            Stats.MemTableOps += 1;
         }
 
         void DoCommitTx(ui32 tid, ui64 txId, TRowVersion rowVersion) noexcept
         {
             auto &wrap = Touch(tid);
 
-            NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste()); 
-            NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize()); 
+            NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
+            NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
             wrap->CommitTx(txId, rowVersion);
-            Stats.MemTableWaste += wrap->GetMemWaste(); 
-            Stats.MemTableBytes += wrap->GetMemSize(); 
+            Stats.MemTableWaste += wrap->GetMemWaste();
+            Stats.MemTableBytes += wrap->GetMemSize();
         }
 
         void DoRemoveTx(ui32 tid, ui64 txId) noexcept
         {
             auto &wrap = Touch(tid);
 
-            NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste()); 
-            NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize()); 
+            NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
+            NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
             wrap->RemoveTx(txId);
-            Stats.MemTableWaste += wrap->GetMemWaste(); 
-            Stats.MemTableBytes += wrap->GetMemSize(); 
+            Stats.MemTableWaste += wrap->GetMemWaste();
+            Stats.MemTableBytes += wrap->GetMemSize();
         }
 
         void DoFlush(ui32 tid, ui64 /* stamp */, TEpoch epoch) noexcept
@@ -406,7 +406,7 @@ namespace NTable {
             }
         }
 
-        TTableWrapper& Touch(ui32 table) noexcept 
+        TTableWrapper& Touch(ui32 table) noexcept
         {
             auto &wrap = Get(table, true);
 
@@ -435,9 +435,9 @@ namespace NTable {
         ui64 Serial_ = 1;       /* db global change serial number    */
         ui64 Begin_ = 0;        /* Serial at moment of Switch() call */
         ui32 Large = Max<ui32>();/* The lowest limit for large blobs */
-        TTableWrapper Dummy; 
-        THashMap<ui32, TTableWrapper> Tables; 
-        NRedo::TPlayer<TDatabaseImpl> Redo; 
+        TTableWrapper Dummy;
+        THashMap<ui32, TTableWrapper> Tables;
+        NRedo::TPlayer<TDatabaseImpl> Redo;
         TVector<ui32> Affects;
         TVector<TMemGlob> Annex;
 

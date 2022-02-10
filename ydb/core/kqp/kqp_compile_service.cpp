@@ -1,12 +1,12 @@
 #include "kqp_impl.h"
 #include "kqp_query_replay.h"
 
-#include <ydb/core/actorlib_impl/long_timer.h> 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/cms/console/console.h> 
-#include <ydb/core/cms/console/configs_dispatcher.h> 
-#include <ydb/core/kqp/counters/kqp_counters.h> 
-#include <ydb/library/aclib/aclib.h> 
+#include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/library/aclib/aclib.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -82,7 +82,7 @@ public:
         auto it = Index.find(TItem(compileResult->Uid));
         if (it != Index.end()) {
             TItem& item = const_cast<TItem&>(*it);
-            item.Value.CompileResult = compileResult; 
+            item.Value.CompileResult = compileResult;
         }
     }
 
@@ -299,21 +299,21 @@ public:
     }
 
     TKqpCompileService(const TTableServiceConfig& serviceConfig, const TKqpSettings::TConstPtr& kqpSettings,
-        TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters, 
-        std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory) 
+        TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+        std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory)
         : Config(serviceConfig)
         , KqpSettings(kqpSettings)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
         , QueryCache(Config.GetCompileQueryCacheSize(), TDuration::Seconds(Config.GetCompileQueryCacheTTLSec()))
-        , RequestsQueue(Config.GetCompileRequestQueueSize()) 
-        , QueryReplayFactory(std::move(queryReplayFactory)) 
-    {} 
+        , RequestsQueue(Config.GetCompileRequestQueueSize())
+        , QueryReplayFactory(std::move(queryReplayFactory))
+    {}
 
     void Bootstrap(const TActorContext& ctx) {
         Y_UNUSED(ctx);
 
-        QueryReplayBackend.Reset(CreateQueryReplayBackend(Config, Counters, QueryReplayFactory)); 
+        QueryReplayBackend.Reset(CreateQueryReplayBackend(Config, Counters, QueryReplayFactory));
         // Subscribe for TableService config changes
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -753,15 +753,15 @@ private:
     TKqpQueryCache QueryCache;
     TKqpRequestsQueue RequestsQueue;
     TActorId CheckQueriesTtlTimer;
-    std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory; 
+    std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
 };
 
 IActor* CreateKqpCompileService(const TTableServiceConfig& serviceConfig, const TKqpSettings::TConstPtr& kqpSettings,
-    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters, 
-    std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory) 
+    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+    std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory)
 {
-    return new TKqpCompileService(serviceConfig, kqpSettings, moduleResolverState, counters, 
-            std::move(queryReplayFactory)); 
+    return new TKqpCompileService(serviceConfig, kqpSettings, moduleResolverState, counters,
+            std::move(queryReplayFactory));
 }
 
 } // namespace NKqp

@@ -2,15 +2,15 @@
 #include "range_ops.h"
 #include <util/string/vector.h>
 
-#include <ydb/core/actorlib_impl/long_timer.h> 
-#include <ydb/core/formats/arrow_batch_builder.h> 
-#include <ydb/core/kqp/kqp_compute.h> 
-#include <ydb/core/tablet_flat/flat_row_celled.h> 
+#include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/formats/arrow_batch_builder.h>
+#include <ydb/core/kqp/kqp_compute.h>
+#include <ydb/core/tablet_flat/flat_row_celled.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 // using namespace NTabletFlatExecutor;
 using namespace NKqp;
@@ -35,7 +35,7 @@ public:
 
 public:
     TKqpScan(const TActorId& computeActorId, const TActorId& datashardActorId, ui32 scanId,
-        NDataShard::TUserTable::TCPtr tableInfo, const TSmallVec<TSerializedTableRange>&& tableRanges, 
+        NDataShard::TUserTable::TCPtr tableInfo, const TSmallVec<TSerializedTableRange>&& tableRanges,
         const TSmallVec<NTable::TTag>&& columnTags, const TSmallVec<bool>&& skipNullKeys,
         const NYql::NDqProto::EDqStatsMode& statsMode, ui64 timeoutMs, ui32 generation,
         NKikimrTxDataShard::EScanDataFormat dataFormat)
@@ -490,7 +490,7 @@ private:
     }
 
     void ReportDatashardStats() {
-        Send(DatashardActorId, new TDataShard::TEvPrivate::TEvScanStats(Rows, CellvecBytes)); 
+        Send(DatashardActorId, new TDataShard::TEvPrivate::TEvScanStats(Rows, CellvecBytes));
         Rows = 0;
         CellvecBytes = 0;
     }
@@ -503,7 +503,7 @@ private:
     TActorId ComputeActorId;
     const TActorId DatashardActorId;
     const ui32 ScanId;
-    const NDataShard::TUserTable::TCPtr TableInfo; 
+    const NDataShard::TUserTable::TCPtr TableInfo;
     const TString TablePath;
     const TSmallVec<TSerializedTableRange> TableRanges;
     ui32 CurrentRange;
@@ -535,7 +535,7 @@ private:
     TOwnedCellVec LastKey;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&) { 
+void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&) {
     auto& request = ev->Get()->Record;
     auto scanComputeActor = ev->Sender;
     auto generation = request.GetGeneration();

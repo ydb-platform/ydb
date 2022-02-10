@@ -8,20 +8,20 @@
 #include "util_fmt_desc.h"
 #include <util/stream/printf.h>
 
-#include <ydb/core/scheme/scheme_tablecell.h> 
-#include <ydb/core/scheme/scheme_type_registry.h> 
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_type_registry.h>
 
 namespace NKikimr {
 namespace NTable {
 
 namespace {
-    const NPage::TFrames::TEntry& GetFrame(const TPart &part, ui64 ref, TCellOp op) 
+    const NPage::TFrames::TEntry& GetFrame(const TPart &part, ui64 ref, TCellOp op)
     {
         static NPage::TFrames::TEntry None{ Max<TRowId>(), Max<ui16>(), 0, 0 };
 
-        if (op == ELargeObj::Outer && part.Small) { 
+        if (op == ELargeObj::Outer && part.Small) {
             return part.Small->Relation(ref);
-        } else if (op == ELargeObj::Extern && part.Large) { 
+        } else if (op == ELargeObj::Extern && part.Large) {
             return part.Large->Relation(ref);
         }
 
@@ -54,7 +54,7 @@ namespace {
             for (auto iter = part.Index->Begin(); iter; ++iter) {
                 Out << Endl;
 
-                DataPage(part, iter->GetPageId()); 
+                DataPage(part, iter->GetPageId());
             }
         }
     }
@@ -68,7 +68,7 @@ namespace {
             << Endl;
     }
 
-    void TDump::Dump(const NPage::TExtBlobs &page) noexcept 
+    void TDump::Dump(const NPage::TExtBlobs &page) noexcept
     {
         Out
             << " + Blobs Label{" << page.Raw.size() << "b} "
@@ -140,10 +140,10 @@ namespace {
         }
     }
 
-    void TDump::DataPage(const TPart &part, ui32 page) noexcept 
+    void TDump::DataPage(const TPart &part, ui32 page) noexcept
     {
         // TODO: need to join with other column groups
-        auto data = NPage::TDataPage(Env->TryGetPage(&part, page)); 
+        auto data = NPage::TDataPage(Env->TryGetPage(&part, page));
 
         if (auto *label = data.Label()) {
             Out
@@ -163,7 +163,7 @@ namespace {
             for (const auto &info: part.Scheme->Groups[0].ColsKeyData)
                 Key.push_back(iter->Cell(info));
 
-            Out << " | ERowOp " << int(iter->GetRop()) << ": "; 
+            Out << " | ERowOp " << int(iter->GetRop()) << ": ";
 
             DumpKey(*part.Scheme);
 
@@ -175,14 +175,14 @@ namespace {
 
                 const auto op = iter->GetOp(info);
 
-                if (op == ECellOp::Empty) 
+                if (op == ECellOp::Empty)
                     continue;
 
                 Out
                     << (std::exchange(first, false) ? " " : ", ")
                     << "{" << EOpToStr(op) << " " << info.Tag << " ";
 
-                if (op == ELargeObj::Inline) { 
+                if (op == ELargeObj::Inline) {
                     Out
                         << DbgPrintCell(iter->Cell(info), info.TypeId, *Reg);
                 } else {
@@ -193,7 +193,7 @@ namespace {
                     const auto frame = GetFrame(part, ref, op);
                     const auto blob = Env->Locate(&part, ref, op);
 
-                    Out << " ELargeObj{" << int(ELargeObj(op)) << ", " << ref << ": "; 
+                    Out << " ELargeObj{" << int(ELargeObj(op)) << ", " << ref << ": ";
 
                     if (auto bytes = frame.Size) {
                         Out << "frm " << bytes << "b";

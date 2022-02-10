@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package NTestProto;
 
-import "ydb/public/api/protos/annotations/sensitive.proto"; 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 message TTestSubProto {
     uint64 i = 1;

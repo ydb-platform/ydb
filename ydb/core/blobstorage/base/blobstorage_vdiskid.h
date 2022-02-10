@@ -1,31 +1,31 @@
 #pragma once
 
-#include "defs.h" 
+#include "defs.h"
 
-#include <ydb/core/protos/blobstorage.pb.h> 
+#include <ydb/core/protos/blobstorage.pb.h>
 
-#include <util/str_stl.h> 
+#include <util/str_stl.h>
 #include <util/digest/numeric.h>
 
 namespace NKikimr {
 
-class TBlobStorageGroupInfo; 
-struct TVDiskIdShort; 
+class TBlobStorageGroupInfo;
+struct TVDiskIdShort;
 
-//////////////////////////////////////////////////////////////////////////// 
-// TVDiskID -- global vdisk identifier 
-//////////////////////////////////////////////////////////////////////////// 
-#pragma pack(push, 4) 
+////////////////////////////////////////////////////////////////////////////
+// TVDiskID -- global vdisk identifier
+////////////////////////////////////////////////////////////////////////////
+#pragma pack(push, 4)
 struct TVDiskID {
-    ui32 GroupID = 0; 
-    ui32 GroupGeneration = 0; 
-    ui8 FailRealm = 0; 
-    ui8 FailDomain = 0; 
-    ui8 VDisk = 0; 
-    ui8 Padding = 0; 
+    ui32 GroupID = 0;
+    ui32 GroupGeneration = 0;
+    ui8 FailRealm = 0;
+    ui8 FailDomain = 0;
+    ui8 VDisk = 0;
+    ui8 Padding = 0;
 
-    TVDiskID() = default; 
-    TVDiskID(ui32 groupId, ui32 groupGen, TVDiskIdShort vdiskIdShort); 
+    TVDiskID() = default;
+    TVDiskID(ui32 groupId, ui32 groupGen, TVDiskIdShort vdiskIdShort);
     TVDiskID(IInputStream &str);
 
     TVDiskID(ui32 groupId, ui32 groupGen, ui8 failRealm, ui8 failDomain, ui8 vdisk)
@@ -34,26 +34,26 @@ struct TVDiskID {
         , FailRealm(failRealm)
         , FailDomain(failDomain)
         , VDisk(vdisk)
-    {} 
+    {}
 
-    bool SameGroupAndGeneration(const TVDiskID &x) const { 
+    bool SameGroupAndGeneration(const TVDiskID &x) const {
         return x.GroupID == GroupID && x.GroupGeneration == GroupGeneration;
     }
- 
-    bool SameGroupAndGeneration(const NKikimrBlobStorage::TVDiskID &x) const { 
+
+    bool SameGroupAndGeneration(const NKikimrBlobStorage::TVDiskID &x) const {
         return x.GetGroupID() == GroupID && x.GetGroupGeneration() == GroupGeneration;
     }
 
-    bool SameExceptGeneration(const TVDiskID &x) const { 
-        return x.GroupID == GroupID && x.FailRealm == FailRealm && x.FailDomain == FailDomain && x.VDisk == VDisk; 
+    bool SameExceptGeneration(const TVDiskID &x) const {
+        return x.GroupID == GroupID && x.FailRealm == FailRealm && x.FailDomain == FailDomain && x.VDisk == VDisk;
     }
 
-    bool SameDisk(const TVDiskID &x) const { 
-        return *this == x; 
-    } 
- 
-    bool SameDisk(const NKikimrBlobStorage::TVDiskID &x) const; 
- 
+    bool SameDisk(const TVDiskID &x) const {
+        return *this == x;
+    }
+
+    bool SameDisk(const NKikimrBlobStorage::TVDiskID &x) const;
+
     auto ConvertToTuple() const {
         return std::make_tuple(GroupID, GroupGeneration, FailRealm, FailDomain, VDisk);
     }
@@ -67,111 +67,111 @@ struct TVDiskID {
     void Serialize(IOutputStream &s) const;
     bool Deserialize(IInputStream &s);
 
-    ui64 Hash() const { 
+    ui64 Hash() const {
         ui32 x = (((ui32(FailRealm) << 8) | ui32(FailDomain)) << 8) | ui32(VDisk);
-        ui64 y = GroupID; 
-        y = y << 32ull; 
-        y |= GroupGeneration; 
-        return CombineHashes(IntHash<ui64>(y), IntHash<ui64>(x)); 
-    } 
- 
+        ui64 y = GroupID;
+        y = y << 32ull;
+        y |= GroupGeneration;
+        return CombineHashes(IntHash<ui64>(y), IntHash<ui64>(x));
+    }
+
     static const TVDiskID InvalidId;
 };
-#pragma pack(pop) 
+#pragma pack(pop)
 
 TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x);
 void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto);
 
-//////////////////////////////////////////////////////////////////////////// 
-// TVDiskIdShort -- topology info about VDisk, it avoids runtime info like 
-// group generation 
-//////////////////////////////////////////////////////////////////////////// 
-#pragma pack(push, 4) 
-struct TVDiskIdShort { 
-    ui8 FailRealm = 0; 
-    ui8 FailDomain = 0; 
-    ui8 VDisk = 0; 
-    ui8 Padding = 0; 
+////////////////////////////////////////////////////////////////////////////
+// TVDiskIdShort -- topology info about VDisk, it avoids runtime info like
+// group generation
+////////////////////////////////////////////////////////////////////////////
+#pragma pack(push, 4)
+struct TVDiskIdShort {
+    ui8 FailRealm = 0;
+    ui8 FailDomain = 0;
+    ui8 VDisk = 0;
+    ui8 Padding = 0;
 
-    TVDiskIdShort() = default; 
+    TVDiskIdShort() = default;
 
-    explicit TVDiskIdShort(ui64 raw) 
-        : FailRealm(ui8((raw >> 16) & 0xff)) 
-        , FailDomain(ui8((raw >> 8) & 0xff)) 
-        , VDisk(ui8(raw & 0xff)) 
-    {} 
+    explicit TVDiskIdShort(ui64 raw)
+        : FailRealm(ui8((raw >> 16) & 0xff))
+        , FailDomain(ui8((raw >> 8) & 0xff))
+        , VDisk(ui8(raw & 0xff))
+    {}
 
-    TVDiskIdShort(ui8 realm, ui8 domain, ui8 vDisk) 
-        : FailRealm(realm) 
-        , FailDomain(domain) 
-        , VDisk(vDisk) 
-    {} 
+    TVDiskIdShort(ui8 realm, ui8 domain, ui8 vDisk)
+        : FailRealm(realm)
+        , FailDomain(domain)
+        , VDisk(vDisk)
+    {}
 
-    TVDiskIdShort(const TVDiskID &id) 
-        : FailRealm(id.FailRealm) 
-        , FailDomain(id.FailDomain) 
-        , VDisk(id.VDisk) 
-    {} 
+    TVDiskIdShort(const TVDiskID &id)
+        : FailRealm(id.FailRealm)
+        , FailDomain(id.FailDomain)
+        , VDisk(id.VDisk)
+    {}
 
-    ui64 GetRaw() const { 
-        return (ui64(FailRealm) << 16) | (ui64(FailDomain) << 8) | ui64(VDisk); 
-    } 
- 
-    bool operator<(const TVDiskIdShort &x) const { 
-        return FailRealm != x.FailRealm ? FailRealm < x.FailRealm : 
-                FailDomain != x.FailDomain ? FailDomain < x.FailDomain : 
-                VDisk != x.VDisk ? VDisk < x.VDisk : false; 
-    } 
+    ui64 GetRaw() const {
+        return (ui64(FailRealm) << 16) | (ui64(FailDomain) << 8) | ui64(VDisk);
+    }
 
-    bool operator==(const TVDiskIdShort &x) const { 
-        return FailRealm == x.FailRealm && 
-                FailDomain == x.FailDomain && 
-                VDisk == x.VDisk; 
-    } 
+    bool operator<(const TVDiskIdShort &x) const {
+        return FailRealm != x.FailRealm ? FailRealm < x.FailRealm :
+                FailDomain != x.FailDomain ? FailDomain < x.FailDomain :
+                VDisk != x.VDisk ? VDisk < x.VDisk : false;
+    }
 
-    bool operator!=(const TVDiskIdShort &x) const { 
-        return !((*this)==x); 
-    } 
+    bool operator==(const TVDiskIdShort &x) const {
+        return FailRealm == x.FailRealm &&
+                FailDomain == x.FailDomain &&
+                VDisk == x.VDisk;
+    }
+
+    bool operator!=(const TVDiskIdShort &x) const {
+        return !((*this)==x);
+    }
 
     TString ToString() const {
-        TStringStream str; 
-        str << "{FailRealm# " << (ui32)FailRealm; 
-        str << " FailDomain# " << (ui32)FailDomain; 
-        str << " VDisk# " << (ui32)VDisk; 
-        str << "}"; 
-        return str.Str(); 
+        TStringStream str;
+        str << "{FailRealm# " << (ui32)FailRealm;
+        str << " FailDomain# " << (ui32)FailDomain;
+        str << " VDisk# " << (ui32)VDisk;
+        str << "}";
+        return str.Str();
     }
- 
-    ui64 Hash() const { 
-        ui32 x = (((ui32(FailRealm) << 8) | ui32(FailDomain)) << 8) | ui32(VDisk); 
-        return IntHash<ui64>(x); 
-    } 
-};
-#pragma pack(pop) 
 
-} // NKikimr 
- 
- 
-template <> 
-struct THash<NKikimr::TVDiskID> { 
-    inline size_t operator()(const NKikimr::TVDiskID& d) const { 
-        return d.Hash(); 
-    } 
-}; 
- 
-template <> 
-struct THash<NKikimr::TVDiskIdShort> { 
-    inline size_t operator()(const NKikimr::TVDiskIdShort& d) const { 
-        return d.Hash(); 
-    } 
-}; 
- 
+    ui64 Hash() const {
+        ui32 x = (((ui32(FailRealm) << 8) | ui32(FailDomain)) << 8) | ui32(VDisk);
+        return IntHash<ui64>(x);
+    }
+};
+#pragma pack(pop)
+
+} // NKikimr
+
+
+template <>
+struct THash<NKikimr::TVDiskID> {
+    inline size_t operator()(const NKikimr::TVDiskID& d) const {
+        return d.Hash();
+    }
+};
+
+template <>
+struct THash<NKikimr::TVDiskIdShort> {
+    inline size_t operator()(const NKikimr::TVDiskIdShort& d) const {
+        return d.Hash();
+    }
+};
+
 template<>
 inline void Out<NKikimr::TVDiskID>(IOutputStream& os, const NKikimr::TVDiskID& vdiskId) {
     os << vdiskId.ToString();
 }
- 
-template<> 
+
+template<>
 inline void Out<NKikimr::TVDiskIdShort>(IOutputStream& os, const NKikimr::TVDiskIdShort& vdiskId) {
-    os << vdiskId.ToString(); 
-} 
+    os << vdiskId.ToString();
+}

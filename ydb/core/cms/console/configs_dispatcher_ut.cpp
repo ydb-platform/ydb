@@ -1,10 +1,10 @@
 #include "configs_dispatcher.h"
 #include "ut_helpers.h"
 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
-#include <ydb/core/tablet/bootstrapper.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
-#include <ydb/core/testlib/tablet_helpers.h> 
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/tablet/bootstrapper.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 
 #include <util/system/hostname.h>
 

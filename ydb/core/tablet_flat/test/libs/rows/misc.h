@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/util_basics.h> 
+#include <ydb/core/tablet_flat/util_basics.h>
 #include <util/generic/vector.h>
 #include <util/generic/utility.h>
 #include <util/memory/pool.h>

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h> 
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h> 
+#include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h>
 
 namespace NYdb {
 namespace NImport {

@@ -2,14 +2,14 @@
 #include "idx_test_common.h"
 #include "idx_test_data_provider.h"
 
-#include <ydb/public/lib/yson_value/ydb_yson_value.h> 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h> 
+#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 
 #include <util/generic/map.h>
-#include <util/string/printf.h> 
-#include <util/generic/hash_set.h> 
-#include <util/generic/list.h> 
-#include <util/system/mutex.h> 
+#include <util/string/printf.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/list.h>
+#include <util/system/mutex.h>
 
 using namespace NYdb;
 using namespace NYdb::NTable;
@@ -136,7 +136,7 @@ public:
         , Client_(client)
         , WithDataColumn_(withDataColumn)
     {
-        ChooseColumnsForIndex(); 
+        ChooseColumnsForIndex();
     }
 
     TAsyncStatus Run() override {
@@ -166,7 +166,7 @@ public:
         return WithDataColumn_ ? IWorkLoader::LC_ALTER_ADD_INDEX_WITH_DATA_COLUMN : IWorkLoader::LC_ALTER_ADD_INDEX;
     }
 private:
-    void ChooseColumnsForIndex() { 
+    void ChooseColumnsForIndex() {
         TVector<TString> columns;
 
         bool hasIndexedType = false;

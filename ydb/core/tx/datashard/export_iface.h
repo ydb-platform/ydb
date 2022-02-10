@@ -1,20 +1,20 @@
-#pragma once 
- 
-#include "datashard_user_table.h" 
-#include "export_scan.h" 
- 
-namespace NKikimr { 
-namespace NDataShard { 
- 
-class IExport { 
-public: 
+#pragma once
+
+#include "datashard_user_table.h"
+#include "export_scan.h"
+
+namespace NKikimr {
+namespace NDataShard {
+
+class IExport {
+public:
     using TTableColumns = TMap<ui32, TUserTable::TUserColumn>;
     using TTask = NKikimrSchemeOp::TBackupTask;
     using IBuffer = NExportScan::IBuffer;
- 
+
 public:
     virtual ~IExport() = default;
- 
+
     virtual IActor* CreateUploader(
         const TActorId& dataShard,
         ui64 txId,
@@ -23,17 +23,17 @@ public:
 
     virtual IBuffer* CreateBuffer(const TTableColumns& columns, ui64 rowsLimit, ui64 bytesLimit) const = 0;
 
-    virtual void Shutdown() const = 0; 
-}; 
- 
+    virtual void Shutdown() const = 0;
+};
+
 class IExportFactory {
-public: 
+public:
     virtual ~IExportFactory() = default;
 
     virtual IExport* CreateExportToYt(bool useTypeV3) const = 0;
     virtual IExport* CreateExportToS3() const = 0;
-    virtual void Shutdown() = 0; 
-}; 
- 
-} // NDataShard 
-} // NKikimr 
+    virtual void Shutdown() = 0;
+};
+
+} // NDataShard
+} // NKikimr

@@ -1,4 +1,4 @@
-#include <ydb/core/mind/local.h> 
+#include <ydb/core/mind/local.h>
 #include "tablet_metrics.h"
 
 namespace NKikimr {

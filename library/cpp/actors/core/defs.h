@@ -39,7 +39,7 @@ namespace NActors {
 
     struct TMailboxType {
         enum EType {
-            Inherited = -1, // inherit mailbox from parent 
+            Inherited = -1, // inherit mailbox from parent
             Simple = 0, // simplest queue under producer lock. fastest in no-contention case
             Revolving = 1, // somewhat outdated, tries to be wait-free. replaced by ReadAsFilled
             HTSwap = 2, // other simple lf queue, suggested for low-contention case

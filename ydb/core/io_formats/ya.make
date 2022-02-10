@@ -13,17 +13,17 @@ SRCS(
 PEERDIR(
     contrib/libs/double-conversion
     library/cpp/string_utils/quote
-    ydb/core/formats 
-    ydb/core/scheme 
-    ydb/library/binary_json 
-    ydb/library/dynumber 
-    ydb/library/yql/minikql/dom 
-    ydb/library/yql/public/decimal 
-    ydb/library/yql/public/udf 
-    ydb/library/yql/utils 
-    ydb/public/lib/scheme_types 
+    ydb/core/formats
+    ydb/core/scheme
+    ydb/library/binary_json
+    ydb/library/dynumber
+    ydb/library/yql/minikql/dom
+    ydb/library/yql/public/decimal
+    ydb/library/yql/public/udf
+    ydb/library/yql/utils
+    ydb/public/lib/scheme_types
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 END()

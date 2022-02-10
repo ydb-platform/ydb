@@ -2,11 +2,11 @@
 
 #include "rows.h"
 
-#include <ydb/core/tablet_flat/flat_row_state.h> 
-#include <ydb/core/tablet_flat/flat_row_misc.h> 
-#include <ydb/core/tablet_flat/flat_row_column.h> 
-#include <ydb/core/tablet_flat/flat_row_celled.h> 
-#include <ydb/core/tablet_flat/flat_update_op.h> 
+#include <ydb/core/tablet_flat/flat_row_state.h>
+#include <ydb/core/tablet_flat/flat_row_misc.h>
+#include <ydb/core/tablet_flat/flat_row_column.h>
+#include <ydb/core/tablet_flat/flat_row_celled.h>
+#include <ydb/core/tablet_flat/flat_update_op.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/vector.h>
@@ -69,7 +69,7 @@ namespace NTest {
                 TRawTypeValue raw(value.Cell.AsRef(), value.Type);
 
                 if (info->IsKey()) {
-                    Y_VERIFY(value.Op == ECellOp::Set || value.Op == ECellOp::Null); 
+                    Y_VERIFY(value.Op == ECellOp::Set || value.Op == ECellOp::Null);
 
                     if (info->Key >= Scheme.Keys->Size()) {
                         ythrow yexception()
@@ -115,13 +115,13 @@ namespace NTest {
 
                 if (keys && !info->IsKey()) {
                     continue; /* Skip non-keys columns */
-                } else if (ELargeObj(val.Op) != ELargeObj(state.GetOp(pos))) { 
+                } else if (ELargeObj(val.Op) != ELargeObj(state.GetOp(pos))) {
                     return false; /* Missmatched value storage method */
-                } else if (val.Op != ELargeObj::Inline) { 
+                } else if (val.Op != ELargeObj::Inline) {
                     if (!(val.Cell.AsRef() == cell.AsRef()))
                         return false;
-                } else if (val.Op == ECellOp::Empty || val.Op == ECellOp::Reset) { 
-                    if (ECellOp(val.Op) != state.GetOp(pos)) 
+                } else if (val.Op == ECellOp::Empty || val.Op == ECellOp::Reset) {
+                    if (ECellOp(val.Op) != state.GetOp(pos))
                         return false;
                 } else if (CompareTypedCells(val.Cell, cell, info->TypeId)) {
                     return false; /* Literal comparison has been failed */

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defs.h" 
+#include "defs.h"
 #include "blobstorage_groupinfo_iter.h"
 
 #include <library/cpp/pop_count/popcount.h>
@@ -86,7 +86,7 @@ namespace NKikimr {
     // failed one if ANY disk inside that domain has failed.
     //
     // TSubgroupVDisks set is used to track status of disks comprising blob subgroup. These disks are returned by
-    // Top->PickSubgroup() methods and their ordinal indexes inside TVDiskIds array match their bit positions in set. 
+    // Top->PickSubgroup() methods and their ordinal indexes inside TVDiskIds array match their bit positions in set.
     //
     // The common methods of manipulating the sets are (Top is std::shared_ptr<TTopology>):
     //
@@ -119,38 +119,38 @@ namespace NKikimr {
     //    if (set) { ... }
     //
     // 10. Check if the group fail model allows failure of provided disks set:
-    //     if (Top->GetQuorumChecker().CheckFailModelForGroup(failedDisksSet)) { ... } 
+    //     if (Top->GetQuorumChecker().CheckFailModelForGroup(failedDisksSet)) { ... }
     //
     // 11. Check for quorum of disks in the group (providing set of successfully answered disks; quorum is obtained when
     //     all disks answer except those who may fail):
-    //     if (Top->GetQuorumChecker().CheckQuorumForGroup(successfulDisksSet)) { ... } 
+    //     if (Top->GetQuorumChecker().CheckQuorumForGroup(successfulDisksSet)) { ... }
 
     template<typename TDerived>
     class TBlobStorageGroupInfo::TDomainSetBase {
         ui64 Mask;
 
     protected:
-        const TBlobStorageGroupInfo::TTopology *Top; 
+        const TBlobStorageGroupInfo::TTopology *Top;
 
-        TDomainSetBase(const TBlobStorageGroupInfo::TTopology *top) 
+        TDomainSetBase(const TBlobStorageGroupInfo::TTopology *top)
             : Mask(0)
-            , Top(top) 
+            , Top(top)
         {}
 
-        TDomainSetBase(const TBlobStorageGroupInfo::TTopology *top, ui32 bitIndex) 
+        TDomainSetBase(const TBlobStorageGroupInfo::TTopology *top, ui32 bitIndex)
             : Mask((ui64)1 << bitIndex)
-            , Top(top) 
+            , Top(top)
         {}
 
-        TDomainSetBase(const TBlobStorageGroupInfo::TTopology *top, const ui64 *mask) 
+        TDomainSetBase(const TBlobStorageGroupInfo::TTopology *top, const ui64 *mask)
             : Mask(*mask)
-            , Top(top) 
+            , Top(top)
         {}
 
     public:
         // combine this set with the other one and store the result inplace
         friend TDerived& operator |=(TDerived& x, const TDerived& y) {
-            Y_VERIFY(x.Top == y.Top); 
+            Y_VERIFY(x.Top == y.Top);
             x.Mask |= y.Mask;
             return x;
         }
@@ -175,7 +175,7 @@ namespace NKikimr {
 
         // calculate intersection of two sets and store the result inplace
         friend TDerived& operator &=(TDerived& x, const TDerived& y) {
-            Y_VERIFY(x.Top == y.Top); 
+            Y_VERIFY(x.Top == y.Top);
             x.Mask &= y.Mask;
             return x;
         }
@@ -222,8 +222,8 @@ namespace NKikimr {
             return PopCount(Mask);
         }
 
-        const TBlobStorageGroupInfo::TTopology *GetTopology() const { 
-            return Top; 
+        const TBlobStorageGroupInfo::TTopology *GetTopology() const {
+            return Top;
         }
 
         void Output(IOutputStream& str) const {
@@ -261,28 +261,28 @@ namespace NKikimr {
     {
         friend class TDomainSetBase<TSubgroupVDisks>;
 
-        TSubgroupVDisks(const TBlobStorageGroupInfo::TTopology *top, const ui64 *mask) 
-            : TDomainSetBase(top, mask) 
+        TSubgroupVDisks(const TBlobStorageGroupInfo::TTopology *top, const ui64 *mask)
+            : TDomainSetBase(top, mask)
         {}
 
     public:
-        TSubgroupVDisks(const TBlobStorageGroupInfo::TTopology *top) 
-            : TDomainSetBase(top) 
+        TSubgroupVDisks(const TBlobStorageGroupInfo::TTopology *top)
+            : TDomainSetBase(top)
         {}
 
         // create a set of subgroup disks containing single disk identified by its sequential number inside subgroup
         // decomposition for specific blob; this number is referred to as "nodeId" in Ingress
-        TSubgroupVDisks(const TBlobStorageGroupInfo::TTopology *top, ui32 nodeId) 
-            : TDomainSetBase(top, nodeId) 
+        TSubgroupVDisks(const TBlobStorageGroupInfo::TTopology *top, ui32 nodeId)
+            : TDomainSetBase(top, nodeId)
         {}
 
-        static TSubgroupVDisks CreateFromMask(const TBlobStorageGroupInfo::TTopology *top, ui64 mask) { 
-            return TSubgroupVDisks(top, &mask); 
+        static TSubgroupVDisks CreateFromMask(const TBlobStorageGroupInfo::TTopology *top, ui64 mask) {
+            return TSubgroupVDisks(top, &mask);
         }
 
-        // Get the maximum possible number of disks in set 
+        // Get the maximum possible number of disks in set
         ui32 GetNumBits() const {
-            return Top->GType.BlobSubgroupSize(); 
+            return Top->GType.BlobSubgroupSize();
         }
     };
 
@@ -296,26 +296,26 @@ namespace NKikimr {
         friend class TDomainSetBase<TGroupVDisks>;
         friend class TGroupFailDomains;
 
-        TGroupVDisks(const TBlobStorageGroupInfo::TTopology *top, const ui64 *mask) 
-            : TDomainSetBase(top, mask) 
+        TGroupVDisks(const TBlobStorageGroupInfo::TTopology *top, const ui64 *mask)
+            : TDomainSetBase(top, mask)
         {}
 
     public:
-        TGroupVDisks(const TBlobStorageGroupInfo::TTopology *top) 
-            : TDomainSetBase(top) 
+        TGroupVDisks(const TBlobStorageGroupInfo::TTopology *top)
+            : TDomainSetBase(top)
         {}
 
-        TGroupVDisks(const TBlobStorageGroupInfo::TTopology *top, const TVDiskIdShort& vdiskId) 
-            : TDomainSetBase(top, top->GetOrderNumber(vdiskId)) 
+        TGroupVDisks(const TBlobStorageGroupInfo::TTopology *top, const TVDiskIdShort& vdiskId)
+            : TDomainSetBase(top, top->GetOrderNumber(vdiskId))
         {}
 
-        static TGroupVDisks CreateFromMask(const TBlobStorageGroupInfo::TTopology *top, ui64 mask) { 
-            return TGroupVDisks(top, &mask); 
+        static TGroupVDisks CreateFromMask(const TBlobStorageGroupInfo::TTopology *top, ui64 mask) {
+            return TGroupVDisks(top, &mask);
         }
 
-        // Get the maximum possible number of disks in set 
+        // Get the maximum possible number of disks in set
         ui32 GetNumBits() const {
-            return Top->GetTotalVDisksNum(); 
+            return Top->GetTotalVDisksNum();
         }
     };
 
@@ -331,31 +331,31 @@ namespace NKikimr {
         };
 
     private:
-        TGroupFailDomains(const TBlobStorageGroupInfo::TTopology *top, ui32 domainOrderNumber) 
-            : TDomainSetBase(top, domainOrderNumber) 
+        TGroupFailDomains(const TBlobStorageGroupInfo::TTopology *top, ui32 domainOrderNumber)
+            : TDomainSetBase(top, domainOrderNumber)
         {}
 
     public:
-        TGroupFailDomains(const TBlobStorageGroupInfo::TTopology *top) 
-            : TDomainSetBase(top) 
+        TGroupFailDomains(const TBlobStorageGroupInfo::TTopology *top)
+            : TDomainSetBase(top)
         {}
 
         // create a group domain set containing single domain for provided VDisk
-        TGroupFailDomains(const TBlobStorageGroupInfo::TTopology *top, const TVDiskIdShort& vdiskId) 
-            : TDomainSetBase(top, top->GetFailDomainOrderNumber(vdiskId)) 
+        TGroupFailDomains(const TBlobStorageGroupInfo::TTopology *top, const TVDiskIdShort& vdiskId)
+            : TDomainSetBase(top, top->GetFailDomainOrderNumber(vdiskId))
         {}
 
         // create a group domain set from the disk set; domain is selected in resulting group if the provided condition
         // triggers for disks of that domain
         static TGroupFailDomains CreateFromGroupDiskSet(const TGroupVDisks& disks, EDiskCondition condition) {
-            const TBlobStorageGroupInfo::TTopology *top = disks.GetTopology(); 
-            TGroupFailDomains res(top); 
+            const TBlobStorageGroupInfo::TTopology *top = disks.GetTopology();
+            TGroupFailDomains res(top);
 
-            for (auto domIt = top->FailDomainsBegin(), domEnd = top->FailDomainsEnd(); domIt != domEnd; ++domIt) { 
+            for (auto domIt = top->FailDomainsBegin(), domEnd = top->FailDomainsEnd(); domIt != domEnd; ++domIt) {
                 bool someSet = false;
                 bool someNotSet = false;
                 for (const auto& vdisk : domIt.GetFailDomainVDisks()) {
-                    if (disks & TGroupVDisks(top, top->GetVDiskId(vdisk.OrderNumber))) { 
+                    if (disks & TGroupVDisks(top, top->GetVDiskId(vdisk.OrderNumber))) {
                         someSet = true;
                     } else {
                         someNotSet = true;
@@ -372,16 +372,16 @@ namespace NKikimr {
                         break;
                 }
                 if (match) {
-                    res += TGroupFailDomains(top, domIt->FailDomainOrderNumber); 
+                    res += TGroupFailDomains(top, domIt->FailDomainOrderNumber);
                 }
             }
 
             return res;
         }
 
-        // Get the maximum possible number of fail domains in set 
+        // Get the maximum possible number of fail domains in set
         ui32 GetNumBits() const {
-            return Top->GetTotalFailDomainsNum(); 
+            return Top->GetTotalFailDomainsNum();
         }
     };
 

@@ -55,11 +55,11 @@ VISIBILITY_CHANGE_METHOD_PARAMS = {
 
 
 def get_sqs_client_path():
-    return yatest_common.binary_path("ydb/core/ymq/client/bin/sqs") 
+    return yatest_common.binary_path("ydb/core/ymq/client/bin/sqs")
 
 
 def get_kikimr_driver_path():
-    return yatest_common.binary_path("ydb/apps/ydbd/ydbd") 
+    return yatest_common.binary_path("ydb/apps/ydbd/ydbd")
 
 
 def to_bytes(v):

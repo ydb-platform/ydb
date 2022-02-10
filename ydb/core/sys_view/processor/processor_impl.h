@@ -2,17 +2,17 @@
 
 #include "schema.h"
 
-#include <ydb/core/protos/sys_view.pb.h> 
-#include <ydb/core/protos/counters_sysview_processor.pb.h> 
+#include <ydb/core/protos/sys_view.pb.h>
+#include <ydb/core/protos/counters_sysview_processor.pb.h>
 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/sys_view/common/common.h> 
-#include <ydb/core/sys_view/common/events.h> 
-#include <ydb/core/sys_view/common/db_counters.h> 
-#include <ydb/core/sys_view/service/query_interval.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
-#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
-#include <ydb/core/tx/tx.h> 
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/sys_view/common/common.h>
+#include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/common/db_counters.h>
+#include <ydb/core/sys_view/service/query_interval.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/tx.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/memory_track.h>

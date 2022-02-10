@@ -1,9 +1,9 @@
 UNITTEST()
 
-OWNER( 
-    alexvru 
-    g:kikimr 
-) 
+OWNER(
+    alexvru
+    g:kikimr
+)
 
 FORK_SUBTESTS()
 
@@ -18,9 +18,9 @@ ENDIF()
 
 PEERDIR(
     library/cpp/actors/protos
-    ydb/core/blobstorage 
-    ydb/core/blobstorage/incrhuge 
-    ydb/core/blobstorage/pdisk 
+    ydb/core/blobstorage
+    ydb/core/blobstorage/incrhuge
+    ydb/core/blobstorage/pdisk
 )
 
 SRCS(

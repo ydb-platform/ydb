@@ -1,5 +1,5 @@
-#include <ydb/core/blobstorage/ut_pdiskfit/lib/fail_injection_test.h> 
-#include <ydb/core/blobstorage/ut_pdiskfit/lib/basic_test.h> 
+#include <ydb/core/blobstorage/ut_pdiskfit/lib/fail_injection_test.h>
+#include <ydb/core/blobstorage/ut_pdiskfit/lib/basic_test.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/sanitizers.h>

@@ -5,7 +5,7 @@
 #include <util/generic/map.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 namespace {
 
@@ -325,5 +325,5 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
 
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

@@ -6,8 +6,8 @@
 #include "console_impl.h"
 #include "console_tenants_manager.h"
 
-#include <ydb/core/testlib/tenant_runtime.h> 
-#include <ydb/core/testlib/tenant_helpers.h> 
+#include <ydb/core/testlib/tenant_runtime.h>
+#include <ydb/core/testlib/tenant_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

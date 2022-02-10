@@ -27,7 +27,7 @@ namespace NRedo {
         {
             out
                 << "Redo{" << NFmt::TStamp(Stamp) << " (" << Embedded.size()
-                << " +" << LargeGlobId.Bytes << ")b, ~" << NFmt::Arr(Tables()) 
+                << " +" << LargeGlobId.Bytes << ")b, ~" << NFmt::Arr(Tables())
                 << "}";
         }
 
@@ -38,12 +38,12 @@ namespace NRedo {
 
         ui64 BytesData() const noexcept
         {
-            return Embedded.size() + LargeGlobId.Bytes; 
+            return Embedded.size() + LargeGlobId.Bytes;
         }
 
-        ui64 BytesLargeGlobId() const noexcept 
+        ui64 BytesLargeGlobId() const noexcept
         {
-            return LargeGlobId.Bytes; 
+            return LargeGlobId.Bytes;
         }
 
         TArrayRef<const ui32> Tables() const noexcept
@@ -68,15 +68,15 @@ namespace NRedo {
         }
 
         const NTable::TTxStamp Stamp;
-        const NPageCollection::TLargeGlobId LargeGlobId; 
+        const NPageCollection::TLargeGlobId LargeGlobId;
         const TString Embedded;
         ui32 Affects = 0;
         ui32 References = 0;
 
     private:
-        TEntry(NTable::TTxStamp stamp, TArrayRef<const ui32> affects, const NPageCollection::TLargeGlobId &largeGlobId) 
+        TEntry(NTable::TTxStamp stamp, TArrayRef<const ui32> affects, const NPageCollection::TLargeGlobId &largeGlobId)
             : Stamp(stamp)
-            , LargeGlobId(largeGlobId) 
+            , LargeGlobId(largeGlobId)
             , Affects(affects.size())
         {
             std::copy(affects.begin(), affects.end(), (ui32*)(this + 1));

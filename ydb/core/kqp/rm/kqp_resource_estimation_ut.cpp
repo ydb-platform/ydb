@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/rm/kqp_resource_estimation.h> 
+#include <ydb/core/kqp/rm/kqp_resource_estimation.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/size_literals.h>

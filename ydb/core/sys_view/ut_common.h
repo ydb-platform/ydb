@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/testlib/test_client.h> 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h> 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h> 
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

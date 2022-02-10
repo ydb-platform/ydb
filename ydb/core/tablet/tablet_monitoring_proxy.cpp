@@ -1,15 +1,15 @@
 #include "tablet_monitoring_proxy.h"
 
 #include <library/cpp/actors/core/log.h>
-#include <ydb/core/mon/mon.h> 
+#include <ydb/core/mon/mon.h>
 #include <library/cpp/actors/core/mon.h>
-#include <ydb/core/base/tablet_resolver.h> 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/base/statestorage.h> 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
-#include <ydb/core/base/tablet.h> 
-#include <ydb/core/tx/tx.h> 
+#include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/base/tablet.h>
+#include <ydb/core/tx/tx.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/builder.h>
 

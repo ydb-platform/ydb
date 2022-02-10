@@ -1,9 +1,9 @@
 #include "console_configs_provider.h"
 #include "util.h"
 
-#include <ydb/core/actorlib_impl/long_timer.h> 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/cms/console/validators/registry.h> 
+#include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/cms/console/validators/registry.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 

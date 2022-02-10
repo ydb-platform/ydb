@@ -1,10 +1,10 @@
 #include "validators.h"
 #include "ydb_control_plane_storage_impl.h"
 
-#include <ydb/public/api/protos/yq.pb.h> 
+#include <ydb/public/api/protos/yq.pb.h>
 
-#include <ydb/core/yq/libs/control_plane_storage/events/events.h> 
-#include <ydb/core/yq/libs/db_schema/db_schema.h> 
+#include <ydb/core/yq/libs/control_plane_storage/events/events.h>
+#include <ydb/core/yq/libs/db_schema/db_schema.h>
 
 namespace NYq {
 

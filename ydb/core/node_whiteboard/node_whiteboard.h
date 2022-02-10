@@ -1,15 +1,15 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/base/events.h> 
-#include <ydb/core/base/subdomain.h> 
-#include <ydb/core/base/tablet_types.h> 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h> 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h> 
-#include <ydb/core/protos/node_whiteboard.pb.h> 
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/events.h>
+#include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/tablet_types.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
+#include <ydb/core/protos/node_whiteboard.pb.h>
 #include <library/cpp/actors/interconnect/events_local.h>
 #include <library/cpp/actors/core/interconnect.h>
-#include <ydb/core/base/tracing.h> 
+#include <ydb/core/base/tracing.h>
 
 namespace NKikimr {
 
@@ -150,7 +150,7 @@ struct TEvWhiteboard{
                 ui64 instanceGuid)
             : Initial(true)
         {
-            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskId()); 
+            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskId());
             if (storagePoolName) {
                 Record.SetStoragePoolName(*storagePoolName);
             }
@@ -163,28 +163,28 @@ struct TEvWhiteboard{
             }
             Record.SetInstanceGuid(instanceGuid);
         }
- 
+
         explicit TEvVDiskStateUpdate(NKikimrWhiteboard::TVDiskSatisfactionRank *satisfactionRank) {
-            Record.MutableSatisfactionRank()->Swap(satisfactionRank); 
-        } 
- 
+            Record.MutableSatisfactionRank()->Swap(satisfactionRank);
+        }
+
         explicit TEvVDiskStateUpdate(NKikimrWhiteboard::EVDiskState state,
-                                     NKikimrWhiteboard::EFlag diskSpace, 
-                                     bool replicated, 
+                                     NKikimrWhiteboard::EFlag diskSpace,
+                                     bool replicated,
                                      bool unreplicatedPhantoms,
                                      bool unreplicatedNonPhantoms,
-                                     ui64 unsyncedVDisks, 
+                                     ui64 unsyncedVDisks,
                                      NKikimrWhiteboard::EFlag frontQueuesLigth,
                                      bool hasUnreadableBlobs) {
-            Record.SetVDiskState(state); 
-            Record.SetDiskSpace(diskSpace); 
-            Record.SetReplicated(replicated); 
+            Record.SetVDiskState(state);
+            Record.SetDiskSpace(diskSpace);
+            Record.SetReplicated(replicated);
             Record.SetUnreplicatedPhantoms(unreplicatedPhantoms);
             Record.SetUnreplicatedNonPhantoms(unreplicatedNonPhantoms);
-            Record.SetUnsyncedVDisks(unsyncedVDisks); 
-            Record.SetFrontQueues(frontQueuesLigth); 
+            Record.SetUnsyncedVDisks(unsyncedVDisks);
+            Record.SetFrontQueues(frontQueuesLigth);
             Record.SetHasUnreadableBlobs(hasUnreadableBlobs);
-        } 
+        }
 
         static constexpr struct TUpdateIncarnationGuid {} UpdateIncarnationGuid{};
 
@@ -238,7 +238,7 @@ struct TEvWhiteboard{
             Record.SetGroupGeneration(groupInfo->GroupGeneration);
             Record.SetErasureSpecies(groupInfo->Type.ErasureSpeciesName(groupInfo->Type.GetErasure()));
             for (auto it = groupInfo->VDisksBegin(), end = groupInfo->VDisksEnd(); it != end; ++it) {
-                auto vd = groupInfo->GetVDiskId(it->OrderNumber); 
+                auto vd = groupInfo->GetVDiskId(it->OrderNumber);
                 NKikimrBlobStorage::TVDiskID* addedVDisk = Record.AddVDiskIds();
                 VDiskIDFromVDiskID(vd, addedVDisk);
             }

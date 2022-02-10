@@ -1,6 +1,6 @@
 #include "cli.h"
-#include <ydb/public/lib/deprecated/client/msgbus_client.h> 
-#include <ydb/core/base/tablet_types.h> 
+#include <ydb/public/lib/deprecated/client/msgbus_client.h>
+#include <ydb/core/base/tablet_types.h>
 
 namespace NKikimr {
 namespace NDriverClient {

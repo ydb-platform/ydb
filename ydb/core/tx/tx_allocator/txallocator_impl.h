@@ -1,11 +1,11 @@
 #pragma once
 #include "txallocator.h"
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/protos/counters_tx_allocator.pb.h> 
-#include <ydb/core/protos/services.pb.h> 
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/counters_tx_allocator.pb.h>
+#include <ydb/core/protos/services.pb.h>
 
 namespace NKikimr {
 

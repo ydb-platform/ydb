@@ -1,35 +1,35 @@
 LIBRARY()
 
-OWNER( 
-    cthulhu 
+OWNER(
+    cthulhu
     va-kuznecov
-    g:kikimr 
-) 
+    g:kikimr
+)
 
 PEERDIR(
-    contrib/libs/lz4 
+    contrib/libs/lz4
     library/cpp/actors/core
     library/cpp/actors/protos
     library/cpp/actors/util
     library/cpp/containers/stack_vector
-    library/cpp/lwtrace 
+    library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters/percentile
     library/cpp/monlib/service/pages
     util
-    ydb/core/base 
-    ydb/core/base/services 
-    ydb/core/blobstorage/base 
-    ydb/core/blobstorage/crypto 
-    ydb/core/blobstorage/groupinfo 
-    ydb/core/blobstorage/lwtrace_probes 
-    ydb/core/control 
-    ydb/core/protos 
-    ydb/core/util 
-    ydb/library/pdisk_io 
-    ydb/library/schlab 
-    ydb/library/schlab/mon 
-    ydb/library/schlab/schine 
-    ydb/library/wilson 
+    ydb/core/base
+    ydb/core/base/services
+    ydb/core/blobstorage/base
+    ydb/core/blobstorage/crypto
+    ydb/core/blobstorage/groupinfo
+    ydb/core/blobstorage/lwtrace_probes
+    ydb/core/control
+    ydb/core/protos
+    ydb/core/util
+    ydb/library/pdisk_io
+    ydb/library/schlab
+    ydb/library/schlab/mon
+    ydb/library/schlab/schine
+    ydb/library/wilson
 )
 
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_state.h)
@@ -49,7 +49,7 @@ SRCS(
     blobstorage_pdisk_internal_interface.cpp
     blobstorage_pdisk_logreader.cpp
     blobstorage_pdisk_mon.cpp
-    blobstorage_pdisk_params.cpp 
+    blobstorage_pdisk_params.cpp
     blobstorage_pdisk_requestimpl.cpp
     blobstorage_pdisk_syslogreader.cpp
     blobstorage_pdisk_sectorrestorator.cpp
@@ -59,17 +59,17 @@ SRCS(
     blobstorage_pdisk_util_signal_event.cpp
     blobstorage_pdisk_util_wcache.cpp
     blobstorage_pdisk_writer.cpp
-    blobstorage_pdisk_ut_helpers.cpp 
-    blobstorage_pdisk_ut_actions.cpp 
-    blobstorage_pdisk_ut_yard.cpp 
+    blobstorage_pdisk_ut_helpers.cpp
+    blobstorage_pdisk_ut_actions.cpp
+    blobstorage_pdisk_ut_yard.cpp
 )
 
 END()
- 
-RECURSE( 
-    mock 
-) 
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE(
+    mock
+)
+
+RECURSE_FOR_TESTS(
+    ut
+)

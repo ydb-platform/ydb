@@ -1,8 +1,8 @@
 #include "kqp_transport.h"
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 
-#include <ydb/core/engine/mkql_proto.h> 
-#include <ydb/core/ydb_convert/ydb_convert.h> 
+#include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>

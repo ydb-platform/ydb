@@ -5,8 +5,8 @@
 
 #include <library/cpp/actors/helpers/selfping_actor.h>
 
-#include <ydb/library/yql/utils/log/log.h> 
-#include <ydb/library/yql/utils/backtrace/backtrace.h> 
+#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>

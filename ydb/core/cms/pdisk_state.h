@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/node_whiteboard.pb.h> 
+#include <ydb/core/protos/node_whiteboard.pb.h>
 
 namespace NKikimr {
 namespace NCms {

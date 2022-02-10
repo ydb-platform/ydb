@@ -1,13 +1,13 @@
-#include <ydb/services/ydb/ydb_common_ut.h> 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/core_facility/core_facility.h> 
+#include <ydb/services/ydb/ydb_common_ut.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/core_facility/core_facility.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 
 /// !!!! JUST FOR UT, DO NOT COPY-PASTE !!! ///
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/driver/constants.h> 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h> 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/driver/constants.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 using namespace NYdb;

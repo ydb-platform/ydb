@@ -3,9 +3,9 @@
 #include "objectwithstate.h"
 #include "state_manager.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h> 
-#include <ydb/library/pdisk_io/aio.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/library/pdisk_io/aio.h>
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/executor_pool_basic.h>
 #include <library/cpp/actors/core/executor_pool_io.h>

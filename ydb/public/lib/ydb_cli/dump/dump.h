@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h> 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h> 
+#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
 #include <util/generic/size_literals.h>
 

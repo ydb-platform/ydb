@@ -4,8 +4,8 @@
 #include "pq_l2_service.h"
 #include "cache_eviction.h"
 
-#include <ydb/core/keyvalue/keyvalue_flat_impl.h> 
-#include <ydb/core/persqueue/events/internal.h> 
+#include <ydb/core/keyvalue/keyvalue_flat_impl.h>
+#include <ydb/core/persqueue/events/internal.h>
 
 namespace NKikimr {
 namespace NPQ {

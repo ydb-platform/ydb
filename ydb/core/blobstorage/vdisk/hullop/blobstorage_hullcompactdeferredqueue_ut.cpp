@@ -1,7 +1,7 @@
-#include "blobstorage_hullcompactdeferredqueue.h" 
-#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_arena.h> 
+#include "blobstorage_hullcompactdeferredqueue.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_arena.h>
 #include <util/random/shuffle.h>
-#include <util/random/fast.h> 
+#include <util/random/fast.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/sanitizers.h>

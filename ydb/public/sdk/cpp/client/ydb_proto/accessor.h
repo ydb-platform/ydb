@@ -1,16 +1,16 @@
 #pragma once
 
-#include <ydb/public/api/protos/ydb_value.pb.h> 
-#include <ydb/public/api/protos/ydb_query_stats.pb.h> 
-#include <ydb/public/api/protos/ydb_table.pb.h> 
-#include <ydb/public/api/protos/ydb_export.pb.h> 
-#include <ydb/public/api/protos/ydb_import.pb.h> 
-#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h> 
+#include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/public/api/protos/ydb_query_stats.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_export/export.h> 
-#include <ydb/public/sdk/cpp/client/ydb_import/import.h> 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h> 
+#include <ydb/public/sdk/cpp/client/ydb_export/export.h>
+#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
 namespace NYdb {
 

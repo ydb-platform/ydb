@@ -4,11 +4,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TFinishProposeUnit : public TExecutionUnit {
 public:
-    TFinishProposeUnit(TDataShard &dataShard, 
+    TFinishProposeUnit(TDataShard &dataShard,
                        TPipeline &pipeline);
     ~TFinishProposeUnit() override;
 
@@ -28,7 +28,7 @@ private:
     TString PrintErrors(const NKikimrTxDataShard::TEvProposeTransactionResult &rec);
 };
 
-TFinishProposeUnit::TFinishProposeUnit(TDataShard &dataShard, 
+TFinishProposeUnit::TFinishProposeUnit(TDataShard &dataShard,
                                        TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::FinishPropose, false, dataShard, pipeline)
 {
@@ -215,11 +215,11 @@ TString TFinishProposeUnit::PrintErrors(const NKikimrTxDataShard::TEvProposeTran
     return s;
 }
 
-THolder<TExecutionUnit> CreateFinishProposeUnit(TDataShard &dataShard, 
+THolder<TExecutionUnit> CreateFinishProposeUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)
 {
     return THolder(new TFinishProposeUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

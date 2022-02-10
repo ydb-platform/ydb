@@ -3,8 +3,8 @@
 #include "defs.h"
 #include "node_warden.h"
 
-#include <ydb/core/blobstorage/dsproxy/group_sessions.h> 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
+#include <ydb/core/blobstorage/dsproxy/group_sessions.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 namespace NKikimr::NStorage {
 

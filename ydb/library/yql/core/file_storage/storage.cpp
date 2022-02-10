@@ -1,6 +1,6 @@
 #include "storage.h"
 
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/rand_guid.h>
 #include <ydb/library/yql/utils/proc_alive.h>
 

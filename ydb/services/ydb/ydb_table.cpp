@@ -1,8 +1,8 @@
 #include "ydb_table.h"
 
-#include <ydb/core/grpc_services/grpc_helper.h> 
-#include <ydb/core/grpc_services/grpc_request_proxy.h> 
-#include <ydb/core/grpc_services/rpc_calls.h> 
+#include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/grpc_services/rpc_calls.h>
 
 namespace NKikimr {
 namespace NGRpcService {

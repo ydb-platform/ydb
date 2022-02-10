@@ -1,10 +1,10 @@
 PROTO_LIBRARY()
 
-OWNER( 
-    xenoxeno 
-    g:kikimr 
-) 
- 
+OWNER(
+    xenoxeno
+    g:kikimr
+)
+
 EXCLUDE_TAGS(GO_PROTO)
 
 SRCS(

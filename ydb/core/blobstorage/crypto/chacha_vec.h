@@ -2,7 +2,7 @@
 
 #include <util/system/types.h>
 
-#if (__ARM_NEON__ || defined(_arm64_)) 
+#if (__ARM_NEON__ || defined(_arm64_))
 #   define CHACHA_GPR_TOO   1
 #   define CHACHA_VBPI      2
 #elif __ALTIVEC__

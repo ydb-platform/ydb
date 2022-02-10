@@ -1,7 +1,7 @@
 #include "local_rate_limiter.h"
 #include "rpc_common.h"
 
-#include <ydb/core/grpc_services/local_rpc/local_rpc.h> 
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
 namespace NKikimr {
 namespace NRpcService {

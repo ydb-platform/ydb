@@ -1,5 +1,5 @@
 #pragma once
-// unique tag to fix pragma once gcc glueing: ./ydb/core/base/services/defs.h 
+// unique tag to fix pragma once gcc glueing: ./ydb/core/base/services/defs.h
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event.h>

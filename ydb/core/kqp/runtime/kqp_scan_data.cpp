@@ -1,7 +1,7 @@
 #include "kqp_scan_data.h"
 
-#include <ydb/core/engine/minikql/minikql_engine_host.h> 
-#include <ydb/core/protos/tx_datashard.pb.h> 
+#include <ydb/core/engine/minikql/minikql_engine_host.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/utils/yql_panic.h>

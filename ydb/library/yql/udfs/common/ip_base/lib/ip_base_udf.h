@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
+#include <ydb/library/yql/public/udf/udf_helpers.h>
 
 #include <util/draft/ip.h>
 #include <util/generic/buffer.h>

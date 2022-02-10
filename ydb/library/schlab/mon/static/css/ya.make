@@ -1,7 +1,7 @@
-LIBRARY() 
- 
-OWNER(fomichev) 
- 
-SRCS() 
- 
-END() 
+LIBRARY()
+
+OWNER(fomichev)
+
+SRCS()
+
+END()

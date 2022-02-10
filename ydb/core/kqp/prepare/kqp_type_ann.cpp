@@ -1,12 +1,12 @@
 #include "kqp_prepare_impl.h"
 
-#include <ydb/core/kqp/common/kqp_yql.h> 
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h> 
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 
 namespace NKikimr {
 namespace NKqp {

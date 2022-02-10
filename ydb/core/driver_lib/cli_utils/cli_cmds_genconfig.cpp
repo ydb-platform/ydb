@@ -1,7 +1,7 @@
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/protos/blobstorage.pb.h> 
-#include <ydb/core/protos/config.pb.h> 
-#include <ydb/core/mind/bscontroller/grouper.h> 
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/mind/bscontroller/grouper.h>
 #include "cli.h"
 #include "cli_cmds.h"
 #include "proto_common.h"
@@ -164,13 +164,13 @@ public:
     void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
-        auto erasure = TBlobStorageGroupType::ErasureSpeciesByName(ErasureStr); 
-        Type = TBlobStorageGroupType(erasure); 
-        if (Type.GetErasure() == TBlobStorageGroupType::ErasureSpeciesCount) { 
+        auto erasure = TBlobStorageGroupType::ErasureSpeciesByName(ErasureStr);
+        Type = TBlobStorageGroupType(erasure);
+        if (Type.GetErasure() == TBlobStorageGroupType::ErasureSpeciesCount) {
             ythrow TWithBackTrace<yexception>() << "unknown erasure species: \"" << ErasureStr << "\", valid values are: " << ErasureList;
         }
 
-        if (!RingDistinctionLevelStr && Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) { 
+        if (!RingDistinctionLevelStr && Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
             RingDistinctionLevelStr = "dc";
         }
 
@@ -193,10 +193,10 @@ public:
         }
 
         if (!FailDomains) {
-            FailDomains = Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc ? 3 : Type.BlobSubgroupSize(); 
+            FailDomains = Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc ? 3 : Type.BlobSubgroupSize();
         }
 
-        ui32 minRings = Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc ? 3 : 1; 
+        ui32 minRings = Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc ? 3 : 1;
         if (!NumRings) {
             NumRings = minRings;
         } else if (NumRings < minRings) {
@@ -208,7 +208,7 @@ public:
     }
 
     int Run(TConfig& config) override {
-        const ui32 minSubgroupSize = Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc ? 3 : Type.BlobSubgroupSize(); 
+        const ui32 minSubgroupSize = Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc ? 3 : Type.BlobSubgroupSize();
         if (FailDomains < minSubgroupSize) {
             Cerr << "not enough fail domains (" << FailDomains << ") to build group; minimum " << minSubgroupSize
                 << " domains required" << Endl;
@@ -324,7 +324,7 @@ public:
         auto& group = *serviceSet.AddGroups();
         group.SetGroupID(GroupId);
         group.SetGroupGeneration(GroupGen);
-        group.SetErasureSpecies(Type.GetErasure()); 
+        group.SetErasureSpecies(Type.GetErasure());
 
         ui32 ringIdx = 0;
         std::for_each(bestGroup.begin(), bestGroup.end(), std::bind(transformRing, std::placeholders::_1,

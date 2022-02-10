@@ -4,8 +4,8 @@
 #include "rpc_kqp_base.h"
 #include "rpc_request_base.h"
 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
-#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -19,7 +19,7 @@ public:
     THolder<TEvSchemeShard::TEvLoginResult> Result;
     Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
     TDuration Timeout = TDuration::MilliSeconds(60000);
-    TActorId PipeClient; 
+    TActorId PipeClient;
 
     NTabletPipe::TClientConfig GetPipeClientConfig() {
         NTabletPipe::TClientConfig clientConfig;
@@ -52,12 +52,12 @@ public:
             const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = response->ResultSet.front();
             ui64 schemeShardTabletId = entry.DomainInfo->ExtractSchemeShard();
             IActor* pipe = NTabletPipe::CreateClient(SelfId(), schemeShardTabletId, GetPipeClientConfig());
-            PipeClient = RegisterWithSameMailbox(pipe); 
+            PipeClient = RegisterWithSameMailbox(pipe);
             THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
             const Ydb::Auth::LoginRequest* protoRequest = Request->GetProtoRequest();
             request.Get()->Record.SetUser(protoRequest->user());
             request.Get()->Record.SetPassword(protoRequest->password());
-            NTabletPipe::SendData(SelfId(), PipeClient, request.Release()); 
+            NTabletPipe::SendData(SelfId(), PipeClient, request.Release());
             return;
         }
         Status = Ydb::StatusIds::SCHEME_ERROR;
@@ -93,9 +93,9 @@ public:
     }
 
     void ReplyAndPassAway() {
-        if (PipeClient) { 
-            NTabletPipe::CloseClient(SelfId(), PipeClient); 
-        } 
+        if (PipeClient) {
+            NTabletPipe::CloseClient(SelfId(), PipeClient);
+        }
         TResponse response;
         Ydb::Operations::Operation& operation = *response.mutable_operation();
         if (Result) {

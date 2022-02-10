@@ -1,9 +1,9 @@
 #include "ut_helpers.h"
 
-#include <ydb/core/testlib/tablet_helpers.h> 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
-#include <ydb/core/kesus/tablet/events.h> 
+#include <ydb/core/kesus/tablet/events.h>
 
 namespace NKikimr {
 

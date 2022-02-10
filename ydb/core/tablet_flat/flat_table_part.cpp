@@ -3,8 +3,8 @@
 #include "flat_table_part.h"
 #include "util_basics.h"
 
-#include <ydb/core/util/pb.h> 
-#include <ydb/core/tablet_flat/protos/flat_table_part.pb.h> 
+#include <ydb/core/util/pb.h>
+#include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/map.h>
 
@@ -141,7 +141,7 @@ void TPartScheme::InitGroup(TGroupInfo& group)
 {
     using namespace NPage;
 
-    group.FixedSize = InitInfo(group.Columns, TPgSizeOf<TDataPage::TItem>::Value); 
+    group.FixedSize = InitInfo(group.Columns, TPgSizeOf<TDataPage::TItem>::Value);
 
     for (auto& col : group.Columns) {
         if (col.IsKey()) {

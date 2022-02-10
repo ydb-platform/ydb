@@ -1,8 +1,8 @@
 #pragma once
 
 #include "flat_row_eggs.h"
-#include <ydb/core/scheme/scheme_tablecell.h> 
-#include <ydb/core/scheme/scheme_type_id.h> 
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_type_id.h>
 
 #include <atomic>
 
@@ -12,10 +12,10 @@ namespace NMem {
 
 #pragma pack(push,4)
 
-    struct TColumnUpdate { 
-        TColumnUpdate() : TColumnUpdate(Max<TTag>(), ECellOp::Empty, { }) { } 
+    struct TColumnUpdate {
+        TColumnUpdate() : TColumnUpdate(Max<TTag>(), ECellOp::Empty, { }) { }
 
-        TColumnUpdate(TTag tag, TCellOp op, const TCell& value) 
+        TColumnUpdate(TTag tag, TCellOp op, const TCell& value)
             : Tag(tag)
             , Op((ui32)op.Raw())
             , Value(value)
@@ -31,17 +31,17 @@ namespace NMem {
 #pragma pack(pop)
 
     struct TUpdate {
-        TColumnUpdate* Ops() noexcept 
+        TColumnUpdate* Ops() noexcept
         {
-            return reinterpret_cast<TColumnUpdate*>(this + 1); 
+            return reinterpret_cast<TColumnUpdate*>(this + 1);
         }
 
-        const TColumnUpdate* Ops() const noexcept 
+        const TColumnUpdate* Ops() const noexcept
         {
-            return reinterpret_cast<const TColumnUpdate*>(this + 1); 
+            return reinterpret_cast<const TColumnUpdate*>(this + 1);
         }
 
-        TArrayRef<const TColumnUpdate> operator*() const noexcept 
+        TArrayRef<const TColumnUpdate> operator*() const noexcept
         {
             return { Ops(), Items };
         }
@@ -49,7 +49,7 @@ namespace NMem {
         const TUpdate *Next;
         TRowVersion RowVersion;
         ui16 Items;
-        ERowOp Rop; 
+        ERowOp Rop;
     };
 
     struct TTreeKey {
@@ -82,7 +82,7 @@ namespace NMem {
         const TUpdate* Chain;
     };
 
-    static_assert(sizeof(TColumnUpdate) == 16, "TColumnUpdate must be 16 bytes"); 
+    static_assert(sizeof(TColumnUpdate) == 16, "TColumnUpdate must be 16 bytes");
     static_assert(sizeof(TUpdate) == 32, "TUpdate must be 32 bytes");
 }
 }

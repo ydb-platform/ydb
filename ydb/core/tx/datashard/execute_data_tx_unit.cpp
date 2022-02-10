@@ -4,13 +4,13 @@
 
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NMiniKQL;
 
 class TExecuteDataTxUnit : public TExecutionUnit {
 public:
-    TExecuteDataTxUnit(TDataShard& dataShard, 
+    TExecuteDataTxUnit(TDataShard& dataShard,
                        TPipeline& pipeline);
     ~TExecuteDataTxUnit() override;
 
@@ -28,7 +28,7 @@ private:
     void AddLocksToResult(TOperation::TPtr op);
 };
 
-TExecuteDataTxUnit::TExecuteDataTxUnit(TDataShard& dataShard, 
+TExecuteDataTxUnit::TExecuteDataTxUnit(TDataShard& dataShard,
                                        TPipeline& pipeline)
     : TExecutionUnit(EExecutionUnitKind::ExecuteDataTx, true, dataShard, pipeline) {
 }
@@ -288,9 +288,9 @@ void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op) {
 void TExecuteDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {
 }
 
-THolder<TExecutionUnit> CreateExecuteDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) { 
+THolder<TExecutionUnit> CreateExecuteDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TExecuteDataTxUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

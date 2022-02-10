@@ -3,9 +3,9 @@
 #include "blobstorage_pdisk_ut.h"
 #include "blobstorage_pdisk_ut_base_test.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/blobstorage/crypto/default.h> 
-#include <ydb/library/pdisk_io/aio.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/blobstorage/crypto/default.h>
+#include <ydb/library/pdisk_io/aio.h>
 
 #include <util/folder/tempdir.h>
 
@@ -167,7 +167,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         }
 
         TIntrusivePtr<NMonitoring::TDynamicCounters> pDiskCounters =
-                GetServiceCounters(mainCounters, "pdisks")->GetSubgroup( 
+                GetServiceCounters(mainCounters, "pdisks")->GetSubgroup(
                         "pdisk", Sprintf("%09" PRIu32, (ui32)pDiskConfig->PDiskId));
         TIntrusivePtr<NMonitoring::TDynamicCounters> deviceGroup = pDiskCounters->GetSubgroup("subsystem", "device");
 

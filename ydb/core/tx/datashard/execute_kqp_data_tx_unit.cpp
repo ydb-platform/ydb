@@ -4,11 +4,11 @@
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
 
-#include <ydb/core/engine/minikql/minikql_engine_host.h> 
-#include <ydb/core/kqp/rm/kqp_rm.h> 
+#include <ydb/core/engine/minikql/minikql_engine_host.h>
+#include <ydb/core/kqp/rm/kqp_rm.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NMiniKQL;
 
@@ -20,7 +20,7 @@ using namespace NMiniKQL;
 
 class TExecuteKqpDataTxUnit : public TExecutionUnit {
 public:
-    TExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline); 
+    TExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TExecuteKqpDataTxUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
@@ -33,7 +33,7 @@ private:
                                       const TActorContext& ctx);
 };
 
-TExecuteKqpDataTxUnit::TExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) 
+TExecuteKqpDataTxUnit::TExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline)
     : TExecutionUnit(EExecutionUnitKind::ExecuteKqpDataTx, true, dataShard, pipeline) {}
 
 TExecuteKqpDataTxUnit::~TExecuteKqpDataTxUnit() {}
@@ -237,9 +237,9 @@ EExecutionStatus TExecuteKqpDataTxUnit::OnTabletNotReady(TActiveTransaction& tx,
 
 void TExecuteKqpDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-THolder<TExecutionUnit> CreateExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) { 
+THolder<TExecutionUnit> CreateExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TExecuteKqpDataTxUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

@@ -1,8 +1,8 @@
 #include "print_operation.h"
 #include "pretty_table.h"
 
-#include <ydb/public/lib/operation_id/operation_id.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h> 
+#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>

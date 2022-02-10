@@ -10,7 +10,7 @@ namespace NTable {
 
     using TBundleSlicesMap = THashMap<TLogoBlobID, TIntrusiveConstPtr<TSlices>>;
 
-    struct TPartView { 
+    struct TPartView {
         explicit operator bool() const
         {
             return bool(Part);
@@ -43,8 +43,8 @@ namespace NTable {
             return Part ? Part->Epoch : TEpoch::Max();
         }
 
-        TPartView CloneWithEpoch(TEpoch epoch) const { 
-            return TPartView{ Part->CloneWithEpoch(epoch), Screen, Slices }; 
+        TPartView CloneWithEpoch(TEpoch epoch) const {
+            return TPartView{ Part->CloneWithEpoch(epoch), Screen, Slices };
         }
 
         TIntrusiveConstPtr<TPart> Part;
@@ -63,10 +63,10 @@ namespace NTable {
         ui64 Rows   = 0;
         ui64 Bytes  = 0;    /* Raw (unencoded) data pages size  */
         ui64 Coded  = 0;    /* Data pages size after encoding   */
-        ui64 Drops  = 0;    /* Total rows with ERowOp::Erase code */ 
+        ui64 Drops  = 0;    /* Total rows with ERowOp::Erase code */
         ui64 Parts  = 0;    /* Total number of produced parts   */
         ui64 HiddenRows = 0; /* Hidden (non-head) total rows */
-        ui64 HiddenDrops = 0; /* Hidden (non-head) rows with ERowOp::Erase */ 
+        ui64 HiddenDrops = 0; /* Hidden (non-head) rows with ERowOp::Erase */
     };
 
 }

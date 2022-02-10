@@ -2,12 +2,12 @@
 #include "defs.h"
 
 #include "events.h"
-#include <ydb/core/ymq/base/table_info.h> 
-#include <ydb/core/protos/sqs.pb.h> 
+#include <ydb/core/ymq/base/table_info.h>
+#include <ydb/core/protos/sqs.pb.h>
 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
-#include <ydb/core/kesus/tablet/events.h> 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actor.h>

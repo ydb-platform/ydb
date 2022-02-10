@@ -11,20 +11,20 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 namespace NBoot {
 
-    class TMemTable final: public NBoot::IStep { 
+    class TMemTable final: public NBoot::IStep {
         using TBlobs = NTable::NMem::TBlobs;
-        using TLargeGlobId = NPageCollection::TLargeGlobId; 
+        using TLargeGlobId = NPageCollection::TLargeGlobId;
 
     public:
-        TMemTable(IStep *owner) : IStep(owner, NBoot::EStep::MemTable) { } 
+        TMemTable(IStep *owner) : IStep(owner, NBoot::EStep::MemTable) { }
 
     private: /* IStep, boot logic DSL actor interface   */
         void Start() noexcept override
         {
-            for (auto it: Back->DatabaseImpl->Scheme->Tables) { 
-                const auto &wrap = Back->DatabaseImpl->Get(it.first, true); 
+            for (auto it: Back->DatabaseImpl->Scheme->Tables) {
+                const auto &wrap = Back->DatabaseImpl->Get(it.first, true);
 
-                for (auto &mem : wrap->GetMemTables()) { 
+                for (auto &mem : wrap->GetMemTables()) {
                     size_t size = mem->GetBlobs()->Size();
                     if (size > 0) {
                         ui64 base = ui64(States.size()) << 32;
@@ -36,7 +36,7 @@ namespace NBoot {
                             Y_VERIFY_DEBUG(page < state.Pages.size(),
                                 "Unexpected memtable blobs instability during boot");
                             ui64 cookie = base | page++;
-                            Pending += Spawn<TLoadBlobs>(TLargeGlobId(it->GId.Group, it->GId.Logo), cookie); 
+                            Pending += Spawn<TLoadBlobs>(TLargeGlobId(it->GId.Group, it->GId.Logo), cookie);
                             ++state.Pending;
                         }
                     }
@@ -78,7 +78,7 @@ namespace NBoot {
     private:
         struct TLoadState {
             TBlobs* Blobs;
-            TVector<NPageCollection::TLoadedPage> Pages; 
+            TVector<NPageCollection::TLoadedPage> Pages;
             size_t Pending = 0;
         };
 

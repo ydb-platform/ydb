@@ -1,18 +1,18 @@
 #pragma once
 
-#include <ydb/core/protos/counters_datashard.pb.h> 
+#include <ydb/core/protos/counters_datashard.pb.h>
 #include <util/datetime/base.h>
 #include <util/system/hp_timer.h>
 
 #include <functional>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
     class TMicrosecTimerCounter {
     public:
-        template<class TDataShardClass> 
-        TMicrosecTimerCounter(TDataShardClass& dataShard, NDataShard::ECumulativeCounters counter) noexcept 
+        template<class TDataShardClass>
+        TMicrosecTimerCounter(TDataShardClass& dataShard, NDataShard::ECumulativeCounters counter) noexcept
             : Callback(
                 [&dataShard, counter](ui64 us) {
                     dataShard.IncCounter(counter, us);
@@ -31,5 +31,5 @@ namespace NDataShard {
         THPTimer Timer;
     };
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

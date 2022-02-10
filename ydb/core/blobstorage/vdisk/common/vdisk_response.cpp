@@ -1,7 +1,7 @@
-#include "vdisk_response.h" 
-#include "vdisk_events.h" 
-#include <ydb/core/blobstorage/base/wilson_events.h> 
-#include <ydb/core/base/interconnect_channels.h> 
+#include "vdisk_response.h"
+#include "vdisk_events.h"
+#include <ydb/core/blobstorage/base/wilson_events.h>
+#include <ydb/core/base/interconnect_channels.h>
 #include <util/system/datetime.h>
 
 namespace NKikimr {
@@ -39,11 +39,11 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
 
     auto event = std::make_unique<IEventHandle>(recipient, ctx.SelfID, ev, IEventHandle::MakeFlags(channel, 0), cookie,
         nullptr, std::move(traceId));
-    if (TEvVResultBase *base = dynamic_cast<TEvVResultBase *>(ev)) { 
+    if (TEvVResultBase *base = dynamic_cast<TEvVResultBase *>(ev)) {
         base->FinalizeAndSend(ctx, std::move(event));
     } else {
         TActivationContext::Send(event.release());
-    } 
-} 
- 
+    }
+}
+
 }//NKikimr

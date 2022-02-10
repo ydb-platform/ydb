@@ -6,7 +6,7 @@ ALLOCATOR(LF)
 
 PEERDIR(
     library/cpp/threading/skip_list
-    ydb/core/util 
+    ydb/core/util
 )
 
 SRCS(

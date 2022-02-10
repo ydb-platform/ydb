@@ -1,6 +1,6 @@
 #include "defs.h"
 #include "db_wrapper.h"
-#include <ydb/core/tx/columnshard/columnshard_schema.h> 
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 namespace NKikimr::NOlap {
 

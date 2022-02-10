@@ -10,14 +10,14 @@ namespace NKikimr {
 namespace NTable {
 namespace NFwd {
 
-    class TCache : public IPageLoadingLogic { 
+    class TCache : public IPageLoadingLogic {
 
         template<size_t Items>
         struct TRound {
             const TSharedData* Get(TPageId pageId) const
             {
                 if (pageId < Edge) {
-                    const auto pred = [pageId](const NPageCollection::TLoadedPage &page) { 
+                    const auto pred = [pageId](const NPageCollection::TLoadedPage &page) {
                         return page.PageId == pageId;
                     };
 
@@ -49,7 +49,7 @@ namespace NFwd {
             }
 
         private:
-            std::array<NPageCollection::TLoadedPage, Items> Pages; 
+            std::array<NPageCollection::TLoadedPage, Items> Pages;
             TPageId Edge = 0;
             ui32 Offset = 0;
         };
@@ -66,7 +66,7 @@ namespace NFwd {
             for (auto &it: Pages) it.Release();
         }
 
-        TResult Handle(IPageLoadingQueue *head, TPageId pageId, ui64 lower) noexcept override 
+        TResult Handle(IPageLoadingQueue *head, TPageId pageId, ui64 lower) noexcept override
         {
             Y_VERIFY(pageId != Max<TPageId>(), "Invalid requested pageId");
 
@@ -80,12 +80,12 @@ namespace NFwd {
             return { Preload(head, 0).Touch(pageId, Stat), more, true };
         }
 
-        void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override 
+        void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
         {
             Preload(head, upper);
         }
 
-        void Apply(TArrayRef<NPageCollection::TLoadedPage> loaded) noexcept override 
+        void Apply(TArrayRef<NPageCollection::TLoadedPage> loaded) noexcept override
         {
             auto it = Pages.begin();
 
@@ -113,14 +113,14 @@ namespace NFwd {
         }
 
     private:
-        TPage& Preload(IPageLoadingQueue *head, ui64 upper) noexcept 
+        TPage& Preload(IPageLoadingQueue *head, ui64 upper) noexcept
         {
             auto until = [this, upper]() {
                 return OnHold + OnFetch < upper ? Max<TPageId>() : 0;
             };
 
             while (auto more = Index.More(until())) {
-                auto size = head->AddToQueue(more, ui16(EPage::DataPage)); 
+                auto size = head->AddToQueue(more, ui16(EPage::DataPage));
 
                 Stat.Fetch += size;
                 OnFetch += size;

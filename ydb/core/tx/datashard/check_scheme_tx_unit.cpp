@@ -2,14 +2,14 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
-#include <ydb/core/tablet/tablet_exception.h> 
+#include <ydb/core/tablet/tablet_exception.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TCheckSchemeTxUnit : public TExecutionUnit {
 public:
-    TCheckSchemeTxUnit(TDataShard &dataShard, 
+    TCheckSchemeTxUnit(TDataShard &dataShard,
                        TPipeline &pipeline);
     ~TCheckSchemeTxUnit() override;
 
@@ -50,7 +50,7 @@ private:
     template <typename T> bool CheckSchemaVersion(TActiveTransaction *activeTx, const T &op);
 };
 
-TCheckSchemeTxUnit::TCheckSchemeTxUnit(TDataShard &dataShard, 
+TCheckSchemeTxUnit::TCheckSchemeTxUnit(TDataShard &dataShard,
                                        TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::CheckSchemeTx, false, dataShard, pipeline)
 {
@@ -456,11 +456,11 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
         bool err = false;
 
         if (freeze) {
-            if (curState != NDataShard::TShardState::Ready) { 
+            if (curState != NDataShard::TShardState::Ready) {
                 err = true;
             }
         } else {
-            if (curState != NDataShard::TShardState::Frozen) { 
+            if (curState != NDataShard::TShardState::Frozen) {
                 err = true;
             }
         }
@@ -716,11 +716,11 @@ void TCheckSchemeTxUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateCheckSchemeTxUnit(TDataShard &dataShard, 
+THolder<TExecutionUnit> CreateCheckSchemeTxUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)
 {
     return THolder(new TCheckSchemeTxUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

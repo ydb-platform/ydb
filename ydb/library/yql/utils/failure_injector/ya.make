@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:yql) 
+OWNER(g:yql)
 
 SRCS(
     failure_injector.cpp
@@ -8,7 +8,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/utils
-    ydb/library/yql/utils/log 
+    ydb/library/yql/utils/log
 )
 
 END()

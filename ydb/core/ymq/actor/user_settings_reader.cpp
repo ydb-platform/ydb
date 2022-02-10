@@ -40,7 +40,7 @@ void TUserSettingsReader::StartReading() {
     CurrentUser = TString();
     CurrentName = TString();
     OldSettings = std::move(CurrentSettings);
-    CurrentSettings = std::make_shared<TUserSettings>(); 
+    CurrentSettings = std::make_shared<TUserSettings>();
     if (CompiledQuery) {
         NextRequest();
     } else {
@@ -99,7 +99,7 @@ void TUserSettingsReader::OnUserSettingsRead(const TSqsEvents::TEvExecuted::TRec
             TString value = row["Value"];
             auto& settings = (*CurrentSettings)[user];
             if (!settings) {
-                settings = std::make_shared<TSettings>(); 
+                settings = std::make_shared<TSettings>();
             }
             settings->emplace(std::move(name), std::move(value));
         }
@@ -148,7 +148,7 @@ void TUserSettingsReader::FinishScan() {
 }
 
 void TUserSettingsReader::CompareUserSettings(const TString& userName, const TSettingsPtr& oldSettings, const TSettingsPtr& newSettings) {
-    std::shared_ptr<std::set<TString>> diff = std::make_shared<std::set<TString>>(); 
+    std::shared_ptr<std::set<TString>> diff = std::make_shared<std::set<TString>>();
     auto oldIt = oldSettings->begin();
     auto newIt = newSettings->begin();
     while (oldIt != oldSettings->end() && newIt != newSettings->end()) {
@@ -180,15 +180,15 @@ void TUserSettingsReader::CompareUserSettings(const TString& userName, const TSe
 }
 
 void TUserSettingsReader::OnRemoveUserSettings(const TString& userName, const TSettingsPtr& oldSettings) {
-    auto diff = std::make_shared<std::set<TString>>(); 
+    auto diff = std::make_shared<std::set<TString>>();
     for (const auto& [name, value] : *oldSettings) {
         diff->insert(name);
     }
-    Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvUserSettingsChanged(userName, std::make_shared<const std::map<TString, TString>>(), std::move(diff))); 
+    Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvUserSettingsChanged(userName, std::make_shared<const std::map<TString, TString>>(), std::move(diff)));
 }
 
 void TUserSettingsReader::OnAddUserSettings(const TString& userName, const TSettingsPtr& currentSettings) {
-    auto diff = std::make_shared<std::set<TString>>(); 
+    auto diff = std::make_shared<std::set<TString>>();
     for (const auto& [name, value] : *currentSettings) {
         diff->insert(name);
     }

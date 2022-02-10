@@ -3,7 +3,7 @@
 #include "events.h"
 #include "counters.h"
 
-#include <ydb/core/base/tablet_pipe.h> 
+#include <ydb/core/base/tablet_pipe.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <util/stream/str.h>
 

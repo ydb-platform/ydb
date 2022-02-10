@@ -24,14 +24,14 @@ void THtmlMonPage::Output(NMonitoring::IMonHttpRequest& request) {
                     out << "<script language='javascript' type='text/javascript' src='/jquery.tablesorter.js'></script>\n";
                 }
 
-                out << "<style type=\"text/css\">\n"; 
-                out << ".table-nonfluid { width: auto; }\n"; 
-                out << ".narrow-line50 {line-height: 50%}\n"; 
-                out << ".narrow-line60 {line-height: 60%}\n"; 
-                out << ".narrow-line70 {line-height: 70%}\n"; 
-                out << ".narrow-line80 {line-height: 80%}\n"; 
-                out << ".narrow-line90 {line-height: 90%}\n"; 
-                out << "</style>\n"; 
+                out << "<style type=\"text/css\">\n";
+                out << ".table-nonfluid { width: auto; }\n";
+                out << ".narrow-line50 {line-height: 50%}\n";
+                out << ".narrow-line60 {line-height: 60%}\n";
+                out << ".narrow-line70 {line-height: 70%}\n";
+                out << ".narrow-line80 {line-height: 80%}\n";
+                out << ".narrow-line90 {line-height: 90%}\n";
+                out << "</style>\n";
             }
             BODY() {
                 OutputNavBar(out);

@@ -3,11 +3,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TMoveTableUnit : public TExecutionUnit {
 public:
-    TMoveTableUnit(TDataShard& dataShard, TPipeline& pipeline) 
+    TMoveTableUnit(TDataShard& dataShard, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::DropIndexNotice, false, dataShard, pipeline)
     { }
 
@@ -75,11 +75,11 @@ public:
 };
 
 THolder<TExecutionUnit> CreateMoveTableUnit(
-    TDataShard& dataShard, 
+    TDataShard& dataShard,
     TPipeline& pipeline)
 {
     return THolder(new TMoveTableUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

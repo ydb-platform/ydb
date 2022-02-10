@@ -7,7 +7,7 @@
 #include "execution_unit.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 template <typename TEvCancel>
 class TBackupRestoreUnitBase : public TExecutionUnit {
@@ -61,7 +61,7 @@ private:
     }
 
 public:
-    TBackupRestoreUnitBase(EExecutionUnitKind kind, TDataShard& self, TPipeline& pipeline) 
+    TBackupRestoreUnitBase(EExecutionUnitKind kind, TDataShard& self, TPipeline& pipeline)
         : TExecutionUnit(kind, false, self, pipeline)
     {
     }
@@ -128,5 +128,5 @@ public:
 
 }; // TBackupRestoreUnitBase
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

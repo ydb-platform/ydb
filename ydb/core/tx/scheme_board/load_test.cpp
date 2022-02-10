@@ -4,11 +4,11 @@
 #include "populator.h"
 #include "subscriber.h"
 
-#include <ydb/core/base/statestorage_impl.h> 
-#include <ydb/core/base/tabletid.h> 
-#include <ydb/core/protos/flat_scheme_op.pb.h> 
-#include <ydb/core/protos/flat_tx_scheme.pb.h> 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
+#include <ydb/core/base/statestorage_impl.h>
+#include <ydb/core/base/tabletid.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

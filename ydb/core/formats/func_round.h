@@ -1,6 +1,6 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h> 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include "func_common.h"
 #include "bit_cast.h"
 

@@ -1,9 +1,9 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h> 
-#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h> 
-#include <ydb/core/testlib/tablet_helpers.h> 
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 
-#include <ydb/core/tx/datashard/datashard.h> 
-#include <ydb/core/metering/metering.h> 
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/metering/metering.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -443,8 +443,8 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                             NLs::PathVersionEqual(3)});
 
         // Force stats reporting without delays
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0); 
-        NDataShard::gDbStatsDataSizeResolution = 80000; 
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        NDataShard::gDbStatsDataSizeResolution = 80000;
 
         auto upgradeEvent = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
             if (ev->Type == TEvSchemeShard::EvModifySchemeTransaction) {

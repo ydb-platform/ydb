@@ -1,4 +1,4 @@
-#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h> 
+#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <random>
 
 Y_UNIT_TEST_SUITE(Mirror3dc) {

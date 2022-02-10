@@ -3,9 +3,9 @@
 #include "ut_helpers.h"
 #include "cms_ut_common.h"
 
-#include <ydb/core/testlib/basics/appdata.h> 
-#include <ydb/core/testlib/test_client.h> 
-#include <ydb/core/testlib/tablet_helpers.h> 
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

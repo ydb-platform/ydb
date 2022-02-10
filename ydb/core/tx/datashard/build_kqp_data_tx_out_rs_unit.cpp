@@ -4,10 +4,10 @@
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
 
-#include <ydb/core/kqp/rm/kqp_rm.h> 
+#include <ydb/core/kqp/rm/kqp_rm.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NMiniKQL;
 
@@ -19,7 +19,7 @@ using namespace NMiniKQL;
 
 class TBuildKqpDataTxOutRSUnit : public TExecutionUnit {
 public:
-    TBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline); 
+    TBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TBuildKqpDataTxOutRSUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
@@ -31,7 +31,7 @@ private:
                                       const TActorContext& ctx);
 };
 
-TBuildKqpDataTxOutRSUnit::TBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline) 
+TBuildKqpDataTxOutRSUnit::TBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline)
     : TExecutionUnit(EExecutionUnitKind::BuildKqpDataTxOutRS, true, dataShard, pipeline) {}
 
 TBuildKqpDataTxOutRSUnit::~TBuildKqpDataTxOutRSUnit() {}
@@ -151,9 +151,9 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::OnTabletNotReady(TActiveTransaction& 
     return EExecutionStatus::Restart;
 }
 
-THolder<TExecutionUnit> CreateBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline) { 
+THolder<TExecutionUnit> CreateBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TBuildKqpDataTxOutRSUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

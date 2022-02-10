@@ -1,19 +1,19 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/monlib/service/monservice.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/service/pages/tablesorter/css_mon_page.h>
 #include <library/cpp/monlib/service/pages/tablesorter/js_mon_page.h>
 
 #include <library/cpp/actors/core/mon.h>
- 
-namespace NActors { 
- 
-    class TActorSystem; 
+
+namespace NActors {
+
+    class TActorSystem;
     struct TActorId;
- 
+
     class TMon : public NMonitoring::TMonService2 {
-    public: 
+    public:
         using TRequestAuthorizer = std::function<IEventHandle*(const NActors::TActorId& owner, NMonitoring::IMonHttpRequest& request)>;
 
         struct TConfig {
@@ -28,11 +28,11 @@ namespace NActors {
         };
 
         TMon(TConfig config);
-        virtual ~TMon(); 
-        void Start(); 
+        virtual ~TMon();
+        void Start();
         void Stop();
- 
-        void Register(NMonitoring::IMonPage *page); 
+
+        void Register(NMonitoring::IMonPage *page);
         NMonitoring::TIndexMonPage *RegisterIndexPage(const TString &path, const TString &title);
 
         struct TRegisterActorPageFields {
@@ -55,12 +55,12 @@ namespace NActors {
         void OutputIndexPage(IOutputStream& out) override;
         void SetAllowedSIDs(const TVector<TString>& sids); // sets allowed users/groups for this web interface
         ui16 GetListenPort();
- 
+
         static NActors::IEventHandle* DefaultAuthorizer(const NActors::TActorId& owner, NMonitoring::IMonHttpRequest& request);
 
-    protected: 
-        typedef NMonitoring::TMonService2 TBase; 
+    protected:
+        typedef NMonitoring::TMonService2 TBase;
         TConfig Config;
-    }; 
- 
-} // NActors 
+    };
+
+} // NActors

@@ -2,11 +2,11 @@
 
 #include "defs.h"
 
-#include <ydb/core/kqp/runtime/kqp_tasks_runner.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
-#include <ydb/core/engine/mkql_engine_flat.h> 
-#include <ydb/core/engine/minikql/minikql_engine_host.h> 
-#include <ydb/core/tx/datashard/datashard_kqp_compute.h> 
+#include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/engine/minikql/minikql_engine_host.h>
+#include <ydb/core/tx/datashard/datashard_kqp_compute.h>
 
 namespace NKikimr {
 
@@ -16,11 +16,11 @@ namespace NTabletFlatExecutor {
 
 using NTabletFlatExecutor::TTransactionContext;
 
-namespace NDataShard { 
+namespace NDataShard {
 
-class TDataShard; 
+class TDataShard;
 
-TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self); 
+TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self);
 
 ///
 class TEngineBay : TNonCopyable {
@@ -37,7 +37,7 @@ public:
         ui64 TotalKeysSize = 0;
     };
 
-    TEngineBay(TDataShard * self, TTransactionContext& txc, const TActorContext& ctx, 
+    TEngineBay(TDataShard * self, TTransactionContext& txc, const TActorContext& ctx,
                std::pair<ui64, ui64> stepTxId);
 
     virtual ~TEngineBay();

@@ -38,7 +38,7 @@ namespace NFwd {
         }
 
         ui64 Fetch = 0;     /* Requested to load by cache       */
-        ui64 Saved = 0;     /* Obtained by cache with DoSave()  */ 
+        ui64 Saved = 0;     /* Obtained by cache with DoSave()  */
         ui64 Usage = 0;     /* Actually was used by client      */
         ui64 After = 0;     /* Dropped after fetch completed    */
         ui64 Before = 0;    /* Dropped before fetch completed   */

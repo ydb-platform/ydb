@@ -1,8 +1,8 @@
 #pragma once
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <ydb/public/lib/base/defs.h> 
-#include <ydb/public/lib/base/msgbus.h> 
+#include <ydb/public/lib/base/defs.h>
+#include <ydb/public/lib/base/msgbus.h>
 #include "msgbus_http_server.h"
 #include "msgbus_server_pq_metacache.h"
 
@@ -294,8 +294,8 @@ IActor* CreateMessageBusChooseProxy(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletStateRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletKillRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeOperationStatus(TBusMessageContext &msg);
-IActor* CreateMessageBusBlobStorageLoadRequest(TBusMessageContext &msg); 
-IActor* CreateMessageBusBlobStorageGetRequest(TBusMessageContext &msg); 
+IActor* CreateMessageBusBlobStorageLoadRequest(TBusMessageContext &msg);
+IActor* CreateMessageBusBlobStorageGetRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusHiveLookupTablet(TBusMessageContext &msg);
 IActor* CreateMessageBusBlobStorageConfig(TBusMessageContext &msg);
 IActor* CreateMessageBusDrainNode(TBusMessageContext &msg);

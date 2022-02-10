@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>

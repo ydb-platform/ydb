@@ -1,18 +1,18 @@
-UNITTEST_FOR(ydb/services/persqueue_cluster_discovery) 
+UNITTEST_FOR(ydb/services/persqueue_cluster_discovery)
 
 OWNER(
     radix
-    g:kikimr 
+    g:kikimr
     g:logbroker
 )
 
 FORK_SUBTESTS()
- 
+
 IF (WITH_VALGRIND)
     TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(ram:32) 
+    REQUIREMENTS(ram:32)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -23,10 +23,10 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/http 
-    ydb/core/testlib 
-    ydb/public/api/grpc 
-    ydb/services/persqueue_cluster_discovery 
+    library/cpp/actors/http
+    ydb/core/testlib
+    ydb/public/api/grpc
+    ydb/services/persqueue_cluster_discovery
 )
 
 YQL_LAST_ABI_VERSION()

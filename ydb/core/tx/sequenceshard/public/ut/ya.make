@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/sequenceshard/public) 
+UNITTEST_FOR(ydb/core/tx/sequenceshard/public)
 
 OWNER(g:kikimr)
 

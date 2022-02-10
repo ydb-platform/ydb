@@ -2,7 +2,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <util/stream/null.h>
-#include <ydb/core/viewer/protos/viewer.pb.h> 
+#include <ydb/core/viewer/protos/viewer.pb.h>
 #include "json_tabletinfo.h"
 #include "json_vdiskinfo.h"
 #include "json_pdiskinfo.h"

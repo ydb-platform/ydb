@@ -1,6 +1,6 @@
-import "ydb/core/protos/tx_proxy.proto"; 
-import "ydb/core/protos/scheme_log.proto"; 
-import "ydb/library/mkql_proto/protos/minikql.proto"; 
+import "ydb/core/protos/tx_proxy.proto";
+import "ydb/core/protos/scheme_log.proto";
+import "ydb/library/mkql_proto/protos/minikql.proto";
 
 package NKikimrTabletTxBase;
 option java_package = "ru.yandex.kikimr.proto";

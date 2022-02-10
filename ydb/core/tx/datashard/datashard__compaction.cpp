@@ -1,14 +1,14 @@
 #include "datashard_impl.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
-class TDataShard::TTxCompactTable : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxCompactTable : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvCompactTable::TPtr Ev;
 
 public:
-    TTxCompactTable(TDataShard* ds, TEvDataShard::TEvCompactTable::TPtr ev) 
+    TTxCompactTable(TDataShard* ds, TEvDataShard::TEvCompactTable::TPtr ev)
         : TBase(ds)
         , Ev(ev)
     {}
@@ -178,7 +178,7 @@ public:
     }
 };
  
-void TDataShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx) { 
+void TDataShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx) {
     Executor()->Execute(new TTxCompactTable(this, ev), ctx);
 }
 
@@ -237,7 +237,7 @@ void TDataShard::ReplyCompactionWaiters(ui32 tableId, ui64 edge, const TActorCon
     }
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const TActorContext& ctx) { 
+void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const TActorContext& ctx) {
     auto &record = ev->Get()->Record;
     auto response = MakeHolder<TEvDataShard::TEvGetCompactTableStatsResult>();
 
@@ -255,5 +255,5 @@ void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const T
     ctx.Send(ev->Sender, std::move(response));
 }
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

@@ -1,4 +1,4 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h> 
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <util/system/env.h>
 

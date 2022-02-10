@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/flat_database.h> 
+#include <ydb/core/tablet_flat/flat_database.h>
 
 namespace NKikimr {
 namespace NTable {

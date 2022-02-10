@@ -1,4 +1,4 @@
-#include <ydb/library/persqueue/topic_parser/topic_parser.h> 
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NPersQueue;

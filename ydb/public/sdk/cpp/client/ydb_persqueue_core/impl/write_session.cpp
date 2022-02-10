@@ -1,5 +1,5 @@
 #include "write_session.h"
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h> 
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 #include <library/cpp/string_utils/url/url.h>
 
 #include <util/generic/store_policy.h>

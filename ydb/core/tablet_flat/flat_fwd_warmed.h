@@ -14,12 +14,12 @@ namespace NKikimr {
 namespace NTable {
 namespace NFwd {
 
-    class TMemTableHandler /* handler for TMemTable table */ { 
+    class TMemTableHandler /* handler for TMemTable table */ {
     public:
-        using TResult = IPages::TResult; 
-        using TRace = TVector<TMemTableSnapshot>; 
+        using TResult = IPages::TResult;
+        using TRace = TVector<TMemTableSnapshot>;
 
-        TMemTableHandler(TArrayRef<const ui32> tags, ui32 edge, const TRace *trace) 
+        TMemTableHandler(TArrayRef<const ui32> tags, ui32 edge, const TRace *trace)
             : Tags(tags)
             , Edge(edge)
         {
@@ -28,17 +28,17 @@ namespace NFwd {
                     if (auto *blobs = one->GetBlobs())
                         Offset = Min(Offset, blobs->Head);
 
-                Blobs = TMemTable::MakeBlobsPage(*trace); 
+                Blobs = TMemTable::MakeBlobsPage(*trace);
                 Touches.Reserve(Blobs->Total());
             }
         }
 
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept 
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept
         {
-            const auto &glob = memTable->GetBlobs()->Get(ref); 
+            const auto &glob = memTable->GetBlobs()->Get(ref);
 
-            Y_VERIFY(glob.Data, "External blob in TMemTable with no data"); 
-            Y_VERIFY(!Blobs || ref >= Offset, "Unexpected ELargeObj reference"); 
+            Y_VERIFY(glob.Data, "External blob in TMemTable with no data");
+            Y_VERIFY(!Blobs || ref >= Offset, "Unexpected ELargeObj reference");
 
             bool omit = glob.Bytes() >= Edge && !TRowScheme::HasTag(Tags, tag);
 
@@ -49,7 +49,7 @@ namespace NFwd {
 
         TSieve Traced() noexcept
         {
-            /* Blobs in TMemTable catalog isn't sorted in order of appearance 
+            /* Blobs in TMemTable catalog isn't sorted in order of appearance
                 in rows cells. That is way bitmap is used instead of just
                 trace cooker as it done for alredy compacted TPart.
             */

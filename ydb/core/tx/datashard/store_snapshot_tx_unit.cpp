@@ -3,11 +3,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TStoreSnapshotTxUnit : public TExecutionUnit {
 public:
-    TStoreSnapshotTxUnit(TDataShard& dataShard, TPipeline& pipeline) 
+    TStoreSnapshotTxUnit(TDataShard& dataShard, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::StoreSnapshotTx, false, dataShard, pipeline)
     { }
 
@@ -33,11 +33,11 @@ public:
 };
 
 THolder<TExecutionUnit> CreateStoreSnapshotTxUnit(
-        TDataShard& dataShard, 
+        TDataShard& dataShard,
         TPipeline& pipeline)
 {
     return THolder(new TStoreSnapshotTxUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

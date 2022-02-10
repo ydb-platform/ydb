@@ -1,4 +1,4 @@
-OWNER(g:yq) 
+OWNER(g:yq)
 
 LIBRARY()
 
@@ -8,8 +8,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/yq/libs/common 
-    ydb/core/yq/libs/events 
+    ydb/core/yq/libs/common
+    ydb/core/yq/libs/events
 )
 
 YQL_LAST_ABI_VERSION()

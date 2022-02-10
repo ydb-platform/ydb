@@ -9,8 +9,8 @@
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/core/engine/mkql_keys.h> 
-#include <ydb/core/scheme_types/scheme_types_defs.h> 
+#include <ydb/core/engine/mkql_keys.h>
+#include <ydb/core/scheme_types/scheme_types_defs.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

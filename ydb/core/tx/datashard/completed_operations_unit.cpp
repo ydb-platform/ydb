@@ -2,11 +2,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TCompletedOperationsUnit : public TExecutionUnit {
 public:
-    TCompletedOperationsUnit(TDataShard &dataShard, 
+    TCompletedOperationsUnit(TDataShard &dataShard,
                              TPipeline &pipeline);
     ~TCompletedOperationsUnit() override;
 
@@ -20,7 +20,7 @@ public:
 private:
 };
 
-TCompletedOperationsUnit::TCompletedOperationsUnit(TDataShard &dataShard, 
+TCompletedOperationsUnit::TCompletedOperationsUnit(TDataShard &dataShard,
                                                    TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::CompletedOperations, false, dataShard, pipeline)
 {
@@ -50,11 +50,11 @@ void TCompletedOperationsUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateCompletedOperationsUnit(TDataShard &dataShard, 
+THolder<TExecutionUnit> CreateCompletedOperationsUnit(TDataShard &dataShard,
                                                       TPipeline &pipeline)
 {
     return THolder(new TCompletedOperationsUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

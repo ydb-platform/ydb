@@ -3,15 +3,15 @@
 #include "defs.h"
 #include "change_record.h"
 
-#include <ydb/core/protos/change_exchange.pb.h> 
-#include <ydb/core/scheme/scheme_tabledefs.h> 
+#include <ydb/core/protos/change_exchange.pb.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <util/generic/vector.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
-class TDataShard; 
+class TDataShard;
 
 struct TEvChangeExchange {
     enum EEv {
@@ -146,16 +146,16 @@ struct TEvChangeExchange {
 
 }; // TEvChangeExchange
 
-IActor* CreateChangeSender(const TDataShard* self); 
+IActor* CreateChangeSender(const TDataShard* self);
 IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& dstDataShards);
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr
 
-Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo, o, x) { 
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo, o, x) {
     return x.Out(o);
 }
 
-Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TEvChangeExchange::TEvRequestRecords::TRecordInfo, o, x) { 
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TEvChangeExchange::TEvRequestRecords::TRecordInfo, o, x) {
     return x.Out(o);
 }

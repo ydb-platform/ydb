@@ -2,19 +2,19 @@
 #include "datashard__engine_host.h"
 #include "read_table_scan.h"
 
-#include <ydb/core/engine/mkql_proto.h> 
-#include <ydb/core/protos/counters_datashard.pb.h> 
-#include <ydb/core/protos/ydb_result_set_old.pb.h> 
+#include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/protos/ydb_result_set_old.pb.h>
 
-#include <ydb/library/binary_json/read.h> 
-#include <ydb/library/dynumber/dynumber.h> 
+#include <ydb/library/binary_json/read.h>
+#include <ydb/library/dynumber/dynumber.h>
 
 //#include <library/cpp/actors/interconnect/interconnect.h>
 
 //#include <util/generic/cast.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using NTable::EScan;
 
@@ -443,7 +443,7 @@ private:
             }
         }
 
-        auto *ev = new TDataShard::TEvPrivate::TEvRegisterScanActor(TxId); 
+        auto *ev = new TDataShard::TEvPrivate::TEvRegisterScanActor(TxId);
         ctx.MakeFor(aid).Send(DataShard, ev);
 
         CheckQuota(ctx.MakeFor(aid));
@@ -624,5 +624,5 @@ TAutoPtr<NTable::IScan> CreateReadTableScan(ui64 txId,
     return new TReadTableScan(txId, shardId, tableInfo, tx, sink, dataShard);
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

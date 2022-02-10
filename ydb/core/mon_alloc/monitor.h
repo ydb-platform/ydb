@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/control/immediate_control_board_impl.h> 
+#include <ydb/core/control/immediate_control_board_impl.h>
 
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>

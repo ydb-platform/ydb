@@ -8,7 +8,7 @@
 #include "servicemap.h"
 #include "scheduler_queue.h"
 #include "scheduler_actor.h"
-#include "log.h" 
+#include "log.h"
 #include "probes.h"
 #include "ask.h"
 #include <library/cpp/actors/util/affinity.h>
@@ -121,7 +121,7 @@ namespace NActors {
     void TActorSystem::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const {
         Schedule(deadline - Timestamp(), ev, cookie);
     }
- 
+
     void TActorSystem::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const {
         const auto current = Monotonic();
         if (deadline < current)

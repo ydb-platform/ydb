@@ -1,13 +1,13 @@
 #include "proxy_ut_helpers.h"
 
-#include <ydb/core/testlib/tablet_helpers.h> 
+#include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
 
-#include <ydb/core/base/path.h> 
-#include <ydb/core/tx/schemeshard/schemeshard_impl.h> 
-#include <ydb/core/blobstorage/base/blobstorage_events.h> 
-#include <ydb/core/tablet/tablet_impl.h> 
+#include <ydb/core/base/path.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/tablet/tablet_impl.h>
 
 
 using namespace NKikimr;

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/scheme/scheme_type_id.h> 
-#include <ydb/core/scheme/scheme_tablecell.h> 
+#include <ydb/core/scheme/scheme_type_id.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <util/generic/ptr.h>
 #include <util/generic/hash.h>
 

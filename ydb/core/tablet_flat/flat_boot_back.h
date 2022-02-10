@@ -7,7 +7,7 @@
 #include "flat_boot_oven.h"
 #include "logic_snap_waste.h"
 #include "logic_redo_queue.h"
-#include <ydb/core/base/tablet.h> 
+#include <ydb/core/base/tablet.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -25,9 +25,9 @@ namespace NBoot {
 
         }
 
-        TLogEntry(NTable::TTxStamp stamp, NPageCollection::TLargeGlobId largeGlobId) 
+        TLogEntry(NTable::TTxStamp stamp, NPageCollection::TLargeGlobId largeGlobId)
             : Stamp(stamp)
-            , LargeGlobId(largeGlobId) 
+            , LargeGlobId(largeGlobId)
         {
 
         }
@@ -38,7 +38,7 @@ namespace NBoot {
         }
 
         const NTable::TTxStamp Stamp;
-        const NPageCollection::TLargeGlobId LargeGlobId; 
+        const NPageCollection::TLargeGlobId LargeGlobId;
         TString Body;
     };
 
@@ -46,7 +46,7 @@ namespace NBoot {
         void Describe(IOutputStream &out) const noexcept
         {
             out
-                << "Body{ " << NFmt::Do(LargeGlobId) 
+                << "Body{ " << NFmt::Do(LargeGlobId)
                 << " has " << Body.size() << "b }";
         }
 
@@ -55,7 +55,7 @@ namespace NBoot {
             return bool(Body);
         }
 
-        const NPageCollection::TLargeGlobId LargeGlobId; 
+        const NPageCollection::TLargeGlobId LargeGlobId;
         TString Body;
     };
 
@@ -94,12 +94,12 @@ namespace NBoot {
 
         ui64 Serial = 0;
 
-        TAutoPtr<NBoot::TSteppedCookieAllocatorFactory> SteppedCookieAllocatorFactory; 
+        TAutoPtr<NBoot::TSteppedCookieAllocatorFactory> SteppedCookieAllocatorFactory;
         TIntrusivePtr<NSnap::TWaste> Waste;
         TAutoPtr<NTable::TScheme> Scheme;
-        TAutoPtr<NTable::TDatabaseImpl> DatabaseImpl; 
+        TAutoPtr<NTable::TDatabaseImpl> DatabaseImpl;
         TAutoPtr<NRedo::TQueue> Redo;
-        NPageCollection::TLargeGlobId Snap; 
+        NPageCollection::TLargeGlobId Snap;
         TDeque<TLogEntry> RedoLog;
         TDeque<TBody> GCELog;
         TDeque<TBody> LoansLog;

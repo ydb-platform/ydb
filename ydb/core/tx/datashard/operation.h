@@ -8,11 +8,11 @@
 #include "change_exchange.h"
 #include "execution_unit_kind.h"
 
-#include <ydb/core/engine/mkql_engine_flat.h> 
-#include <ydb/core/protos/tx_datashard.pb.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
-#include <ydb/core/tx/balance_coverage/balance_coverage_builder.h> 
-#include <ydb/core/tx/tx_processing.h> 
+#include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
+#include <ydb/core/tx/tx_processing.h>
 
 #include <library/cpp/containers/flat_hash/flat_hash.h>
 
@@ -21,11 +21,11 @@
 #include <util/generic/queue.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using NTabletFlatExecutor::TTableSnapshotContext;
 
-class TDataShard; 
+class TDataShard;
 
 enum class ETxOrder {
     Unknown,
@@ -844,5 +844,5 @@ inline IOutputStream &operator <<(IOutputStream &out,
         break;                                                                      \
     }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

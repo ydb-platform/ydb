@@ -5,7 +5,7 @@ import six
 from hamcrest import all_of, has_property, has_properties
 from hamcrest.core.base_matcher import BaseMatcher
 
-import ydb.core.protos.msgbus_kv_pb2 as msgbus_kv 
+import ydb.core.protos.msgbus_kv_pb2 as msgbus_kv
 from ydb.tests.library.common.msgbus_types import EReplyStatus, TStorageStatusFlags
 from ydb.tests.library.common.msgbus_types import MessageBusStatus
 from ydb.tests.library.matchers.collection import contains

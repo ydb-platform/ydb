@@ -1,4 +1,4 @@
-OWNER(g:yq) 
+OWNER(g:yq)
 
 LIBRARY()
 
@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/yq/libs/config/protos 
+    ydb/core/yq/libs/config/protos
     ydb/library/yql/public/issue/protos
 )
 
@@ -15,4 +15,4 @@ END()
 
 RECURSE(
     protos
-) 
+)

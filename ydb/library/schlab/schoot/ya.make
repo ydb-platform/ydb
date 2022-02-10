@@ -1,14 +1,14 @@
 LIBRARY()
 
-OWNER( 
-    cthulhu 
-    g:kikimr 
-) 
+OWNER(
+    cthulhu
+    g:kikimr
+)
 
 PEERDIR(
     library/cpp/containers/stack_vector
     library/cpp/protobuf/json
-    ydb/library/schlab/protos 
+    ydb/library/schlab/protos
 )
 
 SRCS(
@@ -21,4 +21,4 @@ SRCS(
 
 END()
 
-RECURSE() 
+RECURSE()

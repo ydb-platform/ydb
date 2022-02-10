@@ -1,12 +1,12 @@
-UNITTEST_FOR(ydb/core/tx/schemeshard) 
+UNITTEST_FOR(ydb/core/tx/schemeshard)
 
-OWNER( 
-    vvvv 
-    g:kikimr 
-) 
+OWNER(
+    vvvv
+    g:kikimr
+)
 
 FORK_SUBTESTS()
- 
+
 SPLIT_FACTOR(10)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
@@ -19,13 +19,13 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/getopt 
+    library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
-    ydb/core/testlib 
-    ydb/core/tx 
-    ydb/core/tx/schemeshard/ut_helpers 
-    ydb/library/yql/public/udf/service/exception_policy 
+    ydb/core/testlib
+    ydb/core/tx
+    ydb/core/tx/schemeshard/ut_helpers
+    ydb/library/yql/public/udf/service/exception_policy
 )
 
 SRCS(

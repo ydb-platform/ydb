@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/sqs.pb.h> 
+#include <ydb/core/protos/sqs.pb.h>
 
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>

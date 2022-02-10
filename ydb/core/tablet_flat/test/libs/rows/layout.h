@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/flat_row_column.h> 
-#include <ydb/core/tablet_flat/flat_row_scheme.h> 
-#include <ydb/core/tablet_flat/flat_row_remap.h> 
-#include <ydb/core/tablet_flat/flat_table_column.h> 
-#include <ydb/core/tablet_flat/flat_util_misc.h> 
+#include <ydb/core/tablet_flat/flat_row_column.h>
+#include <ydb/core/tablet_flat/flat_row_scheme.h>
+#include <ydb/core/tablet_flat/flat_row_remap.h>
+#include <ydb/core/tablet_flat/flat_table_column.h>
+#include <ydb/core/tablet_flat/flat_util_misc.h>
 
 #include <util/generic/vector.h>
 

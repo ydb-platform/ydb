@@ -3,11 +3,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TPlanQueueUnit : public TExecutionUnit {
 public:
-    TPlanQueueUnit(TDataShard &dataShard, 
+    TPlanQueueUnit(TDataShard &dataShard,
                    TPipeline &pipeline);
     ~TPlanQueueUnit() override;
 
@@ -22,7 +22,7 @@ public:
 private:
 };
 
-TPlanQueueUnit::TPlanQueueUnit(TDataShard &dataShard, 
+TPlanQueueUnit::TPlanQueueUnit(TDataShard &dataShard,
                                TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::PlanQueue, false, dataShard, pipeline)
 {
@@ -110,11 +110,11 @@ void TPlanQueueUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreatePlanQueueUnit(TDataShard &dataShard, 
+THolder<TExecutionUnit> CreatePlanQueueUnit(TDataShard &dataShard,
                                             TPipeline &pipeline)
 {
     return THolder(new TPlanQueueUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

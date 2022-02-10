@@ -2,8 +2,8 @@
 #include "msgbus_server.h"
 #include "msgbus_server_request.h"
 #include "msgbus_tabletreq.h"
-#include <ydb/core/tx/tx_proxy/proxy.h> 
-#include <ydb/core/security/secure_request.h> 
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/security/secure_request.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {

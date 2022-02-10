@@ -1,9 +1,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
-#include <ydb/core/testlib/test_client.h> 
-#include <ydb/core/tx/datashard/datashard_failpoints.h> 
-#include <ydb/library/aclib/aclib.h> 
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/datashard/datashard_failpoints.h>
+#include <ydb/library/aclib/aclib.h>
 
 #include <util/string/subst.h>
 #include <util/system/valgrind.h>
@@ -624,14 +624,14 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                 TParameter("ID", (ui64)1),
                                 TParameter("SPECIES", "Rat"),
                                 TParameter("NAME", "Dobby"),
-                                TParameter("DESCRIPTION", "A test for \"double quotes\""), 
+                                TParameter("DESCRIPTION", "A test for \"double quotes\""),
                                 TParameter("WEIGHT", (i64)350)
                             );
         updateQuery.SyncExecute(
                                 TParameter("ID", (ui64)2),
                                 TParameter("SPECIES", "Rat"),
                                 TParameter("NAME", "Korzhik"),
-                                TParameter("DESCRIPTION", "A test for 'single quotes'"), 
+                                TParameter("DESCRIPTION", "A test for 'single quotes'"),
                                 TParameter("WEIGHT", (i64)500)
                             );
 
@@ -644,11 +644,11 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT_VALUES_EQUAL(value["myRes"].Size(), 2);
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Species"], "Rat");
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Name"], "Dobby");
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Description"], "A test for \"double quotes\""); 
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Description"], "A test for \"double quotes\"");
         UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][0]["Weight"], 350);
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Species"], "Rat");
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Name"], "Korzhik");
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Description"], "A test for 'single quotes'"); 
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Description"], "A test for 'single quotes'");
         UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][1]["Weight"], 500);
     }
 

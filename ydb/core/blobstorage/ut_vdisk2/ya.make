@@ -1,28 +1,28 @@
 UNITTEST()
 
-OWNER(alexvru) 
+OWNER(alexvru)
 
-FORK_SUBTESTS() 
+FORK_SUBTESTS()
 
-SIZE(MEDIUM) 
+SIZE(MEDIUM)
 
-TIMEOUT(600) 
+TIMEOUT(600)
 
-SRCS( 
-    defs.h 
-    env.h 
-    huge.cpp 
-) 
- 
-PEERDIR( 
-    library/cpp/testing/unittest 
-    ydb/core/blobstorage/backpressure 
-    ydb/core/blobstorage/groupinfo 
-    ydb/core/blobstorage/pdisk/mock 
-    ydb/core/blobstorage/vdisk 
-    ydb/core/blobstorage/vdisk/common 
-    ydb/core/tx/scheme_board 
-    ydb/library/yql/public/udf/service/stub 
-) 
- 
+SRCS(
+    defs.h
+    env.h
+    huge.cpp
+)
+
+PEERDIR(
+    library/cpp/testing/unittest
+    ydb/core/blobstorage/backpressure
+    ydb/core/blobstorage/groupinfo
+    ydb/core/blobstorage/pdisk/mock
+    ydb/core/blobstorage/vdisk
+    ydb/core/blobstorage/vdisk/common
+    ydb/core/tx/scheme_board
+    ydb/library/yql/public/udf/service/stub
+)
+
 END()

@@ -12,13 +12,13 @@ namespace {
         TVector<TBlobStorageGroupInfo::TFailRealm> Realms;
         const ui32 GroupID;
         const ui32 GroupGeneration;
-        TBlobStorageGroupInfo::TDynamicInfo DynamicInfo; 
+        TBlobStorageGroupInfo::TDynamicInfo DynamicInfo;
 
         TOriginalBlobStorageGroupInfo(ui32 blobSubgroupSize, const TBlobStorageGroupInfo& groupInfo)
             : BlobSubgroupSize(blobSubgroupSize)
             , GroupID(groupInfo.GroupID)
             , GroupGeneration(groupInfo.GroupGeneration)
-            , DynamicInfo(groupInfo.GetDynamicInfo()) 
+            , DynamicInfo(groupInfo.GetDynamicInfo())
         {
             for (auto it = groupInfo.FailRealmsBegin(); it != groupInfo.FailRealmsEnd(); ++it) {
                 Realms.push_back(*it);
@@ -41,8 +41,8 @@ namespace {
                 const ui32 vx = rng() % domain.VDisks.size();
 
                 outVDisk[i] = TVDiskID(GroupID, GroupGeneration, 0, dx, vx);
-                auto orderNum = domain.VDisks[vx].OrderNumber; 
-                outServiceIds[i] = DynamicInfo.ServiceIdForOrderNumber[orderNum]; 
+                auto orderNum = domain.VDisks[vx].OrderNumber;
+                outServiceIds[i] = DynamicInfo.ServiceIdForOrderNumber[orderNum];
 
                 ++domainIdx;
             }
@@ -118,8 +118,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
         ui32 num = 0;
         for (const auto& vdisk : groupInfo->GetVDisks()) {
             for (const TLogoBlobID& id : ids) {
-                auto vd = groupInfo->GetVDiskId(vdisk.OrderNumber); 
-                num += groupInfo->BelongsToSubgroup(vd, id.Hash()) ? 1 : 0; 
+                auto vd = groupInfo->GetVDiskId(vdisk.OrderNumber);
+                num += groupInfo->BelongsToSubgroup(vd, id.Hash()) ? 1 : 0;
             }
         }
         double newMetric = 1'000'000'000 * timer.PassedReset() / iterationCount;
@@ -133,8 +133,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
         ui32 num2 = 0;
         for (const auto& vdisk : groupInfo->GetVDisks()) {
             for (const TLogoBlobID& id : ids) {
-                auto vd = groupInfo->GetVDiskId(vdisk.OrderNumber); 
-                num2 += orig.BelongsToSubgroup(vd, id.Hash()) ? 1 : 0; 
+                auto vd = groupInfo->GetVDiskId(vdisk.OrderNumber);
+                num2 += orig.BelongsToSubgroup(vd, id.Hash()) ? 1 : 0;
             }
         }
         double oldMetric = 1'000'000'000 * timer.PassedReset() / iterationCount;
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
 
         THashMap<TVDiskID, TVector<ui32>> usageMap;
         for (const auto& vdisk : groupInfo->GetVDisks()) {
-            auto vd = groupInfo->GetVDiskId(vdisk.OrderNumber); 
+            auto vd = groupInfo->GetVDiskId(vdisk.OrderNumber);
             usageMap.emplace(vd, TVector<ui32>(9));
         }
 
@@ -248,12 +248,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
         for (ui32 i = 0; i < 10000; ++i) {
             const ui32 hash = rng();
 
-            TBlobStorageGroupInfo::TOrderNums orderNums; 
+            TBlobStorageGroupInfo::TOrderNums orderNums;
             TBlobStorageGroupInfo::TVDiskIds vdisks;
-            mapper->PickSubgroup(hash, orderNums); 
-            for (const auto &x : orderNums) { 
-                vdisks.push_back(groupInfo->GetVDiskId(x)); 
-            } 
+            mapper->PickSubgroup(hash, orderNums);
+            for (const auto &x : orderNums) {
+                vdisks.push_back(groupInfo->GetVDiskId(x));
+            }
 
             for (ui32 i = 0; i < vdisks.size(); ++i) {
                 ++usageMap[vdisks[i]][i];
@@ -278,11 +278,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
             }
 
             for (const auto& vdisk : groupInfo->GetVDisks()) {
-                auto vd = groupInfo->GetVDiskId(vdisk.OrderNumber); 
-                auto it = disk2index.find(vd); 
+                auto vd = groupInfo->GetVDiskId(vdisk.OrderNumber);
+                auto it = disk2index.find(vd);
                 bool isReplicaFor = it != disk2index.end();
-                UNIT_ASSERT_VALUES_EQUAL(mapper->GetIdxInSubgroup(vd, hash), isReplicaFor ? it->second : 9); 
-                UNIT_ASSERT_VALUES_EQUAL(mapper->BelongsToSubgroup(vd, hash), isReplicaFor); 
+                UNIT_ASSERT_VALUES_EQUAL(mapper->GetIdxInSubgroup(vd, hash), isReplicaFor ? it->second : 9);
+                UNIT_ASSERT_VALUES_EQUAL(mapper->BelongsToSubgroup(vd, hash), isReplicaFor);
             }
 
             for (ui32 i = 0; i < vdisks.size(); ++i) {

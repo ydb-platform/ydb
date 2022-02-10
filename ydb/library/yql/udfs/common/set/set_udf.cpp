@@ -1,6 +1,6 @@
 
-#include <ydb/library/yql/public/udf/udf_type_ops.h> 
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
+#include <ydb/library/yql/public/udf/udf_type_ops.h>
+#include <ydb/library/yql/public/udf/udf_helpers.h>
 
 #include <unordered_set>
 

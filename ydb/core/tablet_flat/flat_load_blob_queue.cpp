@@ -1,7 +1,7 @@
 #include "flat_load_blob_queue.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/counters.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

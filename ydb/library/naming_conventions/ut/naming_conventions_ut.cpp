@@ -1,4 +1,4 @@
-#include <ydb/library/naming_conventions/naming_conventions.h> 
+#include <ydb/library/naming_conventions/naming_conventions.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

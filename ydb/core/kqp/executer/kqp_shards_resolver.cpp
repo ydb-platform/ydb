@@ -1,8 +1,8 @@
 #include "kqp_shards_resolver.h"
 
-#include <ydb/core/base/tablet_resolver.h> 
-#include <ydb/core/kqp/executer/kqp_executer.h> 
-#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
+#include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/kqp/executer/kqp_executer.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

@@ -3,7 +3,7 @@
 #include "ut_helpers.h"
 #include "rate_accounting.h"
 
-#include <ydb/core/metering/metering.h> 
+#include <ydb/core/metering/metering.h>
 
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
 

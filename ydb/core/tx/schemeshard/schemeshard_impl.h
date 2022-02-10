@@ -18,37 +18,37 @@
 
 #include "operation_queue_timer.h"
 
-#include <ydb/core/base/hive.h> 
-#include <ydb/core/base/storage_pools.h> 
-#include <ydb/core/base/subdomain.h> 
-#include <ydb/core/base/tx_processing.h> 
-#include <ydb/core/cms/console/configs_dispatcher.h> 
-#include <ydb/core/cms/console/console.h> 
-#include <ydb/core/kesus/tablet/events.h> 
-#include <ydb/core/persqueue/events/global.h> 
-#include <ydb/core/protos/blockstore_config.pb.h> 
-#include <ydb/core/protos/counters_schemeshard.pb.h> 
-#include <ydb/core/protos/filestore_config.pb.h> 
-#include <ydb/core/protos/flat_scheme_op.pb.h> 
-#include <ydb/core/sys_view/common/events.h> 
-#include <ydb/core/tablet/pipe_tracker.h> 
-#include <ydb/core/tablet/tablet_counters.h> 
-#include <ydb/core/tablet/tablet_pipe_client_cache.h> 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
-#include <ydb/core/tablet_flat/flat_dbase_scheme.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
-#include <ydb/core/tx/message_seqno.h> 
-#include <ydb/core/tx/scheme_board/events.h> 
-#include <ydb/core/tx/tx_allocator_client/actor_client.h> 
+#include <ydb/core/base/hive.h>
+#include <ydb/core/base/storage_pools.h>
+#include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/tx_processing.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/counters_schemeshard.pb.h>
+#include <ydb/core/protos/filestore_config.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/tablet/pipe_tracker.h>
+#include <ydb/core/tablet/tablet_counters.h>
+#include <ydb/core/tablet/tablet_pipe_client_cache.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/flat_dbase_scheme.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/message_seqno.h>
+#include <ydb/core/tx/scheme_board/events.h>
+#include <ydb/core/tx/tx_allocator_client/actor_client.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
-#include <ydb/core/tx/sequenceshard/public/events.h> 
-#include <ydb/core/tx/tx_processing.h> 
-#include <ydb/core/util/pb.h> 
+#include <ydb/core/tx/sequenceshard/public/events.h>
+#include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/util/pb.h>
 
-#include <ydb/core/blockstore/core/blockstore.h> 
-#include <ydb/core/filestore/core/filestore.h> 
+#include <ydb/core/blockstore/core/blockstore.h>
+#include <ydb/core/filestore/core/filestore.h>
 
-#include <ydb/library/login/login.h> 
+#include <ydb/library/login/login.h>
 
 #include <util/generic/ptr.h>
 
@@ -594,7 +594,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxInitRoot();
 
     struct TTxInitRootCompatibility;
-    NTabletFlatExecutor::ITransaction* CreateTxInitRootCompatibility(TEvSchemeShard::TEvInitRootShard::TPtr &ev); 
+    NTabletFlatExecutor::ITransaction* CreateTxInitRootCompatibility(TEvSchemeShard::TEvInitRootShard::TPtr &ev);
 
     struct TTxInitTenantSchemeShard;
     NTabletFlatExecutor::ITransaction* CreateTxInitTenantSchemeShard(TEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev);

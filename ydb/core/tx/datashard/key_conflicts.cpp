@@ -2,7 +2,7 @@
 #include "sys_tables.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using TValidationInfo = NMiniKQL::IEngineFlat::TValidationInfo;
 using TValidatedKey = NMiniKQL::IEngineFlat::TValidatedKey;
@@ -76,5 +76,5 @@ bool HasKeyConflict(const TValidationInfo& infoA,
     return false;
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

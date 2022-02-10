@@ -5,8 +5,8 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event.h>
 #include <library/cpp/actors/core/interconnect.h>
-#include <ydb/core/base/events.h> 
-#include <ydb/core/protos/node_whiteboard.pb.h> 
+#include <ydb/core/base/events.h>
+#include <ydb/core/protos/node_whiteboard.pb.h>
 #include <util/generic/ptr.h>
 #include <util/stream/str.h>
 

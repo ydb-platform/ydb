@@ -10,8 +10,8 @@
 
 namespace NKikimr {
 
-namespace NPageCollection { 
-    class TCookieAllocator; 
+namespace NPageCollection {
+    class TCookieAllocator;
     struct TMemGlob;
 }
 
@@ -21,7 +21,7 @@ namespace NTable {
     struct TSizeEnv;
     class TRowState;
     struct TChange;
-    class TDatabaseImpl; 
+    class TDatabaseImpl;
     class TAnnex;
     class TTable;
     class TKeyRangeCache;
@@ -39,8 +39,8 @@ struct TKeyRange {
 
 class TDatabase {
 public:
-    using TMemGlobs = TVector<NPageCollection::TMemGlob>; 
-    using TCookieAllocator = NPageCollection::TCookieAllocator; 
+    using TMemGlobs = TVector<NPageCollection::TMemGlob>;
+    using TCookieAllocator = NPageCollection::TCookieAllocator;
     using TCounters = TDbStats;
 
     struct TProd {
@@ -53,7 +53,7 @@ public:
     };
 
     TDatabase(const TDatabase&) = delete;
-    TDatabase(TDatabaseImpl *databaseImpl = nullptr) noexcept; 
+    TDatabase(TDatabaseImpl *databaseImpl = nullptr) noexcept;
     ~TDatabase();
 
     /* Returns durable monotonic change number for table or entire database
@@ -92,9 +92,9 @@ public:
                         EDirection direction = EDirection::Forward,
                         TRowVersion snapshot = TRowVersion::Max());
 
-    void Update(ui32 table, ERowOp, TRawVals key, TArrayRef<const TUpdateOp>, TRowVersion rowVersion = TRowVersion::Min()); 
+    void Update(ui32 table, ERowOp, TRawVals key, TArrayRef<const TUpdateOp>, TRowVersion rowVersion = TRowVersion::Min());
 
-    void UpdateTx(ui32 table, ERowOp, TRawVals key, TArrayRef<const TUpdateOp>, ui64 txId); 
+    void UpdateTx(ui32 table, ERowOp, TRawVals key, TArrayRef<const TUpdateOp>, ui64 txId);
     void RemoveTx(ui32 table, ui64 txId);
     void CommitTx(ui32 table, ui64 txId, TRowVersion rowVersion = TRowVersion::Min());
 
@@ -124,10 +124,10 @@ public:
 
     TIntrusiveConstPtr<TRowScheme> GetRowScheme(ui32 table) const noexcept;
 
-    TPartView GetPartView(ui32 table, const TLogoBlobID &bundle) const; 
-    TVector<TPartView> GetTableParts(ui32 table) const; 
+    TPartView GetPartView(ui32 table, const TLogoBlobID &bundle) const;
+    TVector<TPartView> GetTableParts(ui32 table) const;
     TVector<TIntrusiveConstPtr<TColdPart>> GetTableColdParts(ui32 table) const;
-    void EnumerateTableParts(ui32 table, const std::function<void(const TPartView&)>& callback) const; 
+    void EnumerateTableParts(ui32 table, const std::function<void(const TPartView&)>& callback) const;
     void EnumerateTableColdParts(ui32 table, const std::function<void(const TIntrusiveConstPtr<TColdPart>&)>& callback) const;
     void EnumerateTableTxStatusParts(ui32 table, const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
     void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
@@ -148,7 +148,7 @@ public:
 
     void Replace(ui32 table, TArrayRef<const TPartView>, const TSubset&);
     void ReplaceTxStatus(ui32 table, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>>, const TSubset&);
-    void Merge(ui32 table, TPartView); 
+    void Merge(ui32 table, TPartView);
     void Merge(ui32 table, TIntrusiveConstPtr<TColdPart>);
     void Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart>);
 
@@ -159,7 +159,7 @@ public:
 
     // executor interface
     void Begin(TTxStamp, IPages& env);
-    TProd Commit(TTxStamp, bool commit, TCookieAllocator* = nullptr); 
+    TProd Commit(TTxStamp, bool commit, TCookieAllocator* = nullptr);
     TGarbage RollUp(TTxStamp, TArrayRef<const char> delta, TArrayRef<const char> redo, TMemGlobs annex);
 
     void RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper);
@@ -172,7 +172,7 @@ private:
     TTable* Require(ui32 tableId) const noexcept;
 
 private:
-    const THolder<TDatabaseImpl> DatabaseImpl; 
+    const THolder<TDatabaseImpl> DatabaseImpl;
 
     ui64 Stamp = Max<ui64>();
     bool NoMoreReadsFlag;

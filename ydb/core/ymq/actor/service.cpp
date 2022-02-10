@@ -13,17 +13,17 @@
 #include "user_settings_reader.h"
 #include "index_events_processor.h"
 
-#include <ydb/public/lib/value/value.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h> 
-#include <ydb/core/base/quoter.h> 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/ymq/base/counters.h> 
-#include <ydb/core/ymq/base/debug_info.h> 
-#include <ydb/core/ymq/base/probes.h> 
-#include <ydb/core/ymq/base/secure_protobuf_printer.h> 
-#include <ydb/core/tx/scheme_board/cache.h> 
-#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
-#include <ydb/core/base/counters.h> 
+#include <ydb/public/lib/value/value.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb/core/base/quoter.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/ymq/base/counters.h>
+#include <ydb/core/ymq/base/debug_info.h>
+#include <ydb/core/ymq/base/probes.h>
+#include <ydb/core/ymq/base/secure_protobuf_printer.h>
+#include <ydb/core/tx/scheme_board/cache.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/base/counters.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <library/cpp/actors/core/events.h>
@@ -248,7 +248,7 @@ struct TSqsService::TUserInfo : public TAtomicRefCount<TUserInfo> {
     }
 
     TString UserName_;
-    std::shared_ptr<const std::map<TString, TString>> Settings_ = std::make_shared<const std::map<TString, TString>>(); 
+    std::shared_ptr<const std::map<TString, TString>> Settings_ = std::make_shared<const std::map<TString, TString>>();
     TIntrusivePtr<TUserCounters> Counters_;
     std::map<TString, TSqsService::TQueueInfoPtr> Queues_;
     THashMap<std::pair<TString, TString>, TSqsService::TQueueInfoPtr> QueueByNameAndFolder_; // <custom name, folder id> -> queue info
@@ -299,7 +299,7 @@ void TSqsService::Bootstrap() {
     // Counters.
     SqsCoreCounters_ = GetSqsServiceCounters(AppData()->Counters, "core");
     YmqRootCounters_ = GetYmqPublicCounters(AppData()->Counters);
-    AllocPoolCounters_ = std::make_shared<TAlignedPagePoolCounters>(AppData()->Counters, "sqs"); 
+    AllocPoolCounters_ = std::make_shared<TAlignedPagePoolCounters>(AppData()->Counters, "sqs");
     AggregatedUserCounters_ = MakeIntrusive<TUserCounters>(
             Cfg(), SqsCoreCounters_, nullptr, AllocPoolCounters_, TOTAL_COUNTER_LABEL, nullptr, true
     );

@@ -5,8 +5,8 @@
 #include "rpc_common.h"
 #include "table_profiles.h"
 
-#include <ydb/core/cms/console/configs_dispatcher.h> 
-#include <ydb/core/protos/console_config.pb.h> 
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/protos/console_config.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {

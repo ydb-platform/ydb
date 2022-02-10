@@ -49,7 +49,7 @@ public:
     inline void Reset() noexcept {
         TBuffer().Swap(*this);
     }
- 
+
     inline void Assign(const char* data, size_t len) {
         Clear();
         Append(data, len);
@@ -180,7 +180,7 @@ public:
             Append(fillChar);
         }
     }
- 
+
     inline char* data() noexcept {
         return Data();
     }

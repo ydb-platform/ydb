@@ -1,7 +1,7 @@
 #include "log.h"
 #include "context.h"
 #include "profile.h"
-#include <ydb/library/yql/utils/log/ut/log_parser.h> 
+#include <ydb/library/yql/utils/log/ut/log_parser.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/logger/stream.h>

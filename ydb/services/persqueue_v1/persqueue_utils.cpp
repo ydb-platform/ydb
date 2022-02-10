@@ -1,6 +1,6 @@
 #include "persqueue_utils.h"
 
-#include <ydb/core/base/path.h> 
+#include <ydb/core/base/path.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 

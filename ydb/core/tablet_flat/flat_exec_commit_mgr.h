@@ -7,9 +7,9 @@
 #include "flat_sausage_slicer.h"
 #include "flat_executor_gclogic.h"
 #include "flat_executor_counters.h"
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/base/tablet.h> 
-#include <ydb/core/tablet_flat/flat_executor.pb.h> 
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/tablet.h>
+#include <ydb/core/tablet_flat/flat_executor.pb.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -55,14 +55,14 @@ namespace NTabletFlatExecutor {
         using TGcLogic = TExecutorGCLogic;
         using TEvCommit = TEvTablet::TEvCommit;
 
-        TCommitManager(NBoot::TSteppedCookieAllocatorFactory &steppedCookieAllocatorFactory, TIntrusivePtr<NSnap::TWaste> waste, TGcLogic *logic) 
-            : Tablet(steppedCookieAllocatorFactory.Tablet) 
-            , Gen(steppedCookieAllocatorFactory.Gen) 
+        TCommitManager(NBoot::TSteppedCookieAllocatorFactory &steppedCookieAllocatorFactory, TIntrusivePtr<NSnap::TWaste> waste, TGcLogic *logic)
+            : Tablet(steppedCookieAllocatorFactory.Tablet)
+            , Gen(steppedCookieAllocatorFactory.Gen)
             , Waste(std::move(waste))
             , GcLogic(logic)
-            , Turns_(steppedCookieAllocatorFactory.Sys(NBoot::TCookie::EIdx::TurnLz4)) 
-            , Annex(steppedCookieAllocatorFactory.Data()) 
-            , Turns(1, Turns_.Get(), NBlockIO::BlockSize) 
+            , Turns_(steppedCookieAllocatorFactory.Sys(NBoot::TCookie::EIdx::TurnLz4))
+            , Annex(steppedCookieAllocatorFactory.Data())
+            , Turns(1, Turns_.Get(), NBlockIO::BlockSize)
         {
 
         }
@@ -195,11 +195,11 @@ namespace NTabletFlatExecutor {
         ETactic Tactic = ETactic::TacticDefault;
         TGcLogic * const GcLogic = nullptr;
         TMonCo * MonCo = nullptr;
-        TAutoPtr<NPageCollection::TSteppedCookieAllocator> Turns_; 
+        TAutoPtr<NPageCollection::TSteppedCookieAllocator> Turns_;
 
     public:
-        TAutoPtr<NPageCollection::TSteppedCookieAllocator> Annex; 
-        NPageCollection::TSlicer Turns; 
+        TAutoPtr<NPageCollection::TSteppedCookieAllocator> Annex;
+        NPageCollection::TSlicer Turns;
     };
 
 }

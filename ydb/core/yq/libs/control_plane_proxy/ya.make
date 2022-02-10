@@ -1,4 +1,4 @@
-OWNER(g:yq) 
+OWNER(g:yq)
 
 LIBRARY()
 
@@ -9,14 +9,14 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/base 
-    ydb/core/mon 
+    ydb/core/base
+    ydb/core/mon
     ydb/core/yq/libs/actors/logging
-    ydb/core/yq/libs/actors 
-    ydb/core/yq/libs/control_plane_proxy/events 
-    ydb/core/yq/libs/control_plane_storage 
-    ydb/library/folder_service 
-    ydb/library/security 
+    ydb/core/yq/libs/actors
+    ydb/core/yq/libs/control_plane_proxy/events
+    ydb/core/yq/libs/control_plane_storage
+    ydb/library/folder_service
+    ydb/library/security
 )
 
 YQL_LAST_ABI_VERSION()
@@ -27,6 +27,6 @@ RECURSE(
     events
 )
 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+RECURSE_FOR_TESTS(
+    ut
+)

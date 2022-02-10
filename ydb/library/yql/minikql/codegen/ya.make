@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    g:yql 
-    g:yql_ydb_core 
-) 
+OWNER(
+    g:yql
+    g:yql_ydb_core
+)
 
 SRCS(
     codegen.cpp
@@ -12,13 +12,13 @@ SRCS(
 NO_COMPILER_WARNINGS()
 
 IF (NOT WINDOWS)
-    PEERDIR( 
-        contrib/libs/cxxsupp/builtins 
-    ) 
+    PEERDIR(
+        contrib/libs/cxxsupp/builtins
+    )
 ELSE()
-    PEERDIR( 
-        ydb/library/yql/public/decimal 
-    ) 
+    PEERDIR(
+        ydb/library/yql/public/decimal
+    )
 ENDIF()
 
 PEERDIR(
@@ -34,9 +34,9 @@ PEERDIR(
 )
 
 IF (OS_LINUX)
-    PEERDIR( 
+    PEERDIR(
         contrib/libs/llvm12/lib/ExecutionEngine/PerfJITEvents
-    ) 
+    )
 ENDIF()
 
 END()

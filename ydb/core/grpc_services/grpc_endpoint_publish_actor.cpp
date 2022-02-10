@@ -7,10 +7,10 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/location.h> 
-#include <ydb/core/base/statestorage.h> 
-#include <ydb/core/mind/tenant_pool.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/location.h>
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/mind/tenant_pool.h>
 
 namespace NKikimr {
 namespace NGRpcService {

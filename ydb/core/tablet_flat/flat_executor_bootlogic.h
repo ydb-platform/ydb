@@ -13,9 +13,9 @@ class TCommitManager;
 namespace NBoot {
     class IStep;
     class TRoot;
-    class TBundleLoadStep; 
+    class TBundleLoadStep;
     class TRedo;
-    class TMemTable; 
+    class TMemTable;
     class TStages;
     class TGCLog;
     class TLoans;
@@ -43,11 +43,11 @@ namespace NBoot {
 class TExecutorBootLogic
     : private ILoadBlob
 {
-    friend class NBoot::TBundleLoadStep; 
+    friend class NBoot::TBundleLoadStep;
     friend class NBoot::TRedo;
     friend class NBoot::TStages;
     friend class NBoot::TLoadBlobs;
-    friend class NBoot::TMemTable; 
+    friend class NBoot::TMemTable;
     friend class NBoot::TGCLog;
     friend class NBoot::TLoans;
     friend class NBoot::TAlter;
@@ -82,7 +82,7 @@ private:
     TLoadBlobQueue LoadBlobQueue;
 
     THashMap<TLogoBlobID, TIntrusivePtr<NBoot::TLoadBlobs>> EntriesToLoad;
-    THashMap<const NPageCollection::IPageCollection*, TIntrusivePtr<NBoot::IStep>> Loads; 
+    THashMap<const NPageCollection::IPageCollection*, TIntrusivePtr<NBoot::IStep>> Loads;
 
     ui32 GroupResolveCachedChannel;
     ui32 GroupResolveCachedGeneration;

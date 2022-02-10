@@ -1,7 +1,7 @@
 #include "yql_provider_gateway.h"
 
 #include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {
 namespace NCommon {

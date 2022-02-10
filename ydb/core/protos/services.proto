@@ -11,36 +11,36 @@ enum EServiceKikimr {
     BLOBSTORAGE = 257;
     STATESTORAGE = 258;
     RESOURCE_BROKER = 259;
- 
+
     // BLOBSTORAGE section
     BS_SKELETON = 260;
-    BS_VDISK_BLOCK = 261; 
-    BS_VDISK_GC = 262; 
-    BS_VDISK_GET = 263; 
-    BS_VDISK_PUT = 264; 
-    BS_VDISK_OTHER = 265; 
-    BS_LOCALRECOVERY = 266; 
-    BS_HULLCOMP = 267; 
-    BS_HULLRECS = 268; 
-    BS_HULLHUGE = 269; 
-    BS_SYNCLOG = 270; 
-    BS_SYNCJOB = 271; 
-    BS_SYNCER = 272; 
-    BS_REPL = 273; 
-    BS_PDISK = 274; 
+    BS_VDISK_BLOCK = 261;
+    BS_VDISK_GC = 262;
+    BS_VDISK_GET = 263;
+    BS_VDISK_PUT = 264;
+    BS_VDISK_OTHER = 265;
+    BS_LOCALRECOVERY = 266;
+    BS_HULLCOMP = 267;
+    BS_HULLRECS = 268;
+    BS_HULLHUGE = 269;
+    BS_SYNCLOG = 270;
+    BS_SYNCJOB = 271;
+    BS_SYNCER = 272;
+    BS_REPL = 273;
+    BS_PDISK = 274;
     BS_PDISK_TEST = 1102;
-    BS_YARD = 275; 
-    BS_PROXY = 276; 
-    BS_NODE = 277; 
-    BS_CONTROLLER = 278; 
-    BS_DEVICE = 279; 
-    BS_PDISK_SYSLOG = 280; 
-    BS_PROXY_BLOCK = 281; 
-    BS_PROXY_COLLECT = 282; 
-    BS_PROXY_DISCOVER = 283; 
-    BS_PROXY_GET = 284; 
-    BS_PROXY_PUT = 285; 
-    BS_PROXY_RANGE = 286; 
+    BS_YARD = 275;
+    BS_PROXY = 276;
+    BS_NODE = 277;
+    BS_CONTROLLER = 278;
+    BS_DEVICE = 279;
+    BS_PDISK_SYSLOG = 280;
+    BS_PROXY_BLOCK = 281;
+    BS_PROXY_COLLECT = 282;
+    BS_PROXY_DISCOVER = 283;
+    BS_PROXY_GET = 284;
+    BS_PROXY_PUT = 285;
+    BS_PROXY_RANGE = 286;
     BS_QUEUE = 287;
     BS_PROXY_MULTIGET = 288;
     BS_PROXY_MULTICOLLECT = 289;
@@ -58,13 +58,13 @@ enum EServiceKikimr {
     BS_LOAD_TEST = 293;
     BS_INCRHUGE = 294;
     BS_LOGCUTTER = 297;
-    BS_VDISK_CHUNKS = 299; 
- 
+    BS_VDISK_CHUNKS = 299;
+
     // SCHEMESHARD section
     SCHEMESHARD_DESCRIBE = 295;
     FLAT_TX_SCHEMESHARD = 296;
     SHEME_SHARD = 700; // stillborn tag
- 
+
     // OLAP section
     TX_OLAPSHARD = 331;
     TX_COLUMNSHARD = 332;
@@ -80,7 +80,7 @@ enum EServiceKikimr {
     BOOTSTRAPPER = 302;
     TENANT_POOL = 303;
     LABELS_MAINTAINER = 305;
- 
+
     // TABLET section
     TABLET_EXECUTOR = 310;
     TABLET_MAIN = 311;
@@ -99,21 +99,21 @@ enum EServiceKikimr {
     // PIPE section
     PIPE_CLIENT = 320;
     PIPE_SERVER = 321;
- 
+
     // DUMMY section
     TX_DUMMY = 330;
- 
+
     // MINIKQL section
     MINIKQL_ENGINE = 340;
     KQP_TASKS_RUNNER = 341;
- 
+
     // JOBRUNNER section - deprecated, left for compatibility with existing logger configuration
     JOBRUNNER = 350;
     JOBRUNNER_PROXY = 351;
     JOBRUNNER_CONTRACTOR = 352;
     JOB_POOL_MANAGER = 353;
     FLAT_JOBRUNNER_POOL_MANAGER = 354;
- 
+
     // EXECUTION_SERVICE section
     EXECUTION_SERVICE = 360; // deprecated, left for compatibility reasons
     EXECUTION_SERVICE_PROXY = 361; // deprecated, left for compatibility reasons
@@ -122,22 +122,22 @@ enum EServiceKikimr {
     YQL_EXECUTION = 364;
     YAMR_PROXY = 365;
     YQL_KIKIMR_PROXY = 366;
- 
+
     // TRIGGER section
     TRIGGER = 370;
- 
+
     // COORDINATOR section
     TX_COORDINATOR = 380;
     TX_COORDINATOR_PRIVATE = 381;
     TX_COORDINATOR_MEDIATOR_QUEUE = 382;
- 
+
     // MEDIATOR section
     TX_MEDIATOR = 390;
     TX_MEDIATOR_PRIVATE = 391;
     TX_MEDIATOR_EXEC_QUEUE = 392;
     TX_MEDIATOR_TABLETQUEUE = 393;
     TX_MEDIATOR_TIMECAST = 394;
- 
+
     // PROXY section
     TX_PROXY = 400;
     TX_PROXY_SCHEME_CACHE = 401;
@@ -559,7 +559,7 @@ message TActivity {
         BLOCKSTORE_SERVICE_PROXY = 244;
         BLOCKSTORE_SS_PROXY = 245;
         BLOCKSTORE_VOLUME = 246;
-        SAUSAGE_BIO_A = 247; // Generalized page collection blocks IO 
+        SAUSAGE_BIO_A = 247; // Generalized page collection blocks IO
         KQP_EXECUTER_ACTOR = 248;
         USER_REGISTRY_ACTOR = 249;
         TVM_SETTINGS_UPDATER_ACTOR = 250;

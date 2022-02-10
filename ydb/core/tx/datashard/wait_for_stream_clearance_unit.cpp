@@ -3,11 +3,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TWaitForStreamClearanceUnit : public TExecutionUnit {
 public:
-    TWaitForStreamClearanceUnit(TDataShard &dataShard, 
+    TWaitForStreamClearanceUnit(TDataShard &dataShard,
                                 TPipeline &pipeline);
     ~TWaitForStreamClearanceUnit() override;
 
@@ -22,7 +22,7 @@ private:
     void ProcessEvent(TAutoPtr<NActors::IEventHandle> &ev,
                       TOperation::TPtr op,
                       const NActors::TActorContext &ctx);
-    void Handle(TDataShard::TEvPrivate::TEvNodeDisconnected::TPtr &ev, 
+    void Handle(TDataShard::TEvPrivate::TEvNodeDisconnected::TPtr &ev,
                 TOperation::TPtr op,
                 const TActorContext &ctx);
     void Handle(TEvTxProcessing::TEvStreamClearanceResponse::TPtr &ev,
@@ -39,7 +39,7 @@ private:
                const TActorContext &ctx);
 };
 
-TWaitForStreamClearanceUnit::TWaitForStreamClearanceUnit(TDataShard &dataShard, 
+TWaitForStreamClearanceUnit::TWaitForStreamClearanceUnit(TDataShard &dataShard,
                                                          TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::WaitForStreamClearance, false, dataShard, pipeline)
 {
@@ -117,7 +117,7 @@ void TWaitForStreamClearanceUnit::ProcessEvent(TAutoPtr<NActors::IEventHandle> &
                                                const NActors::TActorContext &ctx)
 {
     switch (ev->GetTypeRewrite()) {
-        OHFunc(TDataShard::TEvPrivate::TEvNodeDisconnected, Handle); 
+        OHFunc(TDataShard::TEvPrivate::TEvNodeDisconnected, Handle);
         OHFunc(TEvTxProcessing::TEvStreamClearanceResponse, Handle);
         OHFunc(TEvTxProcessing::TEvInterruptTransaction, Handle);
         OHFunc(TEvents::TEvUndelivered, Handle);
@@ -130,7 +130,7 @@ void TWaitForStreamClearanceUnit::ProcessEvent(TAutoPtr<NActors::IEventHandle> &
     }
 }
 
-void TWaitForStreamClearanceUnit::Handle(TDataShard::TEvPrivate::TEvNodeDisconnected::TPtr &ev, 
+void TWaitForStreamClearanceUnit::Handle(TDataShard::TEvPrivate::TEvNodeDisconnected::TPtr &ev,
                                          TOperation::TPtr op,
                                          const TActorContext &ctx)
 {
@@ -208,11 +208,11 @@ void TWaitForStreamClearanceUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateWaitForStreamClearanceUnit(TDataShard &dataShard, 
+THolder<TExecutionUnit> CreateWaitForStreamClearanceUnit(TDataShard &dataShard,
                                                          TPipeline &pipeline)
 {
     return THolder(new TWaitForStreamClearanceUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

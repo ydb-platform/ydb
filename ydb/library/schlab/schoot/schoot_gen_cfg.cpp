@@ -1,5 +1,5 @@
 #include "schoot_gen_cfg.h"
-#include <ydb/library/schlab/protos/schlab.pb.h> 
+#include <ydb/library/schlab/protos/schlab.pb.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <util/stream/str.h>
 #include <google/protobuf/text_format.h>

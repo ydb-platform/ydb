@@ -1,21 +1,21 @@
 #include "datashard_txs.h"
 
-#include <ydb/core/base/tx_processing.h> 
-#include <ydb/core/tablet/tablet_exception.h> 
-#include <ydb/core/util/pb.h> 
+#include <ydb/core/base/tx_processing.h>
+#include <ydb/core/tablet/tablet_exception.h>
+#include <ydb/core/util/pb.h>
 
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-TDataShard::TTxInit::TTxInit(TDataShard* ds) 
+TDataShard::TTxInit::TTxInit(TDataShard* ds)
     : TBase(ds)
 {}
 
-bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) { 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Execute"); 
+bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Execute");
 
     try {
         Self->State = TShardState::Unknown;
@@ -51,8 +51,8 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
     }
 }
 
-void TDataShard::TTxInit::Complete(const TActorContext &ctx) { 
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Complete"); 
+void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
+    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Complete");
 
     // Start MakeSnapshot() if we started in SplitSrcMakeSnapshot state
     if (Self->State == TShardState::SplitSrcMakeSnapshot) {
@@ -122,11 +122,11 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     Self->CheckMvccStateChangeCanStart(ctx);
 }
 
-#define LOAD_SYS_UI64(db, row, value) if (!TDataShard::SysGetUi64(db, row, value)) return false; 
-#define LOAD_SYS_BYTES(db, row, value) if (!TDataShard::SysGetBytes(db, row, value)) return false; 
-#define LOAD_SYS_BOOL(db, row, value) if (!TDataShard::SysGetBool(db, row, value)) return false; 
+#define LOAD_SYS_UI64(db, row, value) if (!TDataShard::SysGetUi64(db, row, value)) return false;
+#define LOAD_SYS_BYTES(db, row, value) if (!TDataShard::SysGetBytes(db, row, value)) return false;
+#define LOAD_SYS_BOOL(db, row, value) if (!TDataShard::SysGetBool(db, row, value)) return false;
 
-bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) { 
+bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     // Note that we should not store any data directly into Self until NoMoreReads() is called
     // But it is ok for initialization, as long as ALL FOLLOWING ACTIONS ARE IDEMPOTENT
 
@@ -483,9 +483,9 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 }
 
 /// Creates and updates schema at tablet boot time
-class TDataShard::TTxInitSchema : public TTransactionBase<TDataShard> { 
+class TDataShard::TTxInitSchema : public TTransactionBase<TDataShard> {
 public:
-    TTxInitSchema(TDataShard* self) 
+    TTxInitSchema(TDataShard* self)
         : TBase(self)
     {}
 
@@ -560,7 +560,7 @@ public:
             if (pathOwnerId == INVALID_TABLET_ID && currentSchemeShardId != INVALID_TABLET_ID) {
                 pathOwnerId = currentSchemeShardId;
                 LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute Persist Sys_PathOwnerId");
-                Self->PersistSys(db, TDataShard::Schema::Sys_PathOwnerId, pathOwnerId); 
+                Self->PersistSys(db, TDataShard::Schema::Sys_PathOwnerId, pathOwnerId);
             }
         }
 
@@ -574,9 +574,9 @@ public:
 };
 
 /// Initializes schema defaults changes
-class TDataShard::TTxInitSchemaDefaults : public TTransactionBase<TDataShard> { 
+class TDataShard::TTxInitSchemaDefaults : public TTransactionBase<TDataShard> {
 public:
-    TTxInitSchemaDefaults(TDataShard* self) 
+    TTxInitSchemaDefaults(TDataShard* self)
         : TBase(self)
     {}
 
@@ -599,19 +599,19 @@ public:
     }
 };
 
-ITransaction* TDataShard::CreateTxInit() { 
+ITransaction* TDataShard::CreateTxInit() {
     return new TTxInit(this);
 }
 
-ITransaction* TDataShard::CreateTxInitSchema() { 
+ITransaction* TDataShard::CreateTxInitSchema() {
     return new TTxInitSchema(this);
 }
 
-ITransaction* TDataShard::CreateTxInitSchemaDefaults() { 
+ITransaction* TDataShard::CreateTxInitSchemaDefaults() {
     return new TTxInitSchemaDefaults(this);
 }
 
-bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorContext &ctx, 
+bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorContext &ctx,
                                           NKikimrTxDataShard::TError::EKind & status, TString& errMessage)
 {
     status = NKikimrTxDataShard::TError::OK;

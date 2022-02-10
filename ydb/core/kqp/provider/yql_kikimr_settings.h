@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/providers/common/config/yql_dispatch.h>
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
-#include <ydb/core/protos/config.pb.h> 
+#include <ydb/core/protos/config.pb.h>
 
 namespace NYql {
 
@@ -13,7 +13,7 @@ enum EOptionalFlag {
 };
 
 struct TKikimrSettings {
-    using TConstPtr = std::shared_ptr<const TKikimrSettings>; 
+    using TConstPtr = std::shared_ptr<const TKikimrSettings>;
 
     /* KQP */
     NCommon::TConfSetting<ui32, false> _KqpQueryTimeoutSec;

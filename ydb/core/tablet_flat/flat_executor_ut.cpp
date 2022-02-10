@@ -61,9 +61,9 @@ namespace NTabletFlatExecutor {
 
                     TString str = Bytes ? TString(Bytes, (char)Key) : "value";
                     const auto val = NScheme::TString::TInstance(str);
-                    NTable::TUpdateOp ops{ ColumnValueId, NTable::ECellOp::Set, val }; 
+                    NTable::TUpdateOp ops{ ColumnValueId, NTable::ECellOp::Set, val };
 
-                    txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { ops }, WriteVersion); 
+                    txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { ops }, WriteVersion);
                 }
 
                 return true;
@@ -98,7 +98,7 @@ namespace NTabletFlatExecutor {
                 for (auto end = Key + Min(Pack, Rows); Key < end; Key++, Rows--) {
                     const auto key = NScheme::TInt64::TInstance(Key);
 
-                    txc.DB.Update(TableId, NTable::ERowOp::Erase, { key }, { }, WriteVersion); 
+                    txc.DB.Update(TableId, NTable::ERowOp::Erase, { key }, { }, WriteVersion);
                 }
 
                 return true;
@@ -2069,7 +2069,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorCompressedSelectRows) {
                 NTable::TRowState row;
                 auto ready = txc.DB.Select(TRowsModel::TableId, key, tags, row);
                 Y_VERIFY(ready == NTable::EReady::Data);
-                Y_VERIFY(row.GetRowState() == NTable::ERowOp::Upsert); 
+                Y_VERIFY(row.GetRowState() == NTable::ERowOp::Upsert);
                 TStringBuf selected = row.Get(0).AsBuf();
                 Y_VERIFY(selected.size() == 1024);
                 TString expected(1024, (char)keyId);
@@ -2171,16 +2171,16 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedRows) {
                 TString str(1024, (char)key);
                 const auto valValue = NScheme::TString::TInstance(str);
 
-                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue }; 
+                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue };
 
-                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops }, TRowVersion(1, 10)); 
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops }, TRowVersion(1, 10));
             }
 
             // Erase all those rows in 2/20
             for (i64 key = base; key < base + 512; ++key) {
                 const auto keyValue = NScheme::TInt64::TInstance(key);
 
-                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { }, TRowVersion(2, 20)); 
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { }, TRowVersion(2, 20));
             }
 
             // Insert 512KB more rows in 3/30
@@ -2191,9 +2191,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedRows) {
                 TString str(1024, (char)key);
                 const auto valValue = NScheme::TString::TInstance(str);
 
-                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue }; 
+                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue };
 
-                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops }, TRowVersion(3, 30)); 
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops }, TRowVersion(3, 30));
             }
 
             // Resurrect rows in 4/40
@@ -2204,9 +2204,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedRows) {
                 TString str(1024, (char)key);
                 const auto valValue = NScheme::TString::TInstance(str);
 
-                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue }; 
+                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue };
 
-                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops }, TRowVersion(4, 40)); 
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops }, TRowVersion(4, 40));
             }
 
             return true;
@@ -2231,9 +2231,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedRows) {
                 TString str(1024, (char)key);
                 const auto valValue = NScheme::TString::TInstance(str);
 
-                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue }; 
+                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue };
 
-                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops }, TRowVersion(5, 50)); 
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops }, TRowVersion(5, 50));
             }
 
             // Erase 1m+x rows in 6/60
@@ -2241,7 +2241,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedRows) {
             for (i64 key = base; key < base + 512; ++key) {
                 const auto keyValue = NScheme::TInt64::TInstance(key);
 
-                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { }, TRowVersion(6, 60)); 
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { }, TRowVersion(6, 60));
             }
 
             // Erase 2m+x rows in 6/60
@@ -2249,7 +2249,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedRows) {
             for (i64 key = base; key < base + 512; ++key) {
                 const auto keyValue = NScheme::TInt64::TInstance(key);
 
-                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { }, TRowVersion(6, 60)); 
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { }, TRowVersion(6, 60));
             }
 
             return true;
@@ -2506,21 +2506,21 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedLargeBlobs) {
                 const auto val = NScheme::TString::TInstance(str);
                 const auto counter = NScheme::TInt64::TInstance(Counter);
                 NTable::TUpdateOp ops[2] = {
-                    { ValueColumnId, NTable::ECellOp::Set, val }, 
-                    { CounterColumnId, NTable::ECellOp::Set, counter }, 
+                    { ValueColumnId, NTable::ECellOp::Set, val },
+                    { CounterColumnId, NTable::ECellOp::Set, counter },
                 };
 
-                txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, ops, WriteVersion); 
+                txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, ops, WriteVersion);
             }
- 
+
             return true;
         }
- 
+
         void Complete(const TActorContext &ctx) override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
- 
+
     private:
         ui64 Key = 0;
         ui64 Counter = 0;
@@ -2541,20 +2541,20 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedLargeBlobs) {
                 const auto key = NScheme::TInt64::TInstance(Key);
                 const auto counter = NScheme::TInt64::TInstance(Counter);
                 NTable::TUpdateOp ops[1] = {
-                    { CounterColumnId, NTable::ECellOp::Set, counter }, 
+                    { CounterColumnId, NTable::ECellOp::Set, counter },
                 };
 
-                txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, ops, WriteVersion); 
+                txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, ops, WriteVersion);
             }
 
             return true;
         }
- 
+
         void Complete(const TActorContext &ctx) override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
- 
+
     private:
         ui64 Key = 0;
         ui64 Counter = 0;
@@ -2648,9 +2648,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorKeepEraseMarkers) {
                 TString str = "key100value";
                 const auto valValue = NScheme::TString::TInstance(str);
 
-                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue }; 
+                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue };
 
-                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops }); 
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops });
             }
 
             {
@@ -2660,11 +2660,11 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorKeepEraseMarkers) {
                 TString str = "key200value";
                 const auto valValue = NScheme::TString::TInstance(str);
 
-                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue }; 
+                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue };
 
                 // Erase, then update
-                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { }); 
-                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops }); 
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { });
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops });
             }
 
             {
@@ -2674,11 +2674,11 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorKeepEraseMarkers) {
                 TString str = "key300value";
                 const auto valValue = NScheme::TString::TInstance(str);
 
-                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue }; 
+                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue };
 
                 // Update, then erase
-                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops }); 
-                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { }); 
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops });
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { });
             }
 
             {
@@ -2686,7 +2686,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorKeepEraseMarkers) {
                 const auto keyValue = NScheme::TInt64::TInstance(key);
 
                 // Only erase
-                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { }); 
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { });
             }
 
             return true;
@@ -2724,7 +2724,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorKeepEraseMarkers) {
                 DbgPrintValue(value, row.Get(0), NScheme::TString::TypeId);
 
                 builder << "Key " << keyId << " = " << row.GetRowState()
-                    << " value = " << NTable::ECellOp(row.GetOp(0)) << " " << value << Endl; 
+                    << " value = " << NTable::ECellOp(row.GetOp(0)) << " " << value << Endl;
             }
 
             Data = builder;
@@ -2841,11 +2841,11 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
                     TString str = TStringBuilder() << "key" << key << "update";
                     const auto valValue = NScheme::TString::TInstance(str);
 
-                    NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue }; 
+                    NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue };
 
-                    txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops }); 
+                    txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyValue }, { ops });
                 } else {
-                    txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { }); 
+                    txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Erase, { keyValue }, { });
                 }
             }
 
@@ -2856,9 +2856,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
                 TString str = TStringBuilder() << "key" << key << "base";
                 const auto valValue = NScheme::TString::TInstance(str);
 
-                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue }; 
+                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valValue };
 
-                txc.DB.Update(TRowsModel::TableId + 1, NTable::ERowOp::Upsert, { keyValue }, { ops }); 
+                txc.DB.Update(TRowsModel::TableId + 1, NTable::ERowOp::Upsert, { keyValue }, { ops });
             }
 
             return true;
@@ -2985,7 +2985,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
                 DbgPrintValue(value, row.Get(1), NScheme::TString::TypeId);
 
                 builder << "Key " << key << " = " << row.GetRowState()
-                    << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value << Endl; 
+                    << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value << Endl;
             }
 
             Data = builder;
@@ -3255,9 +3255,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
 
             TString str = TStringBuilder() << "key" << Key << "value";
             const auto val = NScheme::TString::TInstance(str);
-            NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, val }; 
+            NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, val };
 
-            txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { key }, { ops }); 
+            txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { key }, { ops });
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
             return true;
         }
@@ -3298,7 +3298,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
                 DbgPrintValue(value, row.Get(1), NScheme::TString::TypeId);
 
                 builder << "Key " << key << " = " << row.GetRowState()
-                    << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value << Endl; 
+                    << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value << Endl;
             }
 
             Data = builder;
@@ -3585,9 +3585,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorRejectProbability) {
 
             TString str(size_t(8 * 1024 * 1024), 'x');
             const auto val = NScheme::TString::TInstance(str);
-            NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, val }; 
+            NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, val };
 
-            txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { ops }); 
+            txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { ops });
             return true;
         }
 
@@ -4027,12 +4027,12 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
             const auto key = NScheme::TInt64::TInstance(Key);
 
             const auto val = NScheme::TString::TInstance(Value);
-            NTable::TUpdateOp ops{ ColumnId, NTable::ECellOp::Set, val }; 
+            NTable::TUpdateOp ops{ ColumnId, NTable::ECellOp::Set, val };
 
             if (TxId == 0) {
-                txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { ops }); 
+                txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { ops });
             } else {
-                txc.DB.UpdateTx(TableId, NTable::ERowOp::Upsert, { key }, { ops }, TxId); 
+                txc.DB.UpdateTx(TableId, NTable::ERowOp::Upsert, { key }, { ops }, TxId);
             }
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
             return true;
@@ -4078,8 +4078,8 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
                 DbgPrintValue(value2, row.Get(2), NScheme::TString::TypeId);
 
                 builder << "Key " << key << " = " << row.GetRowState()
-                    << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value 
-                    << " value2 = " << NTable::ECellOp(row.GetOp(2)) << " " << value2 << Endl; 
+                    << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value
+                    << " value2 = " << NTable::ECellOp(row.GetOp(2)) << " " << value2 << Endl;
             }
 
             Data = builder;
@@ -4127,8 +4127,8 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
                     DbgPrintValue(value2, row.Get(2), NScheme::TString::TypeId);
 
                     builder << "Key " << key << " = " << row.GetRowState()
-                        << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value 
-                        << " value2 = " << NTable::ECellOp(row.GetOp(2)) << " " << value2; 
+                        << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value
+                        << " value2 = " << NTable::ECellOp(row.GetOp(2)) << " " << value2;
                     if (it->IsUncommitted()) {
                         builder << " txId " << it->GetUncommittedTxId();
                     }

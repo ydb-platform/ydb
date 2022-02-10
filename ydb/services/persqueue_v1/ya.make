@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     alexnick
-    g:kikimr 
+    g:kikimr
     g:logbroker
 )
 
@@ -26,27 +26,27 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/containers/disjoint_interval_tree
-    library/cpp/grpc/server 
-    ydb/core/base 
-    ydb/core/grpc_services 
-    ydb/core/kqp 
-    ydb/core/persqueue 
-    ydb/core/persqueue/codecs 
-    ydb/core/persqueue/writer 
-    ydb/core/protos 
-    ydb/core/ydb_convert 
-    ydb/library/aclib 
-    ydb/library/persqueue/obfuscate 
+    library/cpp/grpc/server
+    ydb/core/base
+    ydb/core/grpc_services
+    ydb/core/kqp
+    ydb/core/persqueue
+    ydb/core/persqueue/codecs
+    ydb/core/persqueue/writer
+    ydb/core/protos
+    ydb/core/ydb_convert
+    ydb/library/aclib
+    ydb/library/persqueue/obfuscate
     ydb/library/persqueue/tests
-    ydb/library/persqueue/topic_parser 
-    ydb/public/api/grpc/draft 
-    ydb/public/api/protos 
-    ydb/services/lib/actors 
-    ydb/services/lib/sharding 
+    ydb/library/persqueue/topic_parser
+    ydb/public/api/grpc/draft
+    ydb/public/api/protos
+    ydb/services/lib/actors
+    ydb/services/lib/sharding
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+)

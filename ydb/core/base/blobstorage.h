@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h" 
+#include "defs.h"
 
 #include "blobstorage_pdisk_category.h"
 #include "events.h"
@@ -7,14 +7,14 @@
 #include "logoblob.h"
 #include "pathid.h"
 
-#include <ydb/core/base/services/blobstorage_service_id.h> 
-#include <ydb/core/base/blobstorage_grouptype.h> 
-#include <ydb/core/protos/base.pb.h> 
-#include <ydb/core/protos/blobstorage.pb.h> 
-#include <ydb/core/protos/blobstorage_config.pb.h> 
-#include <ydb/core/util/yverify_stream.h> 
+#include <ydb/core/base/services/blobstorage_service_id.h>
+#include <ydb/core/base/blobstorage_grouptype.h>
+#include <ydb/core/protos/base.pb.h>
+#include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/util/yverify_stream.h>
 
-#include <ydb/library/wilson/wilson_event.h> 
+#include <ydb/library/wilson/wilson_event.h>
 
 #include <library/cpp/lwtrace/shuttle.h>
 
@@ -244,8 +244,8 @@ struct TTabletChannelInfo {
 
     TTabletChannelInfo(ui32 channel, TBlobStorageGroupType::EErasureSpecies erasureSpecies)
         : Channel(channel)
-        , Type(erasureSpecies) 
-    {} 
+        , Type(erasureSpecies)
+    {}
 
     TTabletChannelInfo(ui32 channel, TString storagePool)
         : Channel(channel)
@@ -444,7 +444,7 @@ inline bool SendToBSProxy(const TActorContext &ctx, ui32 groupId, IEventBase *ev
 struct TEvBlobStorage {
     enum EEv {
         // user <-> proxy interface
-        EvPut = EventSpaceBegin(TKikimrEvents::ES_BLOBSTORAGE), /// 268 632 064 
+        EvPut = EventSpaceBegin(TKikimrEvents::ES_BLOBSTORAGE), /// 268 632 064
         EvGet,
         EvBlock,
         EvDiscover,
@@ -452,12 +452,12 @@ struct TEvBlobStorage {
         EvProbe,
         EvCollectGarbage,
         EvStatus,
-        EvVBaldSyncLog, 
+        EvVBaldSyncLog,
         EvPatch,
         EvInplacePatch,
 
         //
-        EvPutResult = EvPut + 512,                              /// 268 632 576 
+        EvPutResult = EvPut + 512,                              /// 268 632 576
         EvGetResult,
         EvBlockResult,
         EvDiscoverResult,
@@ -465,185 +465,185 @@ struct TEvBlobStorage {
         EvProbeResult,
         EvCollectGarbageResult,
         EvStatusResult,
-        EvVBaldSyncLogResult, 
+        EvVBaldSyncLogResult,
         EvPatchResult,
         EvInplacePatchResult,
 
         // proxy <-> vdisk interface
-        EvVPut = EvPut + 2 * 512,                               /// 268 633 088 
+        EvVPut = EvPut + 2 * 512,                               /// 268 633 088
         EvVGet,
         EvVBlock,
         EvVGetBlock,
         EvVCollectGarbage,
-        EvVGetBarrier, 
-        EvVReadyNotify, 
-        EvVStatus, 
-        EvVDbStat, 
+        EvVGetBarrier,
+        EvVReadyNotify,
+        EvVStatus,
+        EvVDbStat,
         EvVCheckReadiness,
-        EvVCompact,                                             /// 268 633 098 
+        EvVCompact,                                             /// 268 633 098
         EvVMultiPut,
         EvVMovedPatch,
         EvVPatchStart,
         EvVPatchDiff,
         EvVPatchXorDiff,
-        EvVDefrag, 
+        EvVDefrag,
         EvVInplacePatch,
 
-        EvVPutResult = EvPut + 3 * 512,                         /// 268 633 600 
+        EvVPutResult = EvPut + 3 * 512,                         /// 268 633 600
         EvVGetResult,
         EvVBlockResult,
         EvVGetBlockResult,
         EvVCollectGarbageResult,
-        EvVGetBarrierResult, 
-        EvVStatusResult, 
-        EvVDbStatResult, 
-        EvVWindowChange, 
+        EvVGetBarrierResult,
+        EvVStatusResult,
+        EvVDbStatResult,
+        EvVWindowChange,
         EvVCheckReadinessResult,
-        EvVCompactResult, 
+        EvVCompactResult,
         EvVMultiPutResult,
         EvVMovedPatchResult,
         EvVPatchFoundParts,
         EvVPatchXorDiffResult,
         EvVPatchResult,
-        EvVDefragResult, 
+        EvVDefragResult,
         EvVInplacePatchResult,
 
         // vdisk <-> vdisk interface
-        EvVDisk = EvPut + 4 * 512,                              /// 268 634 112 
-        EvVSync, 
-        EvVSyncFull, 
-        EvVSyncGuid, 
+        EvVDisk = EvPut + 4 * 512,                              /// 268 634 112
+        EvVSync,
+        EvVSyncFull,
+        EvVSyncGuid,
 
-        EvVDiskReply = EvPut + 5 * 512,                         /// 268 634 624 
-        EvVSyncResult, 
-        EvVSyncFullResult, 
-        EvVSyncGuidResult, 
+        EvVDiskReply = EvPut + 5 * 512,                         /// 268 634 624
+        EvVSyncResult,
+        EvVSyncFullResult,
+        EvVSyncGuidResult,
 
         // vdisk <-> controller interface,
-        EvCnt = EvPut + 6 * 512,                                /// 268 635 136 
+        EvCnt = EvPut + 6 * 512,                                /// 268 635 136
         EvVGenerationChange,
         EvRegisterPDiskLoadActor,
         EvStatusUpdate,
         EvDropDonor,
 
-        EvCntReply = EvPut + 7 * 512,                           /// 268 635 648 
+        EvCntReply = EvPut + 7 * 512,                           /// 268 635 648
         EvVGenerationChangeResult,
         EvRegisterPDiskLoadActorResult,
 
-        // internal vdisk interface 
-        EvYardInit = EvPut + 8 * 512,                           /// 268 636 160 
-        EvLog, 
-        EvReadLog, 
-        EvChunkRead, 
-        EvChunkWrite, 
+        // internal vdisk interface
+        EvYardInit = EvPut + 8 * 512,                           /// 268 636 160
+        EvLog,
+        EvReadLog,
+        EvChunkRead,
+        EvChunkWrite,
         EvHarakiri,
-        EvCheckSpace, 
+        EvCheckSpace,
         EvConfigureScheduler,
         EvYardControl,
         EvCutLog,
-        EvIPDiskGet,                                            /// 268 636 170 
-        EvSyncLogPut, 
-        EvSyncLogRead, 
-        EvSyncLogTrim, 
-        EvSyncLogFreeChunk, 
-        EvSyncLogCommitDone, 
-        EvSyncLogSnapshot, 
-        EvSyncLogReadFinished, 
+        EvIPDiskGet,                                            /// 268 636 170
+        EvSyncLogPut,
+        EvSyncLogRead,
+        EvSyncLogTrim,
+        EvSyncLogFreeChunk,
+        EvSyncLogCommitDone,
+        EvSyncLogSnapshot,
+        EvSyncLogReadFinished,
         EvSyncLogPutSst,
-        EvChunkReserve, 
-        EvSkeletonBackSyncLogID,                                /// 268 636 180 
-        EvHullConfirmedLsn, 
-        EvHullChange, 
-        EvHullSegLoaded, 
-        EvHullSegmentsLoaded, 
-        EvHullIndexLoaded, 
-        EvHullFreeSlice, 
-        EvHullAdvanceLsn, 
-        EvHullCommitFinished, 
-        EvHullWriteHugeBlob, 
-        EvHullLogHugeBlob,                                      /// 268 636 190 
-        EvHullHugeBlobLogged, 
-        EvHullFreeHugeSlots, 
-        EvHullHugeChunkAllocated, 
-        EvHullHugeChunkFreed, 
-        EvHullHugeCommitted, 
-        EvHullHugeWritten, 
-        EvHullDelayedResult, 
-        EvHullCompSelected, 
+        EvChunkReserve,
+        EvSkeletonBackSyncLogID,                                /// 268 636 180
+        EvHullConfirmedLsn,
+        EvHullChange,
+        EvHullSegLoaded,
+        EvHullSegmentsLoaded,
+        EvHullIndexLoaded,
+        EvHullFreeSlice,
+        EvHullAdvanceLsn,
+        EvHullCommitFinished,
+        EvHullWriteHugeBlob,
+        EvHullLogHugeBlob,                                      /// 268 636 190
+        EvHullHugeBlobLogged,
+        EvHullFreeHugeSlots,
+        EvHullHugeChunkAllocated,
+        EvHullHugeChunkFreed,
+        EvHullHugeCommitted,
+        EvHullHugeWritten,
+        EvHullDelayedResult,
+        EvHullCompSelected,
         EvHullReleaseSnapshot,
-        EvSyncJobDone,                                          /// 268 636 200 
-        EvLocalSyncData, 
+        EvSyncJobDone,                                          /// 268 636 200
+        EvLocalSyncData,
         EvVDiskCutLog,
-        EvRunRepl, 
+        EvRunRepl,
         EvRecoveredHugeBlob,
         EvDetectedPhantomBlob,
-        EvAddBulkSst, 
-        EvReplProxyNext, 
-        EvSyncLogGetLastLsn, 
-        EvLocalStatus, 
-        EvLocalHandoff,                                         /// 268 636 210 
-        EvHandoffProxyMon, 
-        EvHandoffSyncLogDel, 
-        EvHandoffSyncLogFinished, 
-        EvVDiskRequestCompleted, 
-        EvFrontRecoveryStatus, 
+        EvAddBulkSst,
+        EvReplProxyNext,
+        EvSyncLogGetLastLsn,
+        EvLocalStatus,
+        EvLocalHandoff,                                         /// 268 636 210
+        EvHandoffProxyMon,
+        EvHandoffSyncLogDel,
+        EvHandoffSyncLogFinished,
+        EvVDiskRequestCompleted,
+        EvFrontRecoveryStatus,
         EvPruneQueue,
         EvPDiskFairSchedulerWake,
-        EvVDiskGuidObtained, 
-        EvCompactionFinished, 
-        EvKickEmergencyPutQueue,                                /// 268 636 220 
-        EvWakeupEmergencyPutQueue, 
-        EvTimeToUpdateWhiteboard, 
+        EvVDiskGuidObtained,
+        EvCompactionFinished,
+        EvKickEmergencyPutQueue,                                /// 268 636 220
+        EvWakeupEmergencyPutQueue,
+        EvTimeToUpdateWhiteboard,
         EvBulkSstsLoaded,
-        EvVDiskGuidWritten, 
-        EvSyncerCommit, 
-        EvSyncerCommitDone, 
-        EvVDiskGuidRecovered, 
+        EvVDiskGuidWritten,
+        EvSyncerCommit,
+        EvSyncerCommitDone,
+        EvVDiskGuidRecovered,
         EvQueryReplToken,
         EvReplToken,
-        EvReleaseReplToken,                                     /// 268 636 230 
+        EvReleaseReplToken,                                     /// 268 636 230
         OBSOLETE_EvQueryReplDataToken,
         OBSOLETE_EvReplDataToken,
         EvQueryReplMemToken,
         EvReplMemToken,
         EvUpdateReplMemToken,
         EvReleaseReplMemToken,
-        EvSyncerCommitProxyDone, 
-        EvSyncerNeedFullRecovery, 
+        EvSyncerCommitProxyDone,
+        EvSyncerNeedFullRecovery,
         EvThroughputUpdate,
-        EvThroughputAddRequest,                                 /// 268 636 240 
-        EvSyncerLostDataRecovered, 
-        EvSyncerGuidFirstRunDone, 
-        EvSyncerFullSyncedWithPeer, 
-        EvSyncerRLDWakeup, 
+        EvThroughputAddRequest,                                 /// 268 636 240
+        EvSyncerLostDataRecovered,
+        EvSyncerGuidFirstRunDone,
+        EvSyncerFullSyncedWithPeer,
+        EvSyncerRLDWakeup,
         EvSlay,
-        EvCallOsiris, 
-        EvAnubisOsirisPut, 
-        EvAnubisOsirisPutResult, 
-        EvSyncLogDbBirthLsn, 
-        EvSublogLine,                                           // 268 636 250 
-        EvDelayedRead, 
-        EvFullSyncedWith, 
-        EvAnubisDone, 
-        EvTakeHullSnapshot, 
-        EvTakeHullSnapshotResult, 
-        EvAnubisQuantumDone, 
-        EvAnubisCandidates, 
-        EvAnubisVGet, 
+        EvCallOsiris,
+        EvAnubisOsirisPut,
+        EvAnubisOsirisPutResult,
+        EvSyncLogDbBirthLsn,
+        EvSublogLine,                                           // 268 636 250
+        EvDelayedRead,
+        EvFullSyncedWith,
+        EvAnubisDone,
+        EvTakeHullSnapshot,
+        EvTakeHullSnapshotResult,
+        EvAnubisQuantumDone,
+        EvAnubisCandidates,
+        EvAnubisVGet,
         EvChunksLock,
-        EvChunksUnlock,                                         // 268 636 260 
+        EvChunksUnlock,                                         // 268 636 260
         EvWhiteboardReportResult,
         EvHttpInfoResult,
         EvReadLogContinue,
         EvLogSectorRestore,
         EvLogInitResult,
         EvAskForCutLog,
-        EvDelLogoBlobDataSyncLog, 
+        EvDelLogoBlobDataSyncLog,
         EvPDiskFormattingFinished,
-        EvRecoveryLogReplayDone, 
-        EvMonStreamQuery,                                       // 268 636 270 
+        EvRecoveryLogReplayDone,
+        EvMonStreamQuery,                                       // 268 636 270
         EvMonStreamActorDeathNote,
-        EvPDiskErrorStateChange, 
+        EvPDiskErrorStateChange,
         EvMultiLog,
         EvVMultiPutItemResult,
         EvEnrichNotYet,
@@ -651,8 +651,8 @@ struct TEvBlobStorage {
         EvRecoverBlob,
         EvRecoverBlobResult,
         EvScrubAwait, // for debugging purposes
-        EvScrubNotify,                                          // 268 636 280 
-        EvDefragQuantumResult, 
+        EvScrubNotify,                                          // 268 636 280
+        EvDefragQuantumResult,
         EvDefragStartQuantum,
         EvReportScrubStatus,
         EvRestoreCorruptedBlob,
@@ -661,62 +661,62 @@ struct TEvBlobStorage {
         EvCaptureVDiskLayoutResult,
         OBSOLETE_EvTriggerCompaction,
         OBSOLETE_EvTriggerCompactionResult,
-        EvHullCompact,                                          // 268 636 290 
-        EvHullCompactResult, 
-        EvCompactVDisk, 
-        EvCompactVDiskResult, 
-        EvDefragRewritten, 
+        EvHullCompact,                                          // 268 636 290
+        EvHullCompactResult,
+        EvCompactVDisk,
+        EvCompactVDiskResult,
+        EvDefragRewritten,
         EvVPatchDyingRequest,
         EvVPatchDyingConfirm,
         EvNonrestoredCorruptedBlobNotify,
-        EvHugeLockChunks, 
-        EvHugeStat, 
+        EvHugeLockChunks,
+        EvHugeStat,
         EvForwardToSkeleton,
- 
-        EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672 
-        EvLogResult, 
-        EvReadLogResult, 
-        EvChunkReadResult, 
-        EvChunkWriteResult, 
+
+        EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
+        EvLogResult,
+        EvReadLogResult,
+        EvChunkReadResult,
+        EvChunkWriteResult,
         EvHarakiriResult,
-        EvCheckSpaceResult, 
+        EvCheckSpaceResult,
         EvConfigureSchedulerResult,
         EvYardControlResult,
         EvIPDiskGetResult,
-        EvSyncLogSnapshotResult,                                /// 268 636 682 
-        EvLocalRecoveryDone, 
-        EvChunkReserveResult, 
-        EvLocalSyncDataResult, 
+        EvSyncLogSnapshotResult,                                /// 268 636 682
+        EvLocalRecoveryDone,
+        EvChunkReserveResult,
+        EvLocalSyncDataResult,
         EvReadFormatResult,
-        EvReplStarted, 
-        EvReplFinished, 
+        EvReplStarted,
+        EvReplFinished,
         EvReplPlanFinished,
-        EvReplProxyNextResult, 
-        EvSyncLogGetLastLsnResult, 
-        EvLocalStatusResult,                                    /// 268 636 692 
-        EvHandoffProxyMonResult, 
-        EvSyncGuidRecoveryDone, 
+        EvReplProxyNextResult,
+        EvSyncLogGetLastLsnResult,
+        EvLocalStatusResult,                                    /// 268 636 692
+        EvHandoffProxyMonResult,
+        EvSyncGuidRecoveryDone,
         EvSlayResult,
-        EvOsirisDone, 
-        EvSyncLogWriteDone, 
-        EvAnubisVGetResult, 
+        EvOsirisDone,
+        EvSyncLogWriteDone,
+        EvAnubisVGetResult,
         EvChunksLockResult,
         EvChunksUnlockResult,
-        EvDelLogoBlobDataSyncLogResult, 
-        EvAddBulkSstResult,                                     /// 268 636 702 
-        EvAddBulkSstCommitted, 
-        EvBulkSstEssenceLoaded, 
+        EvDelLogoBlobDataSyncLogResult,
+        EvAddBulkSstResult,                                     /// 268 636 702
+        EvAddBulkSstCommitted,
+        EvBulkSstEssenceLoaded,
         EvCommitLogChunks,
         EvLogCommitDone,
-        EvSyncLogLocalStatus, 
-        EvSyncLogLocalStatusResult, 
+        EvSyncLogLocalStatus,
+        EvSyncLogLocalStatusResult,
         EvReplResume,
         EvReplDone,
-        EvFreshAppendixCompactionDone, 
+        EvFreshAppendixCompactionDone,
         EvDeviceError,
-        EvHugeLockChunksResult, 
-        EvHugeStatResult, 
- 
+        EvHugeLockChunksResult,
+        EvHugeStatResult,
+
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184
         EvUnusedLocal2,                    // Not used.
@@ -815,11 +815,11 @@ struct TEvBlobStorage {
         EvNodeWardenQueryGroupInfo,
         EvNodeWardenGroupInfo,
 
-        // Other 
-        EvRunActor = EvPut + 15 * 512, 
+        // Other
+        EvRunActor = EvPut + 15 * 512,
         EvVMockCtlRequest,
         EvVMockCtlResponse,
- 
+
         // load actor control
         EvTestLoadRequest = EvPut + 16 * 512,
         EvTestLoadFinished,
@@ -881,7 +881,7 @@ struct TEvBlobStorage {
         const TLogoBlobID Id;
         const TString Buffer;
         const TInstant Deadline;
-        const NKikimrBlobStorage::EPutHandleClass HandleClass; 
+        const NKikimrBlobStorage::EPutHandleClass HandleClass;
         const ETactic Tactic;
         mutable NLWTrace::TOrbit Orbit;
         ui32 RestartCounter = 0;
@@ -892,7 +892,7 @@ struct TEvBlobStorage {
             : Id(id)
             , Buffer(buffer)
             , Deadline(deadline)
-            , HandleClass(handleClass) 
+            , HandleClass(handleClass)
             , Tactic(tactic)
         {
             Y_VERIFY(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());
@@ -905,7 +905,7 @@ struct TEvBlobStorage {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&id, sizeof(id));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.Data(), buffer.size());
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&deadline, sizeof(deadline));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&handleClass, sizeof(handleClass)); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&handleClass, sizeof(handleClass));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&tactic, sizeof(tactic));
         }
 
@@ -917,7 +917,7 @@ struct TEvBlobStorage {
                 str << " Buffer# " << Buffer.Quote();
             }
             str << " Deadline# " << Deadline.MilliSeconds();
-            str << " HandleClass# " << HandleClass; 
+            str << " HandleClass# " << HandleClass;
             str << " Tactic# " << TacticName(Tactic);
             str << "}";
             return str.Str();
@@ -1325,7 +1325,7 @@ struct TEvBlobStorage {
             CheckContructorArgs(originalId, patchedId, Diffs, DiffCount);
         }
 
-        static void CheckContructorArgs(const TLogoBlobID &originalId, const TLogoBlobID &patchedId, 
+        static void CheckContructorArgs(const TLogoBlobID &originalId, const TLogoBlobID &patchedId,
                 const TArrayHolder<TDiff> &diffs, ui64 diffCount)
         {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&originalId, sizeof(originalId));
@@ -2000,37 +2000,37 @@ struct TEvBlobStorage {
     struct TEvVGetBlockResult;
     struct TEvVCollectGarbage;
     struct TEvVCollectGarbageResult;
-    struct TEvVGetBarrier; 
-    struct TEvVGetBarrierResult; 
-    struct TEvVSyncGuid; 
-    struct TEvVSyncGuidResult; 
-    struct TEvVSync; 
-    struct TEvVSyncResult; 
-    struct TEvVSyncFull; 
-    struct TEvVSyncFullResult; 
-    struct TEvVStatus; 
-    struct TEvVStatusResult; 
-    struct EvVBaldSyncLog; 
-    struct EvVBaldSyncLogResult; 
-    struct TEvVDbStat; 
-    struct TEvVDbStatResult; 
+    struct TEvVGetBarrier;
+    struct TEvVGetBarrierResult;
+    struct TEvVSyncGuid;
+    struct TEvVSyncGuidResult;
+    struct TEvVSync;
+    struct TEvVSyncResult;
+    struct TEvVSyncFull;
+    struct TEvVSyncFullResult;
+    struct TEvVStatus;
+    struct TEvVStatusResult;
+    struct EvVBaldSyncLog;
+    struct EvVBaldSyncLogResult;
+    struct TEvVDbStat;
+    struct TEvVDbStatResult;
     struct TEvVCheckReadiness;
     struct TEvVCheckReadinessResult;
-    struct TEvVCompact; 
-    struct TEvVCompactResult; 
-    struct TEvVBaldSyncLog; 
-    struct TEvVBaldSyncLogResult; 
-    struct TEvVWindowChange; 
-    struct TEvLocalRecoveryDone; 
-    struct THullChange; 
-    struct TEvVReadyNotify; 
+    struct TEvVCompact;
+    struct TEvVCompactResult;
+    struct TEvVBaldSyncLog;
+    struct TEvVBaldSyncLogResult;
+    struct TEvVWindowChange;
+    struct TEvLocalRecoveryDone;
+    struct THullChange;
+    struct TEvVReadyNotify;
     struct TEvEnrichNotYet;
     struct TEvCaptureVDiskLayout;
     struct TEvCaptureVDiskLayoutResult;
-    struct TEvVDefrag; 
-    struct TEvVDefragResult; 
+    struct TEvVDefrag;
+    struct TEvVDefragResult;
 
- 
+
     struct TEvControllerRegisterNode;
     struct TEvControllerSelectGroups;
     struct TEvControllerGetGroup;
@@ -2065,36 +2065,36 @@ struct TEvBlobStorage {
     struct TEvRestartPDiskResult;
 };
 
-// EPutHandleClass defines BlobStorage queue to a request to 
-static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlobStorage::EPutHandleClass cls) { 
-    switch (cls) { 
-        case NKikimrBlobStorage::EPutHandleClass::TabletLog: 
-            return NKikimrBlobStorage::EVDiskQueueId::PutTabletLog; 
-        case NKikimrBlobStorage::EPutHandleClass::AsyncBlob: 
-            return NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob; 
-        case NKikimrBlobStorage::EPutHandleClass::UserData: 
-            return NKikimrBlobStorage::EVDiskQueueId::PutUserData; 
-        default: 
+// EPutHandleClass defines BlobStorage queue to a request to
+static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlobStorage::EPutHandleClass cls) {
+    switch (cls) {
+        case NKikimrBlobStorage::EPutHandleClass::TabletLog:
+            return NKikimrBlobStorage::EVDiskQueueId::PutTabletLog;
+        case NKikimrBlobStorage::EPutHandleClass::AsyncBlob:
+            return NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob;
+        case NKikimrBlobStorage::EPutHandleClass::UserData:
+            return NKikimrBlobStorage::EVDiskQueueId::PutUserData;
+        default:
             Y_FAIL("Unexpected case");
-    } 
+    }
 }
 
-    // EGetHandleClass defines BlobStorage queue to a request to 
-    static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlobStorage::EGetHandleClass cls) { 
-        switch (cls) { 
-            case NKikimrBlobStorage::EGetHandleClass::AsyncRead: 
-                return NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead; 
-            case NKikimrBlobStorage::EGetHandleClass::FastRead: 
-                return NKikimrBlobStorage::EVDiskQueueId::GetFastRead; 
+    // EGetHandleClass defines BlobStorage queue to a request to
+    static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlobStorage::EGetHandleClass cls) {
+        switch (cls) {
+            case NKikimrBlobStorage::EGetHandleClass::AsyncRead:
+                return NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead;
+            case NKikimrBlobStorage::EGetHandleClass::FastRead:
+                return NKikimrBlobStorage::EVDiskQueueId::GetFastRead;
             case NKikimrBlobStorage::EGetHandleClass::Discover:
                 return NKikimrBlobStorage::EVDiskQueueId::GetDiscover;
             case NKikimrBlobStorage::EGetHandleClass::LowRead:
                 return NKikimrBlobStorage::EVDiskQueueId::GetLowRead;
-            default: 
-                Y_FAIL("Unexpected case"); 
-        } 
-    } 
- 
+            default:
+                Y_FAIL("Unexpected case");
+        }
+    }
+
 
 inline bool SendPutToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorageInfo *storage,
         THolder<TEvBlobStorage::TEvPut> event, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
@@ -2109,4 +2109,4 @@ inline bool SendPutToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorag
     // TODO(alexvru): check if return status is actually needed?
 }
 
-} // NKikimr 
+} // NKikimr

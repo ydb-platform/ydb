@@ -1,8 +1,8 @@
 #include "action.h"
 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
-#include <ydb/core/util/yverify_stream.h> 
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/util/yverify_stream.h>
 
 #include <util/string/ascii.h>
 #include <util/string/vector.h>

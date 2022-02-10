@@ -6,9 +6,9 @@
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/json_util.h>
 
-#include <ydb/core/protos/flat_tx_scheme.pb.h> 
-#include <ydb/core/protos/services.pb.h> 
-#include <ydb/core/util/yverify_stream.h> 
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/services.pb.h>
+#include <ydb/core/util/yverify_stream.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/interconnect.h>

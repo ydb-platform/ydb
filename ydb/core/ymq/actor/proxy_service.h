@@ -2,12 +2,12 @@
 #include "defs.h"
 #include "log.h"
 #include "events.h"
-#include <ydb/core/ymq/base/query_id.h> 
+#include <ydb/core/ymq/base/query_id.h>
 
-#include <ydb/core/base/tablet_resolver.h> 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
-#include <ydb/core/protos/config.pb.h> 
-#include <ydb/core/ymq/actor/actor.h> 
+#include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/ymq/actor/actor.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actor.h>
@@ -88,8 +88,8 @@ private:
     TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCounters_;
     TIntrusivePtr<NMonitoring::TDynamicCounters> YmqPublicCounters_;
 
-    /// A map of node ids to TNodeIfno 
-    THashMap<ui32, TNodeInfoRef> NodesInfo_; 
+    /// A map of node ids to TNodeIfno
+    THashMap<ui32, TNodeInfoRef> NodesInfo_;
 
     THashMap<TString, TProxyRequestInfoRef> RequestsToProxy_;
 };

@@ -2,8 +2,8 @@
 
 #include "columnshard__scan.h"
 #include "columnshard_common.h"
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
-#include <ydb/core/sys_view/common/schema.h> 
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/sys_view/common/schema.h>
 
 namespace NKikimr::NColumnShard {
 

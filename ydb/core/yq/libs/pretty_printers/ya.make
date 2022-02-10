@@ -1,4 +1,4 @@
-OWNER(g:yq) 
+OWNER(g:yq)
 
 LIBRARY()
 
@@ -10,7 +10,7 @@ SRCS(
 PEERDIR(
     contrib/libs/protobuf
     ydb/core/yq/libs/graph_params/proto
-    ydb/library/protobuf_printer 
+    ydb/library/protobuf_printer
     ydb/library/yql/minikql
     ydb/library/yql/providers/dq/api/protos
 )

@@ -1,6 +1,6 @@
 #include "settings.h"
 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/parser.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/parser.h>
 
 namespace NYdb {
 

@@ -1,9 +1,9 @@
 #include "schemeshard_path.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/base/path.h> 
+#include <ydb/core/base/path.h>
 
-#include <ydb/core/sys_view/common/path.h> 
+#include <ydb/core/sys_view/common/path.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

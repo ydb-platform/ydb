@@ -1,7 +1,7 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h> 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
+#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
             .SetEndpoint(kikimr.GetEndpoint())
             .SetAuthToken("user0@builtin");
         auto driver = TDriver(driverConfig);
-        auto db = NYdb::NTable::TTableClient(driver); 
+        auto db = NYdb::NTable::TTableClient(driver);
 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
             .SetEndpoint(kikimr.GetEndpoint())
             .SetAuthToken("user0@builtin");
         auto driver = TDriver(driverConfig);
-        auto db = NYdb::NTable::TTableClient(driver); 
+        auto db = NYdb::NTable::TTableClient(driver);
 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
             .SetEndpoint(kikimr.GetEndpoint())
             .SetAuthToken("user0@builtin");
         auto driver = TDriver(driverConfig);
-        auto db = NYdb::NTable::TTableClient(driver); 
+        auto db = NYdb::NTable::TTableClient(driver);
 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
             .SetEndpoint(kikimr.GetEndpoint())
             .SetAuthToken("user0@builtin");
         auto driver = TDriver(driverConfig);
-        auto db = NYdb::NTable::TTableClient(driver); 
+        auto db = NYdb::NTable::TTableClient(driver);
 
         auto session = db.CreateSession().GetValueSync().GetSession();
 

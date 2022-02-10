@@ -4,7 +4,7 @@
 #include "mkql_computation_node_holders.h"
 #include "mkql_optional_usage_mask.h"
 
-#include <ydb/library/yql/public/udf/udf_value.h> 
+#include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <library/cpp/enumbitset/enumbitset.h>
 
@@ -13,7 +13,7 @@
 #include <util/generic/strbuf.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
-#include <ydb/library/yql/minikql/codegen/codegen.h> 
+#include <ydb/library/yql/minikql/codegen/codegen.h>
 #endif
 
 #include <utility>

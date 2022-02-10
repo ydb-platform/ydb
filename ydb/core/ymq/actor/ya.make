@@ -1,10 +1,10 @@
 OWNER(
-    g:kikimr 
+    g:kikimr
     g:sqs
 )
 
 LIBRARY()
- 
+
 SRCS(
     actor.cpp
     auth_factory.cpp
@@ -61,38 +61,38 @@ PEERDIR(
     library/cpp/digest/md5
     library/cpp/grpc/client
     library/cpp/logger
-    library/cpp/lwtrace/mon 
+    library/cpp/lwtrace/mon
     library/cpp/monlib/dynamic_counters
     library/cpp/monlib/service/pages
     library/cpp/scheme
-    ydb/core/base 
-    ydb/core/client/minikql_compile 
-    ydb/core/engine 
-    ydb/core/kesus/tablet 
-    ydb/core/mind/address_classification 
-    ydb/core/mon 
-    ydb/core/node_whiteboard 
-    ydb/core/protos 
-    ydb/core/tx/scheme_cache 
-    ydb/core/tx/schemeshard 
-    ydb/core/tx/tx_proxy 
-    ydb/core/util 
-    ydb/core/ymq/base 
-    ydb/core/ymq/proto 
-    ydb/core/ymq/queues/common 
-    ydb/core/ymq/queues/fifo 
-    ydb/core/ymq/queues/std 
-    ydb/library/aclib 
-    ydb/library/http_proxy/authorization 
-    ydb/library/http_proxy/error 
-    ydb/library/mkql_proto/protos 
-    ydb/public/lib/scheme_types 
-    ydb/public/lib/value 
-    ydb/public/sdk/cpp/client/ydb_types/credentials 
+    ydb/core/base
+    ydb/core/client/minikql_compile
+    ydb/core/engine
+    ydb/core/kesus/tablet
+    ydb/core/mind/address_classification
+    ydb/core/mon
+    ydb/core/node_whiteboard
+    ydb/core/protos
+    ydb/core/tx/scheme_cache
+    ydb/core/tx/schemeshard
+    ydb/core/tx/tx_proxy
+    ydb/core/util
+    ydb/core/ymq/base
+    ydb/core/ymq/proto
+    ydb/core/ymq/queues/common
+    ydb/core/ymq/queues/fifo
+    ydb/core/ymq/queues/std
+    ydb/library/aclib
+    ydb/library/http_proxy/authorization
+    ydb/library/http_proxy/error
+    ydb/library/mkql_proto/protos
+    ydb/public/lib/scheme_types
+    ydb/public/lib/value
+    ydb/public/sdk/cpp/client/ydb_types/credentials
     ydb/library/yql/minikql
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(events.h)
 

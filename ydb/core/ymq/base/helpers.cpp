@@ -128,8 +128,8 @@ static TString ProtobufToString(const NProtoBuf::Message& proto) {
 
 static TString EncodeString(const TString& value) {
     TString result = Base64EncodeUrl(value);
-    // Remove these symbols from the end of the string to avoid problems 
-    // with cgi escaping. 
+    // Remove these symbols from the end of the string to avoid problems
+    // with cgi escaping.
     while (!result.empty() && (result.back() == ',' || result.back() == '=')) {
         result.pop_back();
     }

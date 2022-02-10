@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr {
 

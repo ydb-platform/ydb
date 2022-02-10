@@ -1,9 +1,9 @@
 PROTO_LIBRARY()
 
-OWNER( 
-    kruall 
-    g:kikimr 
-) 
+OWNER(
+    kruall
+    g:kikimr
+)
 
 IF (OS_WINDOWS)
     NO_OPTIMIZE_PY_PROTOS()

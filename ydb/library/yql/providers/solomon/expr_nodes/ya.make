@@ -15,11 +15,11 @@ PEERDIR(
 )
 
 SRCDIR(
-    ydb/library/yql/core/expr_nodes_gen 
+    ydb/library/yql/core/expr_nodes_gen
 )
 
 RUN_PROGRAM(
-    ydb/library/yql/core/expr_nodes_gen/gen 
+    ydb/library/yql/core/expr_nodes_gen/gen
         yql_expr_nodes_gen.jnj
         yql_solomon_expr_nodes.json
         yql_solomon_expr_nodes.gen.h
@@ -31,7 +31,7 @@ RUN_PROGRAM(
     OUT yql_solomon_expr_nodes.decl.inl.h
     OUT yql_solomon_expr_nodes.defs.inl.h
     OUTPUT_INCLUDES
-    ${ARCADIA_ROOT}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h 
+    ${ARCADIA_ROOT}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h
     ${ARCADIA_ROOT}/util/generic/hash_set.h
 )
 

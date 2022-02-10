@@ -8,7 +8,7 @@
 #include <util/system/sanitizers.h>
 
 namespace NKikimr {
-namespace NPageCollection { 
+namespace NPageCollection {
 
     class TRecord {
     public:
@@ -55,9 +55,9 @@ namespace NPageCollection {
             char* ptr = raw.mutable_begin();
 
             {
-                NPageCollection::THeader hdr; 
+                NPageCollection::THeader hdr;
 
-                hdr.Magic = NPageCollection::Magic; 
+                hdr.Magic = NPageCollection::Magic;
                 hdr.Blobs = Blobs.size();
                 hdr.Pages = Index.size();
 
@@ -107,7 +107,7 @@ namespace NPageCollection {
         }
 
     public:
-        const ui32 Group = TLargeGlobId::InvalidGroup; 
+        const ui32 Group = TLargeGlobId::InvalidGroup;
 
     private:
         TVector<TBlobId> Blobs;

@@ -7,7 +7,7 @@
 #include <ydb/library/yql/minikql/computation/presort.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/public/udf/udf_types.h> 
+#include <ydb/library/yql/public/udf/udf_types.h>
 #include <ydb/library/yql/utils/cast.h>
 #include <ydb/library/yql/utils/hash.h>
 

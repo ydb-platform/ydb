@@ -1,4 +1,4 @@
-import "ydb/core/protos/base.proto"; 
+import "ydb/core/protos/base.proto";
 
 package NKikimrTablet;
 option java_package = "ru.yandex.kikimr.proto";

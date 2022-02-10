@@ -8,7 +8,7 @@
 #include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h>
 #include <ydb/library/yql/providers/ydb/proto/range.pb.h>
 #include <ydb/library/yql/providers/ydb/proto/source.pb.h>
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {
 

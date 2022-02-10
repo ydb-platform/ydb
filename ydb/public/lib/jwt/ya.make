@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    alexnick 
+    alexnick
     komels
     g:kikimr
 )
@@ -12,9 +12,9 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/jwt-cpp 
+    contrib/libs/jwt-cpp
     library/cpp/json
-    ydb/public/sdk/cpp/client/impl/ydb_internal/common 
+    ydb/public/sdk/cpp/client/impl/ydb_internal/common
 )
 
 END()

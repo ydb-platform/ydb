@@ -1,7 +1,7 @@
 #include "rows_proto_splitter.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h> 
-#include <ydb/services/ydb/ydb_common_ut.h> 
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/services/ydb/ydb_common_ut.h>
 
 namespace NYq {
 

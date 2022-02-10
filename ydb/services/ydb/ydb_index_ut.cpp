@@ -1,4 +1,4 @@
-#include <ydb/public/lib/idx_test/idx_test.h> 
+#include <ydb/public/lib/idx_test/idx_test.h>
 
 #include "ydb_common_ut.h"
 

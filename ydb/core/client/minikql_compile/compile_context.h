@@ -5,8 +5,8 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/core/client/minikql_compile/db_key_resolver.h> 
-#include <ydb/core/engine/kikimr_program_builder.h> 
+#include <ydb/core/client/minikql_compile/db_key_resolver.h>
+#include <ydb/core/engine/kikimr_program_builder.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/list.h>

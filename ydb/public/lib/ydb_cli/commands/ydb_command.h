@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/public/lib/ydb_cli/common/command.h> 
+#include <ydb/public/lib/ydb_cli/common/command.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h> 
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h> 
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 
 namespace NYdb {
 namespace NConsoleClient {

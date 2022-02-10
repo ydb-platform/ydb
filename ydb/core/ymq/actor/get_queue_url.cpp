@@ -4,8 +4,8 @@
 #include "params.h"
 #include "serviceid.h"
 
-#include <ydb/public/lib/value/value.h> 
-#include <ydb/core/ymq/actor/executor.h> 
+#include <ydb/public/lib/value/value.h>
+#include <ydb/core/ymq/actor/executor.h>
 
 #include <util/string/join.h>
 #include <util/string/printf.h>

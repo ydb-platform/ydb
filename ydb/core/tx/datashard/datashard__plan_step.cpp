@@ -3,11 +3,11 @@
 #include <util/string/vector.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-TDataShard::TTxPlanStep::TTxPlanStep(TDataShard *self, TEvTxProcessing::TEvPlanStep::TPtr ev) 
+TDataShard::TTxPlanStep::TTxPlanStep(TDataShard *self, TEvTxProcessing::TEvPlanStep::TPtr ev)
     : TBase(self)
     , Ev(ev)
     , IsAccepted(false)
@@ -16,7 +16,7 @@ TDataShard::TTxPlanStep::TTxPlanStep(TDataShard *self, TEvTxProcessing::TEvPlanS
     Y_VERIFY(Ev);
 }
 
-bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorContext &ctx) { 
+bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorContext &ctx) {
     Y_VERIFY(Ev);
 
     // TEvPlanStep are strictly ordered by mediator so this Tx must not be retried not to break this ordering!
@@ -68,7 +68,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
     return true;
 }
 
-void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) { 
+void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
     Y_VERIFY(Ev);
     ui64 step = Ev->Get()->Record.GetStep();
 

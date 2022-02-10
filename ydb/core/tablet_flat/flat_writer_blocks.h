@@ -17,13 +17,13 @@ namespace NWriter {
         using ECache = NTable::NPage::ECache;
         using EPage = NTable::NPage::EPage;
         using TPageId = NTable::NPage::TPageId;
-        using TCache = TPrivatePageCache::TInfo; 
+        using TCache = TPrivatePageCache::TInfo;
 
         TBlocks(ICone *cone, ui8 channel, ECache cache, ui32 block)
             : Cone(cone)
             , Channel(channel)
             , Cache(cache)
-            , Writer(Cone->CookieRange(1), Channel, block) 
+            , Writer(Cone->CookieRange(1), Channel, block)
         {
 
         }
@@ -42,17 +42,17 @@ namespace NWriter {
         {
             TIntrusivePtr<TCache> pageCollection;
 
-            if (auto meta = Writer.Finish(false /* omit empty page collection */)) { 
+            if (auto meta = Writer.Finish(false /* omit empty page collection */)) {
                 for (auto &glob : Writer.Grab())
                     Cone->Put(std::move(glob));
 
-                pageCollection = MakePageCollection(std::move(meta)); 
+                pageCollection = MakePageCollection(std::move(meta));
             }
 
             Y_VERIFY(!Writer, "Block writer is not empty after Finish");
             Y_VERIFY(!Regular && !Sticky, "Unexpected non-empty page lists");
 
-            return pageCollection; 
+            return pageCollection;
         }
 
         TPageId Write(TSharedData raw, EPage type)
@@ -64,7 +64,7 @@ namespace NWriter {
 
             if (NTable::TLoader::NeedIn(type)) {
                 Sticky.emplace_back(pageId, std::move(raw));
-            } else if (bool(Cache) && type == EPage::DataPage) { 
+            } else if (bool(Cache) && type == EPage::DataPage) {
                 Regular.emplace_back(pageId, std::move(raw));
             }
 
@@ -79,9 +79,9 @@ namespace NWriter {
     private:
         TIntrusivePtr<TCache> MakePageCollection(TSharedData body) noexcept
         {
-            auto largeGlobId = CutToChunks(body); 
+            auto largeGlobId = CutToChunks(body);
 
-            auto *pack = new NPageCollection::TPageCollection(largeGlobId, std::move(body)); 
+            auto *pack = new NPageCollection::TPageCollection(largeGlobId, std::move(body));
 
             TIntrusivePtr<TCache> cache = new TCache(pack);
 
@@ -106,9 +106,9 @@ namespace NWriter {
         const ui8 Channel = Max<ui8>();
         const ECache Cache = ECache::None;
 
-        NPageCollection::TWriter Writer; 
-        TVector<NPageCollection::TLoadedPage> Regular; 
-        TVector<NPageCollection::TLoadedPage> Sticky; 
+        NPageCollection::TWriter Writer;
+        TVector<NPageCollection::TLoadedPage> Regular;
+        TVector<NPageCollection::TLoadedPage> Sticky;
     };
 }
 }

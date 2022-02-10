@@ -1,9 +1,9 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/base/row_version.h> 
-#include <ydb/library/mkql_proto/protos/minikql.pb.h> 
-#include <ydb/core/protos/tx_proxy.pb.h> 
+#include <ydb/core/base/row_version.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb/core/protos/tx_proxy.pb.h>
 
 namespace NKikimr {
 namespace NTxProxy {

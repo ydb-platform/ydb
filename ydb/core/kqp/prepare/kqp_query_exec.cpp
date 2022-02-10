@@ -1,11 +1,11 @@
 #include "kqp_prepare_impl.h"
 
-#include <ydb/core/engine/mkql_engine_flat.h> 
-#include <ydb/core/kqp/common/kqp_yql.h> 
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h> 
-#include <ydb/core/tx/datashard/sys_tables.h> 
+#include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/tx/datashard/sys_tables.h>
 
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <google/protobuf/text_format.h>
 

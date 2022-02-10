@@ -3,9 +3,9 @@
 #include "defs.h"
 #include "datashard_user_table.h"
 
-#include <ydb/core/scheme/scheme_tabledefs.h> 
-#include <ydb/core/tablet_flat/util_basics.h> 
-#include <ydb/public/lib/scheme_types/scheme_type_id.h> 
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tablet_flat/util_basics.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
@@ -31,7 +31,7 @@
 #define IMPORT_LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] " << stream)
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 struct TImportJobProduct: public IDestructable {
     bool Success;
@@ -129,5 +129,5 @@ private:
 
 }; // TTableInfo
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

@@ -1,10 +1,10 @@
 #include "dsproxy.h"
 #include "dsproxy_mon.h"
 #include "dsproxy_quorum_tracker.h"
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
-#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h> 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h> 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h> 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 
 namespace NKikimr {
 

@@ -4,9 +4,9 @@
 #include "log.h"
 #include "params.h"
 
-#include <ydb/core/ymq/base/helpers.h> 
-#include <ydb/core/ymq/base/limits.h> 
-#include <ydb/core/ymq/proto/records.pb.h> 
+#include <ydb/core/ymq/base/helpers.h>
+#include <ydb/core/ymq/base/limits.h>
+#include <ydb/core/ymq/proto/records.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>

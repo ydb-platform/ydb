@@ -2,8 +2,8 @@
 #include "dsproxy_mon.h"
 #include "dsproxy_quorum_tracker.h"
 #include "dsproxy_blob_tracker.h"
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
-#include <ydb/core/blobstorage/base/wilson_events.h> 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <util/generic/set.h>
 
 namespace NKikimr {
@@ -306,7 +306,7 @@ public:
             << " RestartCounter# " << RestartCounter);
 
         for (const auto& vdisk : Info->GetVDisks()) {
-            auto vd = Info->GetVDiskId(vdisk.OrderNumber); 
+            auto vd = Info->GetVDiskId(vdisk.OrderNumber);
             std::unique_ptr<TEvBlobStorage::TEvVGet> vget;
             ui64 queueId = 1;
 
@@ -324,7 +324,7 @@ public:
             for (ui32 queryIdx = 0; queryIdx < QuerySize; ++queryIdx) {
                 const TLogoBlobID &id = Queries[queryIdx].Id;
                 //     If the disk is a replica for the query logoblobid, add it to the vquerry
-                if (Info->BelongsToSubgroup(vd, id.Hash())) { 
+                if (Info->BelongsToSubgroup(vd, id.Hash())) {
                     if (!vget) {
                         const ui64 cookie = queueId++;
                         if (!QuorumTracker.count(cookie)) {

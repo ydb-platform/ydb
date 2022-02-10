@@ -1,14 +1,14 @@
 #pragma once
-// unique tag to fix pragma once gcc glueing: ./ydb/core/tablet_flat/defs.h 
+// unique tag to fix pragma once gcc glueing: ./ydb/core/tablet_flat/defs.h
 
 #include "flat_page_iface.h"
 #include "util_basics.h"
 
-#include <ydb/core/base/defs.h> 
-#include <ydb/core/base/events.h> 
-#include <ydb/core/base/logoblob.h> 
-#include <ydb/core/scheme_types/scheme_raw_type_value.h> 
-#include <ydb/core/util/type_alias.h> 
+#include <ydb/core/base/defs.h>
+#include <ydb/core/base/events.h>
+#include <ydb/core/base/logoblob.h>
+#include <ydb/core/scheme_types/scheme_raw_type_value.h>
+#include <ydb/core/util/type_alias.h>
 #include <util/generic/xrange.h>
 #include <util/generic/ylimits.h>
 

@@ -1,7 +1,7 @@
 #include "query_spacetracker.h"
 
-#include <ydb/core/protos/base.pb.h> 
-#include <ydb/core/protos/blobstorage.pb.h> 
+#include <ydb/core/protos/base.pb.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

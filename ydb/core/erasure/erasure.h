@@ -2,8 +2,8 @@
 
 #include <array>
 
-#include <ydb/core/debug/valgrind_check.h> 
-#include <ydb/core/util/yverify_stream.h> 
+#include <ydb/core/debug/valgrind_check.h>
+#include <ydb/core/util/yverify_stream.h>
 
 #include <util/stream/str.h>
 #include <util/generic/string.h>
@@ -256,8 +256,8 @@ struct TErasureType {
         ErasureSpeciesCount = 19
     };
 
-    static const char *ErasureSpeciesToStr(EErasureSpecies es); 
- 
+    static const char *ErasureSpeciesToStr(EErasureSpecies es);
+
     enum EErasureFamily {
         ErasureMirror,
         ErasureParityStripe,
@@ -269,18 +269,18 @@ struct TErasureType {
         CrcModeWholePart = 1
     };
 
-    TErasureType(EErasureSpecies s = ErasureNone) 
-        : ErasureSpecies(s) 
-    {} 
+    TErasureType(EErasureSpecies s = ErasureNone)
+        : ErasureSpecies(s)
+    {}
 
-    virtual ~TErasureType() = default; 
-    TErasureType(const TErasureType &) = default; 
-    TErasureType &operator =(const TErasureType &) = default; 
+    virtual ~TErasureType() = default;
+    TErasureType(const TErasureType &) = default;
+    TErasureType &operator =(const TErasureType &) = default;
 
-    EErasureSpecies GetErasure() const { 
-        return ErasureSpecies; 
-    } 
- 
+    EErasureSpecies GetErasure() const {
+        return ErasureSpecies;
+    }
+
     TString ToString() const {
         Y_VERIFY((ui64)ErasureSpecies < ErasureSpeciesCount);
         return ErasureName[ErasureSpecies];
@@ -344,8 +344,8 @@ struct TErasureType {
 
     static const std::array<TString, ErasureSpeciesCount> ErasureName;
 protected:
-    EErasureSpecies ErasureSpecies; 
- 
+    EErasureSpecies ErasureSpecies;
+
     ui32 ColumnSize() const;
 };
 

@@ -2,8 +2,8 @@
 
 #include "mkql_computation_node_holders.h"
 
-#include <ydb/library/yql/public/udf/udf_value_builder.h> 
-#include <ydb/library/yql/public/udf/udf_validate.h> 
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
+#include <ydb/library/yql/public/udf/udf_validate.h>
 
 #include <util/generic/noncopyable.h>
 #include <util/memory/pool.h>

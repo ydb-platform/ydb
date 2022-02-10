@@ -2,8 +2,8 @@
 #include "console_configs_subscriber.h"
 #include "console.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <util/stream/file.h>
 #include <util/system/fs.h>

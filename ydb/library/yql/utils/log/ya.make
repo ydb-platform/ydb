@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    udovichenko-r 
-    g:yql 
-) 
+OWNER(
+    udovichenko-r
+    g:yql
+)
 
 SRCS(
     context.cpp

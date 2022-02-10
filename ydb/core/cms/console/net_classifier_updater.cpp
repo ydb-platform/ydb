@@ -1,7 +1,7 @@
 #include "net_classifier_updater.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/tablet_pipe.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipe.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/http/http_proxy.h>

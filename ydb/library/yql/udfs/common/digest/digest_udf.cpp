@@ -1,5 +1,5 @@
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
-#include <ydb/library/yql/public/udf/udf_value_builder.h> 
+#include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
 
 #include <util/digest/murmur.h>
 #include <util/digest/city.h>

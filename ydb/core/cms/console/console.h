@@ -1,11 +1,11 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/protos/console.pb.h> 
-#include <ydb/core/protos/console_config.pb.h> 
-#include <ydb/core/protos/console_tenant.pb.h> 
-#include <ydb/public/api/protos/ydb_cms.pb.h> 
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/protos/console.pb.h>
+#include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/console_tenant.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 
 namespace NKikimr {
 namespace NConsole {

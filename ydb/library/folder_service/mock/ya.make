@@ -1,4 +1,4 @@
-OWNER(g:yq) 
+OWNER(g:yq)
 
 LIBRARY()
 
@@ -8,8 +8,8 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/library/folder_service 
-    ydb/library/folder_service/proto 
+    ydb/library/folder_service
+    ydb/library/folder_service/proto
 )
 
 YQL_LAST_ABI_VERSION()

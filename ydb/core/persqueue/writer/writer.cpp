@@ -5,9 +5,9 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/persqueue/events/global.h> 
-#include <ydb/public/lib/base/msgbus_status.h> 
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/public/lib/base/msgbus_status.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/map.h>

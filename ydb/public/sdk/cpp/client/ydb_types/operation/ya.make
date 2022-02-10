@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:kikimr) 
+OWNER(g:kikimr)
 
 SRCS(
     operation.cpp
@@ -9,8 +9,8 @@ SRCS(
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/threading/future
-    ydb/public/lib/operation_id 
-    ydb/public/sdk/cpp/client/ydb_types 
+    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp/client/ydb_types
 )
 
 END()

@@ -2,13 +2,13 @@
 
 #include "blob_manager.h"
 
-#include <ydb/core/tx/columnshard/engines/column_engine.h> 
-#include <ydb/core/tx/columnshard/engines/indexed_read_data.h> 
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
 
-#include <ydb/core/protos/counters_columnshard.pb.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
-#include <ydb/core/tx/tx_processing.h> 
+#include <ydb/core/protos/counters_columnshard.pb.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/tx_processing.h>
 
 namespace arrow {
     class Schema;

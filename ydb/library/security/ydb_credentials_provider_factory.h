@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h> 
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 #include <memory>
 

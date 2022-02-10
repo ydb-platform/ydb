@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/core/protos/export.pb.h> 
-#include <ydb/public/api/protos/ydb_operation.pb.h> 
-#include <ydb/public/lib/operation_id/operation_id.h> 
+#include <ydb/core/protos/export.pb.h>
+#include <ydb/public/api/protos/ydb_operation.pb.h>
+#include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <util/string/cast.h>
 

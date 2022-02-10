@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/counters_pq.pb.h> 
+#include <ydb/core/protos/counters_pq.pb.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 

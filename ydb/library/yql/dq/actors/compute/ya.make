@@ -18,12 +18,12 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/base 
-    ydb/core/kqp/common 
-    ydb/core/kqp/runtime 
-    ydb/core/protos 
-    ydb/core/scheme 
-    ydb/core/tablet_flat 
+    ydb/core/base
+    ydb/core/kqp/common
+    ydb/core/kqp/runtime
+    ydb/core/protos
+    ydb/core/scheme
+    ydb/core/tablet_flat
     ydb/library/yql/dq/common
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime

@@ -56,25 +56,25 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/helpers
-    library/cpp/actors/protos 
+    library/cpp/actors/protos
     library/cpp/actors/util
     library/cpp/blockcodecs
     library/cpp/deprecated/enum_codegen
     library/cpp/yson
-    ydb/core/base 
-    ydb/core/mon 
-    ydb/core/mon_alloc 
-    ydb/core/node_whiteboard 
-    ydb/core/protos 
-    ydb/core/scheme 
-    ydb/core/sys_view/service 
-    ydb/core/tracing 
-    ydb/core/util 
-    ydb/library/persqueue/topic_parser 
+    ydb/core/base
+    ydb/core/mon
+    ydb/core/mon_alloc
+    ydb/core/node_whiteboard
+    ydb/core/protos
+    ydb/core/scheme
+    ydb/core/sys_view/service
+    ydb/core/tracing
+    ydb/core/util
+    ydb/library/persqueue/topic_parser
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+)

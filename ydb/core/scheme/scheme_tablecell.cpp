@@ -1,5 +1,5 @@
-#include <ydb/core/scheme/scheme_tablecell.h> 
-#include <ydb/core/scheme/scheme_type_registry.h> 
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_type_registry.h>
 
 #include <util/string/escape.h>
 

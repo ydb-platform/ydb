@@ -1,11 +1,11 @@
-import "ydb/core/protos/base.proto"; 
-import "ydb/core/protos/tablet.proto"; 
-import "ydb/core/protos/flat_scheme_op.proto"; 
+import "ydb/core/protos/base.proto";
+import "ydb/core/protos/tablet.proto";
+import "ydb/core/protos/flat_scheme_op.proto";
 
 package NKikimrExecutorFlat;
 option java_package = "ru.yandex.kikimr.proto";
 
-message TLargeGlobId { 
+message TLargeGlobId {
     // This is the correct way of doing for what StorageInfo is now used.
 
     required uint32 Group = 1;
@@ -13,34 +13,34 @@ message TLargeGlobId {
     required NKikimrProto.TLogoBlobID Lead = 3;
 }
 
-message TPageCollection { 
+message TPageCollection {
     message TPage {
         required uint32 Id = 1;
         required bytes Body = 2;
     }
 
-    repeated NKikimrProto.TLogoBlobID MetaId = 1; // Replaced by TLargeGlobId 
+    repeated NKikimrProto.TLogoBlobID MetaId = 1; // Replaced by TLargeGlobId
 
-    optional TLargeGlobId LargeGlobId = 6; 
+    optional TLargeGlobId LargeGlobId = 6;
 
-    // Page collection may be serialized with some meta blobs (its meanings is defined 
+    // Page collection may be serialized with some meta blobs (its meanings is defined
     // at application level), may be used for quick cooking on a receiver side,
-    // i.e. without extra blob loadings at page collection warming stage. This kind of 
-    // packed page collection is called HotBundle. 
+    // i.e. without extra blob loadings at page collection warming stage. This kind of
+    // packed page collection is called HotBundle.
 
     optional bytes Meta = 2;
     repeated TPage Pages = 5;
 }
 
 message TBundle {
-    // Bundle, a generic page collections ordered sequence with properties: 
+    // Bundle, a generic page collections ordered sequence with properties:
     //
-    // * PageCollections bundle have to be composed at least with one page collection. 
-    // * Bundle Id is TLogoBlobID of first meta blob of first page collection. 
-    // * Bundle holds an opaque entity in general indivisible by page collections to 
+    // * PageCollections bundle have to be composed at least with one page collection.
+    // * Bundle Id is TLogoBlobID of first meta blob of first page collection.
+    // * Bundle holds an opaque entity in general indivisible by page collections to
     //      two or more bundles producing new valid entities of the same kind.
 
-    repeated TPageCollection PageCollections = 2; 
+    repeated TPageCollection PageCollections = 2;
 
     // Legacy opaque can only be used for non-empty screen in TPart bundles,
 
@@ -132,7 +132,7 @@ message TBorrowedList {
 
 message TBorrowedPart {
     optional NKikimrProto.TLogoBlobID MetaId = 1;
- 
+
     repeated uint64 Loaners = 2;
     repeated TBorrowedList BorrowedList = 3;
     repeated NKikimrProto.TLogoBlobID BorrowKeepList = 4;
@@ -217,7 +217,7 @@ message TExternalGcEntry {
 message TFollowerPartSwitchAux {
     message TBySwitch {
         optional NKikimrProto.TLogoBlobID PartSwitchRef = 1;
-        repeated TBundle HotBundles = 2; 
+        repeated TBundle HotBundles = 2;
         repeated TTxStatus HotTxStatus = 3;
     }
 
@@ -225,19 +225,19 @@ message TFollowerPartSwitchAux {
 }
 
 message TFollowerAux {
-    message TTouchByPageCollection { 
+    message TTouchByPageCollection {
         optional NKikimrProto.TLogoBlobID MetaInfoId = 1;
         repeated uint32 TouchedPages = 2;
     }
 
-    repeated TTouchByPageCollection PageCollectionsTouched = 1; 
+    repeated TTouchByPageCollection PageCollectionsTouched = 1;
 
     optional bytes UserAuxUpdate = 2;
 }
 
 message TDatabaseBorrowPart {
     message TPartInfo {
-        optional TBundle Bundle = 12; 
+        optional TBundle Bundle = 12;
         repeated NKikimrTabletBase.TTabletStorageInfo StorageInfo = 11;
     }
 

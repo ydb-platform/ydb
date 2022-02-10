@@ -1,4 +1,4 @@
-#include <ydb/core/ymq/actor/message_delay_stats.h> 
+#include <ydb/core/ymq/actor/message_delay_stats.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

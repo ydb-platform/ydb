@@ -5,13 +5,13 @@ namespace NKikimr {
     namespace NBlobMapper {
 
         class TBasicMapper : public IBlobToDiskMapper {
-            const TBlobStorageGroupInfo::TTopology *Topology; 
+            const TBlobStorageGroupInfo::TTopology *Topology;
             const ui8 BlobSubgroupSize;
 
         private:
-            ui32 GetIdxInSubgroupImpl(const TVDiskIdShort& vdisk, ui32 hash) { 
-                const ui32 failDomainOrderNumber = Topology->GetFailDomainOrderNumber(vdisk); 
-                const ui32 numFailDomains = Topology->GetTotalFailDomainsNum(); 
+            ui32 GetIdxInSubgroupImpl(const TVDiskIdShort& vdisk, ui32 hash) {
+                const ui32 failDomainOrderNumber = Topology->GetFailDomainOrderNumber(vdisk);
+                const ui32 numFailDomains = Topology->GetTotalFailDomainsNum();
                 ui32 domainIdx = hash % numFailDomains;
 
                 // get shift of this disk inside ring
@@ -37,15 +37,15 @@ namespace NKikimr {
             }
 
         public:
-            TBasicMapper(const TBlobStorageGroupInfo::TTopology *topology) 
-                : Topology(topology) 
-                , BlobSubgroupSize(Topology->GType.BlobSubgroupSize()) 
+            TBasicMapper(const TBlobStorageGroupInfo::TTopology *topology)
+                : Topology(topology)
+                , BlobSubgroupSize(Topology->GType.BlobSubgroupSize())
             {}
 
-            void PickSubgroup(ui32 hash, TBlobStorageGroupInfo::TOrderNums &orderNums) override final { 
-                Y_VERIFY(orderNums.empty()); 
+            void PickSubgroup(ui32 hash, TBlobStorageGroupInfo::TOrderNums &orderNums) override final {
+                Y_VERIFY(orderNums.empty());
 
-                const ui32 numFailDomains = Topology->GetTotalFailDomainsNum(); 
+                const ui32 numFailDomains = Topology->GetTotalFailDomainsNum();
                 ui32 domainIdx = hash % numFailDomains;
 
                 if (Topology->GetNumVDisksPerFailDomain() == 1) {
@@ -73,18 +73,18 @@ namespace NKikimr {
                 }
             }
 
-            bool BelongsToSubgroup(const TVDiskIdShort& vdisk, ui32 hash) override final { 
+            bool BelongsToSubgroup(const TVDiskIdShort& vdisk, ui32 hash) override final {
                 return GetIdxInSubgroupImpl(vdisk, hash) < BlobSubgroupSize;
             }
 
-            ui32 GetIdxInSubgroup(const TVDiskIdShort& vdisk, ui32 hash) override final { 
+            ui32 GetIdxInSubgroup(const TVDiskIdShort& vdisk, ui32 hash) override final {
                 return GetIdxInSubgroupImpl(vdisk, hash);
             }
 
-            TVDiskIdShort GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) override final { 
-                const ui32 numFailDomains = Topology->GetTotalFailDomainsNum(); 
+            TVDiskIdShort GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) override final {
+                const ui32 numFailDomains = Topology->GetTotalFailDomainsNum();
                 ui32 domainIdx = (static_cast<ui64>(hash) + idxInSubgroup) % numFailDomains;
-                const TBlobStorageGroupInfo::TFailDomain& domain = Topology->GetFailDomain(domainIdx); 
+                const TBlobStorageGroupInfo::TFailDomain& domain = Topology->GetFailDomain(domainIdx);
 
                 if (domain.VDisks.size() == 1) {
                     return domain.VDisks[0].VDiskIdShort;
@@ -101,7 +101,7 @@ namespace NKikimr {
         };
 
         class TMirror3dcMapper : public IBlobToDiskMapper {
-            const TBlobStorageGroupInfo::TTopology *Topology; 
+            const TBlobStorageGroupInfo::TTopology *Topology;
             const ui32 NumFailRealms;
             const ui32 NumFailDomainsPerFailRealm;
             const ui32 NumVDisksPerFailDomain;
@@ -132,7 +132,7 @@ namespace NKikimr {
                 const ui32 realm = (baseRealm + col) % NumFailRealms;
                 const ui32 domain = (baseDomain + row) % NumFailDomainsPerFailRealm;
                 const ui32 vdisk = baseVDisk;
-                return Topology->FailRealms[realm].FailDomains[domain].VDisks[vdisk]; 
+                return Topology->FailRealms[realm].FailDomains[domain].VDisks[vdisk];
             }
 
             void DecomposeIndex(ui32 idxInSubgroup, ui32 *row, ui32 *col) const {
@@ -144,7 +144,7 @@ namespace NKikimr {
                 return row * NumFailRealmsInSubgroup + col;
             }
 
-            ui32 GetIdxInSubgroupImpl(const TVDiskIdShort& vdisk, ui32 hash) const { 
+            ui32 GetIdxInSubgroupImpl(const TVDiskIdShort& vdisk, ui32 hash) const {
                 ui32 baseRealm;
                 ui32 baseDomain;
                 ui32 baseVDisk;
@@ -162,19 +162,19 @@ namespace NKikimr {
             }
 
         public:
-            TMirror3dcMapper(const TBlobStorageGroupInfo::TTopology *topology) 
-                : Topology(topology) 
-                , NumFailRealms(Topology->FailRealms.size()) 
-                , NumFailDomainsPerFailRealm(Topology->FailRealms[0].FailDomains.size()) 
-                , NumVDisksPerFailDomain(Topology->FailRealms[0].FailDomains[0].VDisks.size()) 
+            TMirror3dcMapper(const TBlobStorageGroupInfo::TTopology *topology)
+                : Topology(topology)
+                , NumFailRealms(Topology->FailRealms.size())
+                , NumFailDomainsPerFailRealm(Topology->FailRealms[0].FailDomains.size())
+                , NumVDisksPerFailDomain(Topology->FailRealms[0].FailDomains[0].VDisks.size())
             {
                 Y_VERIFY(NumFailRealms >= NumFailRealmsInSubgroup &&
                         NumFailDomainsPerFailRealm >= NumFailDomainsPerFailRealmInSubgroup,
                         "mirror-3-dc group tolopogy is invalid: %s", topology->ToString().data());
             }
 
-            void PickSubgroup(ui32 hash, TBlobStorageGroupInfo::TOrderNums &orderNums) override final { 
-                Y_VERIFY(orderNums.empty()); 
+            void PickSubgroup(ui32 hash, TBlobStorageGroupInfo::TOrderNums &orderNums) override final {
+                Y_VERIFY(orderNums.empty());
 
                 ui32 baseRealm;
                 ui32 baseDomain;
@@ -186,20 +186,20 @@ namespace NKikimr {
                     for (ui32 col = 0; col < NumFailRealmsInSubgroup; ++col) {
                         const TBlobStorageGroupInfo::TVDiskInfo& vdiskInfo = GetVDiskInfo(baseRealm, baseDomain,
                                 baseVDisk, row, col);
-                        orderNums.push_back(vdiskInfo.OrderNumber); 
+                        orderNums.push_back(vdiskInfo.OrderNumber);
                     }
                 }
             }
 
-            bool BelongsToSubgroup(const TVDiskIdShort& vdisk, ui32 hash) override final { 
+            bool BelongsToSubgroup(const TVDiskIdShort& vdisk, ui32 hash) override final {
                 return GetIdxInSubgroupImpl(vdisk, hash) < BlobSubgroupSize;
             }
 
-            ui32 GetIdxInSubgroup(const TVDiskIdShort& vdisk, ui32 hash) override final { 
+            ui32 GetIdxInSubgroup(const TVDiskIdShort& vdisk, ui32 hash) override final {
                 return GetIdxInSubgroupImpl(vdisk, hash);
             }
 
-            TVDiskIdShort GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) override final { 
+            TVDiskIdShort GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) override final {
                 ui32 baseRealm;
                 ui32 baseDomain;
                 ui32 baseVDisk;
@@ -209,18 +209,18 @@ namespace NKikimr {
                 DecomposeIndex(idxInSubgroup, &row, &col);
                 const TBlobStorageGroupInfo::TVDiskInfo& vdiskInfo = GetVDiskInfo(baseRealm, baseDomain, baseVDisk,
                         row, col);
-                return vdiskInfo.VDiskIdShort; 
+                return vdiskInfo.VDiskIdShort;
             }
         };
 
     } // NBlobMapper
 
-    IBlobToDiskMapper *IBlobToDiskMapper::CreateBasicMapper(const TBlobStorageGroupInfo::TTopology *topology) { 
-        return new NBlobMapper::TBasicMapper(topology); 
+    IBlobToDiskMapper *IBlobToDiskMapper::CreateBasicMapper(const TBlobStorageGroupInfo::TTopology *topology) {
+        return new NBlobMapper::TBasicMapper(topology);
     }
 
-    IBlobToDiskMapper *IBlobToDiskMapper::CreateMirror3dcMapper(const TBlobStorageGroupInfo::TTopology *topology) { 
-        return new NBlobMapper::TMirror3dcMapper(topology); 
+    IBlobToDiskMapper *IBlobToDiskMapper::CreateMirror3dcMapper(const TBlobStorageGroupInfo::TTopology *topology) {
+        return new NBlobMapper::TMirror3dcMapper(topology);
     }
 
 } // NKikimr

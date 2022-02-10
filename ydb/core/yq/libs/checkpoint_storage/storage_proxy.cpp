@@ -1,16 +1,16 @@
 #include "storage_proxy.h"
 
 #include "gc.h"
-#include <ydb/core/yq/libs/config/protos/storage.pb.h> 
-#include <ydb/core/yq/libs/control_plane_storage/util.h> 
+#include <ydb/core/yq/libs/config/protos/storage.pb.h>
+#include <ydb/core/yq/libs/control_plane_storage/util.h>
 #include "ydb_checkpoint_storage.h"
 #include "ydb_state_storage.h"
 
-#include <ydb/core/yq/libs/checkpointing_common/defs.h> 
+#include <ydb/core/yq/libs/checkpointing_common/defs.h>
 #include <ydb/core/yq/libs/checkpoint_storage/events/events.h>
 
 #include <ydb/core/yq/libs/actors/logging/log.h>
-#include <ydb/core/yq/libs/ydb/util.h> 
+#include <ydb/core/yq/libs/ydb/util.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 

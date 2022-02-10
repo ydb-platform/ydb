@@ -4,11 +4,11 @@
 #include "events.h"
 #include "local_rate_limiter_allocator.h"
 
-#include <ydb/core/protos/services.pb.h> 
-#include <ydb/public/lib/value/value.h> 
-#include <ydb/core/ymq/actor/infly.h> 
-#include <ydb/core/ymq/actor/message_delay_stats.h> 
-#include <ydb/core/ymq/base/counters.h> 
+#include <ydb/core/protos/services.pb.h>
+#include <ydb/public/lib/value/value.h>
+#include <ydb/core/ymq/actor/infly.h>
+#include <ydb/core/ymq/actor/message_delay_stats.h>
+#include <ydb/core/ymq/base/counters.h>
 
 #include <library/cpp/actors/core/actorid.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -199,11 +199,11 @@ private:
     };
 
     struct TQuery {
-        /// Compiled program 
+        /// Compiled program
         TString     Compiled;
-        /// A vector of queries that are awaiting compilation completion 
-        TVector<TSqsEvents::TEvExecute::TPtr> Deferred; 
-        /// Program state 
+        /// A vector of queries that are awaiting compilation completion
+        TVector<TSqsEvents::TEvExecute::TPtr> Deferred;
+        /// Program state
         EQueryState State = EQueryState::Empty;
     };
 
@@ -245,7 +245,7 @@ private:
 
     template <class TBatch>
     struct TBatchingState {
-        virtual ~TBatchingState(); 
+        virtual ~TBatchingState();
         void Init(const NKikimrConfig::TSqsConfig::TBatchingPolicy& policy, ui64 shard, bool isFifo);
         void TryExecute(TQueueLeader* leader);
         virtual bool CanExecute(const TBatch& batch) const { // Called for next batches when we have some batches in flight.
@@ -367,7 +367,7 @@ private:
     struct TShardInfo {
         ~TShardInfo();
 
-        /// Counters 
+        /// Counters
         ui64 MessagesCount = 0;
         ui64 InflyMessagesCount = 0;
         ui64 OldestMessageTimestampMs = Max();
@@ -379,7 +379,7 @@ private:
 
         TInstant CreatedTimestamp;
 
-        /// Compiled queries 
+        /// Compiled queries
         TQuery Queries[QUERY_VECTOR_SIZE];
 
         TIntrusivePtr<TInflyMessages> Infly; // Infly for standard queues

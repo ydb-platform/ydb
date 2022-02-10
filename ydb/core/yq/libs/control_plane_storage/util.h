@@ -1,12 +1,12 @@
 #pragma once
 
-#include <ydb/core/yq/libs/control_plane_storage/events/events.h> 
+#include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 
 #include <util/datetime/base.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/timestamp.pb.h>
 
-#include <ydb/core/yq/libs/config/protos/control_plane_storage.pb.h> 
+#include <ydb/core/yq/libs/config/protos/control_plane_storage.pb.h>
 
 namespace NYq {
 

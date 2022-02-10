@@ -2,8 +2,8 @@
 
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include <ydb/core/tx/columnshard/columnshard.h> 
-#include <ydb/core/base/subdomain.h> 
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/base/subdomain.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

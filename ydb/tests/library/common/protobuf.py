@@ -6,8 +6,8 @@ from collections import namedtuple
 import six
 from hamcrest import has_properties
 
-import ydb.core.protos.msgbus_kv_pb2 as msgbus_kv 
-import ydb.core.protos.msgbus_pb2 as msgbus 
+import ydb.core.protos.msgbus_kv_pb2 as msgbus_kv
+import ydb.core.protos.msgbus_pb2 as msgbus
 
 
 def build_protobuf_if_necessary(protobuf_builder):
@@ -184,7 +184,7 @@ class TKeyRange(
 
 class TKeyValuePair(namedtuple('TKeyValuePair', ['key', 'value', 'size', 'creation_time'])):
     """
-    See TKeyValuePair from ydb/core/protos/msgbus_kv.proto 
+    See TKeyValuePair from ydb/core/protos/msgbus_kv.proto
     """
     def __new__(cls, key, value, size=None, creation_time=None):
         if size is None and value is not None:

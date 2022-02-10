@@ -4,8 +4,8 @@ OWNER(g:kikimr)
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/base 
-    ydb/core/protos 
+    ydb/core/base
+    ydb/core/protos
 )
 
 SRCS(

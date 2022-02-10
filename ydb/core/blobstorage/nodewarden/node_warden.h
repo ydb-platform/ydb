@@ -1,11 +1,11 @@
 #pragma once
 
-#include <ydb/core/blobstorage/crypto/default.h> 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_config.h> 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_drivemodel_db.h> 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h> 
-#include <ydb/core/protos/config.pb.h> 
-#include <ydb/library/pdisk_io/sector_map.h> 
+#include <ydb/core/blobstorage/crypto/default.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_drivemodel_db.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/library/pdisk_io/sector_map.h>
 
 #include <util/folder/path.h>
 
@@ -19,7 +19,7 @@ namespace NKikimr {
     struct TNodeWardenConfig : public TThrRefBase {
         NKikimrBlobStorage::TNodeWardenServiceSet ServiceSet;
         TIntrusivePtr<IPDiskServiceFactory> PDiskServiceFactory;
-        TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds; 
+        TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds;
         TIntrusivePtr<NPDisk::TDriveModelDb> AllDriveModels;
         NKikimrBlobStorage::TPDiskConfig PDiskConfigOverlay;
         NKikimrConfig::TFeatureFlags FeatureFlags;

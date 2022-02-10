@@ -4,11 +4,11 @@
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
-namespace NBlockIO { 
+namespace NBlockIO {
 
     constexpr static ui64 BlockSize = 8192 * 1024;
 
-    enum class EPriority { 
+    enum class EPriority {
         None    = 0,
         Fast    = 1,    /* Low latency activity             */
         Bulk    = 2,    /* Huge bulk IO reads like scan ops */

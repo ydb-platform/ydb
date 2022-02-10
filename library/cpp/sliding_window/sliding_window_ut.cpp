@@ -1,9 +1,9 @@
 #include "sliding_window.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 using namespace NSlidingWindow;
- 
+
 Y_UNIT_TEST_SUITE(TSlidingWindowTest) {
     Y_UNIT_TEST(TestSlidingWindowMax) {
         TSlidingWindow<TMaxOperation<unsigned>> w(TDuration::Minutes(5), 5);
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TSlidingWindowTest) {
         now += TDuration::Minutes(5);
         w.Update(1, now);                          // ~ 1 ~ ~ ~
         UNIT_ASSERT_VALUES_EQUAL(w.GetValue(), 1); //   ^
- 
+
         // update current bucket
         w.Update(2, now);                          // ~ 2 ~ ~ ~
         UNIT_ASSERT_VALUES_EQUAL(w.GetValue(), 2); //   ^
@@ -44,8 +44,8 @@ Y_UNIT_TEST_SUITE(TSlidingWindowTest) {
 
         now += TDuration::Minutes(5); // ~ ~ ~ ~ ~
         UNIT_ASSERT_VALUES_EQUAL(w.Update(now), 0);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestSlidingWindowMin) {
         TSlidingWindow<TMinOperation<unsigned>> w(TDuration::Minutes(5), 5);
         TInstant start = TInstant::MicroSeconds(TDuration::Hours(1).MicroSeconds());

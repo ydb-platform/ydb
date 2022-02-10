@@ -1,4 +1,4 @@
-import "ydb/core/protos/flat_tx_scheme.proto"; 
+import "ydb/core/protos/flat_tx_scheme.proto";
 
 package NKikimrSchemeBoard;
 option java_package = "ru.yandex.kikimr.proto";

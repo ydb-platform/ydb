@@ -1,8 +1,8 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/protos/tx.pb.h> 
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/protos/tx.pb.h>
 
 namespace NKikimr {
 IActor* CreateTxAllocator(const TActorId &tablet, TTabletStorageInfo *info);

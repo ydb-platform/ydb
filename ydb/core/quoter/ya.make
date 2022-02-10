@@ -18,19 +18,19 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/containers/ring_buffer
-    ydb/core/base 
-    ydb/core/kesus/tablet 
-    ydb/core/tx/scheme_cache 
-    ydb/core/util 
+    ydb/core/base
+    ydb/core/kesus/tablet
+    ydb/core/tx/scheme_cache
+    ydb/core/util
     ydb/library/yql/public/issue
 )
 
 END()
- 
-RECURSE( 
-    quoter_service_bandwidth_test 
-) 
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE(
+    quoter_service_bandwidth_test
+)
+
+RECURSE_FOR_TESTS(
+    ut
+)

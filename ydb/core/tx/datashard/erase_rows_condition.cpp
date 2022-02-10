@@ -1,6 +1,6 @@
 #include "erase_rows_condition.h"
 
-#include <ydb/library/dynumber/dynumber.h> 
+#include <ydb/library/dynumber/dynumber.h>
 
 #include <library/cpp/actors/core/log.h>
 
@@ -8,7 +8,7 @@
 #include <util/string/cast.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TExpirationCondition: public IEraseRowsCondition {
     using EUnit = NKikimrSchemeOp::TTTLSettings::EUnit;
@@ -194,5 +194,5 @@ IEraseRowsCondition* CreateEraseRowsCondition(const NKikimrTxDataShard::TEvCondi
     return CreateEraseRowsConditionImpl(request);
 }
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

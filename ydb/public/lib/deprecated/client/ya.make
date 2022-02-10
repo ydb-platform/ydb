@@ -14,7 +14,7 @@ SRCS(
 PEERDIR(
     library/cpp/grpc/client
     library/cpp/messagebus
-    ydb/public/lib/base 
+    ydb/public/lib/base
 )
 
 END()

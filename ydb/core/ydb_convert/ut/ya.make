@@ -1,6 +1,6 @@
-UNITTEST_FOR(ydb/core/ydb_convert) 
+UNITTEST_FOR(ydb/core/ydb_convert)
 
-OWNER(g:kikimr) 
+OWNER(g:kikimr)
 
 FORK_SUBTESTS()
 
@@ -14,7 +14,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/unittest
-    ydb/core/testlib 
+    ydb/core/testlib
 )
 
 END()

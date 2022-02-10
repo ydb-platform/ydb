@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/protos/resource_broker.pb.h> 
+#include <ydb/core/protos/resource_broker.pb.h>
 
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>

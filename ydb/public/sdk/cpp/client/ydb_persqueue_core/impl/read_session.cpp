@@ -3,7 +3,7 @@
 #include "common.h"
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>

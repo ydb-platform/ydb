@@ -3,11 +3,11 @@
 #include "change_collector_iface.h"
 
 #include <util/generic/cast.h>
-#include <ydb/core/tablet/tablet_exception.h> 
+#include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/core/engine/mkql_engine_flat_host.h> 
+#include <ydb/core/engine/mkql_engine_flat_host.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

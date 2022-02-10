@@ -2,8 +2,8 @@ package NKikimrLongTxService;
 
 option java_package = "ru.yandex.kikimr.proto";
 
-import "ydb/public/api/protos/ydb_status_codes.proto"; 
-import "ydb/public/api/protos/ydb_issue_message.proto"; 
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
 
 message TLongTxId {
     optional bytes UniqueId = 1;

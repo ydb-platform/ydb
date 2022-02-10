@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/public/lib/ydb_cli/common/command.h> 
-#include <ydb/public/lib/ydb_cli/common/profile_manager.h> 
+#include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/lib/ydb_cli/common/profile_manager.h>
 
 namespace NYdb {
 namespace NConsoleClient {

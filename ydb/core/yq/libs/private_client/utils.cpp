@@ -1,7 +1,7 @@
 #include "utils.h"
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
-#include <ydb/public/lib/ydb_cli/commands/ydb_common.h> 
+#include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 
 namespace NYq {
 

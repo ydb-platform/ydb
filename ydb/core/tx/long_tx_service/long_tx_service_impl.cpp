@@ -1,6 +1,6 @@
 #include "long_tx_service_impl.h"
 
-#include <ydb/core/base/appdata.h> 
+#include <ydb/core/base/appdata.h>
 #include <library/cpp/actors/core/log.h>
 #include <util/string/builder.h>
 

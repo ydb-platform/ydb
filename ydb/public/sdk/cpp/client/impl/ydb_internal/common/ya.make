@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:kikimr) 
+OWNER(g:kikimr)
 
 SRCS(
     parser.cpp
@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/grpc/client 
+    library/cpp/grpc/client
     ydb/library/yql/public/issue
 )
 

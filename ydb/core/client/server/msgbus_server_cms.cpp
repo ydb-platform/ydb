@@ -3,10 +3,10 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/cms/cms.h> 
-#include <ydb/core/base/ticket_parser.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/cms.h>
+#include <ydb/core/base/ticket_parser.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {

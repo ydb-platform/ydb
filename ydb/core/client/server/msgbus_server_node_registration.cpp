@@ -3,10 +3,10 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/mind/node_broker.h> 
-#include <ydb/core/kqp/kqp.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/mind/node_broker.h>
+#include <ydb/core/kqp/kqp.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {

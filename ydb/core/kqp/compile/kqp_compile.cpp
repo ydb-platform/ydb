@@ -1,13 +1,13 @@
 #include "kqp_compile.h"
 
-#include <ydb/core/kqp/common/kqp_yql.h> 
-#include <ydb/core/kqp/compile/kqp_mkql_compiler.h> 
-#include <ydb/core/kqp/compile/kqp_olap_compiler.h> 
-#include <ydb/core/kqp/opt/kqp_opt.h> 
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h> 
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/compile/kqp_mkql_compiler.h>
+#include <ydb/core/kqp/compile/kqp_olap_compiler.h>
+#include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h> 
-#include <ydb/library/mkql_proto/mkql_proto.h> 
+#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>

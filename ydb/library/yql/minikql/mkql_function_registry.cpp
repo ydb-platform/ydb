@@ -1,7 +1,7 @@
 #include "mkql_function_registry.h"
 #include "mkql_utils.h"
 #include "mkql_type_builder.h"
-#include <ydb/library/yql/public/udf/udf_static_registry.h> 
+#include <ydb/library/yql/public/udf/udf_static_registry.h>
 
 #include <util/folder/iterator.h>
 #include <util/folder/dirut.h>
@@ -19,7 +19,7 @@ using namespace NMiniKQL;
 const char MODULE_NAME_DELIMITER = '.';
 const char* RegisterFuncName = "Register";
 const char* AbiVersionFuncName = "AbiVersion";
-#if defined(_win_) || defined(_darwin_) 
+#if defined(_win_) || defined(_darwin_)
 const char* BindSymbolsFuncName = "BindSymbols";
 #endif
 const char* SetBackTraceCallbackName = "SetBackTraceCallback";

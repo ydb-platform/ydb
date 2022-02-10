@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/schemeshard) 
+UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 OWNER(
     ilnaz

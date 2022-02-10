@@ -6,7 +6,7 @@
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/core/yql_holding_file_storage.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/retry.h>
 
 #include <ydb/library/yql/minikql/mkql_node.h>

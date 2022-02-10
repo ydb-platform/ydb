@@ -3,10 +3,10 @@
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include "yql_ydb_settings.h"
 
-#include <ydb/library/yql/providers/common/token_accessor/client/factory.h> 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h> 
-#include <ydb/public/lib/experimental/ydb_clickhouse_internal.h> 
-#include <ydb/core/yq/libs/db_resolver/db_async_resolver_with_meta.h> 
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
+#include <ydb/core/yq/libs/db_resolver/db_async_resolver_with_meta.h>
 
 namespace NKikimr::NMiniKQL {
    class IFunctionRegistry;

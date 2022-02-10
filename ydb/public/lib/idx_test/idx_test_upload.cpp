@@ -6,7 +6,7 @@
 #include <util/system/mutex.h>
 #include <library/cpp/threading/future/future.h>
 
-#include <ydb/public/lib/yson_value/ydb_yson_value.h> 
+#include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 using namespace NYdb;
 using namespace NYdb::NTable;

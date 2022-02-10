@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_dummy.h> 
-#include <ydb/library/mkql_proto/protos/minikql.pb.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_dummy.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include "flat_cxx_database.h"
 #include "flat_dbase_scheme.h"
 #include "flat_dbase_apply.h"

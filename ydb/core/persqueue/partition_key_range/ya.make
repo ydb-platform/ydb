@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     ilnaz
-    g:kikimr 
+    g:kikimr
     g:logbroker
 )
 
@@ -11,8 +11,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/protos 
-    ydb/core/scheme 
+    ydb/core/protos
+    ydb/core/scheme
 )
 
 END()

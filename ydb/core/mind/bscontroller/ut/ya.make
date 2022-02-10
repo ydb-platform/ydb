@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/mind/bscontroller) 
+UNITTEST_FOR(ydb/core/mind/bscontroller)
 
 OWNER(alexvru g:kikimr)
 

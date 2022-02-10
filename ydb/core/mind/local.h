@@ -1,14 +1,14 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/protos/local.pb.h> 
-#include <ydb/core/tablet/tablet_setup.h> 
-#include <ydb/core/base/events.h> 
-#include <ydb/core/base/path.h> 
-#include <ydb/core/base/subdomain.h> 
-#include <ydb/core/base/tablet.h> 
-#include <ydb/core/base/blobstorage.h> 
+#include <ydb/core/protos/local.pb.h>
+#include <ydb/core/tablet/tablet_setup.h>
+#include <ydb/core/base/events.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/tablet.h>
+#include <ydb/core/base/blobstorage.h>
 #include <util/generic/map.h>
-#include <ydb/core/tablet/tablet_metrics.h> 
+#include <ydb/core/tablet/tablet_metrics.h>
 
 namespace NKikimr {
 

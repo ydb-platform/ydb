@@ -1,10 +1,10 @@
-import "ydb/core/protos/export.proto"; 
-import "ydb/core/protos/flat_scheme_op.proto"; 
-import "ydb/core/protos/issue_id.proto"; 
-import "ydb/core/protos/query_stats.proto"; 
-import "ydb/library/mkql_proto/protos/minikql.proto"; 
+import "ydb/core/protos/export.proto";
+import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/protos/issue_id.proto";
+import "ydb/core/protos/query_stats.proto";
+import "ydb/library/mkql_proto/protos/minikql.proto";
 
-import "ydb/public/api/protos/ydb_issue_message.proto"; 
+import "ydb/public/api/protos/ydb_issue_message.proto";
 
 package NKikimrTxUserProxy;
 option java_package = "ru.yandex.kikimr.proto";
@@ -170,7 +170,7 @@ message TMiniKQLCompileResults {
 message TTransaction {
     optional TMiniKQLTransaction MiniKQLTransaction = 4;
 
-    optional uint32 Flags = 6; // See ydb/core/tx/tx_datashard.h NKikimr::NTxDataShard::TTxFlags 
+    optional uint32 Flags = 6; // See ydb/core/tx/tx_datashard.h NKikimr::NTxDataShard::TTxFlags
     optional string UserRequestId = 8;
 
     optional NKikimrSchemeOp.TModifyScheme ModifyScheme = 10;

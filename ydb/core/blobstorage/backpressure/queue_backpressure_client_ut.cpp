@@ -6,11 +6,11 @@
 #include <library/cpp/actors/core/executor_pool_io.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h> 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h> 
-#include <ydb/core/blobstorage/vdisk/vdisk_actor.h> 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_config.h> 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+#include <ydb/core/blobstorage/vdisk/vdisk_actor.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <util/folder/tempdir.h>
 
 using namespace NKikimr;
@@ -189,17 +189,17 @@ public:
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // VDisk
-        TVDiskConfig::TBaseInfo baseInfo( 
+        TVDiskConfig::TBaseInfo baseInfo(
             VDiskId,
             PDiskId,
             PDiskGuid,
             1,
-            TPDiskCategory::DEVICE_TYPE_ROT, 
-            0, 
-            NKikimrBlobStorage::TVDiskKind::Default, 
-            2, 
-            {}); 
-        TIntrusivePtr<TVDiskConfig> vDiskConfig = new TVDiskConfig(baseInfo); 
+            TPDiskCategory::DEVICE_TYPE_ROT,
+            0,
+            NKikimrBlobStorage::TVDiskKind::Default,
+            2,
+            {});
+        TIntrusivePtr<TVDiskConfig> vDiskConfig = new TVDiskConfig(baseInfo);
 
         IActor* vDisk = CreateVDisk(vDiskConfig, Info, Counters);
         TActorSetupCmd vDiskSetup(vDisk, TMailboxType::Revolving, 0);

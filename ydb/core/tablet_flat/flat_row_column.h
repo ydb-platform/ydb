@@ -1,7 +1,7 @@
 #pragma once
 
 #include "flat_row_eggs.h"
-#include <ydb/core/scheme/scheme_type_id.h> 
+#include <ydb/core/scheme/scheme_type_id.h>
 
 namespace NKikimr {
 namespace NTable {

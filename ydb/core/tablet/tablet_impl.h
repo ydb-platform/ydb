@@ -1,15 +1,15 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/base/tablet.h> 
-#include <ydb/core/base/statestorage.h> 
+#include <ydb/core/base/tablet.h>
+#include <ydb/core/base/statestorage.h>
 
-#include <ydb/core/protos/tablet.pb.h> 
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/tablet/tablet_metrics.h> 
+#include <ydb/core/protos/tablet.pb.h>
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/tablet/tablet_metrics.h>
 
 #include <library/cpp/actors/core/scheduler_cookie.h>
 #include <util/generic/deque.h>
-#include <ydb/core/base/tracing.h> 
+#include <ydb/core/base/tracing.h>
 
 namespace NKikimr {
 

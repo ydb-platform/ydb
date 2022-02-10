@@ -5,8 +5,8 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/mkql_proto/protos/minikql.pb.h> 
-#include <ydb/core/protos/minikql_engine.pb.h> 
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb/core/protos/minikql_engine.pb.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 

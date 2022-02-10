@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/public/lib/deprecated/kicli) 
+UNITTEST_FOR(ydb/public/lib/deprecated/kicli)
 
 OWNER(
     xenoxeno
@@ -6,15 +6,15 @@ OWNER(
 )
 
 TIMEOUT(600)
- 
+
 SIZE(MEDIUM)
 
 FORK_SUBTESTS()
 
 PEERDIR(
-    ydb/core/client 
-    ydb/core/testlib 
-    ydb/public/lib/deprecated/kicli 
+    ydb/core/client
+    ydb/core/testlib
+    ydb/public/lib/deprecated/kicli
 )
 
 YQL_LAST_ABI_VERSION()

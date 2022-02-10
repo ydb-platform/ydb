@@ -4,11 +4,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TStoreSchemeTxUnit : public TExecutionUnit {
 public:
-    TStoreSchemeTxUnit(TDataShard &dataShard, 
+    TStoreSchemeTxUnit(TDataShard &dataShard,
                        TPipeline &pipeline);
     ~TStoreSchemeTxUnit() override;
 
@@ -22,7 +22,7 @@ public:
 private:
 };
 
-TStoreSchemeTxUnit::TStoreSchemeTxUnit(TDataShard &dataShard, 
+TStoreSchemeTxUnit::TStoreSchemeTxUnit(TDataShard &dataShard,
                                        TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::StoreSchemeTx, false, dataShard, pipeline)
 {
@@ -95,11 +95,11 @@ void TStoreSchemeTxUnit::Complete(TOperation::TPtr op,
     Pipeline.ProposeComplete(op, ctx);
 }
 
-THolder<TExecutionUnit> CreateStoreSchemeTxUnit(TDataShard &dataShard, 
+THolder<TExecutionUnit> CreateStoreSchemeTxUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)
 {
     return THolder(new TStoreSchemeTxUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

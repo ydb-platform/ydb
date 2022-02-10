@@ -1,9 +1,9 @@
 #include "test_load_actor.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/blobstorage/base/blobstorage_events.h> 
-#include <ydb/public/lib/base/msgbus.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/public/lib/base/msgbus.h>
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/monlib/service/pages/templates.h>

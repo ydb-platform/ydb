@@ -49,10 +49,10 @@ OWNER(
     g:kikimr
 )
 
-IF (KIKIMR_ALLOW_SHARDED_COMPACTION) 
-    CFLAGS( 
-        -DKIKIMR_ALLOW_SHARDED_COMPACTION=1 
-    ) 
+IF (KIKIMR_ALLOW_SHARDED_COMPACTION)
+    CFLAGS(
+        -DKIKIMR_ALLOW_SHARDED_COMPACTION=1
+    )
 ENDIF()
 
 SRCS(
@@ -208,44 +208,44 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
 
 PEERDIR(
-    contrib/libs/protobuf 
+    contrib/libs/protobuf
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata
-    ydb/core/actorlib_impl 
-    ydb/core/base 
-    ydb/core/blockstore/core 
-    ydb/core/engine 
-    ydb/core/engine/minikql 
-    ydb/core/filestore/core 
-    ydb/core/kesus/tablet 
-    ydb/core/metering 
-    ydb/core/persqueue/config 
-    ydb/core/persqueue/events 
-    ydb/core/persqueue/writer 
-    ydb/core/protos 
-    ydb/core/scheme 
-    ydb/core/sys_view/partition_stats 
-    ydb/core/tablet 
-    ydb/core/tablet_flat 
-    ydb/core/tx 
-    ydb/core/tx/datashard 
-    ydb/core/tx/scheme_board 
-    ydb/core/tx/tx_allocator_client 
-    ydb/core/util 
-    ydb/core/wrappers 
-    ydb/core/ydb_convert 
-    ydb/library/aclib 
-    ydb/library/aclib/protos 
-    ydb/library/login 
-    ydb/library/login/protos 
+    ydb/core/actorlib_impl
+    ydb/core/base
+    ydb/core/blockstore/core
+    ydb/core/engine
+    ydb/core/engine/minikql
+    ydb/core/filestore/core
+    ydb/core/kesus/tablet
+    ydb/core/metering
+    ydb/core/persqueue/config
+    ydb/core/persqueue/events
+    ydb/core/persqueue/writer
+    ydb/core/protos
+    ydb/core/scheme
+    ydb/core/sys_view/partition_stats
+    ydb/core/tablet
+    ydb/core/tablet_flat
+    ydb/core/tx
+    ydb/core/tx/datashard
+    ydb/core/tx/scheme_board
+    ydb/core/tx/tx_allocator_client
+    ydb/core/util
+    ydb/core/wrappers
+    ydb/core/ydb_convert
+    ydb/library/aclib
+    ydb/library/aclib/protos
+    ydb/library/login
+    ydb/library/login/protos
     ydb/library/yql/minikql
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     SRCS(

@@ -1,8 +1,8 @@
-#include <ydb/core/tablet_flat/flat_executor.h> 
-#include <ydb/core/tablet_flat/flat_database.h> 
-#include <ydb/core/tablet_flat/flat_writer_conf.h> 
-#include <ydb/core/tablet_flat/flat_writer_bundle.h> 
-#include <ydb/core/tablet_flat/flat_sausage_chop.h> 
+#include <ydb/core/tablet_flat/flat_executor.h>
+#include <ydb/core/tablet_flat/flat_database.h>
+#include <ydb/core/tablet_flat/flat_writer_conf.h>
+#include <ydb/core/tablet_flat/flat_writer_bundle.h>
+#include <ydb/core/tablet_flat/flat_sausage_chop.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(NOther) {
     {
         NWriter::TConf conf;
 
-        conf.Groups[0].Block = 128;       /* Page collection blob size */ 
+        conf.Groups[0].Block = 128;       /* Page collection blob size */
         conf.Slots = { { 1, 11 }, { 3, 13 }, { 5, 17 } };
         conf.Groups[0].Channel = 3;     /* Put data to channel 3 grp 13 */
         conf.BlobsChannel = 5;    /* Put blobs to channel 5 grp 17 */
@@ -37,14 +37,14 @@ Y_UNIT_TEST_SUITE(NOther) {
 
         auto results = bundle->Results();
         UNIT_ASSERT(results);
-        UNIT_ASSERT(results[0].PageCollections.at(0)->Total() == 7); 
+        UNIT_ASSERT(results[0].PageCollections.at(0)->Total() == 7);
 
-        UNIT_ASSERT(globs.size() == 18 /* 11 page collections + 4 meta + 3 external */); 
+        UNIT_ASSERT(globs.size() == 18 /* 11 page collections + 4 meta + 3 external */);
 
         /*_ Ensure that writer places blobs to the correct channel and grp */
 
         for (auto &one: globs) {
-            UNIT_ASSERT(NPageCollection::TGroupBlobsByCookie::IsInPlane(one.GId.Logo, mask)); 
+            UNIT_ASSERT(NPageCollection::TGroupBlobsByCookie::IsInPlane(one.GId.Logo, mask));
             UNIT_ASSERT(
                 (one.GId.Group == 13 && one.GId.Logo.Channel() == 3)
                 ||(one.GId.Group == 17 && one.GId.Logo.Channel() == 5));

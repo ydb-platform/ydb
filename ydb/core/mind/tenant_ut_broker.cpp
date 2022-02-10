@@ -1,13 +1,13 @@
 #include "tenant_slot_broker_impl.h"
 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
-#include <ydb/core/cms/console/config_index.h> 
-#include <ydb/core/cms/console/console.h> 
-#include <ydb/core/mind/tenant_pool.h> 
-#include <ydb/core/mind/tenant_slot_broker.h> 
-#include <ydb/core/testlib/tablet_helpers.h> 
-#include <ydb/core/testlib/tenant_runtime.h> 
+#include <ydb/core/base/counters.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/cms/console/config_index.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mind/tenant_slot_broker.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/tenant_runtime.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

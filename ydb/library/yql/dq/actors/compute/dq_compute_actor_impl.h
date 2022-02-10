@@ -7,8 +7,8 @@
 #include "dq_compute_actor_sources.h"
 #include "dq_compute_issues_buffer.h"
 
-#include <ydb/core/scheme/scheme_tabledefs.h> // TODO: TTableId 
-#include <ydb/core/base/kikimr_issue.h> 
+#include <ydb/core/scheme/scheme_tabledefs.h> // TODO: TTableId
+#include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/tablet_flat/util_basics.h> // TODO: IDestructable
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>

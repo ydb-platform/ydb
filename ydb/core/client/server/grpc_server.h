@@ -1,13 +1,13 @@
 #pragma once
 
-#include <ydb/core/protos/grpc.grpc.pb.h> 
+#include <ydb/core/protos/grpc.grpc.pb.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/grpc/server/grpc_server.h>
-#include <ydb/public/lib/deprecated/client/grpc_client.h> 
-#include <ydb/public/lib/base/defs.h> 
-#include <ydb/public/lib/base/msgbus.h> 
+#include <ydb/public/lib/deprecated/client/grpc_client.h>
+#include <ydb/public/lib/base/defs.h>
+#include <ydb/public/lib/base/msgbus.h>
 
 #include <util/thread/factory.h>
 #include <util/generic/queue.h>

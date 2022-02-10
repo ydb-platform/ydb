@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/tablet_flat 
+    ydb/core/tablet_flat
 )
 
 END()

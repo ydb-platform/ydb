@@ -1,11 +1,11 @@
-#include "export_iface.h" 
+#include "export_iface.h"
 #include "backup_restore_common.h"
 #include "execution_unit_ctors.h"
 #include "export_scan.h"
 #include "export_s3.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TBackupUnit : public TBackupRestoreUnitBase<TEvDataShard::TEvCancelBackup> {
     using IBuffer = NExportScan::IBuffer;
@@ -42,24 +42,24 @@ protected:
 
         auto* appData = AppData(ctx);
 
-        std::shared_ptr<::NKikimr::NDataShard::IExport> exp; 
+        std::shared_ptr<::NKikimr::NDataShard::IExport> exp;
         if (backup.HasYTSettings()) {
-            auto* exportFactory = appData->DataShardExportFactory; 
-            if (exportFactory) { 
-                const auto& settings = backup.GetYTSettings(); 
-                std::shared_ptr<IExport>(exportFactory->CreateExportToYt(settings.GetUseTypeV3())).swap(exp); 
-            } else { 
-                Abort(op, ctx, "Exports to YT are disabled"); 
-                return false; 
-            } 
+            auto* exportFactory = appData->DataShardExportFactory;
+            if (exportFactory) {
+                const auto& settings = backup.GetYTSettings();
+                std::shared_ptr<IExport>(exportFactory->CreateExportToYt(settings.GetUseTypeV3())).swap(exp);
+            } else {
+                Abort(op, ctx, "Exports to YT are disabled");
+                return false;
+            }
         } else if (backup.HasS3Settings()) {
-            auto* exportFactory = appData->DataShardExportFactory; 
-            if (exportFactory) { 
-                std::shared_ptr<IExport>(exportFactory->CreateExportToS3()).swap(exp); 
-            } else { 
-                Abort(op, ctx, "Exports to S3 are disabled"); 
-                return false; 
-            } 
+            auto* exportFactory = appData->DataShardExportFactory;
+            if (exportFactory) {
+                std::shared_ptr<IExport>(exportFactory->CreateExportToS3()).swap(exp);
+            } else {
+                Abort(op, ctx, "Exports to S3 are disabled");
+                return false;
+            }
         } else {
             Abort(op, ctx, "Unsupported backup task");
             return false;
@@ -135,14 +135,14 @@ protected:
     }
 
 public:
-    TBackupUnit(TDataShard& self, TPipeline& pipeline) 
+    TBackupUnit(TDataShard& self, TPipeline& pipeline)
         : TBase(EExecutionUnitKind::Backup, self, pipeline)
     {
     }
 
 }; // TBackupUnit
 
-THolder<TExecutionUnit> CreateBackupUnit(TDataShard& self, TPipeline& pipeline) { 
+THolder<TExecutionUnit> CreateBackupUnit(TDataShard& self, TPipeline& pipeline) {
     return THolder(new TBackupUnit(self, pipeline));
 }
 

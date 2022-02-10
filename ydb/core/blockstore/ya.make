@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(g:kikimr)
 
 PEERDIR(
-    ydb/core/blockstore/core 
+    ydb/core/blockstore/core
 )
 
 END()

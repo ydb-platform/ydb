@@ -1,6 +1,6 @@
 #include "token_field_printer.h"
 
-#include <ydb/library/security/util.h> 
+#include <ydb/library/security/util.h>
 
 namespace NKikimr {
 

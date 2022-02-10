@@ -3,7 +3,7 @@
 #include "config.h"
 #include "pdiskid.h"
 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/set.h>

@@ -52,7 +52,7 @@ namespace NTable {
         TSnapEdge Edge;
 
         // Parts (or their subparts) which are selected for compaction
-        TVector<TPartView> Parts; 
+        TVector<TPartView> Parts;
 
         // Cold parts which are selected for compaction
         TVector<TIntrusiveConstPtr<TColdPart>> ColdParts;
@@ -78,9 +78,9 @@ namespace NTable {
         TEpoch Epoch;
 
         // Parts that replaced original data
-        TVector<TPartView> Parts; 
+        TVector<TPartView> Parts;
 
-        TCompactionResult(TEpoch epoch, TVector<TPartView> parts) 
+        TCompactionResult(TEpoch epoch, TVector<TPartView> parts)
             : Epoch(epoch)
             , Parts(std::move(parts))
         { }
@@ -180,12 +180,12 @@ namespace NTable {
         /**
          * Returns current part with the specified label
          */
-        virtual TPartView TablePart(ui32 table, const TLogoBlobID& label) = 0; 
+        virtual TPartView TablePart(ui32 table, const TLogoBlobID& label) = 0;
 
         /**
          * Returns a complete list of parts from the specified table
          */
-        virtual TVector<TPartView> TableParts(ui32 table) = 0; 
+        virtual TVector<TPartView> TableParts(ui32 table) = 0;
         virtual TVector<TIntrusiveConstPtr<TColdPart>> TableColdParts(ui32 table) = 0;
 
         /**
@@ -296,7 +296,7 @@ namespace NTable {
             TTaskId taskId,
             TSnapEdge edge,
             ui64 forcedCompactionId) = 0;
- 
+
         /**
          * Called when backend needs to compact borrowed data
          */
@@ -324,7 +324,7 @@ namespace NTable {
          * the table, in which case strategy may need to correctly merge new
          * subparts with its existing subparts.
          */
-        virtual void PartMerged(TPartView part, ui32 level) = 0; 
+        virtual void PartMerged(TPartView part, ui32 level) = 0;
         virtual void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) = 0;
 
         /**

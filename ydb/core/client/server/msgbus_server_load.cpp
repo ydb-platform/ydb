@@ -1,5 +1,5 @@
 #include "msgbus_servicereq.h"
-#include <ydb/core/blobstorage/base/blobstorage_events.h> 
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -68,7 +68,7 @@ public:
     }
 };
 
-IActor *CreateMessageBusBlobStorageLoadRequest(NMsgBusProxy::TBusMessageContext& msg) { 
+IActor *CreateMessageBusBlobStorageLoadRequest(NMsgBusProxy::TBusMessageContext& msg) {
     NKikimrClient::TBsTestLoadRequest& record = static_cast<TBusBsTestLoadRequest *>(msg.GetMessage())->Record;
     return new TBsTestLoadActorRequest(record, msg);
 }

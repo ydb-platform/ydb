@@ -1,5 +1,5 @@
 #include "db_async_resolver_with_meta.h"
-#include <ydb/core/yq/libs/common/database_token_builder.h> 
+#include <ydb/core/yq/libs/common/database_token_builder.h>
 
 namespace NYq {
 
@@ -68,5 +68,5 @@ namespace NYq {
             TryAddDatabaseToResolve(auth, dbId, type, Token, AccountIdSignatures, databaseIds);
         }
 
-} // NYq 
- 
+} // NYq
+

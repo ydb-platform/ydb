@@ -1,7 +1,7 @@
 #include "localdb.h"
 #include "compile_time_flags.h"
 
-#include <ydb/core/protos/resource_broker.pb.h> 
+#include <ydb/core/protos/resource_broker.pb.h>
 
 namespace NKikimr {
 namespace NLocalDb {

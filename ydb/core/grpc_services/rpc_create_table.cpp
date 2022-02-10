@@ -6,11 +6,11 @@
 #include "table_profiles.h"
 #include "table_settings.h"
 
-#include <ydb/core/cms/console/configs_dispatcher.h> 
-#include <ydb/core/engine/mkql_proto.h> 
-#include <ydb/core/protos/console_config.pb.h> 
-#include <ydb/core/ydb_convert/column_families.h> 
-#include <ydb/core/ydb_convert/table_description.h> 
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/ydb_convert/column_families.h>
+#include <ydb/core/ydb_convert/table_description.h>
 
 namespace NKikimr {
 namespace NGRpcService {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/runtime/kqp_compute.h> 
+#include <ydb/core/kqp/runtime/kqp_compute.h>
 
 namespace NKikimr::NSysView {
 

@@ -14,7 +14,7 @@
 
 #include <util/random/shuffle.h>
 
-#include <ydb/core/health_check/health_check.h> 
+#include <ydb/core/health_check/health_check.h>
 
 namespace NKikimr {
 namespace NGRpcService {

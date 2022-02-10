@@ -5,6 +5,6 @@
 
 namespace NKikimr {
 
-    NActors::IActor *CreateFailureInjectionActor(); 
+    NActors::IActor *CreateFailureInjectionActor();
 
 } // NKikimr

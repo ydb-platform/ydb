@@ -2,11 +2,11 @@
 #include <util/string/vector.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-class TDataShard::TTxS3Listing : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxS3Listing : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvS3ListingRequest::TPtr Ev;
     TAutoPtr<TEvDataShard::TEvS3ListingResponse> Result;
@@ -19,7 +19,7 @@ private:
     ui32 RestartCount;
 
 public:
-    TTxS3Listing(TDataShard* ds, TEvDataShard::TEvS3ListingRequest::TPtr ev) 
+    TTxS3Listing(TDataShard* ds, TEvDataShard::TEvS3ListingRequest::TPtr ev)
         : TBase(ds)
         , Ev(ev)
         , RestartCount(0)
@@ -166,7 +166,7 @@ public:
 
             // Explicitly skip erased rows after saving LastPath. This allows to continue exactly from
             // this key in case of restart
-            if (iter->Row().GetRowState() == NTable::ERowOp::Erase) { 
+            if (iter->Row().GetRowState() == NTable::ERowOp::Erase) {
                 continue;
             }
 
@@ -285,7 +285,7 @@ private:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx) { 
+void TDataShard::Handle(TEvDataShard::TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx) {
     Executor()->Execute(new TTxS3Listing(this, ev), ctx);
 }
 

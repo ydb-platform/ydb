@@ -19,14 +19,14 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/base 
-    ydb/core/protos 
-    ydb/core/tablet 
-    ydb/public/api/protos 
+    ydb/core/base
+    ydb/core/protos
+    ydb/core/tablet
+    ydb/public/api/protos
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+)

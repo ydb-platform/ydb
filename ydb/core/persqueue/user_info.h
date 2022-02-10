@@ -5,11 +5,11 @@
 #include "percentile_counter.h"
 #include "read_speed_limiter.h"
 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/protos/counters_pq.pb.h> 
-#include <ydb/core/protos/pqconfig.pb.h> 
-#include <ydb/core/tablet/tablet_counters_protobuf.h> 
-#include <ydb/library/persqueue/topic_parser/topic_parser.h> 
+#include <ydb/core/base/counters.h>
+#include <ydb/core/protos/counters_pq.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/sliding_window/sliding_window.h>
 
@@ -198,7 +198,7 @@ struct TUserInfo {
 
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
 
-    std::shared_ptr<TPercentileCounter> ReadTimeLag; 
+    std::shared_ptr<TPercentileCounter> ReadTimeLag;
     bool DoExternalRead = false;
 
     bool WriteInProgress = false;

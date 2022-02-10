@@ -1,19 +1,19 @@
 #include "datashard_distributed_erase.h"
 #include "datashard_impl.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/tablet_pipecache.h> 
-#include <ydb/core/protos/services.pb.h> 
-#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
-#include <ydb/core/tx/tx.h> 
-#include <ydb/library/aclib/aclib.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/protos/services.pb.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx.h>
+#include <ydb/library/aclib/aclib.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 
-#include <ydb/library/yql/public/udf/udf_types.h> 
+#include <ydb/library/yql/public/udf/udf_types.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/hash_set.h>
@@ -39,7 +39,7 @@
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[DistEraser] " << SelfId() << " " << stream)
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TDistEraser: public TActorBootstrapped<TDistEraser> {
     using TEvResponse = NKikimrTxDataShard::TEvEraseRowsResponse;
@@ -1113,5 +1113,5 @@ IActor* CreateDistributedEraser(const TActorId& replyTo, const TTableId& mainTab
     return new TDistEraser(replyTo, mainTableId, indexes);
 }
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

@@ -1,4 +1,4 @@
-import "ydb/core/protos/flat_scheme_op.proto"; 
+import "ydb/core/protos/flat_scheme_op.proto";
 
 package NTabletFlatScheme;
 option java_package = "ru.yandex.kikimr.proto";
@@ -39,7 +39,7 @@ message TAlterRecord {
     optional uint32 EraseCacheMaxBytes = 22;
     optional bool ColdBorrow = 23 [default = false];
 
-    //_ Table: Attributes of storage (page collection) 
+    //_ Table: Attributes of storage (page collection)
 
     optional uint32 Main = 9;       // Default channel for main data
     optional uint32 Blobs = 15;     // Channel for external blobs

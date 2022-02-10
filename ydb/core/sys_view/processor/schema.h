@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 namespace NKikimr {
 namespace NSysView {

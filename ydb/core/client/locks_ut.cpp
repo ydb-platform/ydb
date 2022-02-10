@@ -1,9 +1,9 @@
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/engine/mkql_engine_flat_impl.h> 
-#include <ydb/core/testlib/test_client.h> 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
-#include <ydb/core/tx/datashard/datashard_locks.h> 
-#include <ydb/public/lib/deprecated/kicli/kicli.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/engine/mkql_engine_flat_impl.h>
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/datashard/datashard_locks.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -1810,7 +1810,7 @@ static void LocksLimit() {
 
     using TLock = TSysTables::TLocksTable::TLock;
 
-    ui32 limit = NDataShard::TLockLocker::TLockLimiter::LockLimit(); 
+    ui32 limit = NDataShard::TLockLocker::TLockLimiter::LockLimit();
     const ui32 factor = 100;
 
     const char * query = R"((
@@ -1917,7 +1917,7 @@ static void ShardLocks() {
     TClient::TFlatQueryOptions opts;
 
 
-    ui32 limit = NDataShard::TLockLocker::TLockLimiter::LockLimit(); 
+    ui32 limit = NDataShard::TLockLocker::TLockLimiter::LockLimit();
     //const ui32 factor = 100;
 
     const char * setLock = R"___((

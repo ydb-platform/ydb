@@ -1,7 +1,7 @@
 #include "upload_rows.h"
 #include "upload_rows_common_impl.h"
 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
+#include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr {
 namespace NTxProxy {

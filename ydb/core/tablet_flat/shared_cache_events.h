@@ -12,9 +12,9 @@
 #include <memory>
 
 namespace NKikimr {
-namespace NSharedCache { 
+namespace NSharedCache {
 
-    using EPriority = NTabletFlatExecutor::NBlockIO::EPriority; 
+    using EPriority = NTabletFlatExecutor::NBlockIO::EPriority;
 
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR),
@@ -38,10 +38,10 @@ namespace NSharedCache {
     };
 
     struct TEvInvalidate : public TEventLocal<TEvInvalidate, EvInvalidate> {
-        const TLogoBlobID PageCollectionId; 
+        const TLogoBlobID PageCollectionId;
 
-        TEvInvalidate(const TLogoBlobID &pageCollectionId) 
-            : PageCollectionId(pageCollectionId) 
+        TEvInvalidate(const TLogoBlobID &pageCollectionId)
+            : PageCollectionId(pageCollectionId)
         {}
     };
 
@@ -58,7 +58,7 @@ namespace NSharedCache {
         TActorId Owner;
 
         TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TActorId owner)
-            : PageCollection(std::move(pageCollection)) 
+            : PageCollection(std::move(pageCollection))
             , Owner(owner)
         {
             Y_VERIFY(Owner, "Cannot send request with empty owner");
@@ -66,12 +66,12 @@ namespace NSharedCache {
     };
 
     struct TEvRequest : public TEventLocal<TEvRequest, EvRequest> {
-        const EPriority Priority; 
+        const EPriority Priority;
         TAutoPtr<NPageCollection::TFetch> Fetch;
         TActorId Owner;
 
         TEvRequest(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch, TActorId owner)
-            : Priority(priority) 
+            : Priority(priority)
             , Fetch(fetch)
             , Owner(owner)
         {
@@ -134,18 +134,18 @@ namespace NSharedCache {
 }
 
 template<> inline
-void Out<NKikimr::NTabletFlatExecutor::NBlockIO::EPriority>( 
-        IOutputStream& o, 
-        NKikimr::NTabletFlatExecutor::NBlockIO::EPriority value) 
+void Out<NKikimr::NTabletFlatExecutor::NBlockIO::EPriority>(
+        IOutputStream& o,
+        NKikimr::NTabletFlatExecutor::NBlockIO::EPriority value)
 {
     switch (value) {
-    case NKikimr::NTabletFlatExecutor::NBlockIO::EPriority::Fast: 
+    case NKikimr::NTabletFlatExecutor::NBlockIO::EPriority::Fast:
         o << "Online";
         break;
-    case NKikimr::NTabletFlatExecutor::NBlockIO::EPriority::Bkgr: 
+    case NKikimr::NTabletFlatExecutor::NBlockIO::EPriority::Bkgr:
         o << "AsyncLoad";
         break;
-    case NKikimr::NTabletFlatExecutor::NBlockIO::EPriority::Bulk: 
+    case NKikimr::NTabletFlatExecutor::NBlockIO::EPriority::Bulk:
         o << "Scan";
         break;
     default:

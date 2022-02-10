@@ -71,31 +71,31 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/http
-    ydb/core/actorlib_impl 
-    ydb/core/base 
-    ydb/core/blobstorage 
-    ydb/core/blobstorage/base 
-    ydb/core/blobstorage/groupinfo 
-    ydb/core/cms/console/validators 
-    ydb/core/control 
-    ydb/core/engine/minikql 
-    ydb/core/mind 
-    ydb/core/node_whiteboard 
-    ydb/core/protos 
-    ydb/core/tablet 
-    ydb/core/tablet_flat 
-    ydb/core/util 
-    ydb/library/aclib 
-    ydb/public/api/protos 
-    ydb/public/lib/operation_id 
+    ydb/core/actorlib_impl
+    ydb/core/base
+    ydb/core/blobstorage
+    ydb/core/blobstorage/base
+    ydb/core/blobstorage/groupinfo
+    ydb/core/cms/console/validators
+    ydb/core/control
+    ydb/core/engine/minikql
+    ydb/core/mind
+    ydb/core/node_whiteboard
+    ydb/core/protos
+    ydb/core/tablet
+    ydb/core/tablet_flat
+    ydb/core/util
+    ydb/library/aclib
+    ydb/public/api/protos
+    ydb/public/lib/operation_id
 )
 
 END()
- 
-RECURSE( 
-    validators 
-) 
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE(
+    validators
+)
+
+RECURSE_FOR_TESTS(
+    ut
+)

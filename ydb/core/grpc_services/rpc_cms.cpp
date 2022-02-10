@@ -3,9 +3,9 @@
 #include "rpc_calls.h"
 #include "rpc_deferrable.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/cms/console/console.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/console/console.h>
 
 namespace NKikimr {
 namespace NGRpcService {

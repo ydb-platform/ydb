@@ -1,5 +1,5 @@
-#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h> 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h> 
+#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
 Y_UNIT_TEST_SUITE(Defragmentation) {
     Y_UNIT_TEST(DoesItWork) {

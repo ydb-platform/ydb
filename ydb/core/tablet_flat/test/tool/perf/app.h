@@ -9,10 +9,10 @@
 #include "sponge.h"
 #include "runner.h"
 
-#include <ydb/core/tablet_flat/util_fmt_desc.h> 
-#include <ydb/core/tablet_flat/test/libs/rows/mass.h> 
-#include <ydb/core/tablet_flat/test/libs/table/model/small.h> 
-#include <ydb/core/tablet_flat/test/libs/table/model/large.h> 
+#include <ydb/core/tablet_flat/util_fmt_desc.h>
+#include <ydb/core/tablet_flat/test/libs/rows/mass.h>
+#include <ydb/core/tablet_flat/test/libs/table/model/small.h>
+#include <ydb/core/tablet_flat/test/libs/table/model/large.h>
 
 namespace NKikimr {
 namespace NTable {

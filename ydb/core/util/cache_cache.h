@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/util/queue_oneone_inplace.h> 
+#include <ydb/core/util/queue_oneone_inplace.h>
 #include <library/cpp/monlib/counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/ptr.h>

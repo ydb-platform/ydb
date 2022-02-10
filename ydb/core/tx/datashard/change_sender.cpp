@@ -2,7 +2,7 @@
 #include "change_exchange_impl.h"
 #include "datashard_impl.h"
 
-#include <ydb/core/protos/services.pb.h> 
+#include <ydb/core/protos/services.pb.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -12,7 +12,7 @@
 #include <util/generic/maybe.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TChangeSender: public TActor<TChangeSender> {
     using ESenderType = TEvChangeExchange::ESenderType;
@@ -175,7 +175,7 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_ACTOR;
     }
 
-    explicit TChangeSender(const TDataShard* self) 
+    explicit TChangeSender(const TDataShard* self)
         : TActor(&TThis::StateInactive)
         , DataShard{self->TabletID(), self->Generation(), self->SelfId()}
     {
@@ -227,9 +227,9 @@ private:
 
 }; // TChangeSender
 
-IActor* CreateChangeSender(const TDataShard* self) { 
+IActor* CreateChangeSender(const TDataShard* self) {
     return new TChangeSender(self);
 }
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

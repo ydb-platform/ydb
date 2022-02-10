@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defs.h" 
+#include "defs.h"
 #include "test_load_time_series.h"
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>

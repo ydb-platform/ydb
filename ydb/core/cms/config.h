@@ -2,7 +2,7 @@
 
 #include "pdisk_state.h"
 
-#include <ydb/core/protos/cms.pb.h> 
+#include <ydb/core/protos/cms.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>

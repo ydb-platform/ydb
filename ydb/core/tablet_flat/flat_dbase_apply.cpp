@@ -1,6 +1,6 @@
 #include "flat_dbase_apply.h"
 
-#include <ydb/core/base/localdb.h> 
+#include <ydb/core/base/localdb.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -196,7 +196,7 @@ bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 typ
         bool insertedNew = it.second && !haveName;
         bool replacedExisting = !it.second && it.first->second.Name == name && haveName && itName->second == it.first->first;
         Y_VERIFY_S((insertedNew || replacedExisting),
-            "NewName: " << name << 
+            "NewName: " << name <<
             " OldName: " << (haveName ? itName->first : it.first->second.Name) <<
             " NewId: " << id <<
             " OldId: " << (haveName ? itName->second : it.first->first));

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/base/row_version.h> 
+#include <ydb/core/base/row_version.h>
 
 #include <util/system/types.h>
 #include <util/generic/ylimits.h>
@@ -32,21 +32,21 @@ namespace NTable {
         Reverse,
     };
 
-    enum class ERowOp : ui8 { /* row operation code */ 
+    enum class ERowOp : ui8 { /* row operation code */
         Absent  = 0,
         Upsert  = 1,    /* Set value or update row      */
         Erase   = 2,    /* Explicit null or row drop    */
         Reset   = 3,    /* Reset cell or row to default */
     };
 
-    enum class ECellOp : ui8 { /* cell operation code */ 
+    enum class ECellOp : ui8 { /* cell operation code */
         Empty   = 0,    /* Cell has no any valid state  */
         Set     = 1,    /* Set cell to exact value      */
         Null    = 2,    /* Explicit cell null value     */
         Reset   = 3,    /* Reset cell value to default  */
     };
 
-    enum class ELargeObj : ui8 { 
+    enum class ELargeObj : ui8 {
         Inline  = 0,    /* Data stored within storage   */
         Extern  = 1,    /* Data placed in external blob */
         GlobId  = 2,    /* Explicit TGlobId reference   */
@@ -57,31 +57,31 @@ namespace NTable {
         NoByKey = 0x1,
     };
 
-    struct TLargeObj { 
-        TLargeObj() = default; 
+    struct TLargeObj {
+        TLargeObj() = default;
 
-        TLargeObj(ELargeObj lob, ui64 ref) : Lob(lob), Ref(ref) { } 
+        TLargeObj(ELargeObj lob, ui64 ref) : Lob(lob), Ref(ref) { }
 
         explicit operator bool() const noexcept
         {
-            return Lob != ELargeObj::Inline && Ref != Max<ui64>(); 
+            return Lob != ELargeObj::Inline && Ref != Max<ui64>();
         }
 
-        ELargeObj Lob = ELargeObj::Inline; 
+        ELargeObj Lob = ELargeObj::Inline;
         ui64 Ref = Max<ui64>();
     };
 
 #pragma pack(push, 1)
 
-    struct TCellOp { 
-        constexpr TCellOp() = default; 
+    struct TCellOp {
+        constexpr TCellOp() = default;
 
-        static constexpr TCellOp By(ui8 raw) noexcept 
+        static constexpr TCellOp By(ui8 raw) noexcept
         {
-            return { ECellOp(raw & 0x3f), ELargeObj(raw >> 6) }; 
+            return { ECellOp(raw & 0x3f), ELargeObj(raw >> 6) };
         }
 
-        constexpr TCellOp(ECellOp op, ELargeObj lob = ELargeObj::Inline) noexcept 
+        constexpr TCellOp(ECellOp op, ELargeObj lob = ELargeObj::Inline) noexcept
             : Value(ui8(op) | (ui8(lob) << 6))
         {
 
@@ -92,14 +92,14 @@ namespace NTable {
             return Value;
         }
 
-        constexpr operator ECellOp() const noexcept 
+        constexpr operator ECellOp() const noexcept
         {
-            return ECellOp(Value & 0x3f); 
+            return ECellOp(Value & 0x3f);
         }
 
-        constexpr operator ELargeObj() const noexcept 
+        constexpr operator ELargeObj() const noexcept
         {
-            return ELargeObj(Value >> 6); 
+            return ELargeObj(Value >> 6);
         }
 
         constexpr ui8 operator*() const noexcept
@@ -107,31 +107,31 @@ namespace NTable {
             return Value;
         }
 
-        TCellOp& operator=(ECellOp op) noexcept 
+        TCellOp& operator=(ECellOp op) noexcept
         {
             Value = (Value & ~0x3f) | ui8(op);
 
             return *this;
         }
 
-        TCellOp& operator=(ELargeObj lob) noexcept 
+        TCellOp& operator=(ELargeObj lob) noexcept
         {
-            Value = TCellOp(ECellOp(*this), lob).Raw(); 
+            Value = TCellOp(ECellOp(*this), lob).Raw();
 
             return  *this;
         }
 
-        constexpr static bool HaveNoPayload(ECellOp cellOp) noexcept 
+        constexpr static bool HaveNoPayload(ECellOp cellOp) noexcept
         {
             return
-                cellOp == ECellOp::Null 
-                || cellOp == ECellOp::Reset 
-                || cellOp == ECellOp::Empty; 
+                cellOp == ECellOp::Null
+                || cellOp == ECellOp::Reset
+                || cellOp == ECellOp::Empty;
         }
 
-        constexpr static bool HaveNoOps(ERowOp rop) noexcept 
+        constexpr static bool HaveNoOps(ERowOp rop) noexcept
         {
-            return rop == ERowOp::Erase; 
+            return rop == ERowOp::Erase;
         }
 
     private:
@@ -140,7 +140,7 @@ namespace NTable {
 
 #pragma pack(pop)
 
-    static_assert(sizeof(TCellOp) == 1, "Unexpected TCellOp unit size"); 
+    static_assert(sizeof(TCellOp) == 1, "Unexpected TCellOp unit size");
 
 }
 }

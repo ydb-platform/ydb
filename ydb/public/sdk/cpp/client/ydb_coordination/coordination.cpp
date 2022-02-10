@@ -1,12 +1,12 @@
 #include "coordination.h"
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h> 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb/public/api/grpc/ydb_coordination_v1.grpc.pb.h> 
-#include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h> 
+#include <ydb/public/api/grpc/ydb_coordination_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
 #include <util/generic/deque.h>
 #include <util/random/entropy.h>

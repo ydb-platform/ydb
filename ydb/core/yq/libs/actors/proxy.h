@@ -1,13 +1,13 @@
 #pragma once
-#include <ydb/core/yq/libs/config/protos/pinger.pb.h> 
+#include <ydb/core/yq/libs/config/protos/pinger.pb.h>
 #include "run_actor_params.h"
 #include <util/datetime/base.h>
 
-#include <ydb/core/yq/libs/events/events.h> 
-#include <ydb/core/yq/libs/private_client/private_client.h> 
-#include <ydb/core/yq/libs/shared_resources/db_pool.h> 
-#include <ydb/core/yq/libs/shared_resources/shared_resources.h> 
-#include <ydb/core/yq/libs/signer/signer.h> 
+#include <ydb/core/yq/libs/events/events.h>
+#include <ydb/core/yq/libs/private_client/private_client.h>
+#include <ydb/core/yq/libs/shared_resources/db_pool.h>
+#include <ydb/core/yq/libs/shared_resources/shared_resources.h>
+#include <ydb/core/yq/libs/signer/signer.h>
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
@@ -20,7 +20,7 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/random_provider/random_provider.h>
 
-#include <ydb/core/yq/libs/common/service_counters.h> 
+#include <ydb/core/yq/libs/common/service_counters.h>
 
 namespace NKikimr  {
     namespace NMiniKQL {

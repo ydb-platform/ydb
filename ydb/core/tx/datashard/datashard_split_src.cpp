@@ -1,20 +1,20 @@
 #include "datashard_impl.h"
 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
-#include <ydb/core/util/pb.h> 
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/util/pb.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 
-class TDataShard::TTxSplit : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxSplit : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvSplit::TPtr Ev;
     bool SplitAlreadyFinished;
 
 public:
-    TTxSplit(TDataShard* ds, TEvDataShard::TEvSplit::TPtr& ev) 
-        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds) 
+    TTxSplit(TDataShard* ds, TEvDataShard::TEvSplit::TPtr& ev)
+        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
         , SplitAlreadyFinished(false)
     {}
@@ -92,7 +92,7 @@ public:
     }
 };
 
-void TDataShard::CheckSplitCanStart(const TActorContext& ctx) { 
+void TDataShard::CheckSplitCanStart(const TActorContext& ctx) {
     if (State == TShardState::SplitSrcWaitForNoTxInFlight) {
         ui64 txInFly = TxInFly();
         ui64 immediateTxInFly = ImmediateInFly();
@@ -105,10 +105,10 @@ void TDataShard::CheckSplitCanStart(const TActorContext& ctx) {
 }
 
 
-class TDataShard::TTxStartSplit : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxStartSplit : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    explicit TTxStartSplit(TDataShard* ds) 
-        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds) 
+    explicit TTxStartSplit(TDataShard* ds)
+        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_START_SPLIT; }
@@ -202,18 +202,18 @@ public:
 };
 
 
-NTabletFlatExecutor::ITransaction* TDataShard::CreateTxStartSplit() { 
+NTabletFlatExecutor::ITransaction* TDataShard::CreateTxStartSplit() {
     return new TTxStartSplit(this);
 }
 
-class TDataShard::TTxSplitSnapshotComplete : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxSplitSnapshotComplete : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TIntrusivePtr<TSplitSnapshotContext> SnapContext;
     bool ChangeExchangeSplit;
 
 public:
-    TTxSplitSnapshotComplete(TDataShard* ds, TIntrusivePtr<TSplitSnapshotContext> snapContext) 
-        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds) 
+    TTxSplitSnapshotComplete(TDataShard* ds, TIntrusivePtr<TSplitSnapshotContext> snapContext)
+        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , SnapContext(snapContext)
         , ChangeExchangeSplit(false)
     {}
@@ -391,20 +391,20 @@ public:
 };
 
 
-NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext) { 
+NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext) {
     return new TTxSplitSnapshotComplete(this, snapContext);
 }
 
 
-class TDataShard::TTxSplitTransferSnapshotAck : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxSplitTransferSnapshotAck : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvSplitTransferSnapshotAck::TPtr Ev;
     bool AllDstAcksReceived;
     bool Activate;
 
 public:
-    TTxSplitTransferSnapshotAck(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev) 
-        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds) 
+    TTxSplitTransferSnapshotAck(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev)
+        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
         , AllDstAcksReceived(false)
         , Activate(false)
@@ -457,14 +457,14 @@ public:
 };
 
 
-class TDataShard::TTxSplitPartitioningChanged : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxSplitPartitioningChanged : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvSplitPartitioningChanged::TPtr Ev;
     bool DelayPartitioningChangedAck = false;
 
 public:
-    TTxSplitPartitioningChanged(TDataShard* ds, TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev) 
-        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds) 
+    TTxSplitPartitioningChanged(TDataShard* ds, TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev)
+        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
     {}
 
@@ -519,15 +519,15 @@ public:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvSplit::TPtr& ev, const TActorContext& ctx) { 
+void TDataShard::Handle(TEvDataShard::TEvSplit::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxSplit(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev, const TActorContext& ctx) { 
+void TDataShard::Handle(TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxSplitTransferSnapshotAck(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, const TActorContext& ctx) { 
+void TDataShard::Handle(TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxSplitPartitioningChanged(this, ev), ctx);
 }
 

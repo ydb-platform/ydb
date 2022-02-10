@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/user_data/yql_user_data.h> 
+#include <ydb/library/yql/core/user_data/yql_user_data.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
 
 namespace NYql {

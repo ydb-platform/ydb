@@ -1,9 +1,9 @@
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h> 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/persqueue_impl.h> 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h> 
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/persqueue_impl.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
 
-#include <ydb/library/persqueue/obfuscate/obfuscate.h> 
+#include <ydb/library/persqueue/obfuscate/obfuscate.h>
 
 #include <util/random/random.h>
 #include <util/string/cast.h>

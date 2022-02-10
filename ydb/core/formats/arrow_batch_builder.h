@@ -1,7 +1,7 @@
 #pragma once
 #include "arrow_helpers.h"
-#include <ydb/core/formats/factory.h> 
-#include <ydb/core/scheme/scheme_tablecell.h> 
+#include <ydb/core/formats/factory.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 
 namespace NKikimr::NArrow {
 

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/metering) 
+UNITTEST_FOR(ydb/core/metering)
 
 OWNER(
     svc

@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/client/impl/ydb_endpoints/endpoints.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_endpoints/endpoints.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
 
     Y_UNIT_TEST(Empty) {
         TEndpointElectorSafe elector;
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint("").Endpoint, ""); 
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint("").Endpoint, "");
     }
 
     Y_UNIT_TEST(DiffOnRemove) {
@@ -140,8 +140,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         // Just to make sure no possible to get more than expected
         size_t extra_attempts = 1000;
         while (endpoints.size() != 2 || --extra_attempts) {
-            endpoints.insert(elector.GetEndpoint("").Endpoint); 
-            UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint("Three").Endpoint, "Three"); 
+            endpoints.insert(elector.GetEndpoint("").Endpoint);
+            UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint("Three").Endpoint, "Three");
         }
         UNIT_ASSERT_VALUES_EQUAL(endpoints.size(), 2);
         UNIT_ASSERT(endpoints.find("One_A") != endpoints.end());
@@ -149,8 +149,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
 
         elector.SetNewState(TVector<TEndpointRecord>{{"One", 1}});
         // no prefered endpoint, expect avaliable
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint("Three").Endpoint, "One"); 
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint("").Endpoint, "One"); 
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint("Three").Endpoint, "One");
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint("").Endpoint, "One");
     }
 
     Y_UNIT_TEST(EndpointAssociationTwoThreadsNoRace) {

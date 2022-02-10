@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/blobstorage/vdisk/query) 
+UNITTEST_FOR(ydb/core/blobstorage/vdisk/query)
 
 OWNER(g:kikimr)
 
@@ -14,12 +14,12 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    ydb/core/blobstorage/vdisk/huge 
-    ydb/core/protos 
+    ydb/core/blobstorage/vdisk/huge
+    ydb/core/protos
 )
 
 SRCS(
-    query_spacetracker_ut.cpp 
+    query_spacetracker_ut.cpp
 )
 
 END()

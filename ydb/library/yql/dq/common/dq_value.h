@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/mkql_proto/protos/minikql.pb.h> 
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
 namespace NYql::NDq {
 

@@ -1,4 +1,4 @@
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
+#include <ydb/library/yql/public/udf/udf_helpers.h>
 
 #include <library/cpp/histogram/adaptive/adaptive_histogram.h>
 #include <library/cpp/histogram/adaptive/block_histogram.h>

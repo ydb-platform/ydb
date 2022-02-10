@@ -1,9 +1,9 @@
 #include "private_grpc.h"
 
-#include <ydb/core/grpc_services/base/base.h> 
-#include <ydb/core/grpc_services/grpc_helper.h> 
-#include <ydb/core/grpc_services/service_analytics_internal.h> 
-#include <ydb/library/protobuf_printer/security_printer.h> 
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/grpc_services/service_analytics_internal.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 
 namespace NKikimr {
 namespace NGRpcService {

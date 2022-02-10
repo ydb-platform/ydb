@@ -7,8 +7,8 @@
 
 #include "schemeshard__operation_part.h" // TSideEffects, make separate file
 
-#include <ydb/core/metering/metering.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
+#include <ydb/core/metering/metering.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

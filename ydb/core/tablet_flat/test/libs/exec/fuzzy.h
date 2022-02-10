@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/flat_dbase_scheme.h> 
-#include <ydb/core/tablet_flat/ut/flat_test_db.h> 
-#include <ydb/core/tablet_flat/ut/flat_test_db_helpers.h> 
+#include <ydb/core/tablet_flat/flat_dbase_scheme.h>
+#include <ydb/core/tablet_flat/ut/flat_test_db.h>
+#include <ydb/core/tablet_flat/ut/flat_test_db_helpers.h>
 
 namespace NKikimr {
 namespace NFake {

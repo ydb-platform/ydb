@@ -3,10 +3,10 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
-#include <ydb/core/mon/mon.h> 
+#include <ydb/core/mon/mon.h>
 #include <library/cpp/actors/core/mon.h>
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/tablet_pipe.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipe.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 

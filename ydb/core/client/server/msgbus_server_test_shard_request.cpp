@@ -1,5 +1,5 @@
 #include "msgbus_tabletreq.h"
-#include <ydb/core/test_tablet/events.h> 
+#include <ydb/core/test_tablet/events.h>
 
 namespace NKikimr::NMsgBusProxy {
 

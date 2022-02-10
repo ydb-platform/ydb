@@ -11,7 +11,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    ydb/public/api/protos 
+    ydb/public/api/protos
 )
 
 END()

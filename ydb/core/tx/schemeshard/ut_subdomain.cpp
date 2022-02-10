@@ -1,5 +1,5 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h> 
-#include <ydb/core/tx/datashard/datashard.h> 
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;

@@ -1,5 +1,5 @@
 #include "objectwithstate.h"
-#include <ydb/core/protos/pdiskfit.pb.h> 
+#include <ydb/core/protos/pdiskfit.pb.h>
 
 TMutex TObjectWithState::Mutex;
 TIntrusiveList<TObjectWithState> TObjectWithState::ObjectsWithState;

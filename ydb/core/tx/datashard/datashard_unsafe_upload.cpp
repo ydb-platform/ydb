@@ -1,15 +1,15 @@
 #include "datashard_txs.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
-TDataShard::TTxUnsafeUploadRows::TTxUnsafeUploadRows(TDataShard* ds, TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev) 
+TDataShard::TTxUnsafeUploadRows::TTxUnsafeUploadRows(TDataShard* ds, TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev)
     : TBase(ds)
     , TCommonUploadOps(ev, false, false)
 {
 }
 
-bool TDataShard::TTxUnsafeUploadRows::Execute(TTransactionContext& txc, const TActorContext&) { 
+bool TDataShard::TTxUnsafeUploadRows::Execute(TTransactionContext& txc, const TActorContext&) {
     auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
     if (!TCommonUploadOps::Execute(Self, txc, readVersion, writeVersion))
         return false;
@@ -18,9 +18,9 @@ bool TDataShard::TTxUnsafeUploadRows::Execute(TTransactionContext& txc, const TA
     return true;
 }
 
-void TDataShard::TTxUnsafeUploadRows::Complete(const TActorContext& ctx) { 
+void TDataShard::TTxUnsafeUploadRows::Complete(const TActorContext& ctx) {
     TCommonUploadOps::SendResult(Self, ctx);
 }
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

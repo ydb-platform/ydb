@@ -2,8 +2,8 @@
 
 #include "datashard_user_table.h"
 
-#include <ydb/core/protos/flat_scheme_op.pb.h> 
-#include <ydb/public/api/protos/ydb_table.pb.h> 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
@@ -29,7 +29,7 @@
 #define EXPORT_LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] " << stream)
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
     const TMap<ui32, TUserTable::TUserColumn>& columns,
@@ -38,5 +38,5 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
 TString DecimalToString(const std::pair<ui64, i64>& loHi);
 TString DyNumberToString(TStringBuf data);
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

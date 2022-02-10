@@ -11,16 +11,16 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core 
-    ydb/core/base 
-    ydb/core/blobstorage/base 
-    ydb/library/aclib 
-    ydb/public/api/protos 
+    library/cpp/actors/core
+    ydb/core/base
+    ydb/core/blobstorage/base
+    ydb/library/aclib
+    ydb/public/api/protos
     ydb/library/yql/public/issue/protos
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+)

@@ -9,7 +9,7 @@ namespace NRedo {
     enum class ERedo : ui8 {
         Noop    = 0,
         Update  = 1,
-        Erase   = 2,    /* Legacy ERowOp::Erase operation */ 
+        Erase   = 2,    /* Legacy ERowOp::Erase operation */
         Begin   = 5,    /* ABI and API evolution label  */
         Annex   = 6,    /* Array of used external blobs */
         Flush   = 8,
@@ -75,14 +75,14 @@ namespace NRedo {
 
     struct TEvAnnex {
         TChunk Label;
-        ui32 Items; /* Followed by array of NPageCollection::TGlobId */ 
+        ui32 Items; /* Followed by array of NPageCollection::TGlobId */
     } Y_PACKED;
 
     struct TEvUpdate {
         TChunk Label;
 
         ui32 Table;
-        ERowOp Rop; 
+        ERowOp Rop;
         ui8 Pad0_;
         ui16 Keys;
         ui16 Ops;
@@ -135,7 +135,7 @@ namespace NRedo {
     } Y_PACKED;
 
     struct TUpdate {
-        NTable::TCellOp CellOp; 
+        NTable::TCellOp CellOp;
         NTable::TTag Tag;
         TValue Val;
     } Y_PACKED;

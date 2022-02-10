@@ -1,13 +1,13 @@
 #include "kqp_host_impl.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/kqp/common/kqp_yql.h> 
-#include <ydb/core/kqp/prepare/kqp_query_plan.h> 
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/prepare/kqp_query_plan.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
-#include <ydb/library/yql/core/services/yql_plan.h> 
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h> 
+#include <ydb/library/yql/core/services/yql_plan.h>
+#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
 #include <ydb/library/yql/providers/config/yql_config_provider.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>

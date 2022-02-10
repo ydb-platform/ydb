@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/blobstorage/dsproxy/defs.h> 
+#include <ydb/core/blobstorage/dsproxy/defs.h>
 #include <util/stream/null.h>
 
 namespace NKikimr {

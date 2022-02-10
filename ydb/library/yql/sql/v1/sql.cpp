@@ -9,7 +9,7 @@
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Parser.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Parser.h>
-#include <ydb/library/yql/core/sql_types/simple_types.h> 
+#include <ydb/library/yql/core/sql_types/simple_types.h>
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.h>

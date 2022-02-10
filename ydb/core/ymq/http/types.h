@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/ymq/base/action.h> 
+#include <ydb/core/ymq/base/action.h>
 
 #include <util/generic/string.h>
 

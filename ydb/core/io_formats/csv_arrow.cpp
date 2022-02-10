@@ -1,5 +1,5 @@
 #include "csv.h"
-#include <ydb/core/formats/arrow_helpers.h> 
+#include <ydb/core/formats/arrow_helpers.h>
 
 namespace NKikimr::NFormats {
 

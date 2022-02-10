@@ -13,8 +13,8 @@
 #include "util_fmt_desc.h"
 #include "util_basics.h"
 
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/base/appdata.h> 
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/appdata.h>
 #include <library/cpp/actors/core/actor.h>
 
 #include <bitset>
@@ -24,7 +24,7 @@ namespace NTabletFlatExecutor {
 
     struct TProdCompact: public IDestructable {
         struct TResult {
-            NTable::TPartView Part; 
+            NTable::TPartView Part;
             TDeque<NTable::TScreen::THole> Growth;
         };
 
@@ -169,7 +169,7 @@ namespace NTabletFlatExecutor {
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " feed row { ";
 
-                if (row.GetRowState() == NTable::ERowOp::Erase) { 
+                if (row.GetRowState() == NTable::ERowOp::Erase) {
                     logl << "erased";
                 } else {
                     logl << NFmt::TCells(*row, *Scheme->Nulls, Registry);
@@ -223,7 +223,7 @@ namespace NTabletFlatExecutor {
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " feed row { ";
 
-                if (row.GetRowState() == NTable::ERowOp::Erase) { 
+                if (row.GetRowState() == NTable::ERowOp::Erase) {
                     logl << "erased";
                 } else {
                     logl << NFmt::TCells(*row, *Scheme->Nulls, Registry);
@@ -256,11 +256,11 @@ namespace NTabletFlatExecutor {
             }
 
             THashSet<ui64> txFilter;
-            for (const auto& memTable : Conf->Frozen) { 
-                for (const auto& pr : memTable->GetCommittedTransactions()) { 
+            for (const auto& memTable : Conf->Frozen) {
+                for (const auto& pr : memTable->GetCommittedTransactions()) {
                     txFilter.insert(pr.first);
                 }
-                for (const ui64 txId : memTable->GetRemovedTransactions()) { 
+                for (const ui64 txId : memTable->GetRemovedTransactions()) {
                     txFilter.insert(txId);
                 }
             }
@@ -296,7 +296,7 @@ namespace NTabletFlatExecutor {
                 logl << NFmt::Do(*this) << " written tx status " << dataId.Lead << " size=" << dataId.Bytes;
             }
 
-            TxStatus.emplace_back(new NTable::TTxStatusPartStore(dataId, Conf->Epoch, data)); 
+            TxStatus.emplace_back(new NTable::TTxStatusPartStore(dataId, Conf->Epoch, data));
         }
 
         TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
@@ -307,10 +307,10 @@ namespace NTabletFlatExecutor {
                     std::move(YellowMoveChannels), std::move(YellowStopChannels));
 
             for (auto &result : Results) {
-                Y_VERIFY(result.PageCollections, "Compaction produced a part without page collections"); 
+                Y_VERIFY(result.PageCollections, "Compaction produced a part without page collections");
 
                 NTable::TLoader loader(
-                    std::move(result.PageCollections), 
+                    std::move(result.PageCollections),
                     { },
                     std::move(result.Overlay));
 
@@ -336,14 +336,14 @@ namespace NTabletFlatExecutor {
                     << ", put " << NFmt::If(Spent.Get());
 
                 for (const auto &result : prod->Results) {
-                    if (auto *part = result.Part.As<NTable::TPartStore>()) { 
+                    if (auto *part = result.Part.As<NTable::TPartStore>()) {
                         auto lobs = part->Blobs ? part->Blobs->Total() : 0;
                         auto small = part->Small ? part->Small->Stats().Size : 0;
                         auto large = part->Large ? part->Large->Stats().Size : 0;
                         auto grow = NTable::TScreen::Sum(result.Growth);
 
                         logl
-                            << " Part{ " << part->PageCollections.size() << " pk" 
+                            << " Part{ " << part->PageCollections.size() << " pk"
                             << ", lobs " << (lobs - grow) << " +" << grow
                             << ", (" << part->DataSize()
                                 << " " << small << " " << large <<")b"
@@ -377,7 +377,7 @@ namespace NTabletFlatExecutor {
 
         EScan Flush(bool last) noexcept
         {
-            for (NPageCollection::TGlob& one : Bundle->GetBlobsToSave()) 
+            for (NPageCollection::TGlob& one : Bundle->GetBlobsToSave())
                 FlushToBs(std::move(one));
 
             EScan scan = EScan::Sleep;
@@ -412,7 +412,7 @@ namespace NTabletFlatExecutor {
 
         void Handle(TEvPutResult &msg) noexcept
         {
-            if (!NPageCollection::TGroupBlobsByCookie::IsInPlane(msg.Id, Mask)) { 
+            if (!NPageCollection::TGroupBlobsByCookie::IsInPlane(msg.Id, Mask)) {
                 Y_FAIL("TEvPutResult Id mask is differ from used");
             } else if (Writing < msg.Id.BlobSize()) {
                 Y_FAIL("Compaction writing bytes counter is out of sync");
@@ -453,7 +453,7 @@ namespace NTabletFlatExecutor {
             }
 
             if (ok) {
-                Send(Owner, new NBlockIO::TEvStat(NBlockIO::EDir::Write, NBlockIO::EPriority::Bulk, msg.GroupId, msg.Id)); 
+                Send(Owner, new NBlockIO::TEvStat(NBlockIO::EDir::Write, NBlockIO::EPriority::Bulk, msg.GroupId, msg.Id));
 
                 while (!WriteQueue.empty() && Writing < MaxFlight) {
                     SendToBs(std::move(WriteQueue.front()));
@@ -471,7 +471,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void FlushToBs(NPageCollection::TGlob&& glob) noexcept 
+        void FlushToBs(NPageCollection::TGlob&& glob) noexcept
         {
             Y_VERIFY(glob.GId.Logo.BlobSize() == glob.Data.size(),
                 "Written LogoBlob size doesn't match id");
@@ -487,7 +487,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void SendToBs(NPageCollection::TGlob&& glob) noexcept 
+        void SendToBs(NPageCollection::TGlob&& glob) noexcept
         {
             auto id = glob.GId;
 
@@ -534,7 +534,7 @@ namespace NTabletFlatExecutor {
         std::bitset<256> SeenYellowStopChannels;
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
-        TDeque<NPageCollection::TGlob> WriteQueue; 
+        TDeque<NPageCollection::TGlob> WriteQueue;
 
         THashMap<ui64, TRow> Deltas;
         TSmallVec<ui64> DeltasOrder;

@@ -1,6 +1,6 @@
 #include "partition_key_range.h"
 
-#include <ydb/core/protos/pqconfig.pb.h> 
+#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr {
 namespace NPQ {

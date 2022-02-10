@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <ydb/library/pdisk_io/buffers.h> 
+#include <ydb/library/pdisk_io/buffers.h>
 #include "blobstorage_pdisk_crypto.h"
 
 namespace NKikimr {

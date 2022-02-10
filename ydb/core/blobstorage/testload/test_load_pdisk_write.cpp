@@ -1,8 +1,8 @@
 #include <util/random/shuffle.h>
 #include "test_load_actor.h"
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h> 
-#include <ydb/core/blobstorage/base/blobstorage_events.h> 
+#include <ydb/core/base/counters.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/random/fast.h>
 #include <util/generic/queue.h>
@@ -478,8 +478,8 @@ public:
         record.CommitChunks.push_back(chunkIdx);
         record.DeleteChunks.swap(DeleteChunks);
         DeletedChunksCount += record.DeleteChunks.size();
-        TLsnSeg seg(Lsn, Lsn); 
-        ++Lsn; 
+        TLsnSeg seg(Lsn, Lsn);
+        ++Lsn;
         SendRequest(ctx, std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, PDiskParams->OwnerRound,
                 TLogSignature::SignatureHugeLogoBlob, record, logRecord, seg,
                 reinterpret_cast<void*>(requestIdx)));

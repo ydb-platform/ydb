@@ -3,9 +3,9 @@
 #include "command.h"
 #include "formats.h"
 
-#include <ydb/public/lib/json_value/ydb_json_value.h> 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h> 
+#include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
 namespace NYdb {
 namespace NConsoleClient {

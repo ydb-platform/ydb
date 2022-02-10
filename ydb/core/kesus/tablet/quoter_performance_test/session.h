@@ -1,6 +1,6 @@
 #pragma once
 #include "test_state.h"
-#include <ydb/core/kesus/tablet/ut_helpers.h> 
+#include <ydb/core/kesus/tablet/ut_helpers.h>
 
 #include <util/generic/yexception.h>
 

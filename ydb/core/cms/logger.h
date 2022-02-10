@@ -4,8 +4,8 @@
 #include "cms_state.h"
 #include "scheme.h"
 
-#include <ydb/core/protos/cms.pb.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
+#include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/set.h>

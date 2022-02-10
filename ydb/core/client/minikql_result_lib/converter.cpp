@@ -1,6 +1,6 @@
 #include "converter.h"
 
-#include <ydb/library/mkql_proto/protos/minikql.pb.h> 
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
 
 namespace NKikimr {

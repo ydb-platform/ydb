@@ -2,38 +2,38 @@
 
 #include "feature_flags.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/channel_profiles.h> 
-#include <ydb/core/base/domain.h> 
-#include <ydb/core/formats/factory.h> 
-#include <ydb/core/scheme/scheme_type_registry.h> 
-#include <ydb/core/testlib/actors/test_runtime.h> 
-#include <ydb/core/tx/datashard/export_iface.h> 
-#include <ydb/core/tx/datashard/export_s3.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/domain.h>
+#include <ydb/core/formats/factory.h>
+#include <ydb/core/scheme/scheme_type_registry.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/tx/datashard/export_iface.h>
+#include <ydb/core/tx/datashard/export_s3.h>
 
 namespace NKikimr {
 
-    // FIXME 
+    // FIXME
     // Split this factory
     class TDataShardExportFactory : public NKikimr::NDataShard::IExportFactory {
-    public: 
+    public:
         NKikimr::NDataShard::IExport* CreateExportToYt(bool useTypeV3) const override {
             Y_UNUSED(useTypeV3);
-            return nullptr; 
-        } 
- 
+            return nullptr;
+        }
+
         NKikimr::NDataShard::IExport* CreateExportToS3() const override {
         #ifndef KIKIMR_DISABLE_S3_OPS
             return new NKikimr::NDataShard::TS3Export();
         #else
             return nullptr;
         #endif
-        } 
- 
-        void Shutdown() override { 
-        } 
-    }; 
- 
+        }
+
+        void Shutdown() override {
+        }
+    };
+
     struct TAppPrepare : public TTestFeatureFlagsHolder<TAppPrepare> {
         struct TMine : public NActors::IDestructable {
             TIntrusivePtr<NScheme::TTypeRegistry> Types;

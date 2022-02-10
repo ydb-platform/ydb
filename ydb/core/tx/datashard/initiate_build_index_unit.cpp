@@ -3,13 +3,13 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TInitiateBuildIndexUnit : public TExecutionUnit {
     THolder<TEvChangeExchange::TEvAddSender> AddSender;
 
 public:
-    TInitiateBuildIndexUnit(TDataShard& dataShard, TPipeline& pipeline) 
+    TInitiateBuildIndexUnit(TDataShard& dataShard, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::InitiateBuildIndex, false, dataShard, pipeline)
     { }
 
@@ -81,11 +81,11 @@ public:
 };
 
 THolder<TExecutionUnit> CreateInitiateBuildIndexUnit(
-    TDataShard& dataShard, 
+    TDataShard& dataShard,
     TPipeline& pipeline)
 {
     return THolder(new TInitiateBuildIndexUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

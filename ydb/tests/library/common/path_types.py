@@ -3,13 +3,13 @@
 
 from enum import IntEnum, unique
 
-from ydb.core.protos.flat_scheme_op_pb2 import EPathType 
+from ydb.core.protos.flat_scheme_op_pb2 import EPathType
 
 
 @unique
 class PathType(IntEnum):
     """
-    These are from /arcadia/ydb/core/protos/flat_scheme_op.proto 
+    These are from /arcadia/ydb/core/protos/flat_scheme_op.proto
     Just remap
     """
 

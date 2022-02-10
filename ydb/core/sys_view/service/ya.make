@@ -19,13 +19,13 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/base 
-    ydb/core/protos 
-    ydb/library/aclib/protos 
+    ydb/core/base
+    ydb/core/protos
+    ydb/library/aclib/protos
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+)

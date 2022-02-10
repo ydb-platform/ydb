@@ -1,14 +1,14 @@
-UNITTEST_FOR(ydb/services/ydb) 
+UNITTEST_FOR(ydb/services/ydb)
 
-OWNER( 
-    dcherednik 
-    g:kikimr 
-) 
- 
+OWNER(
+    dcherednik
+    g:kikimr
+)
+
 FORK_SUBTESTS()
- 
+
 SPLIT_FACTOR(5)
- 
+
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -27,10 +27,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/testlib 
-    ydb/public/lib/yson_value 
-    ydb/public/sdk/cpp/client/ydb_scheme 
-    ydb/public/sdk/cpp/client/ydb_table 
+    ydb/core/testlib
+    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/client/ydb_scheme
+    ydb/public/sdk/cpp/client/ydb_table
 )
 
 YQL_LAST_ABI_VERSION()

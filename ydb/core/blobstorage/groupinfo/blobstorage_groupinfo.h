@@ -1,16 +1,16 @@
 #pragma once
 
-#include "defs.h" 
-#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h> 
-#include <ydb/core/blobstorage/crypto/crypto.h> 
+#include "defs.h"
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+#include <ydb/core/blobstorage/crypto/crypto.h>
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/base/event_filter.h> 
-#include <ydb/core/protos/blobstorage.pb.h> 
-#include <ydb/core/util/log_priority_mute_checker.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/event_filter.h>
+#include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/util/log_priority_mute_checker.h>
 
-#include <util/str_stl.h> 
+#include <util/str_stl.h>
 #include <util/digest/numeric.h>
 #include <util/generic/hash_set.h>
 
@@ -31,7 +31,7 @@ namespace NBlobMapper {
 static constexpr ui8 MaxHandoffNodes = 6;
 static constexpr ui8 MaxNodesPerBlob = 10;
 static constexpr ui8 MaxTotalPartCount = 7;
-static constexpr ui8 MaxVDisksInGroup = 32; 
+static constexpr ui8 MaxVDisksInGroup = 32;
 
 // mapper interface forward declaration
 struct IBlobToDiskMapper;
@@ -58,26 +58,26 @@ struct TEncryptionKey {
 // current state of storage group
 class TBlobStorageGroupInfo : public TThrRefBase {
 public:
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    // ITERATORS 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    class TFailRealmIterator; 
-    class TFailDomainIterator; 
-    class TVDiskIterator; 
- 
-    template<typename TBaseIter> 
-    class TRangeBase; 
-    // all fail domains of this group info (or for specific ring) 
-    using TFailDomainRange = TRangeBase<TFailDomainIterator>; 
-    // all VDisks of this group info (or for specific ring) 
-    using TVDiskRange = TRangeBase<TVDiskIterator>; 
- 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    // TYPES 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // ITERATORS
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    class TFailRealmIterator;
+    class TFailDomainIterator;
+    class TVDiskIterator;
+
+    template<typename TBaseIter>
+    class TRangeBase;
+    // all fail domains of this group info (or for specific ring)
+    using TFailDomainRange = TRangeBase<TFailDomainIterator>;
+    // all VDisks of this group info (or for specific ring)
+    using TVDiskRange = TRangeBase<TVDiskIterator>;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // TYPES
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     using TVDiskIds = TStackVec<TVDiskID, 16>;
     using TServiceIds = TStackVec<TActorId, 16>;
-    using TOrderNums = TStackVec<ui32, 16>; 
+    using TOrderNums = TStackVec<ui32, 16>;
 
     enum EBlobStateFlags {
         EBSF_DISINTEGRATED = 1, // Group is disintegrated.
@@ -116,42 +116,42 @@ public:
         ELCP_KEY_NOT_LOADED = 703,
     };
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    // SUBSET HELPER CLASSES 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    template<typename TDerived> 
-    class TDomainSetBase; 
-    class TSubgroupVDisks; 
-    class TGroupVDisks; 
-    class TGroupFailDomains; 
- 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    // QUORUM CHECKER HELPER CLASS 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    struct IQuorumChecker { 
-        virtual ~IQuorumChecker() = default; 
-        virtual bool CheckFailModelForSubgroup(const TSubgroupVDisks& failedSubgroupDisks) const = 0; 
-        virtual bool CheckFailModelForGroup(const TGroupVDisks& failedGroupDisks) const = 0; 
-        virtual bool CheckFailModelForGroupDomains(const TGroupFailDomains& failedDomains) const = 0; 
-        virtual bool CheckQuorumForSubgroup(const TSubgroupVDisks& subgroupDisks) const = 0; 
-        virtual bool CheckQuorumForGroup(const TGroupVDisks& groupDisks) const = 0; 
-        virtual bool CheckQuorumForGroupDomains(const TGroupFailDomains& domains) const = 0; 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // SUBSET HELPER CLASSES
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template<typename TDerived>
+    class TDomainSetBase;
+    class TSubgroupVDisks;
+    class TGroupVDisks;
+    class TGroupFailDomains;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // QUORUM CHECKER HELPER CLASS
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    struct IQuorumChecker {
+        virtual ~IQuorumChecker() = default;
+        virtual bool CheckFailModelForSubgroup(const TSubgroupVDisks& failedSubgroupDisks) const = 0;
+        virtual bool CheckFailModelForGroup(const TGroupVDisks& failedGroupDisks) const = 0;
+        virtual bool CheckFailModelForGroupDomains(const TGroupFailDomains& failedDomains) const = 0;
+        virtual bool CheckQuorumForSubgroup(const TSubgroupVDisks& subgroupDisks) const = 0;
+        virtual bool CheckQuorumForGroup(const TGroupVDisks& groupDisks) const = 0;
+        virtual bool CheckQuorumForGroupDomains(const TGroupFailDomains& domains) const = 0;
         virtual bool IsDegraded(const TGroupVDisks& failedDisks) const = 0;
         virtual bool OneStepFromDegradedOrWorse(const TGroupVDisks& failedDisks) const = 0;
- 
-        virtual EBlobState GetBlobState(const TSubgroupPartLayout& parts, const TSubgroupVDisks& failedDisks) const = 0; 
+
+        virtual EBlobState GetBlobState(const TSubgroupPartLayout& parts, const TSubgroupVDisks& failedDisks) const = 0;
 
         // check if we need to resurrect something; returns bit mask of parts needed for specified disk in group,
         // nth bit represents nth part; all returned parts are suitable for this particular disk
         virtual ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const = 0;
-    }; 
- 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    // TOPOLOGY 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // TOPOLOGY
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     struct TVDiskInfo {
-        // short VDisk identifier 
-        TVDiskIdShort VDiskIdShort; 
+        // short VDisk identifier
+        TVDiskIdShort VDiskIdShort;
 
         // order number inside this group; starting from 0 up to, but not including GetNumTotalVDisks()
         ui32 OrderNumber = 0;
@@ -174,122 +174,122 @@ public:
         TVector<TFailDomain> FailDomains;
     };
 
-    struct TTopology { 
-        // group type (i.e. erasure) 
-        const TBlobStorageGroupType GType; 
+    struct TTopology {
+        // group type (i.e. erasure)
+        const TBlobStorageGroupType GType;
         // fail realms in this group
         TVector<TFailRealm> FailRealms;
-        // total number of fail domains in this group 
-        ui32 TotalFailDomains = 0; 
-        // total number of vdisks 
-        ui32 TotalVDisks = 0; 
-        // maps blobs to disks in topology 
+        // total number of fail domains in this group
+        ui32 TotalFailDomains = 0;
+        // total number of vdisks
+        ui32 TotalVDisks = 0;
+        // maps blobs to disks in topology
         std::unique_ptr<IBlobToDiskMapper> BlobMapper;
-        // quorum checker 
+        // quorum checker
         std::unique_ptr<IQuorumChecker> QuorumChecker;
-        // map to quickly get (Short)VDisk id from its order number inside the group 
+        // map to quickly get (Short)VDisk id from its order number inside the group
         TVector<TVDiskIdShort> VDiskIdForOrderNumber;
- 
+
         TTopology(TBlobStorageGroupType gtype);
         TTopology(TBlobStorageGroupType gtype, ui32 numFailRealms, ui32 numFailDomainsPerFailRealm, ui32 numVDisksPerFailDomain);
-        TTopology(const TTopology&) = delete; 
-        TTopology &operator =(const TTopology&) = delete; 
-        TTopology(TTopology&&) = default; 
-        TTopology &operator =(TTopology&&) = default; 
-        ~TTopology(); 
-        void FinalizeConstruction(); 
- 
-        // Check equality of 2 topologies (for some sanity checks we sometimes need to check equality of topologies) 
-        bool EqualityCheck(const TTopology &t); 
-        // obtain logical fail domain index -- through number for mirror-3-dc and per-ring for other erasures 
-        ui32 GetFailDomainOrderNumber(const TVDiskIdShort& vdisk) const; 
-        // get (Short)VDiskId by specified orderNumber (in range 0...TotalVDisks) 
-        TVDiskIdShort GetVDiskId(ui32 orderNumber) const; 
-        // Get fail domain 
-        const TFailDomain& GetFailDomain(const TVDiskIdShort& vdisk) const; 
-        const TFailDomain& GetFailDomain(ui32 failDomainOrderNumber) const; 
+        TTopology(const TTopology&) = delete;
+        TTopology &operator =(const TTopology&) = delete;
+        TTopology(TTopology&&) = default;
+        TTopology &operator =(TTopology&&) = default;
+        ~TTopology();
+        void FinalizeConstruction();
+
+        // Check equality of 2 topologies (for some sanity checks we sometimes need to check equality of topologies)
+        bool EqualityCheck(const TTopology &t);
+        // obtain logical fail domain index -- through number for mirror-3-dc and per-ring for other erasures
+        ui32 GetFailDomainOrderNumber(const TVDiskIdShort& vdisk) const;
+        // get (Short)VDiskId by specified orderNumber (in range 0...TotalVDisks)
+        TVDiskIdShort GetVDiskId(ui32 orderNumber) const;
+        // Get fail domain
+        const TFailDomain& GetFailDomain(const TVDiskIdShort& vdisk) const;
+        const TFailDomain& GetFailDomain(ui32 failDomainOrderNumber) const;
 
         // check if vdisk id is a valid id for the group
         bool IsValidId(const TVDiskID &vdisk) const;
         bool IsValidId(const TVDiskIdShort &vdisk) const;
-        // vdisk order number in the blobstorage group 
-        ui32 GetOrderNumber(const TVDiskIdShort &vdisk) const; 
-        // get total number of fail realms in the blobstorage group 
-        ui32 GetTotalFailRealmsNum() const { return FailRealms.size(); } 
-        // get total number of fail domains in the blobstorage group 
-        ui32 GetTotalFailDomainsNum() const { return TotalFailDomains; } 
-        // get the total number of VDisks in the blobstorage group 
-        ui32 GetTotalVDisksNum() const { return TotalVDisks; } 
-        // get number of VDisks per fail domain 
-        ui32 GetNumVDisksPerFailDomain() const; 
-        // get quorum checker 
-        const IQuorumChecker& GetQuorumChecker() const { return *QuorumChecker; } 
- 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        // IBlobToDiskMapper interface 
-        ////////////////////////////////////////////////////////////////////////////////////// 
-        void PickSubgroup(ui32 hash, TBlobStorageGroupInfo::TOrderNums &orderNums) const; 
-        // function checks if a blob with provided hash is a replica for specific vdisk 
-        bool BelongsToSubgroup(const TVDiskIdShort& vdisk, ui32 hash) const; 
-        // function returns "vdisk" index into "vdisks" array of select replicas, i.e. it is equivalent to 
-        // 
-        // TVDiskIds ids; 
-        // PickSubgroup(hash, vdisk.Ring, &vdisks, nullptr); 
-        // return std::find(ids.begin(), ids.end(), vdisk) - ids.begin(); 
-        // 
-        // It returns BlobSubgroupSize if this vdisk is not designated for provided blob 
-        ui32 GetIdxInSubgroup(const TVDiskIdShort& vdisk, ui32 hash) const; 
-        // function returns idxInSubgroup-th element of vdisks array from PickSubgroup 
-        TVDiskIdShort GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) const; 
- 
- 
-        TFailRealmIterator FailRealmsBegin() const; 
-        TFailRealmIterator FailRealmsEnd() const; 
- 
-        TFailDomainIterator FailDomainsBegin() const; 
-        TFailDomainIterator FailDomainsEnd() const; 
- 
-        TVDiskIterator VDisksBegin() const; 
-        TVDiskIterator VDisksEnd() const; 
- 
-        // get all fail domains of this group info (or for specific ring) 
-        TFailDomainRange GetFailDomains() const; 
-        // get all VDisks of this group info (or for specific ring) 
-        TVDiskRange GetVDisks() const; 
- 
-        EBlobState BlobState(ui32 effectiveReplicas, ui32 errorDomains) const; 
+        // vdisk order number in the blobstorage group
+        ui32 GetOrderNumber(const TVDiskIdShort &vdisk) const;
+        // get total number of fail realms in the blobstorage group
+        ui32 GetTotalFailRealmsNum() const { return FailRealms.size(); }
+        // get total number of fail domains in the blobstorage group
+        ui32 GetTotalFailDomainsNum() const { return TotalFailDomains; }
+        // get the total number of VDisks in the blobstorage group
+        ui32 GetTotalVDisksNum() const { return TotalVDisks; }
+        // get number of VDisks per fail domain
+        ui32 GetNumVDisksPerFailDomain() const;
+        // get quorum checker
+        const IQuorumChecker& GetQuorumChecker() const { return *QuorumChecker; }
+
+        //////////////////////////////////////////////////////////////////////////////////////
+        // IBlobToDiskMapper interface
+        //////////////////////////////////////////////////////////////////////////////////////
+        void PickSubgroup(ui32 hash, TBlobStorageGroupInfo::TOrderNums &orderNums) const;
+        // function checks if a blob with provided hash is a replica for specific vdisk
+        bool BelongsToSubgroup(const TVDiskIdShort& vdisk, ui32 hash) const;
+        // function returns "vdisk" index into "vdisks" array of select replicas, i.e. it is equivalent to
+        //
+        // TVDiskIds ids;
+        // PickSubgroup(hash, vdisk.Ring, &vdisks, nullptr);
+        // return std::find(ids.begin(), ids.end(), vdisk) - ids.begin();
+        //
+        // It returns BlobSubgroupSize if this vdisk is not designated for provided blob
+        ui32 GetIdxInSubgroup(const TVDiskIdShort& vdisk, ui32 hash) const;
+        // function returns idxInSubgroup-th element of vdisks array from PickSubgroup
+        TVDiskIdShort GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) const;
+
+
+        TFailRealmIterator FailRealmsBegin() const;
+        TFailRealmIterator FailRealmsEnd() const;
+
+        TFailDomainIterator FailDomainsBegin() const;
+        TFailDomainIterator FailDomainsEnd() const;
+
+        TVDiskIterator VDisksBegin() const;
+        TVDiskIterator VDisksEnd() const;
+
+        // get all fail domains of this group info (or for specific ring)
+        TFailDomainRange GetFailDomains() const;
+        // get all VDisks of this group info (or for specific ring)
+        TVDiskRange GetVDisks() const;
+
+        EBlobState BlobState(ui32 effectiveReplicas, ui32 errorDomains) const;
         TString ToString() const;
- 
-    private: 
+
+    private:
         static IBlobToDiskMapper *CreateMapper(TBlobStorageGroupType gtype, const TTopology *topology);
-        static IQuorumChecker *CreateQuorumChecker(const TTopology *topology); 
+        static IQuorumChecker *CreateQuorumChecker(const TTopology *topology);
     };
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    // DYNAMIC INFO 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    struct TDynamicInfo { 
-        // blobstorage group id 
-        const ui32 GroupId; 
-        // blobstorage group generation 
-        const ui32 GroupGeneration; 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // DYNAMIC INFO
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    struct TDynamicInfo {
+        // blobstorage group id
+        const ui32 GroupId;
+        // blobstorage group generation
+        const ui32 GroupGeneration;
         // map to quickly get Service id (TActorId) from its order number inside TTopology
         TVector<TActorId> ServiceIdForOrderNumber;
- 
-        TDynamicInfo(ui32 groupId, ui32 groupGen); 
-        TDynamicInfo(const TDynamicInfo&) = default; 
-        TDynamicInfo(TDynamicInfo&&) = default; 
-        TDynamicInfo &operator =(TDynamicInfo&&) = default; 
-        ~TDynamicInfo() = default; 
- 
+
+        TDynamicInfo(ui32 groupId, ui32 groupGen);
+        TDynamicInfo(const TDynamicInfo&) = default;
+        TDynamicInfo(TDynamicInfo&&) = default;
+        TDynamicInfo &operator =(TDynamicInfo&&) = default;
+        ~TDynamicInfo() = default;
+
         void PushBackActorId(const TActorId &aid) {
-            ServiceIdForOrderNumber.push_back(aid); 
-        } 
-    }; 
- 
+            ServiceIdForOrderNumber.push_back(aid);
+        }
+    };
+
     const IQuorumChecker& GetQuorumChecker() const;
-    const TTopology &GetTopology() const { return *Topology; } 
-    const TDynamicInfo &GetDynamicInfo() const { return Dynamic; } 
+    const TTopology &GetTopology() const { return *Topology; }
+    const TDynamicInfo &GetDynamicInfo() const { return Dynamic; }
     EEncryptionMode GetEncryptionMode() const { return EncryptionMode; }
     ELifeCyclePhase GetLifeCyclePhase() const { return LifeCyclePhase; }
     ui64 GetGroupKeyNonce() const { return GroupKeyNonce; }
@@ -339,7 +339,7 @@ public:
 
     bool IsValidId(const TVDiskID &vdisk) const;
     bool IsValidId(const TVDiskIdShort &vdisk) const;
-    ui32 GetOrderNumber(const TVDiskID &vdisk) const; 
+    ui32 GetOrderNumber(const TVDiskID &vdisk) const;
     ui32 GetOrderNumber(const TVDiskIdShort &vdisk) const;
 
     // obtain logical fail domain index -- through number for mirror-3-dc and per-ring for other erasures
@@ -348,17 +348,17 @@ public:
     ui32 GetFailDomainOrderNumber(const TVDiskIdShort& vdisk) const;
     // get VDisk by specified orderNumber (in range 0...TotalVDisks)
     TVDiskID GetVDiskId(ui32 orderNumber) const;
-    // obtain full vdisk id having just short vdisk id 
-    TVDiskID GetVDiskId(const TVDiskIdShort &vd) const; 
-    // get ActorID by specified orderNumber (in range 0...TotalVDisks) 
+    // obtain full vdisk id having just short vdisk id
+    TVDiskID GetVDiskId(const TVDiskIdShort &vd) const;
+    // get ActorID by specified orderNumber (in range 0...TotalVDisks)
     TActorId GetActorId(ui32 orderNumber) const;
-    // get ActorID having just short vdisk id 
+    // get ActorID having just short vdisk id
     TActorId GetActorId(const TVDiskIdShort &vdisk) const;
     // get the total number of VDisks in this group
     ui32 GetTotalVDisksNum() const;
     // get the total number of fail domains in this group
     ui32 GetTotalFailDomainsNum() const;
-    // get number of VDisks per fail domain 
+    // get number of VDisks per fail domain
     ui32 GetNumVDisksPerFailDomain() const;
 
     TString ToString() const;
@@ -376,7 +376,7 @@ public:
     TFailDomainRange GetFailDomains() const;
     // get all VDisks of this group info (or for specific ring)
     TVDiskRange GetVDisks() const;
-    // obtain iterator for vdisk 
+    // obtain iterator for vdisk
     TVDiskIterator FindVDisk(const TVDiskID& vdisk) const;
 
     bool CheckScope(const TKikimrScopeId& scopeId, const TActorContext& ctx, bool allowLocalScope) const {
@@ -403,23 +403,23 @@ private:
     const TFailDomain& GetFailDomain(const TVDiskID& vdisk) const;
     const TFailDomain& GetFailDomain(ui32 failDomainOrderNumber) const;
 
-public: 
-    // blobstorage group id 
-    const ui32 GroupID; 
-    // blobstorage group generation 
-    const ui32 GroupGeneration; 
-    // erasure primarily 
-    const TBlobStorageGroupType Type; 
+public:
+    // blobstorage group id
+    const ui32 GroupID;
+    // blobstorage group generation
+    const ui32 GroupGeneration;
+    // erasure primarily
+    const TBlobStorageGroupType Type;
     // origin of the group info content
     std::optional<NKikimrBlobStorage::TGroupInfo> Group;
- 
+
     TAtomicLogPriorityMuteChecker<NLog::PRI_ERROR, NLog::PRI_DEBUG> PutErrorMuteChecker;
 
 private:
-    // group topology -- all disks inside this group 
+    // group topology -- all disks inside this group
     std::shared_ptr<TTopology> Topology;
-    // run type info about group (i.e. actor ids) 
-    TDynamicInfo Dynamic; 
+    // run type info about group (i.e. actor ids)
+    TDynamicInfo Dynamic;
     // encryption mode
     EEncryptionMode EncryptionMode = EEM_NONE;
     ELifeCyclePhase LifeCyclePhase = ELCP_INITIAL;
@@ -432,7 +432,7 @@ private:
 };
 
 // physical fail domain description
-struct TFailDomain { 
+struct TFailDomain {
     struct TLevelIds {
         TVector<ui8> Ids;
 
@@ -461,8 +461,8 @@ struct TFailDomain {
     TFailDomain Slice(ui32 level) const;
 };
 
-} // NKikimr 
- 
+} // NKikimr
+
 template<>
 inline void Out<NKikimr::TBlobStorageGroupInfo::EEncryptionMode>(IOutputStream& o, NKikimr::TBlobStorageGroupInfo::EEncryptionMode e) {
     using E = NKikimr::TBlobStorageGroupInfo::EEncryptionMode;

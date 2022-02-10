@@ -3,9 +3,9 @@
 #include "resource.h"
 #include "compile_path.h"
 
-#include <ydb/library/yql/public/udf/udf_type_builder.h> 
-#include <ydb/library/yql/public/udf/udf_value.h> 
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
+#include <ydb/library/yql/public/udf/udf_type_builder.h>
+#include <ydb/library/yql/public/udf/udf_value.h>
+#include <ydb/library/yql/public/udf/udf_helpers.h>
 
 #include <util/generic/yexception.h>
 
@@ -128,5 +128,5 @@ namespace NJson2Udf {
     TStringRef TSqlExists<EDataSlot::JsonDocument, true>::Name() {
         return "JsonDocumentSqlTryExists";
     }
-} 
- 
+}
+

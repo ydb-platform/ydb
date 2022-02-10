@@ -1,17 +1,17 @@
 #include "export_common.h"
 #include "export_scan.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/tablet_flat/flat_row_state.h> 
-#include <ydb/core/tablet_flat/flat_scan_spent.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/tablet_flat/flat_row_state.h>
+#include <ydb/core/tablet_flat/flat_scan_spent.h>
 #include <library/cpp/actors/core/hfunc.h>
 
 #include <util/generic/bitmap.h>
 #include <util/string/builder.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NActors;
 using namespace NExportScan;
@@ -249,5 +249,5 @@ NTable::IScan* CreateExportScan(IBuffer::TPtr buffer, std::function<IActor*()>&&
     return new TExportScan(std::move(createUploaderFn), std::move(buffer));
 }
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

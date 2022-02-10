@@ -7,7 +7,7 @@ import socket
 import six
 
 from google.protobuf.text_format import Parse
-from ydb.core.protos import config_pb2 
+from ydb.core.protos import config_pb2
 import ydb.tests.library.common.yatest_common as yatest_common
 
 from . import tls_tools

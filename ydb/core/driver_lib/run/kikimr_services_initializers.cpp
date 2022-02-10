@@ -3,141 +3,141 @@
 #include "service_initializer.h"
 #include "version.h"
 
-#include <ydb/core/actorlib_impl/destruct_actor.h> 
-#include <ydb/core/actorlib_impl/load_network.h> 
-#include <ydb/core/actorlib_impl/mad_squirrel.h> 
-#include <ydb/core/actorlib_impl/node_identifier.h> 
+#include <ydb/core/actorlib_impl/destruct_actor.h>
+#include <ydb/core/actorlib_impl/load_network.h>
+#include <ydb/core/actorlib_impl/mad_squirrel.h>
+#include <ydb/core/actorlib_impl/node_identifier.h>
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/config_units.h> 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/base/event_filter.h> 
-#include <ydb/core/base/hive.h> 
-#include <ydb/core/base/location.h> 
-#include <ydb/core/base/pool_stats_collector.h> 
-#include <ydb/core/base/statestorage_impl.h> 
-#include <ydb/core/base/tablet_resolver.h> 
-#include <ydb/core/base/tablet_pipecache.h> 
-#include <ydb/core/base/tabletid.h> 
-#include <ydb/core/base/user_registry.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/config_units.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/base/event_filter.h>
+#include <ydb/core/base/hive.h>
+#include <ydb/core/base/location.h>
+#include <ydb/core/base/pool_stats_collector.h>
+#include <ydb/core/base/statestorage_impl.h>
+#include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/base/tabletid.h>
+#include <ydb/core/base/user_registry.h>
 
-#include <ydb/core/blobstorage/backpressure/unisched.h> 
-#include <ydb/core/blobstorage/nodewarden/node_warden.h> 
-#include <ydb/core/blobstorage/other/mon_get_blob_page.h> 
-#include <ydb/core/blobstorage/testload/test_load_actor.h> 
-#include <ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.h> 
+#include <ydb/core/blobstorage/backpressure/unisched.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden.h>
+#include <ydb/core/blobstorage/other/mon_get_blob_page.h>
+#include <ydb/core/blobstorage/testload/test_load_actor.h>
+#include <ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.h>
 
-#include <ydb/core/client/minikql_compile/mkql_compile_service.h> 
-#include <ydb/core/client/server/grpc_proxy_status.h> 
-#include <ydb/core/client/server/msgbus_server_pq_metacache.h> 
-#include <ydb/core/client/server/msgbus_server_tracer.h> 
+#include <ydb/core/client/minikql_compile/mkql_compile_service.h>
+#include <ydb/core/client/server/grpc_proxy_status.h>
+#include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/client/server/msgbus_server_tracer.h>
 
-#include <ydb/core/cms/cms.h> 
-#include <ydb/core/cms/console/configs_dispatcher.h> 
-#include <ydb/core/cms/console/configs_cache.h> 
-#include <ydb/core/cms/console/console.h> 
-#include <ydb/core/cms/console/immediate_controls_configurator.h> 
-#include <ydb/core/cms/console/log_settings_configurator.h> 
-#include <ydb/core/cms/console/shared_cache_configurator.h> 
-#include <ydb/core/cms/console/validators/core_validators.h> 
-#include <ydb/core/cms/http.h> 
+#include <ydb/core/cms/cms.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/configs_cache.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/immediate_controls_configurator.h>
+#include <ydb/core/cms/console/log_settings_configurator.h>
+#include <ydb/core/cms/console/shared_cache_configurator.h>
+#include <ydb/core/cms/console/validators/core_validators.h>
+#include <ydb/core/cms/http.h>
 
-#include <ydb/core/control/immediate_control_board_actor.h> 
+#include <ydb/core/control/immediate_control_board_actor.h>
 
-#include <ydb/core/grpc_services/grpc_mon.h> 
-#include <ydb/core/grpc_services/grpc_request_proxy.h> 
+#include <ydb/core/grpc_services/grpc_mon.h>
+#include <ydb/core/grpc_services/grpc_request_proxy.h>
 
-#include <ydb/core/kesus/proxy/proxy.h> 
-#include <ydb/core/kesus/tablet/tablet.h> 
+#include <ydb/core/kesus/proxy/proxy.h>
+#include <ydb/core/kesus/tablet/tablet.h>
 
-#include <ydb/core/keyvalue/keyvalue.h> 
+#include <ydb/core/keyvalue/keyvalue.h>
 
-#include <ydb/core/test_tablet/test_tablet.h> 
-#include <ydb/core/test_tablet/state_server_interface.h> 
+#include <ydb/core/test_tablet/test_tablet.h>
+#include <ydb/core/test_tablet/state_server_interface.h>
 
-#include <ydb/core/health_check/health_check.h> 
+#include <ydb/core/health_check/health_check.h>
 
-#include <ydb/core/kqp/kqp.h> 
-#include <ydb/core/kqp/rm/kqp_rm.h> 
+#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/rm/kqp_rm.h>
 
-#include <ydb/core/metering/metering.h> 
+#include <ydb/core/metering/metering.h>
 
-#include <ydb/core/mind/address_classification/net_classifier.h> 
-#include <ydb/core/mind/bscontroller/bsc.h> 
-#include <ydb/core/mind/configured_tablet_bootstrapper.h> 
-#include <ydb/core/mind/dynamic_nameserver.h> 
-#include <ydb/core/mind/labels_maintainer.h> 
-#include <ydb/core/mind/lease_holder.h> 
-#include <ydb/core/mind/node_broker.h> 
-#include <ydb/core/mind/tenant_node_enumeration.h> 
-#include <ydb/core/mind/tenant_pool.h> 
-#include <ydb/core/mind/tenant_slot_broker.h> 
+#include <ydb/core/mind/address_classification/net_classifier.h>
+#include <ydb/core/mind/bscontroller/bsc.h>
+#include <ydb/core/mind/configured_tablet_bootstrapper.h>
+#include <ydb/core/mind/dynamic_nameserver.h>
+#include <ydb/core/mind/labels_maintainer.h>
+#include <ydb/core/mind/lease_holder.h>
+#include <ydb/core/mind/node_broker.h>
+#include <ydb/core/mind/tenant_node_enumeration.h>
+#include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mind/tenant_slot_broker.h>
 
-#include <ydb/core/mon/mon.h> 
-#include <ydb/core/mon_alloc/monitor.h> 
-#include <ydb/core/mon_alloc/profiler.h> 
-#include <ydb/core/mon_alloc/stats.h> 
+#include <ydb/core/mon/mon.h>
+#include <ydb/core/mon_alloc/monitor.h>
+#include <ydb/core/mon_alloc/profiler.h>
+#include <ydb/core/mon_alloc/stats.h>
 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
-#include <ydb/core/persqueue/cluster_tracker.h> 
-#include <ydb/core/persqueue/pq.h> 
-#include <ydb/core/persqueue/pq_l2_service.h> 
+#include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/pq.h>
+#include <ydb/core/persqueue/pq_l2_service.h>
 
-#include <ydb/core/protos/services.pb.h> 
-#include <ydb/core/protos/console_config.pb.h> 
+#include <ydb/core/protos/services.pb.h>
+#include <ydb/core/protos/console_config.pb.h>
 
-#include <ydb/core/quoter/quoter_service.h> 
+#include <ydb/core/quoter/quoter_service.h>
 
-#include <ydb/core/scheme/scheme_type_registry.h> 
+#include <ydb/core/scheme/scheme_type_registry.h>
 
-#include <ydb/core/security/ticket_parser.h> 
+#include <ydb/core/security/ticket_parser.h>
 
-#include <ydb/core/sys_view/processor/processor.h> 
-#include <ydb/core/sys_view/service/sysview_service.h> 
+#include <ydb/core/sys_view/processor/processor.h>
+#include <ydb/core/sys_view/service/sysview_service.h>
 
-#include <ydb/core/tablet/bootstrapper.h> 
-#include <ydb/core/tablet/node_tablet_monitor.h> 
-#include <ydb/core/tablet/resource_broker.h> 
-#include <ydb/core/tablet/tablet_counters_aggregator.h> 
-#include <ydb/core/tablet/tablet_list_renderer.h> 
-#include <ydb/core/tablet/tablet_monitoring_proxy.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
+#include <ydb/core/tablet/bootstrapper.h>
+#include <ydb/core/tablet/node_tablet_monitor.h>
+#include <ydb/core/tablet/resource_broker.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
+#include <ydb/core/tablet/tablet_list_renderer.h>
+#include <ydb/core/tablet/tablet_monitoring_proxy.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
-#include <ydb/core/tracing/tablet_info.h> 
+#include <ydb/core/tracing/tablet_info.h>
 
-#include <ydb/core/tx/coordinator/coordinator.h> 
-#include <ydb/core/tx/columnshard/blob_cache.h> 
-#include <ydb/core/tx/datashard/datashard.h> 
-#include <ydb/core/tx/columnshard/columnshard.h> 
-#include <ydb/core/tx/mediator/mediator.h> 
+#include <ydb/core/tx/coordinator/coordinator.h>
+#include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
-#include <ydb/core/tx/scheme_board/scheme_board.h> 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
-#include <ydb/core/tx/sequenceproxy/sequenceproxy.h> 
-#include <ydb/core/tx/sequenceshard/sequenceshard.h> 
-#include <ydb/core/tx/time_cast/time_cast.h> 
-#include <ydb/core/tx/tx.h> 
-#include <ydb/core/tx/tx_allocator/txallocator.h> 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
-#include <ydb/core/tx/long_tx_service/public/events.h> 
-#include <ydb/core/tx/long_tx_service/long_tx_service.h> 
+#include <ydb/core/tx/scheme_board/scheme_board.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
+#include <ydb/core/tx/sequenceshard/sequenceshard.h>
+#include <ydb/core/tx/time_cast/time_cast.h>
+#include <ydb/core/tx/tx.h>
+#include <ydb/core/tx/tx_allocator/txallocator.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/tx/long_tx_service/long_tx_service.h>
 
-#include <ydb/core/util/failure_injection.h> 
-#include <ydb/core/util/memory_tracker.h> 
-#include <ydb/core/util/sig.h> 
+#include <ydb/core/util/failure_injection.h>
+#include <ydb/core/util/memory_tracker.h>
+#include <ydb/core/util/sig.h>
 
-#include <ydb/core/viewer/viewer.h> 
+#include <ydb/core/viewer/viewer.h>
 
-#include <ydb/public/lib/deprecated/client/msgbus_client.h> 
+#include <ydb/public/lib/deprecated/client/msgbus_client.h>
 
-#include <ydb/core/ymq/actor/serviceid.h> 
+#include <ydb/core/ymq/actor/serviceid.h>
 
-#include <ydb/core/yq/libs/init/init.h> 
-#include <ydb/core/yq/libs/logs/log.h> 
+#include <ydb/core/yq/libs/init/init.h>
+#include <ydb/core/yq/libs/logs/log.h>
 
-#include <ydb/library/folder_service/folder_service.h> 
-#include <ydb/library/folder_service/proto/config.pb.h> 
+#include <ydb/library/folder_service/folder_service.h>
+#include <ydb/library/folder_service/proto/config.pb.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 
@@ -903,7 +903,7 @@ void TLocalServiceInitializer::InitializeServices(
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.SchemeShard] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&CreateFlatTxSchemeShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.DataShard] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&CreateDataShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId)); 
+        new TTabletSetupInfo(&CreateDataShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.KeyValue] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&CreateKeyValueFlat, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.PersQueue] = TLocalConfig::TTabletClassInfo(
@@ -965,7 +965,7 @@ TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConf
 void TSharedCacheInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
-    auto config = MakeIntrusive<TSharedPageCacheConfig>(); 
+    auto config = MakeIntrusive<TSharedPageCacheConfig>();
 
     NKikimrSharedCache::TSharedCacheConfig cfg;
     if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasSharedCacheConfig()) {
@@ -985,10 +985,10 @@ void TSharedCacheInitializer::InitializeServices(
             sausageGroup->GetCounter("fresh"),
             sausageGroup->GetCounter("staging"),
             sausageGroup->GetCounter("warm"));
-    config->Counters = new TSharedPageCacheCounters(sausageGroup); 
+    config->Counters = new TSharedPageCacheCounters(sausageGroup);
 
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeSharedPageCacheId(0), 
-        TActorSetupCmd(CreateSharedPageCache(config.Get()), TMailboxType::ReadAsFilled, appData->UserPoolId))); 
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeSharedPageCacheId(0),
+        TActorSetupCmd(CreateSharedPageCache(config.Get()), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 
     auto *configurator = NConsole::CreateSharedCacheConfigurator();
     setup->LocalServices.emplace_back(TActorId(),
@@ -1927,11 +1927,11 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
     );
 }
 
-TKqpServiceInitializer::TKqpServiceInitializer( 
-        const TKikimrRunConfig& runConfig, 
-        std::shared_ptr<TModuleFactories> factories) 
+TKqpServiceInitializer::TKqpServiceInitializer(
+        const TKikimrRunConfig& runConfig,
+        std::shared_ptr<TModuleFactories> factories)
     : IKikimrServicesInitializer(runConfig)
-    , Factories(std::move(factories)) 
+    , Factories(std::move(factories))
 {}
 
 void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
@@ -1960,8 +1960,8 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             NKqp::MakeKqpRmServiceID(NodeId),
             TActorSetupCmd(rm, TMailboxType::HTSwap, appData->UserPoolId)));
 
-        auto proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(), 
-            std::move(settings), Factories->QueryReplayBackendFactory); 
+        auto proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(),
+            std::move(settings), Factories->QueryReplayBackendFactory);
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpProxyID(NodeId),
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));

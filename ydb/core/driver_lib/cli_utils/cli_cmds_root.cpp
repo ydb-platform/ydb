@@ -1,6 +1,6 @@
 #include "cli.h"
 #include "cli_cmds.h"
-#include <ydb/core/driver_lib/run/factories.h> 
+#include <ydb/core/driver_lib/run/factories.h>
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
@@ -11,11 +11,11 @@ namespace NDriverClient {
 
 using namespace NYdb::NConsoleClient;
 
-extern void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories); 
+extern void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories);
 
 class TClientCommandRoot : public TClientCommandRootKikimrBase {
 public:
-    TClientCommandRoot(std::shared_ptr<TModuleFactories> factories) 
+    TClientCommandRoot(std::shared_ptr<TModuleFactories> factories)
         : TClientCommandRootKikimrBase("kikimr")
     {
         AddCommand(std::make_unique<TClientCommandAdmin>());
@@ -23,7 +23,7 @@ public:
         AddCommand(std::make_unique<TClientCommandCms>());
         AddCommand(std::make_unique<TClientCommandWhoAmI>());
         AddCommand(std::make_unique<TClientCommandDiscovery>());
-        AddClientCommandServer(*this, std::move(factories)); 
+        AddClientCommandServer(*this, std::move(factories));
     }
 
     void Config(TConfig& config) override {
@@ -79,15 +79,15 @@ private:
     NMsgBusProxy::TMsgBusClientConfig MsgBusClientConfig;
 };
 
-int NewClient(int argc, char** argv, std::shared_ptr<TModuleFactories> factories) { 
-    THolder<TClientCommandRoot> commandsRoot = MakeHolder<TClientCommandRoot>(std::move(factories)); 
+int NewClient(int argc, char** argv, std::shared_ptr<TModuleFactories> factories) {
+    THolder<TClientCommandRoot> commandsRoot = MakeHolder<TClientCommandRoot>(std::move(factories));
     TClientCommand::TConfig config(argc, argv);
     // TODO: process flags from environment KIKIMR_FLAGS before command line processing
     return commandsRoot->Process(config);
 }
 
-TString NewClientCommandsDescription(std::shared_ptr<TModuleFactories> factories) { 
-    THolder<TClientCommandRoot> commandsRoot = MakeHolder<TClientCommandRoot>(std::move(factories)); 
+TString NewClientCommandsDescription(std::shared_ptr<TModuleFactories> factories) {
+    THolder<TClientCommandRoot> commandsRoot = MakeHolder<TClientCommandRoot>(std::move(factories));
     TStringStream stream;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << " [options] <subcommand>" << Endl << Endl

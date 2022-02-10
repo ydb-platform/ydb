@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/yq/libs/checkpointing_common/defs.h> 
+#include <ydb/core/yq/libs/checkpointing_common/defs.h>
 #include <ydb/core/yq/libs/checkpoint_storage/proto/graph_description.pb.h>
 
 #include <ydb/library/yql/public/issue/yql_issue.h>

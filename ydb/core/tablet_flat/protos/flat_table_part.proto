@@ -1,4 +1,4 @@
-import "ydb/core/protos/base.proto"; 
+import "ydb/core/protos/base.proto";
 
 package NKikimr.NTable.NProto;
 option java_package = "ru.yandex.kikimr.proto";
@@ -37,13 +37,13 @@ message TLayout {
 message TStat {
     optional uint64 Bytes = 1;  // Acrual raw data pages size in part
     optional uint64 Coded = 2;  // Observable (encoded) data pages size
-    optional uint64 Drops = 3;  // Rows with ERowOp::Erase code 
+    optional uint64 Drops = 3;  // Rows with ERowOp::Erase code
     optional uint64 Rows = 4;   // All rows count in the TPart
     optional uint64 HiddenRows = 5; // Hidden (non-head) total rows
-    optional uint64 HiddenDrops = 6; // Hidden (non-main) rows with ERowOp::Erase 
+    optional uint64 HiddenDrops = 6; // Hidden (non-main) rows with ERowOp::Erase
 }
 
-message TRoot { // NTable::TPart page collection metablob 
+message TRoot { // NTable::TPart page collection metablob
     optional int64 Epoch = 2;
     optional uint64 Bytes = 3;  // Actual raw data pages size in part
     optional uint64 Coded = 4;  // Observable (encoded) data pages size

@@ -12,10 +12,10 @@
                 (ident) ? (TLogBackend*)(new TSysLogBackend((ident), (facility), (flags))) : (TLogBackend*)(new TNullLogBackend())));\
         }                                                                                                                            \
     } Y_CAT(loginit, __LINE__);
- 
+
 #define YSYSLOGINIT(ident, facility) YSYSLOGINIT_FLAGS((ident), (facility), 0)
- 
-class TSysLogBackend: public TLogBackend { 
+
+class TSysLogBackend: public TLogBackend {
 public:
     enum EFacility {
         TSYSLOG_LOCAL0 = 0,
@@ -27,7 +27,7 @@ public:
         TSYSLOG_LOCAL6 = 6,
         TSYSLOG_LOCAL7 = 7
     };
- 
+
     enum EFlags {
         LogPerror = 1,
         LogCons = 2
@@ -35,30 +35,30 @@ public:
 
     TSysLogBackend(const char* ident, EFacility facility, int flags = 0);
     ~TSysLogBackend() override;
- 
+
     void WriteData(const TLogRecord& rec) override;
     void ReopenLog() override;
- 
+
     virtual TString GetIdent() const {
         return Ident;
     }
- 
+
     virtual EFacility GetFacility() const {
         return Facility;
     }
- 
+
     virtual int GetFlags() const {
         return Flags;
     }
- 
+
 protected:
     int ELogPriority2SyslogPriority(ELogPriority priority);
- 
+
     TString Ident;
     EFacility Facility;
     int Flags;
-}; 
- 
+};
+
 /*
  * return system-wide logger instance
  * better do not use in real programs(instead of robot, of course)

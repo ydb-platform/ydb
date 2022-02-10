@@ -13,14 +13,14 @@ SRCS(
 
 PEERDIR(
     library/cpp/threading/future
-    ydb/public/api/protos 
-    ydb/public/lib/operation_id/protos 
-    ydb/public/sdk/cpp/client/impl/ydb_endpoints 
+    ydb/public/api/protos
+    ydb/public/lib/operation_id/protos
+    ydb/public/sdk/cpp/client/impl/ydb_endpoints
     ydb/library/yql/public/issue/protos
 )
 
 END()
 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+RECURSE_FOR_TESTS(
+    ut
+)

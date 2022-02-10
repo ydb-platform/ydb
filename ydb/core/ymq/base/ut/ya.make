@@ -1,14 +1,14 @@
 OWNER(
     galaxycrab
-    g:kikimr 
+    g:kikimr
     g:sqs
 )
 
 UNITTEST()
 
 PEERDIR(
-    ydb/core/base 
-    ydb/core/ymq/base 
+    ydb/core/base
+    ydb/core/ymq/base
 )
 
 SRCS(

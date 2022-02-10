@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/sys_view/service) 
+UNITTEST_FOR(ydb/core/sys_view/service)
 
 OWNER(
     monster

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/blobstorage/defs.h> 
+#include <ydb/core/blobstorage/defs.h>
 
 #define INCRHUGE_HARDENED 1
 

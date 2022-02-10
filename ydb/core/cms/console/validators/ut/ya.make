@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/cms/console/validators) 
+UNITTEST_FOR(ydb/core/cms/console/validators)
 
 OWNER(ienkovich g:kikimr)
 

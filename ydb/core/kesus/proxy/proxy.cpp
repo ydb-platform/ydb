@@ -3,8 +3,8 @@
 #include "events.h"
 #include "proxy_actor.h"
 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
-#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

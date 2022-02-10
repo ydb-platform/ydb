@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    g:yql 
-    g:yql_ydb_core 
-) 
+OWNER(
+    g:yql
+    g:yql_ydb_core
+)
 
 SRCS(
     udf_allocator.cpp
@@ -47,7 +47,7 @@ PEERDIR(
     ydb/library/yql/public/types
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 END()
 

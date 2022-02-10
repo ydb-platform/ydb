@@ -1,9 +1,9 @@
 #include "msgbus_tabletreq.h"
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/storage_pools.h> 
-#include <ydb/core/protos/hive.pb.h> 
-#include <ydb/core/base/hive.h> 
-#include <ydb/core/base/subdomain.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/storage_pools.h>
+#include <ydb/core/protos/hive.pb.h>
+#include <ydb/core/base/hive.h>
+#include <ydb/core/base/subdomain.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {

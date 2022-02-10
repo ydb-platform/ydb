@@ -1,8 +1,8 @@
 #pragma once
 #include "aligned_page_pool.h"
 #include "mkql_mem_info.h"
-#include <ydb/library/yql/public/udf/udf_allocator.h> 
-#include <ydb/library/yql/public/udf/udf_value.h> 
+#include <ydb/library/yql/public/udf/udf_allocator.h>
+#include <ydb/library/yql/public/udf/udf_value.h>
 #include <util/system/defaults.h>
 #include <util/system/tls.h>
 #include <util/system/align.h>

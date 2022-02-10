@@ -67,19 +67,19 @@ void TIndexMonPage::OutputIndex(IOutputStream& out, bool pathEndsWithSlash) {
 
 void TIndexMonPage::Register(TMonPagePtr page) {
     TGuard<TMutex> g(Mtx);
-    auto insres = PagesByPath.insert(std::make_pair("/" + page->GetPath(), page)); 
-    if (insres.second) { 
-        // new unique page just inserted, update Pages 
-        Pages.push_back(page); 
-    } else { 
-        // a page with the given path is already present, replace it with the new page 
- 
-        // find old page, sorry for O(n) 
-        auto it = std::find(Pages.begin(), Pages.end(), insres.first->second); 
-        *it = page; 
-        // this already present, replace it 
-        insres.first->second = page; 
-    } 
+    auto insres = PagesByPath.insert(std::make_pair("/" + page->GetPath(), page));
+    if (insres.second) {
+        // new unique page just inserted, update Pages
+        Pages.push_back(page);
+    } else {
+        // a page with the given path is already present, replace it with the new page
+
+        // find old page, sorry for O(n)
+        auto it = std::find(Pages.begin(), Pages.end(), insres.first->second);
+        *it = page;
+        // this already present, replace it
+        insres.first->second = page;
+    }
     page->Parent = this;
 }
 
@@ -90,7 +90,7 @@ TIndexMonPage* TIndexMonPage::RegisterIndexPage(const TString& path, const TStri
         return page;
     }
     page = new TIndexMonPage(path, title);
-    Register(page); 
+    Register(page);
     return VerifyDynamicCast<TIndexMonPage*>(page);
 }
 

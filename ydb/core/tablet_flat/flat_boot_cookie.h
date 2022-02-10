@@ -21,7 +21,7 @@ namespace NBoot {
             Snap    = 0,    /* Legacy, now is unused    */
             Redo    = 1,    /* DBase redo log flow      */
             Alter   = 2,    /* DBase scheme TAlter log  */
-            Pack    = 3,    /* NPageCollection metablobs       */ 
+            Pack    = 3,    /* NPageCollection metablobs       */
             Turn    = 5,    /* Data transmutations log  */
             RedoLz4 = 6,
             SnapLz4 = 7,    /* TExecutor state snapshot */
@@ -48,12 +48,12 @@ namespace NBoot {
         EIdx Index() const { return EIdx((Raw & MaskIdx) >> OffIdx); }
         ui32 Sub() const { return (Raw & MaskSub); }
 
-        static NPageCollection::TCookieRange CookieRange(EIdx index) noexcept 
+        static NPageCollection::TCookieRange CookieRange(EIdx index) noexcept
         {
             return { RawFor(index, 0), RawFor(index, Max<ui32>()) };
         }
 
-        static NPageCollection::TCookieRange CookieRangeRaw() noexcept 
+        static NPageCollection::TCookieRange CookieRangeRaw() noexcept
         {
             return { RawFor(EIdx::Raw, 0), RawFor(EIdx::End, Max<ui32>()) };
         }

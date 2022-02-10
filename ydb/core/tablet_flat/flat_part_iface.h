@@ -5,7 +5,7 @@
 #include "flat_row_eggs.h"
 #include "util_basics.h"
 
-#include <ydb/core/base/shared_data.h> 
+#include <ydb/core/base/shared_data.h>
 
 #include <util/generic/string.h>
 #include <util/system/types.h>
@@ -15,17 +15,17 @@ namespace NTable {
 
     class TColdPart;
     class TPart;
-    class TMemTable; 
+    class TMemTable;
 
     using TPageId = NPage::TPageId;
     using EPage = NPage::EPage;
 
     struct ISaver {
-        using TGlobId = NPageCollection::TGlobId; 
+        using TGlobId = NPageCollection::TGlobId;
 
         virtual void Save(TSharedData raw, NPage::TGroupId groupId) noexcept = 0;
-        virtual TLargeObj Save(TRowId, ui32 tag, const TGlobId &glob) noexcept = 0; 
-        virtual TLargeObj Save(TRowId, ui32 tag, TArrayRef<const char> blob) noexcept = 0; 
+        virtual TLargeObj Save(TRowId, ui32 tag, const TGlobId &glob) noexcept = 0;
+        virtual TLargeObj Save(TRowId, ui32 tag, TArrayRef<const char> blob) noexcept = 0;
     };
 
     class IPageWriter {
@@ -37,20 +37,20 @@ namespace NTable {
         virtual TPageId Write(TSharedData page, EPage type, ui32 group) = 0;
         virtual TPageId WriteOuter(TSharedData) noexcept = 0;
         virtual void WriteInplace(TPageId page, TArrayRef<const char> body) = 0;
-        virtual NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept = 0; 
+        virtual NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept = 0;
         virtual void Finish(TString overlay) noexcept = 0;
     };
 
     struct IPages {
-        using ELargeObj = NTable::ELargeObj; 
+        using ELargeObj = NTable::ELargeObj;
         using TPart = NTable::TPart;
-        using TMemTable = NTable::TMemTable; 
+        using TMemTable = NTable::TMemTable;
         using TPageId = NPage::TPageId;
         using TGroupId = NPage::TGroupId;
 
         virtual ~IPages() = default;
 
-        struct TResult { 
+        struct TResult {
             explicit operator bool() const noexcept
             {
                 return bool(Page);
@@ -65,8 +65,8 @@ namespace NTable {
             const TSharedData *Page;
         };
 
-        virtual TResult Locate(const TMemTable*, ui64 ref, ui32 tag) noexcept = 0; 
-        virtual TResult Locate(const TPart*, ui64 ref, ELargeObj lob) noexcept = 0; 
+        virtual TResult Locate(const TMemTable*, ui64 ref, ui32 tag) noexcept = 0;
+        virtual TResult Locate(const TPart*, ui64 ref, ELargeObj lob) noexcept = 0;
         virtual const TSharedData* TryGetPage(const TPart* part, TPageId id, TGroupId groupId = { }) = 0;
     };
 

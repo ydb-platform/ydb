@@ -6,7 +6,7 @@
 #include "flat_exec_broker.h"
 #include "logic_redo_eggs.h"
 #include "util_fmt_line.h"
-#include <ydb/core/base/localdb.h> 
+#include <ydb/core/base/localdb.h>
 #include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr {
@@ -33,8 +33,8 @@ enum class ECompactionState {
     Pending,
     PendingBackground,
     Compaction,
-    SnapshotPending, 
-    SnapshotCompaction, 
+    SnapshotPending,
+    SnapshotCompaction,
 };
 
 enum class EForcedCompactionState {
@@ -235,7 +235,7 @@ public:
         ui64 compactionId,
         THolder<NTable::TCompactionParams> params);
 
-    void BorrowedPart(ui32 tableId, NTable::TPartView partView); 
+    void BorrowedPart(ui32 tableId, NTable::TPartView partView);
     void BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part);
     ui32 BorrowedPartLevel();
 

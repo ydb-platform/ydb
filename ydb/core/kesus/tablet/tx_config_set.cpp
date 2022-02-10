@@ -1,7 +1,7 @@
 #include "tablet_impl.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/counters.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 
 namespace NKikimr {
 namespace NKesus {

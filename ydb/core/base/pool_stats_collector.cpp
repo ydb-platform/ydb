@@ -2,7 +2,7 @@
 
 #include "counters.h"
 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
 

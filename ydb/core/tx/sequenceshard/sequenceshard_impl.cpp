@@ -1,6 +1,6 @@
 #include "sequenceshard_impl.h"
 
-#include <ydb/core/engine/minikql/flat_local_tx_factory.h> 
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
 #include <util/stream/output.h>
 

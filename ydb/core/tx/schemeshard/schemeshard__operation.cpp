@@ -6,9 +6,9 @@
 
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tablet/tablet_exception.h> 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
+#include <ydb/core/tablet/tablet_exception.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
 #include <util/generic/algorithm.h>
 
@@ -79,7 +79,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(txId), ui64(selfId)));
 
-        response->SetError(NKikimrScheme::StatusAccepted, "There is operation with the same txId has been found in flight. Actually that shouldn't have happened." 
+        response->SetError(NKikimrScheme::StatusAccepted, "There is operation with the same txId has been found in flight. Actually that shouldn't have happened."
                                                                 " Note that tx body equality isn't granted. StatusAccepted is just returned on retries.");
         return std::move(response);
     }

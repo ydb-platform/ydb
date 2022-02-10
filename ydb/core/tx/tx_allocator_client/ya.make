@@ -6,10 +6,10 @@ OWNER(
 )
 
 PEERDIR(
-    ydb/core/base 
-    ydb/core/protos 
-    ydb/core/tablet 
-    ydb/core/tx/tx_allocator 
+    ydb/core/base
+    ydb/core/protos
+    ydb/core/tablet
+    ydb/core/tx/tx_allocator
 )
 
 SRCS(

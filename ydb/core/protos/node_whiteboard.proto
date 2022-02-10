@@ -1,9 +1,9 @@
 import "library/cpp/actors/protos/interconnect.proto";
-import "ydb/core/protos/tablet.proto"; 
-import "ydb/core/protos/subdomains.proto"; 
-import "ydb/core/protos/blobstorage_disk.proto"; 
+import "ydb/core/protos/tablet.proto";
+import "ydb/core/protos/subdomains.proto";
+import "ydb/core/protos/blobstorage_disk.proto";
 import "google/protobuf/descriptor.proto";
-import "ydb/core/protos/tracing.proto"; 
+import "ydb/core/protos/tracing.proto";
 
 package NKikimrWhiteboard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -127,35 +127,35 @@ message TEvPDiskStateResponse {
     optional uint32 ResponseDuration = 3; // filled during collect
 }
 
-enum EVDiskState { 
-    Initial = 1; 
-    LocalRecoveryError = 2; 
-    SyncGuidRecovery = 3; 
-    SyncGuidRecoveryError = 4; 
-    OK = 5; 
-    PDiskError = 6; 
-} 
- 
-// The structure reports VDisk compaction satisfaction rank, i.e. 
-// how good VDisk is in supporting its LSM Tree 
-message TVDiskSatisfactionRank { 
-    message TRank { 
-        // Rank in percents; 0-100% is good; >100% is bad. 
-        // Formula for rank calculation is the following: 
-        // Rank = actual_value / max_allowed_value * 100 
+enum EVDiskState {
+    Initial = 1;
+    LocalRecoveryError = 2;
+    SyncGuidRecovery = 3;
+    SyncGuidRecoveryError = 4;
+    OK = 5;
+    PDiskError = 6;
+}
+
+// The structure reports VDisk compaction satisfaction rank, i.e.
+// how good VDisk is in supporting its LSM Tree
+message TVDiskSatisfactionRank {
+    message TRank {
+        // Rank in percents; 0-100% is good; >100% is bad.
+        // Formula for rank calculation is the following:
+        // Rank = actual_value / max_allowed_value * 100
         optional uint32 RankPercent = 1 [(InsignificantChangeAmount) = 3]; // 3%
- 
-        // Flag is the Rank transformed to something simple 
-        // to understand: Green, Yellow or Red 
-        optional EFlag Flag = 2; 
-    } 
- 
-    optional TRank FreshRank = 1; 
-    optional TRank LevelRank = 2; 
-} 
- 
+
+        // Flag is the Rank transformed to something simple
+        // to understand: Green, Yellow or Red
+        optional EFlag Flag = 2;
+    }
+
+    optional TRank FreshRank = 1;
+    optional TRank LevelRank = 2;
+}
+
 message TVDiskStateInfo {
-    optional NKikimrBlobStorage.TVDiskID VDiskId = 1; 
+    optional NKikimrBlobStorage.TVDiskID VDiskId = 1;
     optional uint64 CreateTime = 2;
     optional uint64 ChangeTime = 3;
     optional uint32 PDiskId = 4;
@@ -164,23 +164,23 @@ message TVDiskStateInfo {
     optional uint64 Kind = 7;
     optional uint32 NodeId = 9; // filled during merge
     optional uint32 Count = 17; // filled during group count
- 
+
     // overall state - to be filled
     optional EFlag Overall = 10;
 
-    // Current state of VDisk 
-    optional EVDiskState VDiskState = 11; 
-    // Disk space flags 
-    optional EFlag DiskSpace = 12; 
-    // Compaction satisfaction rank 
-    optional TVDiskSatisfactionRank SatisfactionRank = 13; 
-    // Is VDisk replicated? (i.e. contains all blobs it must have) 
-    optional bool Replicated = 14; 
+    // Current state of VDisk
+    optional EVDiskState VDiskState = 11;
+    // Disk space flags
+    optional EFlag DiskSpace = 12;
+    // Compaction satisfaction rank
+    optional TVDiskSatisfactionRank SatisfactionRank = 13;
+    // Is VDisk replicated? (i.e. contains all blobs it must have)
+    optional bool Replicated = 14;
     // Does this VDisk has any yet unreplicated phantom-like blobs?
     optional bool UnreplicatedPhantoms = 20 [default = false];
     // The same for the non-phantom-like blobs.
     optional bool UnreplicatedNonPhantoms = 21 [default = false];
-    // How many unsynced VDisks from current BlobStorage group we see 
+    // How many unsynced VDisks from current BlobStorage group we see
     optional uint64 UnsyncedVDisks = 15 [default = 0];
     // How much this VDisk have allocated on corresponding PDisk
     optional uint64 AllocatedSize = 16 [(InsignificantChangeAmount) = 536870912]; // 512MiB
@@ -191,8 +191,8 @@ message TVDiskStateInfo {
     optional fixed64 IncarnationGuid = 25;
     optional bool DonorMode = 26;
     optional fixed64 InstanceGuid = 27; // VDisk actor instance guid
- 
-    // VDisk (Skeleton) Front Queue Status 
+
+    // VDisk (Skeleton) Front Queue Status
     optional EFlag FrontQueues = 18;
 
     // VDisk storage pool label

@@ -1,6 +1,6 @@
 #include "msgbus_tabletreq.h"
 #include "msgbus_securereq.h"
-#include <ydb/core/blobstorage/base/blobstorage_events.h> 
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {

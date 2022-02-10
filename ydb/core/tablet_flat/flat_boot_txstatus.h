@@ -23,7 +23,7 @@ namespace NBoot {
     private:
         void Start() noexcept override {
             if (TSharedData* data = Back->TxStatusCaches.FindPtr(DataId.Lead)) {
-                TxStatus = MakeIntrusive<NTable::TTxStatusPartStore>(DataId, Epoch, *data); 
+                TxStatus = MakeIntrusive<NTable::TTxStatusPartStore>(DataId, Epoch, *data);
             } else {
                 LeftBlobs += Spawn<TLoadBlobs>(DataId, 0);
             }
@@ -35,7 +35,7 @@ namespace NBoot {
             auto *load = step->ConsumeAs<TLoadBlobs>(LeftBlobs);
             TSharedData data = load->PlainData();
             Back->TxStatusCaches[DataId.Lead] = data;
-            TxStatus = MakeIntrusive<NTable::TTxStatusPartStore>(DataId, Epoch, std::move(data)); 
+            TxStatus = MakeIntrusive<NTable::TTxStatusPartStore>(DataId, Epoch, std::move(data));
             TryFinish();
         }
 
@@ -43,7 +43,7 @@ namespace NBoot {
         void TryFinish() noexcept {
             if (!LeftBlobs) {
                 // TODO: we probably want to delay merge as late as possible?
-                Back->DatabaseImpl->Merge(Table, std::move(TxStatus)); 
+                Back->DatabaseImpl->Merge(Table, std::move(TxStatus));
                 Env->Finish(this);
             }
         }
@@ -52,7 +52,7 @@ namespace NBoot {
         const ui32 Table;
         const NPageCollection::TLargeGlobId DataId;
         const NTable::TEpoch Epoch;
-        TIntrusiveConstPtr<NTable::TTxStatusPartStore> TxStatus; 
+        TIntrusiveConstPtr<NTable::TTxStatusPartStore> TxStatus;
         TLeft LeftBlobs;
     };
 

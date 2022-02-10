@@ -1,6 +1,6 @@
 #include "util.h"
 
-#include <ydb/public/lib/ydb_cli/common/recursive_list.h> 
+#include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 
 #include <util/folder/path.h>
 

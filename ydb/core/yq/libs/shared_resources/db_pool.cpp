@@ -1,6 +1,6 @@
 #include "db_pool.h"
 
-#include <ydb/core/protos/services.pb.h> 
+#include <ydb/core/protos/services.pb.h>
 
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/hfunc.h>

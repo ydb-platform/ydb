@@ -1,20 +1,20 @@
 #include "flat_comp_ut_common.h"
 
-#include <ydb/core/tablet_flat/flat_comp_shard.h> 
+#include <ydb/core/tablet_flat/flat_comp_shard.h>
 
-#include <ydb/core/tablet_flat/test/libs/table/test_envs.h> 
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
-#include <ydb/core/tablet_flat/test/libs/rows/layout.h> 
-#include <ydb/core/tablet_flat/test/libs/rows/heap.h> 
-#include <ydb/core/tablet_flat/test/libs/rows/rows.h> 
-#include <ydb/core/tablet_flat/test/libs/rows/tool.h> 
-#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_comp.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_writer.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_envs.h>
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
+#include <ydb/core/tablet_flat/test/libs/rows/layout.h>
+#include <ydb/core/tablet_flat/test/libs/rows/heap.h>
+#include <ydb/core/tablet_flat/test/libs/rows/rows.h>
+#include <ydb/core/tablet_flat/test/libs/rows/tool.h>
+#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_comp.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
 
-#include <ydb/core/tablet_flat/protos/flat_table_shard.pb.h> 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
-#include <ydb/core/util/pb.h> 
+#include <ydb/core/tablet_flat/protos/flat_table_shard.pb.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/util/pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -93,11 +93,11 @@ namespace {
         return conf;
     }
 
-    TPartView CreatePart(const TLayoutCook& lay, const TRowsHeap& rows, ui32 rowsPerPage) { 
+    TPartView CreatePart(const TLayoutCook& lay, const TRowsHeap& rows, ui32 rowsPerPage) {
         return TPartCook(lay, CreateConf(rowsPerPage))
             .Add(rows.begin(), rows.end())
             .Finish()
-            .ToPartView(); 
+            .ToPartView();
     }
 
     struct TSizeChange {
@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
             rows.Put(*TNatural(*lay).Col(seq, 500_u32, 42_u32));
         }
 
-        auto partView = CreatePart(lay, rows, 4); 
+        auto partView = CreatePart(lay, rows, 4);
 
         for (size_t beginRow = 0; beginRow < rows.Size(); ++beginRow) {
             for (size_t endRow = beginRow + 1; endRow <= rows.Size(); ++endRow) {
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
 
                             TStrictEnv env;
                             TSimpleConsumer consumer;
-                            TSliceSplitOp op(&consumer, &table, pshards, partView.Part, slice); 
+                            TSliceSplitOp op(&consumer, &table, pshards, partView.Part, slice);
 
                             bool ok1 = op.Execute(&env);
                             UNIT_ASSERT_VALUES_EQUAL(ok1, false);
@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
             rows.Put(*TNatural(*lay).Col(seq, 500_u32, 42_u32));
         }
 
-        auto partView = CreatePart(lay, rows, 4); 
+        auto partView = CreatePart(lay, rows, 4);
 
         TSlice slice;
         slice.FirstRowId = 0;
@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
 
         TStrictEnv env;
         TSimpleConsumer consumer;
-        TSliceSplitOp op(&consumer, &table, pshards, partView.Part, slice); 
+        TSliceSplitOp op(&consumer, &table, pshards, partView.Part, slice);
 
         bool ok1 = op.Execute(&env);
         UNIT_ASSERT_VALUES_EQUAL(ok1, false);
@@ -393,7 +393,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
             rows.Put(*TNatural(*lay).Col(1000 + seq, 42_u32));
         }
 
-        auto partView = CreatePart(lay, rows, 4); 
+        auto partView = CreatePart(lay, rows, 4);
 
         TSlice slice;
         slice.FirstRowId = 3; // the first 4 rows are not included
@@ -429,7 +429,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
 
         TStrictEnv env;
         TSimpleConsumer consumer;
-        TSliceSplitOp op(&consumer, &table, pshards, partView.Part, slice); 
+        TSliceSplitOp op(&consumer, &table, pshards, partView.Part, slice);
 
         bool ok1 = op.Execute(&env);
         UNIT_ASSERT_VALUES_EQUAL(ok1, false);
@@ -470,11 +470,11 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
             rows.Put(*TNatural(*lay).Col(1000 + seq, 42_u32));
         }
 
-        auto partView = CreatePart(lay, rows, rowsPerPage); 
-        UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u); 
+        auto partView = CreatePart(lay, rows, rowsPerPage);
+        UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u);
 
-        const auto* part = partView.Part.Get(); 
-        const auto slice = partView.Slices->front(); 
+        const auto* part = partView.Part.Get();
+        const auto slice = partView.Slices->front();
 
         // All pages are expected to have the same size
         auto pageSize = part->GetPageSize(part->Index->Begin()->GetPageId());
@@ -542,16 +542,16 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
             rows3.Put(*TNatural(*lay).Col(1003 + seq * 4, 42_u32));
         }
 
-        auto partView1 = CreatePart(lay, rows1, 4); 
-        auto partView2 = CreatePart(lay, rows2, 2); 
-        auto partView3 = CreatePart(lay, rows3, 1); 
-        for (const auto& partView : { partView1, partView2, partView3 }) { 
-            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u); 
+        auto partView1 = CreatePart(lay, rows1, 4);
+        auto partView2 = CreatePart(lay, rows2, 2);
+        auto partView3 = CreatePart(lay, rows3, 1);
+        for (const auto& partView : { partView1, partView2, partView3 }) {
+            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u);
         }
 
-        auto pageSize1 = partView1.Part->GetPageSize(partView1.Part->Index->Begin()->GetPageId()); 
-        auto pageSize2 = partView2.Part->GetPageSize(partView2.Part->Index->Begin()->GetPageId()); 
-        auto pageSize3 = partView3.Part->GetPageSize(partView3.Part->Index->Begin()->GetPageId()); 
+        auto pageSize1 = partView1.Part->GetPageSize(partView1.Part->Index->Begin()->GetPageId());
+        auto pageSize2 = partView2.Part->GetPageSize(partView2.Part->Index->Begin()->GetPageId());
+        auto pageSize3 = partView3.Part->GetPageSize(partView3.Part->Index->Begin()->GetPageId());
 
         // The expected keys are:
         // 1000, 1002, 1003, 1004, 1006, 1007, 1008, ...
@@ -584,9 +584,9 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         }
 
         TSplitStatIterator it(*(*lay).Keys);
-        it.AddSlice(partView1.Part.Get(), partView1.Slices->front(), pageSize1 * pageCount); 
-        it.AddSlice(partView2.Part.Get(), partView2.Slices->front(), pageSize2 * pageCount); 
-        it.AddSlice(partView3.Part.Get(), partView3.Slices->front(), pageSize3 * pageCount); 
+        it.AddSlice(partView1.Part.Get(), partView1.Slices->front(), pageSize1 * pageCount);
+        it.AddSlice(partView2.Part.Get(), partView2.Slices->front(), pageSize2 * pageCount);
+        it.AddSlice(partView3.Part.Get(), partView3.Slices->front(), pageSize3 * pageCount);
         VerifySizeChanges(it, sizeChanges);
     }
 
@@ -609,14 +609,14 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
             rows2.Put(*TNatural(*lay).Col(1006 + seq * 2, 42_u32));
         }
 
-        auto partView1 = CreatePart(lay, rows1, 4); 
-        auto partView2 = CreatePart(lay, rows2, 2); 
-        for (const auto& partView : { partView1, partView2 }) { 
-            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u); 
+        auto partView1 = CreatePart(lay, rows1, 4);
+        auto partView2 = CreatePart(lay, rows2, 2);
+        for (const auto& partView : { partView1, partView2 }) {
+            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u);
         }
 
-        auto pageSize1 = partView1.Part->GetPageSize(partView1.Part->Index->Begin()->GetPageId()); 
-        auto pageSize2 = partView2.Part->GetPageSize(partView2.Part->Index->Begin()->GetPageId()); 
+        auto pageSize1 = partView1.Part->GetPageSize(partView1.Part->Index->Begin()->GetPageId());
+        auto pageSize2 = partView2.Part->GetPageSize(partView2.Part->Index->Begin()->GetPageId());
 
         // Expected keys are 1000, 1004, 1006, 1008, 1010, 1012, ...
         TSizeChanges sizeChanges;
@@ -652,8 +652,8 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         sizeChanges[1006 + (pageCount - 1) * 4].AddLeft(pageSize2, 2);
 
         TSplitStatIterator it(*(*lay).Keys);
-        it.AddSlice(partView1.Part.Get(), partView1.Slices->front(), pageSize1 * pageCount); 
-        it.AddSlice(partView2.Part.Get(), partView2.Slices->front(), pageSize2 * pageCount); 
+        it.AddSlice(partView1.Part.Get(), partView1.Slices->front(), pageSize1 * pageCount);
+        it.AddSlice(partView2.Part.Get(), partView2.Slices->front(), pageSize2 * pageCount);
         VerifySizeChanges(it, sizeChanges);
     }
 
@@ -675,14 +675,14 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         rows2.Put(*TNatural(*lay).Col(1005_u64, 42_u32));
         rows2.Put(*TNatural(*lay).Col(1006_u64, 42_u32));
 
-        auto partView1 = CreatePart(lay, rows1, 4); 
-        auto partView2 = CreatePart(lay, rows2, 4); 
-        for (const auto& partView : { partView1, partView2 }) { 
-            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u); 
+        auto partView1 = CreatePart(lay, rows1, 4);
+        auto partView2 = CreatePart(lay, rows2, 4);
+        for (const auto& partView : { partView1, partView2 }) {
+            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u);
         }
 
-        auto pageSize1 = partView1.Part->GetPageSize(partView1.Part->Index->Begin()->GetPageId()); 
-        auto pageSize2 = partView2.Part->GetPageSize(partView2.Part->Index->Begin()->GetPageId()); 
+        auto pageSize1 = partView1.Part->GetPageSize(partView1.Part->Index->Begin()->GetPageId());
+        auto pageSize2 = partView2.Part->GetPageSize(partView2.Part->Index->Begin()->GetPageId());
 
         // Expected keys are 1000, 1004, 1005, 1008
         TSizeChanges sizeChanges;
@@ -699,8 +699,8 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
             .SubRight(pageSize1, 4);
 
         TSplitStatIterator it(*(*lay).Keys);
-        it.AddSlice(partView1.Part.Get(), partView1.Slices->front(), pageSize1 * pageCount); 
-        it.AddSlice(partView2.Part.Get(), partView2.Slices->front(), pageSize2 * pageCount); 
+        it.AddSlice(partView1.Part.Get(), partView1.Slices->front(), pageSize1 * pageCount);
+        it.AddSlice(partView2.Part.Get(), partView2.Slices->front(), pageSize2 * pageCount);
         VerifySizeChanges(it, sizeChanges);
     }
 
@@ -724,24 +724,24 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
             rows2.Put(*TNatural(*lay).Col(1009 + seq, 42_u32));
         }
 
-        auto partView1 = CreatePart(lay, rows1, 4); 
-        auto partView2 = CreatePart(lay, rows2, 4); 
-        for (const auto& partView : { partView1, partView2 }) { 
-            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u); 
+        auto partView1 = CreatePart(lay, rows1, 4);
+        auto partView2 = CreatePart(lay, rows2, 4);
+        for (const auto& partView : { partView1, partView2 }) {
+            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u);
         }
 
         TPageReuseBuilder builder(*lay.RowScheme()->Keys);
 
         {
-            TSlice slice = partView1.Slices->at(0); 
+            TSlice slice = partView1.Slices->at(0);
             slice.FirstRowId += 2;
             slice.LastRowId -= 2;
             slice.FirstKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows1[slice.FirstRowId])));
             slice.LastKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows1[slice.LastRowId])));
-            builder.AddSlice(partView1.Part.Get(), slice, true); 
+            builder.AddSlice(partView1.Part.Get(), slice, true);
         }
 
-        builder.AddSlice(partView2.Part.Get(), partView2.Slices->at(0), true); 
+        builder.AddSlice(partView2.Part.Get(), partView2.Slices->at(0), true);
 
         auto results = builder.Build();
 
@@ -756,7 +756,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         auto& reusable2 = results.Reusable.at(1);
         UNIT_ASSERT_VALUES_EQUAL(reusable2.Slice.FirstRowId, 16u);
         UNIT_ASSERT_VALUES_EQUAL(reusable2.Slice.FirstInclusive, true);
-        UNIT_ASSERT_VALUES_EQUAL(reusable2.Slice.LastRowId, partView1->Index.GetEndRowId() - 4); 
+        UNIT_ASSERT_VALUES_EQUAL(reusable2.Slice.LastRowId, partView1->Index.GetEndRowId() - 4);
         UNIT_ASSERT_VALUES_EQUAL(reusable2.Slice.LastInclusive, false);
 
         UNIT_ASSERT_VALUES_EQUAL(results.ExpectedSlices, 5u);
@@ -776,15 +776,15 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         TPartCook cook(lay, { false, 4096 });
         for (ui64 seq = 0; seq < rowsCount; ++seq) {
             rows.Put(*TNatural(*lay).Col(1000 + seq, 42_u32));
-            cook.AddOpN(ERowOp::Erase, 1000 + seq); 
+            cook.AddOpN(ERowOp::Erase, 1000 + seq);
         }
 
         auto source = cook.Finish();
 
         {
-            auto partView = source.ToPartView(); 
-            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u); 
-            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->at(0).Rows(), rowsCount); 
+            auto partView = source.ToPartView();
+            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->at(0).Rows(), rowsCount);
         }
 
         TVector<TBounds> underlayMaskValues;
@@ -816,13 +816,13 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         // Check only erase markers under the mask are kept intact
         TCheckIt(born, { nullptr, 0 }, nullptr, true /* expand defaults */)
             .To(10).Seek({ }, ESeek::Lower).Is(EReady::Data)
-            .To(21).IsOpN(ERowOp::Erase, 1004_u64, ECellOp::Empty).Next() 
-            .To(22).IsOpN(ERowOp::Erase, 1005_u64, ECellOp::Empty).Next() 
-            .To(23).IsOpN(ERowOp::Erase, 1006_u64, ECellOp::Empty).Next() 
-            .To(24).IsOpN(ERowOp::Erase, 1007_u64, ECellOp::Empty).Next() 
-            .To(25).IsOpN(ERowOp::Erase, 1011_u64, ECellOp::Empty).Next() 
-            .To(26).IsOpN(ERowOp::Erase, 1012_u64, ECellOp::Empty).Next() 
-            .To(27).IsOpN(ERowOp::Erase, 1013_u64, ECellOp::Empty).Next() 
+            .To(21).IsOpN(ERowOp::Erase, 1004_u64, ECellOp::Empty).Next()
+            .To(22).IsOpN(ERowOp::Erase, 1005_u64, ECellOp::Empty).Next()
+            .To(23).IsOpN(ERowOp::Erase, 1006_u64, ECellOp::Empty).Next()
+            .To(24).IsOpN(ERowOp::Erase, 1007_u64, ECellOp::Empty).Next()
+            .To(25).IsOpN(ERowOp::Erase, 1011_u64, ECellOp::Empty).Next()
+            .To(26).IsOpN(ERowOp::Erase, 1012_u64, ECellOp::Empty).Next()
+            .To(27).IsOpN(ERowOp::Erase, 1013_u64, ECellOp::Empty).Next()
             .To(30).Is(EReady::Gone);
     }
 
@@ -846,9 +846,9 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
             .Finish();
 
         {
-            auto partView = source.ToPartView(); 
-            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u); 
-            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Records, pageCount); 
+            auto partView = source.ToPartView();
+            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Records, pageCount);
         }
 
         TVector<TSerializedCellVec> splitKeyValues;
@@ -860,20 +860,20 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
             .Do(lay.RowScheme(), { &source });
 
         {
-            auto partView = born.ToPartView(); 
-            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 3u); 
-            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Records, 6u); 
+            auto partView = born.ToPartView();
+            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Records, 6u);
 
-            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(0)->GetRowId(), 0u); 
-            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(1)->GetRowId(), 4u); 
-            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(2)->GetRowId(), 6u); 
-            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(3)->GetRowId(), 10u); 
-            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(4)->GetRowId(), 14u); 
-            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(5)->GetRowId(), 18u); 
+            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(0)->GetRowId(), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(1)->GetRowId(), 4u);
+            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(2)->GetRowId(), 6u);
+            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(3)->GetRowId(), 10u);
+            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(4)->GetRowId(), 14u);
+            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(5)->GetRowId(), 18u);
 
             auto key0 = TSerializedCellVec::Serialize(tool.KeyCells(rows[0]));
             auto key5 = TSerializedCellVec::Serialize(tool.KeyCells(rows[5]));
-            auto& slice0 = partView.Slices->at(0); 
+            auto& slice0 = partView.Slices->at(0);
             UNIT_ASSERT_VALUES_EQUAL(slice0.FirstRowId, 0u);
             UNIT_ASSERT_VALUES_EQUAL(slice0.LastRowId, 5u);
             UNIT_ASSERT_VALUES_EQUAL(slice0.FirstKey.GetBuffer(), key0);
@@ -881,7 +881,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
 
             auto key6 = TSerializedCellVec::Serialize(tool.KeyCells(rows[6]));
             auto key13 = TSerializedCellVec::Serialize(tool.KeyCells(rows[13]));
-            auto& slice1 = partView.Slices->at(1); 
+            auto& slice1 = partView.Slices->at(1);
             UNIT_ASSERT_VALUES_EQUAL(slice1.FirstRowId, 6u);
             UNIT_ASSERT_VALUES_EQUAL(slice1.LastRowId, 13u);
             UNIT_ASSERT_VALUES_EQUAL(slice1.FirstKey.GetBuffer(), key6);
@@ -889,7 +889,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
 
             auto key14 = TSerializedCellVec::Serialize(tool.KeyCells(rows[14]));
             auto key19 = TSerializedCellVec::Serialize(tool.KeyCells(rows[19]));
-            auto& slice2 = partView.Slices->at(2); 
+            auto& slice2 = partView.Slices->at(2);
             UNIT_ASSERT_VALUES_EQUAL(slice2.FirstRowId, 14u);
             UNIT_ASSERT_VALUES_EQUAL(slice2.LastRowId, 19u);
             UNIT_ASSERT_VALUES_EQUAL(slice2.FirstKey.GetBuffer(), key14);
@@ -1293,9 +1293,9 @@ Y_UNIT_TEST_SUITE(TShardedCompactionScenarios) {
         // There should be 3 parts by now
         UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(1).size(), 3u);
 
-        for (auto& partView : backend.TableParts(1)) { 
+        for (auto& partView : backend.TableParts(1)) {
             // All parts are expected to have 2 slices
-            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 2u); 
+            UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 2u);
         }
     }
 

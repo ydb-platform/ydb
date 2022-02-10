@@ -3,7 +3,7 @@
 #include <util/generic/yexception.h>
 #include <util/system/compiler.h>
 
-#include <ydb/core/yq/libs/config/protos/issue_id.pb.h> 
+#include <ydb/core/yq/libs/config/protos/issue_id.pb.h>
 
 namespace NYq {
 

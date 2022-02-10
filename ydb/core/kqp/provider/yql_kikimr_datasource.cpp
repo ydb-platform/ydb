@@ -107,7 +107,7 @@ public:
             }
 
             auto emplaceResult = LoadResults.emplace(std::make_pair(clusterName, tableName),
-                std::make_shared<IKikimrGateway::TTableMetadataResult>()); 
+                std::make_shared<IKikimrGateway::TTableMetadataResult>());
 
             YQL_ENSURE(emplaceResult.second);
             auto queryType = SessionCtx->Query().Type;
@@ -201,7 +201,7 @@ private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
 
-    THashMap<std::pair<TString, TString>, std::shared_ptr<IKikimrGateway::TTableMetadataResult>> LoadResults; 
+    THashMap<std::pair<TString, TString>, std::shared_ptr<IKikimrGateway::TTableMetadataResult>> LoadResults;
     NThreading::TFuture<void> AsyncFuture;
 };
 

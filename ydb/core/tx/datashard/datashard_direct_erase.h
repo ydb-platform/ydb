@@ -3,7 +3,7 @@
 #include "datashard_direct_transaction.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TDirectTxErase : public IDirectTx {
     using IChangeCollector = NMiniKQL::IChangeCollector;
@@ -62,13 +62,13 @@ class TDirectTxErase : public IDirectTx {
 public:
     explicit TDirectTxErase(TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
 
-    static bool CheckRequest(TDataShard* self, const NKikimrTxDataShard::TEvEraseRowsRequest& request, 
+    static bool CheckRequest(TDataShard* self, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
         NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error);
 
-    bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion) override; 
-    void SendResult(TDataShard* self, const TActorContext& ctx) override; 
+    bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion) override;
+    void SendResult(TDataShard* self, const TActorContext& ctx) override;
     TVector<IChangeCollector::TChange> GetCollectedChanges() const override;
 };
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

@@ -1,12 +1,12 @@
 #pragma once
 
-#include <ydb/core/protos/services.pb.h> 
+#include <ydb/core/protos/services.pb.h>
 #include "kqp_compute.h"
 
-#include <ydb/core/engine/minikql/minikql_engine_host.h> 
-#include <ydb/core/formats/arrow_helpers.h> 
-#include <ydb/core/scheme/scheme_tabledefs.h> 
-#include <ydb/core/tablet_flat/flat_database.h> 
+#include <ydb/core/engine/minikql/minikql_engine_host.h>
+#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tablet_flat/flat_database.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>

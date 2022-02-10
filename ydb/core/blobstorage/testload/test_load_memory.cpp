@@ -1,6 +1,6 @@
 #include "test_load_actor.h"
 
-#include <ydb/core/base/appdata.h> 
+#include <ydb/core/base/appdata.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 

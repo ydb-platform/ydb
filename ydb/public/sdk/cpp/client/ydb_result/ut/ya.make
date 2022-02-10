@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_result) 
+UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_result)
 
 OWNER(
     dcherednik

@@ -4,12 +4,12 @@
 #include "proxy.h"
 #include "proxy_actor.h"
 
-#include <ydb/core/kesus/tablet/tablet.h> 
-#include <ydb/core/kesus/tablet/events.h> 
+#include <ydb/core/kesus/tablet/tablet.h>
+#include <ydb/core/kesus/tablet/events.h>
 
-#include <ydb/core/erasure/erasure.h> 
-#include <ydb/core/testlib/basics/runtime.h> 
-#include <ydb/core/testlib/tablet_helpers.h> 
+#include <ydb/core/erasure/erasure.h>
+#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

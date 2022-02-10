@@ -1,5 +1,5 @@
-import "ydb/core/protos/http_config.proto"; 
-import "ydb/core/protos/config.proto"; 
+import "ydb/core/protos/http_config.proto";
+import "ydb/core/protos/config.proto";
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
 

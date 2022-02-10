@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h> 
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
 

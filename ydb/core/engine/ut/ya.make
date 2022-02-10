@@ -1,16 +1,16 @@
-UNITTEST_FOR(ydb/core/engine) 
+UNITTEST_FOR(ydb/core/engine)
 
-OWNER( 
-    vvvv 
-    g:kikimr 
-) 
+OWNER(
+    vvvv
+    g:kikimr
+)
 
 ALLOCATOR(J)
 
 FORK_SUBTESTS()
- 
+
 TIMEOUT(150)
- 
+
 SIZE(MEDIUM)
 
 SRCS(
@@ -21,13 +21,13 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/engine/minikql 
-    ydb/core/kqp/ut/common 
-    ydb/core/tablet_flat/test/libs/table 
-    ydb/library/mkql_proto/ut/helpers 
-    ydb/library/yql/public/udf/service/exception_policy 
+    ydb/core/engine/minikql
+    ydb/core/kqp/ut/common
+    ydb/core/tablet_flat/test/libs/table
+    ydb/library/mkql_proto/ut/helpers
+    ydb/library/yql/public/udf/service/exception_policy
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 END()

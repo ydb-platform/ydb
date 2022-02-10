@@ -4,10 +4,10 @@
 #include "common/kqp_ru_calc.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/cputime.h> 
-#include <ydb/core/protos/kqp.pb.h> 
-#include <ydb/library/yql/utils/actor_log/log.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/cputime.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/event_pb.h>

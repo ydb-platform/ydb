@@ -2,8 +2,8 @@
 
 #include "blobstorage_pdisk_drivedata.h"
 
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/protos/blobstorage.pb.h> 
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimr {
 namespace NPDisk {

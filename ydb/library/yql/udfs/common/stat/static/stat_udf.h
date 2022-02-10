@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
-#include <ydb/library/yql/public/udf/udf_value_builder.h> 
+#include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include "tdigest.h"
 
 using namespace NYql;

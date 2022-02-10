@@ -2,11 +2,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TWaitForPlanUnit : public TExecutionUnit {
 public:
-    TWaitForPlanUnit(TDataShard &dataShard, 
+    TWaitForPlanUnit(TDataShard &dataShard,
                      TPipeline &pipeline);
     ~TWaitForPlanUnit() override;
 
@@ -20,7 +20,7 @@ public:
 private:
 };
 
-TWaitForPlanUnit::TWaitForPlanUnit(TDataShard &dataShard, 
+TWaitForPlanUnit::TWaitForPlanUnit(TDataShard &dataShard,
                                    TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::WaitForPlan, false, dataShard, pipeline)
 {
@@ -48,11 +48,11 @@ void TWaitForPlanUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateWaitForPlanUnit(TDataShard &dataShard, 
+THolder<TExecutionUnit> CreateWaitForPlanUnit(TDataShard &dataShard,
                                               TPipeline &pipeline)
 {
     return MakeHolder<TWaitForPlanUnit>(dataShard, pipeline);
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

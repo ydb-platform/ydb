@@ -2,7 +2,7 @@
 
 #include "probes.h"
 
-#include <ydb/core/base/path.h> 
+#include <ydb/core/base/path.h>
 
 #include <util/string/builder.h>
 #include <util/generic/maybe.h>

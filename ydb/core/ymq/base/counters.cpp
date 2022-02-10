@@ -1,8 +1,8 @@
 #include "counters.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/counters.h> 
-#include <ydb/library/http_proxy/error/error.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/library/http_proxy/error/error.h>
 
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
@@ -447,8 +447,8 @@ void TQueryTypeCounters::SetAggregatedParent(TQueryTypeCounters* parent) {
     QueryTypeCountersDescriptor.SetAggregatedParent(this, parent);
 }
 
-void TTransactionCounters::Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, 
-        std::shared_ptr<TAlignedPagePoolCounters> poolCounters, bool forQueue) { 
+void TTransactionCounters::Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters,
+        std::shared_ptr<TAlignedPagePoolCounters> poolCounters, bool forQueue) {
     AllocPoolCounters = std::move(poolCounters);
 
     const ELifetime lifetime = forQueue ? ELifetime::Expiring : ELifetime::Persistent;
@@ -666,8 +666,8 @@ void TQueueCounters::InitCounters(bool forLeaderNode) {
     DetailedCounters.Init(QueueCounters.SqsCounters, AllocPoolCounters, forLeaderNode);
 }
 
-void TQueueCounters::TDetailedCounters::Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& queueCounters, 
-        const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters, bool forLeaderNode) { 
+void TQueueCounters::TDetailedCounters::Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& queueCounters,
+        const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters, bool forLeaderNode) {
     if (!GetConfiguration_Duration) {
         INIT_HISTOGRAM_COUNTER(queueCounters, GetConfiguration_Duration, ELifetime::Expiring, DurationBucketsMs, ELaziness::OnDemand);
     }
@@ -738,7 +738,7 @@ TIntrusivePtr<TQueueCounters> TQueueCounters::GetCountersForNotLeaderNode() {
     return NotLeaderNodeCounters;
 }
 
-void TUserCounters::InitCounters(const TString& userName, const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters) { 
+void TUserCounters::InitCounters(const TString& userName, const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters) {
     UserCounters = GetUserCounters(SqsCoreCounters, userName);
 
     INIT_COUNTER(UserCounters.SqsCounters, RequestTimeouts, ELifetime::Persistent, EValueType::Derivative, Lazy(*Cfg));
@@ -771,8 +771,8 @@ void TUserCounters::InitCounters(const TString& userName, const std::shared_ptr<
     }
 }
 
-void TUserCounters::TDetailedCounters::Init(const TIntrusivePtrCntrCouple& userCounters, 
-        const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters, const NKikimrConfig::TSqsConfig& cfg) { 
+void TUserCounters::TDetailedCounters::Init(const TIntrusivePtrCntrCouple& userCounters,
+        const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters, const NKikimrConfig::TSqsConfig& cfg) {
     TransactionCounters = new TTransactionCounters();
     TransactionCounters->Init(GetAggregatedCountersFromUserCounters(userCounters, cfg), allocPoolCounters, false);
 

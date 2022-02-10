@@ -1,5 +1,5 @@
 #include "pq_l2_cache.h"
-#include <ydb/core/mon/mon.h> 
+#include <ydb/core/mon/mon.h>
 
 namespace NKikimr {
 namespace NPQ {

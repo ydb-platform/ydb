@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h> 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 
-#include <ydb/public/api/protos/ydb_operation.pb.h> 
+#include <ydb/public/api/protos/ydb_operation.pb.h>
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 

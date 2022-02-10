@@ -1,7 +1,7 @@
 #pragma once
 
-#include "defs.h" 
- 
+#include "defs.h"
+
 namespace NKikimr {
 
     template<typename T>

@@ -22,86 +22,86 @@
 #include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
 #include <library/cpp/actors/interconnect/interconnect_mon.h>
-#include <ydb/core/actorlib_impl/mad_squirrel.h> 
+#include <ydb/core/actorlib_impl/mad_squirrel.h>
 
-#include <ydb/core/control/immediate_control_board_actor.h> 
+#include <ydb/core/control/immediate_control_board_actor.h>
 
 #include <library/cpp/actors/protos/services_common.pb.h>
-#include <ydb/core/keyvalue/keyvalue.h> 
-#include <ydb/core/formats/clickhouse_block.h> 
-#include <ydb/core/grpc_services/grpc_request_proxy.h> 
-#include <ydb/core/grpc_services/grpc_mon.h> 
-#include <ydb/core/mon/mon.h> 
-#include <ydb/core/mon/crossref.h> 
-#include <ydb/core/mon_alloc/profiler.h> 
+#include <ydb/core/keyvalue/keyvalue.h>
+#include <ydb/core/formats/clickhouse_block.h>
+#include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/grpc_services/grpc_mon.h>
+#include <ydb/core/mon/mon.h>
+#include <ydb/core/mon/crossref.h>
+#include <ydb/core/mon_alloc/profiler.h>
 
 #include <library/cpp/actors/util/affinity.h>
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/base/tabletid.h> 
-#include <ydb/core/base/statestorage_impl.h> 
-#include <ydb/core/protos/services.pb.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/base/tabletid.h>
+#include <ydb/core/base/statestorage_impl.h>
+#include <ydb/core/protos/services.pb.h>
 
-#include <ydb/core/mind/local.h> 
-#include <ydb/core/mind/tenant_pool.h> 
-#include <ydb/core/base/hive.h> 
+#include <ydb/core/mind/local.h>
+#include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/base/hive.h>
 
-#include <ydb/core/base/tablet_resolver.h> 
-#include <ydb/core/security/login_page.h> 
-#include <ydb/core/tablet/bootstrapper.h> 
-#include <ydb/core/tablet/resource_broker.h> 
-#include <ydb/core/tablet/node_tablet_monitor.h> 
-#include <ydb/core/tablet/tablet_list_renderer.h> 
-#include <ydb/core/tablet/tablet_monitoring_proxy.h> 
-#include <ydb/core/tablet/tablet_counters_aggregator.h> 
+#include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/security/login_page.h>
+#include <ydb/core/tablet/bootstrapper.h>
+#include <ydb/core/tablet/resource_broker.h>
+#include <ydb/core/tablet/node_tablet_monitor.h>
+#include <ydb/core/tablet/tablet_list_renderer.h>
+#include <ydb/core/tablet/tablet_monitoring_proxy.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
 
-#include <ydb/core/tx/tx.h> 
-#include <ydb/core/tx/datashard/datashard.h> 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
-#include <ydb/core/tx/time_cast/time_cast.h> 
+#include <ydb/core/tx/tx.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/time_cast/time_cast.h>
 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
-#include <ydb/core/mind/bscontroller/bsc.h> 
+#include <ydb/core/mind/bscontroller/bsc.h>
 
-#include <ydb/core/blobstorage/other/mon_get_blob_page.h> 
-#include <ydb/core/blobstorage/other/mon_blob_range_page.h> 
-#include <ydb/core/blobstorage/other/mon_vdisk_stream.h> 
+#include <ydb/core/blobstorage/other/mon_get_blob_page.h>
+#include <ydb/core/blobstorage/other/mon_blob_range_page.h>
+#include <ydb/core/blobstorage/other/mon_vdisk_stream.h>
 
-#include <ydb/public/lib/deprecated/client/msgbus_client.h> 
-#include <ydb/core/client/minikql_compile/mkql_compile_service.h> 
-#include <ydb/core/client/server/msgbus_server_pq_metacache.h> 
-#include <ydb/core/client/server/msgbus_server_tracer.h> 
-#include <ydb/core/client/server/http_ping.h> 
+#include <ydb/public/lib/deprecated/client/msgbus_client.h>
+#include <ydb/core/client/minikql_compile/mkql_compile_service.h>
+#include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/client/server/msgbus_server_tracer.h>
+#include <ydb/core/client/server/http_ping.h>
 
 #include <library/cpp/grpc/server/actors/logger.h>
 
-#include <ydb/services/yq/private_grpc.h> 
-#include <ydb/services/cms/grpc_service.h> 
-#include <ydb/services/datastreams/grpc_service.h> 
-#include <ydb/services/kesus/grpc_service.h> 
-#include <ydb/services/monitoring/grpc_service.h> 
-#include <ydb/services/auth/grpc_service.h> 
-#include <ydb/services/ydb/ydb_clickhouse_internal.h> 
-#include <ydb/services/ydb/ydb_dummy.h> 
-#include <ydb/services/ydb/ydb_experimental.h> 
-#include <ydb/services/ydb/ydb_export.h> 
-#include <ydb/services/ydb/ydb_import.h> 
-#include <ydb/services/ydb/ydb_operation.h> 
-#include <ydb/services/ydb/ydb_s3_internal.h> 
-#include <ydb/services/ydb/ydb_scheme.h> 
-#include <ydb/services/ydb/ydb_scripting.h> 
-#include <ydb/services/ydb/ydb_table.h> 
-#include <ydb/services/ydb/ydb_long_tx.h> 
-#include <ydb/services/ydb/ydb_logstore.h> 
-#include <ydb/services/persqueue_cluster_discovery/grpc_service.h> 
-#include <ydb/services/persqueue_v1/persqueue.h> 
-#include <ydb/services/rate_limiter/grpc_service.h> 
-#include <ydb/services/discovery/grpc_service.h> 
-#include <ydb/services/yq/grpc_service.h> 
+#include <ydb/services/yq/private_grpc.h>
+#include <ydb/services/cms/grpc_service.h>
+#include <ydb/services/datastreams/grpc_service.h>
+#include <ydb/services/kesus/grpc_service.h>
+#include <ydb/services/monitoring/grpc_service.h>
+#include <ydb/services/auth/grpc_service.h>
+#include <ydb/services/ydb/ydb_clickhouse_internal.h>
+#include <ydb/services/ydb/ydb_dummy.h>
+#include <ydb/services/ydb/ydb_experimental.h>
+#include <ydb/services/ydb/ydb_export.h>
+#include <ydb/services/ydb/ydb_import.h>
+#include <ydb/services/ydb/ydb_operation.h>
+#include <ydb/services/ydb/ydb_s3_internal.h>
+#include <ydb/services/ydb/ydb_scheme.h>
+#include <ydb/services/ydb/ydb_scripting.h>
+#include <ydb/services/ydb/ydb_table.h>
+#include <ydb/services/ydb/ydb_long_tx.h>
+#include <ydb/services/ydb/ydb_logstore.h>
+#include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
+#include <ydb/services/persqueue_v1/persqueue.h>
+#include <ydb/services/rate_limiter/grpc_service.h>
+#include <ydb/services/discovery/grpc_service.h>
+#include <ydb/services/yq/grpc_service.h>
 
-#include <ydb/core/yq/libs/init/init.h> 
+#include <ydb/core/yq/libs/init/init.h>
 
 #include <library/cpp/logger/global/global.h>
 #include <library/cpp/monlib/messagebus/mon_messagebus.h>
@@ -109,10 +109,10 @@
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/malloc/api/malloc.h>
 
-#include <ydb/core/util/sig.h> 
+#include <ydb/core/util/sig.h>
 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
-#include <ydb/core/tablet/node_tablet_monitor.h> 
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/tablet/node_tablet_monitor.h>
 
 #include <library/cpp/actors/core/memory_track.h>
 #include <library/cpp/actors/prof/tag.h>
@@ -123,7 +123,7 @@
 #include <util/system/getpid.h>
 #include <util/system/hostname.h>
 
-#include <ydb/core/tracing/tablet_info.h> 
+#include <ydb/core/tracing/tablet_info.h>
 
 namespace NKikimr {
 
@@ -317,9 +317,9 @@ public:
     }
 };
 
-TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories) 
-    : ModuleFactories(std::move(factories)) 
-    , Counters(MakeIntrusive<NMonitoring::TDynamicCounters>()) 
+TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
+    : ModuleFactories(std::move(factories))
+    , Counters(MakeIntrusive<NMonitoring::TDynamicCounters>())
     , PollerThreads(new NInterconnect::TPollerThreads)
 {
 }
@@ -939,13 +939,13 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
 void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
 {
-    if (ModuleFactories && ModuleFactories->LogBackendFactory) { 
-        auto logBackend = ModuleFactories->LogBackendFactory->CreateLogBackend(runConfig, Counters); 
-        LogBackend.reset(logBackend.Release()); 
-    } else { 
-        auto logBackend = TLogBackendFactory().CreateLogBackend(runConfig, Counters); 
-        LogBackend.reset(logBackend.Release()); 
-    } 
+    if (ModuleFactories && ModuleFactories->LogBackendFactory) {
+        auto logBackend = ModuleFactories->LogBackendFactory->CreateLogBackend(runConfig, Counters);
+        LogBackend.reset(logBackend.Release());
+    } else {
+        auto logBackend = TLogBackendFactory().CreateLogBackend(runConfig, Counters);
+        LogBackend.reset(logBackend.Release());
+    }
 
     if (!runConfig.AppConfig.HasLogConfig())
         return;
@@ -1269,7 +1269,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 #endif
 
     if (serviceMask.EnableKqp) {
-        sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories)); 
+        sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories));
     }
 
     if (serviceMask.EnableCms) {
@@ -1484,12 +1484,12 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     if (ActorSystem) {
         ActorSystem->Cleanup();
     }
- 
-    if (ModuleFactories) { 
+
+    if (ModuleFactories) {
         if (ModuleFactories->DataShardExportFactory) {
             ModuleFactories->DataShardExportFactory->Shutdown();
-        } 
-    } 
+        }
+    }
 }
 
 void TKikimrRunner::BusyLoop() {
@@ -1550,30 +1550,30 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
 
     NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry);
 #endif
- 
-    NKikHouse::RegisterFormat(*FormatFactory); 
+
+    NKikHouse::RegisterFormat(*FormatFactory);
 }
 
-TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner( 
-        const TKikimrRunConfig& runConfig, 
-        std::shared_ptr<TModuleFactories> factories) { 
-    TBasicKikimrServicesMask servicesMask; // all services enabled by default 
- 
+TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
+        const TKikimrRunConfig& runConfig,
+        std::shared_ptr<TModuleFactories> factories) {
+    TBasicKikimrServicesMask servicesMask; // all services enabled by default
+
     TIntrusivePtr<TKikimrRunner> runner(new TKikimrRunner(factories));
-    runner->InitializeAllocator(runConfig); 
-    runner->InitializeRegistries(runConfig); 
-    runner->InitializeMonitoring(runConfig); 
-    runner->InitializeControlBoard(runConfig); 
+    runner->InitializeAllocator(runConfig);
+    runner->InitializeRegistries(runConfig);
+    runner->InitializeMonitoring(runConfig);
+    runner->InitializeControlBoard(runConfig);
     runner->InitializeMessageBus(runConfig, factories);
-    runner->InitializeAppData(runConfig); 
-    runner->InitializeLogSettings(runConfig); 
-    TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, servicesMask)); 
-    runner->InitializeActorSystem(runConfig, sil, servicesMask); 
+    runner->InitializeAppData(runConfig);
+    runner->InitializeLogSettings(runConfig);
+    TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, servicesMask));
+    runner->InitializeActorSystem(runConfig, sil, servicesMask);
     runner->InitializeMonitoringLogin(runConfig);
-    runner->InitializeKqpController(runConfig); 
-    runner->InitializeGracefulShutdown(runConfig); 
-    runner->InitializeGRpc(runConfig); 
-    return runner; 
+    runner->InitializeKqpController(runConfig);
+    runner->InitializeGracefulShutdown(runConfig);
+    runner->InitializeGRpc(runConfig);
+    return runner;
 }
- 
-} // NKikimr 
+
+} // NKikimr

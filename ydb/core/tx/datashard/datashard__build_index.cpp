@@ -3,13 +3,13 @@
 #include "range_ops.h"
 #include "datashard_build_index.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/scheme/scheme_tablecell.h> 
-#include <ydb/core/tablet_flat/flat_row_state.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/tablet_flat/flat_row_state.h>
 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
-#include <ydb/core/tx/tx_proxy/upload_rows.h> 
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -17,7 +17,7 @@
 #include <util/string/builder.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using TColumnsTags = THashMap<TString, NTable::TTag>;
 using TColumnsTypes = THashMap<TString, NScheme::TTypeId>;
@@ -545,7 +545,7 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
 }
 
 
-void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx) { 
+void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
     auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
@@ -667,5 +667,5 @@ void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, cons
     ctx.Send(ev->Sender, std::move(response));
 }
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

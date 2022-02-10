@@ -1,8 +1,8 @@
 #pragma once
 
 #include <library/cpp/actors/core/hfunc.h>
-#include <ydb/core/base/counters.h> 
-#include <ydb/library/aclib/aclib.h> 
+#include <ydb/core/base/counters.h>
+#include <ydb/library/aclib/aclib.h>
 #include "msgbus_server.h"
 
 namespace NKikimr {

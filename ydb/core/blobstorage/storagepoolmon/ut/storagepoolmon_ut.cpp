@@ -1,4 +1,4 @@
-#include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h> 
+#include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

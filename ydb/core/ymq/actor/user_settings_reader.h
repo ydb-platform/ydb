@@ -24,9 +24,9 @@ public:
 
 private:
     using TSettings = std::map<TString, TString>; // name -> value.
-    using TSettingsPtr = std::shared_ptr<TSettings>; 
+    using TSettingsPtr = std::shared_ptr<TSettings>;
     using TUserSettings = std::map<TString, TSettingsPtr>; // user -> settings.
-    using TUserSettingsPtr = std::shared_ptr<TUserSettings>; 
+    using TUserSettingsPtr = std::shared_ptr<TUserSettings>;
 
     STATEFN(StateFunc);
     void HandleWakeup(TEvWakeup::TPtr& ev);
@@ -51,7 +51,7 @@ private:
     TString CurrentName;
 
     TUserSettingsPtr OldSettings;
-    TUserSettingsPtr CurrentSettings = std::make_shared<TUserSettings>(); 
+    TUserSettingsPtr CurrentSettings = std::make_shared<TUserSettings>();
 };
 
 } // namespace NKikimr::NSQS

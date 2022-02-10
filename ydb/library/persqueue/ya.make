@@ -3,7 +3,7 @@ OWNER(g:logbroker)
 RECURSE(
     counter_time_keeper
     obfuscate
-    tests 
+    tests
     topic_parser
-    topic_parser_public 
+    topic_parser_public
 )

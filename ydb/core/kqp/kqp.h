@@ -1,10 +1,10 @@
 #pragma once
 
-#include "kqp_query_replay.h" 
-#include <ydb/core/kqp/common/kqp_common.h> 
-#include <ydb/core/kqp/counters/kqp_counters.h> 
+#include "kqp_query_replay.h"
+#include <ydb/core/kqp/common/kqp_common.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_query_traits.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h> 
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -167,7 +167,7 @@ public:
 using TPreparedQueryConstPtr = std::shared_ptr<const NKikimrKqp::TPreparedQuery>;
 
 struct TKqpCompileResult {
-    using TConstPtr = std::shared_ptr<const TKqpCompileResult>; 
+    using TConstPtr = std::shared_ptr<const TKqpCompileResult>;
 
     TKqpCompileResult(const TString& uid, TKqpQueryId&& query, const Ydb::StatusIds::StatusCode& status,
         const NYql::TIssues& issues)
@@ -181,16 +181,16 @@ struct TKqpCompileResult {
         , Issues(issues)
         , Uid(uid) {}
 
-    static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, TKqpQueryId&& query, 
+    static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, TKqpQueryId&& query,
         const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues)
     {
-        return std::make_shared<TKqpCompileResult>(uid, std::move(query), status, issues); 
+        return std::make_shared<TKqpCompileResult>(uid, std::move(query), status, issues);
     }
 
-    static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, const Ydb::StatusIds::StatusCode& status, 
+    static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, const Ydb::StatusIds::StatusCode& status,
         const NYql::TIssues& issues)
     {
-        return std::make_shared<TKqpCompileResult>(uid, status, issues); 
+        return std::make_shared<TKqpCompileResult>(uid, status, issues);
     }
 
     Ydb::StatusIds::StatusCode Status;
@@ -477,8 +477,8 @@ static inline IOutputStream& operator<<(IOutputStream& stream, const TKqpRequest
 
 IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    TVector<NKikimrKqp::TKqpSetting>&& settings, 
-    std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory); 
+    TVector<NKikimrKqp::TKqpSetting>&& settings,
+    std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory);
 
 } // namespace NKqp
 } // namespace NKikimr

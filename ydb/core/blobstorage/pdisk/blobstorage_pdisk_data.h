@@ -5,7 +5,7 @@
 #include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_state.h"
 
-#include <ydb/core/util/text.h> 
+#include <ydb/core/util/text.h>
 
 namespace NKikimr {
 namespace NPDisk {

@@ -5,7 +5,7 @@
 #include "pdiskid.h"
 #include "pdisk_state.h"
 
-#include <ydb/core/protos/blobstorage_config.pb.h> 
+#include <ydb/core/protos/blobstorage_config.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>

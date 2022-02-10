@@ -6,9 +6,9 @@
 #include "blobstorage_pdisk_ut_helpers.h"
 #include "blobstorage_pdisk_ut_run.h"
 
-#include <ydb/core/blobstorage/crypto/default.h> 
+#include <ydb/core/blobstorage/crypto/default.h>
 
-#include <ydb/core/testlib/actors/test_runtime.h> 
+#include <ydb/core/testlib/actors/test_runtime.h>
 
 namespace NKikimr {
 

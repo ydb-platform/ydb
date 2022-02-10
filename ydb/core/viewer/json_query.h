@@ -1,17 +1,17 @@
 #pragma once
-#include "viewer.h" 
+#include "viewer.h"
 #include <unordered_map>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/mon.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
-#include <ydb/core/kqp/kqp.h> 
-#include <ydb/core/kqp/executer/kqp_executer.h> 
-#include <ydb/core/viewer/json/json.h> 
-#include <ydb/public/lib/deprecated/kicli/kicli.h> 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h> 
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/executer/kqp_executer.h>
+#include <ydb/core/viewer/json/json.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
 namespace NKikimr {
 namespace NViewer {

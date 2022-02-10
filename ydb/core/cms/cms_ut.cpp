@@ -4,9 +4,9 @@
 #include "walle.h"
 #include "cms_ut_common.h"
 
-#include <ydb/core/blobstorage/base/blobstorage_events.h> 
-#include <ydb/core/base/ticket_parser.h> 
-#include <ydb/core/testlib/tablet_helpers.h> 
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -20,7 +20,7 @@ using namespace NCms;
 using namespace NNodeWhiteboard;
 using namespace NKikimrWhiteboard;
 using namespace NKikimrCms;
-using namespace NKikimrBlobStorage; 
+using namespace NKikimrBlobStorage;
 
 namespace {
 

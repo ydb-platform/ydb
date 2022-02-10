@@ -2,11 +2,11 @@
 
 #include "kqp.h"
 
-#include <ydb/core/kqp/common/kqp_gateway.h> 
-#include <ydb/core/kqp/provider/yql_kikimr_settings.h> 
+#include <ydb/core/kqp/common/kqp_gateway.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
-#include <ydb/library/yql/utils/log/log.h> 
-#include <ydb/library/yql/utils/log/tls_backend.h> 
+#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/log/tls_backend.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/protobuf/util/pb_io.h>
@@ -15,7 +15,7 @@ namespace NKikimr {
 namespace NKqp {
 
 struct TKqpSettings {
-    using TConstPtr = std::shared_ptr<const TKqpSettings>; 
+    using TConstPtr = std::shared_ptr<const TKqpSettings>;
 
     TKqpSettings(const TVector<NKikimrKqp::TKqpSetting>& settings)
         : Settings(settings)
@@ -47,7 +47,7 @@ void ApplyServiceConfig(NYql::TKikimrConfiguration& kqpConfig, const NKikimrConf
 
 IActor* CreateKqpCompileService(const NKikimrConfig::TTableServiceConfig& serviceConfig,
     const TKqpSettings::TConstPtr& kqpSettings, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    TIntrusivePtr<TKqpCounters> counters, std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory); 
+    TIntrusivePtr<TKqpCounters> counters, std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory);
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const NKikimrConfig::TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,

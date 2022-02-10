@@ -8,8 +8,8 @@
 #include "flat_exec_commit.h"
 #include <util/generic/hash.h>
 #include <util/generic/intrlist.h>
-#include <ydb/core/util/queue_inplace.h> 
-#include <ydb/core/tablet_flat/flat_executor.pb.h> 
+#include <ydb/core/util/queue_inplace.h>
+#include <ydb/core/tablet_flat/flat_executor.pb.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -26,9 +26,9 @@ namespace NRedo {
 
         }
 
-        void Push(TStamp stamp, TAffects affects, const NPageCollection::TLargeGlobId &largeGlobId) 
+        void Push(TStamp stamp, TAffects affects, const NPageCollection::TLargeGlobId &largeGlobId)
         {
-            Push(TEntry::Create(stamp, affects, largeGlobId)); 
+            Push(TEntry::Create(stamp, affects, largeGlobId));
         }
 
         void Push(TStamp stamp, TAffects affects, TString embedded)
@@ -41,12 +41,12 @@ namespace NRedo {
         {
             out
                 << "LRedo{" << Overhead.size() << "t" << ", " << Items
-                << " (" << Memory << " mem" << ", " << LargeGlobIdsBytes << " raw)b }"; 
+                << " (" << Memory << " mem" << ", " << LargeGlobIdsBytes << " raw)b }";
         }
 
         void Push(TEntry *entry) noexcept
         {
-            if (bool(entry->Embedded) == bool(entry->LargeGlobId)) { 
+            if (bool(entry->Embedded) == bool(entry->LargeGlobId)) {
                 Y_Fail(NFmt::Do(*entry) << " has incorrect payload");
             }
 
@@ -54,7 +54,7 @@ namespace NRedo {
 
             Items++;
             Memory += entry->BytesMem();
-            LargeGlobIdsBytes += entry->BytesLargeGlobId(); 
+            LargeGlobIdsBytes += entry->BytesLargeGlobId();
 
             for (ui32 table : entry->Tables()) {
                 const auto *edge = Edges.FindPtr(table);
@@ -81,7 +81,7 @@ namespace NRedo {
             cur.TxStamp = Max(cur.TxStamp, edge.TxStamp);
             cur.Head = Max(cur.Head, edge.Head);
 
-            if (auto *over = Overhead[table].Cut(cur.TxStamp, gc, LargeGlobIdsBytes)) 
+            if (auto *over = Overhead[table].Cut(cur.TxStamp, gc, LargeGlobIdsBytes))
                 Changes.PushBack(over);
         }
 
@@ -94,7 +94,7 @@ namespace NRedo {
 
             Items = 0;
             Memory = 0;
-            LargeGlobIdsBytes = 0; 
+            LargeGlobIdsBytes = 0;
 
             auto logos = snap.MutableNonSnapLogBodies();
 
@@ -142,7 +142,7 @@ namespace NRedo {
 
         ui64 Items = 0;
         ui64 Memory = 0;    /* Bytes consumed memory by records */
-        ui64 LargeGlobIdsBytes = 0;    /* Bytes acquired in redo TLargeGlobId-s  */ 
+        ui64 LargeGlobIdsBytes = 0;    /* Bytes acquired in redo TLargeGlobId-s  */
     };
 
 }

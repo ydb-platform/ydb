@@ -1,32 +1,32 @@
-#pragma once 
- 
-#include "events.h" 
-#include "event_local.h" 
+#pragma once
+
+#include "events.h"
+#include "event_local.h"
 #include <library/cpp/monlib/service/monservice.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
- 
-namespace NActors { 
-    namespace NMon { 
-        enum { 
-            HttpInfo = EventSpaceBegin(NActors::TEvents::ES_MON), 
-            HttpInfoRes, 
+
+namespace NActors {
+    namespace NMon {
+        enum {
+            HttpInfo = EventSpaceBegin(NActors::TEvents::ES_MON),
+            HttpInfoRes,
             RemoteHttpInfo,
             RemoteHttpInfoRes,
             RemoteJsonInfoRes,
             RemoteBinaryInfoRes,
-            End 
-        }; 
- 
+            End
+        };
+
         static_assert(End < EventSpaceEnd(NActors::TEvents::ES_MON), "expect End < EventSpaceEnd(NActors::TEvents::ES_MON)");
- 
-        // request info from an actor in HTML format 
+
+        // request info from an actor in HTML format
         struct TEvHttpInfo: public NActors::TEventLocal<TEvHttpInfo, HttpInfo> {
             TEvHttpInfo(const NMonitoring::IMonHttpRequest& request, int subReqId = 0)
-                : Request(request) 
-                , SubRequestId(subReqId) 
-            { 
-            } 
- 
+                : Request(request)
+                , SubRequestId(subReqId)
+            {
+            }
+
             TEvHttpInfo(const NMonitoring::IMonHttpRequest& request, const TString& userToken)
                 : Request(request)
                 , UserToken(userToken)
@@ -36,49 +36,49 @@ namespace NActors {
 
             const NMonitoring::IMonHttpRequest& Request;
             TString UserToken; // built and serialized
-            // SubRequestId != 0 means that we assemble reply from multiple parts and SubRequestId contains this part id 
-            int SubRequestId; 
-        }; 
- 
-        // base class for HTTP info response 
+            // SubRequestId != 0 means that we assemble reply from multiple parts and SubRequestId contains this part id
+            int SubRequestId;
+        };
+
+        // base class for HTTP info response
         struct IEvHttpInfoRes: public NActors::TEventLocal<IEvHttpInfoRes, HttpInfoRes> {
             enum EContentType {
                 Html,
                 Custom,
             };
 
-            IEvHttpInfoRes() { 
-            } 
- 
-            virtual ~IEvHttpInfoRes() { 
-            } 
- 
+            IEvHttpInfoRes() {
+            }
+
+            virtual ~IEvHttpInfoRes() {
+            }
+
             virtual void Output(IOutputStream& out) const = 0;
             virtual EContentType GetContentType() const = 0;
-        }; 
- 
+        };
+
         // Ready to output HTML in TString
         struct TEvHttpInfoRes: public IEvHttpInfoRes {
             TEvHttpInfoRes(const TString& answer, int subReqId = 0, EContentType contentType = Html)
-                : Answer(answer) 
-                , SubRequestId(subReqId) 
+                : Answer(answer)
+                , SubRequestId(subReqId)
                 , ContentType(contentType)
-            { 
-            } 
- 
+            {
+            }
+
             void Output(IOutputStream& out) const override {
-                out << Answer; 
-            } 
- 
+                out << Answer;
+            }
+
             EContentType GetContentType() const override {
                 return ContentType;
             }
 
             const TString Answer;
-            const int SubRequestId; 
+            const int SubRequestId;
             const EContentType ContentType;
-        }; 
- 
+        };
+
         struct TEvRemoteHttpInfo: public NActors::TEventBase<TEvRemoteHttpInfo, RemoteHttpInfo> {
             TEvRemoteHttpInfo() {
             }
@@ -230,5 +230,5 @@ namespace NActors {
         };
 
     }
- 
+
 }

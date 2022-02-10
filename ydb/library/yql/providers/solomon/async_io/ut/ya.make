@@ -16,11 +16,11 @@ SRCS(
 PEERDIR(
     library/cpp/http/simple
     library/cpp/retry
-    ydb/core/testlib/basics 
+    ydb/core/testlib/basics
     ydb/library/yql/minikql
     ydb/library/yql/minikql/computation
-    ydb/library/yql/public/udf/service/exception_policy 
-    ydb/library/yql/sql 
+    ydb/library/yql/public/udf/service/exception_policy
+    ydb/library/yql/sql
     ydb/library/yql/providers/common/comp_nodes
     ydb/library/yql/providers/common/ut_helpers
 )

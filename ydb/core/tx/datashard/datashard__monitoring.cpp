@@ -1,8 +1,8 @@
 #include "datashard_impl.h"
 #include "operation.h"
 
-#include <ydb/core/tablet_flat/flat_stat_table.h> 
-#include <ydb/core/util/pb.h> 
+#include <ydb/core/tablet_flat/flat_stat_table.h>
+#include <ydb/core/util/pb.h>
 
 #include <library/cpp/mime/types/mime.h>
 #include <library/cpp/resource/resource.h>
@@ -10,13 +10,13 @@
 #include <library/cpp/html/pcdata/pcdata.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
-class TDataShard::TTxMonitoring : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxMonitoring : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
     NMon::TEvRemoteHttpInfo::TPtr Ev;
 
 public:
-    TTxMonitoring(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev) 
+    TTxMonitoring(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev)
         : TBase(self)
         , Ev(ev)
     {}
@@ -57,9 +57,9 @@ public:
     TTxType GetTxType() const override { return TXTYPE_MONITORING; }
 };
 
-class TDataShard::TTxGetInfo : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxGetInfo : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxGetInfo(TDataShard *self, 
+    TTxGetInfo(TDataShard *self,
                TEvDataShard::TEvGetInfoRequest::TPtr ev)
         : TBase(self)
         , Ev(ev)
@@ -169,9 +169,9 @@ private:
     TEvDataShard::TEvGetInfoRequest::TPtr Ev;
 };
 
-class TDataShard::TTxListOperations : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxListOperations : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxListOperations(TDataShard *self, 
+    TTxListOperations(TDataShard *self,
                       TEvDataShard::TEvListOperationsRequest::TPtr ev)
         : TBase(self)
         , Ev(ev)
@@ -216,9 +216,9 @@ private:
     TEvDataShard::TEvListOperationsRequest::TPtr Ev;
 };
 
-class TDataShard::TTxGetOperation : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
+class TDataShard::TTxGetOperation : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxGetOperation(TDataShard *self, 
+    TTxGetOperation(TDataShard *self,
                     TEvDataShard::TEvGetOperationRequest::TPtr ev)
         : TBase(self)
         , Ev(ev)
@@ -307,22 +307,22 @@ private:
     TEvDataShard::TEvGetOperationRequest::TPtr Ev;
 };
 
-ITransaction *TDataShard::CreateTxMonitoring(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev) 
+ITransaction *TDataShard::CreateTxMonitoring(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev)
 {
     return new TTxMonitoring(self, ev);
 }
 
-ITransaction *TDataShard::CreateTxGetInfo(TDataShard *self, TEvDataShard::TEvGetInfoRequest::TPtr ev) 
+ITransaction *TDataShard::CreateTxGetInfo(TDataShard *self, TEvDataShard::TEvGetInfoRequest::TPtr ev)
 {
     return new TTxGetInfo(self, ev);
 }
 
-ITransaction *TDataShard::CreateTxListOperations(TDataShard *self, TEvDataShard::TEvListOperationsRequest::TPtr ev) 
+ITransaction *TDataShard::CreateTxListOperations(TDataShard *self, TEvDataShard::TEvListOperationsRequest::TPtr ev)
 {
     return new TTxListOperations(self, ev);
 }
 
-ITransaction *TDataShard::CreateTxGetOperation(TDataShard *self, TEvDataShard::TEvGetOperationRequest::TPtr ev) 
+ITransaction *TDataShard::CreateTxGetOperation(TDataShard *self, TEvDataShard::TEvGetOperationRequest::TPtr ev)
 {
     return new TTxGetOperation(self, ev);
 }

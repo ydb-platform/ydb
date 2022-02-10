@@ -1,4 +1,4 @@
-#include <ydb/core/blobstorage/crypto/crypto.h> 
+#include <ydb/core/blobstorage/crypto/crypto.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/datetime/cputimer.h>
 #include <util/generic/buffer.h>
@@ -9,7 +9,7 @@
 
 #include <numeric>
 
-#include <ydb/core/blobstorage/crypto/ut/ut_helpers.h> 
+#include <ydb/core/blobstorage/crypto/ut/ut_helpers.h>
 
 namespace NKikimr {
 

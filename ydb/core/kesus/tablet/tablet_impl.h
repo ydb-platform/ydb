@@ -6,13 +6,13 @@
 #include "quoter_resource_tree.h"
 #include "schema.h"
 
-#include <ydb/core/base/path.h> 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/protos/counters_kesus.pb.h> 
-#include <ydb/core/tablet/tablet_counters_aggregator.h> 
-#include <ydb/core/tablet/tablet_counters_protobuf.h> 
-#include <ydb/core/tablet_flat/flat_executor_counters.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
+#include <ydb/core/base/path.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/protos/counters_kesus.pb.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tablet_flat/flat_executor_counters.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/scheduler_cookie.h>

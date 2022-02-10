@@ -15,7 +15,7 @@ IF (OS_LINUX)
         aio_linux.cpp
         file_params_linux.cpp
     )
-ELSE(OS_LINUX) 
+ELSE(OS_LINUX)
     SRCS(
         aio_mtp.cpp
     )
@@ -36,9 +36,9 @@ ENDIF(OS_WINDOWS)
 PEERDIR(
     library/cpp/actors/core
     library/cpp/monlib/dynamic_counters
-    ydb/core/debug 
-    ydb/library/pdisk_io/protos 
-    ydb/library/wilson 
+    ydb/core/debug
+    ydb/library/pdisk_io/protos
+    ydb/library/wilson
 )
 
 SRCS(

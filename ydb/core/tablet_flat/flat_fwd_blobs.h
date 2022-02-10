@@ -11,7 +11,7 @@ namespace NKikimr {
 namespace NTable {
 namespace NFwd {
 
-    class TBlobs : public IPageLoadingLogic { 
+    class TBlobs : public IPageLoadingLogic {
         using THoles = TScreen::TCook;
 
     public:
@@ -33,7 +33,7 @@ namespace NFwd {
             for (auto &it: Pages) it.Release();
         }
 
-        TResult Handle(IPageLoadingQueue *head, ui32 ref, ui64 lower) noexcept override 
+        TResult Handle(IPageLoadingQueue *head, ui32 ref, ui64 lower) noexcept override
         {
             Y_VERIFY(ref >= Lower, "Cannot handle backward blob reads");
 
@@ -50,12 +50,12 @@ namespace NFwd {
             return { page.Touch(ref, Stat), more, page.Size < Edge[page.Tag] };
         }
 
-        void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override 
+        void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
         {
             Preload(head, upper);
         }
 
-        void Apply(TArrayRef<NPageCollection::TLoadedPage> loaded) noexcept override 
+        void Apply(TArrayRef<NPageCollection::TLoadedPage> loaded) noexcept override
         {
             for (auto &one: loaded) {
                 if (!Pages || one.PageId < Pages.front().PageId) {
@@ -131,7 +131,7 @@ namespace NFwd {
             return rel.Tag;
         }
 
-        TBlobs& Preload(IPageLoadingQueue *head, ui64 upper) noexcept 
+        TBlobs& Preload(IPageLoadingQueue *head, ui64 upper) noexcept
         {
             auto until = [this, upper]() { return OnHold + OnFetch < upper; };
 
@@ -149,7 +149,7 @@ namespace NFwd {
                     if (!Tags.at(page.Tag) || page.Size >= Edge.at(page.Tag) || !Filter.Has(rel.Row)) {
                         /* Page doesn't fits to load criteria   */
                     } else if (page.Fetch == EFetch::None) {
-                        auto size = head->AddToQueue(Grow, ui16(EPage::Opaque)); 
+                        auto size = head->AddToQueue(Grow, ui16(EPage::Opaque));
 
                         Y_VERIFY(size == page.Size, "Inconsistent page sizez");
 

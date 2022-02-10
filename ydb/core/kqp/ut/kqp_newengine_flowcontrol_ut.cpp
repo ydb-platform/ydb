@@ -1,8 +1,8 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
-#include <ydb/core/protos/kqp.pb.h> 
-#include <ydb/core/kqp/counters/kqp_counters.h> 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
 
-#include <ydb/public/lib/experimental/ydb_experimental.h> 
+#include <ydb/public/lib/experimental/ydb_experimental.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 

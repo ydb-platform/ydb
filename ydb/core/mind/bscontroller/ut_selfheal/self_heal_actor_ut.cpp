@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/util/testactorsys.h> 
-#include <ydb/core/mind/bscontroller/self_heal.h> 
+#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/mind/bscontroller/self_heal.h>
 
 using namespace NActors;
 using namespace NKikimr;

@@ -1,7 +1,7 @@
 #include "yql_kikimr_results.h"
 
-#include <ydb/library/binary_json/read.h> 
-#include <ydb/library/dynumber/dynumber.h> 
+#include <ydb/library/binary_json/read.h>
+#include <ydb/library/dynumber/dynumber.h>
 
 #include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>

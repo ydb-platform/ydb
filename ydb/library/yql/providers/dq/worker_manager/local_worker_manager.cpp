@@ -9,7 +9,7 @@
 #include <ydb/library/yql/dq/common/dq_resource_quoter.h>
 
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/events.h>

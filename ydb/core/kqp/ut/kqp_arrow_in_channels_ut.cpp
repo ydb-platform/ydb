@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <util/generic/size_literals.h>
 
@@ -229,5 +229,5 @@ Y_UNIT_TEST_SUITE(KqpScanArrowInChanels) {
 } // Test suite
 
 } // NKqp
-} // NKikimr 
- 
+} // NKikimr
+

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tablet_flat) 
+UNITTEST_FOR(ydb/core/tablet_flat)
 
 REQUIREMENTS(ram:32)
 
@@ -18,10 +18,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/scheme 
-    ydb/core/tablet_flat/test/libs/exec 
-    ydb/core/tablet_flat/test/libs/table 
-    ydb/library/yql/public/udf/service/exception_policy 
+    ydb/core/scheme
+    ydb/core/tablet_flat/test/libs/exec
+    ydb/core/tablet_flat/test/libs/table
+    ydb/library/yql/public/udf/service/exception_policy
 )
 
 END()

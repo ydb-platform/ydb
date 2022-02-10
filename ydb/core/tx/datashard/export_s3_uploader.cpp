@@ -3,7 +3,7 @@
 #include "export_s3_base_uploader.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TS3Uploader: public TS3UploaderBase<TS3Uploader> {
 protected:
@@ -20,9 +20,9 @@ public:
 
 }; // TS3Uploader
 
-IActor* TS3Export::CreateUploader( 
-        const TActorId& dataShard, 
-        ui64 txId, 
+IActor* TS3Export::CreateUploader(
+        const TActorId& dataShard,
+        ui64 txId,
         const TTableColumns& columns,
         const TTask& task) const
 {
@@ -33,7 +33,7 @@ IActor* TS3Export::CreateUploader(
     return new TS3Uploader(dataShard, txId, task, std::move(scheme));
 }
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr
 
 #endif // KIKIMR_DISABLE_S3_OPS

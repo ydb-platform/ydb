@@ -1,7 +1,7 @@
 #pragma once
 #include "switch_type.h"
-#include <ydb/core/formats/factory.h> 
-#include <ydb/core/scheme/scheme_tablecell.h> 
+#include <ydb/core/formats/factory.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>

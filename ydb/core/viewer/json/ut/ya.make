@@ -1,12 +1,12 @@
-UNITTEST_FOR(ydb/core/viewer/json) 
+UNITTEST_FOR(ydb/core/viewer/json)
 
-OWNER( 
-    xenoxeno 
-    g:kikimr 
-) 
+OWNER(
+    xenoxeno
+    g:kikimr
+)
 
 PEERDIR(
-    ydb/core/viewer/protos 
+    ydb/core/viewer/protos
 )
 
 SRCS(

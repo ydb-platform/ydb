@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/protos/tracing.pb.h> 
+#include <ydb/core/protos/tracing.pb.h>
 
 namespace NKikimr {
 namespace NTracing {

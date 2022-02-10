@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/kqp/proxy) 
+UNITTEST_FOR(ydb/core/kqp/proxy)
 
 OWNER(g:kikimr)
 
@@ -11,10 +11,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/kqp/proxy 
-    ydb/core/kqp/ut/common 
+    ydb/core/kqp/proxy
+    ydb/core/kqp/ut/common
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 END()

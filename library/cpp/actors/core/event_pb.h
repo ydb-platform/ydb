@@ -228,8 +228,8 @@ namespace NActors {
                 }
             }
             return result;
-        } 
- 
+        }
+
         static IEventBase* Load(TIntrusivePtr<TEventSerializedData> input) {
             THolder<TEventPBBase> ev(new TEv());
             if (!input->GetSize()) {
@@ -281,7 +281,7 @@ namespace NActors {
             }
             return CachedByteSize;
         }
- 
+
         ui32 CalculateSerializedSizeCached() const override {
             return GetCachedByteSize();
         }

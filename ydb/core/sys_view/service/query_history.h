@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/sys_view.pb.h> 
+#include <ydb/core/protos/sys_view.pb.h>
 
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>

@@ -1,11 +1,11 @@
 LIBRARY()
 
-OWNER(g:kikimr) 
+OWNER(g:kikimr)
 
 IF (PROFILE_MEMORY_ALLOCATIONS)
-    CFLAGS( 
-        -DPROFILE_MEMORY_ALLOCATIONS 
-    ) 
+    CFLAGS(
+        -DPROFILE_MEMORY_ALLOCATIONS
+    )
 ENDIF()
 
 SRCS(
@@ -23,21 +23,21 @@ PEERDIR(
     library/cpp/malloc/api
     library/cpp/monlib/service/pages
     library/cpp/ytalloc/api
-    ydb/core/base 
-    ydb/core/control 
+    ydb/core/base
+    ydb/core/control
 )
 
-IF (ALLOCATOR == "TCMALLOC_256K") 
-    SRCS( 
-        tcmalloc.cpp 
-    ) 
-    PEERDIR( 
-        contrib/libs/tcmalloc 
-    ) 
+IF (ALLOCATOR == "TCMALLOC_256K")
+    SRCS(
+        tcmalloc.cpp
+    )
+    PEERDIR(
+        contrib/libs/tcmalloc
+    )
 ELSE()
-    SRCS( 
-        tcmalloc_null.cpp 
-    ) 
+    SRCS(
+        tcmalloc_null.cpp
+    )
 ENDIF()
 
 END()

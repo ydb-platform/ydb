@@ -1,7 +1,7 @@
 OWNER(g:kikimr)
 PY3TEST()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd") 
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 PY_SRCS (
     conftest.py
     common.py
@@ -30,7 +30,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-DEPENDS(ydb/apps/ydbd) 
+DEPENDS(ydb/apps/ydbd)
 
 PEERDIR(
     ydb/tests/library

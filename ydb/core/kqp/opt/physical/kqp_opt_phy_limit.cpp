@@ -1,7 +1,7 @@
 #include "kqp_opt_phy_rules.h"
 #include "kqp_opt_phy_impl.h"
 
-#include <ydb/core/kqp/common/kqp_yql.h> 
+#include <ydb/core/kqp/common/kqp_yql.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -89,4 +89,4 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
 }
 
 } // namespace NKikimr::NKqp::NOpt
- 
+

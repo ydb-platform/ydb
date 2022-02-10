@@ -1,6 +1,6 @@
-OWNER(g:kikimr) 
- 
-RECURSE( 
-    ydbd 
+OWNER(g:kikimr)
+
+RECURSE(
+    ydbd
     ydb
-) 
+)

@@ -6,10 +6,10 @@ OWNER(
 )
 
 PEERDIR(
-    contrib/libs/grpc 
+    contrib/libs/grpc
     library/cpp/actors/core
     library/cpp/grpc/server
-    ydb/core/base 
+    ydb/core/base
 )
 
 SRCS(
@@ -17,7 +17,7 @@ SRCS(
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+)

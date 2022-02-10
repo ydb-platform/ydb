@@ -1,11 +1,11 @@
-#include <ydb/core/ymq/actor/serviceid.h> 
+#include <ydb/core/ymq/actor/serviceid.h>
 
-#include <ydb/core/ymq/http/types.h> 
-#include <ydb/core/ymq/actor/events.h> 
-#include <ydb/core/ymq/actor/metering.h> 
+#include <ydb/core/ymq/http/types.h>
+#include <ydb/core/ymq/actor/events.h>
+#include <ydb/core/ymq/actor/metering.h>
 
-#include <ydb/core/mind/address_classification/net_classifier.h> 
-#include <ydb/core/testlib/test_client.h> 
+#include <ydb/core/mind/address_classification/net_classifier.h>
+#include <ydb/core/testlib/test_client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/logger/global/global.h>

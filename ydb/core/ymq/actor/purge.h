@@ -56,7 +56,7 @@ private:
 
 private:
     const TQueuePath QueuePath_;
-    /// A state of shard processing 
+    /// A state of shard processing
     TMap<ui64, TShard> Shards_;
     const TString RequestId_;
     TIntrusivePtr<TQueueCounters> Counters_;

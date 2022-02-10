@@ -2,7 +2,7 @@
 
 #include "domain.h"
 
-#include <ydb/core/protos/subdomains.pb.h> 
+#include <ydb/core/protos/subdomains.pb.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/ptr.h>

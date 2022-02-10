@@ -3,11 +3,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class TAlterCdcStreamUnit : public TExecutionUnit {
 public:
-    TAlterCdcStreamUnit(TDataShard& self, TPipeline& pipeline) 
+    TAlterCdcStreamUnit(TDataShard& self, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::AlterCdcStream, false, self, pipeline)
     {
     }
@@ -51,9 +51,9 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateAlterCdcStreamUnit(TDataShard& self, TPipeline& pipeline) { 
+THolder<TExecutionUnit> CreateAlterCdcStreamUnit(TDataShard& self, TPipeline& pipeline) {
     return THolder(new TAlterCdcStreamUnit(self, pipeline));
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

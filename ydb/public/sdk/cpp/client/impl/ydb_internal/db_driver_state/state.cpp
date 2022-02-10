@@ -1,8 +1,8 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include "state.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h> 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h> 
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 

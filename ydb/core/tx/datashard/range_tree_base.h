@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb/core/scheme/scheme_borders.h> 
-#include <ydb/core/scheme/scheme_tablecell.h> 
+#include <ydb/core/scheme/scheme_borders.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
     class TRangeTreeBase {
     public:
@@ -112,5 +112,5 @@ namespace NDataShard {
         TVector<NScheme::TTypeId> KeyTypes;
     };
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

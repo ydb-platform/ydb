@@ -1,6 +1,6 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/core/sys_view/service/query_history.h> 
+#include <ydb/core/sys_view/service/query_history.h>
 
 namespace NKikimr {
 namespace NKqp {

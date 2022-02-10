@@ -3,7 +3,7 @@
 #include "rows.h"
 #include "tails.h"
 
-#include <ydb/core/tablet_flat/flat_row_scheme.h> 
+#include <ydb/core/tablet_flat/flat_row_scheme.h>
 
 namespace NKikimr {
 namespace NTable {

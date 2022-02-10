@@ -13,9 +13,9 @@
 #include <ydb/library/yql/core/yql_expr_csee.h>
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
 #include <ydb/library/yql/core/yql_opt_aggregate.h>
-#include <ydb/library/yql/utils/log/log.h> 
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h> 
-#include <ydb/library/yql/core/services/yql_out_transformers.h> 
+#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
+#include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/utils/yql_paths.h>
 
 #include <util/generic/xrange.h>

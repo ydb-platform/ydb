@@ -2,7 +2,7 @@
 #include "switch_type.h"
 #include "one_batch_input_stream.h"
 #include "merging_sorted_input_stream.h"
-#include <util/system/yassert.h> 
+#include <util/system/yassert.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>

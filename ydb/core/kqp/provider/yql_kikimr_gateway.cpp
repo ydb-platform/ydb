@@ -4,7 +4,7 @@
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <ydb/core/base/table_index.h> 
+#include <ydb/core/base/table_index.h>
 
 #include <util/string/split.h>
 
@@ -12,7 +12,7 @@ namespace NYql {
 
 using namespace NThreading;
 
-static void CreateDirs(std::shared_ptr<TVector<TString>> partsHolder, size_t index, 
+static void CreateDirs(std::shared_ptr<TVector<TString>> partsHolder, size_t index,
     TPromise<IKikimrGateway::TGenericResult>& promise, IKikimrGateway::TCreateDirFunc createDir)
 {
     auto partPromise = NewPromise<IKikimrGateway::TGenericResult>();
@@ -148,7 +148,7 @@ bool IKikimrGateway::TrySplitTablePath(const TString& path, std::pair<TString, T
 }
 
 TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString& path, TCreateDirFunc createDir) {
-    auto partsHolder = std::make_shared<TVector<TString>>(SplitPath(path)); 
+    auto partsHolder = std::make_shared<TVector<TString>>(SplitPath(path));
     auto &parts = *partsHolder;
 
     if (parts.size() < 2) {

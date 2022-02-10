@@ -6,7 +6,7 @@ option java_package = "com.yandex.ydb.rate_limiter.v1";
 option java_outer_classname = "RateLimiterGrpc";
 option java_multiple_files = true;
 
-import "ydb/public/api/protos/ydb_rate_limiter.proto"; 
+import "ydb/public/api/protos/ydb_rate_limiter.proto";
 
 // Service that implements distributed rate limiting.
 //

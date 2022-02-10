@@ -1,10 +1,10 @@
-#pragma once 
-#include "defs.h" 
- 
+#pragma once
+#include "defs.h"
+
 #include <util/generic/ptr.h>
 
-namespace NKikimr { 
-    namespace NBackpressure { 
+namespace NKikimr {
+    namespace NBackpressure {
         class TFlowRecord : public TThrRefBase {
         protected:
             TAtomic PredictedDelayNs = 0;
@@ -21,6 +21,6 @@ namespace NKikimr {
             // TODO(cthulhu): Improve the prediction, add parameters.
             // TAtomic PredictedSpeedBytesPerSecond;
         };
- 
-    } // NBackpressure 
-} // NKikimr 
+
+    } // NBackpressure
+} // NKikimr

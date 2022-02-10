@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/scheme/scheme_tabledefs.h> 
-#include <ydb/core/tablet_flat/flat_database.h> 
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tablet_flat/flat_database.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -24,7 +24,7 @@ public:
     virtual void SetReadVersion(const TRowVersion& readVersion) = 0;
     virtual void SetWriteVersion(const TRowVersion& writeVersion) = 0;
 
-    virtual bool Collect(const TTableId& tableId, NTable::ERowOp rop, 
+    virtual bool Collect(const TTableId& tableId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates) = 0;
 
     virtual const TVector<TChange>& GetCollected() const = 0;

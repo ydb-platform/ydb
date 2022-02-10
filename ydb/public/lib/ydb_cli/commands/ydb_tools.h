@@ -4,8 +4,8 @@
 #include "ydb_common.h"
 #include "ydb_service_table.h"
 
-#include <ydb/public/lib/ydb_cli/common/examples.h> 
-#include <ydb/public/lib/ydb_cli/common/parseable_struct.h> 
+#include <ydb/public/lib/ydb_cli/common/examples.h>
+#include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
 
 #include <library/cpp/regex/pcre/regexp.h>
 

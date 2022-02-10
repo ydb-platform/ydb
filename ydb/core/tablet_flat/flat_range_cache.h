@@ -3,8 +3,8 @@
 #include "defs.h"
 #include "flat_row_nulls.h"
 
-#include <ydb/core/base/row_version.h> 
-#include <ydb/core/scheme/scheme_tablecell.h> 
+#include <ydb/core/base/row_version.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <library/cpp/actors/core/memory_track.h>
 

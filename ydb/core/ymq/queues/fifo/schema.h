@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/ymq/base/table_info.h> 
+#include <ydb/core/ymq/base/table_info.h>
 
 namespace NKikimr::NSQS {
 

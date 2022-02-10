@@ -3,7 +3,7 @@
 #include "checkpoint_storage.h"
 #include "state_storage.h"
 
-#include <ydb/core/yq/libs/config/protos/checkpoint_coordinator.pb.h> 
+#include <ydb/core/yq/libs/config/protos/checkpoint_coordinator.pb.h>
 
 #include <library/cpp/actors/core/actor.h>
 

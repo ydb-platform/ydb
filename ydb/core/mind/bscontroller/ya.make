@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    alexvru 
-    g:kikimr 
-) 
+OWNER(
+    alexvru
+    g:kikimr
+)
 
 SRCS(
     bsc.cpp
@@ -62,22 +62,22 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/base 
-    ydb/core/base/services 
-    ydb/core/blobstorage 
-    ydb/core/blobstorage/base 
-    ydb/core/blobstorage/groupinfo 
-    ydb/core/engine/minikql 
-    ydb/core/protos 
-    ydb/core/sys_view/common 
-    ydb/core/tablet 
-    ydb/core/tablet_flat 
+    ydb/core/base
+    ydb/core/base/services
+    ydb/core/blobstorage
+    ydb/core/blobstorage/base
+    ydb/core/blobstorage/groupinfo
+    ydb/core/engine/minikql
+    ydb/core/protos
+    ydb/core/sys_view/common
+    ydb/core/tablet
+    ydb/core/tablet_flat
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    ut 
-    ut_bscontroller 
-    ut_selfheal 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+    ut_bscontroller
+    ut_selfheal
+)

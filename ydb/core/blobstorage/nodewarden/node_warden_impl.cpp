@@ -1,6 +1,6 @@
 #include "node_warden_impl.h"
 
-#include <ydb/library/pdisk_io/file_params.h> 
+#include <ydb/library/pdisk_io/file_params.h>
 
 using namespace NKikimr;
 using namespace NStorage;

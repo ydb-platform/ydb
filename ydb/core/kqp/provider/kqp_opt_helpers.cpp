@@ -1,6 +1,6 @@
 #include "kqp_opt_helpers.h"
 
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h> 
+#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 namespace NKikimr {
 namespace NKqp {

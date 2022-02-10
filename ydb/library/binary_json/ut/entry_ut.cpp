@@ -1,7 +1,7 @@
 #include "test_base.h"
 
-#include <ydb/library/binary_json/write.h> 
-#include <ydb/library/binary_json/read.h> 
+#include <ydb/library/binary_json/write.h>
+#include <ydb/library/binary_json/read.h>
 
 using namespace NKikimr::NBinaryJson;
 

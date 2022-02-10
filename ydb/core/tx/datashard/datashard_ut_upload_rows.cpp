@@ -2,17 +2,17 @@
 #include "datashard_ut_common.h"
 #include "datashard_ut_common_kqp.h"
 
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
-#include <ydb/core/testlib/test_client.h> 
-#include <ydb/core/tx/schemeshard/schemeshard.h> 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
-#include <ydb/core/tx/tx_proxy/upload_rows.h> 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 
-using namespace NKikimr::NDataShard::NKqpHelpers; 
+using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
 

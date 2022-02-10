@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/config.pb.h> 
+#include <ydb/core/protos/config.pb.h>
 #include <util/datetime/base.h>
 
 

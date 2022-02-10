@@ -1,10 +1,10 @@
 #include "keyvalue_flat_impl.h"
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <ydb/public/lib/base/msgbus.h> 
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/base/hive.h> 
-#include <ydb/core/util/log_priority_mute_checker.h> 
+#include <ydb/public/lib/base/msgbus.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/hive.h>
+#include <ydb/core/util/log_priority_mute_checker.h>
 
 namespace NKikimr {
 namespace NKeyValue {

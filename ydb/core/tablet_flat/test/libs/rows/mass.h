@@ -3,8 +3,8 @@
 #include "rows.h"
 #include "heap.h"
 
-#include <ydb/core/tablet_flat/flat_row_scheme.h> 
-#include <ydb/core/tablet_flat/util_basics.h> 
+#include <ydb/core/tablet_flat/flat_row_scheme.h>
+#include <ydb/core/tablet_flat/util_basics.h>
 
 #include <util/random/mersenne.h>
 

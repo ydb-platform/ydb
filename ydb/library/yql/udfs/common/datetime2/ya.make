@@ -6,10 +6,10 @@ YQL_ABI_VERSION(
     0
 )
 
-OWNER( 
-    g:yql 
-    g:yql_ydb_core 
-) 
+OWNER(
+    g:yql
+    g:yql_ydb_core
+)
 
 SRCS(
     datetime_udf.cpp
@@ -18,7 +18,7 @@ SRCS(
 PEERDIR(
     util/draft
     ydb/library/yql/minikql
-    ydb/library/yql/public/udf/tz 
+    ydb/library/yql/public/udf/tz
 )
 
 END()

@@ -3,22 +3,22 @@
 #include "utils.h"
 
 #include <ydb/core/yq/libs/actors/logging/log.h>
-#include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h> 
-#include <ydb/core/yq/libs/control_plane_storage/events/events.h> 
-#include <ydb/core/yq/libs/control_plane_storage/util.h> 
+#include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
+#include <ydb/core/yq/libs/control_plane_storage/events/events.h>
+#include <ydb/core/yq/libs/control_plane_storage/util.h>
 #include <ydb/core/yq/libs/test_connection/test_connection.h>
 #include <ydb/core/yq/libs/test_connection/events/events.h>
-#include <ydb/core/yq/libs/ydb/util.h> 
-#include <ydb/core/yq/libs/ydb/ydb.h> 
+#include <ydb/core/yq/libs/ydb/util.h>
+#include <ydb/core/yq/libs/ydb/ydb.h>
 
-#include <ydb/core/yq/libs/config/yq_issue.h> 
-#include <ydb/core/yq/libs/control_plane_proxy/events/events.h> 
+#include <ydb/core/yq/libs/config/yq_issue.h>
+#include <ydb/core/yq/libs/control_plane_proxy/events/events.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actor.h>
 
-#include <ydb/core/base/kikimr_issue.h> 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h> 
+#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -26,14 +26,14 @@
 #include <util/generic/ptr.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
-#include <ydb/library/security/util.h> 
+#include <ydb/library/security/util.h>
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/mon/mon.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/mon/mon.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
-#include <ydb/library/folder_service/folder_service.h> 
-#include <ydb/library/folder_service/events.h> 
+#include <ydb/library/folder_service/folder_service.h>
+#include <ydb/library/folder_service/events.h>
 
 
 namespace NYq {

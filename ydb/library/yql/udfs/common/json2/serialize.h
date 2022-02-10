@@ -2,11 +2,11 @@
 
 #include "resource.h"
 
-#include <ydb/library/yql/public/udf/udf_value.h> 
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
-#include <ydb/library/yql/minikql/dom/json.h> 
+#include <ydb/library/yql/public/udf/udf_value.h>
+#include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <ydb/library/yql/minikql/dom/json.h>
 
-#include <ydb/library/binary_json/write.h> 
+#include <ydb/library/binary_json/write.h>
 
 namespace NJson2Udf {
     using namespace NKikimr;
@@ -85,5 +85,5 @@ namespace NJson2Udf {
         static auto name = TStringRef::Of("SerializeToJsonDocument");
         return name;
     }
-} 
- 
+}
+

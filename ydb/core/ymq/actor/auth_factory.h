@@ -2,11 +2,11 @@
 
 #include "actor.h"
 #include <library/cpp/actors/core/actorsystem.h>
-#include <ydb/core/ymq/base/action.h> 
-#include <ydb/core/ymq/base/counters.h> 
-#include <ydb/library/http_proxy/authorization/signature.h> 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h> 
+#include <ydb/core/ymq/base/action.h>
+#include <ydb/core/ymq/base/counters.h>
+#include <ydb/library/http_proxy/authorization/signature.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 namespace NKikimr::NSQS {
 
@@ -43,7 +43,7 @@ struct TAuthActorData {
  *   depending on input parameters.
  *
  * Handles both internal (Yandex cloud, kikimr/yndx/sqs) and open
- * source (ydb/core/ymq/actor) versions. 
+ * source (ydb/core/ymq/actor) versions.
  *
  * @note An ICredentialsProviderFactory abstraction layer is
  *   unnecessary here as we could register authorization methods directly

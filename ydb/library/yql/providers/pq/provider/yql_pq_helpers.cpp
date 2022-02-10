@@ -2,7 +2,7 @@
 
 #include "yql_pq_provider_impl.h"
 #include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 
 namespace NYql {

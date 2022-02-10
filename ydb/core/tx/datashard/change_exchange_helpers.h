@@ -11,7 +11,7 @@
 #define LOG_C(stream) LOG_CRIT_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() << stream)
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 struct TDataShardId {
     ui64 TabletId;
@@ -19,5 +19,5 @@ struct TDataShardId {
     TActorId ActorId;
 };
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

@@ -6,7 +6,7 @@
 #include <util/string/join.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 struct TS3Upload {
     enum class EStatus: ui8 {
@@ -37,9 +37,9 @@ struct TS3Upload {
 
 }; // TS3Upload
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr
 
-Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TS3Upload, out, value) { 
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TS3Upload, out, value) {
     value.Out(out);
 }

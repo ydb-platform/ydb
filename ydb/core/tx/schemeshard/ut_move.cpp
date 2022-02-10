@@ -1,9 +1,9 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h> 
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h> 
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
-#include <ydb/core/base/compile_time_flags.h> 
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
-#include <ydb/core/tx/datashard/change_exchange.h> 
+#include <ydb/core/base/compile_time_flags.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/tx/datashard/change_exchange.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
@@ -814,7 +814,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         {
             TVector<THolder<IEventHandle>> supressed;
-            auto defOberver = SetSuppressObserver(runtime, supressed, NDataShard::TEvChangeExchange::EvApplyRecords); 
+            auto defOberver = SetSuppressObserver(runtime, supressed, NDataShard::TEvChangeExchange::EvApplyRecords);
 
             req1.Plan(TTestTxConfig::Coordinator);
 
@@ -826,7 +826,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             AsyncMoveTable(runtime, ++txId, "/MyRoot/Table", "/MyRoot/TableMove");
 
             TDispatchOptions opts;
-            opts.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(NDataShard::TEvChangeExchange::EvStatus, 2)); 
+            opts.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(NDataShard::TEvChangeExchange::EvStatus, 2));
             runtime.DispatchEvents(opts);
 
             env.TestWaitNotification(runtime, txId);

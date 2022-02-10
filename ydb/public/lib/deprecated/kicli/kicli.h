@@ -1,13 +1,13 @@
 #pragma once
 
-#include <ydb/core/protos/kqp.pb.h> 
-#include <ydb/core/protos/msgbus.pb.h> 
-#include <ydb/core/protos/ydb_result_set_old.pb.h> 
-#include <ydb/public/lib/deprecated/client/grpc_client.h> 
-#include <ydb/public/lib/deprecated/client/msgbus_client_config.h> 
-#include <ydb/public/lib/base/msgbus_status.h> 
-#include <ydb/public/lib/scheme_types/scheme_type_id.h> 
-#include <ydb/public/lib/value/value.h> 
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/protos/ydb_result_set_old.pb.h>
+#include <ydb/public/lib/deprecated/client/grpc_client.h>
+#include <ydb/public/lib/deprecated/client/msgbus_client_config.h>
+#include <ydb/public/lib/base/msgbus_status.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+#include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/messagebus/message_status.h>
@@ -21,8 +21,8 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <utility> 
- 
+#include <utility>
+
 namespace NBus {
     template<class TBufferRecord, int MType>
     class TBusBufferMessage;
@@ -146,11 +146,11 @@ public:
     void StoreType(NKikimrMiniKQL::TType& type) const {
         type.SetKind(NKikimrMiniKQL::ETypeKind::Struct);
         auto& structType = *type.MutableStruct();
-        StoreMembersTypes(structType, std::make_index_sequence<sizeof...(MemberTypes)>()); 
+        StoreMembersTypes(structType, std::make_index_sequence<sizeof...(MemberTypes)>());
     }
 
     void StoreValue(NKikimrMiniKQL::TValue& value) const {
-        StoreMembersValues(value, std::make_index_sequence<sizeof...(MemberTypes)>()); 
+        StoreMembersValues(value, std::make_index_sequence<sizeof...(MemberTypes)>());
     }
 
 protected:
@@ -170,12 +170,12 @@ protected:
     }
 
     template <std::size_t... N>
-    void StoreMembersTypes(NKikimrMiniKQL::TStructType& type, std::index_sequence<N...>) const { 
+    void StoreMembersTypes(NKikimrMiniKQL::TStructType& type, std::index_sequence<N...>) const {
         StoreMemberType(type, std::get<N>(Members)...);
     }
 
     template <std::size_t... N>
-    void StoreMembersValues(NKikimrMiniKQL::TValue& value, std::index_sequence<N...>) const { 
+    void StoreMembersValues(NKikimrMiniKQL::TValue& value, std::index_sequence<N...>) const {
         StoreMemberValue(value, std::get<N>(Members)...);
     }
 };

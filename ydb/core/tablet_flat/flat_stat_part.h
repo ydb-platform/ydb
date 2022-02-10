@@ -214,8 +214,8 @@ class TScreenedPartIndexIterator {
 public:
     TScreenedPartIndexIterator(TPartView partView, TIntrusiveConstPtr<TKeyNulls> keyColumns,
                             TIntrusiveConstPtr<NPage::TFrames> small)
-        : PartIter(partView.Part, keyColumns) 
-        , Screen(std::move(partView.Screen)) 
+        : PartIter(partView.Part, keyColumns)
+        , Screen(std::move(partView.Screen))
         , Small(std::move(small))
         , CurrentHole(TScreen::Iter(Screen, CurrentHoleIdx, 0, 1))
     {

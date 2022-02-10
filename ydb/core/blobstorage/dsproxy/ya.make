@@ -1,48 +1,48 @@
 LIBRARY()
 
-OWNER( 
-    alexvru 
-    cthulhu 
-    g:kikimr 
-) 
+OWNER(
+    alexvru
+    cthulhu
+    g:kikimr
+)
 
-SRCS( 
-    dsproxy.h 
+SRCS(
+    dsproxy.h
     dsproxy_impl.cpp
     dsproxy_impl.h
     dsproxy_encrypt.cpp
     dsproxy_request.cpp
     dsproxy_stat.cpp
     dsproxy_state.cpp
-    dsproxy_blackboard.h 
-    dsproxy_blackboard.cpp 
-    dsproxy_block.cpp 
-    dsproxy_collect.cpp 
-    dsproxy_discover.cpp 
-    dsproxy_discover_m3dc.cpp 
+    dsproxy_blackboard.h
+    dsproxy_blackboard.cpp
+    dsproxy_block.cpp
+    dsproxy_collect.cpp
+    dsproxy_discover.cpp
+    dsproxy_discover_m3dc.cpp
     dsproxy_discover_m3of4.cpp
-    dsproxy_get.cpp 
-    dsproxy_get_impl.cpp 
-    dsproxy_get_impl.h 
-    dsproxy_indexrestoreget.cpp 
-    dsproxy_mon.cpp 
-    dsproxy_mon.h 
-    dsproxy_monactor.cpp 
-    dsproxy_monactor.h 
-    dsproxy_multicollect.cpp 
-    dsproxy_multiget.cpp 
+    dsproxy_get.cpp
+    dsproxy_get_impl.cpp
+    dsproxy_get_impl.h
+    dsproxy_indexrestoreget.cpp
+    dsproxy_mon.cpp
+    dsproxy_mon.h
+    dsproxy_monactor.cpp
+    dsproxy_monactor.h
+    dsproxy_multicollect.cpp
+    dsproxy_multiget.cpp
     dsproxy_nodemon.cpp
     dsproxy_nodemon.h
     dsproxy_nodemonactor.cpp
     dsproxy_nodemonactor.h
     dsproxy_patch.cpp
-    dsproxy_put.cpp 
+    dsproxy_put.cpp
     dsproxy_put_impl.cpp
     dsproxy_put_impl.h
-    dsproxy_quorum_tracker.h 
-    dsproxy_range.cpp 
-    dsproxy_responsiveness.h 
-    dsproxy_status.cpp 
+    dsproxy_quorum_tracker.h
+    dsproxy_range.cpp
+    dsproxy_responsiveness.h
+    dsproxy_status.cpp
     dsproxy_strategy_accelerate_put.h
     dsproxy_strategy_accelerate_put_m3dc.h
     dsproxy_strategy_base.cpp
@@ -60,28 +60,28 @@ SRCS(
     group_sessions.cpp
     group_sessions.h
     log_acc.h
-    blobstorage_backoff.cpp 
-) 
+    blobstorage_backoff.cpp
+)
 
-PEERDIR( 
+PEERDIR(
     library/cpp/monlib/dynamic_counters/percentile
-    ydb/core/base 
-    ydb/core/blobstorage/backpressure 
-    ydb/core/blobstorage/base 
-    ydb/core/blobstorage/groupinfo 
-    ydb/core/blobstorage/storagepoolmon 
-    ydb/core/blobstorage/vdisk/ingress 
-    ydb/core/control 
-    ydb/core/util 
-) 
- 
+    ydb/core/base
+    ydb/core/blobstorage/backpressure
+    ydb/core/blobstorage/base
+    ydb/core/blobstorage/groupinfo
+    ydb/core/blobstorage/storagepoolmon
+    ydb/core/blobstorage/vdisk/ingress
+    ydb/core/control
+    ydb/core/util
+)
+
 END()
 
 RECURSE(
     mock
 )
- 
-RECURSE_FOR_TESTS( 
-    ut 
-    ut_fat 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+    ut_fat
+)

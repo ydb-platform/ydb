@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/http_proxy/error/error.h> 
-#include <ydb/core/ymq/http/params.h> 
+#include <ydb/library/http_proxy/error/error.h>
+#include <ydb/core/ymq/http/params.h>
 
 using namespace NKikimr::NSQS;
 

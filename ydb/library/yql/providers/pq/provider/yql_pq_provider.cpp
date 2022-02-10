@@ -3,7 +3,7 @@
 #include "yql_pq_dq_integration.h"
 
 #include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/utils/log/context.h> 
+#include <ydb/library/yql/utils/log/context.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 

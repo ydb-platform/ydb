@@ -1,8 +1,8 @@
-OWNER(g:yql) 
- 
-RECURSE( 
+OWNER(g:yql)
+
+RECURSE(
     clickhouse
-    common 
+    common
     config
     dq
     pq
@@ -10,4 +10,4 @@ RECURSE(
     s3
     solomon
     ydb
-) 
+)

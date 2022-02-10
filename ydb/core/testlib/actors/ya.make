@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:kikimr) 
+OWNER(g:kikimr)
 
 SRCS(
     test_runtime.cpp
@@ -9,21 +9,21 @@ SRCS(
 PEERDIR(
     library/cpp/actors/testlib
     library/cpp/testing/unittest
-    ydb/core/base 
-    ydb/core/mon 
-    ydb/core/mon_alloc 
-    ydb/core/scheme 
-    ydb/core/tablet 
+    ydb/core/base
+    ydb/core/mon
+    ydb/core/mon_alloc
+    ydb/core/scheme
+    ydb/core/tablet
 )
 
 IF (GCC)
-    CFLAGS( 
-        -fno-devirtualize-speculatively 
-    ) 
+    CFLAGS(
+        -fno-devirtualize-speculatively
+    )
 ENDIF()
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+)

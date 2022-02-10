@@ -2,15 +2,15 @@
 
 #include "defs.h"
 
-#include <ydb/core/protos/tx_datashard.pb.h> 
-#include <ydb/core/tablet_flat/flat_row_scheme.h> 
-#include <ydb/core/tablet_flat/flat_row_state.h> 
+#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/tablet_flat/flat_row_scheme.h>
+#include <ydb/core/tablet_flat/flat_row_state.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 class IEraseRowsCondition {
 public:
@@ -25,5 +25,5 @@ public:
 IEraseRowsCondition* CreateEraseRowsCondition(const NKikimrTxDataShard::TEvEraseRowsRequest& request);
 IEraseRowsCondition* CreateEraseRowsCondition(const NKikimrTxDataShard::TEvConditionalEraseRowsRequest& request);
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

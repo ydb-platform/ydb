@@ -1,8 +1,8 @@
 #include "kqp_compute_actor.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/kqp/runtime/kqp_compute.h> 
-#include <ydb/core/kqp/runtime/kqp_read_table.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/runtime/kqp_compute.h>
+#include <ydb/core/kqp/runtime/kqp_read_table.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

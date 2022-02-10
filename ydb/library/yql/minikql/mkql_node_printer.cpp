@@ -1,7 +1,7 @@
 #include "mkql_node_printer.h"
 #include "mkql_node_visitor.h"
 #include <util/stream/str.h>
-#include <ydb/library/yql/public/udf/udf_types.h> 
+#include <ydb/library/yql/public/udf/udf_types.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

@@ -3,18 +3,18 @@
 #include <util/string/vector.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-TDataShard::TTxStoreTablePath::TTxStoreTablePath(TDataShard *self, ui64 pathId, const TString &path) 
+TDataShard::TTxStoreTablePath::TTxStoreTablePath(TDataShard *self, ui64 pathId, const TString &path)
     : TBase(self)
     , PathId(pathId)
     , Path(path)
 {
 }
 
-bool TDataShard::TTxStoreTablePath::Execute(TTransactionContext &txc, const TActorContext &ctx) 
+bool TDataShard::TTxStoreTablePath::Execute(TTransactionContext &txc, const TActorContext &ctx)
 {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxStoreTablePath::Execute at " << Self->TabletID());
@@ -33,7 +33,7 @@ bool TDataShard::TTxStoreTablePath::Execute(TTransactionContext &txc, const TAct
     return true;
 }
 
-void TDataShard::TTxStoreTablePath::Complete(const TActorContext &ctx) 
+void TDataShard::TTxStoreTablePath::Complete(const TActorContext &ctx)
 {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxStoreTablePath::Complete at " << Self->TabletID());

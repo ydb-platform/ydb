@@ -8,10 +8,10 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-TExecutorBorrowLogic::TExecutorBorrowLogic(TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies) 
+TExecutorBorrowLogic::TExecutorBorrowLogic(TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)
     : SelfTabletId(cookies ? cookies->Tablet : 0)
     , Cookies(cookies)
-    , Slicer(1, Cookies.Get(), NBlockIO::BlockSize) 
+    , Slicer(1, Cookies.Get(), NBlockIO::BlockSize)
     , HasFlag(false)
 {}
 
@@ -128,7 +128,7 @@ bool TExecutorBorrowLogic::BundleCompacted(
     // 1. if bundle borrowed - keep blobs non-collected
     if (info->BorrowInfo.FullBorrow) {
         Y_VERIFY(!info->BorrowInfo.HasKeep(bundle.BundleId()),
-            "Trying to compact the same page collection twice"); 
+            "Trying to compact the same page collection twice");
 
         if (SelfTabletId == metaId.TabletID()) {
             sieve.MaterializeTo(info->BorrowInfo.Keep);
@@ -254,7 +254,7 @@ void TExecutorBorrowLogic::BorrowBundle(
 
 void TExecutorBorrowLogic::LoanBundle(
     const TLogoBlobID &bundleId,
-    TPageCollectionTxEnv::TLoanBundle &loaned, 
+    TPageCollectionTxEnv::TLoanBundle &loaned,
     TLogCommit *commit)
 {
     auto storedInfoItPair = BorrowedInfo.insert(std::make_pair(bundleId, TBorrowedPartInfo()));
@@ -354,7 +354,7 @@ bool TExecutorBorrowLogic::SetGcBarrier(ui32 step) {
 
 void TExecutorBorrowLogic::UpdateBorrow(
     const TLogoBlobID &metaInfoId,
-    TPageCollectionTxEnv::TBorrowUpdate &borrowUpdate, 
+    TPageCollectionTxEnv::TBorrowUpdate &borrowUpdate,
     TLogCommit *commit)
 {
     auto storedInfoIt = BorrowedInfo.find(metaInfoId);

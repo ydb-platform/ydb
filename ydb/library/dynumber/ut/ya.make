@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/dynumber 
+    ydb/library/dynumber
 )
 
 END()

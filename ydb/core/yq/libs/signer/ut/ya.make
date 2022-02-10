@@ -1,13 +1,13 @@
-UNITTEST_FOR(ydb/core/yq/libs/signer) 
+UNITTEST_FOR(ydb/core/yq/libs/signer)
 
-OWNER(g:yq) 
+OWNER(g:yq)
 
 SRCS(
     signer_ut.cpp
 )
 
 PEERDIR(
-    ydb/core/yq/libs/signer 
+    ydb/core/yq/libs/signer
 )
 
 END()

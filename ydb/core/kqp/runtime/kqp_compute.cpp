@@ -4,8 +4,8 @@
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/public/udf/udf_terminator.h> 
-#include <ydb/library/yql/public/udf/udf_type_builder.h> 
+#include <ydb/library/yql/public/udf/udf_terminator.h>
+#include <ydb/library/yql/public/udf/udf_type_builder.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

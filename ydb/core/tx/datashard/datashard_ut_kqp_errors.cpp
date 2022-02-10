@@ -1,9 +1,9 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
-#include <ydb/core/kqp/rm/kqp_rm.h> 
-#include <ydb/core/tx/datashard/datashard.h> 
-#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h> 
-#include <ydb/core/base/tablet_pipecache.h> 
-#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/rm/kqp_rm.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -11,7 +11,7 @@ namespace NKqp {
 using namespace Ydb;
 using namespace NYql;
 using namespace Tests;
-using namespace NKikimr::NDataShard::NKqpHelpers; 
+using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NKikimrTxDataShard;
 
 namespace {

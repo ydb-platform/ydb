@@ -1,5 +1,5 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <ydb/library/yql/public/udf/udf_value_builder.h> 
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
 
 #include "mkql_validate.h"
 #include <ydb/library/yql/minikql/mkql_node_printer.h>

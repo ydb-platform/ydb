@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/wrappers) 
+UNITTEST_FOR(ydb/core/wrappers)
 
 OWNER(
     ilnaz
@@ -12,16 +12,16 @@ IF (NOT OS_WINDOWS)
         library/cpp/actors/core
         library/cpp/digest/md5
         library/cpp/testing/unittest
-        ydb/core/protos 
-        ydb/core/testlib/basics 
-        ydb/core/wrappers/ut_helpers 
+        ydb/core/protos
+        ydb/core/testlib/basics
+        ydb/core/wrappers/ut_helpers
     )
     SRCS(
         s3_wrapper_ut.cpp
     )
 ENDIF()
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 REQUIREMENTS(ram:12)
 

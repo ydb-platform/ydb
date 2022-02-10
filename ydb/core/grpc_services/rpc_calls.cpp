@@ -1,7 +1,7 @@
 #include "rpc_calls.h"
 #include "grpc_request_proxy.h"
 
-#include <ydb/core/base/path.h> 
+#include <ydb/core/base/path.h>
 
 namespace NKikimr {
 namespace NGRpcService {

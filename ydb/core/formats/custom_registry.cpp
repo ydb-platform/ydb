@@ -1,8 +1,8 @@
 #include "functions.h"
 #include "func_common.h"
-#include <util/system/yassert.h> 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.cc> 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h> 
+#include <util/system/yassert.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.cc>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 
 namespace cp = ::arrow::compute;
 

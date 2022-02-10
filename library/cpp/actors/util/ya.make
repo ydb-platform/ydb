@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    ddoarn 
-    g:kikimr 
-) 
+OWNER(
+    ddoarn
+    g:kikimr
+)
 
 SRCS(
     affinity.cpp

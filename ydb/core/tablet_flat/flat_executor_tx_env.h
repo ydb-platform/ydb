@@ -7,40 +7,40 @@
 #include "flat_sausagecache.h"
 #include "tablet_flat_executor.h"
 #include "flat_executor_snapshot.h"
-#include <ydb/core/util/pb.h> 
+#include <ydb/core/util/pb.h>
 #include <util/generic/hash_set.h>
-#include <ydb/core/tablet_flat/flat_executor.pb.h> 
+#include <ydb/core/tablet_flat/flat_executor.pb.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-    struct TPageCollectionReadEnv : public NTable::IPages { 
-        TPageCollectionReadEnv(TPrivatePageCache& cache) 
+    struct TPageCollectionReadEnv : public NTable::IPages {
+        TPageCollectionReadEnv(TPrivatePageCache& cache)
             : Cache(cache)
         { }
 
-    protected: /* NTable::IPages, page collection backend implementation */ 
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override 
+    protected: /* NTable::IPages, page collection backend implementation */
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
         {
-            return NTable::MemTableRefLookup(memTable, ref, tag); 
+            return NTable::MemTableRefLookup(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override 
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
         {
-            auto *partStore = CheckedCast<const NTable::TPartStore*>(part); 
+            auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return { true, Lookup(partStore->Locate(lob, ref), ref) }; 
+            return { true, Lookup(partStore->Locate(lob, ref), ref) };
         }
 
         const TSharedData* TryGetPage(const TPart* part, TPageId page, TGroupId groupId) override
         {
-            auto *partStore = CheckedCast<const NTable::TPartStore*>(part); 
+            auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return Lookup(partStore->PageCollections.at(groupId.Index).Get(), page); 
+            return Lookup(partStore->PageCollections.at(groupId.Index).Get(), page);
         }
 
     private:
-        const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId id) noexcept 
+        const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId id) noexcept
         {
             if (auto *page = Cache.Lookup(id, info)) {
                 if (Touches[info].insert(id).second) {
@@ -56,17 +56,17 @@ namespace NTabletFlatExecutor {
         }
 
     public:
-        TPrivatePageCache& Cache; 
+        TPrivatePageCache& Cache;
 
-        /*_ Page collection cache pages load trace */ 
+        /*_ Page collection cache pages load trace */
 
-        THashMap<TPrivatePageCache::TInfo*, THashSet<ui32>> Touches; 
-        THashMap<TPrivatePageCache::TInfo*, THashSet<ui32>> ToLoad; 
+        THashMap<TPrivatePageCache::TInfo*, THashSet<ui32>> Touches;
+        THashMap<TPrivatePageCache::TInfo*, THashSet<ui32>> ToLoad;
         size_t CacheHits = 0;
         size_t CacheMisses = 0;
     };
 
-    struct TPageCollectionTxEnv : public TPageCollectionReadEnv, public IExecuting { 
+    struct TPageCollectionTxEnv : public TPageCollectionReadEnv, public IExecuting {
         using TLogoId = TLogoBlobID;
 
         struct TBorrowSnap {
@@ -82,18 +82,18 @@ namespace NTabletFlatExecutor {
         };
 
         struct TLoanBundle {
-            TLoanBundle(ui32 sourceTableId, ui32 localTableId, ui64 lender, NTable::TPartComponents&& pc) 
+            TLoanBundle(ui32 sourceTableId, ui32 localTableId, ui64 lender, NTable::TPartComponents&& pc)
                 : SourceTableId(sourceTableId)
                 , LocalTableId(localTableId)
                 , Lender(lender)
-                , PartComponents(std::move(pc)) 
+                , PartComponents(std::move(pc))
             {}
 
             const ui32 SourceTableId;
             const ui32 LocalTableId;
             const ui64 Lender;
 
-            NTable::TPartComponents PartComponents; 
+            NTable::TPartComponents PartComponents;
         };
 
         struct TLoanTxStatus {
@@ -116,11 +116,11 @@ namespace NTabletFlatExecutor {
             const TString Data;
         };
 
-        struct TSnapshot { 
+        struct TSnapshot {
             TVector<TIntrusivePtr<TTableSnapshotContext>> Context;
         };
 
-        using TPageCollectionReadEnv::TPageCollectionReadEnv; 
+        using TPageCollectionReadEnv::TPageCollectionReadEnv;
 
         bool HasChanges() const noexcept
         {
@@ -168,10 +168,10 @@ namespace NTabletFlatExecutor {
             const ui32 source = proto.GetSourceTable();
 
             for (auto &part : proto.GetParts()) {
-                Y_VERIFY(part.HasBundle(), "Cannot find attached hotdogs in borrow"); 
+                Y_VERIFY(part.HasBundle(), "Cannot find attached hotdogs in borrow");
 
-                LoanBundle.emplace_back(new TLoanBundle(source, tableId, lender, 
-                        TPageCollectionProtoHelper::MakePageCollectionComponents(part.GetBundle(), /* unsplit */ true))); 
+                LoanBundle.emplace_back(new TLoanBundle(source, tableId, lender,
+                        TPageCollectionProtoHelper::MakePageCollectionComponents(part.GetBundle(), /* unsplit */ true)));
             }
 
             for (auto &part : proto.GetTxStatusParts()) {
@@ -197,7 +197,7 @@ namespace NTabletFlatExecutor {
     public:
         /*_ Pending database shanshots      */
 
-        TMap<ui32, TSnapshot> MakeSnap; 
+        TMap<ui32, TSnapshot> MakeSnap;
 
         /*_ In tx tables borrow proto API   */
 

@@ -1,9 +1,9 @@
 #include "ydb_yql.h"
 
-#include <ydb/public/lib/json_value/ydb_json_value.h> 
-#include <ydb/public/lib/ydb_cli/common/pretty_table.h> 
-#include <ydb/public/lib/ydb_cli/common/print_operation.h> 
-#include <ydb/public/lib/ydb_cli/common/query_stats.h> 
+#include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
+#include <ydb/public/lib/ydb_cli/common/print_operation.h>
+#include <ydb/public/lib/ydb_cli/common/query_stats.h>
 
 namespace NYdb {
 namespace NConsoleClient {

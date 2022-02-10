@@ -2,8 +2,8 @@
 
 #include "defs.h"
 
-#include <ydb/core/scheme/scheme_types_defs.h> 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
+#include <ydb/core/scheme/scheme_types_defs.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 namespace NKikimr {
 namespace NNodeBroker {

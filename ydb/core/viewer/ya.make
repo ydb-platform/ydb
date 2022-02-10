@@ -1,7 +1,7 @@
-RECURSE_FOR_TESTS( 
-    ut 
-) 
- 
+RECURSE_FOR_TESTS(
+    ut
+)
+
 LIBRARY()
 
 OWNER(
@@ -183,22 +183,22 @@ PEERDIR(
     library/cpp/actors/core
     library/cpp/archive
     library/cpp/mime/types
-    ydb/core/base 
-    ydb/core/blobstorage/base 
-    ydb/core/client/server 
-    ydb/core/health_check 
-    ydb/core/node_whiteboard 
-    ydb/core/protos 
-    ydb/core/scheme 
-    ydb/core/tx/schemeshard 
-    ydb/core/util 
-    ydb/core/viewer/json 
-    ydb/core/viewer/protos 
-    ydb/library/persqueue/topic_parser 
-    ydb/public/api/protos 
-    ydb/public/lib/deprecated/kicli 
+    ydb/core/base
+    ydb/core/blobstorage/base
+    ydb/core/client/server
+    ydb/core/health_check
+    ydb/core/node_whiteboard
+    ydb/core/protos
+    ydb/core/scheme
+    ydb/core/tx/schemeshard
+    ydb/core/util
+    ydb/core/viewer/json
+    ydb/core/viewer/protos
+    ydb/library/persqueue/topic_parser
+    ydb/public/api/protos
+    ydb/public/lib/deprecated/kicli
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 END()

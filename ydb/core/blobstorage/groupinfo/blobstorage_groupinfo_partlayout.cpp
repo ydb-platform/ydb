@@ -1,6 +1,6 @@
 #include "blobstorage_groupinfo_partlayout.h"
 #include "blobstorage_groupinfo_sets.h"
-#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h> 
+#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 
 namespace NKikimr {
 
@@ -91,7 +91,7 @@ namespace NKikimr {
         return CreateFromIngress(ingress, gtype).CountEffectiveReplicas(gtype);
     }
 
-    TSubgroupPartLayout TSubgroupPartLayout::CreateFromIngress(TIngress ingress, const TBlobStorageGroupType &gtype) { 
+    TSubgroupPartLayout TSubgroupPartLayout::CreateFromIngress(TIngress ingress, const TBlobStorageGroupType &gtype) {
         TSubgroupPartLayout res;
         const ui8 subgroupSize = gtype.BlobSubgroupSize();
         for (ui8 i = 0; i < subgroupSize; ++i) {
@@ -103,13 +103,13 @@ namespace NKikimr {
         return res;
     }
 
-    TBlobStorageGroupInfo::TSubgroupVDisks TSubgroupPartLayout::GetInvolvedDisks(const TBlobStorageGroupInfo::TTopology *top) const { 
-        const ui32 totalPartCount = top->GType.TotalPartCount(); 
+    TBlobStorageGroupInfo::TSubgroupVDisks TSubgroupPartLayout::GetInvolvedDisks(const TBlobStorageGroupInfo::TTopology *top) const {
+        const ui32 totalPartCount = top->GType.TotalPartCount();
         ui32 mask = 0;
         for (ui32 i = 0; i < totalPartCount; ++i) {
             mask |= PerPartStatus[i];
         }
-        return TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(top, mask); 
+        return TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(top, mask);
     }
 
 } // NKikimr

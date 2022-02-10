@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    galaxycrab 
-    g:kikimr 
-) 
+OWNER(
+    galaxycrab
+    g:kikimr
+)
 
 SRCS(
     grpc_service.cpp
@@ -11,14 +11,14 @@ SRCS(
 
 PEERDIR(
     library/cpp/grpc/server
-    ydb/core/grpc_services 
-    ydb/core/kesus/tablet 
-    ydb/public/api/grpc 
-    ydb/services/ydb 
+    ydb/core/grpc_services
+    ydb/core/kesus/tablet
+    ydb/public/api/grpc
+    ydb/services/ydb
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+)

@@ -4,8 +4,8 @@ import itertools
 import string
 from os.path import basename, dirname, join
 
-from ydb.core.protos import msgbus_pb2 
-from ydb.core.protos import flat_scheme_op_pb2 
+from ydb.core.protos import msgbus_pb2
+from ydb.core.protos import flat_scheme_op_pb2
 from ydb.tests.library.common.protobuf import AbstractProtobufBuilder, build_protobuf_if_necessary
 
 
@@ -14,7 +14,7 @@ DEFAULT_SIZE_TO_SPLIT = 10 ** 6
 
 class TPartitionConfig(AbstractProtobufBuilder):
     """
-    See /arcadia/ydb/core/protos/flat_scheme_op_pb2.proto 
+    See /arcadia/ydb/core/protos/flat_scheme_op_pb2.proto
     """
 
     def __init__(self):
@@ -189,8 +189,8 @@ def list_of_create_path_builders_from_full_path(full_path):
 class AbstractTSchemeOperationRequest(AbstractProtobufBuilder):
     """
     See
-    /arcadia/ydb/core/protos/msgbus_pb2.proto 
-    /arcadia/ydb/core/protos/flat_scheme_op_pb2.proto 
+    /arcadia/ydb/core/protos/msgbus_pb2.proto
+    /arcadia/ydb/core/protos/flat_scheme_op_pb2.proto
     """
     def __init__(self):
         super(AbstractTSchemeOperationRequest, self).__init__(msgbus_pb2.TSchemeOperation())

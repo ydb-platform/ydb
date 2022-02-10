@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/console_config.pb.h> 
+#include <ydb/core/protos/console_config.pb.h>
 
 #include <util/generic/hash_set.h>
 

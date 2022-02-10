@@ -16,10 +16,10 @@
 #include <ydb/library/yql/sql/sql.h>
 
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
-#include <ydb/library/yql/utils/actor_log/log.h> 
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/library/yql/utils/log/log.h>
 
-#include <ydb/public/lib/yson_value/ydb_yson_value.h> 
+#include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/event_pb.h>

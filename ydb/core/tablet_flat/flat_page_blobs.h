@@ -10,9 +10,9 @@ namespace NKikimr {
 namespace NTable {
 namespace NPage {
 
-    class TExtBlobs : public NPageCollection::IPageCollection { 
+    class TExtBlobs : public NPageCollection::IPageCollection {
     public:
-        using TEntry = NPageCollection::TGlobId; 
+        using TEntry = NPageCollection::TGlobId;
 
         struct THeader {
             ui32 Skip   = 0;    /* Skip bytes from header to frames */
@@ -28,10 +28,10 @@ namespace NPage {
             ui64 Bytes;
         };
 
-        static_assert(sizeof(TEntry) == 32, "Invalid TExtBlobs entry unit"); 
-        static_assert(sizeof(THeader) == 40, "Invalid TExtBlobs header unit"); 
+        static_assert(sizeof(TEntry) == 32, "Invalid TExtBlobs entry unit");
+        static_assert(sizeof(THeader) == 40, "Invalid TExtBlobs header unit");
 
-        TExtBlobs(TSharedData raw, const TLogoBlobID &label) 
+        TExtBlobs(TSharedData raw, const TLogoBlobID &label)
             : Raw(std::move(raw))
             , Label_(label)
         {
@@ -44,7 +44,7 @@ namespace NPage {
             Header = TDeref<THeader>::At(got.Page.data(), 0);
 
             if (Header->Skip > got.Page.size())
-                Y_FAIL("NPage::TExtBlobs header is out of its blob"); 
+                Y_FAIL("NPage::TExtBlobs header is out of its blob");
 
             auto *ptr = TDeref<TEntry>::At(got.Page.data(), Header->Skip);
 
@@ -76,19 +76,19 @@ namespace NPage {
             return Array.size();
         }
 
-        NPageCollection::TInfo Page(ui32 page) const noexcept override 
+        NPageCollection::TInfo Page(ui32 page) const noexcept override
         {
             return { Glob(page).Logo.BlobSize(), ui32(EPage::Opaque) };
         }
 
-        NPageCollection::TBorder Bounds(ui32 page) const noexcept override 
+        NPageCollection::TBorder Bounds(ui32 page) const noexcept override
         {
             const auto size = Glob(page).Logo.BlobSize();
 
             return { size, { page, 0 }, { page, size } };
         }
 
-        NPageCollection::TGlobId Glob(ui32 page) const noexcept override 
+        NPageCollection::TGlobId Glob(ui32 page) const noexcept override
         {
             return page < Array.size() ? Array[page] : Empty;
         }

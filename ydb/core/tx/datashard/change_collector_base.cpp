@@ -1,16 +1,16 @@
 #include "change_collector_base.h"
 #include "datashard_impl.h"
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
-#include <ydb/core/util/yverify_stream.h> 
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/util/yverify_stream.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NMiniKQL;
 using namespace NTable;
 
-TBaseChangeCollector::TBaseChangeCollector(TDataShard* self, TDatabase& db, bool isImmediateTx) 
+TBaseChangeCollector::TBaseChangeCollector(TDataShard* self, TDatabase& db, bool isImmediateTx)
     : Self(self)
     , Db(db)
 {
@@ -64,7 +64,7 @@ void TBaseChangeCollector::SerializeCells(TSerializedCells& out, TArrayRef<const
 
     TVector<TCell> cells(Reserve(in.size()));
     for (const auto& op : in) {
-        Y_VERIFY_S(op.Op == ECellOp::Set, "Unexpected cell op: " << op.Op.Raw()); 
+        Y_VERIFY_S(op.Op == ECellOp::Set, "Unexpected cell op: " << op.Op.Raw());
 
         out.AddTags(op.Tag);
         cells.emplace_back(op.AsCell());
@@ -87,19 +87,19 @@ void TBaseChangeCollector::SerializeCells(TSerializedCells& out, const TRowState
     out.SetData(TSerializedCellVec::Serialize(cells));
 }
 
-void TBaseChangeCollector::Serialize(TDataChange& out, ERowOp rop, 
+void TBaseChangeCollector::Serialize(TDataChange& out, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates)
 {
     SerializeCells(*out.MutableKey(), key, keyTags);
 
     switch (rop) {
-    case ERowOp::Upsert: 
+    case ERowOp::Upsert:
         SerializeCells(*out.MutableUpsert(), updates);
         break;
-    case ERowOp::Erase: 
+    case ERowOp::Erase:
         out.MutableErase();
         break;
-    case ERowOp::Reset: 
+    case ERowOp::Reset:
         SerializeCells(*out.MutableReset(), updates);
         break;
     default:
@@ -107,7 +107,7 @@ void TBaseChangeCollector::Serialize(TDataChange& out, ERowOp rop,
     }
 }
 
-void TBaseChangeCollector::Serialize(TDataChange& out, ERowOp rop, 
+void TBaseChangeCollector::Serialize(TDataChange& out, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags,
         const TRowState* oldState, const TRowState* newState, TArrayRef<const TTag> valueTags)
 {
@@ -142,5 +142,5 @@ void TBaseChangeCollector::Persist(TChangeRecord::EKind kind, const TPathId& pat
     Collected.emplace_back(record.GetOrder(), record.GetPathId(), record.GetBody().size());
 }
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr

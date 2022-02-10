@@ -3,7 +3,7 @@
 #include "tabletid.h"
 #include "localdb.h"
 
-#include <ydb/core/protos/blobstorage_config.pb.h> 
+#include <ydb/core/protos/blobstorage_config.pb.h>
 
 #include <util/generic/map.h>
 #include <util/generic/hash.h>
@@ -23,7 +23,7 @@ struct TDomainsInfo : public TThrRefBase {
     // it's very sad mistake
     // MakeTabletID should be called with hiveUid == 0 for all domain's static tablets
     // but we do it with hiveUid == domain, and collision with dynamic tablets occurs
-    // use AvoidBrokenUniqPartsBySystemTablets to avoid this mistake 
+    // use AvoidBrokenUniqPartsBySystemTablets to avoid this mistake
     static ui64 MakeTxCoordinatorID(ui32 domain, ui32 uid) {
         Y_VERIFY_DEBUG(domain < 32 && uid < 256);
         const ui64 uniqPart = 0x800000 | (ui64)uid;

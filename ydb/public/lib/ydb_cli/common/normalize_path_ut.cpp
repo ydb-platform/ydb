@@ -1,17 +1,17 @@
-#include "normalize_path.h" 
+#include "normalize_path.h"
 #include <library/cpp/testing/unittest/registar.h>
- 
-using namespace NYdb::NConsoleClient; 
- 
-Y_UNIT_TEST_SUITE(NormalizePathTest) { 
+
+using namespace NYdb::NConsoleClient;
+
+Y_UNIT_TEST_SUITE(NormalizePathTest) {
     Y_UNIT_TEST(TestNormalization) {
-        UNIT_ASSERT(NormalizePath("/abc/./d") == "/abc/d"); 
-        UNIT_ASSERT(NormalizePath("/abc/./def//abcd//tre///brr") == "/abc/def/abcd/tre/brr"); 
-        UNIT_ASSERT(NormalizePath("/abc/../def") == "/abc/../def"); 
-        UNIT_ASSERT(NormalizePath("/abc/def//") == "/abc/def"); 
-        UNIT_ASSERT(NormalizePath("/abc/def/.") == "/abc/def"); 
-        UNIT_ASSERT(NormalizePath("/abc/def/./") == "/abc/def"); 
-    } 
+        UNIT_ASSERT(NormalizePath("/abc/./d") == "/abc/d");
+        UNIT_ASSERT(NormalizePath("/abc/./def//abcd//tre///brr") == "/abc/def/abcd/tre/brr");
+        UNIT_ASSERT(NormalizePath("/abc/../def") == "/abc/../def");
+        UNIT_ASSERT(NormalizePath("/abc/def//") == "/abc/def");
+        UNIT_ASSERT(NormalizePath("/abc/def/.") == "/abc/def");
+        UNIT_ASSERT(NormalizePath("/abc/def/./") == "/abc/def");
+    }
 
     TString AdjustPath(const TString& path, const TClientCommand::TConfig& config) {
         TString copyPath(path);
@@ -33,5 +33,5 @@ Y_UNIT_TEST_SUITE(NormalizePathTest) {
         UNIT_ASSERT_EXCEPTION(AdjustPath("/abc", FakeConfig("/root/db")), TMissUseException);
         UNIT_ASSERT_EXCEPTION(AdjustPath("/root/bd/abc", FakeConfig("/root/db")), TMissUseException);
     }
-} 
- 
+}
+

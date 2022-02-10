@@ -8,10 +8,10 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/grpc/client 
-    library/cpp/threading/task_scheduler 
-    ydb/public/lib/yson_value 
-    ydb/public/sdk/cpp/client/ydb_driver 
+    library/cpp/grpc/client
+    library/cpp/threading/task_scheduler
+    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/client/ydb_driver
     ydb/library/yql/core
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks

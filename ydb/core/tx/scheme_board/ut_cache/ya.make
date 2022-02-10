@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/scheme_board) 
+UNITTEST_FOR(ydb/core/tx/scheme_board)
 
 OWNER(
     ilnaz
@@ -6,19 +6,19 @@ OWNER(
 )
 
 FORK_SUBTESTS()
- 
+
 SIZE(MEDIUM)
- 
+
 TIMEOUT(600)
 
 PEERDIR(
     library/cpp/testing/unittest
-    ydb/core/testlib 
-    ydb/core/tx/schemeshard 
-    ydb/core/tx/schemeshard/ut_helpers 
+    ydb/core/testlib
+    ydb/core/tx/schemeshard
+    ydb/core/tx/schemeshard/ut_helpers
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 SRCS(
     cache_ut.cpp

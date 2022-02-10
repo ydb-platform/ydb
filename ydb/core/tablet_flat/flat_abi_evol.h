@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NTable {
 
-    enum class ECompatibility: ui32 { 
+    enum class ECompatibility: ui32 {
 
         /* Evolution of API/ABI changes of executor binary logs, protocols
             and table internal data units. Each alteration of these entities
@@ -30,20 +30,20 @@ namespace NTable {
 
     /* Ev | Desc                                                   | Gone
      ---------------------------------------------------------------------
-        2   All bundles proto was moved to usage of TLargeGlobId units 
+        2   All bundles proto was moved to usage of TLargeGlobId units
      ---------------------------------------------------------------------
         3   Support of NPage v2 labels with additional metadata
             Page readers adopted to work with relative offsets
      ---------------------------------------------------------------------
-        4   EPage::DataPage compression support via NPage v2 labels 
+        4   EPage::DataPage compression support via NPage v2 labels
      ---------------------------------------------------------------------
         5   TPart columns limited to -Min<ui16>, or to 32767 cols
      ---------------------------------------------------------------------
-        6   Complete support of ELargeObj::Extern blobs references 
+        6   Complete support of ELargeObj::Extern blobs references
      ---------------------------------------------------------------------
         7   Extend NPage::TBlobs with channel mask (version 1)
      ---------------------------------------------------------------------
-        8   ECellOp::{Null,Empty,Reset} cannot have values in redo log 
+        8   ECellOp::{Null,Empty,Reset} cannot have values in redo log
      ---------------------------------------------------------------------
         9   Evolution number storages changed from ui64 to ui32
      ---------------------------------------------------------------------
@@ -53,19 +53,19 @@ namespace NTable {
        11   Complete support of annex in redo log (exnternal blobs)
      ---------------------------------------------------------------------
        12   Write redo log in new binary format with generic chunks
-            Use only TLargeGlobId in bundles proto (TPageCollectionProtoHelper serializer) 
+            Use only TLargeGlobId in bundles proto (TPageCollectionProtoHelper serializer)
      ---------------------------------------------------------------------
-       13   Read/write support for TPart page collection root meta data 
+       13   Read/write support for TPart page collection root meta data
             Scheme page now has TLabel'ed version EPage::Schem2
-            +part metainfo: ABI labels, rows and ERowOp::Erase stats 
+            +part metainfo: ABI labels, rows and ERowOp::Erase stats
      ---------------------------------------------------------------------
        14   Per-part by key bloom filter support (EPage:ByKey v0)
      ---------------------------------------------------------------------
-       15   Complete support ELargeObj::Outer, values packed in page collection 
+       15   Complete support ELargeObj::Outer, values packed in page collection
      ---------------------------------------------------------------------
        16   Read and write final key in EPage::Index
      ---------------------------------------------------------------------
-       17   Fixed incomplete read support of rooted page collections 
+       17   Fixed incomplete read support of rooted page collections
      ---------------------------------------------------------------------
        18   Durable db change serial numbers with EvBegin v1
             Stamp field in EvFlush is not used anymore
@@ -78,7 +78,7 @@ namespace NTable {
      ---------------------------------------------------------------------
        22   Fix of unaligned array placement in NPage::TFrames buf
      ---------------------------------------------------------------------
-       23   Start producing all page collections only with TLabel-ed pages 
+       23   Start producing all page collections only with TLabel-ed pages
             Resuse unused channels mask in EPage::Blobs for stats
      ---------------------------------------------------------------------
        24   Support large NLabel variant in pages and blobs readers

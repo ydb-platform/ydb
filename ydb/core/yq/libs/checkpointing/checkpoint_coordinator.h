@@ -3,12 +3,12 @@
 #include "checkpoint_id_generator.h"
 #include "pending_checkpoint.h"
 
-#include <ydb/core/yq/libs/checkpointing/events/events.h> 
-#include <ydb/core/yq/libs/checkpointing_common/defs.h> 
+#include <ydb/core/yq/libs/checkpointing/events/events.h>
+#include <ydb/core/yq/libs/checkpointing_common/defs.h>
 #include <ydb/core/yq/libs/checkpoint_storage/events/events.h>
 
-#include <ydb/core/yq/libs/config/protos/checkpoint_coordinator.pb.h> 
-#include <ydb/public/api/protos/yq.pb.h> 
+#include <ydb/core/yq/libs/config/protos/checkpoint_coordinator.pb.h>
+#include <ydb/public/api/protos/yq.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/retry_queue.h>

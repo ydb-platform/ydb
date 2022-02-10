@@ -3,7 +3,7 @@
 #include "flat_page_label.h"
 #include "flat_util_binary.h"
 
-#include <ydb/core/util/intrusive_heap.h> 
+#include <ydb/core/util/intrusive_heap.h>
 
 #include <util/generic/map.h>
 #include <util/system/sanitizers.h>

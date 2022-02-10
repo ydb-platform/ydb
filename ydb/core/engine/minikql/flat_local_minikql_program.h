@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/base/tablet.h> 
+#include <ydb/core/base/tablet.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

@@ -1,5 +1,5 @@
 #pragma once
 
-// unique tag: ydb/core/tx/sequenceshard/defs.h 
+// unique tag: ydb/core/tx/sequenceshard/defs.h
 
-#include <ydb/core/base/defs.h> 
+#include <ydb/core/base/defs.h>

@@ -1,21 +1,21 @@
 #include "grpc_pq_actor.h"
-#include <ydb/services/persqueue_v1/ut/pq_data_writer.h> 
-#include <ydb/services/persqueue_v1/ut/api_test_setup.h> 
-#include <ydb/services/persqueue_v1/ut/rate_limiter_test_setup.h> 
-#include <ydb/services/persqueue_v1/ut/test_utils.h> 
-#include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h> 
+#include <ydb/services/persqueue_v1/ut/pq_data_writer.h>
+#include <ydb/services/persqueue_v1/ut/api_test_setup.h>
+#include <ydb/services/persqueue_v1/ut/rate_limiter_test_setup.h>
+#include <ydb/services/persqueue_v1/ut/test_utils.h>
+#include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/testlib/test_pq_client.h> 
-#include <ydb/core/protos/grpc_pq_old.pb.h> 
-#include <ydb/core/persqueue/cluster_tracker.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/testlib/test_pq_client.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/core/persqueue/cluster_tracker.h>
 
-#include <ydb/core/tablet/tablet_counters_aggregator.h> 
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
 
-#include <ydb/library/aclib/aclib.h> 
-#include <ydb/library/persqueue/obfuscate/obfuscate.h> 
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/tests/counters.h>
-#include <ydb/library/persqueue/topic_parser/topic_parser.h> 
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -31,11 +31,11 @@
 #include <grpc++/client_context.h>
 #include <grpc++/create_channel.h>
 
-#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h> 
-#include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h> 
+#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
+#include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h> 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h> 
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
 
 
 namespace NKikimr::NPersQueueTests {
@@ -2674,8 +2674,8 @@ namespace {
         {
             NYdb::TDriverConfig driverCfg;
             driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort);
-            std::shared_ptr<NYdb::TDriver> ydbDriver(new NYdb::TDriver(driverCfg)); 
-            auto pqClient = NYdb::NPersQueue::TPersQueueClient(*ydbDriver); 
+            std::shared_ptr<NYdb::TDriver> ydbDriver(new NYdb::TDriver(driverCfg));
+            auto pqClient = NYdb::NPersQueue::TPersQueueClient(*ydbDriver);
 
             auto res = pqClient.CreateTopic("/Root/PQ/rt3.dc1--acc2--topic2");
             res.Wait();
@@ -2872,7 +2872,7 @@ namespace {
             {"acc/consumer2", "AnotherType"},
             {"acc/consumer3", "SecondType"}
         });
- 
+
         {
             AlterTopicRequest request;
             AlterTopicResponse response;
@@ -3215,8 +3215,8 @@ namespace {
             Cerr << response << "\n" << res << "\n";
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
         };
- 
- 
+
+
         auto checkDescribe = [&](const TString& topic, const TVector<std::pair<TString, TString>>& readRules) {
             DescribeTopicRequest request;
             DescribeTopicResponse response;
@@ -3275,7 +3275,7 @@ namespace {
             rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
             rr->set_consumer_name("acc/new_user");
             rr->set_service_type("MyGreatType");
- 
+
             grpc::ClientContext rcontext;
             auto status = pqStub->AddReadRule(&rcontext, request, &response);
 
@@ -3284,7 +3284,7 @@ namespace {
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
- 
+
             checkDescribe(
                 "/Root/PQ/rt3.dc1--topic_3",
                 {
@@ -3295,7 +3295,7 @@ namespace {
                 }
             );
         }
- 
+
         {
             checkDescribe(
                 "/Root/PQ/rt3.dc1--topic_4",
@@ -3305,12 +3305,12 @@ namespace {
                     {"acc/user3", "default_type"}
                 }
             );
- 
+
             RemoveReadRuleRequest request;
             RemoveReadRuleResponse response;
             request.set_path("/Root/PQ/rt3.dc1--topic_4");
             request.set_consumer_name("acc@user2");
- 
+
             grpc::ClientContext rcontext;
             auto status = pqStub->RemoveReadRule(&rcontext, request, &response);
 
@@ -3319,7 +3319,7 @@ namespace {
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
- 
+
             checkDescribe(
                 "/Root/PQ/rt3.dc1--topic_4",
                 {
@@ -3499,11 +3499,11 @@ namespace {
         NPersQueue::TTestServer server;
 
         ui32 partitionsCount = 100;
-        TString topic = "topic1"; 
-        TString topicFullName = "rt3.dc1--" + topic; 
+        TString topic = "topic1";
+        TString topicFullName = "rt3.dc1--" + topic;
 
-        server.AnnoyingClient->CreateTopic(topicFullName, partitionsCount); 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY}); 
+        server.AnnoyingClient->CreateTopic(topicFullName, partitionsCount);
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY});
 
         auto driver = server.AnnoyingClient->GetDriver();
 
@@ -3522,15 +3522,15 @@ namespace {
             TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
             auto createStream = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event);
             UNIT_ASSERT(createStream);
-            TString stepDescription = TStringBuilder() << "create stream for partition=" << partition 
+            TString stepDescription = TStringBuilder() << "create stream for partition=" << partition
                 << " : " << createStream->DebugString();
             Cerr << stepDescription << Endl;
             UNIT_ASSERT_EQUAL_C(
                 partition,
                 createStream->GetPartitionStream()->GetPartitionId(),
                 stepDescription
-            ); 
-        } 
+            );
+        }
     }
 }
 }

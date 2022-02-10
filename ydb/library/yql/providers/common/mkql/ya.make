@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER( 
-    spuchin 
-    g:yql 
-    g:yql_ydb_core 
-) 
+OWNER(
+    spuchin
+    g:yql
+    g:yql_ydb_core
+)
 
 SRCS(
     parser.cpp
@@ -18,10 +18,10 @@ SRCS(
 PEERDIR(
     library/cpp/json
     ydb/library/yql/ast
-    ydb/library/yql/minikql 
-    ydb/library/yql/public/decimal 
-    ydb/library/yql/public/udf 
-    ydb/library/yql/utils 
+    ydb/library/yql/minikql
+    ydb/library/yql/public/decimal
+    ydb/library/yql/public/udf
+    ydb/library/yql/utils
     ydb/library/yql/core
     ydb/library/yql/core/expr_nodes
     ydb/library/yql/providers/common/schema/expr

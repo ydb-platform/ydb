@@ -1,4 +1,4 @@
-#include <ydb/library/yql/minikql/dom/yson.h> 
+#include <ydb/library/yql/minikql/dom/yson.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>

@@ -7,12 +7,12 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/public/udf/service/exception_policy 
+    ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/sql
 )
 
 TIMEOUT(300)
- 
+
 SIZE(MEDIUM)
 
 END()

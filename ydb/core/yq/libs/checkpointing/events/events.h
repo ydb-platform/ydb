@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/yq/libs/checkpointing_common/defs.h> 
+#include <ydb/core/yq/libs/checkpointing_common/defs.h>
 #include <ydb/core/yq/libs/events/event_subspace.h>
 
 #include <library/cpp/actors/core/events.h>

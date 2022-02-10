@@ -1,141 +1,141 @@
-#include "blobstorage_status.h" 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_response.h> 
-#include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_skeletonerr.h> 
- 
-using namespace NKikimrServices; 
- 
-namespace NKikimr { 
- 
-    //////////////////////////////////////////////////////////////////////////// 
-    // TStatusRequestHandler 
-    //////////////////////////////////////////////////////////////////////////// 
-    class TStatusRequestHandler : public TActorBootstrapped<TStatusRequestHandler> { 
-        TIntrusivePtr<TVDiskContext> VCtx; 
+#include "blobstorage_status.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
+#include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_skeletonerr.h>
+
+using namespace NKikimrServices;
+
+namespace NKikimr {
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TStatusRequestHandler
+    ////////////////////////////////////////////////////////////////////////////
+    class TStatusRequestHandler : public TActorBootstrapped<TStatusRequestHandler> {
+        TIntrusivePtr<TVDiskContext> VCtx;
         const TActorId SkeletonId;
         const TActorId SyncerId;
         const TActorId SyncLogId;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
-        const TVDiskID SelfVDiskId; 
+        const TVDiskID SelfVDiskId;
         const ui64 IncarnationGuid;
         const TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
-        TEvBlobStorage::TEvVStatus::TPtr Ev; 
+        TEvBlobStorage::TEvVStatus::TPtr Ev;
         const TActorId NotifyId;
-        const TInstant Now; 
+        const TInstant Now;
         const bool ReplDone;
-        unsigned Counter; 
+        unsigned Counter;
         std::unique_ptr<TEvBlobStorage::TEvVStatusResult> Result;
- 
-        friend class TActorBootstrapped<TStatusRequestHandler>; 
- 
-        void Bootstrap(const TActorContext &ctx) { 
-            // check request 
-            const NKikimrBlobStorage::TEvVStatus &record = Ev->Get()->Record; 
-            if (!SelfVDiskId.SameDisk(record.GetVDiskID())) { 
+
+        friend class TActorBootstrapped<TStatusRequestHandler>;
+
+        void Bootstrap(const TActorContext &ctx) {
+            // check request
+            const NKikimrBlobStorage::TEvVStatus &record = Ev->Get()->Record;
+            if (!SelfVDiskId.SameDisk(record.GetVDiskID())) {
                 Result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::RACE, SelfVDiskId, false,
                     false, IncarnationGuid);
                 SetRacingGroupInfo(record, Result->Record, GroupInfo);
                 LOG_DEBUG(ctx, BS_VDISK_OTHER, VDISKP(VCtx->VDiskLogPrefix, "TEvVStatusResult Request# {%s} Response# {%s}",
                     SingleLineProto(record).data(), SingleLineProto(Result->Record).data()));
                 SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, Ev->Cookie, Ev->GetChannel());
-                Die(ctx); 
-                return; 
-            } 
- 
+                Die(ctx);
+                return;
+            }
+
             Result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, SelfVDiskId, true, ReplDone,
                 IncarnationGuid);
- 
-            NPDisk::TStatusFlags statusFlags = VCtx->GetOutOfSpaceState().GetGlobalStatusFlags().Flags; 
-            Result->Record.SetStatusFlags(statusFlags); 
- 
-            // send requests to all actors 
-            SendLocalStatusRequest(ctx, SkeletonId); 
-            SendLocalStatusRequest(ctx, SyncerId); 
-            SendLocalStatusRequest(ctx, SyncLogId); 
-            Become(&TThis::StateFunc); 
-        } 
- 
+
+            NPDisk::TStatusFlags statusFlags = VCtx->GetOutOfSpaceState().GetGlobalStatusFlags().Flags;
+            Result->Record.SetStatusFlags(statusFlags);
+
+            // send requests to all actors
+            SendLocalStatusRequest(ctx, SkeletonId);
+            SendLocalStatusRequest(ctx, SyncerId);
+            SendLocalStatusRequest(ctx, SyncLogId);
+            Become(&TThis::StateFunc);
+        }
+
         void SendLocalStatusRequest(const TActorContext &ctx, const TActorId &actor) {
             if (actor != TActorId()) {
-                ctx.Send(actor, new TEvLocalStatus()); 
-                Counter++; 
-            } 
-        } 
- 
-        void Handle(TEvLocalStatusResult::TPtr &ev, const TActorContext &ctx) { 
+                ctx.Send(actor, new TEvLocalStatus());
+                Counter++;
+            }
+        }
+
+        void Handle(TEvLocalStatusResult::TPtr &ev, const TActorContext &ctx) {
             Y_VERIFY_DEBUG(Counter > 0);
-            --Counter; 
- 
-            Result->Record.MergeFrom(ev->Get()->Record); 
- 
-            if (Counter == 0) { 
-                ctx.Send(NotifyId, new TEvents::TEvActorDied()); 
-                LOG_DEBUG(ctx, BS_VDISK_GET, 
-                    VDISKP(VCtx->VDiskLogPrefix, "TEvVStatusResult")); 
+            --Counter;
+
+            Result->Record.MergeFrom(ev->Get()->Record);
+
+            if (Counter == 0) {
+                ctx.Send(NotifyId, new TEvents::TEvActorDied());
+                LOG_DEBUG(ctx, BS_VDISK_GET,
+                    VDISKP(VCtx->VDiskLogPrefix, "TEvVStatusResult"));
                 SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, Ev->Cookie, Ev->GetChannel());
-                Die(ctx); 
-            } 
-        } 
- 
-        void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) { 
-            Y_UNUSED(ev); 
-            Die(ctx); 
-        } 
- 
+                Die(ctx);
+            }
+        }
+
+        void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
+            Y_UNUSED(ev);
+            Die(ctx);
+        }
+
         STRICT_STFUNC(StateFunc,
             HFunc(TEvLocalStatusResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
         )
- 
-    public: 
+
+    public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_STATUS_REQUEST_HANDLER;
         }
 
-        TStatusRequestHandler( 
-                const TIntrusivePtr<TVDiskContext> &vctx, 
+        TStatusRequestHandler(
+                const TIntrusivePtr<TVDiskContext> &vctx,
                 const TActorId &skeletonId,
                 const TActorId &syncerId,
                 const TActorId &syncLogId,
                 const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
-                const TVDiskID selfVDiskId, 
+                const TVDiskID selfVDiskId,
                 const ui64 incarnationGuid,
                 const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo,
-                TEvBlobStorage::TEvVStatus::TPtr &ev, 
+                TEvBlobStorage::TEvVStatus::TPtr &ev,
                 const TActorId &notifyId,
-                const TInstant &now, 
-                bool replDone) 
-            : TActorBootstrapped<TStatusRequestHandler>() 
-            , VCtx(vctx) 
-            , SkeletonId(skeletonId) 
-            , SyncerId(syncerId) 
-            , SyncLogId(syncLogId) 
-            , IFaceMonGroup(ifaceMonGroup) 
-            , SelfVDiskId(selfVDiskId) 
+                const TInstant &now,
+                bool replDone)
+            : TActorBootstrapped<TStatusRequestHandler>()
+            , VCtx(vctx)
+            , SkeletonId(skeletonId)
+            , SyncerId(syncerId)
+            , SyncLogId(syncLogId)
+            , IFaceMonGroup(ifaceMonGroup)
+            , SelfVDiskId(selfVDiskId)
             , IncarnationGuid(incarnationGuid)
             , GroupInfo(groupInfo)
-            , Ev(ev) 
-            , NotifyId(notifyId) 
-            , Now(now) 
+            , Ev(ev)
+            , NotifyId(notifyId)
+            , Now(now)
             , ReplDone(replDone)
-            , Counter(0) 
+            , Counter(0)
         {}
-    }; 
- 
-    IActor *CreateStatusRequestHandler( 
-            const TIntrusivePtr<TVDiskContext> &vctx, 
+    };
+
+    IActor *CreateStatusRequestHandler(
+            const TIntrusivePtr<TVDiskContext> &vctx,
             const TActorId &skeletonId,
             const TActorId &syncerId,
             const TActorId &syncLogId,
             const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
-            const TVDiskID selfVDiskId, 
+            const TVDiskID selfVDiskId,
             const ui64 incarnationGuid,
             const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo,
-            TEvBlobStorage::TEvVStatus::TPtr &ev, 
+            TEvBlobStorage::TEvVStatus::TPtr &ev,
             const TActorId &notifyId,
-            const TInstant &now, 
-            bool replDone) { 
-        return new TStatusRequestHandler(vctx, skeletonId, syncerId, syncLogId, ifaceMonGroup, selfVDiskId, 
+            const TInstant &now,
+            bool replDone) {
+        return new TStatusRequestHandler(vctx, skeletonId, syncerId, syncLogId, ifaceMonGroup, selfVDiskId,
             incarnationGuid, groupInfo, ev, notifyId, now, replDone);
-    } 
- 
-} // NKikimr 
+    }
+
+} // NKikimr

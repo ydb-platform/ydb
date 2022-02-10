@@ -1,16 +1,16 @@
 #include "datashard_ut_common.h"
 
-#include <ydb/core/base/tablet.h> 
-#include <ydb/core/base/tablet_resolver.h> 
-#include <ydb/core/scheme/scheme_types_defs.h> 
-#include <ydb/core/tablet_flat/flat_bio_events.h> 
-#include <ydb/core/tablet_flat/shared_cache_events.h> 
-#include <ydb/core/testlib/basics/appdata.h> 
-#include <ydb/core/tx/balance_coverage/balance_coverage_builder.h> 
-#include <ydb/core/tx/tx_allocator/txallocator.h> 
-#include <ydb/core/tx/tx_proxy/proxy.h> 
-#include <ydb/core/tx/schemeshard/schemeshard_build_index.h> 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h> 
+#include <ydb/core/base/tablet.h>
+#include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/scheme/scheme_types_defs.h>
+#include <ydb/core/tablet_flat/flat_bio_events.h>
+#include <ydb/core/tablet_flat/shared_cache_events.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
+#include <ydb/core/tx/tx_allocator/txallocator.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 
@@ -149,7 +149,7 @@ TTester::TKeyResolver TTester::GetKeyResolver() const {
 
 void TTester::CreateDataShard(TFakeMiniKQLProxy& proxy, ui64 tabletId, const TString& schemeText, bool withRegister) {
     TActorId actorId = CreateTestBootstrapper(Runtime, CreateTestTabletInfo(tabletId, TTabletTypes::FLAT_DATASHARD),
-        &::NKikimr::CreateDataShard); 
+        &::NKikimr::CreateDataShard);
     Y_UNUSED(actorId);
 
     TDispatchOptions options;
@@ -318,7 +318,7 @@ ui32 TFakeProxyTx::SetProgram(TTester& tester, const TString& programText) {
             backtrace->PrintTo(Cerr);
         }
     };
-    settings.ForceOnline = (TxFlags_ & NDataShard::TTxFlags::ForceOnline); 
+    settings.ForceOnline = (TxFlags_ & NDataShard::TTxFlags::ForceOnline);
 
     Engine = CreateEngineFlat(settings);
 
@@ -586,7 +586,7 @@ void TFakeMiniKQLProxy::ProposeScheme(TFakeProxyTx& tx, const TVector<ui64>& sha
     for (ui32 i = 0; i < shards.size(); ++i) {
         ui64 shardId = shards[i];
         auto txBody = txBodyForShard(shards[i]).SerializeAsString();
-        ui32 txFlags = NDataShard::TTxFlags::Default; 
+        ui32 txFlags = NDataShard::TTxFlags::Default;
 
         for (;;) {
             auto proposal = new TEvDataShard::TEvProposeTransaction(kind, FAKE_SCHEMESHARD_TABLET_ID,
@@ -790,9 +790,9 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
         }
 
         // delayed data
-        if (ev->Type == NTabletFlatExecutor::NBlockIO::TEvData::EventType) { 
-            // WARNING: NShared::TEvResult and NBlockIO::TEvData currently share an event id 
-            auto event = ev->Get<NTabletFlatExecutor::NBlockIO::TEvData>(); 
+        if (ev->Type == NTabletFlatExecutor::NBlockIO::TEvData::EventType) {
+            // WARNING: NShared::TEvResult and NBlockIO::TEvData currently share an event id
+            auto event = ev->Get<NTabletFlatExecutor::NBlockIO::TEvData>();
             needDelay = DelayedData && !delayedEvent;
 
             event->Describe(Cerr);
@@ -1751,7 +1751,7 @@ void WaitTabletBecomesOffline(TServer::TPtr server, ui64 tabletId)
             if (ev.GetTypeRewrite() == TEvDataShard::EvStateChanged) {
                 auto &rec = ev.Get<TEvDataShard::TEvStateChanged>()->Record;
                 if (rec.GetTabletId() == TabletId
-                        && rec.GetState() == NDataShard::TShardState::Offline) 
+                        && rec.GetState() == NDataShard::TShardState::Offline)
                     return true;
             }
             return false;

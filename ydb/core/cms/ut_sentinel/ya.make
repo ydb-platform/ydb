@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/cms) 
+UNITTEST_FOR(ydb/core/cms)
 
 OWNER(
     ilnaz
@@ -6,16 +6,16 @@ OWNER(
 )
 
 SIZE(MEDIUM)
- 
+
 TIMEOUT(600)
 
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
-    ydb/core/testlib 
+    ydb/core/testlib
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 SRCS(
     cms_ut_common.cpp

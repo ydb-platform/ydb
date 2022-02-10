@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/tx/sequenceproxy/public/events.h> 
+#include <ydb/core/tx/sequenceproxy/public/events.h>
 
 namespace NKikimr {
 namespace NSequenceProxy {

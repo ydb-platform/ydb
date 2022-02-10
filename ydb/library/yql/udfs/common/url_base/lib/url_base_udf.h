@@ -3,7 +3,7 @@
 #include "url_parse.h"
 #include "url_query.h"
 
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
+#include <ydb/library/yql/public/udf/udf_helpers.h>
 
 #include <library/cpp/tld/tld.h>
 #include <library/cpp/charset/wide.h>

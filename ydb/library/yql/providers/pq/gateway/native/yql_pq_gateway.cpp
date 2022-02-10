@@ -1,9 +1,9 @@
 #include "yql_pq_gateway.h"
 #include "yql_pq_session.h"
 
-#include <ydb/library/yql/utils/log/context.h> 
+#include <ydb/library/yql/utils/log/context.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h> 
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
 #include <util/system/mutex.h>
 

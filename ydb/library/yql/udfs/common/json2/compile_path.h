@@ -2,8 +2,8 @@
 
 #include "resource.h"
 
-#include <ydb/library/yql/public/udf/udf_value.h> 
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
+#include <ydb/library/yql/public/udf/udf_value.h>
+#include <ydb/library/yql/public/udf/udf_helpers.h>
 
 namespace NJson2Udf {
     using namespace NKikimr;
@@ -66,5 +66,5 @@ namespace NJson2Udf {
 
         TSourcePosition Pos_;
     };
-} 
- 
+}
+

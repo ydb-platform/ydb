@@ -1,7 +1,7 @@
 #include "blobstorage_replrecoverymachine.h"
 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h> 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h> 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
 
@@ -10,8 +10,8 @@ namespace NKikimr {
     Y_UNIT_TEST_SUITE(TBlobStorageReplRecoveryMachine) {
 
         TMap<TLogoBlobID, TVector<TString>> GenerateData(ui32 numBlobs,
-                                                        ui32 maxLen, 
-                                                        const TIntrusivePtr<TBlobStorageGroupInfo> &info, 
+                                                        ui32 maxLen,
+                                                        const TIntrusivePtr<TBlobStorageGroupInfo> &info,
                                                         const TVector<TVDiskID>& vdisks) {
             TMap<TLogoBlobID, TVector<TString>> rv;
             TReallyFastRng32 rng(1);
@@ -30,14 +30,14 @@ namespace NKikimr {
 
                 TBlobStorageGroupInfo::TVDiskIds varray;
                 TBlobStorageGroupInfo::TServiceIds services;
-                info->PickSubgroup(id.Hash(), &varray, &services); 
+                info->PickSubgroup(id.Hash(), &varray, &services);
 
                 TDataPartSet parts;
                 info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), data, parts);
 
                 TVector<TString> diskvec(vdisks.size());
 
-                for (ui32 i = 0; i < info->Type.TotalPartCount(); ++i) { 
+                for (ui32 i = 0; i < info->Type.TotalPartCount(); ++i) {
                     for (ui32 k = 0; k < vdisks.size(); ++k) {
                         if (varray[i] == vdisks[k]) {
                             diskvec[k] = parts.Parts[i].OwnedString;
@@ -53,41 +53,41 @@ namespace NKikimr {
         }
 
         std::shared_ptr<TReplCtx> CreateReplCtx(
-            TVector<TVDiskID>& vdisks, 
-            const TIntrusivePtr<TBlobStorageGroupInfo> &info) 
-        { 
-            for (const auto& vdisk : info->GetVDisks()) { 
-                vdisks.push_back(info->GetVDiskId(vdisk.OrderNumber)); 
-            } 
- 
-            auto baseInfo = TVDiskConfig::TBaseInfo::SampleForTests(); 
-            baseInfo.VDiskIdShort = TVDiskIdShort(vdisks[0]); 
-            auto vdiskCfg = MakeIntrusive<TVDiskConfig>(baseInfo); 
-            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>(); 
+            TVector<TVDiskID>& vdisks,
+            const TIntrusivePtr<TBlobStorageGroupInfo> &info)
+        {
+            for (const auto& vdisk : info->GetVDisks()) {
+                vdisks.push_back(info->GetVDiskId(vdisk.OrderNumber));
+            }
+
+            auto baseInfo = TVDiskConfig::TBaseInfo::SampleForTests();
+            baseInfo.VDiskIdShort = TVDiskIdShort(vdisks[0]);
+            auto vdiskCfg = MakeIntrusive<TVDiskConfig>(baseInfo);
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(0, 1, 0, 0, 0),
                 nullptr, TPDiskCategory::DEVICE_TYPE_UNKNOWN);
             auto hugeBlobCtx = std::make_shared<THugeBlobCtx>(512u << 10u, nullptr);
             auto replCtx = std::make_shared<TReplCtx>(
-                vctx, 
-                nullptr, // PDiskCtx 
-                hugeBlobCtx, 
+                vctx,
+                nullptr, // PDiskCtx
+                hugeBlobCtx,
                 nullptr,
                 info,
                 TActorId(),
                 vdiskCfg,
                 std::make_unique<std::atomic_uint64_t>());
- 
-            return replCtx; 
-        } 
- 
-        Y_UNIT_TEST(BasicFunctionality) { 
+
+            return replCtx;
+        }
+
+        Y_UNIT_TEST(BasicFunctionality) {
             TRopeArena arena(&TRopeArenaBackend::Allocate);
-            TVector<TVDiskID> vdisks; 
-            auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block); 
-            auto replCtx = CreateReplCtx(vdisks, groupInfo); 
+            TVector<TVDiskID> vdisks;
+            auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block);
+            auto replCtx = CreateReplCtx(vdisks, groupInfo);
             auto info = MakeIntrusive<TEvReplFinished::TInfo>();
             TBlobIdQueuePtr unreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
-            NRepl::TRecoveryMachine m(replCtx, info, unreplicatedBlobsPtr); 
+            NRepl::TRecoveryMachine m(replCtx, info, unreplicatedBlobsPtr);
             TMap<TLogoBlobID, TVector<TString>> data = GenerateData(10000, 1024, groupInfo, vdisks);
             for (const auto& pair : data) {
                 const TLogoBlobID& id = pair.first;
@@ -96,23 +96,23 @@ namespace NKikimr {
                 TIngress ingress;
                 TBlobStorageGroupInfo::TVDiskIds varray;
                 TBlobStorageGroupInfo::TServiceIds services;
-                groupInfo->PickSubgroup(id.Hash(), &varray, &services); 
-                for (ui32 i = 0; i < groupInfo->Type.TotalPartCount(); ++i) { 
-                    TIngress otherDiskIngress(*TIngress::CreateIngressWithLocal(&groupInfo->GetTopology(), 
-                                                                                varray[i], 
-                                                                                TLogoBlobID(id, i + 1))); 
+                groupInfo->PickSubgroup(id.Hash(), &varray, &services);
+                for (ui32 i = 0; i < groupInfo->Type.TotalPartCount(); ++i) {
+                    TIngress otherDiskIngress(*TIngress::CreateIngressWithLocal(&groupInfo->GetTopology(),
+                                                                                varray[i],
+                                                                                TLogoBlobID(id, i + 1)));
                     ingress.Merge(otherDiskIngress);
                 }
-                ingress = ingress.CopyWithoutLocal(groupInfo->Type); 
+                ingress = ingress.CopyWithoutLocal(groupInfo->Type);
 
                 ui8 partIndex = 0;
-                for (partIndex = 0; partIndex < groupInfo->Type.BlobSubgroupSize(); ++partIndex) { 
-                    if (varray[partIndex] == groupInfo->GetVDiskId(replCtx->VCtx->ShortSelfVDisk)) { 
+                for (partIndex = 0; partIndex < groupInfo->Type.BlobSubgroupSize(); ++partIndex) {
+                    if (varray[partIndex] == groupInfo->GetVDiskId(replCtx->VCtx->ShortSelfVDisk)) {
                         break;
                     }
                 }
-                UNIT_ASSERT(partIndex != groupInfo->Type.BlobSubgroupSize()); 
-                if (partIndex >= groupInfo->Type.TotalPartCount()) { 
+                UNIT_ASSERT(partIndex != groupInfo->Type.BlobSubgroupSize());
+                if (partIndex >= groupInfo->Type.TotalPartCount()) {
                     continue;
                 }
 
@@ -131,7 +131,7 @@ namespace NKikimr {
 
                 TBlobStorageGroupInfo::TVDiskIds varray;
                 TBlobStorageGroupInfo::TServiceIds services;
-                groupInfo->PickSubgroup(id.Hash(), &varray, &services); 
+                groupInfo->PickSubgroup(id.Hash(), &varray, &services);
 
                 NRepl::TRecoveryMachine::TPartSet p(groupInfo->Type);
                 for (ui32 i = 1; i < v.size(); ++i) {
@@ -139,12 +139,12 @@ namespace NKikimr {
                         continue;
                     }
                     ui8 partIndex;
-                    for (partIndex = 0; partIndex < groupInfo->Type.BlobSubgroupSize(); ++partIndex) { 
+                    for (partIndex = 0; partIndex < groupInfo->Type.BlobSubgroupSize(); ++partIndex) {
                         if (varray[partIndex] == vdisks[i]) {
                             break;
                         }
                     }
-                    UNIT_ASSERT(partIndex != groupInfo->Type.BlobSubgroupSize()); 
+                    UNIT_ASSERT(partIndex != groupInfo->Type.BlobSubgroupSize());
                     p.AddData(0, TLogoBlobID(id, partIndex + 1), NKikimrProto::OK, v[i]);
                 }
                 NRepl::TRecoveryMachine::TRecoveredBlobsQueue rbq;
@@ -153,12 +153,12 @@ namespace NKikimr {
                 Y_VERIFY(phantom == NRepl::TRecoveryMachine::EPhantomState::Unknown);
 
                 ui8 partIndex;
-                for (partIndex = 0; partIndex < groupInfo->Type.BlobSubgroupSize(); ++partIndex) { 
-                    if (varray[partIndex] == groupInfo->GetVDiskId(replCtx->VCtx->ShortSelfVDisk)) { 
+                for (partIndex = 0; partIndex < groupInfo->Type.BlobSubgroupSize(); ++partIndex) {
+                    if (varray[partIndex] == groupInfo->GetVDiskId(replCtx->VCtx->ShortSelfVDisk)) {
                         break;
                     }
                 }
-                UNIT_ASSERT(partIndex != groupInfo->Type.BlobSubgroupSize()); 
+                UNIT_ASSERT(partIndex != groupInfo->Type.BlobSubgroupSize());
 
                 UNIT_ASSERT_EQUAL(rbq.size(), 1);
                 auto& item = rbq.front();

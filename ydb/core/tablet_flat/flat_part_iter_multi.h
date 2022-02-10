@@ -72,7 +72,7 @@ namespace NTable {
             return IsValid() ? (Page.BaseRow() + Data.Off()) : Max<TRowId>();
         }
 
-        const NPage::TDataPage::TRecord* GetRecord() const noexcept { 
+        const NPage::TDataPage::TRecord* GetRecord() const noexcept {
             Y_VERIFY_DEBUG(IsValid(), "Use of unpositioned iterator");
             return Data.GetRecord();
         }
@@ -98,8 +98,8 @@ namespace NTable {
         TPageId PageId = Max<TPageId>();
 
         NPage::TIndex::TIter Index;
-        NPage::TDataPage Page; 
-        NPage::TDataPage::TIter Data; 
+        NPage::TDataPage Page;
+        NPage::TDataPage::TIter Data;
     };
 
     /**
@@ -1050,7 +1050,7 @@ namespace NTable {
             }
 
             if (!SkipEraseVersion && data->IsErased()) {
-                row.Touch(ERowOp::Erase); 
+                row.Touch(ERowOp::Erase);
                 return;
             }
 
@@ -1089,11 +1089,11 @@ namespace NTable {
             }
         }
 
-        void Apply(TRowState& row, TPinout::TPin pin, const NPage::TDataPage::TRecord* mainRecord, ui32 altIndex) const noexcept 
+        void Apply(TRowState& row, TPinout::TPin pin, const NPage::TDataPage::TRecord* mainRecord, ui32 altIndex) const noexcept
         {
             auto& col = SkipMainVersion ? Part->Scheme->HistoryColumns[pin.From] : Part->Scheme->AllColumns[pin.From];
 
-            const NPage::TDataPage::TRecord* data; 
+            const NPage::TDataPage::TRecord* data;
             if (col.Group == 0) {
                 data = mainRecord;
             } else {
@@ -1110,7 +1110,7 @@ namespace NTable {
                         // Handling it during Seek/Next makes code too complicated,
                         // so we currently cheat by pretending this column has data
                         // in some outer blob that is waiting to be loaded.
-                        row.Set(pin.To, TCellOp(ECellOp::Null, ELargeObj::Outer), { } /* no useful data */); 
+                        row.Set(pin.To, TCellOp(ECellOp::Null, ELargeObj::Outer), { } /* no useful data */);
                         return;
                     case EReady::Gone:
                         Y_FAIL("Unexpected failure to find RowId=%" PRIu64 " in group %" PRIu32 "%s",
@@ -1124,28 +1124,28 @@ namespace NTable {
         void Apply(
                 TRowState& row,
                 TPinout::TPin pin,
-                const NPage::TDataPage::TRecord* data, 
+                const NPage::TDataPage::TRecord* data,
                 const TPartScheme::TColumn& info) const noexcept
         {
             auto op = data->GetOp(info);
 
-            if (op == ECellOp::Empty) { 
+            if (op == ECellOp::Empty) {
                 Y_VERIFY(!info.IsKey(), "Got an absent key cell");
-            } else if (op == ELargeObj::Inline) { 
+            } else if (op == ELargeObj::Inline) {
                 row.Set(pin.To, op, data->Cell(info));
-            } else if (op == ELargeObj::Extern || op == ELargeObj::Outer) { 
+            } else if (op == ELargeObj::Extern || op == ELargeObj::Outer) {
                 const auto ref = data->Cell(info).AsValue<ui64>();
 
                 if (ref >> (sizeof(ui32) * 8))
-                    Y_FAIL("Upper bits of ELargeObj ref now isn't used"); 
+                    Y_FAIL("Upper bits of ELargeObj ref now isn't used");
                 if (auto blob = Env->Locate(Part, ref, op)) {
                     const auto got = NPage::THello().Read(**blob);
 
                     Y_VERIFY(got == NPage::ECodec::Plain && got.Version == 0);
 
-                    row.Set(pin.To, { ECellOp(op), ELargeObj::Inline }, TCell(*got)); 
-                } else if (op == ELargeObj::Outer) { 
-                    op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::Outer); 
+                    row.Set(pin.To, { ECellOp(op), ELargeObj::Inline }, TCell(*got));
+                } else if (op == ELargeObj::Outer) {
+                    op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::Outer);
 
                     row.Set(pin.To, op, { } /* cannot put some useful data */);
                 } else {
@@ -1156,7 +1156,7 @@ namespace NTable {
                         why here direct array of TGlobId is used.
                     */
 
-                    op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId); 
+                    op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
 
                     row.Set(pin.To, op, TCell::Make((**Part->Blobs)[ref]));
                 }

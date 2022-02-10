@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/base/row_version.h> 
+#include <ydb/core/base/row_version.h>
 
 #include <util/generic/set.h>
 #include <util/generic/string.h>
@@ -165,9 +165,9 @@ namespace NTable {
          *
          * When used with TRowVersion each node uses 16 x 4 = 64 bytes, i.e. a single cache line.
          */
-        class TSteppedCookieAllocator { 
+        class TSteppedCookieAllocator {
         public:
-            explicit TSteppedCookieAllocator(size_t size) 
+            explicit TSteppedCookieAllocator(size_t size)
                 : Size(size)
                 , Index(LeftMostChild(0, size))
             {
@@ -280,14 +280,14 @@ namespace NTable {
                     // Construct a vector optimized for binary search
                     Lower.resize(ranges.size());
                     Upper.resize(ranges.size());
-                    TSteppedCookieAllocator steppedCookieAllocator(ranges.size()); 
+                    TSteppedCookieAllocator steppedCookieAllocator(ranges.size());
                     for (const auto& item : ranges) {
-                        Y_VERIFY_DEBUG(steppedCookieAllocator); 
-                        Lower[steppedCookieAllocator.Current()] = item.Lower; 
-                        Upper[steppedCookieAllocator.Current()] = item.Upper; 
-                        steppedCookieAllocator.MoveNext(); 
+                        Y_VERIFY_DEBUG(steppedCookieAllocator);
+                        Lower[steppedCookieAllocator.Current()] = item.Lower;
+                        Upper[steppedCookieAllocator.Current()] = item.Upper;
+                        steppedCookieAllocator.MoveNext();
                     }
-                    Y_VERIFY_DEBUG(!steppedCookieAllocator); 
+                    Y_VERIFY_DEBUG(!steppedCookieAllocator);
                 }
             }
 
@@ -299,7 +299,7 @@ namespace NTable {
              * Similar to TRowVersionRanges::AdjustDown
              */
             TRowVersion AdjustDown(const TRowVersion& rowVersion) const {
-                size_t index = TSteppedCookieAllocator::LowerBound(Upper, rowVersion); 
+                size_t index = TSteppedCookieAllocator::LowerBound(Upper, rowVersion);
                 if (index == Upper.size()) {
                     return rowVersion;
                 }

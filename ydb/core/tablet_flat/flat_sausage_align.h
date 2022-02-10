@@ -4,7 +4,7 @@
 #include <util/generic/algorithm.h>
 
 namespace NKikimr {
-namespace NPageCollection { 
+namespace NPageCollection {
 
     class TAlign {
     public:

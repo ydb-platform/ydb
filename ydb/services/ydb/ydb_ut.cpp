@@ -4,16 +4,16 @@
 #include <grpc++/client_context.h>
 #include <grpc++/create_channel.h>
 
-#include <ydb/core/base/storage_pools.h> 
-#include <ydb/core/protos/flat_scheme_op.pb.h> 
-#include <ydb/core/scheme/scheme_tablecell.h> 
-#include <ydb/core/testlib/test_client.h> 
+#include <ydb/core/base/storage_pools.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/testlib/test_client.h>
 
-#include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h> 
-#include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h> 
-#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h> 
-#include <ydb/public/api/grpc/draft/dummy.grpc.pb.h> 
-#include <ydb/public/api/protos/ydb_table.pb.h> 
+#include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/draft/dummy.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
 
@@ -23,11 +23,11 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h> 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h> 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h> 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h> 
+#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
 #include "ydb_common_ut.h"
 

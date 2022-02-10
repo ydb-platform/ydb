@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import ydb.core.protos.msgbus_pb2 as msgbus 
+import ydb.core.protos.msgbus_pb2 as msgbus
 from ydb.tests.library.common.types import DeltaTypes, PType
 
 

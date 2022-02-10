@@ -10,9 +10,9 @@ namespace NWriter {
 
     class ICone {
     public:
-        virtual NPageCollection::TCookieAllocator& CookieRange(ui32 cookieRange) noexcept = 0; 
-        virtual void Put(NPageCollection::TGlob&&) noexcept = 0; 
-        virtual NPageCollection::TLargeGlobId Put(ui32 cookieRange, ui8 channel, TArrayRef<const char> body, ui32 block) noexcept = 0; 
+        virtual NPageCollection::TCookieAllocator& CookieRange(ui32 cookieRange) noexcept = 0;
+        virtual void Put(NPageCollection::TGlob&&) noexcept = 0;
+        virtual NPageCollection::TLargeGlobId Put(ui32 cookieRange, ui8 channel, TArrayRef<const char> body, ui32 block) noexcept = 0;
     };
 
     class TBanks {
@@ -21,8 +21,8 @@ namespace NWriter {
         using EIdx = NBoot::TCookie::EIdx;
 
         TBanks(const TLogoBlobID &base, TArrayRef<const TConf::TSlot> row)
-            : Meta(base.TabletID(), Stamp(base), TCookie::CookieRange(EIdx::Pack), row) 
-            , Data(base.TabletID(), Stamp(base), TCookie::CookieRangeRaw(), row) 
+            : Meta(base.TabletID(), Stamp(base), TCookie::CookieRange(EIdx::Pack), row)
+            , Data(base.TabletID(), Stamp(base), TCookie::CookieRangeRaw(), row)
         {
 
         }
@@ -32,8 +32,8 @@ namespace NWriter {
             return (ui64(logo.Generation()) << 32) | logo.Step();
         }
 
-        NPageCollection::TCookieAllocator Meta;  /* PageCollections meta blobs      */ 
-        NPageCollection::TCookieAllocator Data;  /* PageCollections body and blobs  */ 
+        NPageCollection::TCookieAllocator Meta;  /* PageCollections meta blobs      */
+        NPageCollection::TCookieAllocator Data;  /* PageCollections body and blobs  */
     };
 }
 }

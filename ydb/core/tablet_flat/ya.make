@@ -76,44 +76,44 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(flat_comp_gen.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(flat_comp_shard.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(flat_part_loader.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(flat_executor_compaction_logic.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(flat_row_eggs.h)
 
-IF (KIKIMR_TABLET_BORROW_WITHOUT_META) 
-    CFLAGS( 
-        -DKIKIMR_TABLET_BORROW_WITHOUT_META=1 
-    ) 
+IF (KIKIMR_TABLET_BORROW_WITHOUT_META)
+    CFLAGS(
+        -DKIKIMR_TABLET_BORROW_WITHOUT_META=1
+    )
 ENDIF()
 
 PEERDIR(
-    contrib/libs/protobuf 
-    library/cpp/containers/intrusive_rb_tree 
-    library/cpp/containers/stack_vector 
+    contrib/libs/protobuf
+    library/cpp/containers/intrusive_rb_tree
+    library/cpp/containers/stack_vector
     library/cpp/digest/crc32c
     library/cpp/html/pcdata
-    library/cpp/lwtrace 
+    library/cpp/lwtrace
     library/cpp/lwtrace/mon
-    ydb/core/base 
-    ydb/core/control 
-    ydb/core/protos 
-    ydb/core/tablet 
-    ydb/core/tablet_flat/protos 
-    ydb/library/binary_json 
-    ydb/library/dynumber 
-    ydb/library/mkql_proto/protos 
+    ydb/core/base
+    ydb/core/control
+    ydb/core/protos
+    ydb/core/tablet
+    ydb/core/tablet_flat/protos
+    ydb/library/binary_json
+    ydb/library/dynumber
+    ydb/library/mkql_proto/protos
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
-END() 
+END()
 
-RECURSE_FOR_TESTS( 
-    ut 
+RECURSE_FOR_TESTS(
+    ut
     ut_large
-) 
+)

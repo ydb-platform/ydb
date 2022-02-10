@@ -1,8 +1,8 @@
 #include "datashard_kqp_compute.h"
 
-#include <ydb/core/engine/mkql_keys.h> 
-#include <ydb/core/engine/mkql_engine_flat_host.h> 
-#include <ydb/core/kqp/runtime/kqp_runtime_impl.h> 
+#include <ydb/core/engine/mkql_keys.h>
+#include <ydb/core/engine/mkql_engine_flat_host.h>
+#include <ydb/core/kqp/runtime/kqp_runtime_impl.h>
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>

@@ -1,7 +1,7 @@
 #include "schemeshard_utils.h"
 
-#include <ydb/core/mind/hive/hive.h> 
-#include <ydb/core/protos/counters_schemeshard.pb.h> 
+#include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/protos/counters_schemeshard.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

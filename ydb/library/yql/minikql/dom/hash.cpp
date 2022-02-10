@@ -1,7 +1,7 @@
 #include "node.h"
 #include "hash.h"
 
-#include <ydb/library/yql/public/udf/udf_type_ops.h> 
+#include <ydb/library/yql/public/udf/udf_type_ops.h>
 
 namespace NYql::NDom {
 

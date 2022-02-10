@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/protos/config.pb.h> 
-#include <ydb/core/kqp/counters/kqp_counters.h> 
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
 
 #include <library/cpp/actors/core/actor.h>
 

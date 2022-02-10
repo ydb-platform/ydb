@@ -1,10 +1,10 @@
-#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h> 
-#include <ydb/core/blobstorage/ut_blobstorage/lib/common.h> 
+#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 
-#include <ydb/core/protos/blobstorage.pb.h> 
-#include <ydb/core/protos/base.pb.h> 
-#include <ydb/core/base/logoblob.h> 
-#include <ydb/core/protos/blobstorage.pb.h> 
+#include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/base.pb.h>
+#include <ydb/core/base/logoblob.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 Y_UNIT_TEST_SUITE(IncorrectQueries) {
     const TVector<TString> erasureTypes = {"none", "block-4-2", "mirror-3", "mirror-3of4", "mirror-3-dc"};

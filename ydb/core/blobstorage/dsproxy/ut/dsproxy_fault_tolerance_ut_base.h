@@ -1,8 +1,8 @@
 #pragma once
 
 #include "defs.h"
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h> 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h> 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <library/cpp/actors/core/actor_coroutine.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -43,7 +43,7 @@ public:
     void GenerateFailModel() {
         const ui32 numDisks = Runtime.VDisks.size();
         for (ui64 mask = 0; mask < ((ui64)1 << numDisks); ++mask) {
-            TBlobStorageGroupInfo::TGroupVDisks disks = TBlobStorageGroupInfo::TGroupVDisks::CreateFromMask(&Info->GetTopology(), mask); 
+            TBlobStorageGroupInfo::TGroupVDisks disks = TBlobStorageGroupInfo::TGroupVDisks::CreateFromMask(&Info->GetTopology(), mask);
             bool fits = Info->GetQuorumChecker().CheckFailModelForGroup(disks);
             (fits ? FaultsFittingFailModel : FaultsExceedingFailModel).emplace(std::move(disks));
         }
@@ -175,7 +175,7 @@ public:
         ui32 responsesPending = 0;
         for (const auto& pair : Runtime.VDisks) {
             const TVDiskID& vdiskId = pair.first;
-            TBlobStorageGroupInfo::TGroupVDisks curDisk(&Info->GetTopology(), vdiskId); 
+            TBlobStorageGroupInfo::TGroupVDisks curDisk(&Info->GetTopology(), vdiskId);
             if (disks & curDisk) {
                 auto func = wipe
                         ? TEvVMockCtlRequest::CreateWipeOutBlobsRequest
@@ -197,7 +197,7 @@ public:
     void SetFailedDisks(const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) {
         ui32 responsesPending = 0;
         for (const auto& pair : Runtime.VDisks) {
-            bool errorMode = static_cast<bool>(failedDisks & TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), pair.first)); 
+            bool errorMode = static_cast<bool>(failedDisks & TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), pair.first));
             GetActorContext().Send(pair.second, TEvVMockCtlRequest::CreateErrorModeRequest(errorMode));
             ++responsesPending;
         }

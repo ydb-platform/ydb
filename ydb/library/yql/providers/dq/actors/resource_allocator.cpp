@@ -3,7 +3,7 @@
 #include "execution_helpers.h"
 
 #include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 

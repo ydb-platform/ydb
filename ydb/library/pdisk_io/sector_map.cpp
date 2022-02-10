@@ -1,6 +1,6 @@
 #include "sector_map.h"
 
-#include <ydb/library/pdisk_io/protos/sector_map.pb.h> 
+#include <ydb/library/pdisk_io/protos/sector_map.pb.h>
 
 namespace NKikimr::NPDisk {
 

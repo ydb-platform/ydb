@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/core/yq/libs/common/service_counters.h> 
-#include <ydb/core/yq/libs/events/events.h> 
-#include <ydb/core/yq/libs/shared_resources/shared_resources.h> 
+#include <ydb/core/yq/libs/common/service_counters.h>
+#include <ydb/core/yq/libs/events/events.h>
+#include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>

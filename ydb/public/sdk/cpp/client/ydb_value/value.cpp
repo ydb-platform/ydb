@@ -1,14 +1,14 @@
 #include "value.h"
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/value_helpers/helpers.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/value_helpers/helpers.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h> 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/fatal_error_handlers/handlers.h> 
+#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/fatal_error_handlers/handlers.h>
 
-#include <ydb/public/api/protos/ydb_value.pb.h> 
+#include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 

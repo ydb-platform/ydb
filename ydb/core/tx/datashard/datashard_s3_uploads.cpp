@@ -2,10 +2,10 @@
 #include "datashard_impl.h"
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 bool TS3UploadsManager::Load(NIceDb::TNiceDb& db) {
-    using Schema = TDataShard::Schema; 
+    using Schema = TDataShard::Schema;
 
     {
         auto rowset = db.Table<Schema::S3Uploads>().Range().Select();
@@ -80,7 +80,7 @@ const TS3Upload* TS3UploadsManager::Find(ui64 txId) const {
 }
 
 const TS3Upload& TS3UploadsManager::Add(NIceDb::TNiceDb& db, ui64 txId, const TString& uploadId) {
-    using Schema = TDataShard::Schema; 
+    using Schema = TDataShard::Schema;
 
     Y_VERIFY(!Uploads.contains(txId));
     auto res = Uploads.emplace(txId, TS3Upload(uploadId));
@@ -93,7 +93,7 @@ const TS3Upload& TS3UploadsManager::Add(NIceDb::TNiceDb& db, ui64 txId, const TS
 const TS3Upload& TS3UploadsManager::ChangeStatus(NIceDb::TNiceDb& db, ui64 txId, TS3Upload::EStatus status,
         TMaybe<TString>&& error, TVector<TString>&& parts)
 {
-    using Schema = TDataShard::Schema; 
+    using Schema = TDataShard::Schema;
 
     auto it = Uploads.find(txId);
     Y_VERIFY(it != Uploads.end());
@@ -121,5 +121,5 @@ const TS3Upload& TS3UploadsManager::ChangeStatus(NIceDb::TNiceDb& db, ui64 txId,
     return upload;
 }
 
-}   // namespace NDataShard 
+}   // namespace NDataShard
 }   // namespace NKikimr

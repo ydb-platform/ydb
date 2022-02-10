@@ -1,12 +1,12 @@
 UNITTEST()
 
-OWNER( 
-    hcpp 
-    g:kikimr 
-) 
+OWNER(
+    hcpp
+    g:kikimr
+)
 
 PEERDIR(
-    ydb/library/security 
+    ydb/library/security
 )
 
 SRCS(

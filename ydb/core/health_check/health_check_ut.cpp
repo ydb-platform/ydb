@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
-#include <ydb/core/testlib/test_client.h> 
-#include <ydb/public/lib/deprecated/kicli/kicli.h> 
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include "health_check.h"
 

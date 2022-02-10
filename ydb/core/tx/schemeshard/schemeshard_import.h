@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/protos/import.pb.h> 
+#include <ydb/core/protos/import.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

@@ -1,12 +1,12 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h>
 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h>
 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/types.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/ydb.h> 
-#include <ydb/public/sdk/cpp/client/ydb_types/core_facility/core_facility.h> 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/types.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/ydb.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/core_facility/core_facility.h>
 
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/logger/log.h>

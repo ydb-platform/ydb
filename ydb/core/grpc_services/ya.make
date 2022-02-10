@@ -79,52 +79,52 @@ PEERDIR(
     contrib/libs/xxhash
     library/cpp/cgiparam
     library/cpp/digest/old_crc
-    ydb/core/actorlib_impl 
-    ydb/core/base 
-    ydb/core/control 
-    ydb/core/engine 
-    ydb/core/formats 
-    ydb/core/grpc_services/counters 
-    ydb/core/grpc_services/local_rpc 
-    ydb/core/health_check 
-    ydb/core/io_formats 
-    ydb/core/kesus/tablet 
-    ydb/core/protos 
-    ydb/core/scheme 
-    ydb/core/sys_view 
-    ydb/core/tx 
-    ydb/core/tx/datashard 
-    ydb/core/tx/long_tx_service/public 
-    ydb/core/ydb_convert 
-    ydb/core/yq/libs/actors 
-    ydb/core/yq/libs/control_plane_proxy 
-    ydb/core/yq/libs/control_plane_proxy/events 
-    ydb/library/aclib 
-    ydb/library/binary_json 
-    ydb/library/dynumber 
-    ydb/library/mkql_proto 
-    ydb/library/persqueue/topic_parser 
-    ydb/library/yql/public/types 
-    ydb/public/api/grpc/draft 
-    ydb/public/api/protos 
-    ydb/public/lib/operation_id 
-    ydb/public/sdk/cpp/client/resources 
+    ydb/core/actorlib_impl
+    ydb/core/base
+    ydb/core/control
+    ydb/core/engine
+    ydb/core/formats
+    ydb/core/grpc_services/counters
+    ydb/core/grpc_services/local_rpc
+    ydb/core/health_check
+    ydb/core/io_formats
+    ydb/core/kesus/tablet
+    ydb/core/protos
+    ydb/core/scheme
+    ydb/core/sys_view
+    ydb/core/tx
+    ydb/core/tx/datashard
+    ydb/core/tx/long_tx_service/public
+    ydb/core/ydb_convert
+    ydb/core/yq/libs/actors
+    ydb/core/yq/libs/control_plane_proxy
+    ydb/core/yq/libs/control_plane_proxy/events
+    ydb/library/aclib
+    ydb/library/binary_json
+    ydb/library/dynumber
+    ydb/library/mkql_proto
+    ydb/library/persqueue/topic_parser
+    ydb/library/yql/public/types
+    ydb/public/api/grpc/draft
+    ydb/public/api/protos
+    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp/client/resources
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
-END() 
+END()
 
-RECURSE( 
-    base 
-    counters 
-    local_rpc 
-    validation 
-    validation/ut 
-    validation/ut/protos 
-    ut 
-) 
+RECURSE(
+    base
+    counters
+    local_rpc
+    validation
+    validation/ut
+    validation/ut/protos
+    ut
+)
 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+RECURSE_FOR_TESTS(
+    ut
+)

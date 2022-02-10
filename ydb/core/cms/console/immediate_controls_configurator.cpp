@@ -2,8 +2,8 @@
 #include "console.h"
 #include "immediate_controls_configurator.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/protos/config.pb.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 

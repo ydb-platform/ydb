@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h> 
+#include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 
 #include <functional>
 

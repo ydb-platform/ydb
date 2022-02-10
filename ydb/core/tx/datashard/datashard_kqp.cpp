@@ -1,12 +1,12 @@
 #include "datashard_kqp.h"
 #include "datashard_impl.h"
 
-#include <ydb/core/kqp/kqp.h> 
-#include <ydb/core/kqp/runtime/kqp_tasks_runner.h> 
-#include <ydb/core/scheme/scheme_tablecell.h> 
-#include <ydb/core/tx/datashard/datashard_locks.h> 
-#include <ydb/core/tx/datashard/datashard_user_table.h> 
-#include <ydb/core/tx/datashard/range_ops.h> 
+#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/tx/datashard/datashard_locks.h>
+#include <ydb/core/tx/datashard/datashard_user_table.h>
+#include <ydb/core/tx/datashard/range_ops.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
@@ -14,7 +14,7 @@
 #include <util/generic/size_literals.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 namespace {
 
@@ -646,7 +646,7 @@ void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
     }
 }
 
-void KqpUpdateDataShardStatCounters(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters) { 
+void KqpUpdateDataShardStatCounters(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters) {
     dataShard.IncCounter(COUNTER_ENGINE_HOST_SELECT_ROW, counters.NSelectRow);
     dataShard.IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE, counters.NSelectRange);
     dataShard.IncCounter(COUNTER_ENGINE_HOST_UPDATE_ROW, counters.NUpdateRow);
@@ -665,7 +665,7 @@ void KqpUpdateDataShardStatCounters(TDataShard& dataShard, const NMiniKQL::TEngi
     }
 }
 
-void KqpFillTxStats(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters, 
+void KqpFillTxStats(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters,
     TEvDataShard::TEvProposeTransactionResult& result)
 {
     auto& stats = *result.Record.MutableTxStats();
@@ -697,7 +697,7 @@ void KqpFillTxStats(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& 
     }
 }
 
-void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunner, 
+void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunner,
     NMiniKQL::TKqpDatashardComputeContext& computeCtx, const NYql::NDqProto::EDqStatsMode& statsMode,
     TEvDataShard::TEvProposeTransactionResult& result)
 {
@@ -751,7 +751,7 @@ NYql::NDq::TDqTaskRunnerMemoryLimits DefaultKqpDataReqMemoryLimits() {
     // Data queries require output channel to be drained only once, and it must contain complete result
     // (i.e. channel must be Finished).
     // So we have to set such a big buffer size.
-    // @link https://a.yandex-team.ru/arc/trunk/arcadia/ydb/core/tx/datashard/datashard_kqp.cpp?rev=6199480#L196-197 
+    // @link https://a.yandex-team.ru/arc/trunk/arcadia/ydb/core/tx/datashard/datashard_kqp.cpp?rev=6199480#L196-197
     memoryLimits.ChannelBufferSize = std::numeric_limits<ui32>::max();
     memoryLimits.OutputChunkMaxSize = std::numeric_limits<ui32>::max();
 
@@ -780,5 +780,5 @@ THolder<NYql::NDq::IDqTaskRunnerExecutionContext> DefaultKqpExecutionContext() {
     return THolder(new TKqpTaskRunnerExecutionContext);
 }
 
-} // namespace NDataShard 
+} // namespace NDataShard
 } // namespace NKikimr

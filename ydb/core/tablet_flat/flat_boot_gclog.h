@@ -5,7 +5,7 @@
 #include "flat_boot_blobs.h"
 #include "flat_bio_events.h"
 
-#include <ydb/core/util/pb.h> 
+#include <ydb/core/util/pb.h>
 #include <library/cpp/blockcodecs/codecs.h>
 #include <util/generic/xrange.h>
 
@@ -29,8 +29,8 @@ namespace NBoot {
         void Start() noexcept override
         {
             for (auto slot: xrange(Queue.size()))
-                if (const auto &largeGlobId = Queue.at(slot).LargeGlobId) 
-                    Pending += Spawn<TLoadBlobs>(largeGlobId, slot); 
+                if (const auto &largeGlobId = Queue.at(slot).LargeGlobId)
+                    Pending += Spawn<TLoadBlobs>(largeGlobId, slot);
 
             Flush();
         }
@@ -51,8 +51,8 @@ namespace NBoot {
         void Flush() noexcept
         {
             for (TBody *head = nullptr; Queue && *(head = &Queue[0]); ) {
-                auto gen = head->LargeGlobId.Lead.Generation(); 
-                auto step = head->LargeGlobId.Lead.Step(); 
+                auto gen = head->LargeGlobId.Lead.Generation();
+                auto step = head->LargeGlobId.Lead.Step();
 
                 Apply(gen, step, Codec->Decode(head->Body));
 

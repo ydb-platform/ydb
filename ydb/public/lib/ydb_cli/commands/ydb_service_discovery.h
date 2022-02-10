@@ -3,7 +3,7 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h> 
+#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
 
 namespace NYdb {
 namespace NConsoleClient {

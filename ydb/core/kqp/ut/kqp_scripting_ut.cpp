@@ -1,7 +1,7 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h> 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h> 
+#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 
 #include <library/cpp/json/json_prettifier.h>
 
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TScriptingClient client(kikimr.GetDriver());
 
         NYdb::NScripting::TExecuteYqlRequestSettings execSettings;
-        execSettings.CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Basic); 
+        execSettings.CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Basic);
 
         auto result = client.ExecuteYqlScript(R"(
             PRAGMA kikimr.ScanQuery = "false";
@@ -369,7 +369,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TScriptingClient client(kikimr.GetDriver());
 
         TExecuteYqlRequestSettings settings;
-        settings.CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Full); 
+        settings.CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Full);
 
         auto result = client.ExecuteYqlScript(R"(
             PRAGMA Kikimr.UseNewEngine = "true";

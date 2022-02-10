@@ -9,15 +9,15 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 namespace NBoot {
 
-void TStages::FinalizeLeaderLogics(TResult &result, TSteppedCookieAllocatorFactory &steppedCookieAllocatorFactory) noexcept 
+void TStages::FinalizeLeaderLogics(TResult &result, TSteppedCookieAllocatorFactory &steppedCookieAllocatorFactory) noexcept
 {
     using EIdx = TCookie::EIdx;
 
     auto *waste = Back->Waste.Get();
 
-    result.CommitManager = new TCommitManager(steppedCookieAllocatorFactory, waste, result.GcLogic.Get()); 
-    result.Snap = new TLogicSnap(steppedCookieAllocatorFactory.Sys(EIdx::SnapLz4), waste, Back->Snap); 
-    result.Redo = new TLogicRedo(steppedCookieAllocatorFactory.Sys(EIdx::RedoLz4), result.CommitManager.Get(), Back->Redo); 
+    result.CommitManager = new TCommitManager(steppedCookieAllocatorFactory, waste, result.GcLogic.Get());
+    result.Snap = new TLogicSnap(steppedCookieAllocatorFactory.Sys(EIdx::SnapLz4), waste, Back->Snap);
+    result.Redo = new TLogicRedo(steppedCookieAllocatorFactory.Sys(EIdx::RedoLz4), result.CommitManager.Get(), Back->Redo);
 }
 
 }

@@ -1,9 +1,9 @@
 #include "kqp_opt_log_rules.h"
 
-#include <ydb/core/kqp/opt/kqp_opt_impl.h> 
-#include <ydb/core/kqp/common/kqp_yql.h> 
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h> 
-#include <ydb/core/kqp/provider/yql_kikimr_opt_utils.h> 
+#include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_opt_utils.h>
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 

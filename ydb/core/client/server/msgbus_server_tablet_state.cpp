@@ -4,11 +4,11 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
-#include <ydb/core/base/tablet_types.h> 
-#include <ydb/public/lib/base/msgbus.h> 
-#include <ydb/core/tablet/tablet_sys.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/base/tablet_types.h>
+#include <ydb/public/lib/base/msgbus.h>
+#include <ydb/core/tablet/tablet_sys.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {

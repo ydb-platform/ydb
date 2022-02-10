@@ -1,11 +1,11 @@
-#include <ydb/services/ydb/ydb_common_ut.h> 
+#include <ydb/services/ydb/ydb_common_ut.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h> 
-#include <ydb/public/sdk/cpp/client/ydb_rate_limiter/rate_limiter.h> 
+#include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
+#include <ydb/public/sdk/cpp/client/ydb_rate_limiter/rate_limiter.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h> 
+#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
-#include <ydb/core/grpc_services/local_rate_limiter.h> 
+#include <ydb/core/grpc_services/local_rate_limiter.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -14,7 +14,7 @@
 
 #include <util/string/builder.h>
 
-#include <ydb/public/api/protos/ydb_rate_limiter.pb.h> 
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 
 namespace NKikimr {
 

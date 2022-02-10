@@ -6,7 +6,7 @@ RECURSE(
     dnsresolver
     examples
     memory_log
-    helpers 
+    helpers
     prof
     protos
     util

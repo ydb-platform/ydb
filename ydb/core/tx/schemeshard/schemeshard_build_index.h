@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/protos/index_builder.pb.h> 
+#include <ydb/core/protos/index_builder.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

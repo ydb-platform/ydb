@@ -1,11 +1,11 @@
-#include <ydb/core/tablet_flat/flat_part_shrink.h> 
-#include <ydb/core/tablet_flat/test/libs/rows/tool.h> 
-#include <ydb/core/tablet_flat/test/libs/rows/mass.h> 
-#include <ydb/core/tablet_flat/test/libs/table/model/large.h> 
-#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_writer.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_curtain.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_envs.h> 
+#include <ydb/core/tablet_flat/flat_part_shrink.h>
+#include <ydb/core/tablet_flat/test/libs/rows/tool.h>
+#include <ydb/core/tablet_flat/test/libs/rows/mass.h>
+#include <ydb/core/tablet_flat/test/libs/table/model/large.h>
+#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_curtain.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_envs.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -183,21 +183,21 @@ Y_UNIT_TEST_SUITE(TScreen) {
         { /* shrink to empty set shoudn't produce any results */
             const auto key = tool.LookupKey(Mass0().Saved[0]);
 
-            shrink.Put(Eggs0().ToPartView(), { }, key); 
+            shrink.Put(Eggs0().ToPartView(), { }, key);
 
-            UNIT_ASSERT(shrink.Skipped == 0 && shrink.PartView.size() == 0); 
+            UNIT_ASSERT(shrink.Skipped == 0 && shrink.PartView.size() == 0);
         }
 
         { /* shrink to the entire set should leave part as is */
             const auto key = tool.LookupKey(Mass0().Saved[0]);
 
-            shrink.Put(Eggs0().ToPartView(), key, { }); 
+            shrink.Put(Eggs0().ToPartView(), key, { });
 
-            UNIT_ASSERT(shrink.Skipped == 0 && shrink.PartView.size() == 1); 
+            UNIT_ASSERT(shrink.Skipped == 0 && shrink.PartView.size() == 1);
 
-            const auto partView = std::move(shrink.PartView[0]); 
+            const auto partView = std::move(shrink.PartView[0]);
 
-            UNIT_ASSERT(!partView.Screen && partView.Part.Get() == Eggs0().At(0).Get()); 
+            UNIT_ASSERT(!partView.Screen && partView.Part.Get() == Eggs0().At(0).Get());
         }
 
         { /* basic regular shrink of some trivial subset */
@@ -206,14 +206,14 @@ Y_UNIT_TEST_SUITE(TScreen) {
             auto begin = tool.LookupKey(Mass0().Saved[hole.Begin]);
             auto end = tool.LookupKey(Mass0().Saved[hole.End]);
 
-            shrink.Put(Eggs0().ToPartView(), begin, end); 
+            shrink.Put(Eggs0().ToPartView(), begin, end);
 
-            UNIT_ASSERT(shrink.Skipped == 0 && shrink.PartView.size() == 2); 
+            UNIT_ASSERT(shrink.Skipped == 0 && shrink.PartView.size() == 2);
 
-            const auto scr = std::move(shrink.PartView[1].Screen); 
-            const auto run = std::move(shrink.PartView[1].Slices); 
+            const auto scr = std::move(shrink.PartView[1].Screen);
+            const auto run = std::move(shrink.PartView[1].Slices);
 
-            UNIT_ASSERT(scr && shrink.PartView[1].Part.Get() == Eggs0().At(0).Get()); 
+            UNIT_ASSERT(scr && shrink.PartView[1].Part.Get() == Eggs0().At(0).Get());
             UNIT_ASSERT(scr->Size() == 1 && scr->Hole(0) == hole);
             UNIT_ASSERT(run && run->size() == 1);
             UNIT_ASSERT(run->front().FirstRowId == hole.Begin);

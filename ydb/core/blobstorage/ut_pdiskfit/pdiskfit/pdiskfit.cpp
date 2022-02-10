@@ -1,5 +1,5 @@
-#include <ydb/core/blobstorage/ut_pdiskfit/lib/fail_injection_test.h> 
-#include <ydb/core/blobstorage/ut_pdiskfit/lib/basic_test.h> 
+#include <ydb/core/blobstorage/ut_pdiskfit/lib/fail_injection_test.h>
+#include <ydb/core/blobstorage/ut_pdiskfit/lib/basic_test.h>
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 

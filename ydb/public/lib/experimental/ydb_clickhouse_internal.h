@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
-#include <ydb/public/api/grpc/draft/ydb_clickhouse_internal_v1.pb.h> 
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/api/grpc/draft/ydb_clickhouse_internal_v1.pb.h>
 
 // TODO: Bad dependency???
-#include <ydb/core/scheme/scheme_type_id.h> 
+#include <ydb/core/scheme/scheme_type_id.h>
 
 #include <util/generic/deque.h>
 

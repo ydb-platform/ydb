@@ -1,31 +1,31 @@
-#include "defs.h" 
-#include "blobstorage_repl.h" 
-#include "blobstorage_replproxy.h" 
+#include "defs.h"
+#include "blobstorage_repl.h"
+#include "blobstorage_replproxy.h"
 #include "blobstorage_replrecoverymachine.h"
-#include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksst_add.h> 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h> 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h> 
-#include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h> 
+#include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksst_add.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
+#include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
 #include <util/datetime/cputimer.h>
- 
-// FIXME: we need a process that asyncronously transfers handoff parts to their correct vdisk 
-// FIXME: when VDiskProxy reports error, we can get lot of errors during recovery, we want to distinguish them 
-//        from other errors 
- 
- 
-namespace NKikimr { 
- 
-    using namespace NRepl; 
- 
+
+// FIXME: we need a process that asyncronously transfers handoff parts to their correct vdisk
+// FIXME: when VDiskProxy reports error, we can get lot of errors during recovery, we want to distinguish them
+//        from other errors
+
+
+namespace NKikimr {
+
+    using namespace NRepl;
+
     // a vector of proxies we are using to interoperate with other disks; index designates VDisk order number inside the
     // group; for those disks we don't use, the pointer is set to null
     using TVDiskProxySet = TStackVec<TVDiskProxyPtr, 32>;
- 
+
     struct TEvReplPlanFinished : public TEventLocal<TEvReplPlanFinished, TEvBlobStorage::EvReplPlanFinished> {
         std::unique_ptr<TRecoveryMachine> RecoveryMachine;
         TLogoBlobID LastKey;
         bool Eof;
- 
+
         TEvReplPlanFinished(std::unique_ptr<TRecoveryMachine>&& recoveryMachine, const TLogoBlobID& lastKey, bool eof)
             : RecoveryMachine(std::move(recoveryMachine))
             , LastKey(lastKey)
@@ -33,21 +33,21 @@ namespace NKikimr {
         {}
     };
 
-    //////////////////////////////////////////////////////////////////////////// 
-    // THullReplPlannerActor 
-    //////////////////////////////////////////////////////////////////////////// 
+    ////////////////////////////////////////////////////////////////////////////
+    // THullReplPlannerActor
+    ////////////////////////////////////////////////////////////////////////////
     class THullReplPlannerActor : public TActorBootstrapped<THullReplPlannerActor> {
         std::unique_ptr<TRecoveryMachine> RecoveryMachine;
         std::shared_ptr<TReplCtx> ReplCtx;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TActorId Recipient;
         TLogoBlobID StartKey;
-        TEvReplFinished::TInfoPtr ReplInfo; 
+        TEvReplFinished::TInfoPtr ReplInfo;
         TBlobIdQueuePtr BlobsToReplicatePtr;
         TBlobIdQueuePtr UnreplicatedBlobsPtr;
         ui64 QuantumBytes = 0;
         ui32 QuantumParts = 0;
- 
+
     public:
         void Bootstrap(const TActorId& parentId) {
             Recipient = parentId;
@@ -60,8 +60,8 @@ namespace NKikimr {
 
             // switch state func
             Become(&TThis::StateFunc);
-        } 
- 
+        }
+
         void Handle(TEvTakeHullSnapshotResult::TPtr ev) {
             auto& snap = ev->Get()->Snap;
             const bool allowKeepFlags = snap.HullCtx->AllowKeepFlags;
@@ -104,8 +104,8 @@ namespace NKikimr {
                 } else {
                     eof = true;
                 }
-            } 
- 
+            }
+
             if (eof || RecoveryMachine->FullOfTasks() || QuantumBytes >= ReplCtx->VDiskCfg->ReplMaxQuantumBytes) {
                 // adjust counters
                 ReplCtx->MonGroup.ReplCurrentUnreplicatedParts() += QuantumParts;
@@ -120,8 +120,8 @@ namespace NKikimr {
                 // resume processing a bit later with newer snapshot; this one gets released
                 Send(ReplCtx->SkeletonId, new TEvTakeHullSnapshot(true));
             }
-        } 
- 
+        }
+
         void ProcessItem(const TLogoBlobsSnapshot::TIndexForwardIterator& it,
                 TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriers, bool allowKeepFlags) {
             // aliases for convenient access
@@ -179,14 +179,14 @@ namespace NKikimr {
 
         THullReplPlannerActor(std::shared_ptr<TReplCtx> replCtx,
                 TIntrusivePtr<TBlobStorageGroupInfo> ginfo,
-                const TLogoBlobID &startKey, 
-                TEvReplFinished::TInfoPtr replInfo, 
-                TBlobIdQueuePtr&& blobsToReplicatePtr, 
+                const TLogoBlobID &startKey,
+                TEvReplFinished::TInfoPtr replInfo,
+                TBlobIdQueuePtr&& blobsToReplicatePtr,
                 TBlobIdQueuePtr&& unreplicatedBlobsPtr)
-            : ReplCtx(std::move(replCtx)) 
+            : ReplCtx(std::move(replCtx))
             , GInfo(std::move(ginfo))
             , StartKey(startKey)
-            , ReplInfo(replInfo) 
+            , ReplInfo(replInfo)
             , BlobsToReplicatePtr(std::move(blobsToReplicatePtr))
             , UnreplicatedBlobsPtr(std::move(unreplicatedBlobsPtr))
         {}
@@ -213,18 +213,18 @@ namespace NKikimr {
         const TActorId ParentId;
         const TLogoBlobID StartKey;
         TVector<TVDiskProxyPtr> MergeHeap;
-        TEvReplFinished::TInfoPtr ReplInfo; 
+        TEvReplFinished::TInfoPtr ReplInfo;
         TRecoveryMachine::TRecoveredBlobsQueue RecoveryQueue;
         TReplSstStreamWriter Writer;
         bool RecoveryMachineFinished, WriterFinished;
         TTimeAccount TimeAccount;
-        TActiveActors ActiveActors; 
+        TActiveActors ActiveActors;
 
         // huge blob replication part
         ui32 HugeBlobsInFlight;
         const ui32 HugeBlobsInFlightMax;
 
-        TQueueActorMapPtr QueueActorMapPtr; 
+        TQueueActorMapPtr QueueActorMapPtr;
         TBlobIdQueuePtr BlobsToReplicatePtr;
         TBlobIdQueuePtr UnreplicatedBlobsPtr;
         std::optional<std::pair<TVDiskID, TActorId>> Donor;
@@ -273,7 +273,7 @@ namespace NKikimr {
             ReplInfo->ProxyStat = std::make_unique<TProxyStat>(stat);
 
             TimeAccount.SetState(ETimeState::COUNT);
-            TimeAccount.UpdateInfo(*ReplInfo); 
+            TimeAccount.UpdateInfo(*ReplInfo);
 
             Send(ParentId, new TEvReplFinished(ReplInfo));
             PassAway();
@@ -285,13 +285,13 @@ namespace NKikimr {
             auto actor = std::make_unique<THullReplPlannerActor>(ReplCtx, GInfo, StartKey, ReplInfo,
                std::move(BlobsToReplicatePtr), std::move(UnreplicatedBlobsPtr));
             auto aid = RunInBatchPool(TActivationContext::ActorContextFor(SelfId()), actor.release());
-            ActiveActors.Insert(aid); 
+            ActiveActors.Insert(aid);
             Become(&TThis::StatePreparePlan);
         }
 
         void Handle(TEvReplPlanFinished::TPtr& ev) {
             STLOG(PRI_DEBUG, BS_REPL, BSVR03, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "THullReplJobActor::Handle(TEvReplPlanFinished)"));
-            ActiveActors.Erase(ev->Sender); 
+            ActiveActors.Erase(ev->Sender);
             RecoveryMachine = std::move(ev->Get()->RecoveryMachine);
             LastKey = ev->Get()->LastKey;
             Eof = ev->Get()->Eof;
@@ -416,7 +416,7 @@ namespace NKikimr {
                             // if we have seen new chunk index, then increase some counters
                             if (WrittenChunkIdxSet.insert(write->ChunkIdx).second) {
                                 ++ReplInfo->ChunksWritten;
-                                ++ReplCtx->MonGroup.ReplChunksWritten(); 
+                                ++ReplCtx->MonGroup.ReplChunksWritten();
                             }
                             const ui64 bytes = write->PartsPtr ? write->PartsPtr->ByteSize() : 0;
                             ReplInfo->SstBytesWritten += bytes;
@@ -497,7 +497,7 @@ namespace NKikimr {
                 while (lastIter != MergeHeap.begin() && MergeHeap.front()->GenLogoBlobId() == *CurrentKey) {
                     PopHeap(MergeHeap.begin(), lastIter, TVDiskProxy::TPtrGreater());
                     --lastIter;
-                } 
+                }
 
                 // now proxies in range [ lastIter, MergeHeap.end() ) have the same current key; some of them may
                 // contain runs of items with this key, so we should check it also; process those proxies and put
@@ -508,7 +508,7 @@ namespace NKikimr {
                     while (proxy->Valid() && proxy->GenLogoBlobId() == *CurrentKey) {
                         TLogoBlobID id;
                         NKikimrProto::EReplyStatus status;
-                        TTrackableString data(TMemoryConsumer(ReplCtx->VCtx->Replication)); 
+                        TTrackableString data(TMemoryConsumer(ReplCtx->VCtx->Replication));
                         proxy->GetData(&id, &status, &data);
                         if (status != NKikimrProto::OK || data.size()) {
                             CurrentParts->AddData(ReplCtx->VCtx->Top->GetOrderNumber(proxy->VDiskId), id, status, data.GetBaseConstRef());
@@ -578,8 +578,8 @@ namespace NKikimr {
                             Y_FAIL("invalid EProcessQueueAction");
                     }
                 }
-            } 
- 
+            }
+
             Y_VERIFY(!NumRunningProxies && MergeHeap.empty() && RecoveryQueue.empty());
             TimeAccount.SetState(ETimeState::OTHER);
 
@@ -612,8 +612,8 @@ namespace NKikimr {
             }
 
             Y_FAIL("incorrect merger state State# %" PRIu32, ui32(Writer.GetState()));
-        } 
- 
+        }
+
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
             STLOG(PRI_INFO, BS_REPL, BSVR34, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "Received phantom validation reply"),
                 (Msg, ev->Get()->ToString()));
@@ -651,7 +651,7 @@ namespace NKikimr {
                     Y_VERIFY(HugeBlobsInFlight < HugeBlobsInFlightMax);
                     ++HugeBlobsInFlight;
 
-                    ++ReplCtx->MonGroup.ReplHugeBlobsRecovered(); 
+                    ++ReplCtx->MonGroup.ReplHugeBlobsRecovered();
                     ReplCtx->MonGroup.ReplHugeBlobBytesRecovered() += front.Data.GetSize();
 
                     const ui64 bytes = front.Data.GetSize();
@@ -674,10 +674,10 @@ namespace NKikimr {
 
                 if (Writer.AddRecoveredBlob(front)) {
                     if (front.LocalParts.CountBits() > 1) {
-                        ++ReplInfo->MultipartBlobs; 
+                        ++ReplInfo->MultipartBlobs;
                     }
 
-                    ++ReplCtx->MonGroup.ReplBlobsRecovered(); 
+                    ++ReplCtx->MonGroup.ReplBlobsRecovered();
                     ReplCtx->MonGroup.ReplBlobBytesRecovered() += front.Data.GetSize();
                     RecoveryQueue.pop();
                 }
@@ -727,19 +727,19 @@ namespace NKikimr {
                 (NumRunningProxies, NumRunningProxies));
 
             if (MergeHeap.size() == NumRunningProxies) {
-                Become(&TThis::StateMerge); 
+                Become(&TThis::StateMerge);
                 Merge();
-            } 
-        } 
- 
+            }
+        }
+
         void Handle(TEvAddBulkSstResult::TPtr& ev) {
-            Y_UNUSED(ev); 
+            Y_UNUSED(ev);
             Writer.ApplyCommit();
             Merge();
         }
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr& /*ev*/) {
-            // FIXME: Handle NotOK 
+            // FIXME: Handle NotOK
             // this message is received when huge blob is written by Skeleton
             Y_VERIFY(HugeBlobsInFlight != 0);
             --HugeBlobsInFlight;
@@ -749,8 +749,8 @@ namespace NKikimr {
         void PassAway() override {
             ActiveActors.KillAndClear(TActivationContext::ActorContextFor(SelfId()));
             TActorBootstrapped::PassAway();
-        } 
- 
+        }
+
         STRICT_STFUNC(StatePreparePlan,
             hFunc(TEvReplPlanFinished, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
@@ -767,12 +767,12 @@ namespace NKikimr {
             hFunc(TEvBlobStorage::TEvVPutResult, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
         )
- 
+
         STRICT_STFUNC(StateInit,
             hFunc(TEvReplProxyNextResult, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
         )
- 
+
         STRICT_STFUNC(StateToken,
             cFunc(TEvBlobStorage::EvReplResume, HandleResume)
             cFunc(TEvents::TSystem::Poison, PassAway)
@@ -783,32 +783,32 @@ namespace NKikimr {
                 cFunc(TEvents::TSystem::Poison, PassAway)
             }
         }
- 
-    public: 
+
+    public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULL_REPL_JOB;
         }
 
-        THullReplJobActor( 
+        THullReplJobActor(
                 std::shared_ptr<TReplCtx> replCtx,
                 const TActorId &parentId,
-                const TLogoBlobID &startKey, 
-                TQueueActorMapPtr&& queueActorMapPtr, 
-                TBlobIdQueuePtr&& blobsToReplicatePtr, 
+                const TLogoBlobID &startKey,
+                TQueueActorMapPtr&& queueActorMapPtr,
+                TBlobIdQueuePtr&& blobsToReplicatePtr,
                 TBlobIdQueuePtr&& unreplicatedBlobsPtr,
                 const std::optional<std::pair<TVDiskID, TActorId>>& donor)
-            : TActorBootstrapped<THullReplJobActor>() 
-            , ReplCtx(std::move(replCtx)) 
+            : TActorBootstrapped<THullReplJobActor>()
+            , ReplCtx(std::move(replCtx))
             , GInfo(ReplCtx->GInfo) // it is safe to take it here
-            , ParentId(parentId) 
-            , StartKey(startKey) 
-            , ReplInfo(new TEvReplFinished::TInfo()) 
+            , ParentId(parentId)
+            , StartKey(startKey)
+            , ReplInfo(new TEvReplFinished::TInfo())
             , Writer(ReplCtx, ReplCtx->HullDs)
             , RecoveryMachineFinished(false)
             , WriterFinished(false)
             , HugeBlobsInFlight(0)
             , HugeBlobsInFlightMax(3)
-            , QueueActorMapPtr(std::move(queueActorMapPtr)) 
+            , QueueActorMapPtr(std::move(queueActorMapPtr))
             , BlobsToReplicatePtr(blobsToReplicatePtr)
             , UnreplicatedBlobsPtr(unreplicatedBlobsPtr)
             , Donor(donor)
@@ -817,24 +817,24 @@ namespace NKikimr {
                 ReplInfo->DonorVDiskId = Donor->first;
             }
         }
-    }; 
- 
- 
-    //////////////////////////////////////////////////////////////////////////// 
-    // CreateReplJobActor 
-    //////////////////////////////////////////////////////////////////////////// 
-    IActor *CreateReplJobActor( 
+    };
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    // CreateReplJobActor
+    ////////////////////////////////////////////////////////////////////////////
+    IActor *CreateReplJobActor(
             std::shared_ptr<TReplCtx> replCtx,
             const TActorId &parentId,
-            const TLogoBlobID &startKey, 
+            const TLogoBlobID &startKey,
             TQueueActorMapPtr queueActorMapPtr,
             TBlobIdQueuePtr blobsToReplicatePtr,
             TBlobIdQueuePtr unreplicatedBlobsPtr,
             const std::optional<std::pair<TVDiskID, TActorId>>& donor)
-    { 
+    {
         return new THullReplJobActor(std::move(replCtx), parentId, startKey, std::move(queueActorMapPtr),
             std::move(blobsToReplicatePtr), std::move(unreplicatedBlobsPtr), donor);
-    } 
- 
-} // NKikimr 
- 
+    }
+
+} // NKikimr
+

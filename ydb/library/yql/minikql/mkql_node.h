@@ -3,7 +3,7 @@
 #include "mkql_mem_info.h"
 #include "mkql_alloc.h"
 
-#include <ydb/library/yql/public/udf/udf_value.h> 
+#include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>

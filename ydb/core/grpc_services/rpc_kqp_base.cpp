@@ -1,6 +1,6 @@
 #include "rpc_kqp_base.h"
 
-#include <ydb/core/kqp/prepare/kqp_query_plan.h> 
+#include <ydb/core/kqp/prepare/kqp_query_plan.h>
 
 namespace NKikimr {
 namespace NGRpcService {

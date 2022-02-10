@@ -2,8 +2,8 @@
 
 #include "columnshard__stats_scan.h"
 
-#include <ydb/core/base/tablet.h> 
-#include <ydb/core/base/tablet_resolver.h> 
+#include <ydb/core/base/tablet.h>
+#include <ydb/core/base/tablet_resolver.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NTxUT {

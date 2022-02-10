@@ -1,7 +1,7 @@
-#include <ydb/core/cms/console/console.h> 
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h> 
-#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h> 
-#include <ydb/core/tx/datashard/datashard.h> 
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 using namespace NKikimr;
 using namespace NSchemeShardUT_Private;
@@ -134,7 +134,7 @@ ui64 GetCompactionsCount(
 
     return compactionsCount;
 }
- 
+
 void CheckShardCompacted(
     TTestActorRuntime &runtime,
     const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
@@ -165,7 +165,7 @@ void CheckNoCompactions(
     TVector<ui64> shards;
     for (auto &part : description.GetPathDescription().GetTablePartitions())
         shards.push_back(part.GetDatashardId());
- 
+
     UNIT_ASSERT(!shards.empty());
 
     env.SimulateSleep(runtime, TDuration::Seconds(30));
@@ -174,7 +174,7 @@ void CheckNoCompactions(
 
     auto userTableName = TStringBuf(path).RNextTok('/');
     const auto& userTable = tables[userTableName];
- 
+
     auto count1 = GetCompactionsCount(
         runtime,
         userTable,
@@ -188,7 +188,7 @@ void CheckNoCompactions(
         userTable,
         shards,
         ownerId);
- 
+
     UNIT_ASSERT_VALUES_EQUAL(count1, count2);
 }
 
@@ -319,7 +319,7 @@ ui64 TestServerless(
 
     for (auto shard: shards)
         CheckShardCompacted(runtime, tables["Simple"], shard, ownerId, enableServerless);
- 
+
     return schemeshardId;
 }
 
@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         // enabled via schemeshard restart
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
- 
+
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -347,7 +347,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         // enabled via configuration change
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
- 
+
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -363,11 +363,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
     Y_UNIT_TEST(SchemeshardShouldNotRequestCompactionsAfterDisable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
- 
+
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
- 
+
         // disable for the case, when compaction is enabled by default
         SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, false);
 
@@ -388,7 +388,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         // enable regular background compaction, but not serverless
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
- 
+
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -399,7 +399,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
     Y_UNIT_TEST(ShouldCompactServerless) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
- 
+
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -410,7 +410,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
     Y_UNIT_TEST(ShouldNotCompactServerlessAfterDisable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
- 
+
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);

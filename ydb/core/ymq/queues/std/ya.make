@@ -1,5 +1,5 @@
 OWNER(
-    g:kikimr 
+    g:kikimr
     g:sqs
 )
 
@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/ymq/base 
+    ydb/core/ymq/base
 )
 
 END()

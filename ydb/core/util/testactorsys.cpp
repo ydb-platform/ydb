@@ -1,9 +1,9 @@
 #include "testactorsys.h"
-#include <ydb/core/tablet/bootstrapper.h> 
-#include <ydb/core/tx/scheme_board/replica.h> 
-#include <ydb/core/base/statestorage.h> 
-#include <ydb/core/base/statestorage_impl.h> 
-#include <ydb/core/base/tablet_resolver.h> 
+#include <ydb/core/tablet/bootstrapper.h>
+#include <ydb/core/tx/scheme_board/replica.h>
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/statestorage_impl.h>
+#include <ydb/core/base/tablet_resolver.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 
 namespace NKikimr {

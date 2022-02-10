@@ -3,8 +3,8 @@
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 
-#include <ydb/public/api/protos/ydb_issue_message.pb.h> 
-#include <ydb/public/api/protos/ydb_status_codes.pb.h> 
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 
 namespace NKikimr {

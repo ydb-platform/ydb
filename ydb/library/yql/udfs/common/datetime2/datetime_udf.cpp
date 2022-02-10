@@ -1,5 +1,5 @@
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
-#include <ydb/library/yql/public/udf/tz/udf_tz.h> 
+#include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <ydb/library/yql/public/udf/tz/udf_tz.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 
 #include <util/datetime/base.h>

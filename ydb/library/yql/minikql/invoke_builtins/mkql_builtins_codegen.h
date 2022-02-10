@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/codegen/codegen.h> 
+#include <ydb/library/yql/minikql/codegen/codegen.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

@@ -8,7 +8,7 @@
 #include "flat_exec_commit.h"
 #include "logic_snap_waste.h"
 
-#include <ydb/core/tablet_flat/flat_executor.pb.h> 
+#include <ydb/core/tablet_flat/flat_executor.pb.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -17,10 +17,10 @@ namespace NTabletFlatExecutor {
     public:
         using TSnap = NKikimrExecutorFlat::TLogSnapshot;
 
-        TLogicSnap(TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies, TIntrusivePtr<NSnap::TWaste> waste, 
-                    NPageCollection::TLargeGlobId last) 
+        TLogicSnap(TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies, TIntrusivePtr<NSnap::TWaste> waste,
+                    NPageCollection::TLargeGlobId last)
             : Cookies(cookies)
-            , Slicer(1, Cookies.Get(), NBlockIO::BlockSize) 
+            , Slicer(1, Cookies.Get(), NBlockIO::BlockSize)
             , Waste_(std::move(waste))
             , Last(last)
         {
@@ -88,10 +88,10 @@ namespace NTabletFlatExecutor {
 
     private:
         ui32 Pending = 0;
-        TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies; 
-        NPageCollection::TSlicer Slicer; 
+        TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
+        NPageCollection::TSlicer Slicer;
         TIntrusivePtr<NSnap::TWaste> Waste_;
-        NPageCollection::TLargeGlobId Last; 
+        NPageCollection::TLargeGlobId Last;
     };
 
 }

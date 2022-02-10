@@ -8,17 +8,17 @@
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_db_changes.h"
 
-#include <ydb/core/base/hive.h> 
-#include <ydb/core/kesus/tablet/events.h> 
-#include <ydb/core/persqueue/events/global.h> 
-#include <ydb/core/tx/datashard/datashard.h> 
-#include <ydb/core/tx/columnshard/columnshard.h> 
+#include <ydb/core/base/hive.h>
+#include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
-#include <ydb/core/tx/sequenceshard/public/events.h> 
-#include <ydb/core/tx/tx_processing.h> 
+#include <ydb/core/tx/sequenceshard/public/events.h>
+#include <ydb/core/tx/tx_processing.h>
 
-#include <ydb/core/blockstore/core/blockstore.h> 
-#include <ydb/core/filestore/core/filestore.h> 
+#include <ydb/core/blockstore/core/blockstore.h>
+#include <ydb/core/filestore/core/filestore.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>

@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    g:yql 
-    g:yql_ydb_core 
-) 
+OWNER(
+    g:yql
+    g:yql_ydb_core
+)
 
 SRCS(
     bind_in_range.cpp
@@ -46,13 +46,13 @@ PEERDIR(
 END()
 
 RECURSE(
-    actors 
-    actor_log 
-    backtrace 
+    actors
+    actor_log
+    backtrace
     failure_injector
-    fetch 
-    log 
-    threading 
+    fetch
+    log
+    threading
 )
 
 RECURSE_FOR_TESTS(

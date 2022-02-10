@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/yq/libs/actors/logging/log.h>
-#include <ydb/core/yq/libs/config/protos/control_plane_proxy.pb.h> 
+#include <ydb/core/yq/libs/config/protos/control_plane_proxy.pb.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>

@@ -2,9 +2,9 @@
 #include "datashard_impl.h"
 #include "erase_rows_condition.h"
 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/tablet_flat/flat_row_state.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/tablet_flat/flat_row_state.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -13,7 +13,7 @@
 #include <util/string/builder.h>
 
 namespace NKikimr {
-namespace NDataShard { 
+namespace NDataShard {
 
 using namespace NActors;
 using namespace NTable;
@@ -214,7 +214,7 @@ class TCondEraseScan: public IActor, public IScan, public IEraserOps {
     }
 
 public:
-    explicit TCondEraseScan(TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId, THolder<IEraseRowsCondition> condition, const TLimits& limits) 
+    explicit TCondEraseScan(TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId, THolder<IEraseRowsCondition> condition, const TLimits& limits)
         : IActor(static_cast<TReceiveFunc>(&TCondEraseScan::StateWork), NKikimrServices::TActivity::CONDITIONAL_ERASE_ROWS_SCAN_ACTOR)
         , TableId(tableId)
         , DataShard{ds->SelfId(), ds->TabletID()}
@@ -247,7 +247,7 @@ public:
         Y_VERIFY(ScanTags.size() == 1, "Multi-column conditions are not supported");
 
         THashMap<TTag, TPos> tagToPos;
- 
+
         for (TPos pos = 0; pos < ScanTags.size(); ++pos) {
             Y_VERIFY(tagToPos.emplace(ScanTags.at(pos), pos).second);
         }
@@ -268,7 +268,7 @@ public:
     }
 
     void Registered(TActorSystem* sys, const TActorId&) override {
-        sys->Send(DataShard.ActorId, new TDataShard::TEvPrivate::TEvConditionalEraseRowsRegistered(TxId, SelfId())); 
+        sys->Send(DataShard.ActorId, new TDataShard::TEvPrivate::TEvConditionalEraseRowsRegistered(TxId, SelfId()));
     }
 
     EScan Seek(TLead& lead, ui64) noexcept override {
@@ -374,7 +374,7 @@ private:
 class TIndexedCondEraseScan: public TCondEraseScan {
 public:
     explicit TIndexedCondEraseScan(
-            TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId, 
+            TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId,
             THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
         : TCondEraseScan(ds, replyTo, tableId, txId, std::move(condition), limits)
         , Indexes(std::move(indexes))
@@ -433,7 +433,7 @@ private:
 }; // TIndexedCondEraseScan
 
 IScan* CreateCondEraseScan(
-        TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId, 
+        TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId,
         THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
 {
     Y_VERIFY(ds);
@@ -501,7 +501,7 @@ static bool CheckUnit(NScheme::TTypeId type, NKikimrSchemeOp::TTTLSettings::EUni
     }
 }
 
-void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, const TActorContext& ctx) { 
+void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, const TActorContext& ctx) {
     using TEvRequest = TEvDataShard::TEvConditionalEraseRowsRequest;
     using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
@@ -590,7 +590,7 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
     ctx.Send(ev->Sender, std::move(response));
 }
 
-void TDataShard::Handle(TEvPrivate::TEvConditionalEraseRowsRegistered::TPtr& ev, const TActorContext& ctx) { 
+void TDataShard::Handle(TEvPrivate::TEvConditionalEraseRowsRegistered::TPtr& ev, const TActorContext& ctx) {
     if (!InFlightCondErase || InFlightCondErase.TxId != ev->Get()->TxId) {
         LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "Unknown conditional erase actor registered"
             << ": at: " << TabletID());
@@ -600,7 +600,7 @@ void TDataShard::Handle(TEvPrivate::TEvConditionalEraseRowsRegistered::TPtr& ev,
     InFlightCondErase.ActorId = ev->Get()->ActorId;
 }
 
-} // NDataShard 
+} // NDataShard
 } // NKikimr
 
 Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvEraseRowsResponse::EStatus, stream, value) {

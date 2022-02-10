@@ -1,6 +1,6 @@
 PROTO_LIBRARY()
 
-OWNER(g:kikimr) 
+OWNER(g:kikimr)
 
 IF (OS_WINDOWS)
     NO_OPTIMIZE_PY_PROTOS()

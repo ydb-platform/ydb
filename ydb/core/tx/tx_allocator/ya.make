@@ -13,18 +13,18 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/helpers 
+    library/cpp/actors/helpers
     library/cpp/actors/interconnect
-    ydb/core/actorlib_impl 
-    ydb/core/base 
-    ydb/core/engine/minikql 
-    ydb/core/protos 
-    ydb/core/tablet 
-    ydb/core/tablet_flat 
+    ydb/core/actorlib_impl
+    ydb/core/base
+    ydb/core/engine/minikql
+    ydb/core/protos
+    ydb/core/tablet
+    ydb/core/tablet_flat
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+)

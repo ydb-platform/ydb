@@ -1,5 +1,5 @@
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
-#include <ydb/library/yql/public/udf/udf_type_ops.h> 
+#include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <ydb/library/yql/public/udf/udf_type_ops.h>
 
 #include <library/cpp/containers/top_keeper/top_keeper.h>
 

@@ -1,7 +1,7 @@
 #pragma once
-#include <ydb/core/blobstorage/defs.h> 
-#include <ydb/core/erasure/erasure.h> 
-#include <ydb/core/base/logoblob.h> 
+#include <ydb/core/blobstorage/defs.h>
+#include <ydb/core/erasure/erasure.h>
+#include <ydb/core/base/logoblob.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -17,11 +17,11 @@ static constexpr ui32 BlobProtobufHeaderMaxSize = 80;
 struct TBloblStorageErasureParameters;
 
 struct TBlobStorageGroupType : public TErasureType {
- 
-    TBlobStorageGroupType(TErasureType::EErasureSpecies s = TErasureType::ErasureNone) 
-        : TErasureType(s) 
-    {} 
- 
+
+    TBlobStorageGroupType(TErasureType::EErasureSpecies s = TErasureType::ErasureNone)
+        : TErasureType(s)
+    {}
+
     struct TPartLayout {
         TStackVec<ui32, 32> VDiskPartMask;
         ui32 VDiskMask;
@@ -105,33 +105,33 @@ struct TBlobStorageGroupType : public TErasureType {
         }
     };
 
-    struct TResult { 
-        const ui32 PartCount = 0; 
+    struct TResult {
+        const ui32 PartCount = 0;
         const TString Error;
- 
-        TResult(ui32 partCount) 
-            : PartCount(partCount) 
-        {} 
- 
+
+        TResult(ui32 partCount)
+            : PartCount(partCount)
+        {}
+
         TResult(const TString &error)
-            : Error(error) 
-        {} 
- 
-        bool Good() const { 
-            return Error.empty(); 
-        } 
- 
+            : Error(error)
+        {}
+
+        bool Good() const {
+            return Error.empty();
+        }
+
         TString ToString() const {
-            TStringStream str; 
-            if (Good()) { 
-                str << PartCount; 
-            } else { 
-                str << Error; 
-            } 
-            return str.Str(); 
-        } 
-    }; 
- 
+            TStringStream str;
+            if (Good()) {
+                str << PartCount;
+            } else {
+                str << Error;
+            }
+            return str.Str();
+        }
+    };
+
     ui32 BlobSubgroupSize() const; // _4_+_2_+_1_
     ui32 Handoff() const; // 4 + 2 + _1_
     bool IsHandoffInSubgroup(ui32 idxInSubgroup) const; // True for idx of a handoff disk in blob subgoup

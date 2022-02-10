@@ -3,12 +3,12 @@
 #include "query_interval.h"
 #include "sysview_service.h"
 
-#include <ydb/core/sys_view/common/common.h> 
-#include <ydb/core/sys_view/common/events.h> 
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/tablet_pipecache.h> 
-#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
-#include <ydb/core/mind/tenant_pool.h> 
+#include <ydb/core/sys_view/common/common.h>
+#include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/mind/tenant_pool.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

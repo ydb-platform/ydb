@@ -1,7 +1,7 @@
 OWNER(g:kikimr)
 
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd") 
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TEST_SRCS(
     create_tablets.py
     hive_matchers.py
@@ -31,7 +31,7 @@ ELSE()
 ENDIF()
 
 DEPENDS(
-    ydb/apps/ydbd 
+    ydb/apps/ydbd
 )
 
 PEERDIR(

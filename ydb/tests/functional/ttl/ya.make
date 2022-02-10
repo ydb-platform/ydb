@@ -9,12 +9,12 @@ TEST_SRCS(
     test_ttl.py
 )
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd") 
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TIMEOUT(600)
 SIZE(MEDIUM)
 
 DEPENDS(
-    ydb/apps/ydbd 
+    ydb/apps/ydbd
 )
 
 PEERDIR(

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/lib/operation_id/operation_id.h> 
+#include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <library/cpp/threading/future/future.h>
 

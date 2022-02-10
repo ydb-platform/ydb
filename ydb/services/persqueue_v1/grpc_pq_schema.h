@@ -3,8 +3,8 @@
 #include "grpc_pq_actor.h"
 #include "persqueue.h"
 
-#include <ydb/core/client/server/grpc_base.h> 
-#include <ydb/core/persqueue/cluster_tracker.h> 
+#include <ydb/core/client/server/grpc_base.h>
+#include <ydb/core/persqueue/cluster_tracker.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
 

@@ -2,10 +2,10 @@
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <ydb/core/base/tablet_pipe.h> 
-#include <ydb/core/cms/console/console.h> 
-#include <ydb/core/base/hive.h> 
-#include <ydb/core/blobstorage/base/blobstorage_events.h> 
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/base/hive.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include "viewer.h"
@@ -32,7 +32,7 @@ protected:
     };
 
     std::unordered_map<TTabletId, TPipeInfo> PipeInfo;
- 
+
     struct TDelayedRequest {
         std::unique_ptr<IEventHandle> Event;
     };

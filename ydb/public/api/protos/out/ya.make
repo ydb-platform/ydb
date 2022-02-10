@@ -1,5 +1,5 @@
 LIBRARY()
- 
+
 OWNER(g:kikimr)
 
 SRCS(
@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/api/protos 
+    ydb/public/api/protos
 )
 
 END()

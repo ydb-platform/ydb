@@ -7,8 +7,8 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event.h>
 
-#include <ydb/core/base/blobstorage.h> 
-#include <ydb/core/base/tablet_pipe.h> 
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/tablet_pipe.h>
 
 ////////////////////////////////////////////
 namespace NKikimr { namespace NTabletMonitoringProxy {

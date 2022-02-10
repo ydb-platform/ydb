@@ -3,11 +3,11 @@
 #include "test_part.h"
 #include "test_writer.h"
 #include "test_cooker.h"
-#include <ydb/core/tablet_flat/test/libs/rows/mass.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/mass.h>
 
-#include <ydb/core/tablet_flat/flat_mem_warm.h> 
-#include <ydb/core/tablet_flat/flat_row_nulls.h> 
-#include <ydb/core/tablet_flat/flat_table_subset.h> 
+#include <ydb/core/tablet_flat/flat_mem_warm.h>
+#include <ydb/core/tablet_flat/flat_row_nulls.h>
+#include <ydb/core/tablet_flat/flat_table_subset.h>
 
 #include <util/generic/xrange.h>
 
@@ -49,7 +49,7 @@ namespace NTest {
 
             void Add(const TRow &row) noexcept override
             {
-                Cooker.Add(row, ERowOp::Upsert); 
+                Cooker.Add(row, ERowOp::Upsert);
             }
 
             TCooker Cooker;
@@ -65,9 +65,9 @@ namespace NTest {
 
         }
 
-        TIntrusivePtr<TMemTable> Mem() 
+        TIntrusivePtr<TMemTable> Mem()
         {
-            return TCooker(Scheme, TEpoch::Zero()).Add(Saved, ERowOp::Upsert).Unwrap(); 
+            return TCooker(Scheme, TEpoch::Zero()).Add(Saved, ERowOp::Upsert).Unwrap();
         }
 
         TPartEggs Part()

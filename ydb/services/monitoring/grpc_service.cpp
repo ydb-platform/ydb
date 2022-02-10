@@ -1,7 +1,7 @@
 #include "grpc_service.h"
 
-#include <ydb/core/grpc_services/grpc_helper.h> 
-#include <ydb/core/grpc_services/rpc_calls.h> 
+#include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/grpc_services/rpc_calls.h>
 
 namespace NKikimr {
 namespace NGRpcService {

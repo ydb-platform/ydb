@@ -400,7 +400,7 @@ public:
     const TSocket& GetSocket() const noexcept {
         return S_;
     }
- 
+
 private:
     size_t DoRead(void* buf, size_t len) override;
 
@@ -419,7 +419,7 @@ public:
     const TSocket& GetSocket() const noexcept {
         return S_;
     }
- 
+
 private:
     void DoWrite(const void* buf, size_t len) override;
     void DoWriteV(const TPart* parts, size_t count) override;

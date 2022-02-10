@@ -1,6 +1,6 @@
 RECURSE(
-    decimal 
-    issue 
-    types 
-    udf 
+    decimal
+    issue
+    types
+    udf
 )

@@ -2,10 +2,10 @@
 
 #include "flat_test_db.h"
 
-#include <ydb/core/tablet_flat/flat_dbase_apply.h> 
-#include <ydb/core/tablet_flat/flat_row_scheme.h> 
-#include <ydb/core/tablet_flat/flat_mem_warm.h> 
-#include <ydb/core/scheme/scheme_type_id.h> 
+#include <ydb/core/tablet_flat/flat_dbase_apply.h>
+#include <ydb/core/tablet_flat/flat_row_scheme.h>
+#include <ydb/core/tablet_flat/flat_mem_warm.h>
+#include <ydb/core/scheme/scheme_type_id.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -14,7 +14,7 @@ namespace NTable {
 
 struct TFakeTableCell {
 private:
-    ECellOp Op = ECellOp::Set; 
+    ECellOp Op = ECellOp::Set;
     TRawTypeValue Val;
     TString Buf;
 public:
@@ -39,7 +39,7 @@ public:
         }
     }
 
-    void SetOp(ECellOp op) { 
+    void SetOp(ECellOp op) {
         Op = op;
     }
 
@@ -52,7 +52,7 @@ public:
         return Val;
     }
 
-    ECellOp GetOp() const { 
+    ECellOp GetOp() const {
         return Op;
     }
 };
@@ -76,14 +76,14 @@ inline TFakeTableCell FromVal(NScheme::TTypeId t, i64 val) {
     return c;
 }
 
-inline TFakeTableCell MakeNull(ECellOp op) { 
+inline TFakeTableCell MakeNull(ECellOp op) {
     TFakeTableCell c;
     c.SetOp(op);
     return c;
 }
 
 inline TFakeTableCell FromVal(NScheme::TTypeId, std::nullptr_t) {
-    return MakeNull(ECellOp::Set); 
+    return MakeNull(ECellOp::Set);
 }
 
 inline TFakeTableCell FromVal(NScheme::TTypeId t, TString val) {
@@ -158,7 +158,7 @@ public:
         Y_VERIFY(tagId, "Unknown column \"%s\" in table %u", tagName.data(), GetRoot());
         const auto * colInfo = Scheme.GetColumnInfo(GetRoot(), *tagId);
         Y_VERIFY(colInfo, "Column info not found for table id %u, column id %u", GetRoot(), *tagId);
-        TagOps[*tagId] = MakeNull(ECellOp::Null); 
+        TagOps[*tagId] = MakeNull(ECellOp::Null);
         return *this;
     }
 
@@ -187,7 +187,7 @@ void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& 
 
 template <typename... Tt>
 void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& tuple, nullptr_t, Tt... tt) {
-    tuple.push_back(MakeNull(ECellOp::Set)); 
+    tuple.push_back(MakeNull(ECellOp::Set));
     AppendKeyColumn(root, scheme, tuple, tt...);
 }
 
@@ -227,7 +227,7 @@ public:
             ops.push_back(TUpdateOp(op.first, op.second.GetOp(), op.second.Get()));
         }
 
-        Db.Update(update.GetRoot(), ERowOp::Upsert, key, ops); 
+        Db.Update(update.GetRoot(), ERowOp::Upsert, key, ops);
     }
 
     void Apply(const TDbRowErase& erase) {
@@ -237,7 +237,7 @@ public:
             key.push_back(col.Get());
         }
 
-        Db.Update(erase.GetRoot(), ERowOp::Erase, key, { }); 
+        Db.Update(erase.GetRoot(), ERowOp::Erase, key, { });
     }
 
     void Apply(const TSchemeChanges &delta)

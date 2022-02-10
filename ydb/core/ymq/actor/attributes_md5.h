@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/protos/sqs.pb.h> 
+#include <ydb/core/protos/sqs.pb.h>
 
 namespace NKikimr::NSQS {
 

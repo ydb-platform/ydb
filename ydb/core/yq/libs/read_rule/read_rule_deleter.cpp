@@ -1,9 +1,9 @@
 #include "read_rule_deleter.h"
 
-#include <ydb/core/yq/libs/events/events.h> 
+#include <ydb/core/yq/libs/events/events.h>
 
-#include <ydb/core/protos/services.pb.h> 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h> 
+#include <ydb/core/protos/services.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

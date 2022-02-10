@@ -1,12 +1,12 @@
 LIBRARY()
 
-OWNER(g:yql) 
+OWNER(g:yql)
 
 PEERDIR(
-    ydb/library/yql/utils/backtrace 
+    ydb/library/yql/utils/backtrace
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 SRCS(
     backtrace.cpp

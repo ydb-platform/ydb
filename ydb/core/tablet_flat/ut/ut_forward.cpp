@@ -1,10 +1,10 @@
-#include <ydb/core/tablet_flat/util_basics.h> 
-#include <ydb/core/tablet_flat/flat_page_other.h> 
-#include <ydb/core/tablet_flat/flat_page_frames.h> 
-#include <ydb/core/tablet_flat/flat_page_blobs.h> 
-#include <ydb/core/tablet_flat/flat_fwd_blobs.h> 
-#include <ydb/core/tablet_flat/flat_fwd_sieve.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_steps.h> 
+#include <ydb/core/tablet_flat/util_basics.h>
+#include <ydb/core/tablet_flat/flat_page_other.h>
+#include <ydb/core/tablet_flat/flat_page_frames.h>
+#include <ydb/core/tablet_flat/flat_page_blobs.h>
+#include <ydb/core/tablet_flat/flat_fwd_blobs.h>
+#include <ydb/core/tablet_flat/flat_fwd_sieve.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_steps.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/shuffle.h>
 #include <util/random/mersenne.h>
@@ -14,7 +14,7 @@ namespace NTable {
 
 namespace {
 
-    struct TWrap : public NTest::TSteps<TWrap>, protected NFwd::IPageLoadingQueue { 
+    struct TWrap : public NTest::TSteps<TWrap>, protected NFwd::IPageLoadingQueue {
         using TFrames = NPage::TFrames;
 
         TWrap(TIntrusiveConstPtr<TFrames> frames, TIntrusiveConstPtr<TSlices> run, ui32 edge, ui64 aLo = 999, ui64 aHi = 999)
@@ -34,7 +34,7 @@ namespace {
         {
         }
 
-        ui64 AddToQueue(ui32 page, ui16) noexcept override 
+        ui64 AddToQueue(ui32 page, ui16) noexcept override
         {
             Pages.push_back(page);
 
@@ -71,7 +71,7 @@ namespace {
             if (std::exchange(Grow, false))
                 Cache->Forward(this, AheadHi);
 
-            TVector<NPageCollection::TLoadedPage> load; 
+            TVector<NPageCollection::TLoadedPage> load;
 
             for (auto page: std::exchange(Pages, TDeque<ui32>{ })) {
                 const auto &rel = Large->Relation(page);
@@ -122,7 +122,7 @@ namespace {
 
     private:
         bool Grow = false;
-        TAutoPtr<NFwd::IPageLoadingLogic> Cache; 
+        TAutoPtr<NFwd::IPageLoadingLogic> Cache;
         TDeque<ui32> Pages;
         TMersenne<ui64> Rnd;
     };
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
         return new NPage::TFrames(writer.Make());
     }
 
-    Y_UNIT_TEST(MemTableTest) 
+    Y_UNIT_TEST(MemTableTest)
     {
         { /*_ Trivial test, should not produce empty frames */
             UNIT_ASSERT(!NPage::TFrameWriter().Make());
@@ -199,9 +199,9 @@ Y_UNIT_TEST_SUITE(NFwd) {
 
     Y_UNIT_TEST(Sieve)
     {
-        NPage::TExtBlobsWriter out; 
+        NPage::TExtBlobsWriter out;
 
-        std::array<NPageCollection::TGlobId, 6> globs = {{ 
+        std::array<NPageCollection::TGlobId, 6> globs = {{
             { TLogoBlobID(1, 2, 3,  1, 10, 0), 7 },
             { TLogoBlobID(1, 2, 3,  7, 12, 1), 7 },
             { TLogoBlobID(1, 2, 3, 13, 14, 2), 7 },
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
 
         for (auto &one: globs) out.Put(one);
 
-        const auto blobs = new NPage::TExtBlobs(out.Make(), { }); 
+        const auto blobs = new NPage::TExtBlobs(out.Make(), { });
 
         NFwd::TSieve sieve{ blobs, nullptr, nullptr, {{ 1, 3}}};
 
@@ -228,9 +228,9 @@ Y_UNIT_TEST_SUITE(NFwd) {
 
     Y_UNIT_TEST(SieveFiltered)
     {
-        NPage::TExtBlobsWriter out; 
+        NPage::TExtBlobsWriter out;
 
-        std::array<NPageCollection::TGlobId, 6> globs = {{ 
+        std::array<NPageCollection::TGlobId, 6> globs = {{
             { TLogoBlobID(1, 2, 3,  1, 10, 0), 7 },
             { TLogoBlobID(1, 2, 3,  7, 12, 1), 7 },
             { TLogoBlobID(1, 2, 3, 13, 14, 2), 7 },
@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
 
         for (auto &one: globs) out.Put(one);
 
-        const auto blobs = new NPage::TExtBlobs(out.Make(), { }); 
+        const auto blobs = new NPage::TExtBlobs(out.Make(), { });
 
         TIntrusiveConstPtr<NPage::TFrames> frames;
 

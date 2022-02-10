@@ -1,7 +1,7 @@
 #include "math_ir.h"
 
 
-#include <ydb/library/yql/public/udf/udf_helpers.h> 
+#include <ydb/library/yql/public/udf/udf_helpers.h>
 
 #define MATH_UDF_MAP(XX, XXL)                                                                       \
     XX(Pi, double(), ;)                                                                             \

@@ -1,7 +1,7 @@
 #include "functions_metadata.h"
 
 #include <ydb/library/yql/minikql/mkql_function_metadata.h>
-#include <ydb/core/protos/scheme_type_operation.pb.h> 
+#include <ydb/core/protos/scheme_type_operation.pb.h>
 
 
 namespace NKikimr {

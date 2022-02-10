@@ -1,6 +1,6 @@
-#include <ydb/core/tablet_flat/flat_dbase_scheme.h> 
-#include <ydb/core/tablet_flat/test/libs/table/test_dbase.h> 
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
+#include <ydb/core/tablet_flat/flat_dbase_scheme.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_dbase.h>
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/file.h>
@@ -34,10 +34,10 @@ Y_UNIT_TEST_SUITE(DBase) {
         const auto nil = *me.Natural(1).Col(nullptr);
         const auto foo = *me.Natural(1).Col("foo", 33_u64);
         const auto bar = *me.Natural(1).Col("bar", 11_u64);
-        const auto ba1 = *me.Natural(1).Col("bar", ECellOp::Empty, "yo"); 
-        const auto ba2 = *me.Natural(1).Col("bar", ECellOp::Reset, "me"); 
-        const auto ba3 = *me.Natural(1).Col("bar", 99_u64, ECellOp::Reset); 
-        const auto ba4 = *me.Natural(1).Col("bar", ECellOp::Null, "eh"); 
+        const auto ba1 = *me.Natural(1).Col("bar", ECellOp::Empty, "yo");
+        const auto ba2 = *me.Natural(1).Col("bar", ECellOp::Reset, "me");
+        const auto ba3 = *me.Natural(1).Col("bar", 99_u64, ECellOp::Reset);
+        const auto ba4 = *me.Natural(1).Col("bar", ECellOp::Null, "eh");
 
         me.To(11).Iter(1).NoKey(foo).NoKey(bar);
 
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         /*_ 30: Check erase of some row and update  */
 
-        me.To(30).Begin().Add(1, ba1).Add(1, foo, ERowOp::Erase).Commit(); 
+        me.To(30).Begin().Add(1, ba1).Add(1, foo, ERowOp::Erase).Commit();
         me.To(31).Iter(1, false).NoKey(foo).NoVal(bar);
         me.To(32).Iter(1, false).HasN("bar", 11_u64, "yo"); /* omited arg1  */
         me.To(33).Begin().Add(1, ba2).Commit();
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         /*_ 50: Erase and update the same row in tx */
 
-        me.To(50).Begin().Add(1, bar, ERowOp::Erase).Add(1, bar).Commit(); 
+        me.To(50).Begin().Add(1, bar, ERowOp::Erase).Add(1, bar).Commit();
         me.To(51).Iter(1, false).Has(bar).NoKey(foo);
 
         /*_ 60: Check rows counters after compaction */
@@ -102,10 +102,10 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(10).Begin().Apply(*MakeAlter().Flush()).Commit();
 
         const auto bar = *me.Natural(1).Col("bar", 11_u64);
-        const auto ba1 = *me.Natural(1).Col("bar", ECellOp::Empty, "yo"); 
-        const auto ba2 = *me.Natural(1).Col("bar", ECellOp::Reset, "me"); 
-        const auto ba3 = *me.Natural(1).Col("bar", 99_u64, ECellOp::Reset); 
-        const auto ba4 = *me.Natural(1).Col("bar", ECellOp::Null, "eh"); 
+        const auto ba1 = *me.Natural(1).Col("bar", ECellOp::Empty, "yo");
+        const auto ba2 = *me.Natural(1).Col("bar", ECellOp::Reset, "me");
+        const auto ba3 = *me.Natural(1).Col("bar", 99_u64, ECellOp::Reset);
+        const auto ba4 = *me.Natural(1).Col("bar", ECellOp::Null, "eh");
 
         me.To(11).Begin().Add(1, bar).Commit().Select(1).Has(bar);
         me.To(12).Snap(1).Compact(1, false).Select(1).Has(bar);
@@ -117,9 +117,9 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(41).Select(1).HasN("bar", 99_u64, nullptr);
         me.To(50).Begin().Add(1, ba4).Commit().Snap(1);
         me.To(51).Select(1).Has(ba4);
-        me.To(60).Begin().Add(1, ba3, ERowOp::Erase).Commit().Snap(1); 
+        me.To(60).Begin().Add(1, ba3, ERowOp::Erase).Commit().Snap(1);
         me.To(61).Select(1).NoKey(bar);
-        me.To(62).Begin().Add(1, bar, ERowOp::Upsert).Commit(); 
+        me.To(62).Begin().Add(1, bar, ERowOp::Upsert).Commit();
         me.To(63).Select(1).Has(bar);
 
         /* Ensure that test was acomplished on non-trivial subset */
@@ -248,8 +248,8 @@ Y_UNIT_TEST_SUITE(DBase) {
             me.Begin().Apply(*raw).Add(1, ro4).Commit();
         }
 
-        UNIT_ASSERT(me->Counters().MemTableOps == 2); 
-        UNIT_ASSERT(me->Counters().MemTableBytes > 0); 
+        UNIT_ASSERT(me->Counters().MemTableOps == 2);
+        UNIT_ASSERT(me->Counters().MemTableBytes > 0);
         UNIT_ASSERT(me->Counters().Parts.PlainBytes > 0);
         UNIT_ASSERT(me->Counters().Parts.IndexBytes > 0);
 
@@ -271,8 +271,8 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT(me.BackLog().Garbage[0]->Frozen.size() == 1);
         UNIT_ASSERT(me.BackLog().Garbage[1]->Flatten.size() == 1);
         UNIT_ASSERT(me.BackLog().Garbage[1]->Frozen.size() == 0);
-        UNIT_ASSERT(me->Counters().MemTableOps == 0); 
-        UNIT_ASSERT(me->Counters().MemTableBytes == 0); 
+        UNIT_ASSERT(me->Counters().MemTableOps == 0);
+        UNIT_ASSERT(me->Counters().MemTableBytes == 0);
         UNIT_ASSERT(me->Counters().Parts.RowsTotal == 0);
         UNIT_ASSERT(me->Counters().Parts.RowsErase == 0);
         UNIT_ASSERT(me->Counters().Parts.PartsCount == 0);
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(33).Begin().Snapshot(2).Commit().Affects(0, { 2 });
         me.To(34).Compact(2);
 
-        UNIT_ASSERT(me->Counters().MemTableOps == 0); 
+        UNIT_ASSERT(me->Counters().MemTableOps == 0);
         UNIT_ASSERT(me.BackLog().Snapshots.at(0).Epoch == TEpoch::FromIndex(2));
 
         {
@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT(me.BackLog().Annex[0].Data.size() == 8 + 35);
         UNIT_ASSERT(me.BackLog().Annex[1].Data.size() == 8 + 42);
 
-        /*_ 26: Annex should be promoted to external blobs in TMemTable */ 
+        /*_ 26: Annex should be promoted to external blobs in TMemTable */
 
         auto subset = me.To(26).Snap(1)->Subset(1, TEpoch::Max(), { }, { });
 
@@ -401,7 +401,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT(subset->Frozen[0]->GetBlobs()->GetRaw(0).Data.size() == 8 + 35);
         UNIT_ASSERT(subset->Frozen[0]->GetBlobs()->GetRaw(1).Data.size() == 8 + 42);
 
-        /*_ 28: Test blobs refereces generation after TMemTable snapshot */ 
+        /*_ 28: Test blobs refereces generation after TMemTable snapshot */
 
         me.To(28).Begin().Put(1, ro44).Commit().Iter(1, false).Has(ro44);
 
@@ -497,10 +497,10 @@ Y_UNIT_TEST_SUITE(DBase) {
         const auto nil = *me.Natural(1).Col(nullptr);
         const auto foo = *me.Natural(1).Col("foo", 33_u64);
         const auto bar = *me.Natural(1).Col("bar", 11_u64);
-        const auto ba1 = *me.Natural(1).Col("bar", ECellOp::Empty, "yo"); 
-        const auto ba2 = *me.Natural(1).Col("bar", ECellOp::Reset, "me"); 
-        const auto ba3 = *me.Natural(1).Col("bar", 99_u64, ECellOp::Reset); 
-        const auto ba4 = *me.Natural(1).Col("bar", ECellOp::Null, "eh"); 
+        const auto ba1 = *me.Natural(1).Col("bar", ECellOp::Empty, "yo");
+        const auto ba2 = *me.Natural(1).Col("bar", ECellOp::Reset, "me");
+        const auto ba3 = *me.Natural(1).Col("bar", 99_u64, ECellOp::Reset);
+        const auto ba4 = *me.Natural(1).Col("bar", ECellOp::Null, "eh");
 
         me.To(11).Iter(1).NoKey(foo).NoKey(bar);
 
@@ -538,7 +538,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         /*_ 30: Check erase of some row and update  */
 
-        me.To(30).Begin().WriteVer({2, 60}).Add(1, ba1).Add(1, foo, ERowOp::Erase).Commit(); 
+        me.To(30).Begin().WriteVer({2, 60}).Add(1, ba1).Add(1, foo, ERowOp::Erase).Commit();
         me.To(31).Iter(1, false).NoKey(foo).NoVal(bar);
         me.To(32).Iter(1, false).HasN("bar", 11_u64, "yo"); /* omited arg1  */
         me.To(33).Begin().WriteVer({2, 61}).Add(1, ba2).Commit();
@@ -555,7 +555,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         /*_ 50: Erase and update the same row in tx */
 
-        me.To(50).Begin().WriteVer({3, 70}).Add(1, bar, ERowOp::Erase).Add(1, bar).Commit(); 
+        me.To(50).Begin().WriteVer({3, 70}).Add(1, bar, ERowOp::Erase).Add(1, bar).Commit();
         me.To(51).Iter(1, false).Has(bar).NoKey(foo);
 
         /*_ 60: Check rows counters after compaction */
@@ -567,7 +567,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT(me.GetLog().size() == 10);
 
         /* Check history after compaction is correct */
- 
+
         for (int base = 70; base <= 90; base += 10) {
             me.To(base + 0).ReadVer({0, 0}).Iter(1).NoKey(foo).NoKey(bar);
             me.To(base + 1).ReadVer({1, 50}).Iter(1).Has(foo).NoKey(bar);
@@ -607,11 +607,11 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(20).Begin();
         for (ui64 i = 1000; i < 2000; ++i) {
             // Version 1/50, keys added, but all columns are empty (default)
-            me.WriteVer({1, 50}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, ECellOp::Empty)); 
+            me.WriteVer({1, 50}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, ECellOp::Empty));
             // Version 2/60, keys updated with arg1=i
-            me.WriteVer({2, 60}).Put(table, *me.Natural(table).Col(i, i, ECellOp::Empty)); 
+            me.WriteVer({2, 60}).Put(table, *me.Natural(table).Col(i, i, ECellOp::Empty));
             // Version 3/70, keys updated with arg2=3000-i
-            me.WriteVer({3, 70}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, 3000-i)); 
+            me.WriteVer({3, 70}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, 3000-i));
         }
         me.Commit().Snap(table);
         if (compactMemTables) {
@@ -621,7 +621,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         // Create 1000 more rows using different memtables
         me.To(22).Begin();
         for (ui64 i = 2000; i < 3000; ++i) {
-            me.WriteVer({1, 50}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, ECellOp::Empty)); 
+            me.WriteVer({1, 50}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, ECellOp::Empty));
         }
         me.Commit().Snap(table);
         if (compactMemTables) {
@@ -630,7 +630,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(23).Begin();
         for (ui64 i = 2000; i < 3000; ++i) {
-            me.WriteVer({2, 60}).Put(table, *me.Natural(table).Col(i, i, ECellOp::Empty)); 
+            me.WriteVer({2, 60}).Put(table, *me.Natural(table).Col(i, i, ECellOp::Empty));
         }
         me.Commit().Snap(table);
         if (compactMemTables) {
@@ -639,7 +639,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(24).Begin();
         for (ui64 i = 2000; i < 3000; ++i) {
-            me.WriteVer({3, 70}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, 3000-i)); 
+            me.WriteVer({3, 70}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, 3000-i));
         }
         me.Commit().Snap(table);
         if (compactMemTables) {

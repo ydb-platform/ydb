@@ -1,8 +1,8 @@
 #include "tenant_node_enumeration.h"
 #include "tenant_pool.h"
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/statestorage.h> 
-#include <ydb/core/base/path.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/path.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <util/generic/algorithm.h>

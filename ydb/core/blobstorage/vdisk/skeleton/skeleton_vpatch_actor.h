@@ -2,9 +2,9 @@
 
 #include "defs.h"
 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
-#include <ydb/core/blobstorage/base/utility.h> 
-#include <ydb/core/blobstorage/base/vdisk_sync_common.h> 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/base/utility.h>
+#include <ydb/core/blobstorage/base/vdisk_sync_common.h>
 
 
 namespace NKikimr {

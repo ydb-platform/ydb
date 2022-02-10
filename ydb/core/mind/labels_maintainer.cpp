@@ -1,9 +1,9 @@
 #include "labels_maintainer.h"
 #include "tenant_pool.h"
 
-#include <ydb/core/base/counters.h> 
-#include <ydb/core/cms/console/configs_dispatcher.h> 
-#include <ydb/core/cms/console/console.h> 
+#include <ydb/core/base/counters.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

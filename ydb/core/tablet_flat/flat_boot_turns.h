@@ -5,7 +5,7 @@
 #include "flat_boot_blobs.h"
 #include "flat_boot_switch.h"
 
-#include <ydb/core/util/pb.h> 
+#include <ydb/core/util/pb.h>
 #include <util/generic/xrange.h>
 
 namespace NKikimr {
@@ -25,8 +25,8 @@ namespace NBoot {
         void Start() noexcept override
         {
             for (auto slot: xrange(Back->Switches.size()))
-                if (const auto &largeGlobId = Back->Switches[slot].LargeGlobId) 
-                    Pending += Spawn<TLoadBlobs>(largeGlobId, slot); 
+                if (const auto &largeGlobId = Back->Switches[slot].LargeGlobId)
+                    Pending += Spawn<TLoadBlobs>(largeGlobId, slot);
 
             Flush();
         }
@@ -52,9 +52,9 @@ namespace NBoot {
             Y_VERIFY(slot < Back->Switches.size(), "Invalid switch index");
 
             auto &entry = Back->Switches[slot];
-            auto index = TCookie(entry.LargeGlobId.Lead.Cookie()).Index(); 
+            auto index = TCookie(entry.LargeGlobId.Lead.Cookie()).Index();
 
-            Y_VERIFY(entry.LargeGlobId, "Assigning TSwitch entry w/o valid TLargeGlobId"); 
+            Y_VERIFY(entry.LargeGlobId, "Assigning TSwitch entry w/o valid TLargeGlobId");
 
             if (index != TCookie::EIdx::TurnLz4) {
                 Apply(entry, body);
@@ -75,7 +75,7 @@ namespace NBoot {
                     << ", table " << entry.Table << ", bundles [";
 
                 for (const auto &one : entry.Bundles) {
-                    logl << " " << one.LargeGlobIds[0].Lead; 
+                    logl << " " << one.LargeGlobIds[0].Lead;
                     if (one.Epoch != NTable::TEpoch::Max()) {
                         logl << "{epoch " << one.Epoch << "}";
                     }
@@ -157,10 +157,10 @@ namespace NBoot {
                 }
 
                 for (auto &bundle : front.Bundles) {
-                    if (!bundle.LargeGlobIds) { 
-                        Y_Fail("Part switch has bundle without page collections"); 
+                    if (!bundle.LargeGlobIds) {
+                        Y_Fail("Part switch has bundle without page collections");
                     }
-                    const auto &bundleId = bundle.LargeGlobIds[0].Lead; 
+                    const auto &bundleId = bundle.LargeGlobIds[0].Lead;
                     if (Bundles.contains(bundleId)) {
                         Y_Fail("Part switch has a duplicate bundle " << bundleId);
                     }
@@ -217,7 +217,7 @@ namespace NBoot {
                     }
 
                     for (const auto &bundle : front.Bundles) {
-                        const auto &label = bundle.LargeGlobIds[0].Lead; 
+                        const auto &label = bundle.LargeGlobIds[0].Lead;
                         snapshot.State.PartLevels[label] = front.Level;
                     }
 

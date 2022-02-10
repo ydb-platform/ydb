@@ -3,10 +3,10 @@
 #include "columnshard.h"
 #include "columnshard_impl.h"
 
-#include <ydb/core/formats/arrow_batch_builder.h> 
-#include <ydb/core/scheme/scheme_tabledefs.h> 
-#include <ydb/core/testlib/tablet_helpers.h> 
-#include <ydb/core/testlib/test_client.h> 
+#include <ydb/core/formats/arrow_batch_builder.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/test_client.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 

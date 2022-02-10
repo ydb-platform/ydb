@@ -2,8 +2,8 @@
 
 #include "defs.h"
 
-#include <ydb/core/base/events.h> 
-#include <ydb/core/protos/kesus.pb.h> 
+#include <ydb/core/base/events.h>
+#include <ydb/core/protos/kesus.pb.h>
 
 namespace NKikimr {
 namespace NKesus {

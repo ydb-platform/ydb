@@ -3,8 +3,8 @@
 #include "test_steps.h"
 #include "test_pretty.h"
 #include "test_part.h"
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
-#include <ydb/core/tablet_flat/test/libs/rows/tool.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
+#include <ydb/core/tablet_flat/test/libs/rows/tool.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -31,7 +31,7 @@ namespace NTest {
 
             TAutoPtr<IPages> Env;
             ui64 Retry = 0;
-            bool Erased = true; /* do not hide ERowOp::Erase */ 
+            bool Erased = true; /* do not hide ERowOp::Erase */
         };
 
         template<typename ... TArgs>
@@ -74,11 +74,11 @@ namespace NTest {
         template<typename ...TArgs>
         inline TChecker& IsN(TArgs&&...args)
         {
-            return IsOpN(ERowOp::Absent, std::forward<TArgs>(args)...); 
+            return IsOpN(ERowOp::Absent, std::forward<TArgs>(args)...);
         }
 
         template<typename ...TArgs>
-        inline TChecker& IsOpN(ERowOp op, TArgs&&...args) 
+        inline TChecker& IsOpN(ERowOp op, TArgs&&...args)
         {
             auto row = *TNatural(Scheme).Col(std::forward<TArgs>(args)...);
 
@@ -99,12 +99,12 @@ namespace NTest {
 
         TChecker& Has(const TRow &row)
         {
-            return Seek(row, ESeek::Exact).Is(row, true, ERowOp::Absent); 
+            return Seek(row, ESeek::Exact).Is(row, true, ERowOp::Absent);
         }
 
         TChecker& NoVal(const TRow &row)
         {
-            return Seek(row, ESeek::Exact).Is(row, false, ERowOp::Absent); 
+            return Seek(row, ESeek::Exact).Is(row, false, ERowOp::Absent);
         }
 
         template<typename ...TArgs>
@@ -117,7 +117,7 @@ namespace NTest {
         {
             Seek(row, ESeek::Exact);
 
-            return erased ? Is(EReady::Gone) : Is(row, true, ERowOp::Erase); 
+            return erased ? Is(EReady::Gone) : Is(row, true, ERowOp::Erase);
         }
 
         template<typename TListType>
@@ -139,7 +139,7 @@ namespace NTest {
         template<typename TIter>
         TChecker& Is(TIter it, const TIter end)
         {
-            for (; it != end; ++it) Is(*it, true, ERowOp::Absent).Next(); 
+            for (; it != end; ++it) Is(*it, true, ERowOp::Absent).Next();
 
             return *this;
         }
@@ -169,7 +169,7 @@ namespace NTest {
 
                 if (Ready != EReady::Data || Erased) {
                     break;
-                } else if (Wrap.Apply().GetRowState() != ERowOp::Erase) { 
+                } else if (Wrap.Apply().GetRowState() != ERowOp::Erase) {
                     break;  /* Skip technical rows      */
                 } else if (seek == ESeek::Exact) {
                     Ready = EReady::Gone;
@@ -192,7 +192,7 @@ namespace NTest {
 
                 if (Ready != EReady::Data || Erased) {
                     break;
-                } else if (Wrap.Apply().GetRowState() != ERowOp::Erase) { 
+                } else if (Wrap.Apply().GetRowState() != ERowOp::Erase) {
                     break;  /* Skip technical rows      */
                 }
             }
@@ -243,12 +243,12 @@ namespace NTest {
             return *this;
         }
 
-        TChecker& IsOp(ERowOp op, const TRow &row) 
+        TChecker& IsOp(ERowOp op, const TRow &row)
         {
             return Is(row, true, op);
         }
 
-        TChecker& Is(const TRow &row, bool same = true, ERowOp op = ERowOp::Absent) 
+        TChecker& Is(const TRow &row, bool same = true, ERowOp op = ERowOp::Absent)
         {
             if (EReady::Gone == Ready) {
                 TBase::Log()
@@ -261,14 +261,14 @@ namespace NTest {
 
             const auto &state = Wrap.Apply();
             const auto &remap = Wrap.Remap();
-            const bool keys = (op == ERowOp::Erase); 
+            const bool keys = (op == ERowOp::Erase);
 
             bool success = true;
 
-            if (op != ERowOp::Absent && op != state.GetRowState()) { 
+            if (op != ERowOp::Absent && op != state.GetRowState()) {
                 TBase::Log()
                     << "Row state is " << (int)state.GetRowState()
-                    << ", expected ERowOp " << (int)op 
+                    << ", expected ERowOp " << (int)op
                     << Endl;
 
                 success = false;

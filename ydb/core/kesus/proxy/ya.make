@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    snaury 
-    g:kikimr 
-) 
+OWNER(
+    snaury
+    g:kikimr
+)
 
 SRCS(
     events.cpp
@@ -12,16 +12,16 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/base 
-    ydb/core/erasure 
-    ydb/core/kesus/tablet 
-    ydb/core/scheme 
-    ydb/core/tx/scheme_cache 
-    ydb/public/api/protos 
+    ydb/core/base
+    ydb/core/erasure
+    ydb/core/kesus/tablet
+    ydb/core/scheme
+    ydb/core/tx/scheme_cache
+    ydb/public/api/protos
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+)

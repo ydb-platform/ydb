@@ -1,9 +1,9 @@
-#include <ydb/core/scheme/scheme_types_defs.h> 
-#include <ydb/core/tablet_flat/flat_cxx_database.h> 
-#include <ydb/core/tablet_flat/flat_executor.h> 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
-#include <ydb/core/tablet_flat/test/libs/exec/dummy.h> 
-#include <ydb/core/tablet_flat/test/libs/exec/runner.h> 
+#include <ydb/core/scheme/scheme_types_defs.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/flat_executor.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tablet_flat/test/libs/exec/dummy.h>
+#include <ydb/core/tablet_flat/test/libs/exec/runner.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -122,7 +122,7 @@ struct TTxSelect1: public ITransaction {
 
         if (!row1.IsReady() || !row2.IsReady() || !row.IsReady())
             return false;
- 
+
         UNIT_ASSERT_VALUES_EQUAL(row1.GetValue<Schema1::RegularTable1::Value>(), 10);
         UNIT_ASSERT_VALUES_EQUAL(row2.GetValue<Schema1::RegularTable2::Value>(), 20);
 
@@ -152,7 +152,7 @@ struct TTxSelect2: public ITransaction {
 
         if (!row1.IsReady() || !row2.IsReady() || !row.IsReady())
             return false;
- 
+
         UNIT_ASSERT_VALUES_EQUAL(row1.GetValue<Schema2::RegularTable1::Value>(), 10);
         UNIT_ASSERT_VALUES_EQUAL(row2.GetValue<Schema2::RegularTable2::Value>(), 20);
 
@@ -323,5 +323,5 @@ Y_UNIT_TEST_SUITE(TFlatTableRenameTableAndColumn) {
 }
 
 } // namespace NTabletFlatExecutor
-} // namespace NKikimr 
- 
+} // namespace NKikimr
+

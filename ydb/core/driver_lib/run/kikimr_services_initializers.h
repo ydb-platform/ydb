@@ -1,20 +1,20 @@
 #pragma once
 #include "config.h"
-#include "factories.h" 
+#include "factories.h"
 #include "service_initializer.h"
 
 #include <library/cpp/actors/util/affinity.h>
-#include <ydb/core/base/appdata.h> 
-#include <ydb/core/base/statestorage.h> 
-#include <ydb/core/tablet/tablet_setup.h> 
-#include <ydb/core/tablet/node_tablet_monitor.h> 
-#include <ydb/core/tablet_flat/shared_sausagecache.h> 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/tablet/tablet_setup.h>
+#include <ydb/core/tablet/node_tablet_monitor.h>
+#include <ydb/core/tablet_flat/shared_sausagecache.h>
 
-#include <ydb/core/protos/config.pb.h> 
+#include <ydb/core/protos/config.pb.h>
 
-#include <ydb/public/lib/base/msgbus.h> 
+#include <ydb/public/lib/base/msgbus.h>
 
-#include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h> 
+#include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
 
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actorsystem.h>
@@ -380,11 +380,11 @@ public:
 
 class TKqpServiceInitializer : public IKikimrServicesInitializer {
 public:
-    TKqpServiceInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories); 
+    TKqpServiceInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-private: 
-    std::shared_ptr<TModuleFactories> Factories; 
+private:
+    std::shared_ptr<TModuleFactories> Factories;
 };
 
 class TMemoryLogInitializer : public IKikimrServicesInitializer {

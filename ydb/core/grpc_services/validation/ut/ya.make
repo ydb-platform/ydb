@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/grpc_services/validation) 
+UNITTEST_FOR(ydb/core/grpc_services/validation)
 
 OWNER(
     ilnaz
@@ -13,7 +13,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/testing/unittest
-    ydb/core/grpc_services/validation/ut/protos 
+    ydb/core/grpc_services/validation/ut/protos
 )
 
 SRCS(

@@ -5,12 +5,12 @@
 #include "dsproxy_nodemon.h"
 #include "dsproxy_timestats.h"
 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h> 
-#include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h> 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
-#include <ydb/core/protos/node_whiteboard.pb.h> 
-#include <ydb/core/util/throughput_meter.h> 
-#include <ydb/core/mon/mon.h> 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/protos/node_whiteboard.pb.h>
+#include <ydb/core/util/throughput_meter.h>
+#include <ydb/core/mon/mon.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
 #include <util/generic/ptr.h>
 
@@ -244,7 +244,7 @@ public:
     // special patch counters
     NMonitoring::TDynamicCounters::TCounterPtr VPatchContinueFailed;
     NMonitoring::TDynamicCounters::TCounterPtr VPatchPartPlacementVerifyFailed;
-    NMonitoring::TDynamicCounters::TCounterPtr PatchesWithFallback; 
+    NMonitoring::TDynamicCounters::TCounterPtr PatchesWithFallback;
 
     TRequestMonGroup& GetRequestMonGroup(ERequestType request) {
         switch (request) {

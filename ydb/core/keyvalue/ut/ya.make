@@ -1,12 +1,12 @@
-UNITTEST_FOR(ydb/core/keyvalue) 
+UNITTEST_FOR(ydb/core/keyvalue)
 
-OWNER( 
-    cthulhu 
-    g:kikimr 
-) 
+OWNER(
+    cthulhu
+    g:kikimr
+)
 
 FORK_SUBTESTS()
- 
+
 IF (WITH_VALGRIND OR SANITIZER_TYPE)
     TIMEOUT(1800)
     SIZE(LARGE)
@@ -20,12 +20,12 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/regex/pcre 
+    library/cpp/regex/pcre
     library/cpp/svnversion
-    ydb/core/testlib 
+    ydb/core/testlib
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 SRCS(
     keyvalue_ut.cpp

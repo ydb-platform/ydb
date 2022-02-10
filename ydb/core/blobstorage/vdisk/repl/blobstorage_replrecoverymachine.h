@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defs.h" 
+#include "defs.h"
 #include "blobstorage_hullreplwritesst.h"
 #include "blobstorage_repl.h"
 
@@ -35,14 +35,14 @@ namespace NKikimr {
                 }
             }
 
-            void UpdateInfo(TEvReplFinished::TInfo& replInfo) const { 
-                replInfo.PreparePlanDuration = Durations[static_cast<ui32>(ETimeState::PREPARE_PLAN)]; 
+            void UpdateInfo(TEvReplFinished::TInfo& replInfo) const {
+                replInfo.PreparePlanDuration = Durations[static_cast<ui32>(ETimeState::PREPARE_PLAN)];
                 replInfo.TokenWaitDuration = Durations[static_cast<ui32>(ETimeState::TOKEN_WAIT)];
-                replInfo.ProxyWaitDuration = Durations[static_cast<ui32>(ETimeState::PROXY_WAIT)]; 
-                replInfo.MergeDuration = Durations[static_cast<ui32>(ETimeState::MERGE)]; 
+                replInfo.ProxyWaitDuration = Durations[static_cast<ui32>(ETimeState::PROXY_WAIT)];
+                replInfo.MergeDuration = Durations[static_cast<ui32>(ETimeState::MERGE)];
                 replInfo.PDiskDuration = Durations[static_cast<ui32>(ETimeState::PDISK_OP)];
-                replInfo.CommitDuration = Durations[static_cast<ui32>(ETimeState::COMMIT)]; 
-                replInfo.OtherDuration = Durations[static_cast<ui32>(ETimeState::OTHER)]; 
+                replInfo.CommitDuration = Durations[static_cast<ui32>(ETimeState::COMMIT)];
+                replInfo.OtherDuration = Durations[static_cast<ui32>(ETimeState::OTHER)];
                 replInfo.PhantomDuration = Durations[static_cast<ui32>(ETimeState::PHANTOM)];
             }
 
@@ -107,14 +107,14 @@ namespace NKikimr {
             };
 
         public:
-            TRecoveryMachine( 
+            TRecoveryMachine(
                     std::shared_ptr<TReplCtx> replCtx,
-                    TEvReplFinished::TInfoPtr replInfo, 
-                    TBlobIdQueuePtr unreplicatedBlobsPtr) 
-                : ReplCtx(std::move(replCtx)) 
-                , ReplInfo(replInfo) 
+                    TEvReplFinished::TInfoPtr replInfo,
+                    TBlobIdQueuePtr unreplicatedBlobsPtr)
+                : ReplCtx(std::move(replCtx))
+                , ReplInfo(replInfo)
                 , UnreplicatedBlobsPtr(std::move(unreplicatedBlobsPtr))
-                , LostVec(TMemoryConsumer(ReplCtx->VCtx->Replication)) 
+                , LostVec(TMemoryConsumer(ReplCtx->VCtx->Replication))
                 , Arena(&TRopeArenaBackend::Allocate)
             {}
 
@@ -178,7 +178,7 @@ namespace NKikimr {
 
                 // first of all, count present parts and recover only if there are enough of these parts
                 if ((!canRestore && needToRestore && !hasExactParts) || phantom == EPhantomState::Phantom) {
-                    ReplInfo->DataRecoveryNoParts++; 
+                    ReplInfo->DataRecoveryNoParts++;
                     ReplInfo->PartsMissing += parts.CountBits();
                     STLOG(PRI_INFO, BS_REPL, BSVR28, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "not enough data parts to recover"),
                         (BlobId, id), (NumPresentParts, presentParts), (MinParts, groupType.DataParts()),
@@ -190,7 +190,7 @@ namespace NKikimr {
                         : ReplCtx->MonGroup.ReplCurrentNumUnrecoveredNonPhantomBlobs());
 
                     if (phantom == EPhantomState::Phantom) {
-                        ++ReplCtx->MonGroup.ReplCurrentPhantoms(); 
+                        ++ReplCtx->MonGroup.ReplCurrentPhantoms();
 
                         // count phantoms as replicated blobs
                         countAsRecovered = true;
@@ -263,12 +263,12 @@ namespace NKikimr {
                         // count recovered parts
                         countAsRecovered = true;
 
-                        ReplInfo->DataRecoverySuccess++; 
+                        ReplInfo->DataRecoverySuccess++;
                     } catch (const std::exception& ex) {
-                        ++ReplCtx->MonGroup.ReplRecoveryGroupTypeErrors(); 
+                        ++ReplCtx->MonGroup.ReplRecoveryGroupTypeErrors();
                         STLOG(PRI_ERROR, BS_REPL, BSVR29, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "recovery exception"),
                             (BlobId, id), (Error, TString(ex.what())));
-                        ReplInfo->DataRecoveryFailure++; 
+                        ReplInfo->DataRecoveryFailure++;
                         UnreplicatedBlobsPtr->push(id);
                     }
                 }
@@ -344,7 +344,7 @@ namespace NKikimr {
             typedef TTrackableDeque<TLost> TLostVec;
 
             std::shared_ptr<TReplCtx> ReplCtx;
-            TEvReplFinished::TInfoPtr ReplInfo; 
+            TEvReplFinished::TInfoPtr ReplInfo;
             TBlobIdQueuePtr UnreplicatedBlobsPtr;
             TLostVec LostVec;
             TDeque<TLogoBlobID> MetadataParts;

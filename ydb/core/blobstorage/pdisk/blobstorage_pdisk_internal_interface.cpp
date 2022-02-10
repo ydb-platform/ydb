@@ -1,6 +1,6 @@
-#include <ydb/core/node_whiteboard/node_whiteboard.h> 
-#include <ydb/core/blobstorage/base/blobstorage_events.h> 
-#include <ydb/core/protos/blobstorage.pb.h> 
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 #include <util/stream/str.h>
 
 #include "blobstorage_pdisk_internal_interface.h"
@@ -8,8 +8,8 @@
 namespace NKikimr {
 namespace NPDisk {
 
-TEvWhiteboardReportResult::~TEvWhiteboardReportResult() = default; 
- 
+TEvWhiteboardReportResult::~TEvWhiteboardReportResult() = default;
+
 TString TEvWhiteboardReportResult::ToString(const TEvWhiteboardReportResult &record) {
     TStringStream str;
     str << "{";

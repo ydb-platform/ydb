@@ -1,8 +1,8 @@
 #pragma once
 #include "pq_data_writer.h"
 
-#include <ydb/core/testlib/test_client.h> 
-#include <ydb/core/testlib/test_pq_client.h> 
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/core/testlib/test_pq_client.h>
 
 namespace NKikimr::NPersQueueTests {
 

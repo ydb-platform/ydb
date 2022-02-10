@@ -204,25 +204,25 @@ Y_UNIT_TEST_SUITE(TRowVersionRangesTest) {
         UNIT_ASSERT_VALUES_EQUAL(ranges.AdjustDown(TRowVersion(8, 81)), TRowVersion(8, 81));
     }
 
-    using TSteppedCookieAllocator = TRowVersionRanges::TSteppedCookieAllocator; 
+    using TSteppedCookieAllocator = TRowVersionRanges::TSteppedCookieAllocator;
 
-    TString DumpSteppedCookieAllocatorOrder(size_t size) { 
-        TSteppedCookieAllocator steppedCookieAllocator(size); 
+    TString DumpSteppedCookieAllocatorOrder(size_t size) {
+        TSteppedCookieAllocator steppedCookieAllocator(size);
         TStringBuilder builder;
         bool first = true;
-        while (steppedCookieAllocator) { 
+        while (steppedCookieAllocator) {
             if (first) {
                 first = false;
             } else {
                 builder << ", ";
             }
-            builder << steppedCookieAllocator.Current(); 
-            steppedCookieAllocator.MoveNext(); 
+            builder << steppedCookieAllocator.Current();
+            steppedCookieAllocator.MoveNext();
         }
         return builder;
     }
 
-    Y_UNIT_TEST(SteppedCookieAllocatorOrder) { 
+    Y_UNIT_TEST(SteppedCookieAllocatorOrder) {
         TVector<TString> expected{{
             "",
             "0",
@@ -270,13 +270,13 @@ Y_UNIT_TEST_SUITE(TRowVersionRangesTest) {
 
         for (size_t size = 0; size < expected.size(); ++size) {
             UNIT_ASSERT_VALUES_EQUAL_C(
-                DumpSteppedCookieAllocatorOrder(size), 
+                DumpSteppedCookieAllocatorOrder(size),
                 expected[size],
-                "DumpSteppedCookieAllocator(" << size << ")"); 
+                "DumpSteppedCookieAllocator(" << size << ")");
         }
     }
 
-    Y_UNIT_TEST(SteppedCookieAllocatorLowerBound) { 
+    Y_UNIT_TEST(SteppedCookieAllocatorLowerBound) {
         TVector<size_t> sizes{{ 0, 5, 21, 37, 84 }};
         for (size_t size : sizes) {
             TVector<size_t> tree;
@@ -285,10 +285,10 @@ Y_UNIT_TEST_SUITE(TRowVersionRangesTest) {
                 // Build a tree of values 5, 15, 25, ...
                 tree.resize(size);
                 size_t value = 0;
-                TSteppedCookieAllocator steppedCookieAllocator(size); 
-                while (steppedCookieAllocator) { 
-                    tree[steppedCookieAllocator.Current()] = (value++) * 10 + 5; 
-                    steppedCookieAllocator.MoveNext(); 
+                TSteppedCookieAllocator steppedCookieAllocator(size);
+                while (steppedCookieAllocator) {
+                    tree[steppedCookieAllocator.Current()] = (value++) * 10 + 5;
+                    steppedCookieAllocator.MoveNext();
                 }
                 UNIT_ASSERT_VALUES_EQUAL(value, size);
             }
@@ -296,7 +296,7 @@ Y_UNIT_TEST_SUITE(TRowVersionRangesTest) {
             for (size_t index = 0; index < size; ++index) {
                 // Search for every needle must succeed
                 size_t needle = index * 10;
-                size_t found = TSteppedCookieAllocator::LowerBound(tree, needle); 
+                size_t found = TSteppedCookieAllocator::LowerBound(tree, needle);
                 UNIT_ASSERT_C(
                     found != tree.size(),
                     "While looking for " << needle << " in a tree of size " << size);
@@ -308,7 +308,7 @@ Y_UNIT_TEST_SUITE(TRowVersionRangesTest) {
             {
                 // Search for needle above the maximum must fail
                 size_t needle = size * 10;
-                size_t found = TSteppedCookieAllocator::LowerBound(tree, needle); 
+                size_t found = TSteppedCookieAllocator::LowerBound(tree, needle);
                 UNIT_ASSERT_C(
                     found == tree.size(),
                     "While looking for " << needle << " in a tree of size" << size);

@@ -140,8 +140,8 @@ SRCS(
     execution_unit_ctors.h
     execution_unit_kind.h
     export_common.cpp
-    export_iface.cpp 
-    export_iface.h 
+    export_iface.cpp
+    export_iface.h
     export_scan.cpp
     finalize_build_index_unit.cpp
     finish_propose_unit.cpp
@@ -184,19 +184,19 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(change_exchange.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(change_record.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(datashard.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(datashard_active_transaction.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(datashard_s3_upload.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(execution_unit.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(execution_unit_kind.h)
- 
+
 GENERATE_ENUM_SERIALIZATION(operation.h)
 
 RESOURCE(
@@ -208,35 +208,35 @@ PEERDIR(
     library/cpp/containers/flat_hash
     library/cpp/html/pcdata
     library/cpp/string_utils/quote
-    ydb/core/actorlib_impl 
-    ydb/core/base 
-    ydb/core/engine 
-    ydb/core/engine/minikql 
-    ydb/core/formats 
-    ydb/core/io_formats 
-    ydb/core/kqp/runtime 
-    ydb/core/persqueue/partition_key_range 
-    ydb/core/persqueue/writer 
-    ydb/core/protos 
-    ydb/core/tablet 
-    ydb/core/tablet_flat 
-    ydb/core/util 
-    ydb/core/wrappers 
-    ydb/core/ydb_convert 
-    ydb/library/aclib 
-    ydb/library/binary_json 
-    ydb/library/dynumber 
-    ydb/public/api/protos 
-    ydb/public/lib/deprecated/kicli 
+    ydb/core/actorlib_impl
+    ydb/core/base
+    ydb/core/engine
+    ydb/core/engine/minikql
+    ydb/core/formats
+    ydb/core/io_formats
+    ydb/core/kqp/runtime
+    ydb/core/persqueue/partition_key_range
+    ydb/core/persqueue/writer
+    ydb/core/protos
+    ydb/core/tablet
+    ydb/core/tablet_flat
+    ydb/core/util
+    ydb/core/wrappers
+    ydb/core/ydb_convert
+    ydb/library/aclib
+    ydb/library/binary_json
+    ydb/library/dynumber
+    ydb/public/api/protos
+    ydb/public/lib/deprecated/kicli
     ydb/library/yql/dq/actors/compute
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
-    CFLAGS( 
-        -DKIKIMR_DISABLE_S3_OPS 
-    ) 
+    CFLAGS(
+        -DKIKIMR_DISABLE_S3_OPS
+    )
 ELSE()
     SRCS(
         export_s3_buffer.cpp
@@ -246,8 +246,8 @@ ELSE()
 ENDIF()
 
 END()
- 
-RECURSE_FOR_TESTS( 
+
+RECURSE_FOR_TESTS(
     ut_background_compaction
     ut_build_index
     ut_change_collector
@@ -275,4 +275,4 @@ RECURSE_FOR_TESTS(
     ut_snapshot
     ut_stats
     ut_upload_rows
-) 
+)

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/testlib/actors) 
+UNITTEST_FOR(ydb/core/testlib/actors)
 
 OWNER(
     g:kikimr

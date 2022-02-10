@@ -1,3 +1,3 @@
 #pragma once
 
-#include <ydb/core/blobstorage/dsproxy/defs.h> 
+#include <ydb/core/blobstorage/dsproxy/defs.h>

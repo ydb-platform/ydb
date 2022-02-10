@@ -235,10 +235,10 @@ def pytest_configure(config):
     config.test_cores_count = 0
     config.collect_cores = config.option.collect_cores
     config.sanitizer_extra_checks = config.option.sanitizer_extra_checks
-    try:
-        config.test_tool_bin = config.option.test_tool_bin
-    except AttributeError:
-        logging.info("test_tool_bin not specified")
+    try: 
+        config.test_tool_bin = config.option.test_tool_bin 
+    except AttributeError: 
+        logging.info("test_tool_bin not specified") 
 
     if config.sanitizer_extra_checks:
         for envvar in ['LSAN_OPTIONS', 'ASAN_OPTIONS']:

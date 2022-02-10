@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h>
@@ -7,15 +7,15 @@
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
-#include <util/string/builder.h> 
- 
+#include <util/string/builder.h>
+
 #include <atomic>
 #include <memory>
 
-namespace NYdb { 
- 
-namespace NSdkStats { 
- 
+namespace NYdb {
+
+namespace NSdkStats {
+
 // works only for case normal (foo_bar) underscore
 
 inline TStringType UnderscoreToUpperCamel(const TStringType& in) {
@@ -43,18 +43,18 @@ inline TStringType UnderscoreToUpperCamel(const TStringType& in) {
     return result;
 }
 
-template<typename TPointer> 
-class TAtomicPointer { 
-public: 
- 
-    TAtomicPointer(TPointer* pointer = nullptr) { 
-        Set(pointer); 
-    } 
- 
+template<typename TPointer>
+class TAtomicPointer {
+public:
+
+    TAtomicPointer(TPointer* pointer = nullptr) {
+        Set(pointer);
+    }
+
     TAtomicPointer(const TAtomicPointer& other) {
         Set(other.Get());
-    } 
- 
+    }
+
     TAtomicPointer& operator=(const TAtomicPointer& other) {
         Set(other.Get());
         return *this;
@@ -64,202 +64,202 @@ public:
         return Pointer_.load();
     }
 
-    void Set(TPointer* pointer) { 
+    void Set(TPointer* pointer) {
         Pointer_.store(pointer);
-    } 
- 
-private: 
+    }
+
+private:
     std::atomic<TPointer*> Pointer_;
-}; 
- 
-template<typename TPointer> 
-class TAtomicCounter: public TAtomicPointer<TPointer> { 
-    public: 
-        void Add(ui64 value) { 
-            if (auto counter = this->Get()) { 
-                counter->Add(value); 
-            } 
-        } 
- 
-        void Inc() { 
-            if (auto counter = this->Get()) { 
-                counter->Inc(); 
-            } 
-        } 
- 
-        void Dec() { 
-            if (auto counter = this->Get()) { 
-                counter->Dec(); 
-            } 
-        } 
- 
-        void SetValue(ui64 value) { 
-            if (auto counter = this->Get()) { 
-                counter->Set(value); 
-            } 
-        } 
-}; 
- 
-template<typename TCounter> 
-class FastLocalCounter { 
-public: 
-    FastLocalCounter(TAtomicCounter<TCounter>& counter) 
-    : Counter(counter), Value(0) 
-    { } 
- 
-    ~FastLocalCounter() { 
-        Counter.Add(Value); 
-    } 
- 
-    FastLocalCounter<TCounter>& operator++ () { 
-        ++Value; 
-        return *this; 
-    } 
- 
-    TAtomicCounter<TCounter>& Counter; 
-    ui64 Value; 
-}; 
- 
-template<typename TPointer> 
-class TAtomicHistogram: public TAtomicPointer<TPointer> { 
-public: 
- 
-    void Record(i64 value) { 
-        if (auto histogram = this->Get()) { 
-            histogram->Record(value); 
-        } 
-    } 
- 
-    bool IsCollecting() { 
-        return this->Get() != nullptr; 
-    } 
-}; 
- 
-// Sessions count for all clients 
-// Every client has 3 TSessionCounter for active, in session pool, in settler sessions 
-// TSessionCounters in different clients with same role share one sensor 
-class TSessionCounter: public TAtomicPointer<NMonitoring::TIntGauge> { 
-public: 
- 
-    // Call with mutex 
-    void Apply(i64 newValue) { 
-        if (auto gauge = this->Get()) { 
-            gauge->Add(newValue - oldValue); 
-            oldValue = newValue; 
-        } 
-    } 
- 
-    ~TSessionCounter() { 
-        NMonitoring::TIntGauge* gauge = this->Get(); 
-        if (gauge) { 
-            gauge->Add(-oldValue); 
-        } 
-    } 
- 
-private: 
-    i64 oldValue = 0; 
-}; 
- 
-struct TStatCollector { 
+};
+
+template<typename TPointer>
+class TAtomicCounter: public TAtomicPointer<TPointer> {
+    public:
+        void Add(ui64 value) {
+            if (auto counter = this->Get()) {
+                counter->Add(value);
+            }
+        }
+
+        void Inc() {
+            if (auto counter = this->Get()) {
+                counter->Inc();
+            }
+        }
+
+        void Dec() {
+            if (auto counter = this->Get()) {
+                counter->Dec();
+            }
+        }
+
+        void SetValue(ui64 value) {
+            if (auto counter = this->Get()) {
+                counter->Set(value);
+            }
+        }
+};
+
+template<typename TCounter>
+class FastLocalCounter {
+public:
+    FastLocalCounter(TAtomicCounter<TCounter>& counter)
+    : Counter(counter), Value(0)
+    { }
+
+    ~FastLocalCounter() {
+        Counter.Add(Value);
+    }
+
+    FastLocalCounter<TCounter>& operator++ () {
+        ++Value;
+        return *this;
+    }
+
+    TAtomicCounter<TCounter>& Counter;
+    ui64 Value;
+};
+
+template<typename TPointer>
+class TAtomicHistogram: public TAtomicPointer<TPointer> {
+public:
+
+    void Record(i64 value) {
+        if (auto histogram = this->Get()) {
+            histogram->Record(value);
+        }
+    }
+
+    bool IsCollecting() {
+        return this->Get() != nullptr;
+    }
+};
+
+// Sessions count for all clients
+// Every client has 3 TSessionCounter for active, in session pool, in settler sessions
+// TSessionCounters in different clients with same role share one sensor
+class TSessionCounter: public TAtomicPointer<NMonitoring::TIntGauge> {
+public:
+
+    // Call with mutex
+    void Apply(i64 newValue) {
+        if (auto gauge = this->Get()) {
+            gauge->Add(newValue - oldValue);
+            oldValue = newValue;
+        }
+    }
+
+    ~TSessionCounter() {
+        NMonitoring::TIntGauge* gauge = this->Get();
+        if (gauge) {
+            gauge->Add(-oldValue);
+        }
+    }
+
+private:
+    i64 oldValue = 0;
+};
+
+struct TStatCollector {
     using TMetricRegistry = NMonitoring::TMetricRegistry;
- 
-public: 
- 
-    struct TEndpointElectorStatCollector { 
- 
-        TEndpointElectorStatCollector(NMonitoring::TIntGauge* endpointCount = nullptr 
-        , NMonitoring::TIntGauge* pessimizationRatio = nullptr 
-        , NMonitoring::TIntGauge* activeEndpoints = nullptr) 
-        : EndpointCount(endpointCount) 
-        , PessimizationRatio(pessimizationRatio) 
-        , EndpointActive(activeEndpoints) 
-        { } 
- 
-        NMonitoring::TIntGauge* EndpointCount; 
-        NMonitoring::TIntGauge* PessimizationRatio; 
-        NMonitoring::TIntGauge* EndpointActive; 
-    }; 
- 
-    struct TSessionPoolStatCollector { 
- 
-        enum class EStatCollectorType: size_t { 
-            SESSIONPOOL, 
-            SETTLERPOOL 
-        }; 
- 
-        TSessionPoolStatCollector(NMonitoring::TIntGauge* activeSessions = nullptr 
-        , NMonitoring::TIntGauge* inPoolSessions = nullptr 
+
+public:
+
+    struct TEndpointElectorStatCollector {
+
+        TEndpointElectorStatCollector(NMonitoring::TIntGauge* endpointCount = nullptr
+        , NMonitoring::TIntGauge* pessimizationRatio = nullptr
+        , NMonitoring::TIntGauge* activeEndpoints = nullptr)
+        : EndpointCount(endpointCount)
+        , PessimizationRatio(pessimizationRatio)
+        , EndpointActive(activeEndpoints)
+        { }
+
+        NMonitoring::TIntGauge* EndpointCount;
+        NMonitoring::TIntGauge* PessimizationRatio;
+        NMonitoring::TIntGauge* EndpointActive;
+    };
+
+    struct TSessionPoolStatCollector {
+
+        enum class EStatCollectorType: size_t {
+            SESSIONPOOL,
+            SETTLERPOOL
+        };
+
+        TSessionPoolStatCollector(NMonitoring::TIntGauge* activeSessions = nullptr
+        , NMonitoring::TIntGauge* inPoolSessions = nullptr
         , NMonitoring::TRate* fakeSessions = nullptr)
         : ActiveSessions(activeSessions), InPoolSessions(inPoolSessions), FakeSessions(fakeSessions)
-        { } 
- 
-        NMonitoring::TIntGauge* ActiveSessions; 
-        NMonitoring::TIntGauge* InPoolSessions; 
+        { }
+
+        NMonitoring::TIntGauge* ActiveSessions;
+        NMonitoring::TIntGauge* InPoolSessions;
         NMonitoring::TRate* FakeSessions;
-    }; 
- 
-    struct TClientRetryOperationStatCollector { 
- 
+    };
+
+    struct TClientRetryOperationStatCollector {
+
         TClientRetryOperationStatCollector() : MetricRegistry_(), Database_() {}
- 
+
         TClientRetryOperationStatCollector(NMonitoring::TMetricRegistry* registry, const TStringType& database)
         : MetricRegistry_(registry), Database_(database)
-        { } 
- 
-        void IncSyncRetryOperation(const EStatus& status) { 
+        { }
+
+        void IncSyncRetryOperation(const EStatus& status) {
             if (auto registry = MetricRegistry_.Get()) {
                 TString statusName = TStringBuilder() << status;
                 TString sensor = TStringBuilder() << "RetryOperation/" << UnderscoreToUpperCamel(statusName);
                 registry->Rate({ {"database", Database_}, {"sensor", sensor} })->Inc();
-            } 
-        } 
- 
-        void IncAsyncRetryOperation(const EStatus& status) { 
+            }
+        }
+
+        void IncAsyncRetryOperation(const EStatus& status) {
             if (auto registry = MetricRegistry_.Get()) {
                 TString statusName = TStringBuilder() << status;
                 TString sensor = TStringBuilder() << "RetryOperation/" << UnderscoreToUpperCamel(statusName);
                 registry->Rate({ {"database", Database_}, {"sensor", sensor} })->Inc();
-            } 
-        } 
- 
-    private: 
+            }
+        }
+
+    private:
         TAtomicPointer<NMonitoring::TMetricRegistry> MetricRegistry_;
         TStringType Database_;
-    }; 
- 
-    struct TClientStatCollector { 
- 
+    };
+
+    struct TClientStatCollector {
+
         TClientStatCollector(NMonitoring::TRate* cacheMiss = nullptr
-        , NMonitoring::THistogram* querySize = nullptr 
-        , NMonitoring::THistogram* paramsSize = nullptr 
+        , NMonitoring::THistogram* querySize = nullptr
+        , NMonitoring::THistogram* paramsSize = nullptr
         , NMonitoring::TRate* sessionRemoved = nullptr
         , NMonitoring::TRate* requestMigrated = nullptr
-        , TClientRetryOperationStatCollector retryOperationStatCollector = TClientRetryOperationStatCollector()) 
+        , TClientRetryOperationStatCollector retryOperationStatCollector = TClientRetryOperationStatCollector())
         : CacheMiss(cacheMiss)
         , QuerySize(querySize)
         , ParamsSize(paramsSize)
         , SessionRemovedDueBalancing(sessionRemoved)
         , RequestMigrated(requestMigrated)
         , RetryOperationStatCollector(retryOperationStatCollector)
-        { } 
- 
+        { }
+
         NMonitoring::TRate* CacheMiss;
-        NMonitoring::THistogram* QuerySize; 
-        NMonitoring::THistogram* ParamsSize; 
+        NMonitoring::THistogram* QuerySize;
+        NMonitoring::THistogram* ParamsSize;
         NMonitoring::TRate* SessionRemovedDueBalancing;
         NMonitoring::TRate* RequestMigrated;
-        TClientRetryOperationStatCollector RetryOperationStatCollector; 
-    }; 
- 
+        TClientRetryOperationStatCollector RetryOperationStatCollector;
+    };
+
     TStatCollector(const TStringType& database, TMetricRegistry* sensorsRegistry)
         : Database_(database)
         , DatabaseLabel_({"database", database})
-    { 
-        if (sensorsRegistry) { 
+    {
+        if (sensorsRegistry) {
             SetMetricRegistry(sensorsRegistry);
-        } 
-    } 
- 
+        }
+    }
+
     void SetMetricRegistry(TMetricRegistry* sensorsRegistry) {
         Y_VERIFY(sensorsRegistry, "TMetricRegistry is null in stats collector.");
         MetricRegistryPtr_.Set(sensorsRegistry);
@@ -280,53 +280,53 @@ public:
         GRpcInFlight_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,               {"sensor", "Grpc/InFlight"} }));
 
         RequestLatency_.Set(sensorsRegistry->HistogramRate({ DatabaseLabel_, {"sensor", "Request/Latency"} },
-            NMonitoring::ExponentialHistogram(20, 2, 1))); 
+            NMonitoring::ExponentialHistogram(20, 2, 1)));
         QuerySize_.Set(sensorsRegistry->HistogramRate({ DatabaseLabel_, {"sensor", "Request/QuerySize"} },
-            NMonitoring::ExponentialHistogram(20, 2, 32))); 
+            NMonitoring::ExponentialHistogram(20, 2, 32)));
         ParamsSize_.Set(sensorsRegistry->HistogramRate({ DatabaseLabel_, {"sensor", "Request/ParamsSize"} },
-            NMonitoring::ExponentialHistogram(10, 2, 32))); 
+            NMonitoring::ExponentialHistogram(10, 2, 32)));
         ResultSize_.Set(sensorsRegistry->HistogramRate({ DatabaseLabel_, {"sensor", "Request/ResultSize"} },
-            NMonitoring::ExponentialHistogram(20, 2, 32))); 
-    } 
- 
-    void IncDiscoveryDuePessimization() { 
-        DiscoveryDuePessimization_.Inc(); 
-    } 
- 
-    void IncDiscoveryDueExpiration() { 
-        DiscoveryDueExpiration_.Inc(); 
-    } 
- 
-    void IncDiscoveryFailDueTransportError() { 
-        DiscoveryFailDueTransportError_.Inc(); 
-    } 
- 
-    void IncReqFailQueueOverflow() { 
-        RequestFailDueQueueOverflow_.Inc(); 
-    } 
- 
-    void IncReqFailNoEndpoint() { 
-        RequestFailDueNoEndpoint_.Inc(); 
-    } 
- 
-    void IncReqFailDueTransportError() { 
-        RequestFailDueTransportError_.Inc(); 
-    } 
- 
-    void IncRequestLatency(TDuration duration) { 
-        RequestLatency_.Record(duration.MilliSeconds()); 
-    } 
- 
-    void IncResultSize(const size_t& size) { 
-        ResultSize_.Record(size); 
-    } 
- 
+            NMonitoring::ExponentialHistogram(20, 2, 32)));
+    }
+
+    void IncDiscoveryDuePessimization() {
+        DiscoveryDuePessimization_.Inc();
+    }
+
+    void IncDiscoveryDueExpiration() {
+        DiscoveryDueExpiration_.Inc();
+    }
+
+    void IncDiscoveryFailDueTransportError() {
+        DiscoveryFailDueTransportError_.Inc();
+    }
+
+    void IncReqFailQueueOverflow() {
+        RequestFailDueQueueOverflow_.Inc();
+    }
+
+    void IncReqFailNoEndpoint() {
+        RequestFailDueNoEndpoint_.Inc();
+    }
+
+    void IncReqFailDueTransportError() {
+        RequestFailDueTransportError_.Inc();
+    }
+
+    void IncRequestLatency(TDuration duration) {
+        RequestLatency_.Record(duration.MilliSeconds());
+    }
+
+    void IncResultSize(const size_t& size) {
+        ResultSize_.Record(size);
+    }
+
     void IncCounter(const TStringType& sensor) {
         if (auto registry = MetricRegistryPtr_.Get()) {
-            registry->Counter({ {"database", Database_}, {"sensor", sensor} })->Inc(); 
-        } 
-    } 
- 
+            registry->Counter({ {"database", Database_}, {"sensor", sensor} })->Inc();
+        }
+    }
+
     void SetSessionCV(ui32 cv) {
         SessionCV_.SetValue(cv);
     }
@@ -339,47 +339,47 @@ public:
         GRpcInFlight_.Dec();
     }
 
-    TEndpointElectorStatCollector GetEndpointElectorStatCollector() { 
+    TEndpointElectorStatCollector GetEndpointElectorStatCollector() {
         if (auto registry = MetricRegistryPtr_.Get()) {
             auto endpointCoint = registry->IntGauge({ {"database", Database_},      {"sensor", "Endpoints/Total"} });
             auto pessimizationRatio = registry->IntGauge({ {"database", Database_}, {"sensor", "Endpoints/BadRatio"} });
             auto activeEndpoints = registry->IntGauge({ {"database", Database_},    {"sensor", "Endpoints/Good"} });
-            return TEndpointElectorStatCollector(endpointCoint, pessimizationRatio, activeEndpoints); 
-        } else { 
-            return TEndpointElectorStatCollector(); 
-        } 
-    } 
- 
-    TSessionPoolStatCollector GetSessionPoolStatCollector(TSessionPoolStatCollector::EStatCollectorType type) { 
-        if (!IsCollecting()) { 
-            return TSessionPoolStatCollector(); 
-        } 
- 
-        switch (type) { 
+            return TEndpointElectorStatCollector(endpointCoint, pessimizationRatio, activeEndpoints);
+        } else {
+            return TEndpointElectorStatCollector();
+        }
+    }
+
+    TSessionPoolStatCollector GetSessionPoolStatCollector(TSessionPoolStatCollector::EStatCollectorType type) {
+        if (!IsCollecting()) {
+            return TSessionPoolStatCollector();
+        }
+
+        switch (type) {
             case TSessionPoolStatCollector::EStatCollectorType::SESSIONPOOL:
                 return TSessionPoolStatCollector(ActiveSessions_.Get(), InPoolSessions_.Get(), FakeSessions_.Get());
 
-            case TSessionPoolStatCollector::EStatCollectorType::SETTLERPOOL: 
+            case TSessionPoolStatCollector::EStatCollectorType::SETTLERPOOL:
                 return TSessionPoolStatCollector(nullptr, SettlerSessions_.Get(), nullptr);
-        } 
+        }
 
         return TSessionPoolStatCollector();
-    } 
- 
-    TClientStatCollector GetClientStatCollector() { 
-        if (IsCollecting()) { 
+    }
+
+    TClientStatCollector GetClientStatCollector() {
+        if (IsCollecting()) {
             return TClientStatCollector(CacheMiss_.Get(), QuerySize_.Get(), ParamsSize_.Get(),
                 SessionRemovedDueBalancing_.Get(), RequestMigrated_.Get(),
                 TClientRetryOperationStatCollector(MetricRegistryPtr_.Get(), Database_));
-        } else { 
-            return TClientStatCollector(); 
-        } 
-    } 
- 
-    bool IsCollecting() { 
+        } else {
+            return TClientStatCollector();
+        }
+    }
+
+    bool IsCollecting() {
         return MetricRegistryPtr_.Get() != nullptr;
-    } 
- 
+    }
+
     void IncSessionsOnHost(const TStringType& host);
     void DecSessionsOnHost(const TStringType& host);
 
@@ -389,7 +389,7 @@ public:
     void DecGRpcInFlightByHost(const TStringType& host);
 
     void DeleteHost(const TStringType& host);
-private: 
+private:
     const TStringType Database_;
     const NMonitoring::TLabel DatabaseLabel_;
     TAtomicPointer<TMetricRegistry> MetricRegistryPtr_;
@@ -399,21 +399,21 @@ private:
     TAtomicCounter<NMonitoring::TRate> RequestFailDueNoEndpoint_;
     TAtomicCounter<NMonitoring::TRate> RequestFailDueTransportError_;
     TAtomicCounter<NMonitoring::TRate> DiscoveryFailDueTransportError_;
-    TAtomicPointer<NMonitoring::TIntGauge> ActiveSessions_; 
-    TAtomicPointer<NMonitoring::TIntGauge> InPoolSessions_; 
-    TAtomicPointer<NMonitoring::TIntGauge> SettlerSessions_; 
+    TAtomicPointer<NMonitoring::TIntGauge> ActiveSessions_;
+    TAtomicPointer<NMonitoring::TIntGauge> InPoolSessions_;
+    TAtomicPointer<NMonitoring::TIntGauge> SettlerSessions_;
     TAtomicCounter<NMonitoring::TIntGauge> SessionCV_;
     TAtomicCounter<NMonitoring::TRate> SessionRemovedDueBalancing_;
     TAtomicCounter<NMonitoring::TRate> RequestMigrated_;
     TAtomicCounter<NMonitoring::TRate> FakeSessions_;
     TAtomicCounter<NMonitoring::TRate> CacheMiss_;
     TAtomicCounter<NMonitoring::TIntGauge> GRpcInFlight_;
-    TAtomicHistogram<NMonitoring::THistogram> RequestLatency_; 
-    TAtomicHistogram<NMonitoring::THistogram> QuerySize_; 
-    TAtomicHistogram<NMonitoring::THistogram> ParamsSize_; 
-    TAtomicHistogram<NMonitoring::THistogram> ResultSize_; 
-}; 
- 
-} // namespace NSdkStats 
- 
-} // namespace Nydb 
+    TAtomicHistogram<NMonitoring::THistogram> RequestLatency_;
+    TAtomicHistogram<NMonitoring::THistogram> QuerySize_;
+    TAtomicHistogram<NMonitoring::THistogram> ParamsSize_;
+    TAtomicHistogram<NMonitoring::THistogram> ResultSize_;
+};
+
+} // namespace NSdkStats
+
+} // namespace Nydb

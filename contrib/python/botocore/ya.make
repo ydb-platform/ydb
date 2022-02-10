@@ -713,9 +713,9 @@ RESOURCE_FILES(
     #botocore/data/pinpoint-sms-voice/2018-09-05/service-2.json
     #botocore/data/pinpoint/2016-12-01/examples-1.json
     #botocore/data/pinpoint/2016-12-01/service-2.json
-    botocore/data/polly/2016-06-10/examples-1.json
-    botocore/data/polly/2016-06-10/paginators-1.json
-    botocore/data/polly/2016-06-10/service-2.json
+    botocore/data/polly/2016-06-10/examples-1.json 
+    botocore/data/polly/2016-06-10/paginators-1.json 
+    botocore/data/polly/2016-06-10/service-2.json 
     #botocore/data/pricing/2017-10-15/examples-1.json
     #botocore/data/pricing/2017-10-15/paginators-1.json
     #botocore/data/pricing/2017-10-15/service-2.json

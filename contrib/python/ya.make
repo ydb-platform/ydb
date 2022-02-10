@@ -33,8 +33,8 @@ RECURSE(
     aioresponses
     aiormq
     aiosignal
-    aiosmtpd 
-    aiosmtplib 
+    aiosmtpd
+    aiosmtplib
     aiosocksy
     aiosqlite
     aiotg
@@ -859,7 +859,7 @@ RECURSE(
     pyTelegramBotAPI
     pytest
     pytest-allure-adaptor
-    pytest-asyncio 
+    pytest-asyncio
     pytest-bdd
     pytest-datadir
     pytest-datafixtures

@@ -106,7 +106,7 @@ namespace NSorted {
         }
 
         // STL-compatible synonym
-        Y_FORCE_INLINE iterator insert(const value_type& value) {
+        Y_FORCE_INLINE iterator insert(const value_type& value) { 
             return this->Insert(value);
         }
 
@@ -119,7 +119,7 @@ namespace NSorted {
 
         // STL-compatible synonym
         template <class TIter>
-        Y_FORCE_INLINE void insert(TIter first, TIter last) {
+        Y_FORCE_INLINE void insert(TIter first, TIter last) { 
             this->Insert(first, last);
         }
 
@@ -136,7 +136,7 @@ namespace NSorted {
         }
 
         // STL-compatible synonym
-        Y_FORCE_INLINE std::pair<iterator, bool> insert_unique(const value_type& value) {
+        Y_FORCE_INLINE std::pair<iterator, bool> insert_unique(const value_type& value) { 
             return this->InsertUnique(value);
         }
 
@@ -150,7 +150,7 @@ namespace NSorted {
 
         // STL-compatible synonym
         template <class TIter>
-        Y_FORCE_INLINE void insert_unique(TIter first, TIter last) {
+        Y_FORCE_INLINE void insert_unique(TIter first, TIter last) { 
             this->InsertUnique(first, last);
         }
 
@@ -166,25 +166,25 @@ namespace NSorted {
         }
 
         // STL-compatible synonym
-        Y_FORCE_INLINE iterator insert_or_replace(const value_type& value) {
+        Y_FORCE_INLINE iterator insert_or_replace(const value_type& value) { 
             return this->InsertOrReplace(value);
         }
 
-        Y_FORCE_INLINE void Sort() {
+        Y_FORCE_INLINE void Sort() { 
             ::Sort(TBase::begin(), TBase::end(), TKeyCompare());
         }
 
         // STL-compatible synonym
-        Y_FORCE_INLINE void sort() {
+        Y_FORCE_INLINE void sort() { 
             this->Sort();
         }
 
-        Y_FORCE_INLINE void Sort(iterator from, iterator to) {
+        Y_FORCE_INLINE void Sort(iterator from, iterator to) { 
             ::Sort(from, to, TKeyCompare());
         }
 
         // STL-compatible synonym
-        Y_FORCE_INLINE void sort(iterator from, iterator to) {
+        Y_FORCE_INLINE void sort(iterator from, iterator to) { 
             this->Sort(from, to);
         }
 
@@ -193,7 +193,7 @@ namespace NSorted {
         }
 
         // STL-compatible synonym
-        Y_FORCE_INLINE void make_unique() {
+        Y_FORCE_INLINE void make_unique() { 
             this->MakeUnique();
         }
 
@@ -310,7 +310,7 @@ namespace NSorted {
         }
 
         // STL-compatible synonym
-        Y_FORCE_INLINE void erase(const key_type& key) {
+        Y_FORCE_INLINE void erase(const key_type& key) { 
             this->Erase(key);
         }
 
@@ -455,24 +455,24 @@ namespace NSorted {
         // Inserts value with unique key. Returns <iterator, bool> pair,
         // where the first member is the pointer to the inserted/existing value, and the
         // second member indicates either the value is inserted or not.
-        Y_FORCE_INLINE std::pair<iterator, bool> Insert(const TValueType& value) {
+        Y_FORCE_INLINE std::pair<iterator, bool> Insert(const TValueType& value) { 
             return TBase::InsertUnique(value);
         }
 
         // STL-compatible synonym
-        Y_FORCE_INLINE std::pair<iterator, bool> insert(const TValueType& value) {
+        Y_FORCE_INLINE std::pair<iterator, bool> insert(const TValueType& value) { 
             return TBase::InsertUnique(value);
         }
 
         // Inserts value range with unique keys.
         template <class TIter>
-        Y_FORCE_INLINE void Insert(TIter first, TIter last) {
+        Y_FORCE_INLINE void Insert(TIter first, TIter last) { 
             TBase::InsertUnique(first, last);
         }
 
         // STL-compatible synonym
         template <class TIter>
-        Y_FORCE_INLINE void insert(TIter first, TIter last) {
+        Y_FORCE_INLINE void insert(TIter first, TIter last) { 
             TBase::InsertUnique(first, last);
         }
     };

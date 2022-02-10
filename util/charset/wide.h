@@ -52,8 +52,8 @@ namespace NDetail {
         wchar16 lead = chars[0];
         wchar16 tail = chars[1];
 
-        Y_ASSERT(IsW16SurrogateLead(lead));
-        Y_ASSERT(IsW16SurrogateTail(tail));
+        Y_ASSERT(IsW16SurrogateLead(lead)); 
+        Y_ASSERT(IsW16SurrogateTail(tail)); 
 
         return (static_cast<wchar32>(lead) << 10) + tail + SURROGATE_OFFSET;
     }
@@ -64,10 +64,10 @@ namespace NDetail {
 }
 
 inline wchar16* SkipSymbol(wchar16* begin, const wchar16* end) noexcept {
-    return begin + W16SymbolSize(begin, end);
+    return begin + W16SymbolSize(begin, end); 
 }
 inline const wchar16* SkipSymbol(const wchar16* begin, const wchar16* end) noexcept {
-    return begin + W16SymbolSize(begin, end);
+    return begin + W16SymbolSize(begin, end); 
 }
 inline wchar32* SkipSymbol(wchar32* begin, const wchar32* end) noexcept {
     Y_ASSERT(begin < end);
@@ -80,12 +80,12 @@ inline const wchar32* SkipSymbol(const wchar32* begin, const wchar32* end) noexc
 
 inline wchar32 ReadSymbol(const wchar16* begin, const wchar16* end) noexcept {
     Y_ASSERT(begin < end);
-    if (IsW16SurrogateLead(*begin)) {
+    if (IsW16SurrogateLead(*begin)) { 
         if (begin + 1 < end && IsW16SurrogateTail(*(begin + 1)))
             return ::NDetail::ReadSurrogatePair(begin);
 
         return BROKEN_RUNE;
-    } else if (IsW16SurrogateTail(*begin)) {
+    } else if (IsW16SurrogateTail(*begin)) { 
         return BROKEN_RUNE;
     }
 
@@ -100,8 +100,8 @@ inline wchar32 ReadSymbol(const wchar32* begin, const wchar32* end) noexcept {
 //! presuming input data is either big enought of null terminated
 inline wchar32 ReadSymbolAndAdvance(const wchar16*& begin) noexcept {
     Y_ASSERT(*begin);
-    if (IsW16SurrogateLead(begin[0])) {
-        if (IsW16SurrogateTail(begin[1])) {
+    if (IsW16SurrogateLead(begin[0])) { 
+        if (IsW16SurrogateTail(begin[1])) { 
             Y_ASSERT(begin[1] != 0);
             const wchar32 c = ::NDetail::ReadSurrogatePair(begin);
             begin += 2;
@@ -109,7 +109,7 @@ inline wchar32 ReadSymbolAndAdvance(const wchar16*& begin) noexcept {
         }
         ++begin;
         return BROKEN_RUNE;
-    } else if (IsW16SurrogateTail(begin[0])) {
+    } else if (IsW16SurrogateTail(begin[0])) { 
         ++begin;
         return BROKEN_RUNE;
     }
@@ -124,15 +124,15 @@ inline wchar32 ReadSymbolAndAdvance(const wchar32*& begin) noexcept {
 
 inline wchar32 ReadSymbolAndAdvance(const wchar16*& begin, const wchar16* end) noexcept {
     Y_ASSERT(begin < end);
-    if (IsW16SurrogateLead(begin[0])) {
-        if (begin + 1 != end && IsW16SurrogateTail(begin[1])) {
+    if (IsW16SurrogateLead(begin[0])) { 
+        if (begin + 1 != end && IsW16SurrogateTail(begin[1])) { 
             const wchar32 c = ::NDetail::ReadSurrogatePair(begin);
             begin += 2;
             return c;
         }
         ++begin;
         return BROKEN_RUNE;
-    } else if (IsW16SurrogateTail(begin[0])) {
+    } else if (IsW16SurrogateTail(begin[0])) { 
         ++begin;
         return BROKEN_RUNE;
     }
@@ -204,8 +204,8 @@ inline void ::NDetail::WriteSurrogatePair(wchar32 s, T& dest) noexcept {
 
     wchar16 lead = LEAD_OFFSET + (static_cast<wchar16>(s >> 10));
     wchar16 tail = 0xDC00 + static_cast<wchar16>(s & 0x3FF);
-    Y_ASSERT(IsW16SurrogateLead(lead));
-    Y_ASSERT(IsW16SurrogateTail(tail));
+    Y_ASSERT(IsW16SurrogateLead(lead)); 
+    Y_ASSERT(IsW16SurrogateTail(tail)); 
 
     WriteSymbol(lead, dest);
     WriteSymbol(tail, dest);

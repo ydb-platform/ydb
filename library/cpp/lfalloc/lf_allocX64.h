@@ -29,7 +29,7 @@
 
 #define PERTHREAD __declspec(thread)
 #define _win_
-#define Y_FORCE_INLINE __forceinline
+#define Y_FORCE_INLINE __forceinline 
 
 using TAtomic = volatile long;
 
@@ -293,7 +293,7 @@ enum ELFAllocCounter {
     CT_MAX
 };
 
-static Y_FORCE_INLINE void IncrementCounter(ELFAllocCounter counter, size_t value);
+static Y_FORCE_INLINE void IncrementCounter(ELFAllocCounter counter, size_t value); 
 
 //////////////////////////////////////////////////////////////////////////
 enum EMMapMode {
@@ -1011,20 +1011,20 @@ struct TLocalCounter {
     int Updates;
     TAtomic* Parent;
 
-    Y_FORCE_INLINE void Init(TAtomic* parent) {
+    Y_FORCE_INLINE void Init(TAtomic* parent) { 
         Parent = parent;
         Value = 0;
         Updates = 0;
     }
 
-    Y_FORCE_INLINE void Increment(size_t value) {
+    Y_FORCE_INLINE void Increment(size_t value) { 
         Value += value;
         if (++Updates > MAX_LOCAL_UPDATES || Value > MAX_LOCAL_DELTA) {
             Flush();
         }
     }
 
-    Y_FORCE_INLINE void Flush() {
+    Y_FORCE_INLINE void Flush() { 
         AtomicAdd(*Parent, Value);
         Value = 0;
         Updates = 0;

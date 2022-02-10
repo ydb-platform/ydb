@@ -21,7 +21,7 @@ public:
     }
 
     /// if there's 'size' data read it, otherwise just return false
-    Y_FORCE_INLINE bool ReadFixed(const char*& buf, size_t size) {
+    Y_FORCE_INLINE bool ReadFixed(const char*& buf, size_t size) { 
         if (Avail() >= size) {
             buf = Buf();
             Reset(Buf() + size, Avail() - size);
@@ -42,7 +42,7 @@ public:
     }
 
     template <class T>
-    Y_FORCE_INLINE void ReadPOD(T& x) {
+    Y_FORCE_INLINE void ReadPOD(T& x) { 
         x = LoadPOD<T>();
     }
 };

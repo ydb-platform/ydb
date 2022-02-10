@@ -2753,14 +2753,14 @@
                 ]
             }
         },
-        "gdbserver": {
-            "tools": {
+        "gdbserver": { 
+            "tools": { 
                 "gdbserver": {
                     "bottle": "gdb",
                     "executable": "gdbserver"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -2786,8 +2786,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "python": {
             "tools": {
                 "python": {
@@ -3753,13 +3753,13 @@
                 }
             ]
         },
-        "rsync": {
-            "tools": {
+        "rsync": { 
+            "tools": { 
                 "rsync": {
                     "bottle": "rsync",
                     "executable": "rsync"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -3768,7 +3768,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "kiwi": {
             "tools": {
                 "kwmktorrent": {
@@ -6949,20 +6949,20 @@
                 ]
             }
         },
-        "rsync": {
-            "formula": {
+        "rsync": { 
+            "formula": { 
                 "sandbox_id": [
                     65088954
                 ],
-                "match": "rsync"
-            },
-            "executable": {
+                "match": "rsync" 
+            }, 
+            "executable": { 
                 "rsync": [
                     "bin",
                     "rsync"
                 ]
-            }
-        },
+            } 
+        }, 
         "svn110": {
             "formula": {
                 "sandbox_id": 368201676,
@@ -6996,7 +6996,7 @@
         },
         "cmake": {
             "formula": {
-                "sandbox_id": 105454515,
+                "sandbox_id": 105454515, 
                 "match": "cmake"
             },
             "executable": {

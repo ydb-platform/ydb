@@ -65,7 +65,7 @@ static bool IsStupidFlagCombination(EOpenMode oMode) {
 
 TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
     ui32 fcMode = 0;
-    EOpenMode createMode = oMode & MaskCreation;
+    EOpenMode createMode = oMode & MaskCreation; 
     Y_VERIFY(!IsStupidFlagCombination(oMode), "oMode %d makes no sense", static_cast<int>(oMode));
     if (!(oMode & MaskRW)) {
         oMode |= RdWr;
@@ -854,7 +854,7 @@ public:
         , FileName_(fName)
     {
         if (!Handle_.IsOpen()) {
-            ythrow TFileError() << "can't open " << fName.Quote() << " with mode " << DecodeOpenMode(oMode) << " (" << Hex(oMode.ToBaseType()) << ")";
+            ythrow TFileError() << "can't open " << fName.Quote() << " with mode " << DecodeOpenMode(oMode) << " (" << Hex(oMode.ToBaseType()) << ")"; 
         }
     }
 

@@ -15,11 +15,11 @@ namespace NCompactTrie {
     const size_t MT_LEFTSHIFT = 3;
     const size_t MT_RIGHTSHIFT = 0;
 
-    Y_FORCE_INLINE size_t UnpackOffset(const char* p, size_t len);
+    Y_FORCE_INLINE size_t UnpackOffset(const char* p, size_t len); 
     size_t MeasureOffset(size_t offset);
     size_t PackOffset(char* buffer, size_t offset);
     static inline ui64 ArcSaveOffset(size_t offset, IOutputStream& os);
-    Y_FORCE_INLINE char LeapByte(const char*& datapos, const char* dataend, char label);
+    Y_FORCE_INLINE char LeapByte(const char*& datapos, const char* dataend, char label); 
 
     template <class T>
     inline static size_t ExtraBits() {
@@ -103,7 +103,7 @@ namespace NCompactTrie {
 
     // Unpack the offset to the next node. The encoding scheme can store offsets
     // up to 7 bytes; whether they fit into size_t is another issue.
-    Y_FORCE_INLINE size_t UnpackOffset(const char* p, size_t len) {
+    Y_FORCE_INLINE size_t UnpackOffset(const char* p, size_t len) { 
         size_t result = 0;
 
         while (len--)
@@ -116,7 +116,7 @@ namespace NCompactTrie {
     // to the position immediately preceding the value for the link just traversed (if any);
     // returns flags associated with the link. If no arc with the required label is present,
     // zeroes the data pointer.
-    Y_FORCE_INLINE char LeapByte(const char*& datapos, const char* dataend, char label) {
+    Y_FORCE_INLINE char LeapByte(const char*& datapos, const char* dataend, char label) { 
         while (datapos < dataend) {
             size_t offsetlength, offset;
             const char* startpos = datapos;
@@ -183,7 +183,7 @@ namespace NCompactTrie {
     // otherwise sets it to nullptr.
     // Returns true if the symbol was succesfully found in the trie, false otherwise.
     template <typename TSymbol, class TPacker>
-    Y_FORCE_INLINE bool Advance(const char*& datapos, const char* const dataend, const char*& value,
+    Y_FORCE_INLINE bool Advance(const char*& datapos, const char* const dataend, const char*& value, 
                                 TSymbol label, TPacker packer) {
         Y_ASSERT(datapos < dataend);
         char flags = MT_NEXT;

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/system/defaults.h>
-#include <util/generic/array_ref.h>
+#include <util/generic/array_ref.h> 
 
 /*
  * murmur2 from http://murmurhash.googlepages.com/
@@ -41,15 +41,15 @@ static inline T MurmurHash(const void* buf, size_t len) noexcept {
 
 //non-inline version
 size_t MurmurHashSizeT(const char* buf, size_t len) noexcept;
-
-template <typename TOut = size_t>
-struct TMurmurHash {
+ 
+template <typename TOut = size_t> 
+struct TMurmurHash { 
     TOut operator()(const void* buf, size_t len) const noexcept {
-        return MurmurHash<TOut>(buf, len);
-    }
-
-    template <typename ElementType>
+        return MurmurHash<TOut>(buf, len); 
+    } 
+ 
+    template <typename ElementType> 
     TOut operator()(const TArrayRef<ElementType>& data) const noexcept {
-        return operator()(data.data(), data.size() * sizeof(ElementType));
-    }
-};
+        return operator()(data.data(), data.size() * sizeof(ElementType)); 
+    } 
+}; 

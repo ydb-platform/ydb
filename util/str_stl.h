@@ -111,36 +111,36 @@ struct THash<std::type_index> {
     }
 };
 
-namespace NHashPrivate {
-    template <typename T>
-    Y_FORCE_INLINE static size_t HashObject(const T& val) {
-        return THash<T>()(val);
-    }
-
-    template <size_t I, bool IsLastElement, typename... TArgs>
-    struct TupleHashHelper {
-        Y_FORCE_INLINE static size_t Hash(const std::tuple<TArgs...>& tuple) {
-            return CombineHashes(HashObject(std::get<I>(tuple)),
+namespace NHashPrivate { 
+    template <typename T> 
+    Y_FORCE_INLINE static size_t HashObject(const T& val) { 
+        return THash<T>()(val); 
+    } 
+ 
+    template <size_t I, bool IsLastElement, typename... TArgs> 
+    struct TupleHashHelper { 
+        Y_FORCE_INLINE static size_t Hash(const std::tuple<TArgs...>& tuple) { 
+            return CombineHashes(HashObject(std::get<I>(tuple)), 
                                  TupleHashHelper<I + 1, I + 2 >= sizeof...(TArgs), TArgs...>::Hash(tuple));
-        }
-    };
-
-    template <size_t I, typename... TArgs>
-    struct TupleHashHelper<I, true, TArgs...> {
-        Y_FORCE_INLINE static size_t Hash(const std::tuple<TArgs...>& tuple) {
-            return HashObject(std::get<I>(tuple));
-        }
-    };
-
+        } 
+    }; 
+ 
+    template <size_t I, typename... TArgs> 
+    struct TupleHashHelper<I, true, TArgs...> { 
+        Y_FORCE_INLINE static size_t Hash(const std::tuple<TArgs...>& tuple) { 
+            return HashObject(std::get<I>(tuple)); 
+        } 
+    }; 
+ 
 }
-
-template <typename... TArgs>
-struct THash<std::tuple<TArgs...>> {
-    size_t operator()(const std::tuple<TArgs...>& tuple) const {
-        return NHashPrivate::TupleHashHelper<0, 1 >= sizeof...(TArgs), TArgs...>::Hash(tuple);
-    }
-};
-
+ 
+template <typename... TArgs> 
+struct THash<std::tuple<TArgs...>> { 
+    size_t operator()(const std::tuple<TArgs...>& tuple) const { 
+        return NHashPrivate::TupleHashHelper<0, 1 >= sizeof...(TArgs), TArgs...>::Hash(tuple); 
+    } 
+}; 
+ 
 template <class T>
 struct THash: public ::hash<T> {
 };

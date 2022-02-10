@@ -21,7 +21,7 @@ namespace NKikimr {
     // from gcc manual:
     // Returns the number of leading 0-bits in x, starting at the most significant bit position.
     // If x is 0, the result is undefined.
-    Y_FORCE_INLINE unsigned int Clz(unsigned int v) {
+    Y_FORCE_INLINE unsigned int Clz(unsigned int v) { 
 #ifdef __GNUC__
         return __builtin_clz(v);
 #elif defined(_MSC_VER) && defined(_64_)

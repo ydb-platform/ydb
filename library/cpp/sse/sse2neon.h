@@ -165,12 +165,12 @@ template <typename TValue>
 struct TBaseWrapper {
     TValue Value;
 
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     operator TValue&() {
         return Value;
     }
 
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     operator const TValue&() const {
         return Value;
     }
@@ -179,7 +179,7 @@ struct TBaseWrapper {
 template <typename TOp, typename TFunc, TFunc* func,
           typename TDup, TDup* dupfunc>
 struct TWrapperSingleDup: public TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     TWrapperSingleDup(const __m128i& op, const int shift) {
         TQType<TOp>::As(Value) = func(TQType<TOp>::As(op), dupfunc(shift));
     }
@@ -188,7 +188,7 @@ struct TWrapperSingleDup: public TBaseWrapper<__m128i> {
 template <typename TOp, typename TFunc, TFunc* func,
           typename TDup, TDup* dupfunc>
 struct TWrapperSingleNegDup: public TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     TWrapperSingleNegDup(const __m128i& op, const int shift) {
         TQType<TOp>::As(Value) = func(TQType<TOp>::As(op), dupfunc(-shift));
     }
@@ -267,7 +267,7 @@ using _mm_slli_epi64 =
 
 template <typename TOp, typename TFunc, TFunc* func, typename... TParams>
 struct TWrapperDual : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     TWrapperDual(const __m128i& op1, const __m128i& op2, TParams... params) {
         TQType<TOp>::As(Value) = (TOp)
             func(TQType<TOp>::As(op1),
@@ -278,7 +278,7 @@ struct TWrapperDual : TBaseWrapper<__m128i> {
 
 template <typename TOp, typename TFunc, TFunc* func, typename... TParams>
 struct TWrapperDualSwap : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     TWrapperDualSwap(const __m128i& op1, const __m128i& op2, TParams... params) {
         TQType<TOp>::As(Value) =
             func(TQType<TOp>::As(op2),
@@ -289,7 +289,7 @@ struct TWrapperDualSwap : TBaseWrapper<__m128i> {
 
 template <typename TOp, typename TFunc, TFunc* func, typename TArgument = __m128>
 struct TWrapperDualF : TBaseWrapper<TArgument> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     TWrapperDualF(const TArgument& op1, const TArgument& op2) {
         TQType<TOp>::As(TBaseWrapper<TArgument>::Value) = (TOp) func(TQType<TOp>::As(op1), TQType<TOp>::As(op2));
     }
@@ -412,7 +412,7 @@ _mm_store_si128(__m128i* ptr, const __m128i& op) {
 
 template <typename TOp, typename TFunc, TFunc* func, typename... TParams>
 struct TWrapperSimple : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     TWrapperSimple(TParams... params) {
         TQType<TOp>::As(Value) = func(params...);
     }
@@ -420,7 +420,7 @@ struct TWrapperSimple : TBaseWrapper<__m128i> {
 
 template <typename TOp, typename TFunc, TFunc* func, typename... TParams>
 struct TWrapperSimpleF : TBaseWrapper<__m128> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     TWrapperSimpleF(TParams... params) {
         TQType<TOp>::As(Value) = func(params...);
     }
@@ -434,14 +434,14 @@ using _mm_set1_epi32 =
     TWrapperSimple<int32x4_t, decltype(vdupq_n_s32), vdupq_n_s32, const ui32>;
 
 struct _mm_setzero_si128 : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     _mm_setzero_si128() {
         TQType<uint64x2_t>::As(Value) = vdupq_n_u64(0);
     }
 };
 
 struct _mm_loadl_epi64 : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     _mm_loadl_epi64(const __m128i* p) {
         uint64x1_t im = vld1_u64((const uint64_t*)p);
         TQType<uint64x2_t>::As(Value) = vcombine_u64(im, vdup_n_u64(0));
@@ -449,7 +449,7 @@ struct _mm_loadl_epi64 : TBaseWrapper<__m128i> {
 };
 
 struct _mm_storel_epi64 : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     _mm_storel_epi64(__m128i* a, __m128i op) {
         vst1_u64((uint64_t*)a, vget_low_u64(op.AsUi64x2));
     }
@@ -502,7 +502,7 @@ _mm_movemask_epi8(const __m128i& op) {
 
 template <int imm>
 struct THelper_mm_srli_si128 : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     THelper_mm_srli_si128(const __m128i a) {
         const auto zero = vdupq_n_u8(0);
         TQType<uint8x16_t>::As(Value) = vextq_u8(a.AsUi8x16, zero, imm);
@@ -533,7 +533,7 @@ inline uint8x16_t vextq_u8_function<16>(uint8x16_t /* a */, uint8x16_t b) {
 
 template <int imm>
 struct THelper_mm_slli_si128 : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     THelper_mm_slli_si128(const __m128i a) {
         auto zero = vdupq_n_u8(0);
         TQType<uint8x16_t>::As(Value) = vextq_u8_function<16 - imm>(zero, a.AsUi8x16);
@@ -547,7 +547,7 @@ Y_FORCE_INLINE int _mm_cvtsi128_si32(const __m128i& op) {
 }
 
 struct _mm_set_epi16 : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     _mm_set_epi16(const short w7, const short w6,
                   const short w5, const short w4,
                   const short w3, const short w2,
@@ -571,7 +571,7 @@ struct _mm_setr_epi16 : TBaseWrapper<__m128i> {
 };
 
 struct _mm_set_epi32 : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     _mm_set_epi32(const int x3, const int x2,
                   const int x1, const int x0) {
         int32x2_t d0 = {x0, x1};
@@ -591,7 +591,7 @@ struct _mm_setr_epi32 : TBaseWrapper<__m128i> {
 };
 
 struct _mm_cvtsi32_si128 : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     _mm_cvtsi32_si128(int op) {
         auto zero = vdupq_n_s32(0);
         TQType<int32x4_t>::As(Value) = vsetq_lane_s32(op, zero, 0);
@@ -610,7 +610,7 @@ template <typename TOpOut, typename TOpIn,
           typename TFunc, TFunc* func,
           typename TCombine, TCombine* combine>
 struct TCombineWrapper : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     TCombineWrapper(const __m128i op1, const __m128i op2) {
         TQType<TOpOut>::As(Value) =
             combine(func(TQType<TOpIn>::As(op1)),
@@ -634,7 +634,7 @@ using _mm_packus_epi16 =
 template <typename TOpOut, typename TOpIn,
           typename TFunc, TFunc* func, typename... TParams>
 struct TScalarOutWrapper : TBaseWrapper<TOpOut> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     TScalarOutWrapper(const __m128i op, TParams... params) {
         TBaseWrapper<TOpOut>::Value =
             func(TQType<TOpIn>::As(op), params...);
@@ -667,7 +667,7 @@ long long extract_epi64_arm(__m128i arg) {
 #define _mm_extract_epi64(op, imm) extract_epi64_arm<imm>(op)
 #define _mm_extract_ps(op, imm) _mm_extract_epi32(op, imm)
 
-static Y_FORCE_INLINE
+static Y_FORCE_INLINE 
 __m128i _mm_mul_epu32(__m128i op1, __m128i op2) {
     __m128i result;
     uint32x4_t r1 = vuzp1q_u32(op1.AsUi32x4, op2.AsUi32x4);
@@ -728,7 +728,7 @@ using _mm_set_ps1 = TWrapperSimpleF<float32x4_t,
                                     decltype(vdupq_n_f32), vdupq_n_f32, const float>;
 
 struct _mm_setzero_ps : TBaseWrapper<__m128> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     _mm_setzero_ps() {
         TQType<float32x4_t>::As(Value) = vdupq_n_f32(0.);
     }
@@ -759,7 +759,7 @@ Y_FORCE_INLINE void _mm_store_ps(float* ptr, const __m128& op) {
 }
 
 struct _mm_set_ps : TBaseWrapper<__m128> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     _mm_set_ps(const float x3, const float x2,
                const float x1, const float x0) {
         float32x2_t d0 = {x0, x1};
@@ -803,7 +803,7 @@ using _mm_mul_pd = TWrapperDualF<float64x2_t, decltype(vmulq_f64), vmulq_f64, __
 using _mm_div_pd = TWrapperDualF<float64x2_t, decltype(vdivq_f64), vdivq_f64, __m128d>;
 
 struct _mm_and_ps : TBaseWrapper<__m128> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     _mm_and_ps(const __m128& op1, const __m128& op2) {
         TQType<uint64x2_t>::As(Value) =
             vandq_u64(TQType<uint64x2_t>::As(op1),
@@ -842,7 +842,7 @@ Y_FORCE_INLINE __m128i _mm_castps_si128(__m128 op) {
 template <typename TOpOut, typename TOpIn,
           typename TFunc, TFunc* func, typename... TParams>
 struct TCvtS2FWrapperSingle : TBaseWrapper<__m128> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     TCvtS2FWrapperSingle(const __m128i& op, TParams... params) {
         TQType<TOpOut>::As(Value) =
             func(TQType<TOpIn>::As(op), params...);
@@ -856,7 +856,7 @@ using _mm_cvtepi32_ps =
 template <typename TOpOut, typename TOpIn,
           typename TFunc, TFunc* func, typename... TParams>
 struct TCvtF2SWrapperSingle : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
+    Y_FORCE_INLINE 
     TCvtF2SWrapperSingle(const __m128& op, TParams... params) {
         TQType<TOpOut>::As(Value) =
             func(TQType<TOpIn>::As(op), params...);
@@ -887,7 +887,7 @@ _mm_movemask_ps(const __m128& op) {
     return vaddvq_u32(bits);
 }
 
-Y_FORCE_INLINE i64 _mm_cvtsi128_si64(__m128i a) {
+Y_FORCE_INLINE i64 _mm_cvtsi128_si64(__m128i a) { 
     return vgetq_lane_s64(a.AsSi64x2, 0);
 }
 

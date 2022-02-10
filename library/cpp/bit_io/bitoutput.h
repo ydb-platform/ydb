@@ -51,7 +51,7 @@ namespace NBitIO {
         // interface
 
         // Write "bits" lower bits.
-        Y_FORCE_INLINE void Write(ui64 data, ui64 bits) {
+        Y_FORCE_INLINE void Write(ui64 data, ui64 bits) { 
             if (FreeBits < bits) {
                 if (FreeBits) {
                     bits -= FreeBits;
@@ -70,7 +70,7 @@ namespace NBitIO {
         }
 
         // Write "bits" lower bits starting from "skipbits" bit.
-        Y_FORCE_INLINE void Write(ui64 data, ui64 bits, ui64 skipbits) {
+        Y_FORCE_INLINE void Write(ui64 data, ui64 bits, ui64 skipbits) { 
             Write(data >> skipbits, bits);
         }
 
@@ -78,7 +78,7 @@ namespace NBitIO {
         // Like this: (unsigned char)0x2E<3> (0000 0010 1110) <=> 1110 0101
         //                                                        fddd fddd
         template <ui64 bits>
-        Y_FORCE_INLINE void WriteWords(ui64 data) {
+        Y_FORCE_INLINE void WriteWords(ui64 data) { 
             do {
                 ui64 part = data;
 
@@ -88,7 +88,7 @@ namespace NBitIO {
             } while (data);
         }
 
-        Y_FORCE_INLINE ui64 /* padded bits */ Flush() {
+        Y_FORCE_INLINE ui64 /* padded bits */ Flush() { 
             const ui64 ubytes = 8ULL - (FreeBits >> 3ULL);
 
             if (ubytes) {

@@ -55,10 +55,10 @@ public:
         return Value_;
     }
 
-    constexpr TInt ToBaseType() const {
-        return Value_;
-    }
-
+    constexpr TInt ToBaseType() const { 
+        return Value_; 
+    } 
+ 
     constexpr static TFlags FromBaseType(TInt value) {
         return TFlags(TFlag(value));
     }

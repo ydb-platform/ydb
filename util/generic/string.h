@@ -930,11 +930,11 @@ public:
     }
 
     friend TBasicString operator+(const TBasicStringBuf<TCharType, TTraits> s1, const TBasicString& s2) Y_WARN_UNUSED_RESULT {
-        return Join(s1, s2);
+        return Join(s1, s2); 
     }
 
     friend TBasicString operator+(const TCharType* s1, const TBasicString& s2) Y_WARN_UNUSED_RESULT {
-        return Join(s1, s2);
+        return Join(s1, s2); 
     }
 
     friend TBasicString operator+(std::basic_string<TCharType, TTraits> l, TBasicString r) {

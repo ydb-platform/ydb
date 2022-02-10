@@ -63,7 +63,7 @@ private:
 public:
     explicit TSplitDelimiters(const char* s);
 
-    Y_FORCE_INLINE bool IsDelimiter(ui8 ch) const {
+    Y_FORCE_INLINE bool IsDelimiter(ui8 ch) const { 
         return Delims[ch];
     }
 };
@@ -80,11 +80,11 @@ public:
     TSplitBase(const char* str, size_t length);
     TSplitBase(const TString& s);
 
-    Y_FORCE_INLINE const char* GetString() const {
+    Y_FORCE_INLINE const char* GetString() const { 
         return Str;
     }
 
-    Y_FORCE_INLINE size_t GetLength() const {
+    Y_FORCE_INLINE size_t GetLength() const { 
         return Len;
     }
 

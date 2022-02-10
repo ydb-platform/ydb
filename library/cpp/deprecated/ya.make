@@ -1,17 +1,17 @@
 RECURSE(
-    abstract_iterator
-    abstract_iterator/ut
+    abstract_iterator 
+    abstract_iterator/ut 
     accessors
     accessors/ut
     autoarray
     base64
     datafile
-    dater_old
-    dater_old/ut
+    dater_old 
+    dater_old/ut 
     enum_codegen
     enum_codegen/ut
-    fgood
-    fgood/ut
+    fgood 
+    fgood/ut 
     histogram
     ipreg1
     ipreg1/ut
@@ -22,7 +22,7 @@ RECURSE(
     kmp/ut
     mapped_file
     mapped_file/ut
-    mbitmap
+    mbitmap 
     omni
     text_norm
     omni/print_omni

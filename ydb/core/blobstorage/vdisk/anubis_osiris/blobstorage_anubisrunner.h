@@ -62,7 +62,7 @@ namespace NKikimr {
             , AnubisTimeout(anubisTimeout)
         {}
     };
-    IActor* CreateAnubisRunner(const std::shared_ptr<TAnubisCtx> &anubisCtx, 
+    IActor* CreateAnubisRunner(const std::shared_ptr<TAnubisCtx> &anubisCtx,
                                const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo);
 
 } // NKikimr

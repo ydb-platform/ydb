@@ -6,8 +6,8 @@
 
 namespace NKikimr {
 
-    class TDefragQuantumChunkFinder; 
- 
+    class TDefragQuantumChunkFinder;
+
     struct TEvDefragQuantumResult :
         public TEventLocal<TEvDefragQuantumResult, TEvBlobStorage::EvDefragQuantumResult>
     {
@@ -32,10 +32,10 @@ namespace NKikimr {
         {}
     };
 
-    struct TChunksToDefrag; 
+    struct TChunksToDefrag;
 
-    IActor *CreateDefragQuantumActor(const std::shared_ptr<TDefragCtx>& dctx, const TVDiskID& selfVDiskId, 
-        std::optional<TChunksToDefrag> chunksToDefrag); 
- 
+    IActor *CreateDefragQuantumActor(const std::shared_ptr<TDefragCtx>& dctx, const TVDiskID& selfVDiskId,
+        std::optional<TChunksToDefrag> chunksToDefrag);
+
 } // NKikimr
 

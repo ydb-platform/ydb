@@ -11,11 +11,11 @@ public:
     {}
 
     TString ProtoBuf;
-    TAutoPtr<NKikimrClient::TKeyValueRequest> Request; 
+    TAutoPtr<NKikimrClient::TKeyValueRequest> Request;
     TString OutputFile;
     TString InputFile;
 
-    int OnResponse(const NKikimrClient::TResponse& response) { 
+    int OnResponse(const NKikimrClient::TResponse& response) {
         if (!OutputFile.empty()) {
             Y_VERIFY(response.ReadResultSize() == 1);
             Y_VERIFY(response.GetReadResult(0).HasStatus());
@@ -61,7 +61,7 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         ProtoBuf = config.ParseResult->GetFreeArgs().at(0);
-        Request = GetProtobuf<NKikimrClient::TKeyValueRequest>(ProtoBuf); 
+        Request = GetProtobuf<NKikimrClient::TKeyValueRequest>(ProtoBuf);
         if (!InputFile.empty()) {
             Y_VERIFY(Request->CmdWriteSize() == 1);
             Y_VERIFY(Request->GetCmdWrite(0).HasKey());

@@ -291,8 +291,8 @@ protected:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::HIVE_BALANCER_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HIVE_BALANCER_ACTOR;
     }
 
     THiveBalancer(THive* hive, int maxMovements = 0, bool recheckOnFinish = false, const std::vector<TNodeId>& filterNodeIds = {})

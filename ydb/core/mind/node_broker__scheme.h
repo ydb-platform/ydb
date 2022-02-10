@@ -21,11 +21,11 @@ struct Schema : NIceDb::Schema {
         struct Body : Column<9, NScheme::NTypeIds::Uint64> {};
         struct Lease : Column<10, NScheme::NTypeIds::Uint32> {};
         struct Expire : Column<11, NScheme::NTypeIds::Uint64> {};
-        struct Location : Column<12, NScheme::NTypeIds::String> {}; 
+        struct Location : Column<12, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<ID>;
-        using TColumns = TableColumns<ID, Host, Port, ResolveHost, Address, DataCenter, Room, Rack, Body, Lease, Expire, 
-                                      Location>; 
+        using TColumns = TableColumns<ID, Host, Port, ResolveHost, Address, DataCenter, Room, Rack, Body, Lease, Expire,
+                                      Location>;
     };
 
     struct Config : Table<2> {

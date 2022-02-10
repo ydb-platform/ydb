@@ -195,12 +195,12 @@ namespace NKikimr {
             // chunks to delete (i.e. free)
             TVector<ui32> TrimLogByConfirmedLsn(
                 ui64 confirmedCutLsn,
-                std::shared_ptr<IActorNotify> notifier, 
+                std::shared_ptr<IActorNotify> notifier,
                 std::function<void(const TString&)> logger);
             // trim log by removing chunks over some quota, i.e. we got
             // too many chunks allocated for SyncLog and want to remove numChunksToDel;
             // the function returns chunks to delete (i.e. free)
-            TVector<ui32> TrimLogByRemovingChunks(ui32 numChunksToDel, std::shared_ptr<IActorNotify> notifier); 
+            TVector<ui32> TrimLogByRemovingChunks(ui32 numChunksToDel, std::shared_ptr<IActorNotify> notifier);
 
 
             ////////////////////////////////////////////////////////////////////////
@@ -304,7 +304,7 @@ namespace NKikimr {
                 : Params(std::move(params))
             {}
 
-            bool Parse(const TString &serializedData, bool &needsInitialCommit, TString &explanation); 
+            bool Parse(const TString &serializedData, bool &needsInitialCommit, TString &explanation);
             TSyncLogPtr GetSyncLogPtr() const { return SyncLogPtr; }
             TVector<ui32> GetChunksToDelete() const { return ChunksToDelete; }
             ui64 GetRecoveryLogConfirmedLsn() const { return RecoveryLogConfirmedLsn; }
@@ -318,7 +318,7 @@ namespace NKikimr {
             bool ParseToProto(
                     NKikimrVDiskData::TSyncLogEntryPoint &pb,
                     const TString &serializedData,
-                    bool &needsInitialCommit, 
+                    bool &needsInitialCommit,
                     TString &explanation);
             bool ConvertOldFormatToProto(
                     NKikimrVDiskData::TSyncLogEntryPoint &pb,

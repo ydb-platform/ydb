@@ -34,12 +34,12 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
         EDiskEvaluation diskEvaluation = ((considerSlowAsError && disk.IsSlow) ? EDE_ERROR : EDE_UNKNOWN);
         for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
             TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-            if (partSituation == TBlobState::ESituation::Error) { 
+            if (partSituation == TBlobState::ESituation::Error) {
                 R_LOG_DEBUG_SX(logCtx, "BPG41", "Id# " << state.Id.ToString()
                         << " Restore Disk# " << diskIdx << " Part# " << partIdx << " Error");
                 diskEvaluation = EDE_ERROR;
             }
-            if (partSituation == TBlobState::ESituation::Lost) { 
+            if (partSituation == TBlobState::ESituation::Lost) {
                 R_LOG_DEBUG_SX(logCtx, "BPG65", "Id# " << state.Id.ToString()
                         << " Restore Disk# " << diskIdx << " Part# " << partIdx << " Lost");
                 if (diskEvaluation != EDE_ERROR) {
@@ -58,7 +58,7 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
         } else {
             for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                 TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                if (partSituation == TBlobState::ESituation::Present) { 
+                if (partSituation == TBlobState::ESituation::Present) {
                     R_LOG_DEBUG_SX(logCtx, "BPG42", "Request# "
                         << " Id# " << state.Id.ToString()
                         << " Disk# " << diskIdx << " Part# " << partIdx << " Present");
@@ -66,13 +66,13 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
                     optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
                     altruisticLayout.AddItem(diskIdx, partIdx, info.Type);
                     diskEvaluation = EDE_NORMAL;
-                } else if (partSituation == TBlobState::ESituation::Unknown 
-                        || partSituation == TBlobState::ESituation::Sent) { 
+                } else if (partSituation == TBlobState::ESituation::Unknown
+                        || partSituation == TBlobState::ESituation::Sent) {
                     R_LOG_DEBUG_SX(logCtx, "BPG43", "Id# " << state.Id.ToString()
                         << " Disk# " << diskIdx << " Part# " << partIdx << " Unknown");
                     optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
                     altruisticLayout.AddItem(diskIdx, partIdx, info.Type);
-                } else if (partSituation == TBlobState::ESituation::Absent) { 
+                } else if (partSituation == TBlobState::ESituation::Absent) {
                     diskEvaluation = EDE_NORMAL;
                 }
             }
@@ -122,65 +122,65 @@ bool TStrategyBase::IsUnrecoverableAltruistic(TBlobStorageGroupInfo::EBlobState 
     return false;
 }
 
-std::optional<EStrategyOutcome> TStrategyBase::SetAbsentForUnrecoverableAltruistic( 
-        TBlobStorageGroupInfo::EBlobState recoveryState, TBlobState &state) { 
+std::optional<EStrategyOutcome> TStrategyBase::SetAbsentForUnrecoverableAltruistic(
+        TBlobStorageGroupInfo::EBlobState recoveryState, TBlobState &state) {
     if (IsUnrecoverableAltruistic(recoveryState)) {
-        state.WholeSituation = TBlobState::ESituation::Absent; 
-        return EStrategyOutcome::DONE; 
+        state.WholeSituation = TBlobState::ESituation::Absent;
+        return EStrategyOutcome::DONE;
     }
-    return std::nullopt; 
+    return std::nullopt;
 }
 
-std::optional<EStrategyOutcome> TStrategyBase::ProcessOptimistic(TBlobStorageGroupInfo::EBlobState altruisticState, 
+std::optional<EStrategyOutcome> TStrategyBase::ProcessOptimistic(TBlobStorageGroupInfo::EBlobState altruisticState,
         TBlobStorageGroupInfo::EBlobState optimisticState, bool isDryRun, TBlobState &state) {
     switch (optimisticState) {
-        case TBlobStorageGroupInfo::EBS_DISINTEGRATED: 
-            if (!isDryRun) { 
-                return EStrategyOutcome::Error(TStringBuilder() << "TStrategyBase saw optimisticState# " 
+        case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
+            if (!isDryRun) {
+                return EStrategyOutcome::Error(TStringBuilder() << "TStrategyBase saw optimisticState# "
                     << TBlobStorageGroupInfo::BlobStateToString(optimisticState));
             }
-            return EStrategyOutcome::DONE; 
-        case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY: 
-            if (altruisticState & TBlobStorageGroupInfo::EBSF_FRAGMENTARY) { 
-                if (!isDryRun) { 
-                    state.WholeSituation = TBlobState::ESituation::Absent; 
-                } 
-                return EStrategyOutcome::DONE; 
-            } else { 
-                if (!isDryRun) { 
-                    return EStrategyOutcome::Error(TStringBuilder() << "TStrategyBase saw optimisticState# " 
+            return EStrategyOutcome::DONE;
+        case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY:
+            if (altruisticState & TBlobStorageGroupInfo::EBSF_FRAGMENTARY) {
+                if (!isDryRun) {
+                    state.WholeSituation = TBlobState::ESituation::Absent;
+                }
+                return EStrategyOutcome::DONE;
+            } else {
+                if (!isDryRun) {
+                    return EStrategyOutcome::Error(TStringBuilder() << "TStrategyBase saw optimisticState# "
                         << TBlobStorageGroupInfo::BlobStateToString(optimisticState) << " with altruisticState# "
                         << TBlobStorageGroupInfo::BlobStateToString(altruisticState));
-                } 
-                return EStrategyOutcome::DONE; 
+                }
+                return EStrategyOutcome::DONE;
             }
-        case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY: 
-        case TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED: 
-        case TBlobStorageGroupInfo::EBS_FULL: 
-            break; 
+        case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY:
+        case TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED:
+        case TBlobStorageGroupInfo::EBS_FULL:
+            break;
     }
-    return std::nullopt; 
+    return std::nullopt;
 }
 
-std::optional<EStrategyOutcome> TStrategyBase::ProcessPessimistic(const TBlobStorageGroupInfo &info, 
+std::optional<EStrategyOutcome> TStrategyBase::ProcessPessimistic(const TBlobStorageGroupInfo &info,
         TBlobStorageGroupInfo::EBlobState pessimisticState, bool doVerify, TBlobState &state) {
     switch (pessimisticState) {
-        case TBlobStorageGroupInfo::EBS_DISINTEGRATED: 
-            break; 
-        case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY: 
-            break; 
-        case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY: 
-        case TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED: 
-        case TBlobStorageGroupInfo::EBS_FULL: 
-            if (state.Restore(info)) { 
-                state.WholeSituation = TBlobState::ESituation::Present; 
-                return EStrategyOutcome::DONE; // blob has been restored 
+        case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
+            break;
+        case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY:
+            break;
+        case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY:
+        case TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED:
+        case TBlobStorageGroupInfo::EBS_FULL:
+            if (state.Restore(info)) {
+                state.WholeSituation = TBlobState::ESituation::Present;
+                return EStrategyOutcome::DONE; // blob has been restored
             } else {
                 Y_VERIFY(!doVerify);
             }
-            break; 
+            break;
     }
-    return std::nullopt; 
+    return std::nullopt;
 }
 
 void TStrategyBase::AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &groupDiskRequests, TLogoBlobID &fullId,
@@ -195,20 +195,20 @@ void TStrategyBase::AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &group
 
 bool TStrategyBase::VerifyTheWholeSituation(TBlobState &state) {
     switch (state.WholeSituation) {
-        case TBlobState::ESituation::Unknown: 
-            Y_FAIL("Blob Id# %s whole situation Unknown", state.Id.ToString().c_str()); 
-        case TBlobState::ESituation::Lost: 
-            Y_FAIL("Blob Id# %s whole situation Lost", state.Id.ToString().c_str()); 
-        case TBlobState::ESituation::Error: 
-            Y_FAIL("Blob Id# %s whole situation Error", state.Id.ToString().c_str()); 
-        case TBlobState::ESituation::Sent: 
-            Y_FAIL("Blob Id# %s whole situation Sent", state.Id.ToString().c_str()); 
-        case TBlobState::ESituation::Absent: 
+        case TBlobState::ESituation::Unknown:
+            Y_FAIL("Blob Id# %s whole situation Unknown", state.Id.ToString().c_str());
+        case TBlobState::ESituation::Lost:
+            Y_FAIL("Blob Id# %s whole situation Lost", state.Id.ToString().c_str());
+        case TBlobState::ESituation::Error:
+            Y_FAIL("Blob Id# %s whole situation Error", state.Id.ToString().c_str());
+        case TBlobState::ESituation::Sent:
+            Y_FAIL("Blob Id# %s whole situation Sent", state.Id.ToString().c_str());
+        case TBlobState::ESituation::Absent:
             return true;
-        case TBlobState::ESituation::Present: 
+        case TBlobState::ESituation::Present:
             return false;
     }
-    Y_FAIL("Blob Id# %s unexpected WholeSituation# %" PRIu32, state.Id.ToString().c_str(), (ui32)state.WholeSituation); 
+    Y_FAIL("Blob Id# %s unexpected WholeSituation# %" PRIu32, state.Id.ToString().c_str(), (ui32)state.WholeSituation);
 }
 
 void TStrategyBase::PreparePartLayout(const TBlobState &state, const TBlobStorageGroupInfo &info,
@@ -226,7 +226,7 @@ void TStrategyBase::PreparePartLayout(const TBlobState &state, const TBlobStorag
         bool isErrorDisk = false;
         for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
             TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-            if (partSituation == TBlobState::ESituation::Error) { 
+            if (partSituation == TBlobState::ESituation::Error) {
                 isErrorDisk = true;
                 break;
             }
@@ -234,7 +234,7 @@ void TStrategyBase::PreparePartLayout(const TBlobState &state, const TBlobStorag
         if (!isErrorDisk) {
             for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                 TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                if (partSituation == TBlobState::ESituation::Present || 
+                if (partSituation == TBlobState::ESituation::Present ||
                         (diskIdx != slowDiskIdx && partSituation == TBlobState::ESituation::Sent)) {
                     layout->VDiskPartMask[diskIdx] |= (1ul << partIdx);
                 }
@@ -257,15 +257,15 @@ bool TStrategyBase::IsPutNeeded(const TBlobState &state, const TBlobStorageGroup
         const TBlobState::TDisk &disk = state.Disks[record.VDiskIdx];
         TBlobState::ESituation partSituation = disk.DiskParts[record.PartIdx].Situation;
         switch (partSituation) {
-            case TBlobState::ESituation::Unknown: 
-            case TBlobState::ESituation::Absent: 
-            case TBlobState::ESituation::Lost: 
+            case TBlobState::ESituation::Unknown:
+            case TBlobState::ESituation::Absent:
+            case TBlobState::ESituation::Lost:
                 isNeeded = true;
                 break;
-            case TBlobState::ESituation::Error: 
-                Y_FAIL("unexpected Situation"); 
-            case TBlobState::ESituation::Present: 
-            case TBlobState::ESituation::Sent: 
+            case TBlobState::ESituation::Error:
+                Y_FAIL("unexpected Situation");
+            case TBlobState::ESituation::Present:
+            case TBlobState::ESituation::Sent:
                 break;
         }
     }
@@ -312,17 +312,17 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
                 << " blob Id# " << TLogoBlobID(state.Id, record.PartIdx + 1).ToString());
         bool isNeeded = false;
         switch (partSituation) {
-            case TBlobState::ESituation::Unknown: 
-            case TBlobState::ESituation::Absent: 
-            case TBlobState::ESituation::Lost: 
+            case TBlobState::ESituation::Unknown:
+            case TBlobState::ESituation::Absent:
+            case TBlobState::ESituation::Lost:
                 isNeeded = true;
                 break;
-            case TBlobState::ESituation::Error: 
+            case TBlobState::ESituation::Error:
                 Y_VERIFY(false);
                 break;
-            case TBlobState::ESituation::Present: 
+            case TBlobState::ESituation::Present:
                 break;
-            case TBlobState::ESituation::Sent: 
+            case TBlobState::ESituation::Sent:
                 break;
         }
 
@@ -334,7 +334,7 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
             Y_VERIFY(state.Parts[record.PartIdx].Data.IsMonolith());
             groupDiskRequests.AddPut(disk.OrderNumber, partId, state.Parts[record.PartIdx].Data.GetMonolith(),
                     TDiskPutRequest::ReasonInitial, info.Type.IsHandoffInSubgroup(record.VDiskIdx), state.BlobIdx);
-            disk.DiskParts[record.PartIdx].Situation = TBlobState::ESituation::Sent; 
+            disk.DiskParts[record.PartIdx].Situation = TBlobState::ESituation::Sent;
         }
     }
 }
@@ -358,9 +358,9 @@ void TStrategyBase::Evaluate3dcSituation(const TBlobState &state,
             const TBlobState::TDisk &disk = state.Disks[subgroupIdx];
             const TBlobState::ESituation situation = disk.DiskParts[realm].Situation;
             TBlobStorageGroupInfo::TSubgroupVDisks *subgroup = nullptr;
-            if (situation == TBlobState::ESituation::Present) { 
+            if (situation == TBlobState::ESituation::Present) {
                 subgroup = &inOutSuccess;
-            } else if (situation == TBlobState::ESituation::Error || (considerSlowAsError && disk.IsSlow)) { 
+            } else if (situation == TBlobState::ESituation::Error || (considerSlowAsError && disk.IsSlow)) {
                 subgroup = &inOutError;
                 numErrorsInRealm++;
             }
@@ -385,11 +385,11 @@ void TStrategyBase::Prepare3dcPartPlacement(const TBlobState &state,
             size_t subgroupIdx = RealmDomain2SubgroupIdx3dc(realm, domain, numFailRealms);
             const TBlobState::TDisk &disk = state.Disks[subgroupIdx];
             const TBlobState::ESituation situation = disk.DiskParts[realm].Situation;
-            if (situation != TBlobState::ESituation::Error) { 
-                if (situation == TBlobState::ESituation::Present) { 
+            if (situation != TBlobState::ESituation::Error) {
+                if (situation == TBlobState::ESituation::Present) {
                     placed++;
                 } else if (!considerSlowAsError || !disk.IsSlow) {
-                    if (situation != TBlobState::ESituation::Sent) { 
+                    if (situation != TBlobState::ESituation::Sent) {
                         outPartPlacement.Records.emplace_back(subgroupIdx, realm);
                     }
                     placed++;
@@ -407,7 +407,7 @@ i32 TStrategyBase::MarkSlowSubgroupDisk(TBlobState &state, const TBlobStorageGro
             i32 worstSubgroupIdx = -1;
             ui64 worstPredictedNs = 0;
             ui64 nextToWorstPredictedNs = 0;
-            state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues, 
+            state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
                     (isPut ? HandleClassToQueueId(blackboard.PutHandleClass) :
                             HandleClassToQueueId(blackboard.GetHandleClass)),
                     &worstPredictedNs, &nextToWorstPredictedNs, &worstSubgroupIdx);

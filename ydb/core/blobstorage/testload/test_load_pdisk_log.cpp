@@ -104,12 +104,12 @@ public:
         StorageDuration = cmd.GetStorageDuration();
     }
 
-    std::unique_ptr<NPDisk::TEvYardInit> GetYardInit(ui64 pDiskGuid) const { 
-        return std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, pDiskGuid); 
+    std::unique_ptr<NPDisk::TEvYardInit> GetYardInit(ui64 pDiskGuid) const {
+        return std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, pDiskGuid);
     }
 
 
-    std::unique_ptr<NPDisk::TEvLog> TrySend(const ui64 globalWrittenBytes) { 
+    std::unique_ptr<NPDisk::TEvLog> TrySend(const ui64 globalWrittenBytes) {
         if (IsDying || IsHarakiriSent) {
             return {};
         }
@@ -119,7 +119,7 @@ public:
             ++BurstIdx;
         }
 
-        std::unique_ptr<NPDisk::TEvLog> ev; 
+        std::unique_ptr<NPDisk::TEvLog> ev;
 
         if (BurstWrittenBytes + BytesInFlight < BurstSize
                 && BurstInterval * BurstIdx <= globalWrittenBytes
@@ -136,10 +136,10 @@ public:
 
                 CutLogLsn = *NextCutLogLsn;
                 CutLogBytesWritten = NextCutLogBytesWritten;
-                ev = std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, OwnerRound, TLogSignature(), 
+                ev = std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, OwnerRound, TLogSignature(),
                         record, DataBuffer, seg, nullptr);
             } else {
-                ev = std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, OwnerRound, TLogSignature(), 
+                ev = std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, OwnerRound, TLogSignature(),
                         DataBuffer, seg, nullptr);
             }
             BytesInFlight += DataBuffer.Size();
@@ -178,17 +178,17 @@ public:
         return false;
     }
 
-    std::unique_ptr<NPDisk::TEvHarakiri> GetHarakiri() { 
+    std::unique_ptr<NPDisk::TEvHarakiri> GetHarakiri() {
         Y_VERIFY(IsDying);
         Y_VERIFY(LogReadPosition == NPDisk::TLogPosition::Invalid());
-        return std::make_unique<NPDisk::TEvHarakiri>(PDiskParams->Owner, OwnerRound); 
+        return std::make_unique<NPDisk::TEvHarakiri>(PDiskParams->Owner, OwnerRound);
     }
 
-    std::unique_ptr<NPDisk::TEvReadLog> GetLogRead() { 
+    std::unique_ptr<NPDisk::TEvReadLog> GetLogRead() {
         if (LogReadPosition == NPDisk::TLogPosition::Invalid()) {
             return {};
         } else {
-            return std::make_unique<NPDisk::TEvReadLog>(PDiskParams->Owner, OwnerRound, LogReadPosition); 
+            return std::make_unique<NPDisk::TEvReadLog>(PDiskParams->Owner, OwnerRound, LogReadPosition);
         }
     }
 
@@ -273,7 +273,7 @@ class TPDiskLogWriterTestLoadActor : public TActorBootstrapped<TPDiskLogWriterTe
         ui64 Size;
     };
 
-    TVector<std::unique_ptr<TWorker>> Workers; 
+    TVector<std::unique_ptr<TWorker>> Workers;
 
     ui64 WrittenBytes = 0;
 
@@ -324,7 +324,7 @@ public:
 
         ui32 idx = 0;
         for (const auto& workerCmd : cmd.GetWorkers()) {
-            Workers.push_back(std::make_unique<TWorker>(workerCmd, idx, &Rng)); 
+            Workers.push_back(std::make_unique<TWorker>(workerCmd, idx, &Rng));
             if (IsWardenlessTest) {
                 Workers.back()->OwnerRound = 1000 + index + idx;
             }
@@ -563,10 +563,10 @@ public:
                         << " GetReallyWrittenBytes()# " << worker->GetReallyWrittenBytes()
                         << " GetGlobalWrittenBytes()# " << worker->GetGlobalWrittenBytes());
             }
-            auto report = std::make_unique<TLoadReport>(); 
+            auto report = std::make_unique<TLoadReport>();
             report->LoadType = TLoadReport::LOAD_LOG_WRITE;
             report->Duration = TAppData::TimeProvider->Now() - TestStartTime;
-            ctx.Send(Parent, new TEvTestLoadFinished(Tag, report.release(), "OK")); 
+            ctx.Send(Parent, new TEvTestLoadFinished(Tag, report.release(), "OK"));
             LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " End of work, TEvTestLoadFinished is sent");
             Die(ctx);
         }
@@ -591,7 +591,7 @@ public:
         LOG_TRACE_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " SendWriteRequests");
         for (auto& worker : Workers) {
             auto now = TAppData::TimeProvider->Now();
-            while (std::unique_ptr<NPDisk::TEvLog> ev = worker->TrySend(WrittenBytes)) { 
+            while (std::unique_ptr<NPDisk::TEvLog> ev = worker->TrySend(WrittenBytes)) {
                 *LogBytesWritten += ev->Data.size();
                 ev->Cookie = reinterpret_cast<void*>(ReqIdx);
                 InFlightLogWrites.insert({ReqIdx, {worker->Idx, now, ev->Data.size()}});
@@ -633,8 +633,8 @@ public:
     }
 
     template<typename TRequest>
-    void SendRequest(const TActorContext& ctx, std::unique_ptr<TRequest>&& request) { 
-        ctx.Send(MakeBlobStoragePDiskID(ctx.ExecutorThread.ActorSystem->NodeId, PDiskId), request.release()); 
+    void SendRequest(const TActorContext& ctx, std::unique_ptr<TRequest>&& request) {
+        ctx.Send(MakeBlobStoragePDiskID(ctx.ExecutorThread.ActorSystem->NodeId, PDiskId), request.release());
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {

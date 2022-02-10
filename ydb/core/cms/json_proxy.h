@@ -33,9 +33,9 @@ protected:
     using TResponse = TResponseEvent;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
-        return NKikimrServices::TActivity::CMS_SERVICE_PROXY; 
+        return NKikimrServices::TActivity::CMS_SERVICE_PROXY;
     }
 
     TJsonProxyBase(NMon::TEvHttpInfo::TPtr &event)

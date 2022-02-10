@@ -4,9 +4,9 @@ OWNER(g:kikimr)
 
 SRCS(
     actors.proto
-    interconnect.proto 
-    services_common.proto 
-    unittests.proto 
+    interconnect.proto
+    services_common.proto
+    unittests.proto
 )
 
 EXCLUDE_TAGS(GO_PROTO)

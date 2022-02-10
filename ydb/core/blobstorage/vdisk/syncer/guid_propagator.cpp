@@ -99,21 +99,21 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // State Functions
         ////////////////////////////////////////////////////////////////////////
-        STRICT_STFUNC(StateFuncWrite, 
-            HFunc(TEvVDiskGuidWritten, Handle) 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-            HFunc(TEvVGenerationChange, Handle) 
-        ) 
+        STRICT_STFUNC(StateFuncWrite,
+            HFunc(TEvVDiskGuidWritten, Handle)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvVGenerationChange, Handle)
+        )
 
-        STRICT_STFUNC(StateFuncWait, 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup) 
-            HFunc(TEvVGenerationChange, Handle) 
-        ) 
+        STRICT_STFUNC(StateFuncWait,
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
+            HFunc(TEvVGenerationChange, Handle)
+        )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_SYNCER_GUID_PROPAGATOR; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_SYNCER_GUID_PROPAGATOR;
         }
 
         TSyncerGuidPropagator(TIntrusivePtr<TVDiskContext> vctx,

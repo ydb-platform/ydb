@@ -51,13 +51,13 @@ namespace NKikimr {
         const bool prevVal = StopPuts();
         FreshRank.ApplyUpdates();
         LevelRank.ApplyUpdates();
-        std::unique_ptr<NPDisk::TEvConfigureScheduler> msg; 
+        std::unique_ptr<NPDisk::TEvConfigureScheduler> msg;
         TLinearTrackBar::TStatus status;
         // fresh
         status = FreshWeight.Update(FreshRank.GetRank());
         if (status.Changed) {
             if (!msg) {
-                msg = std::make_unique<NPDisk::TEvConfigureScheduler>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound); 
+                msg = std::make_unique<NPDisk::TEvConfigureScheduler>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound);
             }
             msg->SchedulerCfg.FreshWeight = status.Weight;
         }
@@ -65,13 +65,13 @@ namespace NKikimr {
         status = LevelWeight.Update(LevelRank.GetRank());
         if (status.Changed) {
             if (!msg) {
-                msg = std::make_unique<NPDisk::TEvConfigureScheduler>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound); 
+                msg = std::make_unique<NPDisk::TEvConfigureScheduler>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound);
             }
             msg->SchedulerCfg.CompWeight = status.Weight;
         }
         // send msg if any
         if (msg) {
-            ctx.Send(PDiskCtx->PDiskId, msg.release()); 
+            ctx.Send(PDiskCtx->PDiskId, msg.release());
 
             LOG_DEBUG(ctx, BS_VDISK_OTHER,
                       VDISKP(VCtx->VDiskLogPrefix, "TDynamicPDiskWeightsManager: "

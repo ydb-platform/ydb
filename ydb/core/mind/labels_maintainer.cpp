@@ -17,9 +17,9 @@ class TLabelsMaintainer : public TActorBootstrapped<TLabelsMaintainer> {
     using TActorBase = TActorBootstrapped<TLabelsMaintainer>;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
-        return NKikimrServices::TActivity::LABELS_MAINTAINER_ACTOR; 
+        return NKikimrServices::TActivity::LABELS_MAINTAINER_ACTOR;
     }
 
     TLabelsMaintainer(const NKikimrConfig::TMonitoringConfig &config)

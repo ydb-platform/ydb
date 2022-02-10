@@ -67,7 +67,7 @@ protected:
                 Self.State.Clear();
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxInit flat ReadDb Tree");
-                if (!LoadStateFromDB(Self.State, txc.DB)) { 
+                if (!LoadStateFromDB(Self.State, txc.DB)) {
                     return false;
                 }
                 if (Self.State.GetIsDamaged()) {
@@ -119,7 +119,7 @@ protected:
         TKeyValueFlat *Self;
 
         TTxRequest(THolder<TIntermediate> intermediate, TKeyValueFlat *keyValueFlat)
-            : Intermediate(std::move(intermediate)) 
+            : Intermediate(std::move(intermediate))
             , Self(keyValueFlat)
         {
             Intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_UNKNOWN);
@@ -151,7 +151,7 @@ protected:
         bool CheckConsistency(NTabletFlatExecutor::TTransactionContext &txc) {
 #ifdef KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
             TKeyValueState state;
-            if (!TTxInit::LoadStateFromDB(state, txc.DB)) { 
+            if (!TTxInit::LoadStateFromDB(state, txc.DB)) {
                 return false;
             }
             Y_VERIFY(!state.IsDamaged());
@@ -166,36 +166,36 @@ protected:
     };
 
     struct TTxMonitoring : public NTabletFlatExecutor::ITransaction {
-        const THolder<NMon::TEvRemoteHttpInfo> Event; 
+        const THolder<NMon::TEvRemoteHttpInfo> Event;
         const TActorId RespondTo;
         TKeyValueFlat *Self;
 
         TTxMonitoring(THolder<NMon::TEvRemoteHttpInfo> event, const TActorId &respondTo, TKeyValueFlat *keyValue)
-            : Event(std::move(event)) 
-            , RespondTo(respondTo) 
+            : Event(std::move(event))
+            , RespondTo(respondTo)
             , Self(keyValue)
         {}
 
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
             Y_UNUSED(txc);
             TStringStream str;
-            THolder<IEventBase> response; 
-            TCgiParameters params(Event->Cgi()); 
-            if (params.Has("section")) { 
-                const TString section = params.Get("section"); 
-                NJson::TJsonValue json; 
-                if (section == "channelstat") { 
-                    Self->State.MonChannelStat(json); 
-                } else { 
-                    json["Error"] = "invalid json parameter value"; 
-                } 
-                NJson::WriteJson(&str, &json); 
-                response = MakeHolder<NMon::TEvRemoteJsonInfoRes>(str.Str()); 
-            } else { 
-                Self->State.RenderHTMLPage(str); 
-                response = MakeHolder<NMon::TEvRemoteHttpInfoRes>(str.Str()); 
-            } 
-            ctx.Send(RespondTo, response.Release()); 
+            THolder<IEventBase> response;
+            TCgiParameters params(Event->Cgi());
+            if (params.Has("section")) {
+                const TString section = params.Get("section");
+                NJson::TJsonValue json;
+                if (section == "channelstat") {
+                    Self->State.MonChannelStat(json);
+                } else {
+                    json["Error"] = "invalid json parameter value";
+                }
+                NJson::WriteJson(&str, &json);
+                response = MakeHolder<NMon::TEvRemoteJsonInfoRes>(str.Str());
+            } else {
+                Self->State.RenderHTMLPage(str);
+                response = MakeHolder<NMon::TEvRemoteHttpInfoRes>(str.Str());
+            }
+            ctx.Send(RespondTo, response.Release());
             return true;
         }
 
@@ -269,7 +269,7 @@ protected:
     }
 
     void Enqueue(STFUNC_SIG) override {
-        SetActivityType(NKikimrServices::TActivity::KEYVALUE_ACTOR); 
+        SetActivityType(NKikimrServices::TActivity::KEYVALUE_ACTOR);
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE,
                 "KeyValue# " << TabletID()
                 << " Enqueue, event type# " << (ui32)ev->GetTypeRewrite()
@@ -353,7 +353,7 @@ protected:
         CheckYellowChannels(ev->Get()->Intermediate->Stat);
 
         State.OnEvIntermediate(*(ev->Get()->Intermediate), ctx);
-        Execute(new TTxRequest(std::move(ev->Get()->Intermediate), this), ctx); 
+        Execute(new TTxRequest(std::move(ev->Get()->Intermediate), this), ctx);
     }
 
     void Handle(TEvKeyValue::TEvNotify::TPtr &ev, const TActorContext &ctx) {
@@ -386,10 +386,10 @@ protected:
         State.OnPeriodicRefresh(ctx);
     }
 
-    void Handle(TChannelBalancer::TEvUpdateWeights::TPtr ev, const TActorContext& /*ctx*/) { 
-        State.OnUpdateWeights(ev); 
-    } 
- 
+    void Handle(TChannelBalancer::TEvUpdateWeights::TPtr ev, const TActorContext& /*ctx*/) {
+        State.OnUpdateWeights(ev);
+    }
+
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override {
         if (!Executor() || !Executor()->GetStats().IsActive)
             return false;
@@ -399,7 +399,7 @@ protected:
 
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID() << " Handle TEvRemoteHttpInfo: %s"
                 << ev->Get()->Query.data());
-        Execute(new TTxMonitoring(ev->Release(), ev->Sender, this), ctx); 
+        Execute(new TTxMonitoring(ev->Release(), ev->Sender, this), ctx);
 
         return true;
     }
@@ -412,12 +412,12 @@ protected:
     }
 
     void RestoreActorActivity() {
-        SetActivityType(NKikimrServices::TActivity::KEYVALUE_ACTOR); 
+        SetActivityType(NKikimrServices::TActivity::KEYVALUE_ACTOR);
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::KEYVALUE_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::KEYVALUE_ACTOR;
     }
 
     TKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info)
@@ -440,7 +440,7 @@ public:
         if (CollectorActorId) {
             ctx.Send(CollectorActorId, new TEvents::TEvPoisonPill);
         }
-        State.Terminate(ctx); 
+        State.Terminate(ctx);
         Die(ctx);
     }
 
@@ -482,7 +482,7 @@ public:
             HFunc(TEvKeyValue::TEvIntermediate, Handle);
             HFunc(TEvKeyValue::TEvNotify, Handle);
             HFunc(TEvKeyValue::TEvPeriodicRefresh, Handle);
-            HFunc(TChannelBalancer::TEvUpdateWeights, Handle); 
+            HFunc(TChannelBalancer::TEvUpdateWeights, Handle);
             HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             HFunc(TEvents::TEvPoisonPill, Handle);
 

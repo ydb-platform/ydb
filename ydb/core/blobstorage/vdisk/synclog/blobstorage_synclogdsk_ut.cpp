@@ -19,7 +19,7 @@ namespace NKikimr {
             ui32 size = 0;
             ui64 tabletId = 1;
             for (unsigned i = 0; i < num; i++) {
-                size = NSyncLog::TSerializeRoutines::SetBlock(buf, ctx.Lsn, tabletId, ctx.Gen, 0); 
+                size = NSyncLog::TSerializeRoutines::SetBlock(buf, ctx.Lsn, tabletId, ctx.Gen, 0);
                 ctx.Lsn += 2;
                 ctx.Gen++;
                 page->Put(pageSize, (const NSyncLog::TRecordHdr *)buf, size);
@@ -43,7 +43,7 @@ namespace NKikimr {
             char buf[NSyncLog::MaxRecFullSize];
             ui64 tabletId = 1;
             while (memLog.GetNumberOfPages() < pagesNum) {
-                ui32 size = NSyncLog::TSerializeRoutines::SetBlock(buf, ctx.Lsn, tabletId, ctx.Gen, 0); 
+                ui32 size = NSyncLog::TSerializeRoutines::SetBlock(buf, ctx.Lsn, tabletId, ctx.Gen, 0);
                 ctx.Lsn++;
                 ctx.Gen++;
                 memLog.PutOne((const TRecordHdr *)buf, size);
@@ -70,7 +70,7 @@ namespace NKikimr {
             // that 'dsk->UpdateIndex' == 'dsk->GetSnapshot()->Serialize(delta) + Load'
             void UpdateIndexWithCheck(TDiskRecLog *dsk, const TDeltaToDiskRecLog &delta) {
                 // build separate index via snapshot
-                std::unique_ptr<TDiskRecLog> uDsk = BuildUpdatedIndex(dsk, delta); 
+                std::unique_ptr<TDiskRecLog> uDsk = BuildUpdatedIndex(dsk, delta);
                 // update dsk in 'traditional way'
                 dsk->UpdateIndex(delta);
                 // check that both ways give the same result
@@ -83,14 +83,14 @@ namespace NKikimr {
             ui32 IndexBulk;
 
             // Build new TDiskRecLog via snapshot serialization and loading
-            std::unique_ptr<TDiskRecLog> BuildUpdatedIndex(TDiskRecLog *dsk, 
+            std::unique_ptr<TDiskRecLog> BuildUpdatedIndex(TDiskRecLog *dsk,
                                                    const TDeltaToDiskRecLog &delta) {
                 // get snapshot and serialize it with delta
                 auto snap = dsk->GetSnapshot();
                 TStringStream s;
                 snap->Serialize(s, delta);
                 const TString serialized = s.Str();
-                std::unique_ptr<TDiskRecLog> uDsk = std::make_unique<TDiskRecLog>(ChunkSize, 
+                std::unique_ptr<TDiskRecLog> uDsk = std::make_unique<TDiskRecLog>(ChunkSize,
                                                                     PageSize,
                                                                     IndexBulk,
                                                                     serialized.data(),
@@ -107,7 +107,7 @@ namespace NKikimr {
             ui32 pageSize = 16u << 10u;
             ui32 indexBulk = 4;
             TUpdChecker uc(chunkSize, pageSize, indexBulk);
-            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr)); 
+            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr));
 
             TFillIn1Context ctx {1, 1};
             for (int i = 0; i < 5; i++) {
@@ -118,12 +118,12 @@ namespace NKikimr {
                 TStringStream s;
                 dsk->Serialize(s);
                 TString serialized = s.Str();
-                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size())); 
+                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
 
                 // update
                 TDeltaToDiskRecLog delta(indexBulk);
                 delta.Append(0, pages);
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
             }
 
             TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 1} {FirstLsn# 21 OffsInPages# 1 PagesNum# 1} "
@@ -151,7 +151,7 @@ namespace NKikimr {
             ui32 pageSize = 16u << 10u;
             ui32 indexBulk = 4;
             TUpdChecker uc(chunkSize, pageSize, indexBulk);
-            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr)); 
+            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr));
 
             TFillIn1Context ctx {1, 1};
             // add first portion
@@ -164,12 +164,12 @@ namespace NKikimr {
                 // update
                 TDeltaToDiskRecLog delta(indexBulk);
                 delta.Append(0, pages);
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
 
                 TStringStream s;
                 dsk->Serialize(s);
                 TString serialized = s.Str();
-                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size())); 
+                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
             TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 4} {FirstLsn# 81 OffsInPages# 4 PagesNum# 1} "
@@ -187,12 +187,12 @@ namespace NKikimr {
                 // update
                 TDeltaToDiskRecLog delta(indexBulk);
                 delta.Append(0, pages);
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
 
                 TStringStream s;
                 dsk->Serialize(s);
                 TString serialized = s.Str();
-                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size())); 
+                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
             result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 4} {FirstLsn# 81 OffsInPages# 4 PagesNum# 1} "
@@ -209,7 +209,7 @@ namespace NKikimr {
             ui32 pagesInChunk = chunkSize / pageSize;
             ui32 indexBulk = 4;
             TUpdChecker uc(chunkSize, pageSize, indexBulk);
-            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr)); 
+            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr));
 
             TFillIn1Context ctx {1, 1};
             for (int k = 0; k < 4; k++) {
@@ -222,12 +222,12 @@ namespace NKikimr {
                 // update
                 TDeltaToDiskRecLog delta(indexBulk);
                 delta.Append(k * 2 / pagesInChunk, pages);
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
 
                 TStringStream s;
                 dsk->Serialize(s);
                 TString serialized = s.Str();
-                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size())); 
+                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
             TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 2} {FirstLsn# 41 OffsInPages# 2 PagesNum# 2} "
                             "LastRealLsn# 79}} {1 {{FirstLsn# 81 OffsInPages# 0 PagesNum# 2} "
@@ -242,7 +242,7 @@ namespace NKikimr {
             ui32 pageSize = 16u << 10u;
             ui32 indexBulk = 4;
             TUpdChecker uc(chunkSize, pageSize, indexBulk);
-            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr)); 
+            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr));
 
             TFillIn1Context ctx {1, 1};
             for (int i = 0; i < 2; i++) {
@@ -253,12 +253,12 @@ namespace NKikimr {
                 // update
                 TDeltaToDiskRecLog delta(indexBulk);
                 delta.Append(0, pages);
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
 
                 TStringStream s;
                 dsk->Serialize(s);
                 TString serialized = s.Str();
-                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size())); 
+                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
             // create a page
@@ -270,12 +270,12 @@ namespace NKikimr {
                 // update
                 TDeltaToDiskRecLog delta(indexBulk);
                 delta.Append(0, pages);
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
 
                 TStringStream s;
                 dsk->Serialize(s);
                 TString serialized = s.Str();
-                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size())); 
+                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
 
             }
 
@@ -288,12 +288,12 @@ namespace NKikimr {
                 // update
                 TDeltaToDiskRecLog delta(indexBulk);
                 delta.Append(0, pages);
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
 
                 TStringStream s;
                 dsk->Serialize(s);
                 TString serialized = s.Str();
-                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size())); 
+                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
             TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 1} {FirstLsn# 21 OffsInPages# 1 PagesNum# 1} "
@@ -308,7 +308,7 @@ namespace NKikimr {
             ui32 pageSize = 16u << 10u;
             ui32 indexBulk = 4;
             TUpdChecker uc(chunkSize, pageSize, indexBulk);
-            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr)); 
+            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr));
 
             TFillIn1Context ctx {1, 1};
             for (int i = 0; i < 2; i++) {
@@ -319,12 +319,12 @@ namespace NKikimr {
                 // update
                 TDeltaToDiskRecLog delta(indexBulk);
                 delta.Append(0, pages);
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
 
                 TStringStream s;
                 dsk->Serialize(s);
                 TString serialized = s.Str();
-                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size())); 
+                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
             // create a page
@@ -338,12 +338,12 @@ namespace NKikimr {
                 // update
                 TDeltaToDiskRecLog delta(indexBulk);
                 delta.Append(0, pages);
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
 
                 TStringStream s;
                 dsk->Serialize(s);
                 TString serialized = s.Str();
-                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size())); 
+                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
             // append to the page
@@ -355,12 +355,12 @@ namespace NKikimr {
                 // update
                 TDeltaToDiskRecLog delta(indexBulk);
                 delta.Append(0, pages);
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
 
                 TStringStream s;
                 dsk->Serialize(s);
                 TString serialized = s.Str();
-                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size())); 
+                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
             TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 1} {FirstLsn# 21 OffsInPages# 1 PagesNum# 1} "
@@ -376,7 +376,7 @@ namespace NKikimr {
             ui32 pageSize = 16u << 10u;
             ui32 indexBulk = 4;
             TUpdChecker uc(chunkSize, pageSize, indexBulk);
-            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr)); 
+            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr));
 
             TFillIn1Context ctx {1, 1};
 
@@ -392,7 +392,7 @@ namespace NKikimr {
                 // update
                 TDeltaToDiskRecLog delta(indexBulk);
                 delta.Append(0, pages);
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
             }
 
             {
@@ -411,7 +411,7 @@ namespace NKikimr {
                 delta.Append(1, pages);
 
                 // update: update page from chunk 0 and add page from chunk 1
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
             }
         }
 
@@ -421,7 +421,7 @@ namespace NKikimr {
             ui32 pagesInChunk = chunkSize / pageSize;
             ui32 indexBulk = 4;
             TUpdChecker uc(chunkSize, pageSize, indexBulk);
-            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr)); 
+            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr));
 
             TFillIn1Context ctx {1, 1};
             for (int k = 0; k < 8; k++) {
@@ -433,12 +433,12 @@ namespace NKikimr {
                 // update
                 TDeltaToDiskRecLog delta(indexBulk);
                 delta.Append(k * 2 / pagesInChunk, pages);
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
 
                 TStringStream s;
                 dsk->Serialize(s);
                 TString serialized = s.Str();
-                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size())); 
+                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
             TVector<ui32> chunks;
@@ -465,7 +465,7 @@ namespace NKikimr {
             ui32 pagesInChunk = chunkSize / pageSize;
             ui32 indexBulk = 4;
             TUpdChecker uc(chunkSize, pageSize, indexBulk);
-            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr)); 
+            std::unique_ptr<TDiskRecLog> dsk(new TDiskRecLog(chunkSize, pageSize, indexBulk, nullptr, nullptr));
 
             TFillIn1Context ctx {1, 1};
             for (int k = 0; k < 8; k++) {
@@ -477,12 +477,12 @@ namespace NKikimr {
                 // update
                 TDeltaToDiskRecLog delta(indexBulk);
                 delta.Append(k * 2 / pagesInChunk, pages);
-                uc.UpdateIndexWithCheck(dsk.get(), delta); 
+                uc.UpdateIndexWithCheck(dsk.get(), delta);
 
                 TStringStream s;
                 dsk->Serialize(s);
                 TString serialized = s.Str();
-                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size())); 
+                dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
             TVector<ui32> chunks;

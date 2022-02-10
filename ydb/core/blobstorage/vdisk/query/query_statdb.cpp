@@ -9,9 +9,9 @@ namespace NKikimr {
 
     namespace {
 
-        const char *ByteSuffix[] = {"B", "KiB", "MiB", "GiB", nullptr}; 
-        const char *ItemSuffix[] = {"", "K", "M", "G", nullptr}; 
- 
+        const char *ByteSuffix[] = {"B", "KiB", "MiB", "GiB", nullptr};
+        const char *ItemSuffix[] = {"", "K", "M", "G", nullptr};
+
         ///////////////////////////////////////////////////////////////////////////////
         // TChannelInfo
         ///////////////////////////////////////////////////////////////////////////////
@@ -48,12 +48,12 @@ namespace NKikimr {
 
                 HTML(str) {
                     if (pretty) {
-                        TABLED_ATTRS({{"data-text", Sprintf("%" PRIu64, Num)}, {"align", "right"}}) { SMALL() { 
-                            FormatHumanReadable(str, Num, 1000, 2, ItemSuffix); 
-                        }} 
-                        TABLED_ATTRS({{"data-text", Sprintf("%" PRIu64, DataSize)}, {"align", "right"}}) { SMALL() { 
-                            FormatHumanReadable(str, DataSize, 1024, 2, ByteSuffix); 
-                        }} 
+                        TABLED_ATTRS({{"data-text", Sprintf("%" PRIu64, Num)}, {"align", "right"}}) { SMALL() {
+                            FormatHumanReadable(str, Num, 1000, 2, ItemSuffix);
+                        }}
+                        TABLED_ATTRS({{"data-text", Sprintf("%" PRIu64, DataSize)}, {"align", "right"}}) { SMALL() {
+                            FormatHumanReadable(str, DataSize, 1024, 2, ByteSuffix);
+                        }}
                     } else {
                         TABLED() {SMALL() {str << Num;}}
                         TABLED() {SMALL() {str << DataSize;}}

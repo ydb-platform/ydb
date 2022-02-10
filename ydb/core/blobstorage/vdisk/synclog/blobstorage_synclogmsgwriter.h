@@ -1,32 +1,32 @@
-#pragma once 
- 
+#pragma once
+
 #include "defs.h"
 #include "blobstorage_synclogformat.h"
 #include "blobstorage_synclogmsgimpl.h"
-#include <util/generic/buffer.h> 
+#include <util/generic/buffer.h>
 #include <util/generic/string.h>
-#include <util/generic/list.h> 
- 
-namespace NKikimr { 
+#include <util/generic/list.h>
+
+namespace NKikimr {
     namespace NSyncLog {
- 
+
         ////////////////////////////////////////////////////////////////////////////
         // TNaiveFragmentWriter
         ////////////////////////////////////////////////////////////////////////////
         class TNaiveFragmentWriter {
             TList<TBuffer> Chain;
             size_t DataSize;
- 
+
         public:
             TNaiveFragmentWriter()
                 : Chain({{64 << 10}}) // 64 KiB initial storage
                 , DataSize(0)
             {}
- 
+
             size_t GetSize() const {
                 return DataSize;
             }
- 
+
             void Push(const TRecordHdr *hdr) {
                 Push(hdr, hdr->GetSize());
             }
@@ -45,12 +45,12 @@ namespace NKikimr {
                         d += len;
                         size -= len;
                     }
-                } 
-            } 
+                }
+            }
 
             void Finish(TString *respData);
         };
- 
+
         ////////////////////////////////////////////////////////////////////////////
         // TLz4FragmentWriter
         ////////////////////////////////////////////////////////////////////////////
@@ -73,7 +73,7 @@ namespace NKikimr {
                 , Counter(0)
             {
                 // TODO: think about better approximation
-                Records.LogoBlobs.reserve(10000); 
+                Records.LogoBlobs.reserve(10000);
             }
 
             size_t GetSize() const {
@@ -88,17 +88,17 @@ namespace NKikimr {
                 Y_VERIFY((size & 3) == 0); // ensure that size is multiple of 4
                 switch (hdr->RecType) {
                     case TRecordHdr::RecLogoBlob:
-                        Records.LogoBlobs.emplace_back(*hdr->GetLogoBlob(), Counter); 
+                        Records.LogoBlobs.emplace_back(*hdr->GetLogoBlob(), Counter);
                         break;
                     case TRecordHdr::RecBlock:
-                        Records.Blocks.emplace_back(*hdr->GetBlock(), Counter); 
+                        Records.Blocks.emplace_back(*hdr->GetBlock(), Counter);
                         break;
                     case TRecordHdr::RecBarrier:
-                        Records.Barriers.emplace_back(*hdr->GetBarrier(), Counter); 
+                        Records.Barriers.emplace_back(*hdr->GetBarrier(), Counter);
                         break;
-                    case TRecordHdr::RecBlockV2: 
-                        Records.BlocksV2.emplace_back(*hdr->GetBlockV2(), Counter); 
-                        break; 
+                    case TRecordHdr::RecBlockV2:
+                        Records.BlocksV2.emplace_back(*hdr->GetBlockV2(), Counter);
+                        break;
                     default:
                         Y_FAIL("Unexpected RecType# %" PRIu64, (ui64)hdr->RecType);
                 }
@@ -111,7 +111,7 @@ namespace NKikimr {
         protected:
             size_t DataSize;
             ui32 Counter;
-            TRecordsWithSerial Records; 
+            TRecordsWithSerial Records;
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -139,4 +139,4 @@ namespace NKikimr {
         };
 
     } // NSyncLog
-} // NKikimr 
+} // NKikimr

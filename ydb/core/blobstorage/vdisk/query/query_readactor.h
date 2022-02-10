@@ -8,10 +8,10 @@ namespace NKikimr {
     IActor *CreateReadBatcherActor(
         TReadBatcherCtxPtr ctx,
         const TActorId notifyID,
-        std::shared_ptr<TReadBatcherResult> result, 
+        std::shared_ptr<TReadBatcherResult> result,
         ui8 priority,
-        NWilson::TTraceId traceId, 
-        bool isRepl); 
+        NWilson::TTraceId traceId,
+        bool isRepl);
 
 } // NKikimr
 

@@ -320,8 +320,8 @@ public:
     TKesusTablet(const TActorId& tablet, TTabletStorageInfo* info);
     virtual ~TKesusTablet();
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::KESUS_TABLET_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::KESUS_TABLET_ACTOR;
     }
 
 private:

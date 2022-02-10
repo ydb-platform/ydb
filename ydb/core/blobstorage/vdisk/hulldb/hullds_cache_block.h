@@ -27,28 +27,28 @@ namespace NKikimr {
             TString ToString() const;
         };
 
-        struct TBlockedGen { 
-            ui32 Generation = 0; 
-            ui64 IssuerGuid = 0; 
- 
-            TBlockedGen() = default; 
-            TBlockedGen(const TBlockedGen&) = default; 
- 
-            TBlockedGen(ui32 generation, ui64 issuerGuid) 
-                : Generation(generation) 
-                , IssuerGuid(issuerGuid) 
-            {} 
- 
-            bool IsBlocked(const TBlockedGen& gen) const { 
-                return gen.Generation < Generation || (gen.Generation == Generation && (!IssuerGuid || gen.IssuerGuid != IssuerGuid)); 
-            } 
- 
-            friend bool operator ==(const TBlockedGen& x, const TBlockedGen& y) { 
-                return x.Generation == y.Generation && 
-                    x.IssuerGuid == y.IssuerGuid; 
-            } 
-        }; 
- 
+        struct TBlockedGen {
+            ui32 Generation = 0;
+            ui64 IssuerGuid = 0;
+
+            TBlockedGen() = default;
+            TBlockedGen(const TBlockedGen&) = default;
+
+            TBlockedGen(ui32 generation, ui64 issuerGuid)
+                : Generation(generation)
+                , IssuerGuid(issuerGuid)
+            {}
+
+            bool IsBlocked(const TBlockedGen& gen) const {
+                return gen.Generation < Generation || (gen.Generation == Generation && (!IssuerGuid || gen.IssuerGuid != IssuerGuid));
+            }
+
+            friend bool operator ==(const TBlockedGen& x, const TBlockedGen& y) {
+                return x.Generation == y.Generation &&
+                    x.IssuerGuid == y.IssuerGuid;
+            }
+        };
+
         TBlocksCache() = default;
         ~TBlocksCache() = default;
         TBlocksCache(const TBlocksCache &) = delete;
@@ -56,17 +56,17 @@ namespace NKikimr {
         TBlocksCache(TBlocksCache &&) = default;
         TBlocksCache &operator=(TBlocksCache &&) = default;
 
-        TBlockRes IsBlocked(ui64 tabletId, TBlockedGen gen, ui32 *actualGen = nullptr) const; 
-        bool IsBlockedLegacy(ui64 tabletId, TBlockedGen gen, ui32 *actualGen = nullptr) const; 
+        TBlockRes IsBlocked(ui64 tabletId, TBlockedGen gen, ui32 *actualGen = nullptr) const;
+        bool IsBlockedLegacy(ui64 tabletId, TBlockedGen gen, ui32 *actualGen = nullptr) const;
         bool HasRecord(ui64 tabletId) const;
         bool Find(ui64 tabletId, ui32 *outGen) const;
         bool IsInFlight() const { return !InFlightBlocks.empty() || !InFlightBlocksQueue.empty(); }
 
-        void UpdateLegacy(ui64 tabletId, TBlockedGen gen) { UpdatePersistent(tabletId, gen); } 
+        void UpdateLegacy(ui64 tabletId, TBlockedGen gen) { UpdatePersistent(tabletId, gen); }
         // for log replay
-        void UpdatePersistent(ui64 tabletId, TBlockedGen gen); 
-        void UpdateInFlight(ui64 tabletId, TBlockedGen gen, ui64 lsn); 
-        void CommitInFlight(ui64 tabletId, TBlockedGen gen, ui64 lsn); 
+        void UpdatePersistent(ui64 tabletId, TBlockedGen gen);
+        void UpdateInFlight(ui64 tabletId, TBlockedGen gen, ui64 lsn);
+        void CommitInFlight(ui64 tabletId, TBlockedGen gen, ui64 lsn);
         void Build(const THullDs *hullDs);
 
     private:
@@ -109,8 +109,8 @@ namespace NKikimr {
         TInFlightBlocksQueue InFlightBlocksQueue;
         bool Initialized = false;
 
-        TBlockRes IsBlockedByInFlight(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const; 
-        TBlockRes IsBlockedByPersistent(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const; 
+        TBlockRes IsBlockedByInFlight(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const;
+        TBlockRes IsBlockedByPersistent(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const;
     };
 
 } // NKikimr

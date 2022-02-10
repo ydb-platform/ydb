@@ -28,10 +28,10 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
             struct EmptyValue : Column<5, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 13; };
             struct ProtoValue : Column<6, NScheme::NTypeIds::String> { using Type = NKikimrMiniKQL::TValue; };
             struct EnumValue : Column<7, NScheme::NTypeIds::Uint64> { using Type = ESomeEnum; };
-            struct InstantValue : Column<8, NScheme::NTypeIds::Uint64> { using Type = TInstant; }; 
+            struct InstantValue : Column<8, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
 
             using TKey = TableKey<ID>;
-            using TColumns = TableColumns<ID, Value, Name, BoolValue, EmptyValue, ProtoValue, EnumValue, InstantValue>; 
+            using TColumns = TableColumns<ID, Value, Name, BoolValue, EmptyValue, ProtoValue, EnumValue, InstantValue>;
         };
 
         struct TestTable2 : Table<2> {
@@ -71,8 +71,8 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
         NIceDb::TNiceDb db(DB);
         ui64 stamp = 0;
 
-        TInstant timestamp = TInstant::Now(); 
- 
+        TInstant timestamp = TInstant::Now();
+
         {
             TDummyEnv env;
             DB.Begin(++stamp, env);
@@ -98,8 +98,8 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                                                             NIceDb::TUpdate<Schema::TestTable::Name>(ToString(i)),
                                                             NIceDb::TUpdate<Schema::TestTable::BoolValue>(i % 2 == 0),
                                                             NIceDb::TUpdate<Schema::TestTable::ProtoValue>(protoValue),
-                                                            NIceDb::TUpdate<Schema::TestTable::EnumValue>(ESomeEnum::SomeValue1), 
-                                                            NIceDb::TUpdate<Schema::TestTable::InstantValue>(timestamp)); 
+                                                            NIceDb::TUpdate<Schema::TestTable::EnumValue>(ESomeEnum::SomeValue1),
+                                                            NIceDb::TUpdate<Schema::TestTable::InstantValue>(timestamp));
 
                 // modern syntax:
                 db.Table<Schema::TestTable>().Key(i).Update<
@@ -107,9 +107,9 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                         Schema::TestTable::Name,
                         Schema::TestTable::BoolValue,
                         Schema::TestTable::ProtoValue,
-                        Schema::TestTable::EnumValue, 
-                        Schema::TestTable::InstantValue>(i, ToString(i), i % 2 == 0, protoValue, ESomeEnum::SomeValue1, 
-                            timestamp); 
+                        Schema::TestTable::EnumValue,
+                        Schema::TestTable::InstantValue>(i, ToString(i), i % 2 == 0, protoValue, ESomeEnum::SomeValue1,
+                            timestamp);
 
                 // also modern syntax:
                 db.Table<Schema::TestTable>().Key(i)
@@ -117,8 +117,8 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                         .Update<Schema::TestTable::Name>(ToString(i))
                         .Update<Schema::TestTable::BoolValue>(i % 2 == 0)
                         .Update<Schema::TestTable::ProtoValue>(protoValue)
-                        .Update<Schema::TestTable::EnumValue>(ESomeEnum::SomeValue1) 
-                        .Update<Schema::TestTable::InstantValue>(timestamp); 
+                        .Update<Schema::TestTable::EnumValue>(ESomeEnum::SomeValue1)
+                        .Update<Schema::TestTable::InstantValue>(timestamp);
             }
             DB.Commit(stamp, true);
         }
@@ -175,8 +175,8 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                         Schema::TestTable::Name,
                         Schema::TestTable::BoolValue,
                         Schema::TestTable::EmptyValue,
-                        Schema::TestTable::EnumValue, 
-                        Schema::TestTable::InstantValue>(); 
+                        Schema::TestTable::EnumValue,
+                        Schema::TestTable::InstantValue>();
                 // move semantics test
                 decltype(row) new_row = std::move(row);
                 row = std::move(new_row);
@@ -187,12 +187,12 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                 TString name = row.GetValue<Schema::TestTable::Name>();
                 bool boolValue = row.GetValue<Schema::TestTable::BoolValue>();
                 ESomeEnum enumValue = row.GetValue<Schema::TestTable::EnumValue>();
-                TInstant instantValue = row.GetValue<Schema::TestTable::InstantValue>(); 
+                TInstant instantValue = row.GetValue<Schema::TestTable::InstantValue>();
                 UNIT_ASSERT_EQUAL(value, i);
                 UNIT_ASSERT_EQUAL(ToString(value), name);
                 UNIT_ASSERT_EQUAL(boolValue, (i % 2 == 0));
                 UNIT_ASSERT_EQUAL(enumValue, ESomeEnum::SomeValue1);
-                UNIT_ASSERT_EQUAL(instantValue, timestamp); 
+                UNIT_ASSERT_EQUAL(instantValue, timestamp);
                 UNIT_ASSERT_EQUAL(row.GetValue<Schema::TestTable::EmptyValue>(), 13);
                 UNIT_ASSERT_EQUAL(row.GetValueOrDefault<Schema::TestTable::EmptyValue>(), 13);
                 UNIT_ASSERT_EQUAL(row.GetValueOrDefault<Schema::TestTable::EmptyValue>(i), i);

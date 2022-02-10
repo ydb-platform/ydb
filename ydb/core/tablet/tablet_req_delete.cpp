@@ -54,17 +54,17 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
 
     void SendRequest(int numRequest, const TActorContext& ctx) {
         const TRequestInfo& info(Requests[numRequest]);
-        bool total = Generation == std::numeric_limits<ui32>::max(); 
-        const ui32 recordGeneration = total ? Generation : Generation + 1; 
-        const ui32 perGenerationCounter = total ? Max<ui32>() : 0; 
-        auto event = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier( 
-                    TabletStorageInfo->TabletID,      // tabletId 
-                    recordGeneration,                 // recordGeneration 
-                    perGenerationCounter,             // perGenerationCounter 
-                    info.Channel,                     // channel 
-                    Generation,                       // collectGeneration 
-                    std::numeric_limits<ui32>::max(), // collectStep 
-                    TInstant::Max());                 // deadline 
+        bool total = Generation == std::numeric_limits<ui32>::max();
+        const ui32 recordGeneration = total ? Generation : Generation + 1;
+        const ui32 perGenerationCounter = total ? Max<ui32>() : 0;
+        auto event = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(
+                    TabletStorageInfo->TabletID,      // tabletId
+                    recordGeneration,                 // recordGeneration
+                    perGenerationCounter,             // perGenerationCounter
+                    info.Channel,                     // channel
+                    Generation,                       // collectGeneration
+                    std::numeric_limits<ui32>::max(), // collectStep
+                    TInstant::Max());                 // deadline
         event->IsMonitored = false;
         SendToBSProxy(ctx, info.GroupId, event.Release(), numRequest);
     }
@@ -113,8 +113,8 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TABLET_REQ_DELETE_TABLET; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TABLET_REQ_DELETE_TABLET;
     }
 
     TTabletReqDelete(const TActorId &owner, const TIntrusivePtr<TTabletStorageInfo>& tabletStorageInfo, ui32 generation = std::numeric_limits<ui32>::max())

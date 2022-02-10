@@ -93,10 +93,10 @@ struct TTestState {
     TEvBlobStorage::TEvPut::TPtr CreatePutRequest(const TBlobTestSet::TBlob &blob,
             TEvBlobStorage::TEvPut::ETactic tactic, NKikimrBlobStorage::EPutHandleClass handleClass)
     {
-        std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(blob.Id, blob.Data, TInstant::Max(), 
+        std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(blob.Id, blob.Data, TInstant::Max(),
                 handleClass, tactic);
         return static_cast<TEventHandle<TEvBlobStorage::TEvPut>*>(
-                new IEventHandle(EdgeActor, EdgeActor, put.release())); 
+                new IEventHandle(EdgeActor, EdgeActor, put.release()));
     }
 
     template <typename TIter, typename TPutIter>
@@ -124,10 +124,10 @@ struct TTestState {
             q.Shift = 0;
             q.Size = q.Id.BlobSize();
         }
-        std::unique_ptr<TEvBlobStorage::TEvGet> get = std::make_unique<TEvBlobStorage::TEvGet>(queries, blobs.size(), TInstant::Max(), 
+        std::unique_ptr<TEvBlobStorage::TEvGet> get = std::make_unique<TEvBlobStorage::TEvGet>(queries, blobs.size(), TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::FastRead, mustRestore, false);
         return static_cast<TEventHandle<TEvBlobStorage::TEvGet>*>(
-                new IEventHandle(EdgeActor, EdgeActor, get.release())); 
+                new IEventHandle(EdgeActor, EdgeActor, get.release()));
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -140,8 +140,8 @@ struct TTestState {
     }
 
     template <typename TEvent>
-    typename TEvent::TPtr CreateEventPtr(TActorId recipient, TActorId sender, std::unique_ptr<TEvent> &ev, ui64 cookie) { 
-        return CreateEventPtr(recipient, sender, ev.release(), cookie); 
+    typename TEvent::TPtr CreateEventPtr(TActorId recipient, TActorId sender, std::unique_ptr<TEvent> &ev, ui64 cookie) {
+        return CreateEventPtr(recipient, sender, ev.release(), cookie);
     }
 
     template <typename TEvent>
@@ -163,26 +163,26 @@ struct TTestState {
         return handle;
     }
 
-    std::unique_ptr<TEvBlobStorage::TEvVPutResult> CreateEventResult(TEvBlobStorage::TEvVPut *ev, 
+    std::unique_ptr<TEvBlobStorage::TEvVPutResult> CreateEventResult(TEvBlobStorage::TEvVPut *ev,
             NKikimrProto::EReplyStatus status, TVDiskID vDiskId)
     {
         NKikimrBlobStorage::TEvVPut &record = ev->Record;
         TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(record.GetBlobID());
         ui64 cookieValue = record.GetCookie();
         ui64 *cookie = record.HasCookie() ? &cookieValue : nullptr;
-        std::unique_ptr<TEvBlobStorage::TEvVPutResult> result(new TEvBlobStorage::TEvVPutResult(status, blobId, vDiskId, 
+        std::unique_ptr<TEvBlobStorage::TEvVPutResult> result(new TEvBlobStorage::TEvVPutResult(status, blobId, vDiskId,
                 cookie, TOutOfSpaceStatus(0u, 0.0), TAppData::TimeProvider->Now(),
                 0, nullptr, nullptr, nullptr, nullptr, 0, NWilson::TTraceId(), 0, TString()));
         return result;
     }
 
-    std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult> CreateEventResult(TEvBlobStorage::TEvVMultiPut *ev, 
+    std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult> CreateEventResult(TEvBlobStorage::TEvVMultiPut *ev,
             NKikimrProto::EReplyStatus status, TVDiskID vDiskId)
     {
         NKikimrBlobStorage::TEvVMultiPut &record = ev->Record;
         ui64 cookieValue = record.GetCookie();
         ui64 *cookie = record.HasCookie() ? &cookieValue : nullptr;
-        std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult> result( 
+        std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult> result(
                 new TEvBlobStorage::TEvVMultiPutResult(status, vDiskId, cookie, TAppData::TimeProvider->Now(), 0,
                         nullptr, nullptr, nullptr, nullptr, 0, NWilson::TTraceId(), 0, TString()));
         result->Record.SetStatusFlags(TOutOfSpaceStatus(0u, 0.0).Flags);
@@ -190,7 +190,7 @@ struct TTestState {
     }
 
     template <typename TIter>
-    std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult> CreateEventResult(TEvBlobStorage::TEvVMultiPut *ev, 
+    std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult> CreateEventResult(TEvBlobStorage::TEvVMultiPut *ev,
             NKikimrProto::EReplyStatus status, TIter begin, TIter end, TVDiskID vDiskId)
     {
         NKikimrBlobStorage::TEvVMultiPut &record = ev->Record;
@@ -212,17 +212,17 @@ struct TTestState {
     }
 
     template <typename TCont>
-    std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult> CreateEventResult(TEvBlobStorage::TEvVMultiPut *ev, 
+    std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult> CreateEventResult(TEvBlobStorage::TEvVMultiPut *ev,
             NKikimrProto::EReplyStatus status, const TCont &cont, TVDiskID vDiskId)
     {
         return CreateEventResult(ev, status, cont.cbegin(), cont.cend(), vDiskId);
     }
 
-    std::unique_ptr<TEvBlobStorage::TEvVGetResult> CreateEventResult(TEvBlobStorage::TEvVGet *ev, 
+    std::unique_ptr<TEvBlobStorage::TEvVGetResult> CreateEventResult(TEvBlobStorage::TEvVGet *ev,
             NKikimrProto::EReplyStatus status = NKikimrProto::OK)
     {
         TVDiskID vDiskId = VDiskIDFromVDiskID(ev->Record.GetVDiskID());
-        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult( 
+        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
                 status, vDiskId, TAppData::TimeProvider->Now(), 0, nullptr,
                 nullptr, nullptr, nullptr, NWilson::TTraceId(), {}, 0U, 0U));
         return result;
@@ -286,4 +286,4 @@ struct TTestState {
     }
 };
 
-} // namespace NKikimr 
+} // namespace NKikimr

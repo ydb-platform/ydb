@@ -104,9 +104,9 @@ public:
     using TValueType = T;
 
     inline T* operator->() const noexcept {
-        T* ptr = AsT(); 
-        Y_ASSERT(ptr); 
-        return ptr; 
+        T* ptr = AsT();
+        Y_ASSERT(ptr);
+        return ptr;
     }
 
 #ifndef __cpp_impl_three_way_comparison

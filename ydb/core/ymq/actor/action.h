@@ -53,8 +53,8 @@ public:
         DebugInfo->ActionActors.EraseKeyValue(RequestId_, this);
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::SQS_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SQS_ACTOR;
     }
 
     static constexpr bool NeedQueueAttributes() { // override it in TDerived if needed

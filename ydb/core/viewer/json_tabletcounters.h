@@ -29,8 +29,8 @@ class TJsonTabletCounters : public TActorBootstrapped<TJsonTabletCounters> {
     bool Aggregate = false;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::VIEWER_HANDLER; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
     TJsonTabletCounters(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)

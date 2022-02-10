@@ -7,7 +7,7 @@
 #include <ydb/library/yql/minikql/mkql_terminator.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <util/system/env.h>
-#include <util/system/mutex.h> 
+#include <util/system/mutex.h>
 #include <util/digest/city.h>
 
 #ifndef MKQL_DISABLE_CODEGEN

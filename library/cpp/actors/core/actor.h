@@ -66,10 +66,10 @@ namespace NActors {
 
         static TInstant Now();
         static TMonotonic Monotonic();
-        NLog::TSettings* LoggerSettings() const; 
+        NLog::TSettings* LoggerSettings() const;
 
         // register new actor in ActorSystem on new fresh mailbox.
-        static TActorId Register(IActor* actor, TActorId parentId = TActorId(), TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()); 
+        static TActorId Register(IActor* actor, TActorId parentId = TActorId(), TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>());
 
         // Register new actor in ActorSystem on same _mailbox_ as current actor.
         // There is one thread per mailbox to execute actor, which mean
@@ -102,11 +102,11 @@ namespace NActors {
         bool Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
             return Send(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie, std::move(traceId));
         }
-        bool Send(TAutoPtr<IEventHandle> ev) const; 
+        bool Send(TAutoPtr<IEventHandle> ev) const;
 
-        TInstant Now() const; 
-        TMonotonic Monotonic() const; 
- 
+        TInstant Now() const;
+        TMonotonic Monotonic() const;
+
         /**
          * Schedule one-shot event that will be send at given time point in the future.
          *
@@ -164,9 +164,9 @@ namespace NActors {
         }
 
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
-        void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const; 
-        void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const; 
-        void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const; 
+        void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
+        void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
+        void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
     };
 
     class IActor;
@@ -223,16 +223,16 @@ namespace NActors {
         friend class TDecorator;
 
     public:
-        /// @sa services.proto NKikimrServices::TActivity::EType 
+        /// @sa services.proto NKikimrServices::TActivity::EType
         enum EActorActivity {
             OTHER = 0,
             ACTOR_SYSTEM = 1,
             ACTORLIB_COMMON = 2,
             ACTORLIB_STATS = 3,
-            LOG_ACTOR = 4, 
-            INTERCONNECT_PROXY_TCP = 12, 
-            INTERCONNECT_SESSION_TCP = 13, 
-            INTERCONNECT_COMMON = 171, 
+            LOG_ACTOR = 4,
+            INTERCONNECT_PROXY_TCP = 12,
+            INTERCONNECT_SESSION_TCP = 13,
+            INTERCONNECT_COMMON = 171,
             SELF_PING_ACTOR = 207,
             TEST_ACTOR_RUNTIME = 283,
             INTERCONNECT_HANDSHAKE = 284,
@@ -241,11 +241,11 @@ namespace NActors {
             ACTOR_SYSTEM_SCHEDULER_ACTOR = 312,
             ACTOR_FUTURE_CALLBACK = 337,
             INTERCONNECT_MONACTOR = 362,
-            INTERCONNECT_LOAD_ACTOR = 376, 
-            INTERCONNECT_LOAD_RESPONDER = 377, 
-            NAMESERVICE = 450, 
+            INTERCONNECT_LOAD_ACTOR = 376,
+            INTERCONNECT_LOAD_RESPONDER = 377,
+            NAMESERVICE = 450,
             DNS_RESOLVER = 481,
-            INTERCONNECT_PROXY_WRAPPER = 546, 
+            INTERCONNECT_PROXY_WRAPPER = 546,
         };
 
         using EActivityType = EActorActivity;
@@ -275,16 +275,16 @@ namespace NActors {
             StateFunc = static_cast<TReceiveFunc>(stateFunc);
         }
 
-        template <typename T, typename... TArgs> 
-        void Become(T stateFunc, const TActorContext& ctx, TArgs&&... args) { 
+        template <typename T, typename... TArgs>
+        void Become(T stateFunc, const TActorContext& ctx, TArgs&&... args) {
             StateFunc = static_cast<TReceiveFunc>(stateFunc);
-            ctx.Schedule(std::forward<TArgs>(args)...); 
+            ctx.Schedule(std::forward<TArgs>(args)...);
         }
 
-        template <typename T, typename... TArgs> 
-        void Become(T stateFunc, TArgs&&... args) { 
+        template <typename T, typename... TArgs>
+        void Become(T stateFunc, TArgs&&... args) {
             StateFunc = static_cast<TReceiveFunc>(stateFunc);
-            Schedule(std::forward<TArgs>(args)...); 
+            Schedule(std::forward<TArgs>(args)...);
         }
 
     protected:
@@ -304,25 +304,25 @@ namespace NActors {
             HandledEvents++;
         }
 
-        // must be called to wrap any call trasitions from one actor to another 
-        template<typename TActor, typename TMethod, typename... TArgs> 
-        static decltype((std::declval<TActor>().*std::declval<TMethod>())(std::declval<TArgs>()...)) 
-                InvokeOtherActor(TActor& actor, TMethod&& method, TArgs&&... args) { 
-            struct TRecurseContext : TActorContext { 
-                TActivationContext *Prev; 
+        // must be called to wrap any call trasitions from one actor to another
+        template<typename TActor, typename TMethod, typename... TArgs>
+        static decltype((std::declval<TActor>().*std::declval<TMethod>())(std::declval<TArgs>()...))
+                InvokeOtherActor(TActor& actor, TMethod&& method, TArgs&&... args) {
+            struct TRecurseContext : TActorContext {
+                TActivationContext *Prev;
                 TRecurseContext(const TActorId& actorId)
-                    : TActorContext(TActivationContext::ActorContextFor(actorId)) 
-                    , Prev(TlsActivationContext) 
-                { 
-                    TlsActivationContext = this; 
-                } 
-                ~TRecurseContext() { 
-                    TlsActivationContext = Prev; 
-                } 
-            } context(actor.SelfId()); 
-            return (actor.*method)(std::forward<TArgs>(args)...); 
-        } 
- 
+                    : TActorContext(TActivationContext::ActorContextFor(actorId))
+                    , Prev(TlsActivationContext)
+                {
+                    TlsActivationContext = this;
+                }
+                ~TRecurseContext() {
+                    TlsActivationContext = Prev;
+                }
+            } context(actor.SelfId());
+            return (actor.*method)(std::forward<TArgs>(args)...);
+        }
+
         virtual void Registered(TActorSystem* sys, const TActorId& owner);
 
         virtual TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) {
@@ -435,20 +435,20 @@ namespace NActors {
 
 
 #define STFUNC_SIG TAutoPtr< ::NActors::IEventHandle>&ev, const ::NActors::TActorContext &ctx
-#define STATEFN_SIG TAutoPtr<::NActors::IEventHandle>& ev 
+#define STATEFN_SIG TAutoPtr<::NActors::IEventHandle>& ev
 #define STFUNC(funcName) void funcName(TAutoPtr< ::NActors::IEventHandle>& ev, const ::NActors::TActorContext& ctx)
 #define STATEFN(funcName) void funcName(TAutoPtr< ::NActors::IEventHandle>& ev, const ::NActors::TActorContext& )
 
-#define STRICT_STFUNC(NAME, HANDLERS)                                                               \ 
-    void NAME(STFUNC_SIG) {                                                                         \ 
-        Y_UNUSED(ctx);                                                                              \ 
-        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \ 
-            HANDLERS                                                                                \ 
-            default:                                                                                \ 
-                Y_VERIFY_DEBUG(false, "%s: unexpected message type 0x%08" PRIx32, __func__, etype); \ 
-        }                                                                                           \ 
-    } 
- 
+#define STRICT_STFUNC(NAME, HANDLERS)                                                               \
+    void NAME(STFUNC_SIG) {                                                                         \
+        Y_UNUSED(ctx);                                                                              \
+        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
+            HANDLERS                                                                                \
+            default:                                                                                \
+                Y_VERIFY_DEBUG(false, "%s: unexpected message type 0x%08" PRIx32, __func__, etype); \
+        }                                                                                           \
+    }
+
     inline const TActorContext& TActivationContext::AsActorContext() {
         TActivationContext* tls = TlsActivationContext;
         return *static_cast<TActorContext*>(tls);

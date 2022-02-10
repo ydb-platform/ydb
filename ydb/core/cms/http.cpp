@@ -33,9 +33,9 @@ public:
 
 class TCmsHttp : public TActorBootstrapped<TCmsHttp> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
-        return NKikimrServices::TActivity::CMS_SERVICE_PROXY; 
+        return NKikimrServices::TActivity::CMS_SERVICE_PROXY;
     }
 
     void Bootstrap(const TActorContext &ctx)
@@ -127,17 +127,17 @@ private:
             return;
         }
 
-        if (filename == "cms/ui/index.html") { 
+        if (filename == "cms/ui/index.html") {
             type = "text/html";
-        } 
- 
-        TStringStream response; 
-        response << "HTTP/1.1 200 Ok\r\n"; 
-        response << "Content-Type: " << type << "\r\n"; 
-        response << "Content-Length: " << blob.size() << "\r\n"; 
-        response << "\r\n"; 
-        response.Write(blob.data(), blob.size()); 
-        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
+        }
+
+        TStringStream response;
+        response << "HTTP/1.1 200 Ok\r\n";
+        response << "Content-Type: " << type << "\r\n";
+        response << "Content-Length: " << blob.size() << "\r\n";
+        response << "\r\n";
+        response.Write(blob.data(), blob.size());
+        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 
     static TString DumpRequest(const NMonitoring::IMonHttpRequest& request) {

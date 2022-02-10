@@ -44,16 +44,16 @@ namespace NKikimr {
         static TKeyLogoBlob First() {
             return TKeyLogoBlob();
         }
- 
-        bool IsSameAs(const TKeyLogoBlob& other) const { 
-            TLogoBlobID x(LogoBlobID()); 
-            TLogoBlobID y(other.LogoBlobID()); 
-            return x.TabletID()   == y.TabletID() 
-                && x.Channel()    == y.Channel() 
-                && x.Generation() == y.Generation() 
-                && x.Step()       == y.Step() 
-                && x.Cookie()     == y.Cookie(); 
-        } 
+
+        bool IsSameAs(const TKeyLogoBlob& other) const {
+            TLogoBlobID x(LogoBlobID());
+            TLogoBlobID y(other.LogoBlobID());
+            return x.TabletID()   == y.TabletID()
+                && x.Channel()    == y.Channel()
+                && x.Generation() == y.Generation()
+                && x.Step()       == y.Step()
+                && x.Cookie()     == y.Cookie();
+        }
     };
 #pragma pack(pop)
 
@@ -69,10 +69,10 @@ namespace NKikimr {
         return x.LogoBlobID() == y.LogoBlobID();
     }
 
-    inline bool operator !=(const TKeyLogoBlob &x, const TKeyLogoBlob &y) { 
-        return x.LogoBlobID() != y.LogoBlobID(); 
-    } 
- 
+    inline bool operator !=(const TKeyLogoBlob &x, const TKeyLogoBlob &y) {
+        return x.LogoBlobID() != y.LogoBlobID();
+    }
+
     inline bool operator <=(const TKeyLogoBlob &x, const TKeyLogoBlob &y) {
         return x.LogoBlobID() <= y.LogoBlobID();
     }
@@ -120,7 +120,7 @@ namespace NKikimr {
             ClearData();
         }
 
-        void Merge(const TMemRecLogoBlob& rec, const TKeyLogoBlob& /*key*/) { 
+        void Merge(const TMemRecLogoBlob& rec, const TKeyLogoBlob& /*key*/) {
             TIngress::Merge(Ingress, rec.Ingress);
         }
 
@@ -130,7 +130,7 @@ namespace NKikimr {
 
         bool HasData() const {
             TBlobType::EType t = GetType();
-            return t == TBlobType::HugeBlob || t == TBlobType::ManyHugeBlobs || Size; 
+            return t == TBlobType::HugeBlob || t == TBlobType::ManyHugeBlobs || Size;
         }
 
         void SetDiskBlob(const TDiskPart &dataAddr) {
@@ -147,18 +147,18 @@ namespace NKikimr {
             Size = dataAddr.Size;
         }
 
-        void SetManyHugeBlobs(ui32 idx, ui32 num, ui32 size) { 
-            Type = TBlobType::ManyHugeBlobs; 
+        void SetManyHugeBlobs(ui32 idx, ui32 num, ui32 size) {
+            Type = TBlobType::ManyHugeBlobs;
             Id = idx;
             Offset = num;
-            Size = size; 
+            Size = size;
         }
 
-        void SetMemBlob(ui64 id, ui32 size) { 
+        void SetMemBlob(ui64 id, ui32 size) {
             Type = TBlobType::MemBlob;
-            Y_VERIFY(id < (ui64(1) << 62)); 
-            Id = id >> 32; 
-            Offset = id; 
+            Y_VERIFY(id < (ui64(1) << 62));
+            Id = id >> 32;
+            Offset = id;
             Size = size;
         }
 
@@ -171,7 +171,7 @@ namespace NKikimr {
             Type = t;
         }
 
-        TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr, const TDiskPart *outbound) const { 
+        TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr, const TDiskPart *outbound) const {
             TBlobType::EType t = GetType();
             if (t == TBlobType::DiskBlob || t == TBlobType::HugeBlob) {
                 extr->Set(t, TDiskPart(Id, Offset, Size));
@@ -185,7 +185,7 @@ namespace NKikimr {
 
         TMemPart GetMemData() const {
             Y_VERIFY_DEBUG(GetType() == TBlobType::MemBlob);
-            return TMemPart(ui64(Id) << 32 | Offset, Size); 
+            return TMemPart(ui64(Id) << 32 | Offset, Size);
         }
 
         const TIngress &GetIngress() const {
@@ -202,18 +202,18 @@ namespace NKikimr {
 
         void ClearLocalParts(const TBlobStorageGroupType &gtype) {
             Ingress = Ingress.CopyWithoutLocal(gtype);
-        } 
- 
+        }
+
         TString ToString(const TIngressCache *cache, const TDiskPart *outbound) const {
             Y_UNUSED(cache);
             TStringStream str;
             TBlobType::EType t = GetType();
-            str << "{" << TBlobType::TypeToStr(t) << " " << CollectMode2String(Ingress.GetCollectMode( 
-                TIngress::IngressMode(cache->Topology->GType))); 
+            str << "{" << TBlobType::TypeToStr(t) << " " << CollectMode2String(Ingress.GetCollectMode(
+                TIngress::IngressMode(cache->Topology->GType)));
             if (t == TBlobType::MemBlob) {
                 // nothing
             } else {
-                TDiskDataExtractor extr; 
+                TDiskDataExtractor extr;
                 GetDiskData(&extr, outbound);
                 str << " " << extr.ToString();
             }

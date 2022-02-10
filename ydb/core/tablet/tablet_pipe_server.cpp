@@ -11,8 +11,8 @@ namespace NTabletPipe {
 
     class TServer : public TActor<TServer> {
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::TABLET_PIPE_SERVER; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::TABLET_PIPE_SERVER;
         }
 
         TServer(ui64 tabletId, const TActorId& clientId, const TActorId& interconnectSession, ui32 features, ui64 connectCookie)
@@ -72,7 +72,7 @@ namespace NTabletPipe {
                 return;
             }
 
-            auto buffer = MakeIntrusive<TEventSerializedData>(record.GetBuffer(), record.GetExtendedFormat()); 
+            auto buffer = MakeIntrusive<TEventSerializedData>(record.GetBuffer(), record.GetExtendedFormat());
             auto result = std::make_unique<IEventHandle>(
                     ev->InterconnectSession,
                     record.GetType(),

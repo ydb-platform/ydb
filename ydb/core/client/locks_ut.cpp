@@ -37,7 +37,7 @@ public:
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> LsPathId(ui64 schemeshardId, ui64 pathId) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe()); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe());
         request->Record.SetPathId(pathId);
         request->Record.SetSchemeshardId(schemeshardId);
         TAutoPtr<NBus::TBusMessage> reply;

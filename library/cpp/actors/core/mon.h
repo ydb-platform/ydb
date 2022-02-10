@@ -112,19 +112,19 @@ namespace NActors {
             }
 
             bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
-                return serializer->WriteString(&Query); 
+                return serializer->WriteString(&Query);
             }
 
-            ui32 CalculateSerializedSize() const override { 
-                return Query.size(); 
-            } 
- 
-            bool IsSerializable() const override { 
-                return true; 
-            } 
- 
+            ui32 CalculateSerializedSize() const override {
+                return Query.size();
+            }
+
+            bool IsSerializable() const override {
+                return true;
+            }
+
             static IEventBase* Load(TEventSerializedData* bufs) {
-                return new TEvRemoteHttpInfo(bufs->GetString()); 
+                return new TEvRemoteHttpInfo(bufs->GetString());
             }
 
             HTTP_METHOD GetMethod() const
@@ -149,19 +149,19 @@ namespace NActors {
             }
 
             bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
-                return serializer->WriteString(&Html); 
+                return serializer->WriteString(&Html);
             }
 
-            ui32 CalculateSerializedSize() const override { 
-                return Html.size(); 
-            } 
- 
-            bool IsSerializable() const override { 
-                return true; 
-            } 
- 
+            ui32 CalculateSerializedSize() const override {
+                return Html.size();
+            }
+
+            bool IsSerializable() const override {
+                return true;
+            }
+
             static IEventBase* Load(TEventSerializedData* bufs) {
-                return new TEvRemoteHttpInfoRes(bufs->GetString()); 
+                return new TEvRemoteHttpInfoRes(bufs->GetString());
             }
         };
 
@@ -181,19 +181,19 @@ namespace NActors {
             }
 
             bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
-                return serializer->WriteString(&Json); 
+                return serializer->WriteString(&Json);
             }
 
-            ui32 CalculateSerializedSize() const override { 
-                return Json.size(); 
-            } 
- 
-            bool IsSerializable() const override { 
-                return true; 
-            } 
- 
+            ui32 CalculateSerializedSize() const override {
+                return Json.size();
+            }
+
+            bool IsSerializable() const override {
+                return true;
+            }
+
             static IEventBase* Load(TEventSerializedData* bufs) {
-                return new TEvRemoteJsonInfoRes(bufs->GetString()); 
+                return new TEvRemoteJsonInfoRes(bufs->GetString());
             }
         };
 
@@ -213,19 +213,19 @@ namespace NActors {
             }
 
             bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
-                return serializer->WriteString(&Blob); 
+                return serializer->WriteString(&Blob);
             }
 
-            ui32 CalculateSerializedSize() const override { 
-                return Blob.size(); 
-            } 
- 
-            bool IsSerializable() const override { 
-                return true; 
-            } 
- 
+            ui32 CalculateSerializedSize() const override {
+                return Blob.size();
+            }
+
+            bool IsSerializable() const override {
+                return true;
+            }
+
             static IEventBase* Load(TEventSerializedData* bufs) {
-                return new TEvRemoteBinaryInfoRes(bufs->GetString()); 
+                return new TEvRemoteBinaryInfoRes(bufs->GetString());
             }
         };
 

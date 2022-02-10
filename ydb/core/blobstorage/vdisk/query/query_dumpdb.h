@@ -47,26 +47,26 @@ namespace NKikimr {
 
             // send result
             Result->SetResult(str.Str());
-            SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, Ev->Cookie); 
+            SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, Ev->Cookie);
             TThis::Die(ctx);
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_LEVEL_INDEX_STAT_QUERY; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_LEVEL_INDEX_STAT_QUERY;
         }
 
         TLevelIndexDumpActor(TIntrusivePtr<THullCtx> hullCtx,
                              const TActorId &parentId,
                              TLevelIndexSnapshot &&snapshot,
                              TEvBlobStorage::TEvVDbStat::TPtr &ev,
-                             std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result) 
+                             std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result)
             : TActorBootstrapped<TThis>()
             , HullCtx(std::move(hullCtx))
             , ParentId(parentId)
             , Snapshot(std::move(snapshot))
             , Ev(ev)
-            , Result(std::move(result)) 
+            , Result(std::move(result))
         {}
 
     private:
@@ -74,7 +74,7 @@ namespace NKikimr {
         const TActorId ParentId;
         TLevelIndexSnapshot Snapshot;
         TEvBlobStorage::TEvVDbStat::TPtr Ev;
-        std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> Result; 
+        std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> Result;
     };
 
 } // NKikimr

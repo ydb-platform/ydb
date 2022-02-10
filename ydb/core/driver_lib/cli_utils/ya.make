@@ -12,12 +12,12 @@ SRCS(
     cli_cmds_admin.cpp
     cli_cmds_bs.cpp
     cli_cmds_cms.cpp
-    cli_cmds_config.cpp 
+    cli_cmds_config.cpp
     cli_cmds_console.cpp
     cli_cmds_debug.cpp
     cli_cmds_disk.cpp
-    cli_cmds_genconfig.cpp 
-    cli_cmds_get.cpp 
+    cli_cmds_genconfig.cpp
+    cli_cmds_get.cpp
     cli_cmds_group.cpp
     cli_cmds_node.cpp
     cli_cmds_root.cpp
@@ -29,7 +29,7 @@ SRCS(
     cli_persqueue.cpp
     cli_persqueue_cluster_discovery.cpp
     cli_persqueue_stress.cpp
-    cli_load.cpp 
+    cli_load.cpp
     cli_minikql_compile_and_exec.cpp
     cli_mb_trace.cpp
     cli_scheme_cache_append.cpp

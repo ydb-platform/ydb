@@ -109,8 +109,8 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
 
     void Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
         auto *msg = ev->Get();
-        if (msg->Node && msg->Node->Location.GetDataCenterId()) 
-            SelfDatacenter = msg->Node->Location.GetDataCenterId(); 
+        if (msg->Node && msg->Node->Location.GetDataCenterId())
+            SelfDatacenter = msg->Node->Location.GetDataCenterId();
 
         if (Description->ServedDatabases) {
             TString payload;
@@ -164,4 +164,4 @@ IActor* CreateGrpcEndpointPublishActor(TGrpcEndpointDescription *description) {
 }
 
 }
-} 
+}

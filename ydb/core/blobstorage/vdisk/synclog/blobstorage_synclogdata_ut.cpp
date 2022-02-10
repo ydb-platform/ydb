@@ -23,8 +23,8 @@ namespace NKikimr {
             TSyncLogParams params(pDiskGuid, chunkSize, appendBlockSize, syncLogAdvisedIndexedBlockSize, memConsumer);
             TEntryPointParser parser(std::move(params));
             TString explanation;
-            bool needsInitialCommit; 
-            bool success = parser.Parse(serializedData, needsInitialCommit, explanation); 
+            bool needsInitialCommit;
+            bool success = parser.Parse(serializedData, needsInitialCommit, explanation);
             UNIT_ASSERT(success);
             return parser;
         }

@@ -26,9 +26,9 @@ namespace NKikimr {
         FreshCompaction = true;
         GCOnlySynced = true;
         AllowKeepFlags = true;              // by default vdisk client can send keep/don'tkeep flags, for log can't
-        CheckHugeBlobs = false; 
+        CheckHugeBlobs = false;
         // 128KB for SSD (because of PDisk crc?), 1MB for HDD (?)
-        MaxLogoBlobDataSize = MaxVDiskBlobSize; 
+        MaxLogoBlobDataSize = MaxVDiskBlobSize;
         HullSstSizeInChunksFresh = 1;
         HullSstSizeInChunksLevel = 1;
         HugeBlobsFreeChunkReservation = 1;
@@ -39,17 +39,17 @@ namespace NKikimr {
         HullCompSortedPartsNum = 8u;
         HullCompLevelRateThreshold = 1.0;
         HullCompFreeSpaceThreshold = 2.0;
-        FreshCompMaxInFlightWrites = 10; 
-        HullCompMaxInFlightWrites = 10; 
+        FreshCompMaxInFlightWrites = 10;
+        HullCompMaxInFlightWrites = 10;
         HullCompMaxInFlightReads = 20;
-        HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data 
+        HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;
 
         RecoveryLogCutterFirstDuration = TDuration::Seconds(10);
         RecoveryLogCutterRegularDuration = TDuration::Seconds(30);
         AdvanceEntryPointTimeout = TDuration::Seconds(10);          // 10 seconds (FIXME: use feedback from PDisk)
         SyncTimeInterval = TDuration::Seconds(3);                   // 3 seconds
-        SyncJobTimeout = TDuration::Minutes(30);                    // 30 minutes 
+        SyncJobTimeout = TDuration::Minutes(30);                    // 30 minutes
         SyncerRLDRetryTimeout = TDuration::Seconds(1);
         AnubisTimeout = TDuration::Minutes(60);
         RunSyncer = true;
@@ -69,8 +69,8 @@ namespace NKikimr {
         ReplRequestElements = 250;
         ReplPrefetchElements = 2500;
         ReplPrefetchDataSize = 32 << 20;
-        ReplMaxResponseSize = 10 << 20; 
-        ReplInterconnectChannel = TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA; 
+        ReplMaxResponseSize = 10 << 20;
+        ReplInterconnectChannel = TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA;
         HandoffMaxWaitQueueSize = 10000;
         HandoffMaxWaitQueueByteSize = 32u << 20u;
         HandoffMaxInFlightSize = 1000;
@@ -80,20 +80,20 @@ namespace NKikimr {
         RunHandoff = false;
 
         SkeletonFrontGets_MaxInFlightCount = 24;
-        SkeletonFrontGets_MaxInFlightCost = 200000000;              // 200ms 
-        SkeletonFrontDiscover_MaxInFlightCount = 100; 
-        SkeletonFrontDiscover_MaxInFlightCost = 300000000;          // 300ms 
+        SkeletonFrontGets_MaxInFlightCost = 200000000;              // 200ms
+        SkeletonFrontDiscover_MaxInFlightCount = 100;
+        SkeletonFrontDiscover_MaxInFlightCost = 300000000;          // 300ms
         SkeletonFrontLogPuts_MaxInFlightCount = 4000;
-        SkeletonFrontLogPuts_MaxInFlightCost = 200000000;           // 200ms 
+        SkeletonFrontLogPuts_MaxInFlightCost = 200000000;           // 200ms
         SkeletonFrontHugePuts_MaxInFlightCount = 50;
-        SkeletonFrontHugePuts_MaxInFlightCost = 700000000;          // 700ms 
+        SkeletonFrontHugePuts_MaxInFlightCost = 700000000;          // 700ms
 
-        SkeletonFrontExtPutTabletLog_TotalCost = 300000000;         // 300ms 
-        SkeletonFrontExtPutAsyncBlob_TotalCost = 700000000;         // 700ms 
-        SkeletonFrontExtPutUserData_TotalCost = 300000000;          // 300ms 
-        SkeletonFrontExtGetAsync_TotalCost = 300000000;             // 300ms 
-        SkeletonFrontExtGetFast_TotalCost = 300000000;              // 300ms 
-        SkeletonFrontExtGetDiscover_TotalCost = 300000000;          // 300ms 
+        SkeletonFrontExtPutTabletLog_TotalCost = 300000000;         // 300ms
+        SkeletonFrontExtPutAsyncBlob_TotalCost = 700000000;         // 700ms
+        SkeletonFrontExtPutUserData_TotalCost = 300000000;          // 300ms
+        SkeletonFrontExtGetAsync_TotalCost = 300000000;             // 300ms
+        SkeletonFrontExtGetFast_TotalCost = 300000000;              // 300ms
+        SkeletonFrontExtGetDiscover_TotalCost = 300000000;          // 300ms
         SkeletonFrontExtGetLow_TotalCost = 300000000;              // 300ms
 
         SkeletonFrontWakeupPeriod = TDuration::Seconds(1);
@@ -106,18 +106,18 @@ namespace NKikimr {
         WindowPercentThreshold = 5;                                 // 5%
         WindowCostChangeUntilFrozenPercent = 20;                    // 20%
         WindowCostChangeUntilDeathPercent = 33;                     // 33%
-        WindowTimeout = TDuration::Minutes(60);                     // 1 hour 
+        WindowTimeout = TDuration::Minutes(60);                     // 1 hour
 
         MaxResponseSize = ui32(8) << ui32(20);                      // 8 MB
         DskTrackerInterval = TDuration::Seconds(1);
         WhiteboardUpdateInterval = TDuration::Seconds(1);
-        EnableVDiskCooldownTimeout = false; 
- 
-#ifdef NDEBUG 
-        BarrierValidation = false; 
-#else 
-        BarrierValidation = true; // switch by default on debug builds 
-#endif 
+        EnableVDiskCooldownTimeout = false;
+
+#ifdef NDEBUG
+        BarrierValidation = false;
+#else
+        BarrierValidation = true; // switch by default on debug builds
+#endif
     }
 
     void TVDiskConfig::SetupHugeBytes() {
@@ -155,7 +155,7 @@ namespace NKikimr {
 
         UPDATE_MACRO(HullCompLevel0MaxSstsAtOnce);
         UPDATE_MACRO(HullCompSortedPartsNum);
- 
+
         UPDATE_MACRO(ReplInterconnectChannel);
 
         UPDATE_MACRO(BarrierValidation);

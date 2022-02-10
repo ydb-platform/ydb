@@ -30,31 +30,31 @@ public:
         return preferredReplicasPerRealm;
     }
 
-    EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info, 
-            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests) override { 
+    EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
+            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests) override {
         TBlobStorageGroupType::TPartPlacement partPlacement;
         bool degraded = false;
         bool isDone = false;
         i32 slowDiskSubgroupIdx = MarkSlowSubgroupDisk(state, info, blackboard, true);
-        do { 
-            if (slowDiskSubgroupIdx < 0) { 
-                break; // ignore this case 
-            } 
+        do {
+            if (slowDiskSubgroupIdx < 0) {
+                break; // ignore this case
+            }
             TBlobStorageGroupInfo::TSubgroupVDisks success(&info.GetTopology());
             TBlobStorageGroupInfo::TSubgroupVDisks error(&info.GetTopology());
-            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, true, success, error, degraded); 
-            TBlobStorageGroupInfo::TSubgroupVDisks slow(&info.GetTopology(), slowDiskSubgroupIdx); 
-            if ((success | error) & slow) { 
-                break; // slow disk is already marked as successful or erroneous 
-            } 
-            error += slow; 
+            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, true, success, error, degraded);
+            TBlobStorageGroupInfo::TSubgroupVDisks slow(&info.GetTopology(), slowDiskSubgroupIdx);
+            if ((success | error) & slow) {
+                break; // slow disk is already marked as successful or erroneous
+            }
+            error += slow;
 
             // check for failure tolerance; we issue ERROR in case when it is not possible to achieve success condition in
             // any way; also check if we have already finished writing replicas
             const auto& checker = info.GetQuorumChecker();
             if (checker.CheckFailModelForSubgroup(error)) {
                 if (checker.CheckQuorumForSubgroup(success)) {
-                    return EStrategyOutcome::DONE; 
+                    return EStrategyOutcome::DONE;
                 }
 
                 // now check every realm and check if we have to issue some write requests to it
@@ -63,19 +63,19 @@ public:
                         true, partPlacement);
                 isDone = true;
             }
-        } while (false); 
+        } while (false);
         if (!isDone) {
             TBlobStorageGroupInfo::TSubgroupVDisks success(&info.GetTopology());
             TBlobStorageGroupInfo::TSubgroupVDisks error(&info.GetTopology());
-            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, false, success, error, degraded); 
+            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, false, success, error, degraded);
 
             // check for failure tolerance; we issue ERROR in case when it is not possible to achieve success condition in
             // any way; also check if we have already finished writing replicas
             const auto& checker = info.GetQuorumChecker();
             if (!checker.CheckFailModelForSubgroup(error)) {
-                return EStrategyOutcome::Error("TPut3dcStrategy failed the Fail Model check"); 
+                return EStrategyOutcome::Error("TPut3dcStrategy failed the Fail Model check");
             } else if (checker.CheckQuorumForSubgroup(success)) {
-                return EStrategyOutcome::DONE; 
+                return EStrategyOutcome::DONE;
             }
 
             // now check every realm and check if we have to issue some write requests to it
@@ -86,7 +86,7 @@ public:
         if (IsPutNeeded(state, partPlacement)) {
             PreparePutsForPartPlacement(logCtx, state, info, groupDiskRequests, partPlacement);
         }
-        return EStrategyOutcome::IN_PROGRESS; 
+        return EStrategyOutcome::IN_PROGRESS;
     }
 };
 

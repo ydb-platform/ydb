@@ -48,7 +48,7 @@ struct TFastVDiskSetupSmallVDiskQueues : public TFastVDiskSetup {
     }
 };
 
-struct TFastVDiskSetupRepl : public TFastVDiskSetup { 
+struct TFastVDiskSetupRepl : public TFastVDiskSetup {
     TFastVDiskSetupRepl() {
         auto modifier = [] (NKikimr::TVDiskConfig *cfg) {
             cfg->HullCompSchedulingInterval = TDuration::Seconds(1);
@@ -59,9 +59,9 @@ struct TFastVDiskSetupRepl : public TFastVDiskSetup {
             cfg->MilestoneHugeBlobInBytes = 512u << 10u;
         };
         AddConfigModifier(modifier);
-    } 
-}; 
- 
+    }
+};
+
 struct TFastVDiskSetupHndOff : public TFastVDiskSetup {
     TFastVDiskSetupHndOff() {
         auto modifier = [] (NKikimr::TVDiskConfig *cfg) {

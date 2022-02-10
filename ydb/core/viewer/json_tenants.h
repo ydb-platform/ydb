@@ -26,8 +26,8 @@ class TJsonTenants : public TViewerPipeClient<TJsonTenants> {
     THashMap<TString, NKikimrViewer::TTenant*> TenantIndex;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::VIEWER_HANDLER; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
     TJsonTenants(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)

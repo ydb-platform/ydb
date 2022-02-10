@@ -44,35 +44,35 @@ bool operator<(const TPDiskCategory x, const TPDiskCategory y) {
     return std::make_tuple(x.Type(), x.Kind()) < std::make_tuple(y.Type(), y.Kind());
 }
 
-std::unique_ptr<TEvBlobStorage::TEvPutResult> TEvBlobStorage::TEvPut::MakeErrorResponse( 
-        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 groupId) { 
-    auto res = std::make_unique<TEvPutResult>(status, Id, TStorageStatusFlags(), groupId, 0.0f); 
-    res->ErrorReason = errorReason; 
-    return res; 
-} 
- 
-std::unique_ptr<TEvBlobStorage::TEvGetResult> TEvBlobStorage::TEvGet::MakeErrorResponse( 
-        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 groupId) { 
-    auto res = std::make_unique<TEvGetResult>(status, QuerySize, groupId); 
-    for (ui32 i = 0; i < QuerySize; ++i) { 
-        const auto& from = Queries[i]; 
-        auto& to = res->Responses[i]; 
-        to.Status = status; 
-        to.Id = from.Id; 
-        to.Shift = from.Shift; 
-        to.RequestedSize = from.Size; 
-    } 
-    res->ErrorReason = errorReason; 
-    return res; 
-} 
- 
-std::unique_ptr<TEvBlobStorage::TEvBlockResult> TEvBlobStorage::TEvBlock::MakeErrorResponse( 
-        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 /*groupId*/) { 
-    auto res = std::make_unique<TEvBlockResult>(status); 
-    res->ErrorReason = errorReason; 
-    return res; 
-} 
- 
+std::unique_ptr<TEvBlobStorage::TEvPutResult> TEvBlobStorage::TEvPut::MakeErrorResponse(
+        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 groupId) {
+    auto res = std::make_unique<TEvPutResult>(status, Id, TStorageStatusFlags(), groupId, 0.0f);
+    res->ErrorReason = errorReason;
+    return res;
+}
+
+std::unique_ptr<TEvBlobStorage::TEvGetResult> TEvBlobStorage::TEvGet::MakeErrorResponse(
+        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 groupId) {
+    auto res = std::make_unique<TEvGetResult>(status, QuerySize, groupId);
+    for (ui32 i = 0; i < QuerySize; ++i) {
+        const auto& from = Queries[i];
+        auto& to = res->Responses[i];
+        to.Status = status;
+        to.Id = from.Id;
+        to.Shift = from.Shift;
+        to.RequestedSize = from.Size;
+    }
+    res->ErrorReason = errorReason;
+    return res;
+}
+
+std::unique_ptr<TEvBlobStorage::TEvBlockResult> TEvBlobStorage::TEvBlock::MakeErrorResponse(
+        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 /*groupId*/) {
+    auto res = std::make_unique<TEvBlockResult>(status);
+    res->ErrorReason = errorReason;
+    return res;
+}
+
 std::unique_ptr<TEvBlobStorage::TEvPatchResult> TEvBlobStorage::TEvPatch::MakeErrorResponse(
         NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 groupId) {
     auto res = std::make_unique<TEvPatchResult>(status, PatchedId, TStorageStatusFlags(), groupId, 0.0f);
@@ -87,34 +87,34 @@ std::unique_ptr<TEvBlobStorage::TEvInplacePatchResult> TEvBlobStorage::TEvInplac
     return res;
 }
 
-std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> TEvBlobStorage::TEvDiscover::MakeErrorResponse( 
-        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 /*groupId*/) { 
-    auto res = std::make_unique<TEvDiscoverResult>(status, MinGeneration, 0); 
-    res->ErrorReason = errorReason; 
-    return res; 
-} 
- 
-std::unique_ptr<TEvBlobStorage::TEvRangeResult> TEvBlobStorage::TEvRange::MakeErrorResponse( 
-        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 groupId) { 
-    auto res = std::make_unique<TEvRangeResult>(status, From, To, groupId); 
-    res->ErrorReason = errorReason; 
-    return res; 
-} 
- 
-std::unique_ptr<TEvBlobStorage::TEvCollectGarbageResult> TEvBlobStorage::TEvCollectGarbage::MakeErrorResponse( 
-        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 /*groupId*/) { 
-    auto res = std::make_unique<TEvCollectGarbageResult>(status, TabletId, RecordGeneration, PerGenerationCounter, Channel); 
-    res->ErrorReason = errorReason; 
-    return res; 
-} 
- 
-std::unique_ptr<TEvBlobStorage::TEvStatusResult> TEvBlobStorage::TEvStatus::MakeErrorResponse( 
-        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 /*groupId*/) { 
-    auto res = std::make_unique<TEvStatusResult>(status, TStorageStatusFlags()); 
-    res->ErrorReason = errorReason; 
-    return res; 
-} 
- 
+std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> TEvBlobStorage::TEvDiscover::MakeErrorResponse(
+        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 /*groupId*/) {
+    auto res = std::make_unique<TEvDiscoverResult>(status, MinGeneration, 0);
+    res->ErrorReason = errorReason;
+    return res;
+}
+
+std::unique_ptr<TEvBlobStorage::TEvRangeResult> TEvBlobStorage::TEvRange::MakeErrorResponse(
+        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 groupId) {
+    auto res = std::make_unique<TEvRangeResult>(status, From, To, groupId);
+    res->ErrorReason = errorReason;
+    return res;
+}
+
+std::unique_ptr<TEvBlobStorage::TEvCollectGarbageResult> TEvBlobStorage::TEvCollectGarbage::MakeErrorResponse(
+        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 /*groupId*/) {
+    auto res = std::make_unique<TEvCollectGarbageResult>(status, TabletId, RecordGeneration, PerGenerationCounter, Channel);
+    res->ErrorReason = errorReason;
+    return res;
+}
+
+std::unique_ptr<TEvBlobStorage::TEvStatusResult> TEvBlobStorage::TEvStatus::MakeErrorResponse(
+        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 /*groupId*/) {
+    auto res = std::make_unique<TEvStatusResult>(status, TStorageStatusFlags());
+    res->ErrorReason = errorReason;
+    return res;
+}
+
 };
 
 template<>

@@ -17,7 +17,7 @@ namespace NKikimr {
                 delete msg;
             };
 
-            auto dr = std::make_unique<TDelayedResponses>(); 
+            auto dr = std::make_unique<TDelayedResponses>();
             dr->Put(nullptr, TActorId(), 1, 500);
             dr->Put(nullptr, TActorId(), 2, 500);
             dr->Put(nullptr, TActorId(), 3, 501);

@@ -382,8 +382,8 @@ public:
         using TTables = SchemaTables<State, DomainConfiguration>;
     };
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR;
     }
 
     TTxMediator(TTabletStorageInfo *info, const TActorId &tablet);

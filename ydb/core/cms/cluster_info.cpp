@@ -441,7 +441,7 @@ void TClusterInfo::UpdatePDiskState(const TPDiskID &id, const NKikimrWhiteboard:
     }
 
     auto &pdisk = PDiskRef(id);
-    pdisk.State = info.GetState() == NKikimrBlobStorage::TPDiskState::Normal ? UP : DOWN; 
+    pdisk.State = info.GetState() == NKikimrBlobStorage::TPDiskState::Normal ? UP : DOWN;
 }
 
 void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)

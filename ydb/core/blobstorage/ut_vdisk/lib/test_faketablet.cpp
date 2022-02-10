@@ -155,7 +155,7 @@ public:
         , LogActor(new TFakeTabletLogChannelActor(conf, tabletId, minHugeBlobSize))
         , HugeBlobActor(new TFakeTabletHugeBlobChannelActor(conf, tabletId, 1 /*channel*/, hugeBlobSize,
                                                             minHugeBlobSize, waitTime))
-    {} 
+    {}
 };
 
 

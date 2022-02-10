@@ -18,8 +18,8 @@ namespace NKikimr {
         TIntrusivePtr<THullCtx> HullCtx;
         const TVDiskID SelfVDiskId;
         const TActorId ParentId;
-        std::shared_ptr<THull> Hull; 
-        std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup; 
+        std::shared_ptr<THull> Hull;
+        std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         TEvBlobStorage::TEvVSyncFull::TPtr Ev;
         const NKikimrBlobStorage::TEvVSyncFull &Record;
         const TVDiskID SourceVDisk;
@@ -43,7 +43,7 @@ namespace NKikimr {
             IFaceMonGroup->SyncFullMsgs()++;
 
             TActorId recipient = Ev->Sender;
-            const ui64 cookie = Ev->Cookie; 
+            const ui64 cookie = Ev->Cookie;
             TSyncState clientSyncState(SyncStateFromSyncState(Record.GetSyncState()));
 
             LOG_DEBUG_S(ctx, BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
@@ -56,10 +56,10 @@ namespace NKikimr {
             // check that the disk is from this group
             if (!SelfVDiskId.SameGroupAndGeneration(SourceVDisk) ||
                 !SelfVDiskId.SameDisk(TargetVDisk)) {
-                auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::ERROR, SelfVDiskId, 
-                    Record.GetCookie(), Now, IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, std::move(Ev->TraceId), 
-                    Ev->GetChannel()); 
-                SendVDiskResponse(ctx, recipient, result.release(), *this, cookie); 
+                auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::ERROR, SelfVDiskId,
+                    Record.GetCookie(), Now, IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, std::move(Ev->TraceId),
+                    Ev->GetChannel());
+                SendVDiskResponse(ctx, recipient, result.release(), *this, cookie);
                 Die(ctx);
                 return;
             }
@@ -71,10 +71,10 @@ namespace NKikimr {
                         << " SourceVDisk# " << SourceVDisk
                         << " DbBirthLsn# " << DbBirthLsn
                         << " Marker# BSVSFH02");
-                auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::NODATA, SelfVDiskId, 
-                    TSyncState(Db->GetVDiskIncarnationGuid(), DbBirthLsn), Record.GetCookie(), Now, 
-                    IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, std::move(Ev->TraceId), Ev->GetChannel()); 
-                SendVDiskResponse(ctx, recipient, result.release(), *this, cookie); 
+                auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::NODATA, SelfVDiskId,
+                    TSyncState(Db->GetVDiskIncarnationGuid(), DbBirthLsn), Record.GetCookie(), Now,
+                    IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, std::move(Ev->TraceId), Ev->GetChannel());
+                SendVDiskResponse(ctx, recipient, result.release(), *this, cookie);
                 Die(ctx);
                 return;
             }
@@ -104,9 +104,9 @@ namespace NKikimr {
             const TKeyBarrier barrierFrom(Record.GetBarrierFrom());
 
             TSyncState newSyncState(Db->GetVDiskIncarnationGuid(), syncedLsn);
-            auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::OK, SelfVDiskId, 
-                newSyncState, Record.GetCookie(), Now, IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, 
-                std::move(Ev->TraceId), Ev->GetChannel()); 
+            auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::OK, SelfVDiskId,
+                newSyncState, Record.GetCookie(), Now, IFaceMonGroup->SyncFullResMsgsPtr(), nullptr,
+                std::move(Ev->TraceId), Ev->GetChannel());
 
             // snapshotLsn is _always_ the last confirmed lsn
             THullDsSnap fullSnap = Hull->GetIndexSnapshot();
@@ -127,7 +127,7 @@ namespace NKikimr {
                 TKeyBlock(blockTabletFrom),
                 barrierFrom,
                 stage,
-                std::move(result)); 
+                std::move(result));
             auto aid = ctx.Register(actor);
             ActiveActors.Insert(aid);
             Become(&TThis::StateFunc);
@@ -145,22 +145,22 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc, 
-            HFunc(TEvents::TEvActorDied, Handle) 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-        ) 
+        STRICT_STFUNC(StateFunc,
+            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+        )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_SYNC_FULL_HANDLER; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_SYNC_FULL_HANDLER;
         }
 
         TVSyncFullHandler(const TIntrusivePtr<TDb> &db,
                           const TIntrusivePtr<THullCtx> &hullCtx,
                           const TVDiskID &selfVDiskId,
                           const TActorId &parentId,
-                          const std::shared_ptr<THull> &hull, 
-                          const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup, 
+                          const std::shared_ptr<THull> &hull,
+                          const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
                           TEvBlobStorage::TEvVSyncFull::TPtr &ev,
                           const TInstant &now,
                           ui64 dbBirthLsn,
@@ -191,8 +191,8 @@ namespace NKikimr {
                                       const TIntrusivePtr<THullCtx> &hullCtx,
                                       const TVDiskID &selfVDiskId,
                                       const TActorId &parentId,
-                                      const std::shared_ptr<THull> &hull, 
-                                      const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup, 
+                                      const std::shared_ptr<THull> &hull,
+                                      const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
                                       TEvBlobStorage::TEvVSyncFull::TPtr &ev,
                                       const TInstant &now,
                                       ui64 dbBirthLsn,

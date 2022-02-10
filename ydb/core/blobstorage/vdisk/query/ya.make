@@ -34,7 +34,7 @@ SRCS(
     query_stathuge.h
     query_stattablet.cpp
     query_stattablet.h
-    query_stream.h 
+    query_stream.h
 )
 
 END()

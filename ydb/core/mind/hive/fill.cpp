@@ -79,8 +79,8 @@ protected:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::HIVE_BALANCER_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HIVE_BALANCER_ACTOR;
     }
 
     THiveFill(THive* hive, TNodeId nodeId, const TActorId& initiator)

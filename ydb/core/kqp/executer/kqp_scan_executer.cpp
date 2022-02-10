@@ -38,8 +38,8 @@ class TKqpScanExecuter : public TKqpExecuterBase<TKqpScanExecuter, EExecType::Sc
     using TBase = TKqpExecuterBase<TKqpScanExecuter, EExecType::Scan>;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::KQP_EXECUTER_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::KQP_EXECUTER_ACTOR;
     }
 
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,

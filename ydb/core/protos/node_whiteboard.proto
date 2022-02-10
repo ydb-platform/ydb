@@ -105,7 +105,7 @@ message TPDiskStateInfo {
     optional uint64 Category = 6;
     optional uint64 AvailableSize = 7 [(InsignificantChangeAmount) = 104857600]; // 100Mb
     optional uint64 TotalSize = 8;
-    optional NKikimrBlobStorage.TPDiskState.E State = 9; 
+    optional NKikimrBlobStorage.TPDiskState.E State = 9;
     optional uint32 NodeId = 10; // filled during merge
     optional uint32 Count = 13; // filled during group count
     optional EFlag Device = 14;
@@ -176,32 +176,32 @@ message TVDiskStateInfo {
     optional TVDiskSatisfactionRank SatisfactionRank = 13;
     // Is VDisk replicated? (i.e. contains all blobs it must have)
     optional bool Replicated = 14;
-    // Does this VDisk has any yet unreplicated phantom-like blobs? 
-    optional bool UnreplicatedPhantoms = 20 [default = false]; 
-    // The same for the non-phantom-like blobs. 
-    optional bool UnreplicatedNonPhantoms = 21 [default = false]; 
+    // Does this VDisk has any yet unreplicated phantom-like blobs?
+    optional bool UnreplicatedPhantoms = 20 [default = false];
+    // The same for the non-phantom-like blobs.
+    optional bool UnreplicatedNonPhantoms = 21 [default = false];
     // How many unsynced VDisks from current BlobStorage group we see
-    optional uint64 UnsyncedVDisks = 15 [default = 0]; 
+    optional uint64 UnsyncedVDisks = 15 [default = 0];
     // How much this VDisk have allocated on corresponding PDisk
     optional uint64 AllocatedSize = 16 [(InsignificantChangeAmount) = 536870912]; // 512MiB
     // How much space is available for VDisk corresponding to PDisk's hard space limits
     optional uint64 AvailableSize = 28 [(InsignificantChangeAmount) = 536870912]; // 512MiB
-    // Does this disk has some unreadable but not yet restored blobs? 
-    optional bool HasUnreadableBlobs = 24; 
-    optional fixed64 IncarnationGuid = 25; 
-    optional bool DonorMode = 26; 
-    optional fixed64 InstanceGuid = 27; // VDisk actor instance guid 
+    // Does this disk has some unreadable but not yet restored blobs?
+    optional bool HasUnreadableBlobs = 24;
+    optional fixed64 IncarnationGuid = 25;
+    optional bool DonorMode = 26;
+    optional fixed64 InstanceGuid = 27; // VDisk actor instance guid
 
     // VDisk (Skeleton) Front Queue Status
     optional EFlag FrontQueues = 18;
- 
-    // VDisk storage pool label 
-    optional string StoragePoolName = 19; 
- 
-    // Read bytes per second from PDisk for TEvVGet blobs only 
-    optional uint64 ReadThroughput = 22; 
-    // Write bytes per second to PDisk for TEvVPut blobs and replication bytes only 
-    optional uint64 WriteThroughput = 23; 
+
+    // VDisk storage pool label
+    optional string StoragePoolName = 19;
+
+    // Read bytes per second from PDisk for TEvVGet blobs only
+    optional uint64 ReadThroughput = 22;
+    // Write bytes per second to PDisk for TEvVPut blobs and replication bytes only
+    optional uint64 WriteThroughput = 23;
 }
 
 message TEvVDiskStateRequest {
@@ -224,7 +224,7 @@ message TBSGroupStateInfo {
     optional EFlag Overall = 7;
     optional EFlag Latency = 8;
     optional uint32 Count = 13; // filled during group count
-    optional string StoragePoolName = 14; // from BS_CONTROLLER 
+    optional string StoragePoolName = 14; // from BS_CONTROLLER
 }
 
 message TEvBSGroupStateRequest {
@@ -243,27 +243,27 @@ enum EConfigState {
 }
 
 message TSystemStateInfo {
-    message TPoolStats { 
-        optional string Name = 1; 
+    message TPoolStats {
+        optional string Name = 1;
         optional double Usage = 2 [(InsignificantChangePercent) = 30];
         optional uint32 Threads = 3;
-    } 
- 
+    }
+
     message TEndpoint {
         optional string Name = 1;
         optional string Address = 2;
     }
 
-    message TLegacyNodeLocation { 
-        optional uint32 DataCenter = 1; 
-        optional uint32 Room = 2; 
-        optional uint32 Rack = 3; 
-        optional uint32 Body = 4; 
-    } 
- 
+    message TLegacyNodeLocation {
+        optional uint32 DataCenter = 1;
+        optional uint32 Room = 2;
+        optional uint32 Rack = 3;
+        optional uint32 Body = 4;
+    }
+
     optional uint64 StartTime = 1;
     optional uint64 ChangeTime = 2;
-    optional TLegacyNodeLocation SystemLocation = 3; 
+    optional TLegacyNodeLocation SystemLocation = 3;
     repeated double LoadAverage = 4;
     optional uint32 NumberOfCpus = 5;
     optional EFlag SystemState = 6;
@@ -278,7 +278,7 @@ message TSystemStateInfo {
     optional string Rack = 18;
     optional string Host = 19;
     optional string Version = 20;
-    repeated TPoolStats PoolStats = 21; 
+    repeated TPoolStats PoolStats = 21;
     repeated TEndpoint Endpoints = 22;
     repeated string Roles = 23;
     repeated string Tenants = 24;
@@ -288,7 +288,7 @@ message TSystemStateInfo {
     optional EConfigState ConfigState = 28 [default = Consistent];
     optional uint64 MemoryUsedInAlloc = 29;
     optional double MaxDiskUsage = 30;
-    optional NActorsInterconnect.TNodeLocation Location = 31; 
+    optional NActorsInterconnect.TNodeLocation Location = 31;
 }
 
 message TEvSystemStateRequest {

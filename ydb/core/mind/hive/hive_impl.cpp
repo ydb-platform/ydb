@@ -342,7 +342,7 @@ void THive::Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
     NKikimrBlobStorage::TEvControllerSelectGroupsResult& rec = ev->Get()->Record;
     if (rec.GetStatus() == NKikimrProto::OK) {
         BLOG_D("THive::Handle TEvControllerSelectGroupsResult: success " << rec.ShortDebugString());
-        if (rec.MatchingGroupsSize()) { 
+        if (rec.MatchingGroupsSize()) {
             TVector<TTabletId> tablets;
             for (const auto& matchingGroups : rec.GetMatchingGroups()) {
                 if (matchingGroups.GroupsSize() == 0) {
@@ -365,7 +365,7 @@ void THive::Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
                     Execute(CreateUpdateTabletGroups(tabletId));
                 }
             }
-        } else { 
+        } else {
             BLOG_ERROR("THive::Handle TEvControllerSelectGroupsResult: obsolete BSC response");
         }
     } else {
@@ -622,8 +622,8 @@ void THive::Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
         NodesInfo[node->NodeId] = nodeInfo;
         TNodeInfo* hiveNodeInfo = FindNode(nodeInfo.NodeId);
         if (hiveNodeInfo != nullptr) {
-            hiveNodeInfo->Location = nodeInfo.Location; 
-            hiveNodeInfo->LocationAcquired = true; 
+            hiveNodeInfo->Location = nodeInfo.Location;
+            hiveNodeInfo->LocationAcquired = true;
             BLOG_D("TEvInterconnect::TEvNodeInfo NodeId " << nodeInfo.NodeId << " Location " << GetLocationString(hiveNodeInfo->Location));
             if (hiveNodeInfo->IsRegistered()) {
                 UpdateRegisteredDataCenters(hiveNodeInfo->Location.GetDataCenterId());
@@ -633,10 +633,10 @@ void THive::Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
 }
 
 void THive::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
-    THashSet<TDataCenterId> dataCenters; 
+    THashSet<TDataCenterId> dataCenters;
     for (const TEvInterconnect::TNodeInfo& node : ev->Get()->Nodes) {
         NodesInfo[node.NodeId] = node;
-        dataCenters.insert(node.Location.GetDataCenterId()); 
+        dataCenters.insert(node.Location.GetDataCenterId());
     }
     dataCenters.erase(0); // remove default data center id if exists
     if (!dataCenters.empty()) {
@@ -857,19 +857,19 @@ void THive::DefaultSignalTabletActive(const TActorContext& ctx) {
 void THive::AssignTabletGroups(TLeaderTabletInfo& tablet) {
     ui32 channels = tablet.GetChannelCount();
     THashSet<TString> storagePoolsToRefresh;
-    // was this method called for the first time for this tablet? 
+    // was this method called for the first time for this tablet?
     bool firstInvocation = tablet.ChannelProfileNewGroup.none();
- 
-    for (ui32 channelId = 0; channelId < channels; ++channelId) { 
-        if (firstInvocation || tablet.ChannelProfileNewGroup.test(channelId)) { 
-            tablet.ChannelProfileNewGroup.set(channelId); 
+
+    for (ui32 channelId = 0; channelId < channels; ++channelId) {
+        if (firstInvocation || tablet.ChannelProfileNewGroup.test(channelId)) {
+            tablet.ChannelProfileNewGroup.set(channelId);
             TStoragePoolInfo& storagePool = tablet.GetStoragePool(channelId);
             if (!storagePool.IsFresh() || storagePool.ConfigurationGeneration != ConfigurationGeneration) {
                 storagePoolsToRefresh.insert(storagePool.Name);
-            } 
+            }
         }
     }
- 
+
     if (!storagePoolsToRefresh.empty()) {
         // we had to refresh storage pool state from BSC
         TVector<THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters>> requests;
@@ -882,7 +882,7 @@ void THive::AssignTabletGroups(TLeaderTabletInfo& tablet) {
             }
         }
         if (!requests.empty()) {
-            THolder<TEvBlobStorage::TEvControllerSelectGroups> ev = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>(); 
+            THolder<TEvBlobStorage::TEvControllerSelectGroups> ev = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
             NKikimrBlobStorage::TEvControllerSelectGroups& record = ev->Record;
             record.SetReturnAllMatchingGroups(true);
             for (auto& request : requests) {
@@ -1085,7 +1085,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
                     });
                     for (size_t i = 0; i < dcs.size(); ++i) {
                         dataCentersGroupsHolder[i].AddDataCenter(dcs[i]);
-                        dataCentersGroupsHolder[i].AddDataCenterNum(DataCenterFromString(dcs[i])); 
+                        dataCentersGroupsHolder[i].AddDataCenterNum(DataCenterFromString(dcs[i]));
                         dataCentersGroupsPointers[i] = dataCentersGroupsHolder.data() + i;
                     }
                     dataCentersGroups = TArrayRef<const NKikimrHive::TDataCentersGroup*>(dataCentersGroupsPointers.data(), dcTablets.size());
@@ -1102,14 +1102,14 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
     std::unordered_map<TDataCenterId, std::vector<TNodeInfo*>*> indexDC2Group;
     for (size_t numGroup = 0; numGroup < dataCentersGroups.size(); ++numGroup) {
         const NKikimrHive::TDataCentersGroup* dcGroup = dataCentersGroups[numGroup];
-        if (dcGroup->DataCenterSize()) { 
-            for (TDataCenterId dc : dcGroup->GetDataCenter()) { 
+        if (dcGroup->DataCenterSize()) {
+            for (TDataCenterId dc : dcGroup->GetDataCenter()) {
                 indexDC2Group[dc] = candidateGroups.data() + numGroup;
-            } 
-        } else { 
-            for (const ui64 dcId : dcGroup->GetDataCenterNum()) { 
+            }
+        } else {
+            for (const ui64 dcId : dcGroup->GetDataCenterNum()) {
                 indexDC2Group[DataCenterToString(dcId)] = candidateGroups.data() + numGroup;
-            } 
+            }
         }
     }
     for (auto it = Nodes.begin(); it != Nodes.end(); ++it) {
@@ -1280,11 +1280,11 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
     }
 }
 
-const TNodeLocation& THive::GetNodeLocation(TNodeId nodeId) const { 
+const TNodeLocation& THive::GetNodeLocation(TNodeId nodeId) const {
     auto it = NodesInfo.find(nodeId);
     if (it != NodesInfo.end())
         return it->second.Location;
-    static TNodeLocation defaultLocation; 
+    static TNodeLocation defaultLocation;
     return defaultLocation;
 }
 
@@ -1397,8 +1397,8 @@ void THive::DeleteTablet(TTabletId tabletId) {
             itType->second.DecreaseCount();
             if (itType->second.Counter == 0) {
                 TabletTypeToTabletMetrics.erase(itType);
-            } 
-        } 
+            }
+        }
         for (auto nt = Nodes.begin(); nt != Nodes.end(); ++nt) {
             for (auto st = nt->second.Tablets.begin(); st != nt->second.Tablets.end(); ++st) {
                 Y_ENSURE_LOG(st->second.count(&tablet) == 0, " Deleting tablet found on node " << nt->first << " in state " << TTabletInfo::EVolatileStateName(st->first));
@@ -2097,16 +2097,16 @@ NKikimrTabletBase::TMetrics THive::GetDefaultResourceValuesForObject(TObjectId o
     return metrics;
 }
 
-NKikimrTabletBase::TMetrics THive::GetDefaultResourceValuesForTabletType(TTabletTypes::EType type) { 
-    NKikimrTabletBase::TMetrics metrics; 
+NKikimrTabletBase::TMetrics THive::GetDefaultResourceValuesForTabletType(TTabletTypes::EType type) {
+    NKikimrTabletBase::TMetrics metrics;
     auto it = TabletTypeToTabletMetrics.find(type);
     if (it != TabletTypeToTabletMetrics.end()) {
         metrics = it->second.GetAverage();
         metrics.ClearCounter();
-    } 
-    return metrics; 
-} 
- 
+    }
+    return metrics;
+}
+
 NKikimrTabletBase::TMetrics THive::GetDefaultResourceValuesForProfile(TTabletTypes::EType type, const TString& resourceProfile) {
     NKikimrTabletBase::TMetrics resourceValues;
     // copy default resource usage from resource profile

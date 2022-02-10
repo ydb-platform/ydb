@@ -1474,7 +1474,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                 ")";
 
         TClient::TFlatQueryOptions opts;
-        NKikimrClient::TResponse response; 
+        NKikimrClient::TResponse response;
 
         int errorCount = 0;
         for (ui32 i = 0; i < 20; ++i) {
@@ -1545,7 +1545,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         ui32 status = 0;
         TClient::TFlatQueryOptions opts;
-        NKikimrClient::TResponse response; 
+        NKikimrClient::TResponse response;
         status = annoyingClient.FlatQueryRaw(Sprintf(R"(
             (
             (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
@@ -1643,7 +1643,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         ui32 status = 0;
         TClient::TFlatQueryOptions opts;
-        NKikimrClient::TResponse response; 
+        NKikimrClient::TResponse response;
         status = annoyingClient.FlatQueryRaw(readQuery, opts, response);
         UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)status, NMsgBusProxy::MSTATUS_ERROR, "Big read should fail");
     }
@@ -1703,7 +1703,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         ui32 status = 0;
         TClient::TFlatQueryOptions opts;
-        NKikimrClient::TResponse response; 
+        NKikimrClient::TResponse response;
         status = annoyingClient.FlatQueryRaw(readQuery, opts, response);
         UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)status, NMsgBusProxy::MSTATUS_ERROR, "Big read should fail");
     }

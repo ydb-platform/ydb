@@ -65,11 +65,11 @@ namespace NKikimr {
             typedef ::NKikimr::NHullComp::TTask<TKey, TMemRec> TCompactionTask;
 
             const NHullComp::EAction Action;
-            std::unique_ptr<TCompactionTask> CompactionTask; 
+            std::unique_ptr<TCompactionTask> CompactionTask;
 
-            TSelected(NHullComp::EAction action, std::unique_ptr<TCompactionTask> compactionTask) 
+            TSelected(NHullComp::EAction action, std::unique_ptr<TCompactionTask> compactionTask)
                 : Action(action)
-                , CompactionTask(std::move(compactionTask)) 
+                , CompactionTask(std::move(compactionTask))
             {}
         };
 
@@ -94,15 +94,15 @@ namespace NKikimr {
             TLevelIndexSnapshot LevelSnap;
             TBarriersSnapshot BarriersSnap;
             const TActorId RecipientID;
-            std::unique_ptr<TCompactionTask> CompactionTask; 
+            std::unique_ptr<TCompactionTask> CompactionTask;
 
             void Bootstrap(const TActorContext &ctx) {
                 TInstant startTime(TAppData::TimeProvider->Now());
                 TStrategy strategy(HullCtx, Params, std::move(LevelSnap), std::move(BarriersSnap),
-                        CompactionTask.get()); 
+                        CompactionTask.get());
 
                 NHullComp::EAction action = strategy.Select();
-                ctx.Send(RecipientID, new TSelected(action, std::move(CompactionTask))); 
+                ctx.Send(RecipientID, new TSelected(action, std::move(CompactionTask)));
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
                 LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
@@ -114,8 +114,8 @@ namespace NKikimr {
             }
 
         public:
-            static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-                return NKikimrServices::TActivity::BS_HULLCOMP_SELECTOR; 
+            static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+                return NKikimrServices::TActivity::BS_HULLCOMP_SELECTOR;
             }
 
             TSelectorActor(
@@ -124,14 +124,14 @@ namespace NKikimr {
                     TLevelIndexSnapshot &&levelSnap,
                     TBarriersSnapshot &&barriersSnap,
                     const TActorId &recipientID,
-                    std::unique_ptr<TCompactionTask> compactionTask) 
+                    std::unique_ptr<TCompactionTask> compactionTask)
                 : TActorBootstrapped<TThis>()
                 , HullCtx(hullCtx)
                 , Params(params)
                 , LevelSnap(std::move(levelSnap))
                 , BarriersSnap(std::move(barriersSnap))
                 , RecipientID(recipientID)
-                , CompactionTask(std::move(compactionTask)) 
+                , CompactionTask(std::move(compactionTask))
             {}
         };
 

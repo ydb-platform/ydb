@@ -43,7 +43,7 @@ namespace NKikimr {
 
         TSaviour(const TIntrusivePtr<THullCtx> &hullCtx,
                  TLogoBlobsSnapshot &&snapshot,
-                 const std::shared_ptr<TFilter> &filter) 
+                 const std::shared_ptr<TFilter> &filter)
             : HullCtx(hullCtx)
             , Snapshot(std::move(snapshot))
             , Filter(filter)
@@ -72,46 +72,46 @@ namespace NKikimr {
             return CurKey;
         }
 
-        NMatrix::TVectorType GetPartsToResurrect() const { 
-            return PartsToResurrect; 
+        NMatrix::TVectorType GetPartsToResurrect() const {
+            return PartsToResurrect;
         }
 
     private:
         TIntrusivePtr<THullCtx> HullCtx;
         TLogoBlobsSnapshot Snapshot;
-        const std::shared_ptr<TFilter> Filter; 
+        const std::shared_ptr<TFilter> Filter;
 
         // As an iterator we position at some element, below are data extracted from this element
-        TIndexForwardIterator CurIt; // current iterator we have 
-        TLogoBlobID CurKey; // current key we have 
-        TIngress CurIngress; // merged ingress we have 
-        NMatrix::TVectorType PartsToResurrect; // parts to resurrect we have 
+        TIndexForwardIterator CurIt; // current iterator we have
+        TLogoBlobID CurKey; // current key we have
+        TIngress CurIngress; // merged ingress we have
+        NMatrix::TVectorType PartsToResurrect; // parts to resurrect we have
 
-        bool ResurrectCur() { 
-            auto &self = HullCtx->VCtx->ShortSelfVDisk; // VDiskId we have 
-            const auto& topology = *HullCtx->VCtx->Top; // topology we have 
-            Y_VERIFY(topology.BelongsToSubgroup(self, CurKey.Hash())); // check that blob belongs to subgroup 
+        bool ResurrectCur() {
+            auto &self = HullCtx->VCtx->ShortSelfVDisk; // VDiskId we have
+            const auto& topology = *HullCtx->VCtx->Top; // topology we have
+            Y_VERIFY(topology.BelongsToSubgroup(self, CurKey.Hash())); // check that blob belongs to subgroup
 
-            if (!Filter->Check(CurKey, CurIt.GetMemRec(), CurIt.GetMemRecsMerged(), HullCtx->AllowKeepFlags)) { 
-                // filter check returned false 
-                return false; 
-            } 
+            if (!Filter->Check(CurKey, CurIt.GetMemRec(), CurIt.GetMemRecsMerged(), HullCtx->AllowKeepFlags)) {
+                // filter check returned false
+                return false;
+            }
 
-            const TSubgroupPartLayout layout = TSubgroupPartLayout::CreateFromIngress(CurIngress, topology.GType); 
-            const ui32 idxInSubgroup = topology.GetIdxInSubgroup(self, CurKey.Hash()); 
-            const ui32 partsMask = topology.GetQuorumChecker().GetPartsToResurrect(layout, idxInSubgroup); 
-            if (!partsMask) { 
-                return false; 
-            } 
+            const TSubgroupPartLayout layout = TSubgroupPartLayout::CreateFromIngress(CurIngress, topology.GType);
+            const ui32 idxInSubgroup = topology.GetIdxInSubgroup(self, CurKey.Hash());
+            const ui32 partsMask = topology.GetQuorumChecker().GetPartsToResurrect(layout, idxInSubgroup);
+            if (!partsMask) {
+                return false;
+            }
 
-            PartsToResurrect = NMatrix::TVectorType(0, topology.GType.TotalPartCount()); 
-            for (ui32 i = 0; i < PartsToResurrect.GetSize(); ++i) { 
-                if (partsMask & (1 << i)) { 
-                    PartsToResurrect.Set(i); 
-                } 
-            } 
- 
-            return true; 
+            PartsToResurrect = NMatrix::TVectorType(0, topology.GType.TotalPartCount());
+            for (ui32 i = 0; i < PartsToResurrect.GetSize(); ++i) {
+                if (partsMask & (1 << i)) {
+                    PartsToResurrect.Set(i);
+                }
+            }
+
+            return true;
         }
 
         void ScanUntilItemToResurrect() {
@@ -120,9 +120,9 @@ namespace NKikimr {
                 CurKey = CurIt.GetCurKey().LogoBlobID();
                 CurIngress = CurIt.GetMemRec().GetIngress();
 
-                if (ResurrectCur()) { 
+                if (ResurrectCur()) {
                     break;
-                } 
+                }
 
                 CurIt.Next();
             }
@@ -140,7 +140,7 @@ namespace NKikimr {
         const TActorId NotifyId;
         const TActorId ParentId;
         const TActorId SkeletonId;
-        std::shared_ptr<TLogoBlobFilterForOsiris> LogoBlobFilter; 
+        std::shared_ptr<TLogoBlobFilterForOsiris> LogoBlobFilter;
         TSaviour<TLogoBlobFilterForOsiris> Saviour;
         ui64 InFly = 0;
         ui64 BlobsResurrected = 0;
@@ -169,7 +169,7 @@ namespace NKikimr {
             while (Saviour.Valid() && InFly < MaxInFly) {
                 // find parts to resurrect
                 TLogoBlobID lb = Saviour.LogoBlobID();
-                NMatrix::TVectorType v = Saviour.GetPartsToResurrect(); 
+                NMatrix::TVectorType v = Saviour.GetPartsToResurrect();
 
                 // for every part send a message to skeleton, we can send more than
                 // MaxInFly if we need to resurrect several parts
@@ -213,14 +213,14 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc, 
+        STRICT_STFUNC(StateFunc,
             HFunc(TEvAnubisOsirisPutResult, Handle)
-            CFunc(TEvents::TSystem::PoisonPill, HandlePoison) 
-        ) 
+            CFunc(TEvents::TSystem::PoisonPill, HandlePoison)
+        )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_HULL_OSIRIS; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_HULL_OSIRIS;
         }
 
         THullOsirisActor(
@@ -236,7 +236,7 @@ namespace NKikimr {
             , NotifyId(notifyId)
             , ParentId(parentId)
             , SkeletonId(skeletonId)
-            , LogoBlobFilter(std::make_shared<TLogoBlobFilterForOsiris>(HullCtx, std::move(fullSnap.BarriersSnap))) 
+            , LogoBlobFilter(std::make_shared<TLogoBlobFilterForOsiris>(HullCtx, std::move(fullSnap.BarriersSnap)))
             , Saviour(HullCtx, std::move(fullSnap.LogoBlobsSnap), LogoBlobFilter)
             , MaxInFly(anubisOsirisMaxInFly)
         {}

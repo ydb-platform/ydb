@@ -7,28 +7,28 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 
 Y_UNIT_TEST_SUITE(IncorrectQueries) {
-    const TVector<TString> erasureTypes = {"none", "block-4-2", "mirror-3", "mirror-3of4", "mirror-3-dc"}; 
+    const TVector<TString> erasureTypes = {"none", "block-4-2", "mirror-3", "mirror-3of4", "mirror-3-dc"};
 
-    void SendPut(TEnvironmentSetup& env, TTestInfo& test, 
+    void SendPut(TEnvironmentSetup& env, TTestInfo& test,
                 const TLogoBlobID& blobId, NKikimrProto::EReplyStatus status, ui32 blob_size, bool isEmptyObject = false, bool isEmptyMeta = false) {
         const TString data(blob_size, 'a');
-        std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvVPut>(blobId, data, test.Info->GetVDiskInSubgroup(0, blobId.Hash()), 
+        std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvVPut>(blobId, data, test.Info->GetVDiskInSubgroup(0, blobId.Hash()),
                                  false, nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob);
 
         if (isEmptyObject) {
             if (isEmptyMeta) {
-                ev = std::make_unique<TEvBlobStorage::TEvVPut>(); 
+                ev = std::make_unique<TEvBlobStorage::TEvVPut>();
             } else {
                 NKikimrBlobStorage::TEvVPut protoQuery;
-                static_cast<TEvBlobStorage::TEvVPut*>(ev.get())->Record = protoQuery; 
+                static_cast<TEvBlobStorage::TEvVPut*>(ev.get())->Record = protoQuery;
             }
         } else if (isEmptyMeta) {
-            static_cast<TEvBlobStorage::TEvVPut*>(ev.get())->StripPayload(); 
+            static_cast<TEvBlobStorage::TEvVPut*>(ev.get())->StripPayload();
         }
- 
+
         env.WithQueueId(test.Info->GetVDiskInSubgroup(0, blobId.Hash()), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
             test.Edge = test.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId()); 
+            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId());
             auto handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
             UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvVPutResult);
             TEvBlobStorage::TEvVPutResult *putResult = handle->Get<TEvBlobStorage::TEvVPutResult>();
@@ -38,24 +38,24 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
 
     void SendGet(TEnvironmentSetup& env, TTestInfo& test, const TVDiskID& vdiskId, const TLogoBlobID& blobId, const TString& part,
              NKikimrProto::EReplyStatus status = NKikimrProto::OK, bool isEmptyObject = false, bool isEmptyMeta = false) {
-        std::unique_ptr<IEventBase> ev = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdiskId, 
+        std::unique_ptr<IEventBase> ev = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdiskId,
             TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead, TEvBlobStorage::TEvVGet::EFlags::None,
             Nothing(), {{blobId, 0u, ui32(part.size())}});
 
         if (isEmptyObject) {
             if (isEmptyMeta) {
-                ev = std::make_unique<TEvBlobStorage::TEvVGet>(); 
+                ev = std::make_unique<TEvBlobStorage::TEvVGet>();
             } else {
                 NKikimrBlobStorage::TEvVGet protoQuery;
-                static_cast<TEvBlobStorage::TEvVGet*>(ev.get())->Record = protoQuery; 
+                static_cast<TEvBlobStorage::TEvVGet*>(ev.get())->Record = protoQuery;
             }
         } else if (isEmptyMeta) {
-            static_cast<TEvBlobStorage::TEvVGet*>(ev.get())->StripPayload(); 
+            static_cast<TEvBlobStorage::TEvVGet*>(ev.get())->StripPayload();
         }
- 
+
         env.WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::GetFastRead, [&](TActorId queueId) {
             test.Edge = test.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId()); 
+            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId());
             auto r = test.Runtime->WaitForEdgeActorEvent({test.Edge});
 
             UNIT_ASSERT_EQUAL(r->Type, TEvBlobStorage::EvVGetResult);
@@ -76,18 +76,18 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
     void SendEmptyMultiPut(TEnvironmentSetup& env, TTestInfo& test, const std::vector<TBlobInfo>& blobs, NKikimrProto::EReplyStatus status,
                            NKikimrBlobStorage::TEvVMultiPut proto) {
 
-        std::unique_ptr<IEventBase> ev(new TEvBlobStorage::TEvVMultiPut(test.Info->GetVDiskId(0), 
-                                TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false, nullptr)); 
+        std::unique_ptr<IEventBase> ev(new TEvBlobStorage::TEvVMultiPut(test.Info->GetVDiskId(0),
+                                TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false, nullptr));
 
         for(auto [blob, data, status] : blobs) {
-            static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->AddVPut(blob, data, 0); 
+            static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->AddVPut(blob, data, 0);
         }
 
-        static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->Record = proto; 
- 
+        static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->Record = proto;
+
         env.WithQueueId(test.Info->GetVDiskId(0), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
             test.Edge = test.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId()); 
+            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId());
             auto handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
             UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvVMultiPutResult);
             TEvBlobStorage::TEvVMultiPutResult *putResult = handle->Get<TEvBlobStorage::TEvVMultiPutResult>();
@@ -101,16 +101,16 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
     }
 
     void SendMultiPut(TEnvironmentSetup& env, TTestInfo& test, NKikimrProto::EReplyStatus status, const std::vector<TBlobInfo>& blobs) {
-        std::unique_ptr<IEventBase> ev(new TEvBlobStorage::TEvVMultiPut(test.Info->GetVDiskInSubgroup(0, blobs[0].BlobId.Hash()), 
+        std::unique_ptr<IEventBase> ev(new TEvBlobStorage::TEvVMultiPut(test.Info->GetVDiskInSubgroup(0, blobs[0].BlobId.Hash()),
                                 TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false, nullptr));
 
         for(auto [blob, data, status] : blobs) {
-            static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->AddVPut(blob, data, 0); 
+            static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->AddVPut(blob, data, 0);
         }
- 
+
         env.WithQueueId(test.Info->GetVDiskInSubgroup(0, blobs[0].BlobId.Hash()), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
             test.Edge = test.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId()); 
+            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId());
             auto handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
             UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvVMultiPutResult);
             TEvBlobStorage::TEvVMultiPutResult *putResult = handle->Get<TEvBlobStorage::TEvVMultiPutResult>();
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
             TLogoBlobID blobId(1, 1, 0, 0, size, 0, 13);
             SendPut(env, test, blobId, NKikimrProto::ERROR, size);
         }
-    } 
+    }
 
     Y_UNIT_TEST(VeryBigBlob) {
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         SendPut(env, test, blobId, NKikimrProto::ERROR, size - 42, true, true);
         SendPut(env, test, blobId, NKikimrProto::ERROR, size + 42, true, true);
         SendPut(env, test, blobId, NKikimrProto::ERROR, 0, true, true);
-    } 
+    }
 
     Y_UNIT_TEST(Proto) {
        for(const auto& erasure : erasureTypes) {
@@ -208,13 +208,13 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
             protoBlobId.clear_rawx1();
             blobId = LogoBlobIDFromLogoBlobID(protoBlobId);
             SendPut(env, test, blobId, NKikimrProto::ERROR, 42);
-        } 
+        }
     }
 
     Y_UNIT_TEST(BaseReadingTest) {
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
         TTestInfo test = InitTest(env);
- 
+
         constexpr ui32 size = 10;
         TLogoBlobID blobId(1, 1, 0, 0, size, 0, 1);
         SendPut(env, test, blobId, NKikimrProto::OK, size);
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         return;
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
         TTestInfo test = InitTest(env);
- 
+
         constexpr ui32 size = 10;
         TLogoBlobID blobId(1, 1, 0, 0, size, 0, 1);
         SendPut(env, test, blobId, NKikimrProto::OK, size);
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         auto vdiskId = test.Info->GetVDiskInSubgroup(0, blobId.Hash());
         SendGet(env, test, vdiskId, blobId, "a");
     }
- 
+
     Y_UNIT_TEST(ProtoQueryGet) {
         return;
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         SendGet(env, test, vdiskId, blobId, data, NKikimrProto::ERROR, true);
     }
 
- 
+
     Y_UNIT_TEST(WrongPartId) {
         TEnvironmentSetup env(true, GetErasureTypeByString("block-4-2"));
         TTestInfo test = InitTest(env);
@@ -301,7 +301,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         auto vdiskId = test.Info->GetVDiskInSubgroup(0, blobId.Hash());
         SendGet(env, test, vdiskId, blobId, "");
     }
- 
+
     Y_UNIT_TEST(EmptyTest) {
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
         TTestInfo test = InitTest(env);
@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
     Y_UNIT_TEST(SameBlob) {
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
         TTestInfo test = InitTest(env);
- 
+
         constexpr ui32 size = 10;
         TLogoBlobID BlobId(1, 1, 0, 0, size, 0, 1);
         TLogoBlobID BlobId2(1, 1, 0, 0, size+100, 0, 1);
@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
     Y_UNIT_TEST(BasePutTest) {
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
         TTestInfo test = InitTest(env);
- 
+
         constexpr ui32 size = 10;
         TLogoBlobID blobId(1, 1, 0, 0, size, 0, 1);
         SendPut(env, test, blobId, NKikimrProto::OK, size);
@@ -381,22 +381,22 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
 
         NKikimrProto::TLogoBlobID pBlobId;
         auto blobId = LogoBlobIDFromLogoBlobID(pBlobId);
- 
+
         std::vector<TBlobInfo> blobs;
         blobs.push_back({blobId, "", NKikimrProto::ERROR});
- 
+
         SendMultiPut(env, test, NKikimrProto::OK, blobs);
 
         pBlobId.set_rawx1(0);
         pBlobId.set_rawx2(0);
         pBlobId.set_rawx3((1ull << 30) + (1ull << 31) + 1);
 
-        blobId = LogoBlobIDFromLogoBlobID(pBlobId); 
+        blobId = LogoBlobIDFromLogoBlobID(pBlobId);
         blobs.push_back({blobId, "", NKikimrProto::ERROR});
 
         pBlobId.set_rawx3((1ull << 31) + 1);
 
-        blobId = LogoBlobIDFromLogoBlobID(pBlobId); 
+        blobId = LogoBlobIDFromLogoBlobID(pBlobId);
         blobs.push_back({blobId, "", NKikimrProto::ERROR});
 
         SendMultiPut(env, test, NKikimrProto::OK, blobs);
@@ -416,12 +416,12 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         return;
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
         TTestInfo test = InitTest(env);
-        std::unique_ptr<IEventBase> ev(new TEvBlobStorage::TEvVMultiPut(test.Info->GetVDiskId(0), 
+        std::unique_ptr<IEventBase> ev(new TEvBlobStorage::TEvVMultiPut(test.Info->GetVDiskId(0),
                                 TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false, nullptr));
 
         env.WithQueueId(test.Info->GetVDiskId(0), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
             test.Edge = test.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId()); 
+            test.Runtime->Send(new IEventHandle(queueId, test.Edge, ev.release()), queueId.NodeId());
             auto handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
             UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvVMultiPutResult);
             TEvBlobStorage::TEvVMultiPutResult *putResult = handle->Get<TEvBlobStorage::TEvVMultiPutResult>();
@@ -519,23 +519,23 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         constexpr int eventsCount = 10000;
         constexpr int blobSize = 100;
         const TString data(blobSize, 'a');
-        std::vector<std::unique_ptr<IEventBase>> events(eventsCount); 
+        std::vector<std::unique_ptr<IEventBase>> events(eventsCount);
 
         int goodCount = 0;
         for(int i = 0; i < eventsCount; ++i) {
-            events[i].reset(new TEvBlobStorage::TEvVMultiPut(test.Info->GetVDiskId(0), 
+            events[i].reset(new TEvBlobStorage::TEvVMultiPut(test.Info->GetVDiskId(0),
                                 TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false, nullptr));
             if (i % 19 != 18) {
                 ++goodCount;
                 TLogoBlobID blob(i, 1, 0, 0, blobSize, 0, 1);
-                static_cast<TEvBlobStorage::TEvVMultiPut*>(events[i].get())->AddVPut(blob, data, 0); 
+                static_cast<TEvBlobStorage::TEvVMultiPut*>(events[i].get())->AddVPut(blob, data, 0);
             }
         }
 
         env.WithQueueId(test.Info->GetVDiskId(0), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
             test.Edge = test.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
             for(int i = 0; i < eventsCount; ++i) {
-                test.Runtime->Send(new IEventHandle(queueId, test.Edge, events[i].release()), queueId.NodeId()); 
+                test.Runtime->Send(new IEventHandle(queueId, test.Edge, events[i].release()), queueId.NodeId());
             }
 
             int okCount = 0;

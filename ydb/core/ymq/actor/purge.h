@@ -32,8 +32,8 @@ public:
 
     void Bootstrap();
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::SQS_PURGE_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SQS_PURGE_ACTOR;
     }
 
 private:

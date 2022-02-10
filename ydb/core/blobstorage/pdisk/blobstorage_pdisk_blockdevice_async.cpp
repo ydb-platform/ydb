@@ -17,7 +17,7 @@
 #include <ydb/core/util/yverify_stream.h>
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/spdk_state.h>
- 
+
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/util/thread.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -804,7 +804,7 @@ protected:
                 << " Warning# " << LastWarning);
         }
         if (IsFileOpened) {
-            IoContext->SetActorSystem(ActorSystem); 
+            IoContext->SetActorSystem(ActorSystem);
             CompletionThread = MakeHolder<TCompletionThread>(*this, MaxQueuedCompletionActions);
             TrimThread = MakeHolder<TTrimThread>(*this);
             SharedCallback = MakeHolder<TSharedCallback>(*this);
@@ -943,9 +943,9 @@ protected:
             REQUEST_VALGRIND_CHECK_MEM_IS_ADDRESSABLE(data, size);
         }
 
-        if (ActorSystem) { 
-            WILSON_TRACE(*ActorSystem, traceId, BlockPread, DiskOffset = offset, Size = size); 
-        } 
+        if (ActorSystem) {
+            WILSON_TRACE(*ActorSystem, traceId, BlockPread, DiskOffset = offset, Size = size);
+        }
         IAsyncIoOperation* op = IoContext->CreateAsyncIoOperation(completionAction, reqId, traceId);
         IoContext->PreparePRead(op, data, size, offset);
         Submit(op);
@@ -963,9 +963,9 @@ protected:
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(data, size);
         }
 
-        if (ActorSystem) { 
-            WILSON_TRACE(*ActorSystem, traceId, BlockPwrite, DiskOffset = offset, Size = size); 
-        } 
+        if (ActorSystem) {
+            WILSON_TRACE(*ActorSystem, traceId, BlockPwrite, DiskOffset = offset, Size = size);
+        }
         IAsyncIoOperation* op = IoContext->CreateAsyncIoOperation(completionAction, reqId, traceId);
         IoContext->PreparePWrite(op, const_cast<void*>(data), size, offset);
         Submit(op);

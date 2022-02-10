@@ -77,7 +77,7 @@ const char *TErasureType::ErasureSpeciesToStr(TErasureType::EErasureSpecies es) 
         case Erasure2Plus3Stripe:   return "2Plus3Stripe";
         case Erasure2Plus2Block:    return "2Plus2Block";
         case Erasure2Plus2Stripe:   return "2Plus2Stripe";
-        case ErasureMirror3of4:     return "ErasureMirror3of4"; 
+        case ErasureMirror3of4:     return "ErasureMirror3of4";
         default:                    return "UNKNOWN";
     }
 }
@@ -89,7 +89,7 @@ struct TErasureParameters {
     ui32 Prime; // for parity - smallest prime number >= DataParts, for mirror - 1
 };
 
-static const std::array<TErasureParameters, TErasureType::ErasureSpeciesCount> ErasureSpeciesParameters{{ 
+static const std::array<TErasureParameters, TErasureType::ErasureSpeciesCount> ErasureSpeciesParameters{{
     {TErasureType::ErasureMirror,  1, 0, 1} // 0 = ErasureSpicies::ErasureNone
     ,{TErasureType::ErasureMirror, 1, 2, 1} // 1 = ErasureSpicies::ErasureMirror3
     ,{TErasureType::ErasureParityBlock,  3, 1, 3} // 2 = ErasureSpicies::Erasure3Plus1Block
@@ -99,7 +99,7 @@ static const std::array<TErasureParameters, TErasureType::ErasureSpeciesCount> E
     ,{TErasureType::ErasureParityStripe, 4, 2, 5} // 6 = ErasureSpicies::Erasure4Plus2Stipe
     ,{TErasureType::ErasureParityStripe, 3, 2, 3} // 7 = ErasureSpicies::Erasure3Plus2Stipe
     ,{TErasureType::ErasureMirror,       1, 2, 1} // 8 = ErasureSpicies::ErasureMirror3Plus2
-    ,{TErasureType::ErasureMirror,       1, 2, 1} // 9 = ErasureSpicies::ErasureMirror3dc 
+    ,{TErasureType::ErasureMirror,       1, 2, 1} // 9 = ErasureSpicies::ErasureMirror3dc
     ,{TErasureType::ErasureParityBlock,  4, 3, 5} // 10 = ErasureSpicies::Erasure4Plus3Block
     ,{TErasureType::ErasureParityStripe, 4, 3, 5} // 11 = ErasureSpicies::Erasure4Plus3Stripe
     ,{TErasureType::ErasureParityBlock,  3, 3, 3} // 12 = ErasureSpicies::Erasure3Plus3Block
@@ -108,8 +108,8 @@ static const std::array<TErasureParameters, TErasureType::ErasureSpeciesCount> E
     ,{TErasureType::ErasureParityStripe, 2, 3, 3} // 15 = ErasureSpicies::Erasure2Plus3Stripe
     ,{TErasureType::ErasureParityBlock,  2, 2, 3} // 16 = ErasureSpicies::Erasure2Plus2Block
     ,{TErasureType::ErasureParityStripe, 2, 2, 3} // 17 = ErasureSpicies::Erasure2Plus2Stripe
-    ,{TErasureType::ErasureMirror,       1, 2, 1} // 18 = ErasureSpicies::ErasureMirror3of4 
-}}; 
+    ,{TErasureType::ErasureMirror,       1, 2, 1} // 18 = ErasureSpicies::ErasureMirror3of4
+}};
 
 void PadAndCrcAtTheEnd(char *data, ui64 dataSize, ui64 bufferSize) {
     ui64 marginSize = bufferSize - dataSize - sizeof(ui32);
@@ -492,10 +492,10 @@ public:
                 memset(bufferDataPart[i], 0, ColumnSize);
             }
             bufferDataPart[DataParts - 1] = (ui64*)(lastBlockSource + (DataParts - 1) * ColumnSize);
-            char *lastColumnData = reinterpret_cast<char*>(bufferDataPart[DataParts - 1]); 
+            char *lastColumnData = reinterpret_cast<char*>(bufferDataPart[DataParts - 1]);
             if (LastPartTailSize) {
                 memcpy(lastColumnData,
-                    reinterpret_cast<const char*>(BufferDataPart[DataParts - 1]) + WholeBlocks * ColumnSize, 
+                    reinterpret_cast<const char*>(BufferDataPart[DataParts - 1]) + WholeBlocks * ColumnSize,
                     LastPartTailSize);
             }
             memset(lastColumnData + LastPartTailSize, 0, ColumnSize - LastPartTailSize);
@@ -518,10 +518,10 @@ public:
             memcpy(Data + WholeBlocks * BlockSize, lastBlock, TailSize);
         } else {
             for (ui32 i = 0; i < FirstSmallPartIdx; ++i) {
-                memcpy(reinterpret_cast<char*>(BufferDataPart[i]) + WholeBlocks * ColumnSize, 
+                memcpy(reinterpret_cast<char*>(BufferDataPart[i]) + WholeBlocks * ColumnSize,
                     bufferDataPart[i], ColumnSize);
             }
-            memcpy(reinterpret_cast<char*>(BufferDataPart[DataParts - 1]) + WholeBlocks * ColumnSize, 
+            memcpy(reinterpret_cast<char*>(BufferDataPart[DataParts - 1]) + WholeBlocks * ColumnSize,
                 bufferDataPart[DataParts - 1], LastPartTailSize);
         }
     }
@@ -1289,7 +1289,7 @@ public:
             VERBOSE_COUT("Out: " << Endl);
             for (ui64 lineIdx = 0; lineIdx < LineCount; ++lineIdx) {
                 for (ui32 part = 0; part <= DataParts; ++part) {
-                    ui64 partData = *reinterpret_cast<const ui64*>( 
+                    ui64 partData = *reinterpret_cast<const ui64*>(
                         partSet.Parts[part].GetDataAt(readPosition - ColumnSize + lineIdx * sizeof(ui64)));
                     VERBOSE_COUT(DebugFormatBits(partData) << ", ");
                 }
@@ -1383,7 +1383,7 @@ void StarBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, co
     TBlockParams p(crcMode, type, buffer.size());
 
     // Prepare input data pointers
-    p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data())); 
+    p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data()));
 
     outPartSet.FullDataSize = buffer.size();
     outPartSet.PartsMask = ~((~(ui32)0) << p.TotalParts);
@@ -1404,7 +1404,7 @@ void EoBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, cons
     TBlockParams p(crcMode, type, buffer.size());
 
     // Prepare input data pointers
-    p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data())); 
+    p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data()));
 
     // Prepare if not yet
     if (!outPartSet.IsSplitStarted()) {
@@ -1434,7 +1434,7 @@ void XorBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, con
     TBlockParams p(crcMode, type, buffer.size());
 
     // Prepare input data pointers
-    p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data())); 
+    p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data()));
 
     outPartSet.FullDataSize = buffer.size();
     outPartSet.PartsMask = ~((~(ui32)0) << p.TotalParts);
@@ -1515,17 +1515,17 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
                 (!restoreParts && missingDataPartIdxA >= p.TotalParts - 2)) {
         VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
         if (isStripe) {
-            p.PrepareInputDataPointers<isStripe>(outBuffer.Detach()); 
+            p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
             p.XorRestorePart<isStripe, false, true, false>(partSet, p.DataParts);
         } else {
-            p.GlueBlockParts(outBuffer.Detach(), partSet); 
+            p.GlueBlockParts(outBuffer.Detach(), partSet);
         }
         return;
     }
 
     // Prepare output data pointers
     if (restoreFullData) {
-        p.PrepareInputDataPointers<isStripe>(outBuffer.Detach()); 
+        p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
     }
 
     // Consider failed disk cases
@@ -1598,7 +1598,7 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
         }
         if (isStripe) {
             TRACE(__LINE__ << Endl);
-            p.PrepareInputDataPointers<isStripe>(buffer.Detach()); 
+            p.PrepareInputDataPointers<isStripe>(buffer.Detach());
             p.XorRestorePart<isStripe, false, true, false>(partSet, p.DataParts);
         } else {
             TRACE(__LINE__ << Endl);
@@ -1728,7 +1728,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
     TBlockParams p(crcMode, type, dataSize);
     if (restoreFullData) {
         Refurbish(outBuffer, dataSize);
-        p.PrepareInputDataPointers<isStripe>(outBuffer.Detach()); 
+        p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
     } else if (missingDataPartCount == 0) {
         return;
     }
@@ -1738,10 +1738,10 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
             (!restoreParts && missingDataPartIdxA >= p.DataParts)) {
         VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
         if (isStripe) {
-            p.PrepareInputDataPointers<isStripe>(outBuffer.Detach()); 
+            p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
             p.XorRestorePart<isStripe, false, true, false>(partSet, p.DataParts);
         } else {
-            p.GlueBlockParts(outBuffer.Detach(), partSet); 
+            p.GlueBlockParts(outBuffer.Detach(), partSet);
         }
         return;
     }
@@ -1919,16 +1919,16 @@ void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, T
     if (missingDataPartCount == 0 ||
             (missingDataPartCount == 1 && !restoreParts && missingDataPartIdx == p.TotalParts - 1)) {
         if (isStripe) {
-            p.PrepareInputDataPointers<isStripe>(outBuffer.Detach()); 
+            p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
             p.XorRestorePart<isStripe, false, true, false>(partSet, p.DataParts);
         } else {
-            p.GlueBlockParts(outBuffer.Detach(), partSet); 
+            p.GlueBlockParts(outBuffer.Detach(), partSet);
         }
         return;
     }
     // Prepare output data pointers
     if (restoreFullData) {
-        p.PrepareInputDataPointers<isStripe>(outBuffer.Detach()); 
+        p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
     }
 
     p.XorRestorePart<isStripe, restoreParts, restoreFullData, restoreParityParts>(partSet, missingDataPartIdx);
@@ -1942,8 +1942,8 @@ const std::array<TString, TErasureType::ErasureSpeciesCount> TErasureType::Erasu
     "block-4-2",
     "block-3-2",
     "stripe-4-2",
-    "stripe-3-2", 
-    "mirror-3-2", 
+    "stripe-3-2",
+    "mirror-3-2",
     "mirror-3-dc",
     "block-4-3",
     "stripe-4-3",
@@ -1953,8 +1953,8 @@ const std::array<TString, TErasureType::ErasureSpeciesCount> TErasureType::Erasu
     "stripe-2-3",
     "block-2-2",
     "stripe-2-2",
-    "mirror-3of4", 
-}}; 
+    "mirror-3of4",
+}};
 
 TErasureType::EErasureFamily TErasureType::ErasureFamily() const {
     const TErasureParameters &erasure = ErasureSpeciesParameters[ErasureSpecies];

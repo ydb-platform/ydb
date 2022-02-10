@@ -23,7 +23,7 @@ namespace NKikimr {
             LocalRecovInfoId = 10,
             AnubisRunnerId = 11,
             DelayedHugeBlobDeleterId = 12,
-            ScrubId = 13, 
+            ScrubId = 13,
             DbMainPageLogoBlobs = 14,
             DbMainPageBlocks = 15,
             DbMainPageBarriers = 16,
@@ -32,24 +32,24 @@ namespace NKikimr {
 
         static const char *SubRequestIDToStr(int val) {
             switch (val) {
-                case SkeletonStateId:          return "SkeletonStateId"; 
-                case HullInfoId:               return "HullInfoId"; 
-                case SyncerInfoId:             return "SyncerInfoId"; 
-                case SyncLogId:                return "SyncLogId"; 
-                case ReplId:                   return "ReplId"; 
-                case LogCutterId:              return "LogCutterId"; 
-                case HandoffMonId:             return "HandoffMonId"; 
-                case HugeKeeperId:             return "HugeKeeperId"; 
-                case DskSpaceTrackerId:        return "DskSpaceTrackerId"; 
-                case LocalRecovInfoId:         return "LocalRecovInfoId"; 
-                case DelayedHugeBlobDeleterId: return "DelayedHugeBlobDeleterId"; 
-                case ScrubId:                  return "ScrubId"; 
+                case SkeletonStateId:          return "SkeletonStateId";
+                case HullInfoId:               return "HullInfoId";
+                case SyncerInfoId:             return "SyncerInfoId";
+                case SyncLogId:                return "SyncLogId";
+                case ReplId:                   return "ReplId";
+                case LogCutterId:              return "LogCutterId";
+                case HandoffMonId:             return "HandoffMonId";
+                case HugeKeeperId:             return "HugeKeeperId";
+                case DskSpaceTrackerId:        return "DskSpaceTrackerId";
+                case LocalRecovInfoId:         return "LocalRecovInfoId";
+                case DelayedHugeBlobDeleterId: return "DelayedHugeBlobDeleterId";
+                case ScrubId:                  return "ScrubId";
                 case DbMainPageLogoBlobs:      return "DbMainPageLogoBlobs";
                 case DbMainPageBlocks:         return "DbMainPageBlocks";
                 case DbMainPageBarriers:       return "DbMainPageBarriers";
                 case Defrag:                   return "Defrag";
             }
-            return "Unknown"; 
+            return "Unknown";
         }
 
         struct TDbLocalRecovery {
@@ -57,7 +57,7 @@ namespace NKikimr {
                 Initial,
                 YardInit,
                 LoadDb,
-                LoadBulkFormedSegments, 
+                LoadBulkFormedSegments,
                 ApplyLog,
                 Error,
                 Done
@@ -68,7 +68,7 @@ namespace NKikimr {
                     case Initial: return "Initial";
                     case YardInit: return "YardInit";
                     case LoadDb: return "LoadDb";
-                    case LoadBulkFormedSegments: return "LoadBulkFormedSegments"; 
+                    case LoadBulkFormedSegments: return "LoadBulkFormedSegments";
                     case ApplyLog: return "ApplyLog";
                     case Error: return "Error";
                     case Done: return "Done";

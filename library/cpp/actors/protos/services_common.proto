@@ -9,10 +9,10 @@ enum EServiceCommon {
     INTERCONNECT = 1;
     TEST = 2;
     PROTOCOLS = 3;
-    INTERCONNECT_SPEED_TEST = 4; 
-    INTERCONNECT_STATUS = 5; 
-    INTERCONNECT_NETWORK = 6; 
-    INTERCONNECT_SESSION = 7; 
+    INTERCONNECT_SPEED_TEST = 4;
+    INTERCONNECT_STATUS = 5;
+    INTERCONNECT_NETWORK = 6;
+    INTERCONNECT_SESSION = 7;
     HTTP = 8;
 
     // This value is reserved boundary. Is must not be aliased with any values

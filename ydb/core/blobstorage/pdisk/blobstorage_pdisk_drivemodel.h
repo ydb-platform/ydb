@@ -22,7 +22,7 @@ protected:
     // Model data
     ui64 SeekTimeNsec;
     ui64 BulkReadBlockSizeBytes;
-    ui64 BulkWriteBlockSizeBytes; 
+    ui64 BulkWriteBlockSizeBytes;
     ui64 TrimSpeedBps;
     ui32 TotalChunksCount;
     ui64 SpeedBps[OP_TYPE_COUNT];
@@ -200,14 +200,14 @@ public:
         return Speed(chunkIdx, type) * durationNs / 1000000000ull;
     }
 
-    ui64 BulkWriteBlockSize() const { 
-        return BulkWriteBlockSizeBytes; 
-    } 
- 
-    ui32 IOPS() const { 
-        return 1000000000ULL / SeekTimeNsec; 
-    } 
- 
+    ui64 BulkWriteBlockSize() const {
+        return BulkWriteBlockSizeBytes;
+    }
+
+    ui32 IOPS() const {
+        return 1000000000ULL / SeekTimeNsec;
+    }
+
     TString ToString() const {
         return ToString(false);
     }

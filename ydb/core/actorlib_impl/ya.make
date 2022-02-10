@@ -7,24 +7,24 @@ OWNER(
 )
 
 SRCS(
-    actor_tracker.cpp 
-    actor_tracker.h 
+    actor_tracker.cpp
+    actor_tracker.h
     async_destroyer.h
     connect_socket_protocol.cpp
     connect_socket_protocol.h
-    defs.h 
-    destruct_actor.h 
+    defs.h
+    destruct_actor.h
     http_request_protocol.h
-    load_network.cpp 
+    load_network.cpp
     load_network.h
     long_timer.cpp
     long_timer.h
-    mad_squirrel.cpp 
+    mad_squirrel.cpp
     mad_squirrel.h
     melancholic_gopher.cpp
     name_service_client_protocol.cpp
     name_service_client_protocol.h
-    node_identifier.cpp 
+    node_identifier.cpp
     node_identifier.h
     proto_ready_actor.h
     read_data_protocol.cpp

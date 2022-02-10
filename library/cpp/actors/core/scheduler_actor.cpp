@@ -19,7 +19,7 @@ namespace NActors {
 
     public:
         TTimerDescriptor()
-            : Descriptor(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK)) 
+            : Descriptor(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK))
         {
             Y_VERIFY(Descriptor != -1, "timerfd_create() failed with %s", strerror(errno));
         }
@@ -40,7 +40,7 @@ namespace NActors {
         TVector<NSchedulerQueue::TReader*> Readers;
 
         TActorId PollerActor;
-        TPollerToken::TPtr PollerToken; 
+        TPollerToken::TPtr PollerToken;
 
         ui64 RealTime;
         ui64 MonotonicTime;
@@ -93,8 +93,8 @@ namespace NActors {
             new_time.it_interval.tv_nsec = Cfg.ResolutionMicroseconds * 1000;
             int ret = timerfd_settime(TimerDescriptor->GetDescriptor(), 0, &new_time, NULL);
             Y_VERIFY(ret != -1, "timerfd_settime() failed with %s", strerror(errno));
-            const bool success = ctx.Send(PollerActor, new TEvPollerRegister(TimerDescriptor, SelfId(), {})); 
-            Y_VERIFY(success); 
+            const bool success = ctx.Send(PollerActor, new TEvPollerRegister(TimerDescriptor, SelfId(), {}));
+            Y_VERIFY(success);
 
             RealTime = RelaxedLoad(CurrentTimestamp);
             MonotonicTime = RelaxedLoad(CurrentMonotonic);
@@ -102,11 +102,11 @@ namespace NActors {
             ActiveTick = AlignUp<ui64>(MonotonicTime, IntrasecondThreshold);
         }
 
-        void Handle(TEvPollerRegisterResult::TPtr ev, const TActorContext& ctx) { 
-            PollerToken = ev->Get()->PollerToken; 
-            HandleSchedule(ctx); 
-        } 
- 
+        void Handle(TEvPollerRegisterResult::TPtr ev, const TActorContext& ctx) {
+            PollerToken = ev->Get()->PollerToken;
+            HandleSchedule(ctx);
+        }
+
         void UpdateTime() {
             RealTime = TInstant::Now().MicroSeconds();
             MonotonicTime = Max(MonotonicTime, GetMonotonicMicroSeconds());
@@ -125,135 +125,135 @@ namespace NActors {
         }
 
         void HandleSchedule(const TActorContext& ctx) {
-            for (;;) { 
-                NHPTimer::STime schedulingStart; 
-                GetTimeFast(&schedulingStart); 
-                NHPTimer::STime lastTimeUpdate = schedulingStart; 
+            for (;;) {
+                NHPTimer::STime schedulingStart;
+                GetTimeFast(&schedulingStart);
+                NHPTimer::STime lastTimeUpdate = schedulingStart;
 
-                ui64 expired; 
-                ssize_t bytesRead; 
-                bytesRead = read(TimerDescriptor->GetDescriptor(), &expired, sizeof(expired)); 
-                if (bytesRead == -1) { 
-                    if (errno == EAGAIN) { 
-                        PollerToken->Request(true, false); 
-                        break; 
-                    } else if (errno == EINTR) { 
-                        continue; 
-                    } 
-                } 
-                Y_VERIFY(bytesRead == sizeof(expired), "Error while reading from timerfd, strerror# %s", strerror(errno)); 
-                UpdateTime(); 
+                ui64 expired;
+                ssize_t bytesRead;
+                bytesRead = read(TimerDescriptor->GetDescriptor(), &expired, sizeof(expired));
+                if (bytesRead == -1) {
+                    if (errno == EAGAIN) {
+                        PollerToken->Request(true, false);
+                        break;
+                    } else if (errno == EINTR) {
+                        continue;
+                    }
+                }
+                Y_VERIFY(bytesRead == sizeof(expired), "Error while reading from timerfd, strerror# %s", strerror(errno));
+                UpdateTime();
 
-                ui32 eventsGottenFromQueues = 0; 
-                // collect everything from queues 
-                for (ui32 i = 0; i != Readers.size(); ++i) { 
-                    while (NSchedulerQueue::TEntry* x = Readers[i]->Pop()) { 
-                        const ui64 instant = AlignUp<ui64>(x->InstantMicroseconds, Cfg.ResolutionMicroseconds); 
-                        IEventHandle* const ev = x->Ev; 
-                        ISchedulerCookie* const cookie = x->Cookie; 
+                ui32 eventsGottenFromQueues = 0;
+                // collect everything from queues
+                for (ui32 i = 0; i != Readers.size(); ++i) {
+                    while (NSchedulerQueue::TEntry* x = Readers[i]->Pop()) {
+                        const ui64 instant = AlignUp<ui64>(x->InstantMicroseconds, Cfg.ResolutionMicroseconds);
+                        IEventHandle* const ev = x->Ev;
+                        ISchedulerCookie* const cookie = x->Cookie;
 
-                        // check is cookie still valid? looks like it will hurt performance w/o sagnificant memory save 
+                        // check is cookie still valid? looks like it will hurt performance w/o sagnificant memory save
 
-                        if (instant <= ActiveTick) { 
-                            if (!ActiveSec) 
-                                ActiveSec.Reset(new TMomentMap()); 
-                            TAutoPtr<NSchedulerQueue::TQueueType>& queue = (*ActiveSec)[instant]; 
-                            if (!queue) 
-                                queue.Reset(new NSchedulerQueue::TQueueType()); 
-                            queue->Writer.Push(instant, ev, cookie); 
-                        } else { 
-                            const ui64 intrasecond = AlignUp<ui64>(instant, IntrasecondThreshold); 
-                            TAutoPtr<TMomentMap>& msec = ScheduleMap[intrasecond]; 
-                            if (!msec) 
-                                msec.Reset(new TMomentMap()); 
-                            TAutoPtr<NSchedulerQueue::TQueueType>& queue = (*msec)[instant]; 
-                            if (!queue) 
-                                queue.Reset(new NSchedulerQueue::TQueueType()); 
-                            queue->Writer.Push(instant, ev, cookie); 
-                        } 
-                        ++eventsGottenFromQueues; 
-                        TryUpdateTime(&lastTimeUpdate); 
+                        if (instant <= ActiveTick) {
+                            if (!ActiveSec)
+                                ActiveSec.Reset(new TMomentMap());
+                            TAutoPtr<NSchedulerQueue::TQueueType>& queue = (*ActiveSec)[instant];
+                            if (!queue)
+                                queue.Reset(new NSchedulerQueue::TQueueType());
+                            queue->Writer.Push(instant, ev, cookie);
+                        } else {
+                            const ui64 intrasecond = AlignUp<ui64>(instant, IntrasecondThreshold);
+                            TAutoPtr<TMomentMap>& msec = ScheduleMap[intrasecond];
+                            if (!msec)
+                                msec.Reset(new TMomentMap());
+                            TAutoPtr<NSchedulerQueue::TQueueType>& queue = (*msec)[instant];
+                            if (!queue)
+                                queue.Reset(new NSchedulerQueue::TQueueType());
+                            queue->Writer.Push(instant, ev, cookie);
+                        }
+                        ++eventsGottenFromQueues;
+                        TryUpdateTime(&lastTimeUpdate);
                     }
                 }
 
-                ui64 eventSchedulingErrorUs = 0; 
-                // send everything triggered on schedule 
-                for (;;) { 
-                    while (!!ActiveSec && !ActiveSec->empty()) { 
-                        TMomentMap::iterator it = ActiveSec->begin(); 
-                        if (it->first <= MonotonicTime) { 
-                            if (NSchedulerQueue::TQueueType* q = it->second.Get()) { 
-                                while (NSchedulerQueue::TEntry* x = q->Reader.Pop()) { 
-                                    Y_VERIFY_DEBUG(x->InstantMicroseconds <= ActiveTick); 
-                                    if (eventSchedulingErrorUs == 0 && MonotonicTime > x->InstantMicroseconds) { 
-                                        eventSchedulingErrorUs = MonotonicTime - x->InstantMicroseconds; 
-                                    } 
-                                    IEventHandle* ev = x->Ev; 
-                                    ISchedulerCookie* cookie = x->Cookie; 
-                                    if (cookie) { 
-                                        if (cookie->Detach()) { 
-                                            EventsToBeSent.push_back(ev); 
-                                        } else { 
-                                            delete ev; 
-                                        } 
-                                    } else { 
+                ui64 eventSchedulingErrorUs = 0;
+                // send everything triggered on schedule
+                for (;;) {
+                    while (!!ActiveSec && !ActiveSec->empty()) {
+                        TMomentMap::iterator it = ActiveSec->begin();
+                        if (it->first <= MonotonicTime) {
+                            if (NSchedulerQueue::TQueueType* q = it->second.Get()) {
+                                while (NSchedulerQueue::TEntry* x = q->Reader.Pop()) {
+                                    Y_VERIFY_DEBUG(x->InstantMicroseconds <= ActiveTick);
+                                    if (eventSchedulingErrorUs == 0 && MonotonicTime > x->InstantMicroseconds) {
+                                        eventSchedulingErrorUs = MonotonicTime - x->InstantMicroseconds;
+                                    }
+                                    IEventHandle* ev = x->Ev;
+                                    ISchedulerCookie* cookie = x->Cookie;
+                                    if (cookie) {
+                                        if (cookie->Detach()) {
+                                            EventsToBeSent.push_back(ev);
+                                        } else {
+                                            delete ev;
+                                        }
+                                    } else {
                                         EventsToBeSent.push_back(ev);
                                     }
-                                    TryUpdateTime(&lastTimeUpdate); 
+                                    TryUpdateTime(&lastTimeUpdate);
                                 }
                             }
-                            ActiveSec->erase(it); 
-                        } else { 
-                            break; 
+                            ActiveSec->erase(it);
+                        } else {
+                            break;
                         }
                     }
 
-                    if (ActiveTick <= MonotonicTime) { 
-                        Y_VERIFY_DEBUG(!ActiveSec || ActiveSec->empty()); 
-                        ActiveSec.Destroy(); 
-                        ActiveTick += IntrasecondThreshold; 
-                        TScheduleMap::iterator it = ScheduleMap.find(ActiveTick); 
-                        if (it != ScheduleMap.end()) { 
-                            ActiveSec = it->second; 
-                            ScheduleMap.erase(it); 
-                        } 
-                        continue; 
+                    if (ActiveTick <= MonotonicTime) {
+                        Y_VERIFY_DEBUG(!ActiveSec || ActiveSec->empty());
+                        ActiveSec.Destroy();
+                        ActiveTick += IntrasecondThreshold;
+                        TScheduleMap::iterator it = ScheduleMap.find(ActiveTick);
+                        if (it != ScheduleMap.end()) {
+                            ActiveSec = it->second;
+                            ScheduleMap.erase(it);
+                        }
+                        continue;
                     }
- 
-                    // ok, if we are here - then nothing is ready, so send step complete 
-                    break; 
+
+                    // ok, if we are here - then nothing is ready, so send step complete
+                    break;
                 }
 
-                // Send all from buffer queue 
-                const ui64 eventsToBeSentSize = EventsToBeSent.size(); 
-                ui32 sentCount = 0; 
-                if (eventsToBeSentSize > Cfg.RelaxedSendThresholdEventsPerCycle) { 
-                    sentCount = Cfg.RelaxedSendPaceEventsPerCycle + 
-                        (eventsToBeSentSize - Cfg.RelaxedSendThresholdEventsPerCycle) / 2; 
-                } else { 
-                    sentCount = Min(eventsToBeSentSize, Cfg.RelaxedSendPaceEventsPerCycle); 
-                } 
-                for (ui32 i = 0; i < sentCount; ++i) { 
-                    ctx.Send(EventsToBeSent.front()); 
-                    EventsToBeSent.pop_front(); 
-                } 
+                // Send all from buffer queue
+                const ui64 eventsToBeSentSize = EventsToBeSent.size();
+                ui32 sentCount = 0;
+                if (eventsToBeSentSize > Cfg.RelaxedSendThresholdEventsPerCycle) {
+                    sentCount = Cfg.RelaxedSendPaceEventsPerCycle +
+                        (eventsToBeSentSize - Cfg.RelaxedSendThresholdEventsPerCycle) / 2;
+                } else {
+                    sentCount = Min(eventsToBeSentSize, Cfg.RelaxedSendPaceEventsPerCycle);
+                }
+                for (ui32 i = 0; i < sentCount; ++i) {
+                    ctx.Send(EventsToBeSent.front());
+                    EventsToBeSent.pop_front();
+                }
 
-                NHPTimer::STime hpnow; 
-                GetTimeFast(&hpnow); 
-                const ui64 processingTime = hpnow > schedulingStart ? hpnow - schedulingStart : 0; 
-                const ui64 elapsedTimeMicroseconds = processingTime / (NHPTimer::GetCyclesPerSecond() / IntrasecondThreshold); 
-                LWPROBE(ActorsystemScheduler, elapsedTimeMicroseconds, expired, eventsGottenFromQueues, sentCount, 
-                        eventsToBeSentSize, eventSchedulingErrorUs); 
-                TryUpdateTime(&lastTimeUpdate); 
+                NHPTimer::STime hpnow;
+                GetTimeFast(&hpnow);
+                const ui64 processingTime = hpnow > schedulingStart ? hpnow - schedulingStart : 0;
+                const ui64 elapsedTimeMicroseconds = processingTime / (NHPTimer::GetCyclesPerSecond() / IntrasecondThreshold);
+                LWPROBE(ActorsystemScheduler, elapsedTimeMicroseconds, expired, eventsGottenFromQueues, sentCount,
+                        eventsToBeSentSize, eventSchedulingErrorUs);
+                TryUpdateTime(&lastTimeUpdate);
             }
         }
 
-        STRICT_STFUNC(StateFunc, 
-            HFunc(TEvSchedulerInitialize, Handle) 
-            CFunc(TEvPollerReady::EventType, HandleSchedule) 
-            CFunc(TEvents::TSystem::PoisonPill, Die) 
-            HFunc(TEvPollerRegisterResult, Handle) 
-        ) 
+        STRICT_STFUNC(StateFunc,
+            HFunc(TEvSchedulerInitialize, Handle)
+            CFunc(TEvPollerReady::EventType, HandleSchedule)
+            CFunc(TEvents::TSystem::PoisonPill, Die)
+            HFunc(TEvPollerRegisterResult, Handle)
+        )
     };
 
     IActor* CreateSchedulerActor(const TSchedulerConfig& cfg) {

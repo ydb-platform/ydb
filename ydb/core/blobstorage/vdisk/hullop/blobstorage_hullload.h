@@ -9,30 +9,30 @@
 
 namespace NKikimr {
 
-    template<typename TMemRec> 
-    struct TSmallBlobChunkIdxExtractor { 
-        template<typename TIterator> 
-        TMaybe<TChunkIdx> ExtractChunkIdx(TIterator& /*it*/) { 
-            return {}; 
-        } 
-    }; 
- 
-    template<> 
-    struct TSmallBlobChunkIdxExtractor<TMemRecLogoBlob> { 
-        template<typename TIterator> 
-        TMaybe<TChunkIdx> ExtractChunkIdx(TIterator& it) { 
-            if (it->MemRec.GetType() == TBlobType::DiskBlob) { 
-                TDiskDataExtractor extr; 
-                it.GetDiskData(&extr); 
-                const TDiskPart& part = extr.SwearOne(); 
-                if (!part.Empty()) { 
-                    return part.ChunkIdx; 
-                } 
-            } 
-            return {}; 
-        } 
-    }; 
- 
+    template<typename TMemRec>
+    struct TSmallBlobChunkIdxExtractor {
+        template<typename TIterator>
+        TMaybe<TChunkIdx> ExtractChunkIdx(TIterator& /*it*/) {
+            return {};
+        }
+    };
+
+    template<>
+    struct TSmallBlobChunkIdxExtractor<TMemRecLogoBlob> {
+        template<typename TIterator>
+        TMaybe<TChunkIdx> ExtractChunkIdx(TIterator& it) {
+            if (it->MemRec.GetType() == TBlobType::DiskBlob) {
+                TDiskDataExtractor extr;
+                it.GetDiskData(&extr);
+                const TDiskPart& part = extr.SwearOne();
+                if (!part.Empty()) {
+                    return part.ChunkIdx;
+                }
+            }
+            return {};
+        }
+    };
+
     ////////////////////////////////////////////////////////////////////////////
     // THullSegLoaded
     ////////////////////////////////////////////////////////////////////////////
@@ -162,25 +162,25 @@ namespace NKikimr {
 
             // add data chunks to ChunksBuilder
             typedef typename TLevelSegment::TMemIterator TMemIterator;
-            TSmallBlobChunkIdxExtractor<TMemRec> chunkIdxExtr; 
+            TSmallBlobChunkIdxExtractor<TMemRec> chunkIdxExtr;
             TMemIterator it(LevelSegment);
             it.SeekToFirst();
-            bool first = true; 
-            TKey prevKey; 
+            bool first = true;
+            TKey prevKey;
             while (it.Valid()) {
-                if (const TMaybe<TChunkIdx> chunkIdx = chunkIdxExtr.ExtractChunkIdx(it)) { 
-                    Chunks.Add(*chunkIdx); 
+                if (const TMaybe<TChunkIdx> chunkIdx = chunkIdxExtr.ExtractChunkIdx(it)) {
+                    Chunks.Add(*chunkIdx);
                 }
- 
-                // ensure that keys are stored in strictly increasing order 
-                const TKey& key = it.GetCurKey(); 
-                if (first) { 
-                    first = false; 
-                } else { 
-                    Y_VERIFY(prevKey < key && !prevKey.IsSameAs(key)); 
-                } 
-                prevKey = key; 
- 
+
+                // ensure that keys are stored in strictly increasing order
+                const TKey& key = it.GetCurKey();
+                if (first) {
+                    first = false;
+                } else {
+                    Y_VERIFY(prevKey < key && !prevKey.IsSameAs(key));
+                }
+                prevKey = key;
+
                 it.Next();
             }
             Chunks.FillInVector(LevelSegment->AllChunks);
@@ -193,7 +193,7 @@ namespace NKikimr {
             Y_VERIFY_DEBUG(data && size && RestToReadIndex >= size);
 
             RestToReadIndex -= size;
-            memcpy(reinterpret_cast<char *>(LevelSegment->LoadedIndex.data()) + RestToReadIndex, data, size); 
+            memcpy(reinterpret_cast<char *>(LevelSegment->LoadedIndex.data()) + RestToReadIndex, data, size);
         }
 
         void AppendData(const char *data, size_t size) {
@@ -202,13 +202,13 @@ namespace NKikimr {
             if (RestToReadOutbound) {
                 if (RestToReadOutbound >= size) {
                     RestToReadOutbound -= size;
-                    memcpy(reinterpret_cast<char *>(LevelSegment->LoadedOutbound.data()) + RestToReadOutbound, data, size); 
+                    memcpy(reinterpret_cast<char *>(LevelSegment->LoadedOutbound.data()) + RestToReadOutbound, data, size);
                     return;
                 } else {
                     size_t writeSize = RestToReadOutbound;
                     size_t restSize = size - writeSize;
 
-                    memcpy(reinterpret_cast<char *>(LevelSegment->LoadedOutbound.data()), data + restSize, writeSize); 
+                    memcpy(reinterpret_cast<char *>(LevelSegment->LoadedOutbound.data()), data + restSize, writeSize);
                     RestToReadOutbound = 0;
 
                     AppendIndexData(data, restSize);
@@ -219,62 +219,62 @@ namespace NKikimr {
         }
 
         void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) {
-            auto *msg = ev->Get(); 
+            auto *msg = ev->Get();
             TString message;
-            if (msg->Status != NKikimrProto::OK) { 
-                TStringStream str; 
-                str << "{Origin# '" << Origin << "'}"; 
-                message = str.Str(); 
-            } 
+            if (msg->Status != NKikimrProto::OK) {
+                TStringStream str;
+                str << "{Origin# '" << Origin << "'}";
+                message = str.Str();
+            }
             CHECK_PDISK_RESPONSE_MSG(VCtx, ev, ctx, message);
 
-            const TBufferWithGaps &data = msg->Data; 
-            LevelSegment->IndexParts.push_back({msg->ChunkIdx, msg->Offset, msg->Data.Size()}); 
- 
+            const TBufferWithGaps &data = msg->Data;
+            LevelSegment->IndexParts.push_back({msg->ChunkIdx, msg->Offset, msg->Data.Size()});
+
             if (FirstRead) {
                 FirstRead = false;
 
-                // copy placeholder data, because otherwise we get unaligned access 
-                TIdxDiskPlaceHolder placeHolder(0); 
-                size_t partSize = data.Size() - sizeof(TIdxDiskPlaceHolder); 
-                memcpy(&placeHolder, data.DataPtr<const TIdxDiskPlaceHolder>(partSize), sizeof(TIdxDiskPlaceHolder)); 
+                // copy placeholder data, because otherwise we get unaligned access
+                TIdxDiskPlaceHolder placeHolder(0);
+                size_t partSize = data.Size() - sizeof(TIdxDiskPlaceHolder);
+                memcpy(&placeHolder, data.DataPtr<const TIdxDiskPlaceHolder>(partSize), sizeof(TIdxDiskPlaceHolder));
 
-                Y_VERIFY(placeHolder.MagicNumber == TIdxDiskPlaceHolder::Signature); 
-                RestToReadIndex = placeHolder.Info.IdxTotalSize; 
-                RestToReadOutbound = placeHolder.Info.OutboundItems * sizeof(TDiskPart); 
-                LevelSegment->LoadedIndex.resize(placeHolder.Info.Items); 
-                LevelSegment->LoadedOutbound.resize(placeHolder.Info.OutboundItems); 
-                LevelSegment->Info = placeHolder.Info; 
-                LevelSegment->AssignedSstId = placeHolder.SstId; 
- 
-                AppendData(data.DataPtr<const char>(0, partSize), partSize); 
+                Y_VERIFY(placeHolder.MagicNumber == TIdxDiskPlaceHolder::Signature);
+                RestToReadIndex = placeHolder.Info.IdxTotalSize;
+                RestToReadOutbound = placeHolder.Info.OutboundItems * sizeof(TDiskPart);
+                LevelSegment->LoadedIndex.resize(placeHolder.Info.Items);
+                LevelSegment->LoadedOutbound.resize(placeHolder.Info.OutboundItems);
+                LevelSegment->Info = placeHolder.Info;
+                LevelSegment->AssignedSstId = placeHolder.SstId;
 
-                if (!placeHolder.PrevPart.Empty()) { 
+                AppendData(data.DataPtr<const char>(0, partSize), partSize);
+
+                if (!placeHolder.PrevPart.Empty()) {
                     ctx.Send(PDiskCtx->PDiskId, new NPDisk::TEvChunkRead(PDiskCtx->Dsk->Owner,
                                                                  PDiskCtx->Dsk->OwnerRound,
-                                                                 placeHolder.PrevPart.ChunkIdx, 
-                                                                 placeHolder.PrevPart.Offset, 
-                                                                 placeHolder.PrevPart.Size, NPriRead::HullLoad, 
+                                                                 placeHolder.PrevPart.ChunkIdx,
+                                                                 placeHolder.PrevPart.Offset,
+                                                                 placeHolder.PrevPart.Size, NPriRead::HullLoad,
                                                                  nullptr));
-                    Chunks.Add(placeHolder.PrevPart.ChunkIdx); 
+                    Chunks.Add(placeHolder.PrevPart.ChunkIdx);
                 } else {
                     Finish(ctx);
                 }
             } else {
-                TIdxDiskLinker linker; 
-                size_t partSize = data.Size() - sizeof(TIdxDiskLinker); 
-                memcpy(&linker, data.DataPtr<const TIdxDiskLinker>(partSize), sizeof(TIdxDiskLinker)); 
+                TIdxDiskLinker linker;
+                size_t partSize = data.Size() - sizeof(TIdxDiskLinker);
+                memcpy(&linker, data.DataPtr<const TIdxDiskLinker>(partSize), sizeof(TIdxDiskLinker));
 
-                // TODO(alexvru, fomichev): this logic seems to work incorrectly -- data must be prepended 
-                AppendData(data.DataPtr<const char>(0, partSize), partSize); 
+                // TODO(alexvru, fomichev): this logic seems to work incorrectly -- data must be prepended
+                AppendData(data.DataPtr<const char>(0, partSize), partSize);
 
-                if (!linker.PrevPart.Empty()) { 
+                if (!linker.PrevPart.Empty()) {
                     ctx.Send(PDiskCtx->PDiskId, new NPDisk::TEvChunkRead(PDiskCtx->Dsk->Owner,
                                                                  PDiskCtx->Dsk->OwnerRound,
-                                                                 linker.PrevPart.ChunkIdx, 
-                                                                 linker.PrevPart.Offset, linker.PrevPart.Size, 
+                                                                 linker.PrevPart.ChunkIdx,
+                                                                 linker.PrevPart.Offset, linker.PrevPart.Size,
                                                                  NPriRead::HullLoad, nullptr));
-                    Chunks.Add(linker.PrevPart.ChunkIdx); 
+                    Chunks.Add(linker.PrevPart.ChunkIdx);
                 } else {
                     Finish(ctx);
                 }
@@ -286,16 +286,16 @@ namespace NKikimr {
             TThis::Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc, 
-            HFunc(NPDisk::TEvChunkReadResult, Handle) 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-        ) 
+        STRICT_STFUNC(StateFunc,
+            HFunc(NPDisk::TEvChunkReadResult, Handle)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+        )
 
         PDISK_TERMINATE_STATE_FUNC_DEF;
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_LEVEL_SEGMENT_LOADER; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_LEVEL_SEGMENT_LOADER;
         }
 
         TLevelSegmentLoader(
@@ -309,13 +309,13 @@ namespace NKikimr {
             , PDiskCtx(pdiskCtx)
             , LevelSegment(levelSegment)
             , Recipient(recipient)
-            , Origin(origin) 
+            , Origin(origin)
             , FirstRead(true)
             , RestToReadIndex(0)
             , RestToReadOutbound(0)
             , Chunks()
         {
-            const TDiskPart& entry = levelSegment->GetEntryPoint(); 
+            const TDiskPart& entry = levelSegment->GetEntryPoint();
             Y_VERIFY_DEBUG(!entry.Empty());
         }
     };
@@ -368,7 +368,7 @@ namespace NKikimr {
 
         void Process(const TActorContext &ctx) {
             if (Pos < Size) {
-                std::unique_ptr<TLevelSegmentLoader> actor(new TLevelSegmentLoader(VCtx, PDiskCtx, 
+                std::unique_ptr<TLevelSegmentLoader> actor(new TLevelSegmentLoader(VCtx, PDiskCtx,
                         Segs->Segments[Pos].Get(), ctx.SelfID, "OrderedLevelSegmentsLoader"));
                 NActors::TActorId aid = ctx.Register(actor.Release());
                 ActiveActors.Insert(aid);
@@ -396,14 +396,14 @@ namespace NKikimr {
             TThis::Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc, 
-            HTemplFunc(THullSegLoaded, Handle) 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-        ) 
+        STRICT_STFUNC(StateFunc,
+            HTemplFunc(THullSegLoaded, Handle)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+        )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_ORD_LEVEL_SEGMENT_LOADER; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_ORD_LEVEL_SEGMENT_LOADER;
         }
 
         TOrderedLevelSegmentsLoader(
@@ -449,7 +449,7 @@ namespace NKikimr {
 
         void Process(const TActorContext &ctx) {
             if (Pos != End) {
-                std::unique_ptr<TLevelSegmentLoader> actor(new TLevelSegmentLoader(VCtx, PDiskCtx, Pos->Get(), ctx.SelfID)); 
+                std::unique_ptr<TLevelSegmentLoader> actor(new TLevelSegmentLoader(VCtx, PDiskCtx, Pos->Get(), ctx.SelfID));
                 NActors::TActorId aid = ctx.Register(actor.Release());
                 ActiveActors.Insert(aid);
             } else {
@@ -475,14 +475,14 @@ namespace NKikimr {
             TThis::Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc, 
-            HTemplFunc(THullSegLoaded, Handle) 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-        ) 
+        STRICT_STFUNC(StateFunc,
+            HTemplFunc(THullSegLoaded, Handle)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+        )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_UNORD_LEVEL_SEGMENT_LOADER; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_UNORD_LEVEL_SEGMENT_LOADER;
         }
 
         TUnorderedLevelSegmentsLoader(
@@ -537,9 +537,9 @@ namespace NKikimr {
         void Process(const TActorContext &ctx) {
             if (It.Valid()) {
                 // Load next
-                auto actor = std::make_unique<TLevelSegmentLoader>(VCtx, PDiskCtx, It.Get().SstPtr.Get(), ctx.SelfID, 
-                    "LevelIndexLoader"); 
-                NActors::TActorId aid = ctx.Register(actor.release()); 
+                auto actor = std::make_unique<TLevelSegmentLoader>(VCtx, PDiskCtx, It.Get().SstPtr.Get(), ctx.SelfID,
+                    "LevelIndexLoader");
+                NActors::TActorId aid = ctx.Register(actor.release());
                 ActiveActors.Insert(aid);
                 It.Next();
             } else {
@@ -567,14 +567,14 @@ namespace NKikimr {
             TThis::Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc, 
-            HTemplFunc(THullSegLoaded, Handle) 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-        ) 
+        STRICT_STFUNC(StateFunc,
+            HTemplFunc(THullSegLoaded, Handle)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+        )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_LEVEL_INDEX_LOADER; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_LEVEL_INDEX_LOADER;
         }
 
         TLevelIndexLoader(

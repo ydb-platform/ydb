@@ -36,8 +36,8 @@ class TJsonCluster : public TActorBootstrapped<TJsonCluster> {
     bool Tablets = false;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::VIEWER_HANDLER; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
     TJsonCluster(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)

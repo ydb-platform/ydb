@@ -198,8 +198,8 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::SS_MON; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SS_MON;
     }
 
     TStateStorageMonitoringActor(ui64 tabletId, const TActorId &sender, const TString &query)

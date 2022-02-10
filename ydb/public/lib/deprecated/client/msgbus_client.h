@@ -40,7 +40,7 @@ public:
     const TMsgBusClientConfig& GetConfig();
 };
 
-EDataReqStatusExcerpt ExtractDataRequestStatus(const NKikimrClient::TResponse *response); 
+EDataReqStatusExcerpt ExtractDataRequestStatus(const NKikimrClient::TResponse *response);
 
 } // NMsgBusProxy
 

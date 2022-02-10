@@ -172,8 +172,8 @@ namespace NTxMediator {
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR;
         }
 
         TTxMediatorExecQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui32 timecastBuckets)

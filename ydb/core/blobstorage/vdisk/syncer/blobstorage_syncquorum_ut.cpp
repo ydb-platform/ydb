@@ -34,13 +34,13 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(ErasureNoneNeverHasQuorum_4_1) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureNone, 1, 4); 
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureNone, 1, 4);
 
-            auto vdisks = GetDisks(&groupInfo); 
+            auto vdisks = GetDisks(&groupInfo);
             Shuffle(vdisks.begin(), vdisks.end());
             auto self = vdisks[0];
 
-            TQuorumTracker tracker(self, groupInfo.PickTopology(), false); 
+            TQuorumTracker tracker(self, groupInfo.PickTopology(), false);
             for (unsigned i = 1; i < vdisks.size(); i++) {
                 tracker.Update(vdisks[i]);
                 UNIT_ASSERT(!tracker.HasQuorum());
@@ -48,57 +48,57 @@ namespace NKikimr {
             }
             UNIT_ASSERT(!tracker.HasQuorum());
         }
- 
+
         Y_UNIT_TEST(Erasure4Plus2BlockIncludingMyFailDomain_8_2) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 8); 
- 
-            auto vdisks = GetDisks(&groupInfo); 
-            const TVDiskID& self = vdisks[0]; 
- 
-            TQuorumTracker tracker(self, groupInfo.PickTopology(), true); 
-            for (unsigned i = 0; i < vdisks.size(); i++) { 
-                tracker.Update(vdisks[i]); 
-                if (i + 1 >= 2 * 6) { 
-                    UNIT_ASSERT(tracker.HasQuorum()); 
-                } else { 
-                    UNIT_ASSERT(!tracker.HasQuorum()); 
-                } 
-            } 
-        } 
- 
-        Y_UNIT_TEST(Erasure4Plus2BlockNotIncludingMyFailDomain_8_2) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 8); 
- 
-            auto vdisks = GetDisks(&groupInfo); 
-            const TVDiskID& self = vdisks[0]; 
- 
-            TQuorumTracker tracker(self, groupInfo.PickTopology(), false); 
-            for (unsigned i = 0; i < vdisks.size(); i++) { 
-                tracker.Update(vdisks[i]); 
-                if (i + 1 >= 2 * (6 + 1)) { 
-                    UNIT_ASSERT(tracker.HasQuorum()); 
-                } else { 
-                    UNIT_ASSERT(!tracker.HasQuorum()); 
-                } 
-            } 
-        } 
- 
-        Y_UNIT_TEST(ErasureMirror3IncludingMyFailDomain_4_2) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4); 
-            auto vdisks = GetDisks(&groupInfo); 
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 8);
+
+            auto vdisks = GetDisks(&groupInfo);
             const TVDiskID& self = vdisks[0];
 
-            TQuorumTracker tracker(self, groupInfo.PickTopology(), true); 
+            TQuorumTracker tracker(self, groupInfo.PickTopology(), true);
+            for (unsigned i = 0; i < vdisks.size(); i++) {
+                tracker.Update(vdisks[i]);
+                if (i + 1 >= 2 * 6) {
+                    UNIT_ASSERT(tracker.HasQuorum());
+                } else {
+                    UNIT_ASSERT(!tracker.HasQuorum());
+                }
+            }
+        }
+
+        Y_UNIT_TEST(Erasure4Plus2BlockNotIncludingMyFailDomain_8_2) {
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 8);
+
+            auto vdisks = GetDisks(&groupInfo);
+            const TVDiskID& self = vdisks[0];
+
+            TQuorumTracker tracker(self, groupInfo.PickTopology(), false);
+            for (unsigned i = 0; i < vdisks.size(); i++) {
+                tracker.Update(vdisks[i]);
+                if (i + 1 >= 2 * (6 + 1)) {
+                    UNIT_ASSERT(tracker.HasQuorum());
+                } else {
+                    UNIT_ASSERT(!tracker.HasQuorum());
+                }
+            }
+        }
+
+        Y_UNIT_TEST(ErasureMirror3IncludingMyFailDomain_4_2) {
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            auto vdisks = GetDisks(&groupInfo);
+            const TVDiskID& self = vdisks[0];
+
+            TQuorumTracker tracker(self, groupInfo.PickTopology(), true);
             TVector<int> notYetQuorum = {0, 1, 2, 3, 4, 7};
             Check(tracker, vdisks, notYetQuorum, 6);
         }
 
         Y_UNIT_TEST(ErasureMirror3IncludingMyFailDomain_5_2) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 5); 
-            auto vdisks = GetDisks(&groupInfo); 
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 5);
+            auto vdisks = GetDisks(&groupInfo);
             const TVDiskID& self = vdisks[0];
 
-            TQuorumTracker tracker(self, groupInfo.PickTopology(), true); 
+            TQuorumTracker tracker(self, groupInfo.PickTopology(), true);
             TVector<int> notYetQuorum = {0, 1, 3, 4, 5, 6, 8, 9};
             Check(tracker, vdisks, notYetQuorum, 2);
         }

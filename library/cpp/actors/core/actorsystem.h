@@ -15,7 +15,7 @@
 
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
-#include <util/system/mutex.h> 
+#include <util/system/mutex.h>
 
 namespace NActors {
     class TActorSystem;
@@ -23,23 +23,23 @@ namespace NActors {
     class IExecutorPool;
     struct TWorkerContext;
 
-    inline TActorId MakeInterconnectProxyId(ui32 destNodeId) { 
-        char data[12]; 
-        memcpy(data, "ICProxy@", 8); 
-        memcpy(data + 8, &destNodeId, sizeof(ui32)); 
+    inline TActorId MakeInterconnectProxyId(ui32 destNodeId) {
+        char data[12];
+        memcpy(data, "ICProxy@", 8);
+        memcpy(data + 8, &destNodeId, sizeof(ui32));
         return TActorId(0, TStringBuf(data, 12));
-    } 
- 
-    inline bool IsInterconnectProxyId(const TActorId& actorId) { 
-        return actorId.IsService() && !memcmp(actorId.ServiceId().data(), "ICProxy@", 8); 
-    } 
- 
-    inline ui32 GetInterconnectProxyNode(const TActorId& actorId) { 
-        ui32 nodeId; 
-        memcpy(&nodeId, actorId.ServiceId().data() + 8, sizeof(ui32)); 
-        return nodeId; 
-    } 
- 
+    }
+
+    inline bool IsInterconnectProxyId(const TActorId& actorId) {
+        return actorId.IsService() && !memcmp(actorId.ServiceId().data(), "ICProxy@", 8);
+    }
+
+    inline ui32 GetInterconnectProxyNode(const TActorId& actorId) {
+        ui32 nodeId;
+        memcpy(&nodeId, actorId.ServiceId().data() + 8, sizeof(ui32));
+        return nodeId;
+    }
+
     namespace NSchedulerQueue {
         class TReader;
         struct TQueueType;
@@ -170,11 +170,11 @@ namespace NActors {
         }
     };
 
-    using TProxyWrapperFactory = std::function<TActorId(TActorSystem*, ui32)>; 
- 
+    using TProxyWrapperFactory = std::function<TActorId(TActorSystem*, ui32)>;
+
     struct TInterconnectSetup {
         TVector<TActorSetupCmd> ProxyActors;
-        TProxyWrapperFactory ProxyWrapperFactory; 
+        TProxyWrapperFactory ProxyWrapperFactory;
     };
 
     struct TActorSystemSetup {
@@ -238,14 +238,14 @@ namespace NActors {
         TActorId DefSelfID;
         void* AppData0;
         TIntrusivePtr<NLog::TSettings> LoggerSettings0;
-        TProxyWrapperFactory ProxyWrapperFactory; 
-        TMutex ProxyCreationLock; 
+        TProxyWrapperFactory ProxyWrapperFactory;
+        TMutex ProxyCreationLock;
 
         bool StartExecuted;
         bool StopExecuted;
         bool CleanupExecuted;
- 
-        std::deque<std::function<void()>> DeferredPreStop; 
+
+        std::deque<std::function<void()>> DeferredPreStop;
     public:
         TActorSystem(THolder<TActorSystemSetup>& setup, void* appData = nullptr,
                      TIntrusivePtr<NLog::TSettings> loggerSettings = TIntrusivePtr<NLog::TSettings>(nullptr));
@@ -329,7 +329,7 @@ namespace NActors {
         void UpdateLinkStatus(ui8 status, ui32 destinationNode);
         ui8 LinkStatus(ui32 destinationNode);
 
-        TActorId LookupLocalService(const TActorId& x) const; 
+        TActorId LookupLocalService(const TActorId& x) const;
         TActorId RegisterLocalService(const TActorId& serviceId, const TActorId& actorId);
 
         ui32 GetMaxActivityType() const {
@@ -355,10 +355,10 @@ namespace NActors {
 
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
 
-        void DeferPreStop(std::function<void()> fn) { 
-            DeferredPreStop.push_back(std::move(fn)); 
-        } 
- 
+        void DeferPreStop(std::function<void()> fn) {
+            DeferredPreStop.push_back(std::move(fn));
+        }
+
         /* This is the base for memory profiling tags.
        System sets memory profiling tag for debug version of lfalloc.
        The tag is set as "base_tag + actor_activity_type". */

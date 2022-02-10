@@ -41,8 +41,8 @@ namespace NKikimr {
         TLevelIndexSnapshot(TLevelIndexSnapshot &&) = default;
 
         void Destroy() {
-            SliceSnap.Destroy(); 
-            FreshSnap.Destroy(); 
+            SliceSnap.Destroy();
+            FreshSnap.Destroy();
             Notifier.Drop();
         }
 
@@ -56,15 +56,15 @@ namespace NKikimr {
         class TIndexForwardIterator;
         class TIndexBackwardIterator;
 
-        TLevelSliceSnapshot SliceSnap; 
-        TFreshDataSnapshot FreshSnap; 
- 
+        TLevelSliceSnapshot SliceSnap;
+        TFreshDataSnapshot FreshSnap;
+
     private:
         TIntrusivePtr<TDelayedHugeBlobDeleterNotifier> Notifier;
     };
 
-    extern template class TLevelIndexSnapshot<TKeyLogoBlob, TMemRecLogoBlob>; 
-    extern template class TLevelIndexSnapshot<TKeyBarrier, TMemRecBarrier>; 
-    extern template class TLevelIndexSnapshot<TKeyBlock, TMemRecBlock>; 
- 
+    extern template class TLevelIndexSnapshot<TKeyLogoBlob, TMemRecLogoBlob>;
+    extern template class TLevelIndexSnapshot<TKeyBarrier, TMemRecBarrier>;
+    extern template class TLevelIndexSnapshot<TKeyBlock, TMemRecBlock>;
+
 } // NKikimr

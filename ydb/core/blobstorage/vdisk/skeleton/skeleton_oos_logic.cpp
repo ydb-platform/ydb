@@ -124,7 +124,7 @@ namespace NKikimr {
 
     */
 
-    TOutOfSpaceLogic::TOutOfSpaceLogic(TIntrusivePtr<TVDiskContext> vctx, std::shared_ptr<THull> hull) 
+    TOutOfSpaceLogic::TOutOfSpaceLogic(TIntrusivePtr<TVDiskContext> vctx, std::shared_ptr<THull> hull)
         : VCtx(std::move(vctx))
         , Hull(std::move(hull))
         , Stat(new TStat)

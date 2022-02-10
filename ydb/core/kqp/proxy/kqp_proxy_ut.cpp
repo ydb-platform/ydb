@@ -21,12 +21,12 @@ using namespace NSchemeShard;
 struct TSimpleResource {
     ui32 Cnt;
     ui32 NodeId;
-    TString DataCenterId; 
+    TString DataCenterId;
 
-    TSimpleResource(ui32 cnt, ui32 nodeId, TString dataCenterId) 
+    TSimpleResource(ui32 cnt, ui32 nodeId, TString dataCenterId)
         : Cnt(cnt)
         , NodeId(nodeId)
-        , DataCenterId(std::move(dataCenterId)) 
+        , DataCenterId(std::move(dataCenterId))
     {}
 };
 

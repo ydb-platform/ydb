@@ -120,7 +120,7 @@ namespace NYql::NDqs {
         setup->MaxActivityType = maxActivityType;
 
         YQL_LOG(DEBUG) << "Initializing local services";
-        setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, 0)); 
+        setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, 0));
         if (IActor* schedulerActor = CreateSchedulerActor(schedulerConfig)) {
             TActorId schedulerActorId = MakeSchedulerActorId();
             setup->LocalServices.emplace_back(schedulerActorId, TActorSetupCmd(schedulerActor, TMailboxType::ReadAsFilled, 0));
@@ -202,7 +202,7 @@ namespace NYql::NDqs {
         setup->Interconnect.ProxyActors.resize(maxNodeId + 1);
         for (ui32 id = 1; id <= maxNodeId; ++id) {
             if (nodeId != id) {
-                IActor* actor = new TInterconnectProxyTCP(id, icCommon); 
+                IActor* actor = new TInterconnectProxyTCP(id, icCommon);
                 setup->Interconnect.ProxyActors[id] = TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0);
             }
         }

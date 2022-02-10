@@ -14,14 +14,14 @@ namespace NKikimr {
         using TAction = std::function<void (const TActorId &id, ui64 cookie, IEventBase *msg)>;
 
         void Put(IEventBase *msg, const TActorId &recipient, ui64 recipientCookie, ui64 lsn) {
-            Map.emplace(lsn, TValue {recipient, recipientCookie, std::unique_ptr<IEventBase>(msg)}); 
+            Map.emplace(lsn, TValue {recipient, recipientCookie, std::unique_ptr<IEventBase>(msg)});
         }
 
         void ConfirmLsn(ui64 lsn, const TAction &action) {
             TMap::iterator it = Map.begin();
             while (it != Map.end() && it->first <= lsn) {
                 TValue &v = it->second;
-                action(v.Recipient, v.RecipientCookie, v.Msg.release()); 
+                action(v.Recipient, v.RecipientCookie, v.Msg.release());
                 ++it;
             }
             // remove all traversed elements
@@ -32,7 +32,7 @@ namespace NKikimr {
         struct TValue {
             TActorId Recipient;
             ui64 RecipientCookie;
-            std::unique_ptr<IEventBase> Msg; 
+            std::unique_ptr<IEventBase> Msg;
         };
 
         using TMap = std::multimap<ui64, TValue>;

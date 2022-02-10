@@ -27,7 +27,7 @@ struct TDynamicConfig : public TThrRefBase {
                          const TString &host,
                          const TString &resolveHost,
                          ui16 port,
-                         const TNodeLocation &location, 
+                         const TNodeLocation &location,
                          TInstant expire)
             : TNodeInfo(address, host, resolveHost, port, location)
             , Expire(expire)
@@ -39,14 +39,14 @@ struct TDynamicConfig : public TThrRefBase {
                                info.GetHost(),
                                info.GetResolveHost(),
                                (ui16)info.GetPort(),
-                               TNodeLocation(info.GetLocation()), 
+                               TNodeLocation(info.GetLocation()),
                                TInstant::MicroSeconds(info.GetExpire()))
         {
         }
 
         TDynamicNodeInfo(const TDynamicNodeInfo &other) = default;
 
-        bool EqualExceptExpire(const TDynamicNodeInfo &other) const 
+        bool EqualExceptExpire(const TDynamicNodeInfo &other) const
         {
             return Host == other.Host
                 && Address == other.Address
@@ -69,17 +69,17 @@ class TDynamicNodeResolverBase : public TActorBootstrapped<TDynamicNodeResolverB
 public:
     using TBase = TActorBootstrapped<TDynamicNodeResolverBase>;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::NAMESERVICE; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::NAMESERVICE;
     }
 
     TDynamicNodeResolverBase(TActorId owner, ui32 nodeId, TDynamicConfigPtr config,
-                             TAutoPtr<IEventHandle> origRequest, TInstant deadline) 
+                             TAutoPtr<IEventHandle> origRequest, TInstant deadline)
         : Owner(owner)
         , NodeId(nodeId)
         , Config(config)
         , OrigRequest(origRequest)
-        , Deadline(deadline) 
+        , Deadline(deadline)
     {
     }
 
@@ -88,7 +88,7 @@ public:
             CFunc(TEvTabletPipe::EvClientDestroyed, ReplyWithErrorAndDie);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvNodeBroker::TEvResolvedNode, Handle);
-            CFunc(TEvents::TSystem::Wakeup, ReplyWithErrorAndDie); 
+            CFunc(TEvents::TSystem::Wakeup, ReplyWithErrorAndDie);
         }
     }
 
@@ -115,7 +115,7 @@ protected:
     ui32 NodeId;
     TDynamicConfigPtr Config;
     TAutoPtr<IEventHandle> OrigRequest;
-    const TInstant Deadline; 
+    const TInstant Deadline;
 
 private:
     TActorId NodeBrokerPipe;
@@ -124,8 +124,8 @@ private:
 class TDynamicNodeResolver : public TDynamicNodeResolverBase {
 public:
     TDynamicNodeResolver(TActorId owner, ui32 nodeId, TDynamicConfigPtr config,
-                         TAutoPtr<IEventHandle> origRequest, TInstant deadline) 
-        : TDynamicNodeResolverBase(owner, nodeId, config, origRequest, deadline) 
+                         TAutoPtr<IEventHandle> origRequest, TInstant deadline)
+        : TDynamicNodeResolverBase(owner, nodeId, config, origRequest, deadline)
     {
     }
 
@@ -136,8 +136,8 @@ public:
 class TDynamicNodeSearcher : public TDynamicNodeResolverBase {
 public:
     TDynamicNodeSearcher(TActorId owner, ui32 nodeId, TDynamicConfigPtr config,
-                         TAutoPtr<IEventHandle> origRequest, TInstant deadline) 
-        : TDynamicNodeResolverBase(owner, nodeId, config, origRequest, deadline) 
+                         TAutoPtr<IEventHandle> origRequest, TInstant deadline)
+        : TDynamicNodeResolverBase(owner, nodeId, config, origRequest, deadline)
     {
     }
 
@@ -149,8 +149,8 @@ class TDynamicNameserver : public TActorBootstrapped<TDynamicNameserver> {
 public:
     using TBase = TActorBootstrapped<TDynamicNameserver>;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::NAMESERVICE; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::NAMESERVICE;
     }
 
     struct TEvPrivate {
@@ -174,7 +174,7 @@ public:
         };
     };
 
-    TDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup, ui32 resolvePoolId) 
+    TDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup, ui32 resolvePoolId)
         : StaticConfig(setup)
         , ResolvePoolId(resolvePoolId)
     {
@@ -218,22 +218,22 @@ private:
     void RequestEpochUpdate(ui32 domain,
                             ui32 epoch,
                             const TActorContext &ctx);
-    void ResolveStaticNode(ui32 nodeId, TActorId sender, TInstant deadline, const TActorContext &ctx); 
-    void ResolveDynamicNode(ui32 nodeId, TAutoPtr<IEventHandle> ev, TInstant deadline, const TActorContext &ctx); 
-    void SendNodesList(const TActorContext &ctx); 
-    void PendingRequestAnswered(ui32 domain, const TActorContext &ctx); 
+    void ResolveStaticNode(ui32 nodeId, TActorId sender, TInstant deadline, const TActorContext &ctx);
+    void ResolveDynamicNode(ui32 nodeId, TAutoPtr<IEventHandle> ev, TInstant deadline, const TActorContext &ctx);
+    void SendNodesList(const TActorContext &ctx);
+    void PendingRequestAnswered(ui32 domain, const TActorContext &ctx);
     void UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
                      const TActorContext &ctx);
 
     void OnPipeDestroyed(ui32 domain,
                          const TActorContext &ctx);
 
-    void Handle(TEvInterconnect::TEvResolveNode::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvResolveAddress::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvInterconnect::TEvListNodes::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvInterconnect::TEvResolveNode::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvResolveAddress::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvInterconnect::TEvListNodes::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvNodesInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev, const TActorContext &ctx);
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx);

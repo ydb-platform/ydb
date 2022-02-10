@@ -1,14 +1,14 @@
-#pragma once 
- 
-#include "defs.h" 
- 
-namespace NKikimr { 
- 
-    namespace NFake { 
-        class TProxyDS; 
-    } // NFake 
- 
-    IActor *CreateBlobStorageGroupProxyMockActor(TIntrusivePtr<NFake::TProxyDS> model); 
-    IActor *CreateBlobStorageGroupProxyMockActor(); 
- 
-} // NKikimr 
+#pragma once
+
+#include "defs.h"
+
+namespace NKikimr {
+
+    namespace NFake {
+        class TProxyDS;
+    } // NFake
+
+    IActor *CreateBlobStorageGroupProxyMockActor(TIntrusivePtr<NFake::TProxyDS> model);
+    IActor *CreateBlobStorageGroupProxyMockActor();
+
+} // NKikimr

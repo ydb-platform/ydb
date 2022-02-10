@@ -16,10 +16,10 @@ namespace NKikimr {
     struct TEvSyncerJobDone :
             public TEventLocal<TEvSyncerJobDone, TEvBlobStorage::EvSyncJobDone>
     {
-        std::unique_ptr<NSyncer::TSyncerJobTask> Task; 
+        std::unique_ptr<NSyncer::TSyncerJobTask> Task;
 
-        TEvSyncerJobDone(std::unique_ptr<NSyncer::TSyncerJobTask> task) 
-            : Task(std::move(task)) 
+        TEvSyncerJobDone(std::unique_ptr<NSyncer::TSyncerJobTask> task)
+            : Task(std::move(task))
         {}
     };
 
@@ -27,7 +27,7 @@ namespace NKikimr {
     // TSyncerJob CREATOR
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateSyncerJob(const TIntrusivePtr<TSyncerContext> &sc,
-                            std::unique_ptr<NSyncer::TSyncerJobTask> task, 
+                            std::unique_ptr<NSyncer::TSyncerJobTask> task,
                             const TActorId &notifyId);
 
 } // NKikimr

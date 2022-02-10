@@ -78,17 +78,17 @@ namespace NKikimr {
         }
 
         // append cur seg chunk ids (index and data) to the vector
-        void FillInChunkIds(TVector<ui32> &vec) const { 
-            for (const auto &x : Segments) 
-                x->FillInChunkIds(vec); 
-        } 
+        void FillInChunkIds(TVector<ui32> &vec) const {
+            for (const auto &x : Segments)
+                x->FillInChunkIds(vec);
+        }
 
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
-            for (const TLevelSegmentPtr& seg : Segments) { 
-                seg->GetOwnedChunks(chunks); 
-            } 
-        } 
- 
+            for (const TLevelSegmentPtr& seg : Segments) {
+                seg->GetOwnedChunks(chunks);
+            }
+        }
+
         void SerializeToProto(NKikimrVDiskData::TLevelX &pb) const {
             for (const auto &x : Segments) {
                 auto sst = pb.AddSsts();
@@ -151,7 +151,7 @@ namespace NKikimr {
 
         void OutputHtml(ui32 &index, ui32 level, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const {
             for (typename TSegments::const_iterator it = Segments.begin(), e = Segments.end(); it != e; ++it) {
-                (*it)->OutputHtml(index, level, str, sum); 
+                (*it)->OutputHtml(index, level, str, sum);
             }
         }
 
@@ -165,9 +165,9 @@ namespace NKikimr {
         class TSstIterator;     // iterate via ssts
     };
 
-    extern template struct TOrderedLevelSegments<TKeyLogoBlob, TMemRecLogoBlob>; 
-    extern template struct TOrderedLevelSegments<TKeyBarrier, TMemRecBarrier>; 
-    extern template struct TOrderedLevelSegments<TKeyBlock, TMemRecBlock>; 
+    extern template struct TOrderedLevelSegments<TKeyLogoBlob, TMemRecLogoBlob>;
+    extern template struct TOrderedLevelSegments<TKeyBarrier, TMemRecBarrier>;
+    extern template struct TOrderedLevelSegments<TKeyBlock, TMemRecBlock>;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TUnorderedLevelSegments
@@ -252,22 +252,22 @@ namespace NKikimr {
         void OutputHtml(ui32 &index, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const {
             for (const auto &x : Segments) {
                 if (x)
-                    x->OutputHtml(index, 0, str, sum); 
+                    x->OutputHtml(index, 0, str, sum);
             }
         }
 
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
-            for (const TLevelSegmentPtr& seg : Segments) { 
-                seg->GetOwnedChunks(chunks); 
-            } 
-        } 
- 
+            for (const TLevelSegmentPtr& seg : Segments) {
+                seg->GetOwnedChunks(chunks);
+            }
+        }
+
         // iterator through ssts
         class TSstIterator;
     };
 
-    extern template struct TUnorderedLevelSegments<TKeyLogoBlob, TMemRecLogoBlob>; 
-    extern template struct TUnorderedLevelSegments<TKeyBarrier, TMemRecBarrier>; 
-    extern template struct TUnorderedLevelSegments<TKeyBlock, TMemRecBlock>; 
- 
+    extern template struct TUnorderedLevelSegments<TKeyLogoBlob, TMemRecLogoBlob>;
+    extern template struct TUnorderedLevelSegments<TKeyBarrier, TMemRecBarrier>;
+    extern template struct TUnorderedLevelSegments<TKeyBlock, TMemRecBlock>;
+
 } // NKikimr

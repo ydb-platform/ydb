@@ -50,7 +50,7 @@ TPDiskStateInfo MakePDiskInfo(ui32 id)
     pdisk.SetGuid(id);
     pdisk.SetAvailableSize(100ULL << 30);
     pdisk.SetTotalSize(100ULL << 30);
-    pdisk.SetState(NKikimrBlobStorage::TPDiskState::Normal); 
+    pdisk.SetState(NKikimrBlobStorage::TPDiskState::Normal);
     return pdisk;
 }
 
@@ -255,13 +255,13 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
 
     Y_UNIT_TEST(FillInfo) {
         TEvInterconnect::TNodeInfo node1 =
-            { 1, "::1", "test1", "test1", 1, TNodeLocation() }; 
+            { 1, "::1", "test1", "test1", 1, TNodeLocation() };
         TEvInterconnect::TNodeInfo node2 =
-            { 1, "::1", "test2", "test2", 1, TNodeLocation() }; 
+            { 1, "::1", "test2", "test2", 1, TNodeLocation() };
         TEvInterconnect::TNodeInfo node3 =
-            { 2, "::2", "localhost", "localhost", 1, TNodeLocation() }; 
+            { 2, "::2", "localhost", "localhost", 1, TNodeLocation() };
         TEvInterconnect::TNodeInfo node4 =
-            { 3, "::2", "localhost", "localhost", 1, TNodeLocation() }; 
+            { 3, "::2", "localhost", "localhost", 1, TNodeLocation() };
 
         TClusterInfo cluster;
         cluster.AddNode(node1, nullptr);

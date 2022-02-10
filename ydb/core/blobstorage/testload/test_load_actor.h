@@ -1,17 +1,17 @@
-#pragma once 
- 
+#pragma once
+
 #include "defs.h"
 #include <ydb/core/base/blobstorage.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
 #include <cmath>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
     enum {
         EvStopTest = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
         EvUpdateQuantile,
         EvUpdateMonitoring,
     };
- 
+
     struct TEvStopTest : TEventLocal<TEvStopTest, EvStopTest>
     {};
     constexpr TDuration DelayBeforeMeasurements = TDuration::Seconds(15);
@@ -25,18 +25,18 @@ namespace NKikimr {
     {};
 
 
-    class TLoadActorException : public yexception { 
-    }; 
- 
+    class TLoadActorException : public yexception {
+    };
+
     NActors::IActor *CreateTestLoadActor(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters);
- 
-    NActors::IActor *CreateWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TLoadStart& cmd, 
+
+    NActors::IActor *CreateWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TLoadStart& cmd,
             const NActors::TActorId& parent, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, ui64 tag);
- 
-    NActors::IActor *CreatePDiskWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLoadStart& cmd, 
+
+    NActors::IActor *CreatePDiskWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLoadStart& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
- 
+
     NActors::IActor *CreatePDiskLogWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLogLoadStart& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
@@ -45,9 +45,9 @@ namespace NKikimr {
             const NActors::TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
 
-    NActors::IActor *CreateVDiskWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TVDiskLoadStart& cmd, 
+    NActors::IActor *CreateVDiskWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TVDiskLoadStart& cmd,
             const NActors::TActorId& parent, ui64 tag);
- 
+
     NActors::IActor *CreateKeyValueWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TKeyValueLoadStart& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
@@ -112,25 +112,25 @@ namespace NKikimr {
         }
     };
 
-    struct TEvTestLoadFinished : public TEventLocal<TEvTestLoadFinished, TEvBlobStorage::EvTestLoadFinished> { 
-        ui64 Tag; 
+    struct TEvTestLoadFinished : public TEventLocal<TEvTestLoadFinished, TEvBlobStorage::EvTestLoadFinished> {
+        ui64 Tag;
         TIntrusivePtr<TLoadReport> Report; // nullptr indicates error
         TString ErrorReason;
- 
+
         TEvTestLoadFinished(ui64 tag, TIntrusivePtr<TLoadReport> report, TString errorReason)
-            : Tag(tag) 
+            : Tag(tag)
             , Report(report)
             , ErrorReason(errorReason)
-        {} 
-    }; 
- 
-#define VERIFY_PARAM2(FIELD, NAME) \ 
-    do { \ 
-        if (!(FIELD).Has##NAME()) { \ 
-            ythrow TLoadActorException() << "missing " << #NAME << " parameter"; \ 
-        } \ 
-    } while (false) 
- 
-#define VERIFY_PARAM(NAME) VERIFY_PARAM2(cmd, NAME) 
- 
-} // NKikimr 
+        {}
+    };
+
+#define VERIFY_PARAM2(FIELD, NAME) \
+    do { \
+        if (!(FIELD).Has##NAME()) { \
+            ythrow TLoadActorException() << "missing " << #NAME << " parameter"; \
+        } \
+    } while (false)
+
+#define VERIFY_PARAM(NAME) VERIFY_PARAM2(cmd, NAME)
+
+} // NKikimr

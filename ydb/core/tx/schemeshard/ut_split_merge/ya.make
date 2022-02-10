@@ -1,12 +1,12 @@
 IF (NOT WITH_VALGRIND)
     UNITTEST_FOR(ydb/core/tx/schemeshard)
- 
+
     OWNER(g:kikimr)
- 
+
     FORK_SUBTESTS()
 
     SPLIT_FACTOR(20)
- 
+
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         TIMEOUT(3600)
         SIZE(LARGE)
@@ -15,7 +15,7 @@ IF (NOT WITH_VALGRIND)
         TIMEOUT(600)
         SIZE(MEDIUM)
     ENDIF()
- 
+
     PEERDIR(
         library/cpp/getopt
         library/cpp/regex/pcre

@@ -23,8 +23,8 @@ class TJsonBSControllerInfo : public TViewerPipeClient<TJsonBSControllerInfo> {
     ui32 Timeout = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::VIEWER_HANDLER; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
     TJsonBSControllerInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)

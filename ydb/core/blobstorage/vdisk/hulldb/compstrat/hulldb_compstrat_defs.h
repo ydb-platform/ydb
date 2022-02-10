@@ -163,14 +163,14 @@ namespace NKikimr {
                 void FindHugeBlobsForRemoval(const TLevelSegment *seg) {
                     typename TLevelSegment::TMemIterator it(seg);
                     it.SeekToFirst();
-                    TDiskDataExtractor extr; 
+                    TDiskDataExtractor extr;
                     while (it.Valid()) {
                         it.GetDiskData(&extr);
-                        if (extr.BlobType == TBlobType::HugeBlob || extr.BlobType == TBlobType::ManyHugeBlobs) { 
+                        if (extr.BlobType == TBlobType::HugeBlob || extr.BlobType == TBlobType::ManyHugeBlobs) {
                             for (const TDiskPart *part = extr.Begin; part < extr.End; ++part) {
-                                if (!part->Empty()) { 
-                                    HugeBlobsToDelete.PushBack(*part); 
-                                } 
+                                if (!part->Empty()) {
+                                    HugeBlobsToDelete.PushBack(*part);
+                                }
                             }
                         }
                         extr.Clear();

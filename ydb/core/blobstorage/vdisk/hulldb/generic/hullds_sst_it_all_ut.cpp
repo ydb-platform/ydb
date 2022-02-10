@@ -24,7 +24,7 @@ namespace NKikimr {
             for (ui32 i = 0; i < recs; i++) {
                 TLogoBlobID id(tabletId, generation, step + i * plus, channel, 0, cookie);
                 TRec rec {TKeyLogoBlob(id), TMemRecLogoBlob()};
-                ptr->LoadedIndex.push_back(rec); 
+                ptr->LoadedIndex.push_back(rec);
             }
             return ptr;
         }

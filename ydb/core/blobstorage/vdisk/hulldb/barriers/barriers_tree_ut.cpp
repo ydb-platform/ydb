@@ -22,10 +22,10 @@ namespace NKikimr {
                 TVDiskID vdisk1(0, 1, 0, 1 /*domain*/, 0 /*vdisk*/);
                 TVDiskID vdisk2(0, 1, 0, 2 /*domain*/, 0 /*vdisk*/);
                 TVDiskID vdisk3(0, 1, 0, 3 /*domain*/, 0 /*vdisk*/);
-                Cache0 = TIngressCache::Create(Info.PickTopology(), vdisk0); 
-                Cache1 = TIngressCache::Create(Info.PickTopology(), vdisk1); 
-                Cache2 = TIngressCache::Create(Info.PickTopology(), vdisk2); 
-                Cache3 = TIngressCache::Create(Info.PickTopology(), vdisk3); 
+                Cache0 = TIngressCache::Create(Info.PickTopology(), vdisk0);
+                Cache1 = TIngressCache::Create(Info.PickTopology(), vdisk1);
+                Cache2 = TIngressCache::Create(Info.PickTopology(), vdisk2);
+                Cache3 = TIngressCache::Create(Info.PickTopology(), vdisk3);
             }
 
             void Write(NBarriers::TTree &tree, const TKeyBarrier &key, ui32 collectGen, ui32 collectStep) {
@@ -57,7 +57,7 @@ namespace NKikimr {
         Y_UNIT_TEST(Tree) {
             TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3, 1, 4);
             TVDiskID vdisk0(0, 1, 0, 0 /*domain*/, 0 /*vdisk*/);
-            TIngressCachePtr cache0 = TIngressCache::Create(info.PickTopology(), vdisk0); 
+            TIngressCachePtr cache0 = TIngressCache::Create(info.PickTopology(), vdisk0);
             NBarriers::TTree tree(cache0, VDiskLogPrefix);
             TWriter writer;
             TMaybe<NBarriers::TCurrentBarrier> soft;

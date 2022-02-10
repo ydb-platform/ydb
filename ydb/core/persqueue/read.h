@@ -17,8 +17,8 @@ namespace NPQ {
     /// Intablet cache proxy: Partition <-> CacheProxy <-> KV
     class TPQCacheProxy : public TActorBootstrapped<TPQCacheProxy> {
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::PERSQUEUE_CACHE_ACTOR; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::PERSQUEUE_CACHE_ACTOR;
         }
 
         TPQCacheProxy(const TActorId& tablet, TString topicName, ui32 size)

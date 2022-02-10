@@ -25,13 +25,13 @@ bool TTenantSlotBroker::TSlotsAllocation::IsSlotOk(const TString &type,
         && Description.SlotType != ANY_SLOT_TYPE)
         return false;
     if (dc != Description.DataCenter
-        && Description.DataCenter != ANY_DATA_CENTER) { 
+        && Description.DataCenter != ANY_DATA_CENTER) {
         if (strictMatch || Description.ForceLocation)
             return false;
     }
     if (Group) {
         if (Group->GetPreferredDataCenter() != dc
-            && Group->GetPreferredDataCenter() != ANY_DATA_CENTER) { 
+            && Group->GetPreferredDataCenter() != ANY_DATA_CENTER) {
             if (strictMatch || Description.ForceCollocation)
                 return false;
         }
@@ -60,7 +60,7 @@ void TTenantSlotBroker::TTenant::AddSlotsAllocation(const TSlotDescription &desc
     TSlotsAllocation::TPtr allocation = new TSlotsAllocation(descr, Stats);
     Allocations[descr] = allocation;
     if (descr.CollocationGroup
-        && (descr.DataCenter == ANY_DATA_CENTER 
+        && (descr.DataCenter == ANY_DATA_CENTER
             || !descr.ForceLocation)) {
         auto group = GetOrCreateCollocationGroup(descr.CollocationGroup);
         group->Allocations.insert(allocation);
@@ -120,7 +120,7 @@ void TTenantSlotBroker::TTenant::DetermineDataCenterForCollocationGroups()
 
         for (auto allocation : pr.second->Allocations) {
             for (auto slot : allocation->AssignedSlots) {
-                if (slot->DataCenter != ANY_DATA_CENTER) 
+                if (slot->DataCenter != ANY_DATA_CENTER)
                     slots[slot->DataCenter] += 1;
             }
         }
@@ -380,11 +380,11 @@ TTenantSlotBroker::TSlot::TPtr TTenantSlotBroker::TFreeSlotsIndex::FindByDC(cons
 TTenantSlotBroker::TSlot::TPtr TTenantSlotBroker::TFreeSlotsIndex::Find(const TString &type,
                                                                         const TString &dataCenter)
 {
-    if (type == ANY_SLOT_TYPE && dataCenter == ANY_DATA_CENTER) 
+    if (type == ANY_SLOT_TYPE && dataCenter == ANY_DATA_CENTER)
         return Find();
     if (type == ANY_SLOT_TYPE)
         return FindByDC(dataCenter);
-    if (dataCenter == ANY_DATA_CENTER) 
+    if (dataCenter == ANY_DATA_CENTER)
         return FindByType(type);
 
     auto it1 = FreeSlotsByType.find(type);
@@ -817,7 +817,7 @@ bool TTenantSlotBroker::UpdateSlotDataCenter(TSlot::TPtr slot,
     // Check if slot has to be detached due to updated data center.
     if (slot->AssignedTenant
         && !slot->IsPinned
-        && (slot->UsedAs.DataCenter != ANY_DATA_CENTER 
+        && (slot->UsedAs.DataCenter != ANY_DATA_CENTER
             || slot->UsedAs.CollocationGroup)) {
         DetachSlot(slot, txc, ctx);
         res = true;
@@ -964,7 +964,7 @@ void TTenantSlotBroker::DetachSlotNoConfigureNoDb(TSlot::TPtr slot,
     if (slot->IsPending())
         allocation->DecPending();
     allocation->IncMissing();
-    if (allocation->Description.DataCenter != ANY_DATA_CENTER 
+    if (allocation->Description.DataCenter != ANY_DATA_CENTER
         && allocation->Description.DataCenter != slot->DataCenter)
         allocation->DecMisplaced();
     if (allocation->Group
@@ -1029,7 +1029,7 @@ void TTenantSlotBroker::AttachSlotNoConfigureNoDb(TSlot::TPtr slot,
     auto allocation = tenant->GetAllocation(usedAs);
     allocation->AddAssignedSlot(slot);
     allocation->DecMissing();
-    if (allocation->Description.DataCenter != ANY_DATA_CENTER 
+    if (allocation->Description.DataCenter != ANY_DATA_CENTER
         && allocation->Description.DataCenter != slot->DataCenter)
         allocation->IncMisplaced();
     if (allocation->Group
@@ -1150,7 +1150,7 @@ bool TTenantSlotBroker::AssignFreeSlots(TTenant::TPtr tenant,
                 // Try to find slot in another data center if allowed.
                 if (!freeSlot && !allocation->Description.ForceLocation)
                     freeSlot = FreeSlots.Find(allocation->Description.SlotType,
-                                              ANY_DATA_CENTER); 
+                                              ANY_DATA_CENTER);
 
                 if (!freeSlot)
                     break;
@@ -1217,7 +1217,7 @@ TTenantSlotBroker::ComputeLayoutForGroup(TCollocationGroup::TPtr group,
     for (auto allocation : group->Allocations) {
         auto &assigned = layout->AssignedSlots[allocation];
 
-        if (allocation->Description.DataCenter != ANY_DATA_CENTER 
+        if (allocation->Description.DataCenter != ANY_DATA_CENTER
             && allocation->Description.DataCenter != dc)
             continue;
 
@@ -1236,7 +1236,7 @@ TTenantSlotBroker::ComputeLayoutForGroup(TCollocationGroup::TPtr group,
     for (auto allocation : group->Allocations) {
         auto &assigned = layout->AssignedSlots[allocation];
 
-        if (allocation->Description.DataCenter == ANY_DATA_CENTER 
+        if (allocation->Description.DataCenter == ANY_DATA_CENTER
             || allocation->Description.DataCenter == dc)
             continue;
 
@@ -1274,10 +1274,10 @@ TTenantSlotBroker::ComputeLayoutForGroup(TCollocationGroup::TPtr group,
 
         while (assigned.size() < allocation->RequiredCount) {
             auto slot = ExtractSlot(current, index, allocation->Description.SlotType,
-                                    ANY_DATA_CENTER); 
+                                    ANY_DATA_CENTER);
             if (slot) {
                 assigned.insert(slot);
-                if (allocation->Description.DataCenter != ANY_DATA_CENTER 
+                if (allocation->Description.DataCenter != ANY_DATA_CENTER
                     && allocation->Description.DataCenter != slot->DataCenter)
                     ++layout->MisplacedCount;
                 Y_VERIFY(slot->DataCenter != dc);
@@ -1370,7 +1370,7 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
         currentMissing += allocation->MissingCount;
         currentMisplaced += allocation->MisplacedCount;
         currentSplit += allocation->SplitCount;
-        if (allocation->Description.DataCenter != ANY_DATA_CENTER) { 
+        if (allocation->Description.DataCenter != ANY_DATA_CENTER) {
             Y_VERIFY(!allocation->Description.ForceLocation);
             preferredDCs.insert(allocation->Description.DataCenter);
         }

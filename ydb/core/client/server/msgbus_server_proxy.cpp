@@ -60,7 +60,7 @@ class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMe
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_SCHEME_DESCRIBE; } 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_SCHEME_DESCRIBE; }
 
     TMessageBusServerFlatDescribeRequest(TEvBusProxy::TEvFlatDescribeRequest* msg)
         : TBase(msg->MsgContext)
@@ -178,14 +178,14 @@ void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
     SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
     PqMetaCache = CreatePersQueueMetaCacheV2Id();
 
-    if (Server) { 
-        Server->InitSession(ctx.ExecutorThread.ActorSystem, ctx.SelfID); 
-    } 
- 
-    if (Server) { 
-        if (auto *busMonPage = AppData(ctx)->BusMonPage) 
-            Server->RegisterMonPage(busMonPage); 
-    } 
+    if (Server) {
+        Server->InitSession(ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+    }
+
+    if (Server) {
+        if (auto *busMonPage = AppData(ctx)->BusMonPage)
+            Server->RegisterMonPage(busMonPage);
+    }
 
     Become(&TThis::StateFunc);
 }

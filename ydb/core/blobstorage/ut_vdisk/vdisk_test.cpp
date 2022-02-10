@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskExtreme) {
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingKeyFresh, TSimple3Put1GetMissingKey, TFastVDiskSetup, false, 0, DG_3PUT)
     Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingKeyCompaction, TSimple3Put1GetMissingKey, TFastVDiskSetupCompacted, true, 0, DG_3PUT)
- 
+
     Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingPartFresh, TSimple3Put1GetMissingPart, TFastVDiskSetup, false, 0, DG_3PUT)
     Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingPartCompaction, TSimple3Put1GetMissingPart, TFastVDiskSetupCompacted, true, 0, DG_3PUT)
     // TODO: Make range queries
@@ -258,17 +258,17 @@ Y_UNIT_TEST_SUITE(TBsVDiskRangeHuge) {
 
 Y_UNIT_TEST_SUITE(TBsVDiskManyPutGetCheckSize) {
     Y_UNIT_TEST(ManyPutGetCheckSize) {
-        std::shared_ptr<TVector<TMsgPackInfo>> msgPacks(std::unique_ptr<TVector<TMsgPackInfo>>(new TVector<TMsgPackInfo>{ 
+        std::shared_ptr<TVector<TMsgPackInfo>> msgPacks(std::unique_ptr<TVector<TMsgPackInfo>>(new TVector<TMsgPackInfo>{
             TMsgPackInfo(100'000, 672),
             TMsgPackInfo(17'026, 1)
-        })); 
+        }));
         TManyPutOneGet testOk(false, msgPacks, UNK, 0, 257, false);
         TestRun<TManyPutOneGet, TFastVDiskSetupHndOff>(&testOk, TDuration::Minutes(100), DefChunkSize, DefDiskSize,
                 1, 1, NKikimr::TErasureType::ErasureNone);
-        std::shared_ptr<TVector<TMsgPackInfo>> failMsgPacks(std::unique_ptr<TVector<TMsgPackInfo>>(new TVector<TMsgPackInfo>{ 
+        std::shared_ptr<TVector<TMsgPackInfo>> failMsgPacks(std::unique_ptr<TVector<TMsgPackInfo>>(new TVector<TMsgPackInfo>{
             TMsgPackInfo(100'000, 672),
             TMsgPackInfo(17'027, 1)
-        })); 
+        }));
         TManyPutOneGet testError(false, failMsgPacks, UNK, 0, 257, true);
         TestRun<TManyPutOneGet, TFastVDiskSetupHndOff>(&testError, TDuration::Minutes(100), DefChunkSize, DefDiskSize,
                 1, 1, NKikimr::TErasureType::ErasureNone);
@@ -469,25 +469,25 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
     }
 
     Y_UNIT_TEST(WriteRestartRead) {
-        auto vdiskSetup = std::make_shared<TFastVDiskSetup>(); 
+        auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         auto settings = TWriteRestartReadSettings::OneSetup(1000, 10, UNK, vdiskSetup);
         WriteRestartRead(settings, TIMEOUT);
     }
 
     Y_UNIT_TEST(WriteRestartReadHuge) {
-        auto vdiskSetup = std::make_shared<TFastVDiskSetup>(); 
+        auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         auto settings = TWriteRestartReadSettings::OneSetup(1000, 65u << 10u, HUGEB, vdiskSetup);
         WriteRestartRead(settings, TIMEOUT);
     }
 
     Y_UNIT_TEST(MultiPutWriteRestartRead) {
-        auto vdiskSetup = std::make_shared<TFastVDiskSetup>(); 
+        auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         auto settings = TMultiPutWriteRestartReadSettings::OneSetup(1000, 10, 10, UNK, vdiskSetup);
         MultiPutWriteRestartRead(settings, TIMEOUT);
     }
 
     Y_UNIT_TEST(MultiPutWriteRestartReadHuge) {
-        auto vdiskSetup = std::make_shared<TFastVDiskSetup>(); 
+        auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         auto settings = TMultiPutWriteRestartReadSettings::OneSetup(1000, 10, 65u << 10u, HUGEB, vdiskSetup);
         MultiPutWriteRestartRead(settings, TIMEOUT);
     }
@@ -519,15 +519,15 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
     };
 
     Y_UNIT_TEST(SmallerHugeBlobs) {
-        auto vdiskWriteSetup = std::make_shared<TWriteVDiskSetup>(); 
-        auto vdiskReadSetup = std::make_shared <TReadVDiskSetup>(); 
+        auto vdiskWriteSetup = std::make_shared<TWriteVDiskSetup>();
+        auto vdiskReadSetup = std::make_shared <TReadVDiskSetup>();
         TWriteRestartReadSettings settings(1000, 66u << 10u, HUGEB, vdiskWriteSetup, vdiskReadSetup);
         WriteRestartRead(settings, TIMEOUT);
     }
     */
 
     Y_UNIT_TEST(ChaoticWriteRestart) {
-        auto vdiskSetup = std::make_shared<TFastVDiskSetup>(); 
+        auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         TChaoticWriteRestartWriteSettings settings(
             TWriteRestartReadSettings::OneSetup(100000, 10, UNK, vdiskSetup),
             10,
@@ -538,7 +538,7 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
 
     Y_UNIT_TEST(ChaoticWriteRestartHuge) {
         return; // https://st.yandex-team.ru/KIKIMR-5314
-        auto vdiskSetup = std::make_shared<TFastVDiskSetup>(); 
+        auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         TChaoticWriteRestartWriteSettings settings(
             TWriteRestartReadSettings::OneSetup(100000, 65u << 10u, HUGEB, vdiskSetup),
             10,
@@ -548,7 +548,7 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
     }
 
     Y_UNIT_TEST(ChaoticWriteRestartHugeXXX) {
-        auto vdiskSetup = std::make_shared<TFastVDiskSetup>(); 
+        auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         TChaoticWriteRestartWriteSettings settings(
             TWriteRestartReadSettings::OneSetup(300, 65u << 10u, HUGEB, vdiskSetup),
             500,
@@ -564,7 +564,7 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
 Y_UNIT_TEST_SUITE(TBsOther1) {
 
     Y_UNIT_TEST(PoisonPill) {
-        TManyPutRangeGet2Channels test(false, true, LARGE_MSG_NUM, 100, UNK); 
+        TManyPutRangeGet2Channels test(false, true, LARGE_MSG_NUM, 100, UNK);
         TConfiguration Conf;
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
@@ -577,21 +577,21 @@ Y_UNIT_TEST_SUITE(TBsOther1) {
 
     template <class TSetup>
     void ChaoticParallelWriteGeneric(ui32 parallel, ui32 msgNum, ui32 msgSize,
-                                     std::shared_ptr<IPutHandleClassGenerator> cls, 
+                                     std::shared_ptr<IPutHandleClassGenerator> cls,
                                      TDuration workingTime, TDuration requestTimeout) {
         TConfiguration Conf;
         TSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
 
         TChaoticManyPutsTest w(parallel, msgNum, msgSize, cls, workingTime, requestTimeout);
-        bool success1 = Conf.Run<TChaoticManyPutsTest>(&w, TDuration::Seconds(600)); 
+        bool success1 = Conf.Run<TChaoticManyPutsTest>(&w, TDuration::Seconds(600));
         LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "Chaotic write done");
         UNIT_ASSERT(success1);
         Conf.Shutdown();
     }
 
     Y_UNIT_TEST(ChaoticParallelWrite) {
-        auto cls = std::make_shared<TPutHandleClassGenerator>(UNK); 
+        auto cls = std::make_shared<TPutHandleClassGenerator>(UNK);
         NTestSuiteTBsOther1::ChaoticParallelWriteGeneric<TFastVDiskSetup>(
                 5000, 100, 10, cls, TDuration::Seconds(600), TDuration());
     }
@@ -612,7 +612,7 @@ Y_UNIT_TEST_SUITE(TBsOther2) {
         // and get them overflow
         // vdisk must handle request in 0.1 sec or drop it, expect overload
         const auto requestTimeout = TDuration::MilliSeconds(100);
-        auto cls = std::make_shared<TRandomPutHandleClassGenerator>(); 
+        auto cls = std::make_shared<TRandomPutHandleClassGenerator>();
         NTestSuiteTBsOther1::ChaoticParallelWriteGeneric<TFastVDiskSetupSmallVDiskQueues>(
                 5000, 100, 10, cls, TDuration::Seconds(600), requestTimeout);
     }
@@ -623,7 +623,7 @@ Y_UNIT_TEST_SUITE(TBsOther2) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 Y_UNIT_TEST_SUITE(TBsDbStat) {
     Y_UNIT_TEST(ChaoticParallelWrite_DbStat) {
-        auto cls = std::make_shared<TPutHandleClassGenerator>(UNK); 
+        auto cls = std::make_shared<TPutHandleClassGenerator>(UNK);
         const ui32 parallel = 50;
         const ui32 msgNum = 10000;
         const ui32 msgSize = 10;
@@ -711,26 +711,26 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl2) {
 
 Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
     Y_UNIT_TEST(ReplEraseDiskRestoreMultipart) {
-        TSmallCommonDataSet dataSet; 
-        ui32 domainsNum = 4u; 
-        ui32 disksInDomain = 1u; 
-        ui32 pDisksNum = domainsNum * disksInDomain; 
+        TSmallCommonDataSet dataSet;
+        ui32 domainsNum = 4u;
+        ui32 disksInDomain = 1u;
+        ui32 pDisksNum = domainsNum * disksInDomain;
         TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"),
-                            domainsNum, disksInDomain); 
-        TFastVDiskSetup vdiskSetup; 
-        Conf.Prepare(&vdiskSetup); 
-        TTestReplDataWriteAndSyncMultipart testLoad(&dataSet); 
-        bool success1 = Conf.Run<TTestReplDataWriteAndSyncMultipart>(&testLoad, TIMEOUT); 
-        UNIT_ASSERT(success1); 
-        Conf.Shutdown(); 
-        Conf.PDisks->EraseDisk(3, 678); 
-        Conf.Prepare(&vdiskSetup, false); 
-        TReadUntilSuccess testRead(&dataSet, 3, SMALL_TIMEOUT, true); 
-        bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT); 
-        Conf.Shutdown(); 
-        UNIT_ASSERT(success2); 
-    } 
- 
+                            domainsNum, disksInDomain);
+        TFastVDiskSetup vdiskSetup;
+        Conf.Prepare(&vdiskSetup);
+        TTestReplDataWriteAndSyncMultipart testLoad(&dataSet);
+        bool success1 = Conf.Run<TTestReplDataWriteAndSyncMultipart>(&testLoad, TIMEOUT);
+        UNIT_ASSERT(success1);
+        Conf.Shutdown();
+        Conf.PDisks->EraseDisk(3, 678);
+        Conf.Prepare(&vdiskSetup, false);
+        TReadUntilSuccess testRead(&dataSet, 3, SMALL_TIMEOUT, true);
+        bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
+        Conf.Shutdown();
+        UNIT_ASSERT(success2);
+    }
+
     Y_UNIT_TEST(AnubisTest) {
         // ignored
         return;
@@ -789,62 +789,62 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
         ui32 pDisksNum = domainsNum * disksInDomain;
         TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 16u << 20u, 16ull << 30ull, "ROT"),
                             domainsNum, disksInDomain);
-        TFastVDiskSetupRepl vdiskSetup; 
-        Conf.Prepare(&vdiskSetup); 
- 
-        const ui32 erasedPDiskID = 4; 
- 
+        TFastVDiskSetupRepl vdiskSetup;
+        Conf.Prepare(&vdiskSetup);
+
+        const ui32 erasedPDiskID = 4;
+
         TVector<NKikimr::TVDiskID> vdisks;
-        for (ui32 i = 0; i < Conf.VDisks->GetSize(); ++i) { 
-            auto& vDisk = Conf.VDisks->Get(i); 
+        for (ui32 i = 0; i < Conf.VDisks->GetSize(); ++i) {
+            auto& vDisk = Conf.VDisks->Get(i);
             if (vDisk.Cfg->BaseInfo.PDiskId == erasedPDiskID) {
-                vdisks.push_back(vDisk.VDiskID); 
-            } 
-        } 
- 
+                vdisks.push_back(vDisk.VDiskID);
+            }
+        }
+
         LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting writer");
         generator.Reset(CreateBlobGenerator(maxDataSize, maxBlobs, minBlobSize, maxBlobSize, 0, 1,
                 Conf.GroupInfo, vdisks));
         dataSetPtr.Reset(new TGeneratedDataSet(generator));
         TTestReplDataWriteAndSync testLoad(dataSetPtr.Get());
         bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT);
-        UNIT_ASSERT(success1); 
-        LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "stopped writer"); 
-        Conf.Shutdown(); 
- 
-        Conf.PDisks->EraseDisk(3, 678); 
- 
-        Conf.Prepare(&vdiskSetup, false); 
- 
+        UNIT_ASSERT(success1);
+        LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "stopped writer");
+        Conf.Shutdown();
+
+        Conf.PDisks->EraseDisk(3, 678);
+
+        Conf.Prepare(&vdiskSetup, false);
+
         generator.Reset(CreateBlobGenerator(maxDataSize, maxBlobs, minBlobSize, maxBlobSize, 0, 1,
                 Conf.GroupInfo, vdisks));
         dataSetPtr.Reset(new TGeneratedDataSet(generator));
-        LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting first read pass"); 
+        LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting first read pass");
         TReadUntilSuccess testRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT);
-        TInstant begin = Now(); 
+        TInstant begin = Now();
         bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
-        TInstant end = Now(); 
-        TDuration timedelta = end - begin; 
-        Conf.Shutdown(); 
-        UNIT_ASSERT(success2); 
- 
-        Conf.Prepare(&vdiskSetup, false, false); // do not run replication here, all data must already be in VDisk 
- 
+        TInstant end = Now();
+        TDuration timedelta = end - begin;
+        Conf.Shutdown();
+        UNIT_ASSERT(success2);
+
+        Conf.Prepare(&vdiskSetup, false, false); // do not run replication here, all data must already be in VDisk
+
         generator.Reset(CreateBlobGenerator(maxDataSize, maxBlobs, minBlobSize, maxBlobSize, 0, 1,
                 Conf.GroupInfo, vdisks));
         dataSetPtr.Reset(new TGeneratedDataSet(generator));
- 
+
         LOG_NOTICE_S(*Conf.ActorSystem1, NActorsServices::TEST, "first read pass w/repl took " << timedelta.ToString().data());
-        LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting second read pass"); 
+        LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting second read pass");
         TReadUntilSuccess verifyRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT);
-        begin = Now(); 
+        begin = Now();
         bool success3 = Conf.Run<TReadUntilSuccess>(&verifyRead, TIMEOUT);
-        end = Now(); 
-        timedelta = end - begin; 
-        Conf.Shutdown(); 
-        UNIT_ASSERT(success3); 
-    } 
- 
+        end = Now();
+        timedelta = end - begin;
+        Conf.Shutdown();
+        UNIT_ASSERT(success3);
+    }
+
     Y_UNIT_TEST(SyncLogTest) {
         TConfiguration Conf;
         TNoVDiskSetup vdiskSetup;

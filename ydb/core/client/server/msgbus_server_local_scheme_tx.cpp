@@ -9,10 +9,10 @@ namespace {
 }
 
 class TMessageBusLocalSchemeTx : public TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TMessageBusLocalSchemeTx,
-        TEvTablet::TEvLocalSchemeTxResponse, NKikimrServices::TActivity::FRONT_LOCAL_TXRQ>> { 
+        TEvTablet::TEvLocalSchemeTxResponse, NKikimrServices::TActivity::FRONT_LOCAL_TXRQ>> {
     using TBase = TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TMessageBusLocalSchemeTx,
-    TEvTablet::TEvLocalSchemeTxResponse, NKikimrServices::TActivity::FRONT_LOCAL_TXRQ>>; 
-    NKikimrClient::TLocalSchemeTx Request; 
+    TEvTablet::TEvLocalSchemeTxResponse, NKikimrServices::TActivity::FRONT_LOCAL_TXRQ>>;
+    NKikimrClient::TLocalSchemeTx Request;
 public:
     TMessageBusLocalSchemeTx(TBusMessageContext &msg, NKikimrClient::TLocalSchemeTx &request, ui64 tabletId, bool withRetry, TDuration timeout, bool connectToFollower)
         : TMessageBusSecureRequest(msg, tabletId, withRetry, timeout, connectToFollower)

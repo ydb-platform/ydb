@@ -46,7 +46,7 @@ namespace NKikimr {
                                 (finishTime - startTime).ToString().data(), stat.ToString().data()));
                 }
 
-                BarriersEssence.Reset(); 
+                BarriersEssence.Reset();
             }
 
         private:
@@ -122,8 +122,8 @@ namespace NKikimr {
                         break;
                     }
                 }
- 
-                BarriersEssence.Reset(); 
+
+                BarriersEssence.Reset();
             }
 
             TSstRatioPtr CalculateSstRatio(TLevelSegmentPtr sst, TInstant now) {
@@ -147,7 +147,7 @@ namespace NKikimr {
                                               const TIndexRecordMerger &dbMerger) {
                     Y_UNUSED(subsIt);
                     Y_UNUSED(subsMerger);
-                    TDiskDataExtractor extr; 
+                    TDiskDataExtractor extr;
                     subsIt.GetDiskData(&extr);
                     // calculate item's parameters
                     const ui64 indexItemByteSize = sizeof(TKey) + sizeof(TMemRec);

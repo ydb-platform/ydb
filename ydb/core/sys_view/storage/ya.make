@@ -12,8 +12,8 @@ SRCS(
     pdisks.cpp
     storage_pools.h
     storage_pools.cpp
-    storage_stats.h 
-    storage_stats.cpp 
+    storage_stats.h
+    storage_stats.cpp
     vslots.h
     vslots.cpp
 )

@@ -14,34 +14,34 @@ namespace NKikimr {
     class TEvHullWriteHugeBlob : public TEventLocal<TEvHullWriteHugeBlob, TEvBlobStorage::EvHullWriteHugeBlob>, public TIntrusiveListItem<TEvHullWriteHugeBlob> {
     public:
         const TActorId SenderId;
-        const ui64 Cookie; 
+        const ui64 Cookie;
         const TLogoBlobID LogoBlobId;
         const TIngress Ingress;
-        TRope Data; 
+        TRope Data;
         const bool IgnoreBlock;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
-        std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result; 
+        std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
 
         TEvHullWriteHugeBlob(const TActorId &senderId,
-                             ui64 cookie, 
+                             ui64 cookie,
                              const TLogoBlobID &logoBlobId,
                              const TIngress &ingress,
-                             TRope&& data, 
+                             TRope&& data,
                              bool ignoreBlock,
                              NKikimrBlobStorage::EPutHandleClass handleClass,
-                             std::unique_ptr<TEvBlobStorage::TEvVPutResult> result) 
+                             std::unique_ptr<TEvBlobStorage::TEvVPutResult> result)
             : SenderId(senderId)
-            , Cookie(cookie) 
+            , Cookie(cookie)
             , LogoBlobId(logoBlobId)
             , Ingress(ingress)
-            , Data(std::move(data)) 
+            , Data(std::move(data))
             , IgnoreBlock(ignoreBlock)
             , HandleClass(handleClass)
-            , Result(std::move(result)) 
+            , Result(std::move(result))
         {}
 
         ui64 ByteSize() const {
-            return Data.GetSize(); 
+            return Data.GetSize();
         }
 
         TString ToString() const {
@@ -62,8 +62,8 @@ namespace NKikimr {
         const TDiskPart HugeBlob;
         const bool IgnoreBlock;
         const TActorId OrigClient;
-        const ui64 OrigCookie; 
-        std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result; 
+        const ui64 OrigCookie;
+        std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,
@@ -71,16 +71,16 @@ namespace NKikimr {
                            const TDiskPart &hugeBlob,
                            bool ignoreBlock,
                            const TActorId &origClient,
-                           ui64 origCookie, 
-                           std::unique_ptr<TEvBlobStorage::TEvVPutResult> result) 
+                           ui64 origCookie,
+                           std::unique_ptr<TEvBlobStorage::TEvVPutResult> result)
             : WriteId(writeId)
             , LogoBlobID(logoBlobID)
             , Ingress(ingress)
             , HugeBlob(hugeBlob)
             , IgnoreBlock(ignoreBlock)
             , OrigClient(origClient)
-            , OrigCookie(origCookie) 
-            , Result(std::move(result)) 
+            , OrigCookie(origCookie)
+            , Result(std::move(result))
 
         {}
     };
@@ -131,7 +131,7 @@ namespace NKikimr {
             TStringStream str;
             str << "{" << Signature.ToString()
                 << " DelLsn# " << DeletionLsn << " Slots# "
-                << HugeBlobs.ToString() << "}"; 
+                << HugeBlobs.ToString() << "}";
             return str.Str();
         }
     };
@@ -217,7 +217,7 @@ namespace NKikimr {
     // CreateHullHugeBlobKeeper
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateHullHugeBlobKeeper(
-            std::shared_ptr<THugeKeeperCtx> hugeKeeperCtx, 
-            std::shared_ptr<NHuge::THullHugeKeeperPersState> persState); 
+            std::shared_ptr<THugeKeeperCtx> hugeKeeperCtx,
+            std::shared_ptr<NHuge::THullHugeKeeperPersState> persState);
 
 } // NKikimr

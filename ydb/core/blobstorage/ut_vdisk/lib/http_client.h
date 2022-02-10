@@ -44,8 +44,8 @@ public:
 private:
     void ReadAndTransferHttp(const TStringBuf relativeUrl, THttpInput& inp, IOutputStream* output) const;
 
-    std::unique_ptr<TNetworkAddress> Resolve() const; 
-    std::unique_ptr<TSocket> Connect(TNetworkAddress& addr) const; 
+    std::unique_ptr<TNetworkAddress> Resolve() const;
+    std::unique_ptr<TSocket> Connect(TNetworkAddress& addr) const;
     void ProcessResponse(const TStringBuf relativeUrl, THttpInput& input, IOutputStream* output,
         const unsigned statusCode) const;
 

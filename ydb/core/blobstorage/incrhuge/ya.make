@@ -1,4 +1,4 @@
-LIBRARY() 
+LIBRARY()
 
 OWNER(
     alexvru
@@ -39,7 +39,7 @@ SRCS(
     incrhuge_keeper_write.h
 )
 
-END() 
+END()
 
 RECURSE_FOR_TESTS(
     ut

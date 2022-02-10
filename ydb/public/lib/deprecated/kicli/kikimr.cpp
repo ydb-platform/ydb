@@ -43,7 +43,7 @@ protected:
             , Promise(promise)
             , Request(request)
         {}
- 
+
         bool operator <(const TQueueItem& other) const {
             return Time > other.Time;
         }
@@ -279,8 +279,8 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusSqsRequest, NMsgBusProxy::TBusSqsResponse>(&NGRpcProxy::TGRpcClient::SqsRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_S3_LISTING_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusS3ListingRequest, NMsgBusProxy::TBusS3ListingResponse>(&NGRpcProxy::TGRpcClient::S3Listing, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_INTERCONNECT_DEBUG: 
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusInterconnectDebug>(&NGRpcProxy::TGRpcClient::InterconnectDebug, promise, request); 
+        case NMsgBusProxy::MTYPE_CLIENT_INTERCONNECT_DEBUG:
+            return ExecuteGRpcRequest<NMsgBusProxy::TBusInterconnectDebug>(&NGRpcProxy::TGRpcClient::InterconnectDebug, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusConsoleRequest, NMsgBusProxy::TBusConsoleResponse>(&NGRpcProxy::TGRpcClient::ConsoleRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_WHOAMI:
@@ -401,17 +401,17 @@ void TKikimr::TRetryQueue::QueueRequest(NThreading::TPromise<TResult> promise, T
 TKikimr::TKikimr(const NMsgBusProxy::TMsgBusClientConfig& clientConfig, const TConnectionPolicy& policy)
     : Impl(new TMsgBusImpl(clientConfig, policy))
 {}
- 
+
 TKikimr::TKikimr(const NGRpcProxy::TGRpcClientConfig& clientConfig, const TConnectionPolicy& policy)
     : Impl(new TGRpcImpl(clientConfig, policy))
 {}
- 
+
 TString TKikimr::GetCurrentLocation() const {
     return Impl->GetCurrentLocation();
 }
 
 TKikimr::~TKikimr() = default;
- 
+
 TTextQuery TKikimr::Query(const TString& program) {
     return TTextQuery(*this, program);
 }
@@ -500,7 +500,7 @@ NThreading::TFuture<TPrepareResult> TKikimr::PrepareQuery(const TTextQuery& quer
 }
 
 NThreading::TFuture<TResult> TKikimr::DescribeObject(const TSchemaObject& object) {
-    TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe()); 
+    TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe());
     request->Record.SetPath(object.GetPath());
     return ExecuteRequest(request.Release());
 }
@@ -513,7 +513,7 @@ NThreading::TFuture<TResult> TKikimr::ModifySchema(const TModifyScheme& schema) 
 }
 
 NThreading::TFuture<TResult> TKikimr::MakeDirectory(const TSchemaObject& object, const TString& name) {
-    TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+    TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
     request->Record.MutablePollOptions()->SetTimeout(POLLING_TIMEOUT);
     auto* modifyScheme = request->Record.MutableTransaction()->MutableModifyScheme();
     modifyScheme->SetWorkingDir(object.GetPath());
@@ -526,7 +526,7 @@ NThreading::TFuture<TResult> TKikimr::MakeDirectory(const TSchemaObject& object,
 NThreading::TFuture<TResult> TKikimr::CreateTable(TSchemaObject& object, const TString& name, const TVector<TColumn>& columns,
                                                   const TTablePartitionConfig* partitionConfig)
 {
-    TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+    TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
     request->Record.MutablePollOptions()->SetTimeout(POLLING_TIMEOUT);
     auto* modifyScheme = request->Record.MutableTransaction()->MutableModifyScheme();
     modifyScheme->SetWorkingDir(object.GetPath());
@@ -576,21 +576,21 @@ TNodeConfigurator TKikimr::GetNodeConfigurator()
 
 NThreading::TFuture<TResult> TKikimr::RegisterNode(const TString& domainPath, const TString& host, ui16 port,
                                                    const TString& address, const TString& resolveHost,
-                                                   const NActors::TNodeLocation& location, 
-                                                   bool fixedNodeId, TMaybe<TString> path) 
+                                                   const NActors::TNodeLocation& location,
+                                                   bool fixedNodeId, TMaybe<TString> path)
 {
     TAutoPtr<NMsgBusProxy::TBusNodeRegistrationRequest> request = new NMsgBusProxy::TBusNodeRegistrationRequest;
     request->Record.SetHost(host);
     request->Record.SetPort(port);
     request->Record.SetAddress(address);
     request->Record.SetResolveHost(resolveHost);
-    location.Serialize(request->Record.MutableLocation()); 
-    location.GetLegacyValue().Serialize(request->Record.MutableLocation()); 
+    location.Serialize(request->Record.MutableLocation());
+    location.GetLegacyValue().Serialize(request->Record.MutableLocation());
     request->Record.SetDomainPath(domainPath);
     request->Record.SetFixedNodeId(fixedNodeId);
-    if (path) { 
-        request->Record.SetPath(*path); 
-    } 
+    if (path) {
+        request->Record.SetPath(*path);
+    }
     return ExecuteRequest(request.Release());
 }
 

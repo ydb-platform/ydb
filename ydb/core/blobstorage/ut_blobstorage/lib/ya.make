@@ -1,4 +1,4 @@
-LIBRARY() 
+LIBRARY()
 
 OWNER(g:kikimr)
 
@@ -30,4 +30,4 @@ PEERDIR(
     ydb/library/yql/public/udf/service/stub
 )
 
-END() 
+END()

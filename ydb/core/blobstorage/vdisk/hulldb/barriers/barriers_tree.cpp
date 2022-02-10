@@ -66,13 +66,13 @@ namespace NKikimr {
                 const TKeyBarrier &key,
                 const TMemRecBarrier &memRec)
         {
-            LockWrite(); 
- 
+            LockWrite();
+
             TIndexKey indexKey(key.TabletId, key.Channel);
             auto deadIt = Dead.find(indexKey);
             if (deadIt != Dead.end()) {
                 // already dead table, ignore
-                UnlockWrite(); 
+                UnlockWrite();
                 return;
             }
 
@@ -92,8 +92,8 @@ namespace NKikimr {
                 Dead.insert(indexKey);
                 Index.erase(it);
             }
- 
-            UnlockWrite(); 
+
+            UnlockWrite();
         }
 
         void TTree::GetBarrier(ui64 tabletId,
@@ -101,15 +101,15 @@ namespace NKikimr {
                 TMaybe<TCurrentBarrier> &soft,
                 TMaybe<TCurrentBarrier> &hard) const
         {
-            LockRead(); 
- 
+            LockRead();
+
             TIndexKey indexKey(tabletId, channel);
             auto deadIt = Dead.find(indexKey);
             if (deadIt != Dead.end()) {
                 // already dead table, ignore
                 soft = TCurrentBarrier(Max<ui32>(), Max<ui32>(), Max<ui32>(), Max<ui32>());
                 hard = TCurrentBarrier(Max<ui32>(), Max<ui32>(), Max<ui32>(), Max<ui32>());
-                UnlockRead(); 
+                UnlockRead();
                 return;
             }
 
@@ -121,8 +121,8 @@ namespace NKikimr {
                 soft = it->second.GetSoftBarrier();
                 hard = it->second.GetHardBarrier();
             }
- 
-            UnlockRead(); 
+
+            UnlockRead();
         }
 
         void TTree::Output(IOutputStream &str) const {
@@ -143,7 +143,7 @@ namespace NKikimr {
         // TMemView::TTreeWithLog
         ////////////////////////////////////////////////////////////////////////////////////////////
         TMemView::TTreeWithLog::TTreeWithLog(TIntrusivePtr<TIngressCache> ingressCache, const TString &vdiskLogPrefix)
-            : Tree(std::make_shared<TTree>(ingressCache, vdiskLogPrefix)) 
+            : Tree(std::make_shared<TTree>(ingressCache, vdiskLogPrefix))
         {}
 
         void TMemView::TTreeWithLog::RollUp(bool gcOnlySynced){
@@ -168,7 +168,7 @@ namespace NKikimr {
         }
 
         bool TMemView::TTreeWithLog::Shared() const {
-            return Tree.use_count() > 1; 
+            return Tree.use_count() > 1;
         }
 
         bool TMemView::TTreeWithLog::NeedRollUp() const {
@@ -184,22 +184,22 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////////////////////
         TMemView::TMemView(TIntrusivePtr<TIngressCache> ingrCache, const TString &vdiskLogPrefix, bool gcOnlySynced)
             : GCOnlySynced(gcOnlySynced)
-            , Active(std::make_unique<TTreeWithLog>(ingrCache, vdiskLogPrefix)) 
-            , Passive(std::make_unique<TTreeWithLog>(ingrCache, vdiskLogPrefix)) 
+            , Active(std::make_unique<TTreeWithLog>(ingrCache, vdiskLogPrefix))
+            , Passive(std::make_unique<TTreeWithLog>(ingrCache, vdiskLogPrefix))
         {}
 
         void TMemView::Update(const TKeyBarrier &key, const TMemRecBarrier &memRec) {
             Active->Update(GCOnlySynced, key, memRec);
             Passive->Update(GCOnlySynced, key, memRec);
-            if (Active->Shared() && !Passive->Shared()) { 
-                Active.swap(Passive); 
+            if (Active->Shared() && !Passive->Shared()) {
+                Active.swap(Passive);
             }
         }
 
         TMemViewSnap TMemView::GetSnapshot() {
             if (Active->NeedRollUp()) {
-                if (Active->Shared() && !Passive->Shared()) { 
-                    Active.swap(Passive); 
+                if (Active->Shared() && !Passive->Shared()) {
+                    Active.swap(Passive);
                 }
                 if (!Active->Shared()) {
                     Active->RollUp(GCOnlySynced);

@@ -288,7 +288,7 @@ TError::TError(const TResult& result)
         Message = result.TransportErrorMessage;
     } else {
         if (result.Reply->GetHeader()->Type == NMsgBusProxy::MTYPE_CLIENT_RESPONSE) {
-            const NKikimrClient::TResponse& response = result.GetResult<NKikimrClient::TResponse>(); 
+            const NKikimrClient::TResponse& response = result.GetResult<NKikimrClient::TResponse>();
             if (response.HasExecutionEngineStatus()
                     && response.GetExecutionEngineStatus() != NKikimrMiniKQLEngine::Ok
                     && response.GetExecutionEngineStatus() != NKikimrMiniKQLEngine::Unknown) {

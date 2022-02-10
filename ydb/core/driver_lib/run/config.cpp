@@ -2,10 +2,10 @@
 
 namespace NKikimr {
 
-TKikimrRunConfig::TKikimrRunConfig(NKikimrConfig::TAppConfig& appConfig, ui32 nodeId, const TKikimrScopeId& scopeId) 
+TKikimrRunConfig::TKikimrRunConfig(NKikimrConfig::TAppConfig& appConfig, ui32 nodeId, const TKikimrScopeId& scopeId)
     : AppConfig(appConfig)
-    , NodeId(nodeId) 
-    , ScopeId(scopeId) 
-{} 
+    , NodeId(nodeId)
+    , ScopeId(scopeId)
+{}
 
 } // namespace NKikimr

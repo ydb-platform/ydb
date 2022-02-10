@@ -30,8 +30,8 @@ class TFakeSchemeShard : public TActor<TFakeSchemeShard>, public NTabletFlatExec
 public:
     using TState = TFakeSchemeShardState;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR;
     }
 
     TFakeSchemeShard(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state)

@@ -80,8 +80,8 @@ protected:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::MSGBUS_COMMON; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::MSGBUS_COMMON;
     }
 
     void Bootstrap(const TActorContext &ctx) {
@@ -119,7 +119,7 @@ public:
     }
 };
 
-template<typename TDerived, typename TTabletReplyEvent, NKikimrServices::TActivity::EType Activity> 
+template<typename TDerived, typename TTabletReplyEvent, NKikimrServices::TActivity::EType Activity>
 class TMessageBusSimpleTabletRequest : public TMessageBusTabletRequest<TDerived, TTabletReplyEvent> {
 protected:
     const ui64 TabletID;

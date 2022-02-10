@@ -29,9 +29,9 @@ namespace NKikimr {
     // THull::TFields
     ////////////////////////////////////////////////////////////////////////////
     struct THull::TFields {
-        std::shared_ptr<TLogoBlobsRunTimeCtx> LogoBlobsRunTimeCtx; 
-        std::shared_ptr<TBlocksRunTimeCtx> BlocksRunTimeCtx; 
-        std::shared_ptr<TBarriersRunTimeCtx> BarriersRunTimeCtx; 
+        std::shared_ptr<TLogoBlobsRunTimeCtx> LogoBlobsRunTimeCtx;
+        std::shared_ptr<TBlocksRunTimeCtx> BlocksRunTimeCtx;
+        std::shared_ptr<TBarriersRunTimeCtx> BarriersRunTimeCtx;
         TIntrusivePtr<TLsnMngr> LsnMngr;
         TActorSystem *ActorSystem;
         const bool BarrierValidation;
@@ -45,21 +45,21 @@ namespace NKikimr {
                 bool runHandoff,
                 TActorSystem *as,
                 bool barrierValidation)
-            : LogoBlobsRunTimeCtx(std::make_shared<TLogoBlobsRunTimeCtx>(lsnMngr, pdiskCtx, handoffDelegate, 
+            : LogoBlobsRunTimeCtx(std::make_shared<TLogoBlobsRunTimeCtx>(lsnMngr, pdiskCtx, handoffDelegate,
                         skeletonId, runHandoff, hullDs->LogoBlobs))
-            , BlocksRunTimeCtx(std::make_shared<TBlocksRunTimeCtx>(lsnMngr, pdiskCtx, handoffDelegate, 
+            , BlocksRunTimeCtx(std::make_shared<TBlocksRunTimeCtx>(lsnMngr, pdiskCtx, handoffDelegate,
                         skeletonId, runHandoff, hullDs->Blocks))
-            , BarriersRunTimeCtx(std::make_shared<TBarriersRunTimeCtx>(lsnMngr, pdiskCtx, handoffDelegate, 
+            , BarriersRunTimeCtx(std::make_shared<TBarriersRunTimeCtx>(lsnMngr, pdiskCtx, handoffDelegate,
                         skeletonId, runHandoff, hullDs->Barriers))
             , LsnMngr(std::move(lsnMngr))
             , ActorSystem(as)
             , BarrierValidation(barrierValidation)
         {}
 
-        void CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg) { 
-            LogoBlobsRunTimeCtx->CutRecoveryLog(ctx, std::unique_ptr<NPDisk::TEvCutLog>(msg->Clone())); 
-            BlocksRunTimeCtx->CutRecoveryLog(ctx, std::unique_ptr<NPDisk::TEvCutLog>(msg->Clone())); 
-            BarriersRunTimeCtx->CutRecoveryLog(ctx, std::unique_ptr<NPDisk::TEvCutLog>(msg->Clone())); 
+        void CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg) {
+            LogoBlobsRunTimeCtx->CutRecoveryLog(ctx, std::unique_ptr<NPDisk::TEvCutLog>(msg->Clone()));
+            BlocksRunTimeCtx->CutRecoveryLog(ctx, std::unique_ptr<NPDisk::TEvCutLog>(msg->Clone()));
+            BarriersRunTimeCtx->CutRecoveryLog(ctx, std::unique_ptr<NPDisk::TEvCutLog>(msg->Clone()));
         }
 
         void SetLogNotifierActorId(const TActorId &aid) {
@@ -82,7 +82,7 @@ namespace NKikimr {
             TActorSystem *as,
             bool barrierValidation)
         : THullDbRecovery(std::move(uncond))
-        , Fields(std::make_unique<TFields>(HullDs, std::move(lsnMngr), std::move(pdiskCtx), std::move(handoffDelegate), 
+        , Fields(std::make_unique<TFields>(HullDs, std::move(lsnMngr), std::move(pdiskCtx), std::move(handoffDelegate),
                 skeletonId, runHandoff,  as, barrierValidation))
     {}
 
@@ -106,8 +106,8 @@ namespace NKikimr {
 
     TActiveActors THull::RunHullServices(
             TIntrusivePtr<TVDiskConfig> config,
-            std::shared_ptr<THullLogCtx> hullLogCtx, 
-            std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep, 
+            std::shared_ptr<THullLogCtx> hullLogCtx,
+            std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep,
             TActorId loggerId,
             TActorId logCutterId,
             const TActorContext &ctx)
@@ -142,8 +142,8 @@ namespace NKikimr {
         return activeActors;
     }
 
-    void THull::CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg) { 
-        Fields->CutRecoveryLog(ctx, std::move(msg)); 
+    void THull::CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg) {
+        Fields->CutRecoveryLog(ctx, std::move(msg));
     }
 
     void THull::PostponeReplyUntilCommitted(
@@ -165,14 +165,14 @@ namespace NKikimr {
     {
         // check blocked
         if (!ignoreBlock) {
-            auto res = BlocksCache.IsBlocked(id.TabletID(), {id.Generation(), 0}); 
+            auto res = BlocksCache.IsBlocked(id.TabletID(), {id.Generation(), 0});
             switch (res.Status) {
                 case TBlocksCache::EStatus::OK:
                     break;
                 case TBlocksCache::EStatus::BLOCKED_PERS:
-                    return {NKikimrProto::BLOCKED, "blocked", 0, false}; 
+                    return {NKikimrProto::BLOCKED, "blocked", 0, false};
                 case TBlocksCache::EStatus::BLOCKED_INFLIGH:
-                    return {NKikimrProto::BLOCKED, "blocked", res.Lsn, true}; 
+                    return {NKikimrProto::BLOCKED, "blocked", res.Lsn, true};
             }
         }
 
@@ -185,7 +185,7 @@ namespace NKikimr {
             const TLogoBlobID &id,
             ui8 partId,
             const TIngress &ingress,
-            TRope buffer, 
+            TRope buffer,
             ui64 lsn)
     {
         ReplayAddLogoBlobCmd(ctx, id, partId, ingress, std::move(buffer), lsn, THullDbRecovery::NORMAL);
@@ -231,21 +231,21 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////
     // Blocks
     ////////////////////////////////////////////////////////////////////////
-    THullCheckStatus THull::CheckBlockCmdAndAllocLsn(ui64 tabletID, ui32 gen, ui64 issuerGuid, ui32 *actGen, TLsnSeg *seg) 
+    THullCheckStatus THull::CheckBlockCmdAndAllocLsn(ui64 tabletID, ui32 gen, ui64 issuerGuid, ui32 *actGen, TLsnSeg *seg)
     {
-        const TBlocksCache::TBlockedGen g(gen, issuerGuid); 
-        auto res = BlocksCache.IsBlocked(tabletID, g, actGen); 
+        const TBlocksCache::TBlockedGen g(gen, issuerGuid);
+        auto res = BlocksCache.IsBlocked(tabletID, g, actGen);
         switch (res.Status) {
             case TBlocksCache::EStatus::OK:
                 *actGen = gen;
                 // allocate lsn in case of success
                 *seg = Fields->LsnMngr->AllocLsnForHullAndSyncLog();
-                BlocksCache.UpdateInFlight(tabletID, g, seg->Point()); 
+                BlocksCache.UpdateInFlight(tabletID, g, seg->Point());
                 return {NKikimrProto::OK, 0, false};
             case TBlocksCache::EStatus::BLOCKED_PERS:
-                return {NKikimrProto::ALREADY, "already got", 0, false}; 
+                return {NKikimrProto::ALREADY, "already got", 0, false};
             case TBlocksCache::EStatus::BLOCKED_INFLIGH:
-                return {NKikimrProto::ALREADY, "already got", res.Lsn, true}; 
+                return {NKikimrProto::ALREADY, "already got", res.Lsn, true};
         }
     }
 
@@ -253,12 +253,12 @@ namespace NKikimr {
             const TActorContext &ctx,
             ui64 tabletID,
             ui32 gen,
-            ui64 issuerGuid, 
+            ui64 issuerGuid,
             ui64 lsn,
             const THull::TReplySender &replySender)
     {
         // unconditional replay
-        ReplayAddBlockCmd(ctx, tabletID, gen, issuerGuid, lsn, THullDbRecovery::NORMAL); 
+        ReplayAddBlockCmd(ctx, tabletID, gen, issuerGuid, lsn, THullDbRecovery::NORMAL);
         Fields->DelayedResponses.ConfirmLsn(lsn, replySender);
 
         // run compaction if required
@@ -290,7 +290,7 @@ namespace NKikimr {
             ui32 perGenCounter,
             ui32 collectGeneration,
             ui32 collectStep,
-            const TBarrierIngress& ingress, 
+            const TBarrierIngress& ingress,
             const TActorContext& ctx)
     {
         // check barrier against current state of Hull:
@@ -320,16 +320,16 @@ namespace NKikimr {
             }
 
             // we already have this key with the same value, so we issue ALREADY response
-            const TBarrierIngress existingIngress(it.GetMemRec().Ingress); 
-            TBarrierIngress newIngress = existingIngress; 
-            TBarrierIngress::Merge(newIngress, ingress); 
-            return existingIngress.Raw() == newIngress.Raw() 
-                ? NKikimrProto::ALREADY // if this command is already seen by this disk 
-                : NKikimrProto::OK; // process command 
-        } 
- 
-        // ensure that keys are coming in strictly ascending order 
-        if (IsFromSameSequence(newKey, it)) { 
+            const TBarrierIngress existingIngress(it.GetMemRec().Ingress);
+            TBarrierIngress newIngress = existingIngress;
+            TBarrierIngress::Merge(newIngress, ingress);
+            return existingIngress.Raw() == newIngress.Raw()
+                ? NKikimrProto::ALREADY // if this command is already seen by this disk
+                : NKikimrProto::OK; // process command
+        }
+
+        // ensure that keys are coming in strictly ascending order
+        if (IsFromSameSequence(newKey, it)) {
             // check that existing key is really greater that the new one -- this is internal consistency check
             // so we can do it in Y_VERIFY
             const TKeyBarrier& key = it.GetCurKey();
@@ -399,33 +399,33 @@ namespace NKikimr {
             case TBlocksCache::EStatus::OK:
                 break;
             case TBlocksCache::EStatus::BLOCKED_PERS:
-                return {NKikimrProto::BLOCKED, "blocked", 0, false}; 
+                return {NKikimrProto::BLOCKED, "blocked", 0, false};
             case TBlocksCache::EStatus::BLOCKED_INFLIGH:
-                return {NKikimrProto::BLOCKED, "blocked", blockStatus.Lsn, true}; 
+                return {NKikimrProto::BLOCKED, "blocked", blockStatus.Lsn, true};
         }
 
         // check per generation counter
         if (!record.HasPerGenerationCounter())
-            return {NKikimrProto::ERROR, "missing per generation counter"}; // all commands must have per generation counter by contract 
+            return {NKikimrProto::ERROR, "missing per generation counter"}; // all commands must have per generation counter by contract
 
         if (completeDel) {
             if (recordGeneration != Max<ui32>() || perGenCounter != Max<ui32>())
-                return {NKikimrProto::ERROR, "incorrect complete deletion command"}; // complete del must obey format 
+                return {NKikimrProto::ERROR, "incorrect complete deletion command"}; // complete del must obey format
         }
 
         // check keep/don't keep flags and if they are allowed
         const bool hasFlagsButNotAllowed = !HullDs->HullCtx->AllowKeepFlags
             && (record.KeepSize() > 0 || record.DoNotKeepSize() > 0);
         if (hasFlagsButNotAllowed)
-            return {NKikimrProto::ERROR, "no keep flags allowed"}; 
+            return {NKikimrProto::ERROR, "no keep flags allowed"};
 
         if (collect) {
             const ui32 channel = record.GetChannel();
             const bool hard = record.GetHard();
             NKikimrProto::EReplyStatus status = ValidateGCCmd(tabletID, channel, hard, recordGeneration,
-                    perGenCounter, collectGeneration, collectStep, ingress, ctx); 
+                    perGenCounter, collectGeneration, collectStep, ingress, ctx);
             if (status != NKikimrProto::OK) {
-                return {status, "command invalid"}; 
+                return {status, "command invalid"};
             }
         }
 
@@ -436,7 +436,7 @@ namespace NKikimr {
         ui64 lsnAdvance = !!collect + record.KeepSize() + record.DoNotKeepSize();
         Y_VERIFY(lsnAdvance > 0);
         *seg = Fields->LsnMngr->AllocLsnForHullAndSyncLog(lsnAdvance);
-        return {NKikimrProto::OK, {}}; 
+        return {NKikimrProto::OK, {}};
     }
 
     void THull::AddGCCmd(
@@ -458,7 +458,7 @@ namespace NKikimr {
             const TLsnSeg &seg)
     {
         TIngress ingress;
-        ingress.SetKeep(TIngress::IngressMode(HullDs->HullCtx->VCtx->Top->GType), CollectModeDoNotKeep); 
+        ingress.SetKeep(TIngress::IngressMode(HullDs->HullCtx->VCtx->Top->GType), CollectModeDoNotKeep);
         ui64 idLsn = seg.First;
         for (const TLogoBlobID& id : phantoms) {
             HullDs->LogoBlobs->PutToFresh(idLsn, TKeyLogoBlob(id), TMemRecLogoBlob(ingress));
@@ -496,7 +496,7 @@ namespace NKikimr {
         ui32 counter = 0;
         auto count = [&counter] (const void *) { counter++; };
         // do job - count all elements
-        NSyncLog::TFragmentReader(data).ForEach(count, count, count, count); 
+        NSyncLog::TFragmentReader(data).ForEach(count, count, count, count);
 
         // allocate LsnSeg; we reserve a diapason of lsns since we put multiple records
         ui64 lsnAdvance = counter;
@@ -506,16 +506,16 @@ namespace NKikimr {
         // update blocks cache by blocks that are in flight
         ui64 curLsn = seg.First;
         auto blockHandler = [&] (const NSyncLog::TBlockRec *rec) {
-            BlocksCache.UpdateInFlight(rec->TabletId, {rec->Generation, 0}, curLsn++); 
+            BlocksCache.UpdateInFlight(rec->TabletId, {rec->Generation, 0}, curLsn++);
         };
-        auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) { 
-            BlocksCache.UpdateInFlight(rec->TabletId, {rec->Generation, rec->IssuerGuid}, curLsn++); 
-        }; 
+        auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) {
+            BlocksCache.UpdateInFlight(rec->TabletId, {rec->Generation, rec->IssuerGuid}, curLsn++);
+        };
         auto otherHandler = [&] (const void *) {
             curLsn++;
         };
         // do job - update blocks cache
-        NSyncLog::TFragmentReader(data).ForEach(otherHandler, blockHandler, otherHandler, blockHandlerV2); 
+        NSyncLog::TFragmentReader(data).ForEach(otherHandler, blockHandler, otherHandler, blockHandlerV2);
         // check that all records are applied
         Y_VERIFY_DEBUG(curLsn == seg.Last + 1);
 
@@ -534,10 +534,10 @@ namespace NKikimr {
 
         if (freshBatch.Blocks) {
             ui64 curLsn = seg.First + logoBlobsCount;
-            TFreshAppendixBlocks::TIterator it(HullDs->HullCtx, freshBatch.Blocks.get()); 
+            TFreshAppendixBlocks::TIterator it(HullDs->HullCtx, freshBatch.Blocks.get());
             it.SeekToFirst();
             while (it.Valid()) {
-                BlocksCache.UpdateInFlight(it.GetCurKey().TabletId, {it.GetMemRec().BlockedGeneration, 0}, curLsn++); 
+                BlocksCache.UpdateInFlight(it.GetCurKey().TabletId, {it.GetMemRec().BlockedGeneration, 0}, curLsn++);
                 it.Next();
             }
         }
@@ -555,7 +555,7 @@ namespace NKikimr {
 
         // record handlers
         auto blobHandler = [&] (const NSyncLog::TLogoBlobRec *rec) {
-            Y_VERIFY_DEBUG(TIngress::MustKnowAboutLogoBlob(HullDs->HullCtx->VCtx->Top.get(), 
+            Y_VERIFY_DEBUG(TIngress::MustKnowAboutLogoBlob(HullDs->HullCtx->VCtx->Top.get(),
                                                            HullDs->HullCtx->VCtx->ShortSelfVDisk,
                                                            rec->LogoBlobID()),
                          "logoBlobID# %s ShortSelfVDisk# %s top# %s",
@@ -567,7 +567,7 @@ namespace NKikimr {
         };
         auto blockHandler = [&] (const NSyncLog::TBlockRec *rec) {
             // replay uncondititionally
-            ReplayAddBlockCmd(ctx, rec->TabletId, rec->Generation, 0, curLsn, THullDbRecovery::NORMAL); 
+            ReplayAddBlockCmd(ctx, rec->TabletId, rec->Generation, 0, curLsn, THullDbRecovery::NORMAL);
             Fields->DelayedResponses.ConfirmLsn(curLsn, replySender);
             ++curLsn;
         };
@@ -575,15 +575,15 @@ namespace NKikimr {
             ReplayAddBarrierCmd(ctx, rec->TabletId, rec->Channel, rec->Gen, rec->GenCounter, rec->CollectGeneration,
                 rec->CollectStep, rec->Hard, rec->Ingress, curLsn++, THullDbRecovery::NORMAL);
         };
-        auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) { 
-            ReplayAddBlockCmd(ctx, rec->TabletId, rec->Generation, rec->IssuerGuid, curLsn, THullDbRecovery::NORMAL); 
-            Fields->DelayedResponses.ConfirmLsn(curLsn, replySender); 
-            ++curLsn; 
-        }; 
+        auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) {
+            ReplayAddBlockCmd(ctx, rec->TabletId, rec->Generation, rec->IssuerGuid, curLsn, THullDbRecovery::NORMAL);
+            Fields->DelayedResponses.ConfirmLsn(curLsn, replySender);
+            ++curLsn;
+        };
 
         // process synclog data
         NSyncLog::TFragmentReader fragment(data);
-        fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2); 
+        fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2);
         // check that all records are applied
         Y_VERIFY_DEBUG(curLsn == seg.Last + 1);
 
@@ -598,7 +598,7 @@ namespace NKikimr {
     void CompactFreshIfRequired(
             const TActorContext &ctx,
             TIntrusivePtr<THullDs> &hullDs,
-            std::shared_ptr<TLevelIndexRunTimeCtx<TKey, TMemRec>> &rtCtx, 
+            std::shared_ptr<TLevelIndexRunTimeCtx<TKey, TMemRec>> &rtCtx,
             TLevelIndex<TKey, TMemRec> &levelIndex)
     {
         // try to start fresh compaction
@@ -635,7 +635,7 @@ namespace NKikimr {
             TLsnSeg s(curLsn, curLsn + blocksCount - 1);
 
             // confirm lsns
-            TFreshAppendixBlocks::TIterator it(HullDs->HullCtx, freshBatch.Blocks.get()); 
+            TFreshAppendixBlocks::TIterator it(HullDs->HullCtx, freshBatch.Blocks.get());
             it.SeekToFirst();
             while (it.Valid()) {
                 Fields->DelayedResponses.ConfirmLsn(curLsn++, replySender);

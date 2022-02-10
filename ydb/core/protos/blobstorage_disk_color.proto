@@ -1,16 +1,16 @@
-syntax = "proto3"; 
- 
-package NKikimrBlobStorage; 
- 
-message TPDiskSpaceColor { 
-    enum E { 
-        GREEN = 0; 
-        CYAN = 10; 
+syntax = "proto3";
+
+package NKikimrBlobStorage;
+
+message TPDiskSpaceColor {
+    enum E {
+        GREEN = 0;
+        CYAN = 10;
         LIGHT_YELLOW = 15;
-        YELLOW = 20; 
-        LIGHT_ORANGE = 30; 
-        ORANGE = 40; 
-        RED = 50; 
-        BLACK = 60; 
-    } 
-} 
+        YELLOW = 20;
+        LIGHT_ORANGE = 30;
+        ORANGE = 40;
+        RED = 50;
+        BLACK = 60;
+    }
+}

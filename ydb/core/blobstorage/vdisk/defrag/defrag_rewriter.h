@@ -34,7 +34,7 @@ namespace NKikimr {
     // Rewrites selected huge blobs to free up some Huge Heap chunks
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateDefragRewriter(
-        const std::shared_ptr<TDefragCtx> &dCtx, 
+        const std::shared_ptr<TDefragCtx> &dCtx,
         const TVDiskID &selfVDiskId,
         const TActorId &notifyId,
         THullDsSnap &&fullSnap,

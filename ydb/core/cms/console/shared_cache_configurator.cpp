@@ -11,8 +11,8 @@ namespace NConsole {
 
 class TSharedCacheConfigurator : public TActorBootstrapped<TSharedCacheConfigurator> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::SHARED_CACHE_CONFIGURATOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SHARED_CACHE_CONFIGURATOR;
     }
 
     TSharedCacheConfigurator() = default;

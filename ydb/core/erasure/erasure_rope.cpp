@@ -77,7 +77,7 @@ const char *TRopeErasureType::ErasureSpeciesToStr(TRopeErasureType::EErasureSpec
         case Erasure2Plus3Stripe:   return "2Plus3Stripe";
         case Erasure2Plus2Block:    return "2Plus2Block";
         case Erasure2Plus2Stripe:   return "2Plus2Stripe";
-        case ErasureMirror3of4:     return "Mirror3of4"; 
+        case ErasureMirror3of4:     return "Mirror3of4";
         default:                    return "UNKNOWN";
     }
 }
@@ -108,7 +108,7 @@ static const std::array<TErasureParameters, TRopeErasureType::ErasureSpeciesCoun
     ,{TRopeErasureType::ErasureParityStripe, 2, 3, 3} // 15 = ErasureSpicies::Erasure2Plus3Stripe
     ,{TRopeErasureType::ErasureParityBlock,  2, 2, 3} // 16 = ErasureSpicies::Erasure2Plus2Block
     ,{TRopeErasureType::ErasureParityStripe, 2, 2, 3} // 17 = ErasureSpicies::Erasure2Plus2Stripe
-    ,{TRopeErasureType::ErasureMirror,       1, 2, 1} // 18 = ErasureSpicies::ErasureMirror3of4 
+    ,{TRopeErasureType::ErasureMirror,       1, 2, 1} // 18 = ErasureSpicies::ErasureMirror3of4
 }};
 
 void PadAndCrcAtTheEnd(TRopeHelpers::Iterator data, ui64 dataSize, ui64 bufferSize) {
@@ -2266,7 +2266,7 @@ const std::array<TString, TRopeErasureType::ErasureSpeciesCount> TRopeErasureTyp
     "stripe-2-3",
     "block-2-2",
     "stripe-2-2",
-    "mirror-3of4", 
+    "mirror-3of4",
 }};
 
 ui32 TRopeErasureType::ParityParts() const {

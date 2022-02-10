@@ -136,20 +136,20 @@ public:
 template <class TIntervals>
 TIntervals MakeIntervalSet(ui64 n, ui32 len) {
     TIntervals res;
-    for (ui32 i = 0; i < len; ) { 
-        if (n >> i & 1) { 
-            const ui32 begin = i; 
-            while (i < len && n >> i & 1) { 
-                ++i; 
-            } 
-            res.Add(begin, i); 
-        } else { 
-            ++i; 
-        } 
-    } 
-    return res; 
-} 
- 
+    for (ui32 i = 0; i < len; ) {
+        if (n >> i & 1) {
+            const ui32 begin = i;
+            while (i < len && n >> i & 1) {
+                ++i;
+            }
+            res.Add(begin, i);
+        } else {
+            ++i;
+        }
+    }
+    return res;
+}
+
 #define MY_UNIT_TEST(N)      \
     template <class TIntervals, const char* TestName>       \
     struct TTestCase##N : public TCurrentTestCase {         \
@@ -601,117 +601,117 @@ Y_UNIT_TEST_SUITE(TIntervalSetTest) {
     }
 
     MY_UNIT_TEST(Union) {
-        ui32 len = 8; 
-        ui64 n = 1 << len; 
-        for (ui64 i = 0; i < n; ++i) { 
-            for (ui64 j = 0; j < n; ++j) { 
+        ui32 len = 8;
+        ui64 n = 1 << len;
+        for (ui64 i = 0; i < n; ++i) {
+            for (ui64 j = 0; j < n; ++j) {
                 const TIntervals a = MakeIntervalSet<TIntervals>(i, len);
                 const TIntervals b = MakeIntervalSet<TIntervals>(j, len);
                 const TIntervals res = a | b;
                 const TIntervals reference = MakeIntervalSet<TIntervals>(i | j, len);
-                UNIT_ASSERT_EQUAL_C(res, reference, "a# " << a.ToString() << " b# " << b.ToString() << " res# " 
-                    << res.ToString() << " reference# " << reference.ToString()); 
-            } 
-        } 
-    } 
- 
+                UNIT_ASSERT_EQUAL_C(res, reference, "a# " << a.ToString() << " b# " << b.ToString() << " res# "
+                    << res.ToString() << " reference# " << reference.ToString());
+            }
+        }
+    }
+
     MY_UNIT_TEST(UnionInplace) {
-        ui32 len = 8; 
-        ui64 n = 1 << len; 
-        for (ui64 i = 0; i < n; ++i) { 
-            for (ui64 j = 0; j < n; ++j) { 
+        ui32 len = 8;
+        ui64 n = 1 << len;
+        for (ui64 i = 0; i < n; ++i) {
+            for (ui64 j = 0; j < n; ++j) {
                 const TIntervals a = MakeIntervalSet<TIntervals>(i, len);
                 const TIntervals b = MakeIntervalSet<TIntervals>(j, len);
                 TIntervals res = a;
-                res |= b; 
+                res |= b;
                 const TIntervals reference = MakeIntervalSet<TIntervals>(i | j, len);
-                UNIT_ASSERT_EQUAL_C(res, reference, "a# " << a.ToString() << " b# " << b.ToString() << " res# " 
-                    << res.ToString() << " reference# " << reference.ToString()); 
-            } 
-        } 
-    } 
- 
+                UNIT_ASSERT_EQUAL_C(res, reference, "a# " << a.ToString() << " b# " << b.ToString() << " res# "
+                    << res.ToString() << " reference# " << reference.ToString());
+            }
+        }
+    }
+
     MY_UNIT_TEST(UnionInplaceSelf) {
-        ui32 len = 8; 
-        ui64 n = 1 << len; 
-        for (ui64 i = 0; i < n; ++i) { 
+        ui32 len = 8;
+        ui64 n = 1 << len;
+        for (ui64 i = 0; i < n; ++i) {
             TIntervals res = MakeIntervalSet<TIntervals>(i, len);
             TIntervals *other = &res;
-            res |= *other; 
+            res |= *other;
             const TIntervals reference = MakeIntervalSet<TIntervals>(i, len);
-            UNIT_ASSERT_EQUAL(res, reference); 
-        } 
-    } 
- 
+            UNIT_ASSERT_EQUAL(res, reference);
+        }
+    }
+
     MY_UNIT_TEST(Intersection) {
-        ui32 len = 8; 
-        ui64 n = 1 << len; 
-        for (ui64 i = 0; i < n; ++i) { 
-            for (ui64 j = 0; j < n; ++j) { 
+        ui32 len = 8;
+        ui64 n = 1 << len;
+        for (ui64 i = 0; i < n; ++i) {
+            for (ui64 j = 0; j < n; ++j) {
                 const TIntervals a = MakeIntervalSet<TIntervals>(i, len);
                 const TIntervals b = MakeIntervalSet<TIntervals>(j, len);
                 const TIntervals res = a & b;
                 const TIntervals reference = MakeIntervalSet<TIntervals>(i & j, len);
-                UNIT_ASSERT_EQUAL_C(res, reference, "a# " << a.ToString() << " b# " << b.ToString() << " res# " 
-                    << res.ToString() << " reference# " << reference.ToString()); 
-            } 
-        } 
-    } 
- 
+                UNIT_ASSERT_EQUAL_C(res, reference, "a# " << a.ToString() << " b# " << b.ToString() << " res# "
+                    << res.ToString() << " reference# " << reference.ToString());
+            }
+        }
+    }
+
     MY_UNIT_TEST(IntersectionInplace) {
-        ui32 len = 8; 
-        ui64 n = 1 << len; 
-        for (ui64 i = 0; i < n; ++i) { 
-            for (ui64 j = 0; j < n; ++j) { 
+        ui32 len = 8;
+        ui64 n = 1 << len;
+        for (ui64 i = 0; i < n; ++i) {
+            for (ui64 j = 0; j < n; ++j) {
                 const TIntervals a = MakeIntervalSet<TIntervals>(i, len);
                 const TIntervals b = MakeIntervalSet<TIntervals>(j, len);
                 TIntervals res = a;
-                res &= b; 
+                res &= b;
                 const TIntervals reference = MakeIntervalSet<TIntervals>(i & j, len);
-                UNIT_ASSERT_EQUAL_C(res, reference, "a# " << a.ToString() << " b# " << b.ToString() << " res# " 
-                    << res.ToString() << " reference# " << reference.ToString()); 
-            } 
-        } 
-    } 
- 
+                UNIT_ASSERT_EQUAL_C(res, reference, "a# " << a.ToString() << " b# " << b.ToString() << " res# "
+                    << res.ToString() << " reference# " << reference.ToString());
+            }
+        }
+    }
+
     MY_UNIT_TEST(IntersectionInplaceSelf) {
-        ui32 len = 8; 
-        ui64 n = 1 << len; 
-        for (ui64 i = 0; i < n; ++i) { 
+        ui32 len = 8;
+        ui64 n = 1 << len;
+        for (ui64 i = 0; i < n; ++i) {
             TIntervals res = MakeIntervalSet<TIntervals>(i, len);
             TIntervals *other = &res;
-            res &= *other; 
+            res &= *other;
             const TIntervals reference = MakeIntervalSet<TIntervals>(i, len);
-            UNIT_ASSERT_EQUAL(res, reference); 
-        } 
-    } 
- 
+            UNIT_ASSERT_EQUAL(res, reference);
+        }
+    }
+
     MY_UNIT_TEST(Difference) {
-        ui32 len = 8; 
-        ui64 n = 1 << len; 
-        for (ui64 i = 0; i < n; ++i) { 
-            for (ui64 j = 0; j < n; ++j) { 
+        ui32 len = 8;
+        ui64 n = 1 << len;
+        for (ui64 i = 0; i < n; ++i) {
+            for (ui64 j = 0; j < n; ++j) {
                 const TIntervals a = MakeIntervalSet<TIntervals>(i, len);
                 const TIntervals b = MakeIntervalSet<TIntervals>(j, len);
                 const TIntervals res = a - b;
                 const TIntervals reference = MakeIntervalSet<TIntervals>(i & ~j, len);
-                UNIT_ASSERT_EQUAL_C(res, reference, "a# " << a.ToString() << " b# " << b.ToString() << " res# " 
-                    << res.ToString() << " reference# " << reference.ToString()); 
-            } 
-        } 
-    } 
- 
+                UNIT_ASSERT_EQUAL_C(res, reference, "a# " << a.ToString() << " b# " << b.ToString() << " res# "
+                    << res.ToString() << " reference# " << reference.ToString());
+            }
+        }
+    }
+
     MY_UNIT_TEST(DifferenceInplaceSelf) {
-        ui32 len = 8; 
-        ui64 n = 1 << len; 
-        for (ui64 i = 0; i < n; ++i) { 
+        ui32 len = 8;
+        ui64 n = 1 << len;
+        for (ui64 i = 0; i < n; ++i) {
             TIntervals res = MakeIntervalSet<TIntervals>(i, len);
             TIntervals *other = &res;
-            res -= *other; 
-            UNIT_ASSERT(!res); 
-        } 
-    } 
- 
+            res -= *other;
+            UNIT_ASSERT(!res);
+        }
+    }
+
     Y_UNIT_TEST(IntervalSetTestIterator) {
         using TIntervals = TIntervalSet<i32>;
         for (ui64 aBits = 0; aBits < 128; ++aBits) {

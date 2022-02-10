@@ -7,15 +7,15 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TSyncLogRepaired
         ////////////////////////////////////////////////////////////////////////////
-        std::unique_ptr<TSyncLogRepaired> TSyncLogRepaired::Construct( 
+        std::unique_ptr<TSyncLogRepaired> TSyncLogRepaired::Construct(
                 TSyncLogParams &&params,
                 const TString &data,
                 ui64 entryPointLsn,
                 TString &explanation)
         {
             TEntryPointParser parser(std::move(params));
-            bool needsInitialCommit = false; 
-            bool success = parser.Parse(data, needsInitialCommit, explanation); 
+            bool needsInitialCommit = false;
+            bool success = parser.Parse(data, needsInitialCommit, explanation);
             if (!success) {
                 return nullptr;
             }
@@ -23,28 +23,28 @@ namespace NKikimr {
             const ui64 recoveryLogConfirmedLsn = parser.GetRecoveryLogConfirmedLsn();
             TCommitHistory commitHistory(TAppData::TimeProvider->Now(), entryPointLsn, recoveryLogConfirmedLsn);
             // build TSyncLogRepaired
-            return std::unique_ptr<TSyncLogRepaired>(new TSyncLogRepaired(parser.GetSyncLogPtr(), 
+            return std::unique_ptr<TSyncLogRepaired>(new TSyncLogRepaired(parser.GetSyncLogPtr(),
                 parser.GetChunksToDelete(),
-                std::move(commitHistory), 
-                needsInitialCommit)); 
+                std::move(commitHistory),
+                needsInitialCommit));
         }
 
         TSyncLogRepaired::TSyncLogRepaired(
                 TSyncLogPtr &&syncLog,
                 TVector<ui32> &&chunksToDelete,
-                TCommitHistory &&commitHistory, 
-                bool needsInitialCommit) 
+                TCommitHistory &&commitHistory,
+                bool needsInitialCommit)
             : SyncLogPtr(std::move(syncLog))
             , ChunksToDelete(std::move(chunksToDelete))
             , CommitHistory(std::move(commitHistory))
-            , NeedsInitialCommit(needsInitialCommit) 
+            , NeedsInitialCommit(needsInitialCommit)
         {}
 
 
         ////////////////////////////////////////////////////////////////////////////
         // TSyncLogRecovery
         ////////////////////////////////////////////////////////////////////////////
-        TSyncLogRecovery::TSyncLogRecovery(std::unique_ptr<TSyncLogRepaired> &&repaired) { 
+        TSyncLogRecovery::TSyncLogRecovery(std::unique_ptr<TSyncLogRepaired> &&repaired) {
             Repaired = std::move(repaired);
         }
 
@@ -69,7 +69,7 @@ namespace NKikimr {
             ++Blocks;
 
             char buf[NSyncLog::MaxRecFullSize];
-            ui32 size = NSyncLog::TSerializeRoutines::SetBlock(buf, lsn, tabletId, gen, 0); 
+            ui32 size = NSyncLog::TSerializeRoutines::SetBlock(buf, lsn, tabletId, gen, 0);
             Repaired->SyncLogPtr->PutOne((const NSyncLog::TRecordHdr *)buf, size);
         }
 
@@ -122,11 +122,11 @@ namespace NKikimr {
             Repaired->SyncLogPtr->PutOne((const NSyncLog::TRecordHdr *)buf, size);
         }
 
-        std::unique_ptr<TSyncLogRepaired> TSyncLogRecovery::ReleaseRepaired() { 
+        std::unique_ptr<TSyncLogRepaired> TSyncLogRecovery::ReleaseRepaired() {
             // after finishing recovery check that Dsk and Mem do not intersect
             Y_VERIFY(Repaired->SyncLogPtr->CheckMemAndDiskRecLogsDoNotIntersect(),
                      "%s", Repaired->SyncLogPtr->BoundariesToString().data());
-            return std::exchange(Repaired, nullptr); 
+            return std::exchange(Repaired, nullptr);
         }
 
         ui64 TSyncLogRecovery::GetLastLsnOfIndexRecord() const {
@@ -154,7 +154,7 @@ namespace NKikimr {
             s << "{GetLastLsnOfIndexRecord# " << GetLastLsnOfIndexRecord()
               << " AddSegs# " << AddSegs << " LogoBlobs# " << LogoBlobs
               << " Blocks# " << Blocks << " Gcs# " << Gcs
-              << " Barriers# " << Barriers << "}"; 
+              << " Barriers# " << Barriers << "}";
             return s.Str();
         }
 

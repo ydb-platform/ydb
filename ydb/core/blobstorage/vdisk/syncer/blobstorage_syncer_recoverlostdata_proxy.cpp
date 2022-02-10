@@ -21,10 +21,10 @@ namespace NKikimr {
         : public TEventLocal<TEvSyncerRLDWakeup, TEvBlobStorage::EvSyncerRLDWakeup>
     {
         // Our task we working on
-        std::unique_ptr<TSyncerJobTask> Task; 
+        std::unique_ptr<TSyncerJobTask> Task;
 
-        TEvSyncerRLDWakeup(std::unique_ptr<TSyncerJobTask> task) 
-            : Task(std::move(task)) 
+        TEvSyncerRLDWakeup(std::unique_ptr<TSyncerJobTask> task)
+            : Task(std::move(task))
         {}
     };
 
@@ -40,17 +40,17 @@ namespace NKikimr {
         const TActorId CommitterId;
         const TActorId NotifyId;
         TActiveActors ActiveActors;
-        std::shared_ptr<TSjCtx> JobCtx; 
+        std::shared_ptr<TSjCtx> JobCtx;
         // Target VDiskId and ActorId are reconfigurable
         TVDiskID TargetVDiskId;
         TActorId TargetActorId;
 
         void CreateAndRunTask(const TActorContext &ctx) {
             // create task
-            auto task = std::make_unique<TSyncerJobTask>(TSyncerJobTask::EFullRecover, TargetVDiskId, TargetActorId, 
-                PeerSyncState, JobCtx); 
+            auto task = std::make_unique<TSyncerJobTask>(TSyncerJobTask::EFullRecover, TargetVDiskId, TargetActorId,
+                PeerSyncState, JobCtx);
             // run task
-            const TActorId aid = ctx.Register(CreateSyncerJob(SyncerCtx, std::move(task), ctx.SelfID)); 
+            const TActorId aid = ctx.Register(CreateSyncerJob(SyncerCtx, std::move(task), ctx.SelfID));
             ActiveActors.Insert(aid);
             // state func
             Become(&TThis::WaitForSyncStateFunc);
@@ -72,20 +72,20 @@ namespace NKikimr {
                         "TSyncerRLDFullSyncProxyActor(%s): TEvSyncerJobDone; Task# %s",
                             TargetVDiskId.ToString().data(), ev->Get()->Task->ToString().data()));
             ActiveActors.Erase(ev->Sender);
-            std::unique_ptr<TSyncerJobTask> task = std::move(ev->Get()->Task); 
+            std::unique_ptr<TSyncerJobTask> task = std::move(ev->Get()->Task);
             auto syncStatus = task->GetCurrent().LastSyncStatus;
             if (!TPeerSyncState::Good(syncStatus)) {
                 RerunTaskAfterTimeout(ctx);
             } else {
-                Commit(ctx, std::move(task)); 
+                Commit(ctx, std::move(task));
             }
         }
 
-        STRICT_STFUNC(WaitForSyncStateFunc, 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-            HFunc(TEvSyncerJobDone, Handle) 
-            HFunc(TEvVGenerationChange, Handle) 
-        ) 
+        STRICT_STFUNC(WaitForSyncStateFunc,
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvSyncerJobDone, Handle)
+            HFunc(TEvVGenerationChange, Handle)
+        )
 
         ////////////////////////////////////////////////////////////////////////
         // WAIT FOR TIMEOUT
@@ -95,7 +95,7 @@ namespace NKikimr {
                       VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerRLDFullSyncProxyActor(%s): RerunTaskAfterTimeout",
                             TargetVDiskId.ToString().data()));
-            auto timeout = SyncerCtx->Config->SyncerRLDRetryTimeout; 
+            auto timeout = SyncerCtx->Config->SyncerRLDRetryTimeout;
             ctx.Schedule(timeout, new TEvSyncerRLDWakeup(nullptr));
             // state func
             Become(&TThis::WaitForTimeoutStateFunc);
@@ -107,23 +107,23 @@ namespace NKikimr {
             CreateAndRunTask(ctx);
         }
 
-        STRICT_STFUNC(WaitForTimeoutStateFunc, 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-            HFunc(TEvSyncerRLDWakeup, Handle) 
-            IgnoreFunc(TEvSyncerJobDone) 
-            HFunc(TEvVGenerationChange, Handle) 
-        ) 
+        STRICT_STFUNC(WaitForTimeoutStateFunc,
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvSyncerRLDWakeup, Handle)
+            IgnoreFunc(TEvSyncerJobDone)
+            HFunc(TEvVGenerationChange, Handle)
+        )
 
         ////////////////////////////////////////////////////////////////////////
         // COMMIT
         ////////////////////////////////////////////////////////////////////////
-        void Commit(const TActorContext &ctx, std::unique_ptr<TSyncerJobTask> task) { 
+        void Commit(const TActorContext &ctx, std::unique_ptr<TSyncerJobTask> task) {
             LOG_DEBUG(ctx, BS_SYNCER,
                       VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerRLDFullSyncProxyActor(%s): Commit",
                             TargetVDiskId.ToString().data()));
             auto msg = TEvSyncerCommit::Remote(task->VDiskId, task->GetCurrent());
-            ctx.Send(CommitterId, msg.release()); 
+            ctx.Send(CommitterId, msg.release());
             Become(&TThis::WaitForCommitStateFunc);
         }
 
@@ -137,11 +137,11 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(WaitForCommitStateFunc, 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-            HFunc(TEvSyncerCommitDone, Handle) 
-            HFunc(TEvVGenerationChange, Handle) 
-        ) 
+        STRICT_STFUNC(WaitForCommitStateFunc,
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvSyncerCommitDone, Handle)
+            HFunc(TEvVGenerationChange, Handle)
+        )
 
         ////////////////////////////////////////////////////////////////////////
         // HandlePoison
@@ -169,15 +169,15 @@ namespace NKikimr {
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_SYNCER_RECOVER_LOST_DATA; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_SYNCER_RECOVER_LOST_DATA;
         }
 
         TSyncerRLDFullSyncProxyActor(const TIntrusivePtr<TSyncerContext> &sc,
                                      const TPeerSyncState& peerSyncState,
                                      const TActorId &committerId,
                                      const TActorId &notifyId,
-                                     const std::shared_ptr<TSjCtx> &jobCtx, 
+                                     const std::shared_ptr<TSjCtx> &jobCtx,
                                      const TVDiskID &targetVDiskId,
                                      const TActorId &targetActorId)
             : TActorBootstrapped<TSyncerRLDFullSyncProxyActor>()
@@ -199,7 +199,7 @@ namespace NKikimr {
                                            const TPeerSyncState& peerSyncState,
                                            const TActorId &committerId,
                                            const TActorId &notifyId,
-                                           const std::shared_ptr<TSjCtx> &jobCtx, 
+                                           const std::shared_ptr<TSjCtx> &jobCtx,
                                            const TVDiskID &targetVDiskId,
                                            const TActorId &targetActorId) {
         return new TSyncerRLDFullSyncProxyActor(sc, peerSyncState, committerId, notifyId,

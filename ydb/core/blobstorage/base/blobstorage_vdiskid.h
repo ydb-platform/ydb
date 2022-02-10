@@ -1,9 +1,9 @@
 #pragma once
- 
+
 #include "defs.h"
- 
+
 #include <ydb/core/protos/blobstorage.pb.h>
- 
+
 #include <util/str_stl.h>
 #include <util/digest/numeric.h>
 
@@ -11,7 +11,7 @@ namespace NKikimr {
 
 class TBlobStorageGroupInfo;
 struct TVDiskIdShort;
- 
+
 ////////////////////////////////////////////////////////////////////////////
 // TVDiskID -- global vdisk identifier
 ////////////////////////////////////////////////////////////////////////////
@@ -28,11 +28,11 @@ struct TVDiskID {
     TVDiskID(ui32 groupId, ui32 groupGen, TVDiskIdShort vdiskIdShort);
     TVDiskID(IInputStream &str);
 
-    TVDiskID(ui32 groupId, ui32 groupGen, ui8 failRealm, ui8 failDomain, ui8 vdisk) 
+    TVDiskID(ui32 groupId, ui32 groupGen, ui8 failRealm, ui8 failDomain, ui8 vdisk)
         : GroupID(groupId)
         , GroupGeneration(groupGen)
-        , FailRealm(failRealm) 
-        , FailDomain(failDomain) 
+        , FailRealm(failRealm)
+        , FailDomain(failDomain)
         , VDisk(vdisk)
     {}
 
@@ -47,20 +47,20 @@ struct TVDiskID {
     bool SameExceptGeneration(const TVDiskID &x) const {
         return x.GroupID == GroupID && x.FailRealm == FailRealm && x.FailDomain == FailDomain && x.VDisk == VDisk;
     }
- 
+
     bool SameDisk(const TVDiskID &x) const {
         return *this == x;
     }
 
     bool SameDisk(const NKikimrBlobStorage::TVDiskID &x) const;
 
-    auto ConvertToTuple() const { 
-        return std::make_tuple(GroupID, GroupGeneration, FailRealm, FailDomain, VDisk); 
+    auto ConvertToTuple() const {
+        return std::make_tuple(GroupID, GroupGeneration, FailRealm, FailDomain, VDisk);
     }
 
-    friend bool operator ==(const TVDiskID& x, const TVDiskID& y) { return x.ConvertToTuple() == y.ConvertToTuple(); } 
-    friend bool operator !=(const TVDiskID& x, const TVDiskID& y) { return x.ConvertToTuple() != y.ConvertToTuple(); } 
-    friend bool operator < (const TVDiskID& x, const TVDiskID& y) { return x.ConvertToTuple() <  y.ConvertToTuple(); } 
+    friend bool operator ==(const TVDiskID& x, const TVDiskID& y) { return x.ConvertToTuple() == y.ConvertToTuple(); }
+    friend bool operator !=(const TVDiskID& x, const TVDiskID& y) { return x.ConvertToTuple() != y.ConvertToTuple(); }
+    friend bool operator < (const TVDiskID& x, const TVDiskID& y) { return x.ConvertToTuple() <  y.ConvertToTuple(); }
 
     TString ToString() const;
     TString ToStringWOGeneration() const;
@@ -68,7 +68,7 @@ struct TVDiskID {
     bool Deserialize(IInputStream &s);
 
     ui64 Hash() const {
-        ui32 x = (((ui32(FailRealm) << 8) | ui32(FailDomain)) << 8) | ui32(VDisk); 
+        ui32 x = (((ui32(FailRealm) << 8) | ui32(FailDomain)) << 8) | ui32(VDisk);
         ui64 y = GroupID;
         y = y << 32ull;
         y |= GroupGeneration;
@@ -92,7 +92,7 @@ struct TVDiskIdShort {
     ui8 FailDomain = 0;
     ui8 VDisk = 0;
     ui8 Padding = 0;
- 
+
     TVDiskIdShort() = default;
 
     explicit TVDiskIdShort(ui64 raw)
@@ -122,13 +122,13 @@ struct TVDiskIdShort {
                 FailDomain != x.FailDomain ? FailDomain < x.FailDomain :
                 VDisk != x.VDisk ? VDisk < x.VDisk : false;
     }
- 
+
     bool operator==(const TVDiskIdShort &x) const {
         return FailRealm == x.FailRealm &&
                 FailDomain == x.FailDomain &&
                 VDisk == x.VDisk;
     }
- 
+
     bool operator!=(const TVDiskIdShort &x) const {
         return !((*this)==x);
     }
@@ -140,7 +140,7 @@ struct TVDiskIdShort {
         str << " VDisk# " << (ui32)VDisk;
         str << "}";
         return str.Str();
-    } 
+    }
 
     ui64 Hash() const {
         ui32 x = (((ui32(FailRealm) << 8) | ui32(FailDomain)) << 8) | ui32(VDisk);

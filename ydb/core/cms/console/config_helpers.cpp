@@ -51,9 +51,9 @@ private:
     ui64 Cookie;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
-        return NKikimrServices::TActivity::CMS_CONFIGS_SUBSCRIBER; 
+        return NKikimrServices::TActivity::CMS_CONFIGS_SUBSCRIBER;
     }
 
     // Add/replace subscription.

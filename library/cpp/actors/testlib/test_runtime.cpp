@@ -11,7 +11,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
-#include <library/cpp/actors/interconnect/interconnect_proxy_wrapper.h> 
+#include <library/cpp/actors/interconnect/interconnect_proxy_wrapper.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/bt_exception.h>
@@ -487,9 +487,9 @@ namespace NActors {
 
     void TTestActorRuntimeBase::InitNode(TNodeDataBase* node, size_t nodeIndex) {
         const NActors::TActorId loggerActorId = NActors::TActorId(FirstNodeId + nodeIndex, "logger");
-        node->LogSettings = new NActors::NLog::TSettings(loggerActorId, 410 /* NKikimrServices::LOGGER */, 
+        node->LogSettings = new NActors::NLog::TSettings(loggerActorId, 410 /* NKikimrServices::LOGGER */,
             NActors::NLog::PRI_WARN,  NActors::NLog::PRI_WARN, 0);
-        node->LogSettings->SetAllowDrop(false); 
+        node->LogSettings->SetAllowDrop(false);
         node->LogSettings->SetThrottleDelay(TDuration::Zero());
         node->DynamicCounters = new NMonitoring::TDynamicCounters;
 
@@ -642,8 +642,8 @@ namespace NActors {
         while (!scheduledEvents.empty() && scheduledEvents.begin()->Deadline == time) {
             static THashMap<std::pair<TActorId, TString>, ui64> eventTypes;
             auto& item = *scheduledEvents.begin();
-            TString name = item.Event->GetBase() ? TypeName(*item.Event->GetBase()) : Sprintf("%08" PRIx32, item.Event->Type); 
-            eventTypes[std::make_pair(item.Event->Recipient, name)]++; 
+            TString name = item.Event->GetBase() ? TypeName(*item.Event->GetBase()) : Sprintf("%08" PRIx32, item.Event->Type);
+            eventTypes[std::make_pair(item.Event->Recipient, name)]++;
             runtime.ScheduledCount++;
             if (runtime.ScheduledCount > runtime.ScheduledLimit) {
 //                TScheduledTreeItem root("Root");
@@ -1653,11 +1653,11 @@ namespace NActors {
         common->TechnicalSelfHostName = "::1";
 
         if (!UseRealThreads) {
-            common->Settings.DeadPeer = TDuration::Max(); 
-            common->Settings.CloseOnIdle = TDuration::Max(); 
-            common->Settings.PingPeriod = TDuration::Max(); 
-            common->Settings.ForceConfirmPeriod = TDuration::Max(); 
-            common->Settings.Handshake = TDuration::Max(); 
+            common->Settings.DeadPeer = TDuration::Max();
+            common->Settings.CloseOnIdle = TDuration::Max();
+            common->Settings.PingPeriod = TDuration::Max();
+            common->Settings.ForceConfirmPeriod = TDuration::Max();
+            common->Settings.Handshake = TDuration::Max();
         }
 
         common->ClusterUUID = ClusterUUID;
@@ -1667,22 +1667,22 @@ namespace NActors {
             if (proxyNodeIndex == nodeIndex)
                 continue;
 
-            const ui32 peerNodeId = FirstNodeId + proxyNodeIndex; 
+            const ui32 peerNodeId = FirstNodeId + proxyNodeIndex;
 
-            IActor *proxyActor = UseRealInterconnect 
-                ? new TInterconnectProxyTCP(peerNodeId, common) 
-                : InterconnectMock.CreateProxyMock(setup->NodeId, peerNodeId, common); 
- 
-            setup->Interconnect.ProxyActors[peerNodeId] = {proxyActor, TMailboxType::ReadAsFilled, InterconnectPoolId()}; 
+            IActor *proxyActor = UseRealInterconnect
+                ? new TInterconnectProxyTCP(peerNodeId, common)
+                : InterconnectMock.CreateProxyMock(setup->NodeId, peerNodeId, common);
+
+            setup->Interconnect.ProxyActors[peerNodeId] = {proxyActor, TMailboxType::ReadAsFilled, InterconnectPoolId()};
         }
 
-        setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId(), &InterconnectMock); 
+        setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId(), &InterconnectMock);
 
-        if (UseRealInterconnect) { 
-            setup->LocalServices.emplace_back(MakePollerActorId(), NActors::TActorSetupCmd(CreatePollerActor(), 
-                NActors::TMailboxType::Simple, InterconnectPoolId())); 
-        } 
- 
+        if (UseRealInterconnect) {
+            setup->LocalServices.emplace_back(MakePollerActorId(), NActors::TActorSetupCmd(CreatePollerActor(),
+                NActors::TMailboxType::Simple, InterconnectPoolId()));
+        }
+
         if (!SingleSysEnv) { // Single system env should do this self
             TAutoPtr<TLogBackend> logBackend = LogBackend ? LogBackend : NActors::CreateStderrBackend();
             NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(node->LogSettings,
@@ -1852,7 +1852,7 @@ namespace NActors {
             ReplyChecker->OnRequest(ev);
             TAutoPtr<IEventHandle> forwardedEv = ev->HasEvent()
                 ? new IEventHandle(Delegatee, ReplyId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie)
-                : new IEventHandle(ev->GetTypeRewrite(), ev->Flags, Delegatee, ReplyId, ev->ReleaseChainBuffer(), ev->Cookie); 
+                : new IEventHandle(ev->GetTypeRewrite(), ev->Flags, Delegatee, ReplyId, ev->ReleaseChainBuffer(), ev->Cookie);
 
             return forwardedEv;
         }

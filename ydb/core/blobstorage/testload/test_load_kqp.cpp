@@ -170,9 +170,9 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag
                 << " TKqpWriterTestLoadActor StartDeathProcess called");
         for(const auto& session : Sessions) {
-            auto request = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>(); 
+            auto request = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
             request->Record.MutableRequest()->SetSessionId(session);
-            ctx.Send( new IEventHandle(NKqp::MakeKqpProxyID(1), SelfId(), request.release(), 
+            ctx.Send( new IEventHandle(NKqp::MakeKqpProxyID(1), SelfId(), request.release(),
                     0, /* via actor system */ true));
         }
 

@@ -65,9 +65,9 @@ private:
 
 public:
     TMessageBusInterface(TBusMessageContext& msg)
-        : TMessageBusSessionIdentHolder(msg) 
-        , Request(static_cast<RequestType*>(msg.ReleaseMessage())) 
-    {} 
+        : TMessageBusSessionIdentHolder(msg)
+        , Request(static_cast<RequestType*>(msg.ReleaseMessage()))
+    {}
 
     void ReplyWithErrorToInterface(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TString& message, const TActorContext&) {
         TAutoPtr<TBusResponse> response(new TBusResponseStatus(status, message));
@@ -294,7 +294,7 @@ protected:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::MSGBUS_COMMON; } 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::MSGBUS_COMMON; }
 
     TServerDbOperation(TBusMessageContext& msg, TActorId txProxyId, const TActorId& schemeCache, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters);
 
@@ -727,8 +727,8 @@ protected:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::MSGBUS_COMMON; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::MSGBUS_COMMON;
     }
 
     TServerDbSchema(TBusMessageContext &msg, TActorId txProxyId, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters);
@@ -981,8 +981,8 @@ protected:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::MSGBUS_COMMON; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::MSGBUS_COMMON;
     }
 
     TServerDbBatch(TBusMessageContext &msg, const TActorId txProxyId, const TActorId& schemeCache, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters);

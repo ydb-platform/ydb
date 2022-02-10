@@ -77,9 +77,9 @@ private:
     };
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
-        return NKikimrServices::TActivity::CONFIGS_DISPATCHER_ACTOR; 
+        return NKikimrServices::TActivity::CONFIGS_DISPATCHER_ACTOR;
     }
 
     TConfigsDispatcher(const NKikimrConfig::TAppConfig &config);

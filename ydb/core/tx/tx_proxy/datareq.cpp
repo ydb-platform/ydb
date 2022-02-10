@@ -448,8 +448,8 @@ private:
     bool IsReadOnlyRequest() const;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TX_REQ_PROXY; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TX_REQ_PROXY;
     }
 
     TDataReq(const TTxProxyServices &services, ui64 txid, const TIntrusivePtr<TTxProxyMon> mon,

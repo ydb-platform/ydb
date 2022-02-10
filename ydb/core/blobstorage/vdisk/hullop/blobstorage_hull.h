@@ -20,13 +20,13 @@ namespace NKikimr {
     // reply until commit to the log. It is used for BLOCKED status;
     struct THullCheckStatus {
         NKikimrProto::EReplyStatus Status;
-        TString ErrorReason; 
+        TString ErrorReason;
         ui64 Lsn;
         bool Postponed;
 
-        THullCheckStatus(NKikimrProto::EReplyStatus status, TString errorReason, ui64 lsn = 0, bool postponed = false) 
+        THullCheckStatus(NKikimrProto::EReplyStatus status, TString errorReason, ui64 lsn = 0, bool postponed = false)
             : Status(status)
-            , ErrorReason(std::move(errorReason)) 
+            , ErrorReason(std::move(errorReason))
             , Lsn(lsn)
             , Postponed(postponed)
         {}
@@ -38,7 +38,7 @@ namespace NKikimr {
     class THull : public THullDbRecovery {
     private:
         struct TFields;
-        std::unique_ptr<TFields> Fields; 
+        std::unique_ptr<TFields> Fields;
 
         void ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id);
 
@@ -53,7 +53,7 @@ namespace NKikimr {
                 ui32 perGenCounter,
                 ui32 collectGeneration,
                 ui32 collectStep,
-                const TBarrierIngress& ingress, 
+                const TBarrierIngress& ingress,
                 const TActorContext& ctx);
 
     public:
@@ -75,14 +75,14 @@ namespace NKikimr {
         // Run all required hull facilities, like actors that perform compactions, etc
         TActiveActors RunHullServices(
                 TIntrusivePtr<TVDiskConfig> config,
-                std::shared_ptr<THullLogCtx> hullLogCtx, 
-                std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep, 
+                std::shared_ptr<THullLogCtx> hullLogCtx,
+                std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep,
                 TActorId loggerId,
                 TActorId logCutterId,
                 const TActorContext &ctx);
 
         // Request from PDisk to cut the recovery log
-        void CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg); 
+        void CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg);
 
         void PostponeReplyUntilCommitted(IEventBase *msg, const TActorId &recipient, ui64 recipientCookie, ui64 lsn);
 
@@ -99,7 +99,7 @@ namespace NKikimr {
                 const TLogoBlobID &id,
                 ui8 partId,
                 const TIngress &ingress,
-                TRope buffer, 
+                TRope buffer,
                 ui64 lsn);
 
         void AddHugeLogoBlob(
@@ -139,7 +139,7 @@ namespace NKikimr {
         THullCheckStatus CheckBlockCmdAndAllocLsn(
                 ui64 tabletID,
                 ui32 gen,
-                ui64 issuerGuid, 
+                ui64 issuerGuid,
                 ui32 *actGen,
                 TLsnSeg *seg);
 
@@ -147,7 +147,7 @@ namespace NKikimr {
                 const TActorContext &ctx,
                 ui64 tabletID,
                 ui32 gen,
-                ui64 issuerGuid, 
+                ui64 issuerGuid,
                 ui64 lsn,
                 const TReplySender &replySender);
 
@@ -174,7 +174,7 @@ namespace NKikimr {
 
         TLsnSeg AllocateLsnForPhantoms(const TDeque<TLogoBlobID>& phantoms);
         void CollectPhantoms(const TActorContext& ctx, const TDeque<TLogoBlobID>& phantoms, const TLsnSeg &seg);
- 
+
         // fast check for LogoBlob
         bool FastKeep(const TLogoBlobID& id, bool keepByIngress, TString *explanation = nullptr) const;
 

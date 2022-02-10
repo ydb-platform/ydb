@@ -3,8 +3,8 @@
 // unique tag to fix pragma once gcc glueing: ./library/actorlib/core/defs.h
 
 #include <library/cpp/actors/util/defs.h>
-#include <util/generic/hash.h> 
-#include <util/string/printf.h> 
+#include <util/generic/hash.h>
+#include <util/string/printf.h>
 
 // Enables collection of
 //    event send/receive counts
@@ -18,7 +18,7 @@ namespace NActors {
     static constexpr TPoolId PoolBits = 6;
     static constexpr TPoolId MaxPools = (1 << PoolBits) - 1; // maximum amount of pools (poolid=63 is reserved)
     static constexpr TPoolsMask WaitPoolsFlag = (1ull << MaxPools); // wait-for-slow-workers flag bitmask
- 
+
     // Special TPoolId values used by TCpuState
     static constexpr TPoolId CpuSpinning = MaxPools; // fast-worker is actively spinning, no slow-workers
     static constexpr TPoolId CpuBlocked = MaxPools + 1; // fast-worker is blocked, no slow-workers
@@ -50,20 +50,20 @@ namespace NActors {
             //Virtual
         };
     };
- 
-    struct TScopeId : std::pair<ui64, ui64> { 
-        using TBase = std::pair<ui64, ui64>; 
-        using TBase::TBase; 
-        static const TScopeId LocallyGenerated; 
-    }; 
- 
-    static inline TString ScopeIdToString(const TScopeId& scopeId) { 
-        return Sprintf("<%" PRIu64 ":%" PRIu64 ">", scopeId.first, scopeId.second); 
-    } 
- 
+
+    struct TScopeId : std::pair<ui64, ui64> {
+        using TBase = std::pair<ui64, ui64>;
+        using TBase::TBase;
+        static const TScopeId LocallyGenerated;
+    };
+
+    static inline TString ScopeIdToString(const TScopeId& scopeId) {
+        return Sprintf("<%" PRIu64 ":%" PRIu64 ">", scopeId.first, scopeId.second);
+    }
+
 }
 
-template<> 
-struct hash<NActors::TScopeId> : hash<std::pair<ui64, ui64>> {}; 
- 
+template<>
+struct hash<NActors::TScopeId> : hash<std::pair<ui64, ui64>> {};
+
 class TAffinity;

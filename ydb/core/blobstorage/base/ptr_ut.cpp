@@ -18,9 +18,9 @@ Y_UNIT_TEST_SUITE(PtrTest) {
         }
 
         template <class T>
-        inline void Destroy(std::unique_ptr<T> t) noexcept { 
+        inline void Destroy(std::unique_ptr<T> t) noexcept {
             ++(*Num);
-            CheckedDelete<T>(t.release()); 
+            CheckedDelete<T>(t.release());
         }
 
         ui64 GetNum() const {

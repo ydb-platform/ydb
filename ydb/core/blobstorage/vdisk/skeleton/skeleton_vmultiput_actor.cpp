@@ -11,7 +11,7 @@ namespace NKikimr {
 
             struct TItem {
                 NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
-                TString ErrorReason; 
+                TString ErrorReason;
                 TLogoBlobID BlobId;
                 ui64 Cookie = 0;
                 ui32 StatusFlags = 0;
@@ -22,7 +22,7 @@ namespace NKikimr {
                     return TStringBuilder()
                         << "{"
                         << " Status# " << NKikimrProto::EReplyStatus_Name(Status)
-                        << " ErrorReason# " << '"' << EscapeC(ErrorReason) << '"' 
+                        << " ErrorReason# " << '"' << EscapeC(ErrorReason) << '"'
                         << " BlobId# " << BlobId.ToString()
                         << " HasCookie# " << HasCookie
                         << " Cookie# " << Cookie
@@ -41,13 +41,13 @@ namespace NKikimr {
             TActorId LeaderId;
             TOutOfSpaceStatus OOSStatus;
 
-            const ui64 IncarnationGuid; 
- 
+            const ui64 IncarnationGuid;
+
         public:
             TBufferVMultiPutActor(TActorId leaderId, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses,
                     TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
                     TActorIDPtr skeletonFrontIDPtr, NMonitoring::TDynamicCounters::TCounterPtr multiPutResMsgsPtr,
-                    ui64 incarnationGuid) 
+                    ui64 incarnationGuid)
                 : TActorBootstrapped()
                 , Items(ev->Get()->Record.ItemsSize())
                 , ReceivedResults(0)
@@ -56,7 +56,7 @@ namespace NKikimr {
                 , Event(ev)
                 , LeaderId(leaderId)
                 , OOSStatus(oosStatus)
-                , IncarnationGuid(incarnationGuid) 
+                , IncarnationGuid(incarnationGuid)
             {
                 Y_VERIFY(statuses.size() == Items.size());
                 for (ui64 idx = 0; idx < Items.size(); ++idx) {
@@ -78,19 +78,19 @@ namespace NKikimr {
 
                 TInstant now = TAppData::TimeProvider->Now();
                 const ui64 bufferSizeBytes = Event->Get()->GetBufferBytes();
-                auto vMultiPutResult = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(NKikimrProto::OK, vdisk, cookie, 
-                    now, Event->Get()->GetCachedByteSize(), &vMultiPutRecord, SkeletonFrontIDPtr, MultiPutResMsgsPtr, 
-                    nullptr, bufferSizeBytes, std::move(Event->TraceId), IncarnationGuid, TString()); 
+                auto vMultiPutResult = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(NKikimrProto::OK, vdisk, cookie,
+                    now, Event->Get()->GetCachedByteSize(), &vMultiPutRecord, SkeletonFrontIDPtr, MultiPutResMsgsPtr,
+                    nullptr, bufferSizeBytes, std::move(Event->TraceId), IncarnationGuid, TString());
 
                 for (ui64 idx = 0; idx < Items.size(); ++idx) {
                     TItem &result = Items[idx];
-                    vMultiPutResult->AddVPutResult(result.Status, result.ErrorReason, result.BlobId, 
-                        result.HasCookie ? &result.Cookie : nullptr, result.StatusFlags); 
+                    vMultiPutResult->AddVPutResult(result.Status, result.ErrorReason, result.BlobId,
+                        result.HasCookie ? &result.Cookie : nullptr, result.StatusFlags);
                 }
 
                 vMultiPutResult->Record.SetStatusFlags(OOSStatus.Flags);
 
-                SendVDiskResponse(ctx, Event->Sender, vMultiPutResult.release(), *this, Event->Cookie); 
+                SendVDiskResponse(ctx, Event->Sender, vMultiPutResult.release(), *this, Event->Cookie);
                 PassAway();
             }
 
@@ -104,7 +104,7 @@ namespace NKikimr {
                 Y_VERIFY(!item.Received, "itemIdx# %" PRIu64 " item# %s", idx, item.ToString().data());
                 item.Received = true;
                 item.Status = ev->Get()->Status;
-                item.ErrorReason = ev->Get()->ErrorReason; 
+                item.ErrorReason = ev->Get()->ErrorReason;
 
                 ReceivedResults++;
 
@@ -127,7 +127,7 @@ namespace NKikimr {
                 item.Received = true;
                 Y_VERIFY(record.HasStatus());
                 item.Status = record.GetStatus();
-                item.ErrorReason = record.GetErrorReason(); 
+                item.ErrorReason = record.GetErrorReason();
 
                 ReceivedResults++;
 

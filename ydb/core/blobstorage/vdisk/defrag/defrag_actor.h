@@ -18,7 +18,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     struct TDefragCtx {
         const TIntrusivePtr<TVDiskContext> VCtx;
-        const std::shared_ptr<THugeBlobCtx> HugeBlobCtx; 
+        const std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
         const TPDiskCtxPtr PDiskCtx;
         const TActorId SkeletonId;
         const TActorId HugeKeeperId;
@@ -30,7 +30,7 @@ namespace NKikimr {
 
         TDefragCtx(
                 const TIntrusivePtr<TVDiskContext> &vctx,
-                const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx, 
+                const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
                 const TPDiskCtxPtr &pdiskCtx,
                 const TActorId &skeletonId,
                 const TActorId &hugeKeeperId,
@@ -55,7 +55,7 @@ namespace NKikimr {
     // Can defrag manually by receiving TEvBlobStorage::TEvVDefrag message.
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateDefragActor(
-            const std::shared_ptr<TDefragCtx> &dCtx, 
+            const std::shared_ptr<TDefragCtx> &dCtx,
             const TIntrusivePtr<TBlobStorageGroupInfo> &info);
 
 } // NKikimr

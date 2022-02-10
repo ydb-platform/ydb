@@ -50,8 +50,8 @@ public:
     NMetrics::TFastRiseAverageValue<double, 20> AveragedNodeTotalUsage;
     TResourceRawValues ResourceMaximumValues;
     TInstant StartTime;
-    TNodeLocation Location; 
-    bool LocationAcquired; 
+    TNodeLocation Location;
+    bool LocationAcquired;
     std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> TabletAvailability;
     TVector<TSubDomainKey> ServicedDomains;
     TVector<TSubDomainKey> LastSeenServicedDomains;
@@ -247,7 +247,7 @@ public:
     void ActualizeNodeStatistics(TInstant now);
 
     TDataCenterId GetDataCenter() const {
-        return Location.GetDataCenterId(); 
+        return Location.GetDataCenterId();
     }
 };
 

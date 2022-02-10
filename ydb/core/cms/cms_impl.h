@@ -436,9 +436,9 @@ public:
     {
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
-        return NKikimrServices::TActivity::CMS_SERVICE; 
+        return NKikimrServices::TActivity::CMS_SERVICE;
     }
 
 };

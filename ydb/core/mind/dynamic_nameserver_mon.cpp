@@ -83,8 +83,8 @@ void OutputNodeInfo(ui32 nodeId,
         << "  <td>" << info.Host << ":" << info.Port << "</td>" << Endl
         << "  <td>" << info.ResolveHost << "</td>" << Endl
         << "  <td>" << info.Address << "</td>" << Endl
-        << "  <td>" << info.Location.GetDataCenterId() << "</td>" << Endl 
-        << "  <td>" << info.Location.ToString() << "</td>" << Endl; 
+        << "  <td>" << info.Location.GetDataCenterId() << "</td>" << Endl
+        << "  <td>" << info.Location.ToString() << "</td>" << Endl;
     if (expire)
         str << "<td>" << ToString(expire) << "</td>" << Endl;
     str << "</tr>" << Endl;
@@ -102,7 +102,7 @@ void OutputStaticNodes(const TTableNameserverSetup &setup,
         << "      <th>Resolve Host</th>" << Endl
         << "      <th>Address</th>" << Endl
         << "      <th>Data Center</th>" << Endl
-        << "      <th>Location</th>" << Endl 
+        << "      <th>Location</th>" << Endl
         << "    </tr>" << Endl
         << "  </thead>" << Endl
         << "  <tbody class='center-align'>" << Endl;

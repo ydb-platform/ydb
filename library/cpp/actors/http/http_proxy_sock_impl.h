@@ -45,12 +45,12 @@ struct TPlainSocketImpl : virtual public THttpConfig {
         return Socket->Socket.Connect(&address);
     }
 
-    static constexpr int OnConnect(bool&, bool&) { 
-        return 1; 
+    static constexpr int OnConnect(bool&, bool&) {
+        return 1;
     }
 
-    static constexpr int OnAccept(const TEndpointInfo&, bool&, bool&) { 
-        return 1; 
+    static constexpr int OnAccept(const TEndpointInfo&, bool&, bool&) {
+        return 1;
     }
 
     bool IsGood() {
@@ -65,11 +65,11 @@ struct TPlainSocketImpl : virtual public THttpConfig {
         return res;
     }
 
-    ssize_t Send(const void* data, size_t size, bool&, bool&) { 
+    ssize_t Send(const void* data, size_t size, bool&, bool&) {
         return Socket->Socket.Send(data, size);
     }
 
-    ssize_t Recv(void* data, size_t size, bool&, bool&) { 
+    ssize_t Recv(void* data, size_t size, bool&, bool&) {
         return Socket->Socket.Recv(data, size);
     }
 };
@@ -180,16 +180,16 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
 
     void Flush() {}
 
-    ssize_t Send(const void* data, size_t size, bool& read, bool& write) { 
+    ssize_t Send(const void* data, size_t size, bool& read, bool& write) {
         ssize_t res = SSL_write(Ssl.Get(), data, size);
         if (res < 0) {
             res = SSL_get_error(Ssl.Get(), res);
             switch(res) {
             case SSL_ERROR_WANT_READ:
-                read = true; 
-                return -EAGAIN; 
+                read = true;
+                return -EAGAIN;
             case SSL_ERROR_WANT_WRITE:
-                write = true; 
+                write = true;
                 return -EAGAIN;
             default:
                 return -EIO;
@@ -198,16 +198,16 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         return res;
     }
 
-    ssize_t Recv(void* data, size_t size, bool& read, bool& write) { 
+    ssize_t Recv(void* data, size_t size, bool& read, bool& write) {
         ssize_t res = SSL_read(Ssl.Get(), data, size);
         if (res < 0) {
             res = SSL_get_error(Ssl.Get(), res);
             switch(res) {
             case SSL_ERROR_WANT_READ:
-                read = true; 
-                return -EAGAIN; 
+                read = true;
+                return -EAGAIN;
             case SSL_ERROR_WANT_WRITE:
-                write = true; 
+                write = true;
                 return -EAGAIN;
             default:
                 return -EIO;
@@ -216,19 +216,19 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         return res;
     }
 
-    int OnConnect(bool& read, bool& write) { 
+    int OnConnect(bool& read, bool& write) {
         if (!Ssl) {
             InitClientSsl();
         }
         int res = SSL_connect(Ssl.Get());
-        if (res <= 0) { 
+        if (res <= 0) {
             res = SSL_get_error(Ssl.Get(), res);
             switch(res) {
             case SSL_ERROR_WANT_READ:
-                read = true; 
-                return -EAGAIN; 
+                read = true;
+                return -EAGAIN;
             case SSL_ERROR_WANT_WRITE:
-                write = true; 
+                write = true;
                 return -EAGAIN;
             default:
                 return -EIO;
@@ -237,19 +237,19 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         return res;
     }
 
-    int OnAccept(const TEndpointInfo& endpoint, bool& read, bool& write) { 
+    int OnAccept(const TEndpointInfo& endpoint, bool& read, bool& write) {
         if (!Ssl) {
             InitServerSsl(endpoint.SecureContext.Get());
         }
         int res = SSL_accept(Ssl.Get());
-        if (res <= 0) { 
+        if (res <= 0) {
             res = SSL_get_error(Ssl.Get(), res);
             switch(res) {
             case SSL_ERROR_WANT_READ:
-                read = true; 
-                return -EAGAIN; 
+                read = true;
+                return -EAGAIN;
             case SSL_ERROR_WANT_WRITE:
-                write = true; 
+                write = true;
                 return -EAGAIN;
             default:
                 return -EIO;

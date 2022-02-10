@@ -1,91 +1,91 @@
-#include "config.h" 
- 
-namespace NKikimr::NBsController { 
- 
-    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TUpdateDriveStatus& cmd, TStatus& /*status*/) { 
-        const auto& host = NormalizeHostKey(cmd.GetHostKey()); 
- 
-        TPDiskId pdiskId; 
-        if (cmd.GetPDiskId()) { 
-            if (cmd.GetPath()) { 
-                throw TExError() << "TUpdateDriveStatus.Path and PDiskId are mutually exclusive"; 
-            } 
-            pdiskId = TPDiskId(host.GetNodeId(), cmd.GetPDiskId()); 
-            if (!PDisks.Find(pdiskId) || PDisksToRemove.count(pdiskId)) { 
-                throw TExPDiskNotFound(host, cmd.GetPDiskId(), TString()); 
-            } 
-        } else { 
-            const auto it = PDiskLocationMap.find(TPDiskLocation(host.GetNodeId(), cmd.GetPath())); 
-            if (it != PDiskLocationMap.end() && !PDisksToRemove.count(it->second)) { 
-                pdiskId = it->second; 
-            } else { 
-                throw TExPDiskNotFound(host, 0, cmd.GetPath()); 
-            } 
-        } 
- 
-        TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId); 
-        if (cmd.GetStatus() != pdisk->Status) { 
-            const bool wasGoodExpectedStatus = pdisk->HasGoodExpectedStatus(); 
-            pdisk->Status = cmd.GetStatus(); 
-            pdisk->StatusTimestamp = Timestamp; 
-            if (pdisk->HasGoodExpectedStatus() != wasGoodExpectedStatus) { 
-                for (const auto& [id, slot] : pdisk->VSlotsOnPDisk) { 
-                    if (slot->Group) { 
-                        TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID); 
-                        group->CalculateGroupStatus(); 
-                    } 
-                } 
-            } 
-        } 
- 
-        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA01, "UpdateDriveStatus", 
-            (UniqueId, UniqueId), 
-            (FQDN, host.GetFqdn()), 
-            (IcPort, host.GetIcPort()), 
-            (NodeId, host.GetNodeId()), 
-            (Path, cmd.GetPath()), 
-            (Status, cmd.GetStatus())); 
-    } 
- 
-    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadDriveStatus& cmd, TStatus& status) { 
-        const TString& path = cmd.GetPath(); 
- 
-        TPDiskId from = Min<TPDiskId>(); 
-        TPDiskId to = Max<TPDiskId>(); 
- 
-        if (cmd.HasHostKey()) { 
-            const auto& host = NormalizeHostKey(cmd.GetHostKey()); 
-            const TNodeId& nodeId = host.GetNodeId(); 
-            from = TPDiskId::MinForNode(nodeId); 
-            to = TPDiskId::MaxForNode(nodeId); 
-        } 
- 
-        PDisks.ForEachInRange(from, to, [&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) { 
-            if (!path || path == pdiskInfo.Path) { 
-                NKikimrBlobStorage::TUpdateDriveStatus *item = status.AddDriveStatus(); 
-                NKikimrBlobStorage::THostKey *host = item->MutableHostKey(); 
-                host->SetFqdn(std::get<0>(pdiskInfo.HostId)); 
-                host->SetIcPort(std::get<1>(pdiskInfo.HostId)); 
-                host->SetNodeId(pdiskId.NodeId); 
-                item->SetPath(pdiskInfo.Path); 
-                item->SetStatus(pdiskInfo.Status); 
+#include "config.h"
+
+namespace NKikimr::NBsController {
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TUpdateDriveStatus& cmd, TStatus& /*status*/) {
+        const auto& host = NormalizeHostKey(cmd.GetHostKey());
+
+        TPDiskId pdiskId;
+        if (cmd.GetPDiskId()) {
+            if (cmd.GetPath()) {
+                throw TExError() << "TUpdateDriveStatus.Path and PDiskId are mutually exclusive";
+            }
+            pdiskId = TPDiskId(host.GetNodeId(), cmd.GetPDiskId());
+            if (!PDisks.Find(pdiskId) || PDisksToRemove.count(pdiskId)) {
+                throw TExPDiskNotFound(host, cmd.GetPDiskId(), TString());
+            }
+        } else {
+            const auto it = PDiskLocationMap.find(TPDiskLocation(host.GetNodeId(), cmd.GetPath()));
+            if (it != PDiskLocationMap.end() && !PDisksToRemove.count(it->second)) {
+                pdiskId = it->second;
+            } else {
+                throw TExPDiskNotFound(host, 0, cmd.GetPath());
+            }
+        }
+
+        TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
+        if (cmd.GetStatus() != pdisk->Status) {
+            const bool wasGoodExpectedStatus = pdisk->HasGoodExpectedStatus();
+            pdisk->Status = cmd.GetStatus();
+            pdisk->StatusTimestamp = Timestamp;
+            if (pdisk->HasGoodExpectedStatus() != wasGoodExpectedStatus) {
+                for (const auto& [id, slot] : pdisk->VSlotsOnPDisk) {
+                    if (slot->Group) {
+                        TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
+                        group->CalculateGroupStatus();
+                    }
+                }
+            }
+        }
+
+        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA01, "UpdateDriveStatus",
+            (UniqueId, UniqueId),
+            (FQDN, host.GetFqdn()),
+            (IcPort, host.GetIcPort()),
+            (NodeId, host.GetNodeId()),
+            (Path, cmd.GetPath()),
+            (Status, cmd.GetStatus()));
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadDriveStatus& cmd, TStatus& status) {
+        const TString& path = cmd.GetPath();
+
+        TPDiskId from = Min<TPDiskId>();
+        TPDiskId to = Max<TPDiskId>();
+
+        if (cmd.HasHostKey()) {
+            const auto& host = NormalizeHostKey(cmd.GetHostKey());
+            const TNodeId& nodeId = host.GetNodeId();
+            from = TPDiskId::MinForNode(nodeId);
+            to = TPDiskId::MaxForNode(nodeId);
+        }
+
+        PDisks.ForEachInRange(from, to, [&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
+            if (!path || path == pdiskInfo.Path) {
+                NKikimrBlobStorage::TUpdateDriveStatus *item = status.AddDriveStatus();
+                NKikimrBlobStorage::THostKey *host = item->MutableHostKey();
+                host->SetFqdn(std::get<0>(pdiskInfo.HostId));
+                host->SetIcPort(std::get<1>(pdiskInfo.HostId));
+                host->SetNodeId(pdiskId.NodeId);
+                item->SetPath(pdiskInfo.Path);
+                item->SetStatus(pdiskInfo.Status);
                 item->SetPDiskId(pdiskId.PDiskId);
                 item->SetSerial(pdiskInfo.ExpectedSerial);
-                item->SetStatusChangeTimestamp(pdiskInfo.StatusTimestamp.GetValue()); 
-            } 
-            return true; 
-        }); 
-    } 
- 
+                item->SetStatusChangeTimestamp(pdiskInfo.StatusTimestamp.GetValue());
+            }
+            return true;
+        });
+    }
+
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TAddDriveSerial& cmd,
             TStatus& /*status*/) {
 
         const TString& newSerial = cmd.GetSerial();
 
         Schema::DriveSerial::BoxId::Type boxId = cmd.GetBoxId();
-        const TDriveSerialInfo *driveInfo = DrivesSerials.Find(newSerial); 
+        const TDriveSerialInfo *driveInfo = DrivesSerials.Find(newSerial);
 
-        if (driveInfo && driveInfo->LifeStage != NKikimrBlobStorage::TDriveLifeStage::REMOVED) { 
+        if (driveInfo && driveInfo->LifeStage != NKikimrBlobStorage::TDriveLifeStage::REMOVED) {
             throw TExAlready() << "Device with such serial already exists in BSC database and not in lifeStage REMOVED";
         }
 
@@ -109,9 +109,9 @@ namespace NKikimr::NBsController {
             if (updatePDiskId) {
                 // PDisk is defined through HostConfigs, but there may be fictional row in DrivesSerials
                 // if row is present - delete it
-                if (driveInfo) { 
-                    DrivesSerials.DeleteExistingEntry(newSerial); 
-                    driveInfo = nullptr; 
+                if (driveInfo) {
+                    DrivesSerials.DeleteExistingEntry(newSerial);
+                    driveInfo = nullptr;
                 }
                 TPDiskInfo *pdiskInfo = PDisks.FindForUpdate(*updatePDiskId);
                 if (pdiskInfo->ExpectedSerial == newSerial) {
@@ -151,23 +151,23 @@ namespace NKikimr::NBsController {
             }
         }
 
-        // delete existing entry, if any, but keep its GUID 
-        std::optional<TMaybe<Schema::DriveSerial::Guid::Type>> guid = driveInfo ? std::make_optional(driveInfo->Guid) : std::nullopt; 
-        if (driveInfo) { 
-            DrivesSerials.DeleteExistingEntry(newSerial); 
+        // delete existing entry, if any, but keep its GUID
+        std::optional<TMaybe<Schema::DriveSerial::Guid::Type>> guid = driveInfo ? std::make_optional(driveInfo->Guid) : std::nullopt;
+        if (driveInfo) {
+            DrivesSerials.DeleteExistingEntry(newSerial);
         }
 
-        TDriveSerialInfo *driveInfoNew = DrivesSerials.ConstructInplaceNewEntry(newSerial, boxId); 
-        if (guid) { 
-            driveInfoNew->Guid = *guid; 
-        } 
- 
-        driveInfoNew->Kind = cmd.GetKind(); 
-        driveInfoNew->PDiskType = cmd.GetPDiskType(); 
+        TDriveSerialInfo *driveInfoNew = DrivesSerials.ConstructInplaceNewEntry(newSerial, boxId);
+        if (guid) {
+            driveInfoNew->Guid = *guid;
+        }
+
+        driveInfoNew->Kind = cmd.GetKind();
+        driveInfoNew->PDiskType = cmd.GetPDiskType();
         TString config;
         const bool success = cmd.GetPDiskConfig().SerializeToString(&config);
         Y_VERIFY(success);
-        driveInfoNew->PDiskConfig = config; 
+        driveInfoNew->PDiskConfig = config;
 
         STLOG(PRI_NOTICE, BS_CONTROLLER_AUDIT, BSCA06, "AddDriveSerial", (Serial, newSerial), (BoxId, boxId));
     }
@@ -177,7 +177,7 @@ namespace NKikimr::NBsController {
 
         const TString& serial = cmd.GetSerial();
 
-        if (const TDriveSerialInfo *driveInfo = DrivesSerials.Find(serial); !driveInfo) { 
+        if (const TDriveSerialInfo *driveInfo = DrivesSerials.Find(serial); !driveInfo) {
             // Drive is defined in HostConfigs
             //
 
@@ -225,19 +225,19 @@ namespace NKikimr::NBsController {
 
             // create fictional row in DrivesSerials to be able to reply kAlready for already removed disk
             // even if they are defined through HostConfig
-            TDriveSerialInfo *driveInfoNew = DrivesSerials.ConstructInplaceNewEntry(serial, pdiskUpdate->BoxId); 
-            driveInfoNew->Guid = pdiskUpdate->Guid; 
-            driveInfoNew->Kind = pdiskUpdate->Kind.Kind(); 
-            driveInfoNew->PDiskType = PDiskTypeToPDiskType(pdiskUpdate->Kind.Type()); 
-            driveInfoNew->PDiskConfig = pdiskUpdate->PDiskConfig; 
-            driveInfoNew->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED; 
+            TDriveSerialInfo *driveInfoNew = DrivesSerials.ConstructInplaceNewEntry(serial, pdiskUpdate->BoxId);
+            driveInfoNew->Guid = pdiskUpdate->Guid;
+            driveInfoNew->Kind = pdiskUpdate->Kind.Kind();
+            driveInfoNew->PDiskType = PDiskTypeToPDiskType(pdiskUpdate->Kind.Type());
+            driveInfoNew->PDiskConfig = pdiskUpdate->PDiskConfig;
+            driveInfoNew->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED;
         } else {
-            if (driveInfo->LifeStage == NKikimrBlobStorage::TDriveLifeStage::REMOVED) { 
+            if (driveInfo->LifeStage == NKikimrBlobStorage::TDriveLifeStage::REMOVED) {
                 throw TExAlready() << "Drive is already removed";
             }
 
-            if (driveInfo->NodeId && driveInfo->PDiskId) { 
-                TPDiskId pdiskId(*driveInfo->NodeId, *driveInfo->PDiskId); 
+            if (driveInfo->NodeId && driveInfo->PDiskId) {
+                TPDiskId pdiskId(*driveInfo->NodeId, *driveInfo->PDiskId);
                 if (auto* pdiskInfo = PDisks.Find(pdiskId)) {
                     if (pdiskInfo->NumActiveSlots) {
                         throw TExError() << "There are active vdisks on that drive";
@@ -247,10 +247,10 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            TDriveSerialInfo *driveInfoMutable = DrivesSerials.FindForUpdate(serial); 
-            driveInfoMutable->NodeId.Clear(); 
-            driveInfoMutable->PDiskId.Clear(); 
-            driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED; 
+            TDriveSerialInfo *driveInfoMutable = DrivesSerials.FindForUpdate(serial);
+            driveInfoMutable->NodeId.Clear();
+            driveInfoMutable->PDiskId.Clear();
+            driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED;
 
             STLOG(PRI_NOTICE, BS_CONTROLLER_AUDIT, BSCA07, "RemoveDriveSerial", (Serial, serial));
         }
@@ -261,12 +261,12 @@ namespace NKikimr::NBsController {
 
         const TString& serial = cmd.GetSerial();
 
-        if (const TDriveSerialInfo *driveInfo = DrivesSerials.Find(serial)) { 
-            switch (driveInfo->LifeStage) { 
+        if (const TDriveSerialInfo *driveInfo = DrivesSerials.Find(serial)) {
+            switch (driveInfo->LifeStage) {
                 case NKikimrBlobStorage::TDriveLifeStage::NOT_SEEN:
                     [[fallthrough]];
-                case NKikimrBlobStorage::TDriveLifeStage::REMOVED: 
-                    DrivesSerials.DeleteExistingEntry(serial); 
+                case NKikimrBlobStorage::TDriveLifeStage::REMOVED:
+                    DrivesSerials.DeleteExistingEntry(serial);
                     break;
                 default: {
                     throw TExError() << "Drive not in {NOT_SEEN, REMOVED} lifestage and cannot be forgotten. Remove it first";
@@ -274,7 +274,7 @@ namespace NKikimr::NBsController {
                 }
             }
         } else {
-            throw TExAlready() << "Drive is unknown for BS_CONTROLLER and cannot be forgotten"; 
+            throw TExAlready() << "Drive is unknown for BS_CONTROLLER and cannot be forgotten";
         }
     }
 
@@ -302,4 +302,4 @@ namespace NKikimr::NBsController {
 
         SerialManagementStage.Unshare() = newStage;
     }
-} // NKikimr::NBsController 
+} // NKikimr::NBsController

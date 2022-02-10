@@ -19,9 +19,9 @@ extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 namespace NKikimr {
 namespace NDriverClient {
 
-class TClientCommandServerBase : public TClientCommand { 
-protected: 
-    NKikimrConfig::TAppConfig BaseConfig; 
+class TClientCommandServerBase : public TClientCommand {
+protected:
+    NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig AppConfig;
     TKikimrRunConfig RunConfig;
 
@@ -80,16 +80,16 @@ protected:
     TVector<TString> GRpcPublicAddressesV4;
     TVector<TString> GRpcPublicAddressesV6;
     TString GRpcPublicTargetNameOverride;
-    TString PathToCert; 
-    TString PathToPKey; 
-    TString PathToCA; 
+    TString PathToCert;
+    TString PathToPKey;
+    TString PathToCA;
     TVector<TString> YamlConfigFiles;
 
-    TClientCommandServerBase(const char *cmd, const char *description) 
-        : TClientCommand(cmd, {}, description) 
-        , RunConfig(AppConfig) 
-    {} 
- 
+    TClientCommandServerBase(const char *cmd, const char *description)
+        : TClientCommand(cmd, {}, description)
+        , RunConfig(AppConfig)
+    {}
+
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
 
@@ -183,9 +183,9 @@ protected:
         config.Opts->AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
         config.Opts->AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&MonitoringAddress);
         config.Opts->AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads);
-        config.Opts->AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument(); 
+        config.Opts->AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument();
 
-//        config.Opts->AddLongOption('u', "url-base", "url base to request configs from").OptionalArgument("URL"); 
+//        config.Opts->AddLongOption('u', "url-base", "url base to request configs from").OptionalArgument("URL");
         config.Opts->AddLongOption("sys-file", "actor system config file (use dummy config by default)").OptionalArgument("PATH");
         config.Opts->AddLongOption("naming-file", "static nameservice config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("domains-file", "domain config file").OptionalArgument("PATH");
@@ -195,7 +195,7 @@ protected:
         config.Opts->AddLongOption("channels-file", "tablet channel profile config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("vdisk-file", "vdisk kind config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("drivemodel-file", "drive model config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH"); 
+        config.Opts->AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("tenant-pool-file", "Tenant Pool service config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort);
         config.Opts->AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT").StoreResult(&GRpcsPort);
@@ -205,9 +205,9 @@ protected:
         config.Opts->AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV4);
         config.Opts->AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV6);
         config.Opts->AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicTargetNameOverride);
-        config.Opts->AddLongOption("kqp-file", "Kikimr Query Processor config file").OptionalArgument("PATH"); 
-        config.Opts->AddLongOption("incrhuge-file", "incremental huge blob keeper config file").OptionalArgument("PATH"); 
-        config.Opts->AddLongOption("memorylog-file", "set buffer size for memory log").OptionalArgument("PATH"); 
+        config.Opts->AddLongOption("kqp-file", "Kikimr Query Processor config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("incrhuge-file", "incremental huge blob keeper config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("memorylog-file", "set buffer size for memory log").OptionalArgument("PATH");
         config.Opts->AddLongOption("pq-file", "PersQueue config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("pqcd-file", "PersQueue cluster discovery config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("netclassifier-file", "NetClassifier config file").OptionalArgument("PATH");
@@ -234,9 +234,9 @@ protected:
                 .RequiredArgument("NAME").StoreResult(&NodeType);
         config.Opts->AddLongOption("ignore-cms-configs", "Don't load configs from CMS")
                 .NoArgument().SetFlag(&IgnoreCmsConfigs);
-        config.Opts->AddLongOption("cert", "Path to client certificate file (PEM)").RequiredArgument("PATH").StoreResult(&PathToCert); 
-        config.Opts->AddLongOption("key", "Path to private key file (PEM)").RequiredArgument("PATH").StoreResult(&PathToPKey); 
-        config.Opts->AddLongOption("ca", "Path to certificate authority file (PEM)").RequiredArgument("PATH").StoreResult(&PathToCA); 
+        config.Opts->AddLongOption("cert", "Path to client certificate file (PEM)").RequiredArgument("PATH").StoreResult(&PathToCert);
+        config.Opts->AddLongOption("key", "Path to private key file (PEM)").RequiredArgument("PATH").StoreResult(&PathToPKey);
+        config.Opts->AddLongOption("ca", "Path to certificate authority file (PEM)").RequiredArgument("PATH").StoreResult(&PathToCA);
         config.Opts->AddLongOption("data-center", "data center name (used to describe dynamic node location)")
                 .RequiredArgument("NAME").StoreResult(&DataCenter);
         config.Opts->AddLongOption("rack", "rack name (used to describe dynamic node location)")
@@ -247,43 +247,43 @@ protected:
         config.Opts->AddLongOption("cms-config-cache-file", "Path to CMS cache config file").OptionalArgument("PATH")
             .StoreResult(&RunConfig.PathToConfigCacheFile);
         config.Opts->AddHelpOption('h');
- 
-        // add messagebus proxy options 
-        config.Opts->AddLongOption("mbus", "Start MessageBus proxy").NoArgument(); 
-        config.Opts->AddLongOption("mbus-port", "MessageBus proxy port").RequiredArgument("PORT").StoreResult(&BusProxyPort); 
-        config.Opts->AddLongOption("mbus-trace-path", "Path for trace files").RequiredArgument("PATH").StoreResult(&TracePath); 
-        SetMsgBusDefaults(ProxyBusSessionConfig, ProxyBusQueueConfig); 
-        ProxyBusSessionConfig.ConfigureLastGetopt(*config.Opts, "mbus-"); 
-        ProxyBusQueueConfig.ConfigureLastGetopt(*config.Opts, "mbus-"); 
- 
+
+        // add messagebus proxy options
+        config.Opts->AddLongOption("mbus", "Start MessageBus proxy").NoArgument();
+        config.Opts->AddLongOption("mbus-port", "MessageBus proxy port").RequiredArgument("PORT").StoreResult(&BusProxyPort);
+        config.Opts->AddLongOption("mbus-trace-path", "Path for trace files").RequiredArgument("PATH").StoreResult(&TracePath);
+        SetMsgBusDefaults(ProxyBusSessionConfig, ProxyBusQueueConfig);
+        ProxyBusSessionConfig.ConfigureLastGetopt(*config.Opts, "mbus-");
+        ProxyBusQueueConfig.ConfigureLastGetopt(*config.Opts, "mbus-");
+
         config.Opts->AddLongOption("hierarchic-cfg", "Use hierarchical approach for configuration parts overriding")
         .NoArgument().SetFlag(&HierarchicalCfg);
 
         config.SetFreeArgsMin(0);
-        config.Opts->SetFreeArgDefaultTitle("PATH", "path to protobuf file; files are merged in order in which they are enlisted"); 
+        config.Opts->SetFreeArgDefaultTitle("PATH", "path to protobuf file; files are merged in order in which they are enlisted");
     }
 
-    template<typename TProto> 
+    template<typename TProto>
     TProto *MutableConfigPart(TConfig& config, const char *optname,
-            bool (NKikimrConfig::TAppConfig::*hasConfig)() const, 
-            const TProto& (NKikimrConfig::TAppConfig::*getConfig)() const, 
-            TProto* (NKikimrConfig::TAppConfig::*mutableConfig)()) { 
-        TProto *res = nullptr; 
+            bool (NKikimrConfig::TAppConfig::*hasConfig)() const,
+            const TProto& (NKikimrConfig::TAppConfig::*getConfig)() const,
+            TProto* (NKikimrConfig::TAppConfig::*mutableConfig)()) {
+        TProto *res = nullptr;
         if (!HierarchicalCfg && (AppConfig.*hasConfig)()) {
-            return nullptr; // this field is already provided in AppConfig, so we don't overwrite it 
-        } 
- 
-        if (config.ParseResult->Has(optname)) { 
-            const bool success = ParsePBFromFile(config.ParseResult->Get(optname), res = (AppConfig.*mutableConfig)()); 
-            Y_VERIFY(success); 
-        } else if ((BaseConfig.*hasConfig)()) { 
-            res = (AppConfig.*mutableConfig)(); 
-            res->CopyFrom((BaseConfig.*getConfig)()); 
-        } 
- 
-        return res; 
-    } 
- 
+            return nullptr; // this field is already provided in AppConfig, so we don't overwrite it
+        }
+
+        if (config.ParseResult->Has(optname)) {
+            const bool success = ParsePBFromFile(config.ParseResult->Get(optname), res = (AppConfig.*mutableConfig)());
+            Y_VERIFY(success);
+        } else if ((BaseConfig.*hasConfig)()) {
+            res = (AppConfig.*mutableConfig)();
+            res->CopyFrom((BaseConfig.*getConfig)());
+        }
+
+        return res;
+    }
+
     template<typename TProto>
     TProto *MutableConfigPartMerge(TConfig& config, const char *optname,
             TProto* (NKikimrConfig::TAppConfig::*mutableConfig)()) {
@@ -304,32 +304,32 @@ protected:
         TClientCommand::Parse(config);
 
 #define OPTION(NAME, FIELD) MutableConfigPart(config, NAME, &NKikimrConfig::TAppConfig::Has##FIELD, \
-            &NKikimrConfig::TAppConfig::Get##FIELD, &NKikimrConfig::TAppConfig::Mutable##FIELD) 
+            &NKikimrConfig::TAppConfig::Get##FIELD, &NKikimrConfig::TAppConfig::Mutable##FIELD)
 #define OPTION_MERGE(NAME, FIELD) MutableConfigPartMerge(config, NAME, &NKikimrConfig::TAppConfig::Mutable##FIELD)
- 
+
         OPTION("auth-file", AuthConfig);
         OPTION_MERGE("auth-token-file", AuthConfig);
 
         LoadBaseConfig(config);
         LoadYamlConfig();
 
-        // start memorylog as soon as possible 
-        if (auto mem = OPTION("memorylog-file", MemoryLogConfig)) { 
-            if (mem->HasLogBufferSize() && mem->GetLogBufferSize() > 0) { 
-                if (mem->HasLogGrainSize() && mem->GetLogGrainSize() > 0) { 
-                    TMemoryLog::CreateMemoryLogBuffer(mem->GetLogBufferSize(), mem->GetLogGrainSize()); 
-                } else { 
-                    TMemoryLog::CreateMemoryLogBuffer(mem->GetLogBufferSize()); 
-                } 
-                MemLogWriteNullTerm("Memory_log_has_been_started_YAHOO_"); 
-            } 
-        } 
- 
-        OPTION("naming-file", NameserviceConfig); 
+        // start memorylog as soon as possible
+        if (auto mem = OPTION("memorylog-file", MemoryLogConfig)) {
+            if (mem->HasLogBufferSize() && mem->GetLogBufferSize() > 0) {
+                if (mem->HasLogGrainSize() && mem->GetLogGrainSize() > 0) {
+                    TMemoryLog::CreateMemoryLogBuffer(mem->GetLogBufferSize(), mem->GetLogGrainSize());
+                } else {
+                    TMemoryLog::CreateMemoryLogBuffer(mem->GetLogBufferSize());
+                }
+                MemLogWriteNullTerm("Memory_log_has_been_started_YAHOO_");
+            }
+        }
+
+        OPTION("naming-file", NameserviceConfig);
 
         if (config.ParseResult->Has("node")) {
             if (NodeIdValue == "static") {
-                if (!AppConfig.HasNameserviceConfig() || !InterconnectPort) 
+                if (!AppConfig.HasNameserviceConfig() || !InterconnectPort)
                     ythrow yexception() << "'--node static' requires naming file and IC port to be specified";
                 TString hostname;
                 try {
@@ -373,15 +373,15 @@ protected:
 
         LoadYamlConfig();
 
-        OPTION("sys-file", ActorSystemConfig); 
+        OPTION("sys-file", ActorSystemConfig);
         if (!AppConfig.HasActorSystemConfig()) {
-            AppConfig.MutableActorSystemConfig()->CopyFrom(*DummyActorSystemConfig()); 
+            AppConfig.MutableActorSystemConfig()->CopyFrom(*DummyActorSystemConfig());
         }
 
-        OPTION("domains-file", DomainsConfig); 
-        OPTION("bs-file", BlobStorageConfig); 
+        OPTION("domains-file", DomainsConfig);
+        OPTION("bs-file", BlobStorageConfig);
 
-        if (auto logConfig = OPTION("log-file", LogConfig)) { 
+        if (auto logConfig = OPTION("log-file", LogConfig)) {
             if (config.ParseResult->Has("syslog"))
                 logConfig->SetSysLog(true);
             if (config.ParseResult->Has("log-level"))
@@ -403,37 +403,37 @@ protected:
         if (config.ParseResult->Has("log-file-name"))
             AppConfig.MutableLogConfig()->SetBackendFileName(LogFileName);
 
-        if (auto interconnectConfig = OPTION("ic-file", InterconnectConfig)) { 
-            if (config.ParseResult->Has("tcp")) { 
-                interconnectConfig->SetStartTcp(true); 
-            } 
+        if (auto interconnectConfig = OPTION("ic-file", InterconnectConfig)) {
+            if (config.ParseResult->Has("tcp")) {
+                interconnectConfig->SetStartTcp(true);
+            }
         }
 
-        OPTION("channels-file", ChannelProfileConfig); 
+        OPTION("channels-file", ChannelProfileConfig);
 
-        if (auto bootstrapConfig = OPTION("bootstrap-file", BootstrapConfig)) { 
-            bootstrapConfig->MutableCompileServiceConfig()->SetInflightLimit(CompileInflightLimit); 
+        if (auto bootstrapConfig = OPTION("bootstrap-file", BootstrapConfig)) {
+            bootstrapConfig->MutableCompileServiceConfig()->SetInflightLimit(CompileInflightLimit);
         }
 
-        OPTION("vdisk-file", VDiskConfig); 
-        OPTION("drivemodel-file", DriveModelConfig); 
-        OPTION("grpc-file", GRpcConfig); 
-        OPTION("tenant-pool-file", TenantPoolConfig); 
-        OPTION("dyn-nodes-file", DynamicNameserviceConfig); 
-        OPTION("cms-file", CmsConfig); 
-        OPTION("pq-file", PQConfig); 
+        OPTION("vdisk-file", VDiskConfig);
+        OPTION("drivemodel-file", DriveModelConfig);
+        OPTION("grpc-file", GRpcConfig);
+        OPTION("tenant-pool-file", TenantPoolConfig);
+        OPTION("dyn-nodes-file", DynamicNameserviceConfig);
+        OPTION("cms-file", CmsConfig);
+        OPTION("pq-file", PQConfig);
         OPTION("pqcd-file", PQClusterDiscoveryConfig);
         OPTION("netclassifier-file", NetClassifierConfig);
         OPTION("auth-file", AuthConfig);
         OPTION_MERGE("auth-token-file", AuthConfig);
-        OPTION("key-file", KeyConfig); 
+        OPTION("key-file", KeyConfig);
         OPTION("pdisk-key-file", PDiskKeyConfig);
-        OPTION("sqs-file", SqsConfig); 
-        OPTION("feature-flags-file", FeatureFlags); 
+        OPTION("sqs-file", SqsConfig);
+        OPTION("feature-flags-file", FeatureFlags);
         OPTION("rb-file", ResourceBrokerConfig);
         OPTION("metering-file", MeteringConfig);
-        OPTION("kqp-file", KQPConfig); 
-        OPTION("incrhuge-file", IncrHugeConfig); 
+        OPTION("kqp-file", KQPConfig);
+        OPTION("incrhuge-file", IncrHugeConfig);
         OPTION("alloc-file", AllocatorConfig);
         OPTION("yq-file", YandexQueryConfig);
 
@@ -441,35 +441,35 @@ protected:
             AppConfig.MutableAllocatorConfig()->CopyFrom(*DummyAllocatorConfig());
         }
 
-        // apply certificates, if any 
-        if (config.ParseResult->Has("cert")) { 
-            AppConfig.MutableInterconnectConfig()->SetPathToCertificateFile(PathToCert); 
-        } 
-        if (config.ParseResult->Has("key")) { 
-            AppConfig.MutableInterconnectConfig()->SetPathToPrivateKeyFile(PathToPKey); 
-        } 
-        if (config.ParseResult->Has("ca")) { 
-            AppConfig.MutableInterconnectConfig()->SetPathToCaFile(PathToCA); 
-        } 
- 
-        if (!AppConfig.HasDomainsConfig()) 
-            ythrow yexception() << "DomainsConfig is not provided"; 
-        if (!AppConfig.HasChannelProfileConfig()) 
-            ythrow yexception() << "ChannelProfileConfig is not provided"; 
+        // apply certificates, if any
+        if (config.ParseResult->Has("cert")) {
+            AppConfig.MutableInterconnectConfig()->SetPathToCertificateFile(PathToCert);
+        }
+        if (config.ParseResult->Has("key")) {
+            AppConfig.MutableInterconnectConfig()->SetPathToPrivateKeyFile(PathToPKey);
+        }
+        if (config.ParseResult->Has("ca")) {
+            AppConfig.MutableInterconnectConfig()->SetPathToCaFile(PathToCA);
+        }
 
-        if ((!config.ParseResult->Has("tenant") || TenantName == "no") && RunConfig.ScopeId.IsEmpty()) { 
-            const TString myDomain = DeduceNodeDomain(); 
-            for (const auto& domain : AppConfig.GetDomainsConfig().GetDomain()) { 
-                if (domain.GetName() == myDomain) { 
-                    RunConfig.ScopeId = TKikimrScopeId(0, domain.GetDomainId()); 
-                    break; 
-                } 
-            } 
-        } 
-        if (TenantName == "dynamic") { 
-            Y_VERIFY(RunConfig.ScopeId.IsEmpty()); 
-            RunConfig.ScopeId = TKikimrScopeId::DynamicTenantScopeId; 
-        } 
+        if (!AppConfig.HasDomainsConfig())
+            ythrow yexception() << "DomainsConfig is not provided";
+        if (!AppConfig.HasChannelProfileConfig())
+            ythrow yexception() << "ChannelProfileConfig is not provided";
+
+        if ((!config.ParseResult->Has("tenant") || TenantName == "no") && RunConfig.ScopeId.IsEmpty()) {
+            const TString myDomain = DeduceNodeDomain();
+            for (const auto& domain : AppConfig.GetDomainsConfig().GetDomain()) {
+                if (domain.GetName() == myDomain) {
+                    RunConfig.ScopeId = TKikimrScopeId(0, domain.GetDomainId());
+                    break;
+                }
+            }
+        }
+        if (TenantName == "dynamic") {
+            Y_VERIFY(RunConfig.ScopeId.IsEmpty());
+            RunConfig.ScopeId = TKikimrScopeId::DynamicTenantScopeId;
+        }
         if (NodeId)
             RunConfig.NodeId = NodeId;
         if (AppConfig.HasNameserviceConfig() && NodeId) {
@@ -497,13 +497,13 @@ protected:
             }
             Y_VERIFY(nodeIdMatchesConfig, "Cannot find passed NodeId = %" PRIu32 " for hostname %s", NodeId, hostname.data());
         }
-        if (config.ParseResult->Has("suppress-version-check")) { 
-            if (AppConfig.HasNameserviceConfig()) { 
-                AppConfig.MutableNameserviceConfig()->SetSuppressVersionCheck(true); 
-            } else { 
-                ythrow yexception() << "--suppress-version-check option is provided without static nameservice config"; 
-            } 
-        } 
+        if (config.ParseResult->Has("suppress-version-check")) {
+            if (AppConfig.HasNameserviceConfig()) {
+                AppConfig.MutableNameserviceConfig()->SetSuppressVersionCheck(true);
+            } else {
+                ythrow yexception() << "--suppress-version-check option is provided without static nameservice config";
+            }
+        }
 
         // apply options affecting UDF paths
         if (!AppConfig.HasUDFsDir())
@@ -607,23 +607,23 @@ protected:
             }
         }
 
-        // MessageBus options. 
- 
+        // MessageBus options.
+
         if (!AppConfig.HasMessageBusConfig()) {
             auto messageBusConfig = AppConfig.MutableMessageBusConfig();
             messageBusConfig->SetStartBusProxy(config.ParseResult->Has(config.Opts->FindLongOption("mbus")));
             messageBusConfig->SetBusProxyPort(BusProxyPort);
- 
+
             if (!messageBusConfig->GetStartBusProxy()) {
                 for (const auto &option : config.Opts->Opts_) {
                     for (const TString &longName : option->GetLongNames()) {
                         if (longName.StartsWith("mbus-") && config.ParseResult->Has(option.Get())) {
                             ythrow yexception() << "option --" << longName << " is useless without --mbus option";
                         }
-                    } 
-                } 
-            } 
- 
+                    }
+                }
+            }
+
             auto queueConfig = messageBusConfig->MutableProxyBusQueueConfig();
             queueConfig->SetName(ProxyBusQueueConfig.Name);
             queueConfig->SetNumWorkers(ProxyBusQueueConfig.NumWorkers);
@@ -861,24 +861,24 @@ protected:
             const TString &domainName,
             const TString &nodeHost,
             const TString &nodeAddress,
-            const TString &nodeResolveHost, 
+            const TString &nodeResolveHost,
         const TMaybe<TString>& path) {
         NClient::TKikimr kikimr(GetKikimr(addr));
         auto registrant = kikimr.GetNodeRegistrant();
- 
-        NActorsInterconnect::TNodeLocation location; 
-        location.SetDataCenter(DataCenter); 
-        location.SetRack(Rack); 
-        location.SetUnit(ToString(Body)); 
-        TNodeLocation loc(location); 
 
-        NActorsInterconnect::TNodeLocation legacy; 
-        legacy.SetDataCenterNum(DataCenterFromString(DataCenter)); 
-        legacy.SetRoomNum(0); 
-        legacy.SetRackNum(RackFromString(Rack)); 
-        legacy.SetBodyNum(Body); 
-        loc.InheritLegacyValue(TNodeLocation(legacy)); 
- 
+        NActorsInterconnect::TNodeLocation location;
+        location.SetDataCenter(DataCenter);
+        location.SetRack(Rack);
+        location.SetUnit(ToString(Body));
+        TNodeLocation loc(location);
+
+        NActorsInterconnect::TNodeLocation legacy;
+        legacy.SetDataCenterNum(DataCenterFromString(DataCenter));
+        legacy.SetRoomNum(0);
+        legacy.SetRackNum(RackFromString(Rack));
+        legacy.SetBodyNum(Body);
+        loc.InheritLegacyValue(TNodeLocation(legacy));
+
         Cout << "Trying to register at " << addr << Endl;
 
         return MakeHolder<NClient::TRegistrationResult>
@@ -887,9 +887,9 @@ protected:
                                          InterconnectPort,
                                          nodeAddress,
                                          nodeResolveHost,
-                                         std::move(loc), 
-                                         FixedNodeID, 
-                                         path)); 
+                                         std::move(loc),
+                                         FixedNodeID,
+                                         path));
     }
 
     void FillClusterEndpoints(TVector<TString> &addrs) {
@@ -916,13 +916,13 @@ protected:
         }
     }
 
-    TMaybe<TString> GetSchemePath() { 
-        if (TenantName.StartsWith('/')) { 
-            return TenantName; // TODO(alexvru): fix it 
-        } 
-        return {}; 
-    } 
- 
+    TMaybe<TString> GetSchemePath() {
+        if (TenantName.StartsWith('/')) {
+            return TenantName; // TODO(alexvru): fix it
+        }
+        return {};
+    }
+
     void RegisterDynamicNode() {
         TVector<TString> addrs;
         auto &dnConfig = *RunConfig.AppConfig.MutableDynamicNodeConfig();
@@ -945,7 +945,7 @@ protected:
         THolder<NClient::TRegistrationResult> result;
         while (!result || !result->IsSuccess()) {
             for (auto addr : addrs) {
-                result = TryToRegisterDynamicNode(addr, domainName, NodeHost, NodeAddress, NodeResolveHost, GetSchemePath()); 
+                result = TryToRegisterDynamicNode(addr, domainName, NodeHost, NodeAddress, NodeResolveHost, GetSchemePath());
                 if (result->IsSuccess()) {
                     Cout << "Success. Registered as " << result->GetNodeId() << Endl;
                     break;
@@ -961,7 +961,7 @@ protected:
             ythrow yexception() << "Cannot register dynamic node: " << result->GetErrorMessage();
 
         RunConfig.NodeId = result->GetNodeId();
-        RunConfig.ScopeId = TKikimrScopeId(result->GetScopeId()); 
+        RunConfig.ScopeId = TKikimrScopeId(result->GetScopeId());
         auto &nsConfig = *RunConfig.AppConfig.MutableNameserviceConfig();
 
         nsConfig.ClearNode();
@@ -1110,48 +1110,48 @@ private:
     }
 };
 
-class TClientCommandServerConfig : public TClientCommandServerBase { 
-public: 
-    TClientCommandServerConfig() 
-        : TClientCommandServerBase("serverconfig", "Generate configs for new-style invocation of server") 
-    { 
-    } 
- 
-    virtual void Config(TConfig& config) override { 
-        TClientCommandServerBase::Config(config); 
-        config.Opts->AddLongOption("dump-config-to", "Dump final application config protobuf to PATH and terminate").RequiredArgument("PATH").Required(); 
-    } 
- 
-    virtual int Run(TConfig& config) override { 
-        Y_VERIFY(config.ParseResult->Has("dump-config-to")); 
- 
-        TString proto; 
-        const bool status = google::protobuf::TextFormat::PrintToString(AppConfig, &proto); 
-        Y_VERIFY(status); 
-        TString path = config.ParseResult->Get("dump-config-to"); 
-        TFileOutput file(path); 
-        file << proto; 
- 
-        return 0; 
-    } 
-}; 
- 
-class TClientCommandServer : public TClientCommandServerBase { 
-public: 
+class TClientCommandServerConfig : public TClientCommandServerBase {
+public:
+    TClientCommandServerConfig()
+        : TClientCommandServerBase("serverconfig", "Generate configs for new-style invocation of server")
+    {
+    }
+
+    virtual void Config(TConfig& config) override {
+        TClientCommandServerBase::Config(config);
+        config.Opts->AddLongOption("dump-config-to", "Dump final application config protobuf to PATH and terminate").RequiredArgument("PATH").Required();
+    }
+
+    virtual int Run(TConfig& config) override {
+        Y_VERIFY(config.ParseResult->Has("dump-config-to"));
+
+        TString proto;
+        const bool status = google::protobuf::TextFormat::PrintToString(AppConfig, &proto);
+        Y_VERIFY(status);
+        TString path = config.ParseResult->Get("dump-config-to");
+        TFileOutput file(path);
+        file << proto;
+
+        return 0;
+    }
+};
+
+class TClientCommandServer : public TClientCommandServerBase {
+public:
     TClientCommandServer(std::shared_ptr<TModuleFactories> factories)
-        : TClientCommandServerBase("server", "Execute KiKiMR server") 
+        : TClientCommandServerBase("server", "Execute KiKiMR server")
         , Factories(std::move(factories))
-    {} 
- 
-    virtual int Run(TConfig &/*config*/) override { 
-        Y_VERIFY(RunConfig.NodeId); 
+    {}
+
+    virtual int Run(TConfig &/*config*/) override {
+        Y_VERIFY(RunConfig.NodeId);
         return MainRun(RunConfig, Factories);
-    } 
+    }
 
 private:
     std::shared_ptr<TModuleFactories> Factories;
-}; 
- 
+};
+
 void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories) {
     parent.AddCommand(std::make_unique<TClientCommandServer>(factories));
     parent.AddCommand(std::make_unique<TClientCommandServerConfig>());

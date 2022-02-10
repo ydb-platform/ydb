@@ -49,7 +49,7 @@ public:
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> LsPathId(ui64 schemeshardId, ui64 pathId) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe()); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe());
         request->Record.SetPathId(pathId);
         request->Record.SetSchemeshardId(schemeshardId);
         TAutoPtr<NBus::TBusMessage> reply;
@@ -86,7 +86,7 @@ public:
 
     TVector<ui64> GetTablePartitions(const TString& tablePath) {
         TAutoPtr<NMsgBusProxy::TBusResponse> msg = Ls(tablePath);
-        const NKikimrClient::TResponse &response = msg->Record; 
+        const NKikimrClient::TResponse &response = msg->Record;
         UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
         const auto& descr = response.GetPathDescription();
         TVector<ui64> partitions;
@@ -98,7 +98,7 @@ public:
     }
 
     void TrySplitTablePartition(const TString& tablePath, const TString& splitDescription, NKikimrClient::TResponse& response) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpSplitMergeTablePartitions);
         UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(splitDescription, op->MutableSplitMergeTablePartitions()));

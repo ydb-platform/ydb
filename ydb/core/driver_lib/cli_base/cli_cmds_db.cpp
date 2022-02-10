@@ -31,7 +31,7 @@ public:
         : TClientCommand("mkdir", {}, "Create directory")
     {}
 
-    TAutoPtr<NKikimrClient::TSchemeOperation> Request; 
+    TAutoPtr<NKikimrClient::TSchemeOperation> Request;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
@@ -62,11 +62,11 @@ public:
     }
 
     virtual int Run(TConfig& config) override {
-        auto handler = [this](NClient::TKikimr& kikimr) { 
-            kikimr.GetSchemaRoot(Base).MakeDirectory(Name); 
-            return 0; 
-        }; 
-        return InvokeThroughKikimr(config, std::move(handler)); 
+        auto handler = [this](NClient::TKikimr& kikimr) {
+            kikimr.GetSchemaRoot(Base).MakeDirectory(Name);
+            return 0;
+        };
+        return InvokeThroughKikimr(config, std::move(handler));
     }
 };
 
@@ -138,7 +138,7 @@ public:
         NKikimrSchemeOp::TModifyScript protoScript;
         ParseProtobuf(&protoScript, config.ParseResult->GetFreeArgs()[0]);
         for (const auto& modifyScheme : protoScript.GetModifyScheme()) {
-            TAutoPtr<NKikimrClient::TSchemeOperation> request = new NKikimrClient::TSchemeOperation(); 
+            TAutoPtr<NKikimrClient::TSchemeOperation> request = new NKikimrClient::TSchemeOperation();
             request->MutablePollOptions()->SetTimeout(NClient::TKikimr::POLLING_TIMEOUT);
             request->MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
             Requests.emplace_back(request);
@@ -148,9 +148,9 @@ public:
     virtual int Run(TConfig& config) override {
         int result = 0;
         for (const auto& pbRequest : Requests) {
-            TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+            TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
             request->Record.MergeFrom(*pbRequest);
-            result = MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request, 
+            result = MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request,
                 [this](const NMsgBusProxy::TBusResponse& response) -> int {
                     if (response.Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
                         Cerr << ToCString(static_cast<NMsgBusProxy::EResponseStatus>(response.Record.GetStatus())) << " " << response.Record.GetErrorReason() << Endl;
@@ -179,7 +179,7 @@ public:
         : TClientCommand("describe", { "desc" }, "Describe schema object")
     {}
 
-    TAutoPtr<NKikimrClient::TSchemeDescribe> Request; 
+    TAutoPtr<NKikimrClient::TSchemeDescribe> Request;
     TString Path;
     bool Tree;
     bool Details;
@@ -214,7 +214,7 @@ public:
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
-        Request = new NKikimrClient::TSchemeDescribe(); 
+        Request = new NKikimrClient::TSchemeDescribe();
         Path = config.ParseResult->GetFreeArgs()[0];
         if (Path.StartsWith('/')) {
             Request->SetPath(Path);
@@ -390,14 +390,14 @@ public:
     }
 
     virtual int Run(TConfig& config) override {
-        TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe()); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe());
         if (Request != nullptr)
             request->Record.MergeFrom(*Request);
 
         TList<NKikimrSchemeOp::TPathDescription> entries;
 
         for(;;) {
-            MessageBusCall<NMsgBusProxy::TBusSchemeDescribe, NMsgBusProxy::TBusResponse>(config, request, 
+            MessageBusCall<NMsgBusProxy::TBusSchemeDescribe, NMsgBusProxy::TBusResponse>(config, request,
                 [&entries](const NMsgBusProxy::TBusResponse& response) -> int {
                     entries.push_front(response.Record.GetPathDescription());
                     return 0;
@@ -407,7 +407,7 @@ public:
                     && entries.front().GetSelf().HasParentPathId()
                     && entries.front().GetSelf().HasSchemeshardId()
                     && entries.front().GetSelf().GetParentPathId() != entries.front().GetSelf().GetPathId()) {
-                request = new NMsgBusProxy::TBusSchemeDescribe(); 
+                request = new NMsgBusProxy::TBusSchemeDescribe();
                 request->Record.SetSchemeshardId(entries.front().GetSelf().GetSchemeshardId());
                 request->Record.SetPathId(entries.front().GetSelf().GetParentPathId());
                 continue;
@@ -434,7 +434,7 @@ public:
         : TClientCommand("ls", {}, "List schema object or path content")
     {}
 
-    TAutoPtr<NKikimrClient::TSchemeDescribe> Request; 
+    TAutoPtr<NKikimrClient::TSchemeDescribe> Request;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
@@ -444,16 +444,16 @@ public:
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
-        Request = new NKikimrClient::TSchemeDescribe(); 
+        Request = new NKikimrClient::TSchemeDescribe();
         Request->SetPath(config.ParseResult->GetFreeArgs()[0]);
     }
 
     virtual int Run(TConfig& config) override {
-        TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe()); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe());
         if (Request != nullptr)
             request->Record.MergeFrom(*Request);
 
-        return MessageBusCall<NMsgBusProxy::TBusSchemeDescribe, NMsgBusProxy::TBusResponse>(config, request, 
+        return MessageBusCall<NMsgBusProxy::TBusSchemeDescribe, NMsgBusProxy::TBusResponse>(config, request,
             [this](const NMsgBusProxy::TBusResponse& response) -> int {
                 return PrintResponse(response);
         });
@@ -495,7 +495,7 @@ public:
     }
 
     int PrintResponse(const NMsgBusProxy::TBusResponse& response) const {
-        const NKikimrClient::TResponse& record(response.Record); 
+        const NKikimrClient::TResponse& record(response.Record);
         const auto& description(record.GetPathDescription());
         if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeDir
             || description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeSubDomain
@@ -516,7 +516,7 @@ public:
         : TClientCommand("init", {}, "Initialize schema root")
     {}
 
-    TAutoPtr<NKikimrClient::TSchemeInitRoot> Request; 
+    TAutoPtr<NKikimrClient::TSchemeInitRoot> Request;
     TString Root;
     TString DefaultStoragePool;
 
@@ -529,7 +529,7 @@ public:
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
-        Request = new NKikimrClient::TSchemeInitRoot(); 
+        Request = new NKikimrClient::TSchemeInitRoot();
         Root = config.ParseResult->GetFreeArgs()[0];
         if (Root.StartsWith('/'))
             Root = Root.substr(1);
@@ -558,7 +558,7 @@ public:
         : TClientCommand("chown", {}, "Change owner")
     {}
 
-    TAutoPtr<NKikimrClient::TSchemeOperation> Request; 
+    TAutoPtr<NKikimrClient::TSchemeOperation> Request;
 
     bool Recursive = false;
     bool Verbose = false;
@@ -596,8 +596,8 @@ public:
         size_t pos = path.rfind('/');
         TString base = path.substr(0, pos);
         TString name = path.substr(pos + 1);
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
-        NKikimrClient::TSchemeOperation& record(request->Record); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        NKikimrClient::TSchemeOperation& record(request->Record);
         auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
         modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
         modifyScheme.SetWorkingDir(base);
@@ -607,7 +607,7 @@ public:
         if (Verbose) {
             Cout << path << Endl;
         }
-        int result = MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request, 
+        int result = MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request,
             [path](const NMsgBusProxy::TBusResponse& response) -> int {
                 if (response.Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
                     Cerr << path << ' ' << ToCString(static_cast<NMsgBusProxy::EResponseStatus>(response.Record.GetStatus())) << " " << response.Record.GetErrorReason() << Endl;
@@ -658,7 +658,7 @@ public:
         : TClientCommand("add", {}, "Add access right")
     {}
 
-    TAutoPtr<NKikimrClient::TSchemeOperation> Request; 
+    TAutoPtr<NKikimrClient::TSchemeOperation> Request;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
@@ -694,8 +694,8 @@ public:
     }
 
     virtual int Run(TConfig& config) override {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
-        NKikimrClient::TSchemeOperation& record(request->Record); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        NKikimrClient::TSchemeOperation& record(request->Record);
         auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
         modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
         modifyScheme.SetWorkingDir(Base);
@@ -711,7 +711,7 @@ public:
             diffAcl.AddAccess(ace);
         }
         modifyAcl.SetDiffACL(diffAcl.SerializeAsString());
-        int result = MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request, 
+        int result = MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request,
             [](const NMsgBusProxy::TBusResponse& response) -> int {
                 if (response.Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
                     Cerr << ToCString(static_cast<NMsgBusProxy::EResponseStatus>(response.Record.GetStatus())) << " " << response.Record.GetErrorReason() << Endl;
@@ -729,7 +729,7 @@ public:
         : TClientCommand("remove", {}, "Remove access right")
     {}
 
-    TAutoPtr<NKikimrClient::TSchemeOperation> Request; 
+    TAutoPtr<NKikimrClient::TSchemeOperation> Request;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
@@ -765,8 +765,8 @@ public:
     }
 
     virtual int Run(TConfig& config) override {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
-        NKikimrClient::TSchemeOperation& record(request->Record); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        NKikimrClient::TSchemeOperation& record(request->Record);
         auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
         modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
         modifyScheme.SetWorkingDir(Base);
@@ -779,7 +779,7 @@ public:
             diffAcl.RemoveAccess(ace);
         }
         modifyAcl.SetDiffACL(diffAcl.SerializeAsString());
-        int result = MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request, 
+        int result = MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request,
             [](const NMsgBusProxy::TBusResponse& response) -> int {
                 if (response.Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
                     Cerr << ToCString(static_cast<NMsgBusProxy::EResponseStatus>(response.Record.GetStatus())) << " " << response.Record.GetErrorReason() << Endl;
@@ -1308,24 +1308,24 @@ public:
     }
 
     virtual int Run(TConfig& config) override {
-        auto handler = [this](NClient::TKikimr& kikimr) { 
-            NClient::TTextQuery query(kikimr.Query(MiniKQL)); 
+        auto handler = [this](NClient::TKikimr& kikimr) {
+            NClient::TTextQuery query(kikimr.Query(MiniKQL));
 
-            NThreading::TFuture<NClient::TQueryResult> future; 
-            if (Proto) { 
-                NKikimrMiniKQL::TParams mkqlParams; 
-                NClient::TQuery::ParseTextParameters(mkqlParams, Params); 
-                future = query.AsyncExecute(mkqlParams); 
-            } else { 
-                future = query.AsyncExecute(Params); 
-            } 
+            NThreading::TFuture<NClient::TQueryResult> future;
+            if (Proto) {
+                NKikimrMiniKQL::TParams mkqlParams;
+                NClient::TQuery::ParseTextParameters(mkqlParams, Params);
+                future = query.AsyncExecute(mkqlParams);
+            } else {
+                future = query.AsyncExecute(Params);
+            }
 
-            return HandleResponse<NClient::TQueryResult>(future, [](const NClient::TQueryResult& result) -> int { 
-                Cout << result.GetValue().GetValueText<NClient::TFormatJSON>() << '\n'; 
-                return 0; 
-            }); 
-        }; 
-        return InvokeThroughKikimr(config, std::move(handler)); 
+            return HandleResponse<NClient::TQueryResult>(future, [](const NClient::TQueryResult& result) -> int {
+                Cout << result.GetValue().GetValueText<NClient::TFormatJSON>() << '\n';
+                return 0;
+            });
+        };
+        return InvokeThroughKikimr(config, std::move(handler));
     }
 };
 

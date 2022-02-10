@@ -203,7 +203,7 @@ namespace NKikimr {
                 return std::pair<ui32, ui32>(ChainDelegators.size(), SearchTable.size());
             }
             // Builds a map of BlobSize -> THugeSlotsMap::TSlotInfo for THugeBlobCtx
-            std::shared_ptr<THugeSlotsMap> BuildHugeSlotsMap() const; 
+            std::shared_ptr<THugeSlotsMap> BuildHugeSlotsMap() const;
 
         private:
             struct TBuiltChainDelegators {
@@ -283,7 +283,7 @@ namespace NKikimr {
             }
 
             // Builds a map of BlobSize -> THugeSlotsMap::TSlotInfo for THugeBlobCtx
-            std::shared_ptr<THugeSlotsMap> BuildHugeSlotsMap() const { 
+            std::shared_ptr<THugeSlotsMap> BuildHugeSlotsMap() const {
                 return Chains.BuildHugeSlotsMap();
             }
 
@@ -291,7 +291,7 @@ namespace NKikimr {
             // Main functions
             //////////////////////////////////////////////////////////////////////////////////////////
             THugeSlot ConvertDiskPartToHugeSlot(const TDiskPart &addr) const;
-            bool Allocate(ui32 size, THugeSlot *hugeSlot, ui32 *slotSize); 
+            bool Allocate(ui32 size, THugeSlot *hugeSlot, ui32 *slotSize);
             TFreeRes Free(const TDiskPart &addr);
             void AddChunk(ui32 chunkId);
             ui32 RemoveChunk();

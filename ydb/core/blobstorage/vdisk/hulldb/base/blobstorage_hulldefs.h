@@ -14,16 +14,16 @@
 // FIXME: only for TIngressCache (put it to vdisk/common)
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
- 
+
 namespace NKikimr {
 
     template <class TKey>
     TLogSignature PDiskSignatureForHullDbKey();
 
     ///////////////////////////////////////////////////////////////////////////////////////
-    // TDiskDataExtractor 
+    // TDiskDataExtractor
     ///////////////////////////////////////////////////////////////////////////////////////
-    struct TDiskDataExtractor { 
+    struct TDiskDataExtractor {
         TBlobType::EType BlobType = TBlobType::DiskBlob;
         const TDiskPart *Begin = nullptr;
         const TDiskPart *End = nullptr;
@@ -103,11 +103,11 @@ namespace NKikimr {
     // TMemPart
     ///////////////////////////////////////////////////////////////////////////////////////
     struct TMemPart {
-        ui64 BufferId; 
+        ui64 BufferId;
         ui32 Size;
 
-        TMemPart(ui64 bufferId, ui32 size) 
-            : BufferId(bufferId) 
+        TMemPart(ui64 bufferId, ui32 size)
+            : BufferId(bufferId)
             , Size(size)
         {}
     };
@@ -155,7 +155,7 @@ namespace NKikimr {
                 TDuration hullCompStorageRatioCalcPeriod,
                 TDuration hullCompStorageRatioMaxCalcDuration)
             : VCtx(std::move(vctx))
-            , IngressCache(TIngressCache::Create(VCtx->Top, VCtx->ShortSelfVDisk)) 
+            , IngressCache(TIngressCache::Create(VCtx->Top, VCtx->ShortSelfVDisk))
             , ChunkSize(chunkSize)
             , CompWorthReadSize(compWorthReadSize)
             , FreshCompaction(freshCompaction)

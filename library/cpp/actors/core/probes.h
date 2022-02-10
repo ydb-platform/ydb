@@ -65,12 +65,12 @@
     PROBE(SlowICPushSendQueue, GROUPS("ActorLibSlowIC"),                                                                              \
           TYPES(ui32, double),                                                                                                        \
           NAMES("peerId", "icPushSendQueueMs"))                                                                                       \
-    PROBE(SlowICWriteData, GROUPS("ActorLibSlowIC"),                                                                                  \ 
+    PROBE(SlowICWriteData, GROUPS("ActorLibSlowIC"),                                                                                  \
           TYPES(ui32, double),                                                                                                        \
-          NAMES("peerId", "icWriteDataMs"))                                                                                           \ 
-    PROBE(SlowICDropConfirmed, GROUPS("ActorLibSlowIC"),                                                                              \ 
-          TYPES(ui32, double),                                                                                                        \ 
-          NAMES("peerId", "icDropConfirmedMs"))                                                                                       \ 
+          NAMES("peerId", "icWriteDataMs"))                                                                                           \
+    PROBE(SlowICDropConfirmed, GROUPS("ActorLibSlowIC"),                                                                              \
+          TYPES(ui32, double),                                                                                                        \
+          NAMES("peerId", "icDropConfirmedMs"))                                                                                       \
     PROBE(ActorsystemScheduler, GROUPS("Durations"),                                                                                  \
           TYPES(ui64, ui64, ui32, ui32, ui64, ui64),                                                                                  \
           NAMES("timeUs", "timerfd_expirations", "eventsGottenFromQueues", "eventsSent",                                              \

@@ -166,8 +166,8 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         CheckCompletion();
     }
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::BOARD_LOOKUP_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::BOARD_LOOKUP_ACTOR;
     }
 
     TBoardLookupActor(const TString &path, TActorId owner, EBoardLookupMode mode, ui32 groupId)

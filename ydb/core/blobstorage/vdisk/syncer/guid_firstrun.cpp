@@ -103,7 +103,7 @@ namespace NKikimr {
 
     public:
         TVDiskGuidFirstRunState(const TVDiskIdShort &self,
-                                const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top, 
+                                const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                 EFirstRunStep step,
                                 TVDiskEternalGuid guid)
             : Neighbors(self, top)
@@ -364,11 +364,11 @@ namespace NKikimr {
             }
         }
 
-        STRICT_STFUNC(WriteGuidInProgressStateFunc, 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-            HFunc(TEvVDiskGuidWritten, HandleInProgressWritten) 
-            HFunc(TEvVGenerationChange, HandleWhileProxiesRunning) 
-        ) 
+        STRICT_STFUNC(WriteGuidInProgressStateFunc,
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvVDiskGuidWritten, HandleInProgressWritten)
+            HFunc(TEvVGenerationChange, HandleWhileProxiesRunning)
+        )
 
         ////////////////////////////////////////////////////////////////////////
         // WRITE SELECTED GUID LOCALLY
@@ -381,7 +381,7 @@ namespace NKikimr {
             FirstRunState.RunWriteSelectedLocally();
             auto guid = FirstRunState.GetGuid();
             auto msg = TEvSyncerCommit::Local(TLocalVal::Selected, guid);
-            ctx.Send(CommitterId, msg.release()); 
+            ctx.Send(CommitterId, msg.release());
             Become(&TThis::WriteSelectedLocallyStateFunc);
             WaitFor = WaitForCommitter;
         }
@@ -392,14 +392,14 @@ namespace NKikimr {
             WriteFinalGuidToQuorum(ctx);
         }
 
-        STRICT_STFUNC(WriteSelectedLocallyStateFunc, 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-            HFunc(TEvSyncerCommitDone, HandleSelectedLocally) 
-            // NOTE: In WaitForCommitter state we can still receive TEvVDiskGuidWritten 
-            // messages (i.e. replies from the previous phase). Ignore them. 
-            IgnoreFunc(TEvVDiskGuidWritten) 
-            HFunc(TEvVGenerationChange, HandleNoProxies) 
-        ) 
+        STRICT_STFUNC(WriteSelectedLocallyStateFunc,
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvSyncerCommitDone, HandleSelectedLocally)
+            // NOTE: In WaitForCommitter state we can still receive TEvVDiskGuidWritten
+            // messages (i.e. replies from the previous phase). Ignore them.
+            IgnoreFunc(TEvVDiskGuidWritten)
+            HFunc(TEvVGenerationChange, HandleNoProxies)
+        )
 
         ////////////////////////////////////////////////////////////////////////
         // WRITE FINAL GUID TO QUORUM
@@ -447,11 +447,11 @@ namespace NKikimr {
             }
         }
 
-        STRICT_STFUNC(WriteFinalGuidStateFunc, 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-            HFunc(TEvVDiskGuidWritten, HandleFinalWritten) 
-            HFunc(TEvVGenerationChange, HandleWhileProxiesRunning) 
-        ) 
+        STRICT_STFUNC(WriteFinalGuidStateFunc,
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvVDiskGuidWritten, HandleFinalWritten)
+            HFunc(TEvVGenerationChange, HandleWhileProxiesRunning)
+        )
 
         ////////////////////////////////////////////////////////////////////////
         // WRITE FINAL GUID LOCALLY
@@ -466,7 +466,7 @@ namespace NKikimr {
             Y_VERIFY(guid);
             ui64 dbBirthLsn = 0;
             auto msg = TEvSyncerCommit::LocalFinal(guid, dbBirthLsn);
-            ctx.Send(CommitterId, msg.release()); 
+            ctx.Send(CommitterId, msg.release());
             Become(&TThis::WriteFinalLocallyStateFunc);
             WaitFor = WaitForCommitter;
         }
@@ -477,14 +477,14 @@ namespace NKikimr {
             Finish(ctx);
         }
 
-        STRICT_STFUNC(WriteFinalLocallyStateFunc, 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-            HFunc(TEvSyncerCommitDone, HandleFinalLocally) 
-            // NOTE: In WaitForCommitter state we can still receive TEvVDiskGuidWritten 
-            // messages (i.e. replies from the previous phase). Ignore them. 
-            IgnoreFunc(TEvVDiskGuidWritten) 
-            HFunc(TEvVGenerationChange, HandleNoProxies) 
-        ) 
+        STRICT_STFUNC(WriteFinalLocallyStateFunc,
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvSyncerCommitDone, HandleFinalLocally)
+            // NOTE: In WaitForCommitter state we can still receive TEvVDiskGuidWritten
+            // messages (i.e. replies from the previous phase). Ignore them.
+            IgnoreFunc(TEvVDiskGuidWritten)
+            HFunc(TEvVGenerationChange, HandleNoProxies)
+        )
 
         ////////////////////////////////////////////////////////////////////////
         // FINISH
@@ -544,8 +544,8 @@ namespace NKikimr {
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_SYNC_VDISK_GUID_FIRST_RUN; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_SYNC_VDISK_GUID_FIRST_RUN;
         }
 
         TVDiskGuidFirstRunActor(TIntrusivePtr<TVDiskContext> vctx,

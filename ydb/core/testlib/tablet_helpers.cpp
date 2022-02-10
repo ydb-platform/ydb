@@ -68,8 +68,8 @@ namespace NKikimr {
 
     class TFakeMediatorTimecastProxy : public TActor<TFakeMediatorTimecastProxy> {
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR;
         }
 
         TFakeMediatorTimecastProxy()
@@ -711,7 +711,7 @@ namespace NKikimr {
         runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes));
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
-        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>(); 
+        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
 
         NKikimrBlobStorage::TDefineBox boxConfig;
         boxConfig.SetBoxId(1);
@@ -1085,8 +1085,8 @@ namespace NKikimr {
         using TTabletInfo = TFakeHiveTabletInfo;
         using TState = TFakeHiveState;
 
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::HIVE_ACTOR; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::HIVE_ACTOR;
         }
 
         TFakeHive(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state,

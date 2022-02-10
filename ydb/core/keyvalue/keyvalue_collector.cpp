@@ -26,8 +26,8 @@ class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
 
     TMap<ui32, TMap<ui32, TGroupCollector>> CollectorForGroupForChannel;
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::KEYVALUE_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::KEYVALUE_ACTOR;
     }
 
     TKeyValueCollector(const TActorId &keyValueActorId, TIntrusivePtr<TCollectOperation> &collectOperation,

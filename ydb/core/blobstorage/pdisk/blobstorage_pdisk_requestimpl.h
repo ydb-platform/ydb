@@ -54,7 +54,7 @@ public:
     NHPTimer::STime ScheduleTime = 0;
 
     // Tracing
-    mutable NWilson::TTraceId TraceId; 
+    mutable NWilson::TTraceId TraceId;
     mutable NLWTrace::TOrbit Orbit;
 public:
     TRequestBase(const TActorId &sender, TReqId reqId, TOwner owner, TOwnerRound ownerRound, ui8 priorityClass,
@@ -66,7 +66,7 @@ public:
         , PriorityClass(priorityClass)
         , OwnerGroupType(EOwnerGroupType::Dynamic)
         , CreationTime(HPNow())
-        , TraceId(std::move(traceId)) 
+        , TraceId(std::move(traceId))
     {}
 
     void SetOwnerGroupType(bool isStaticGroupOwner) {
@@ -120,16 +120,16 @@ public:
     TVDiskID VDisk;
     ui64 PDiskGuid;
     TActorId CutLogId;
-    TActorId WhiteboardProxyId; 
-    ui32 SlotId; 
+    TActorId WhiteboardProxyId;
+    ui32 SlotId;
 
     TYardInit(const NPDisk::TEvYardInit &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::YardInit, reqIdx), 0, ev.OwnerRound, NPriInternal::Other)
         , VDisk(ev.VDisk)
         , PDiskGuid(ev.PDiskGuid)
         , CutLogId(ev.CutLogID)
-        , WhiteboardProxyId(ev.WhiteboardProxyId) 
-        , SlotId(ev.SlotId) 
+        , WhiteboardProxyId(ev.WhiteboardProxyId)
+        , SlotId(ev.SlotId)
     {}
 
     ERequestType GetType() const override {
@@ -251,7 +251,7 @@ class TLogWrite : public TRequestBase {
 public:
     TLogWrite *NextInBatch = nullptr;
     TLogWrite *BatchTail; // Valid only for the head of the batch
-    using TCallback = NPDisk::TEvLog::TCallback; 
+    using TCallback = NPDisk::TEvLog::TCallback;
 
     TLogSignature Signature;
     ui32 EstimatedChunkIdx;

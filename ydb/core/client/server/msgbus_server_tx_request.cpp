@@ -66,7 +66,7 @@ public:
     }
 };
 
-IActor* CreateMessageBusSchemeOperationStatus(TBusMessageContext &msg) { 
+IActor* CreateMessageBusSchemeOperationStatus(TBusMessageContext &msg) {
     return new TMessageBusTxStatusRequestActor(msg);
 }
 

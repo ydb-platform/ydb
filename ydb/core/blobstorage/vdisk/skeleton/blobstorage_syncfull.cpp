@@ -24,8 +24,8 @@ namespace NKikimr {
                    bool allowKeepFlags) const {
             return TLogoBlobFilter::Check(key.LogoBlobID()) &&
                     BarriersEssence->Keep(key, memRec, recsMerged, allowKeepFlags).KeepData;
-        } 
- 
+        }
+
         TIntrusivePtr<THullCtx> HullCtx;
         TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> BarriersEssence;
     };
@@ -45,7 +45,7 @@ namespace NKikimr {
         TKeyBlock KeyBlock;
         TKeyBarrier KeyBarrier;
         NKikimrBlobStorage::ESyncFullStage Stage;
-        std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> Result; 
+        std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> Result;
         TFakeFilter FakeFilter;
         TLogoBlobFilterForHull LogoBlobFilter;
         TVDiskID SourceVDisk;
@@ -70,7 +70,7 @@ namespace NKikimr {
             Y_UNUSED(ctx);
             char tmpBuf[NSyncLog::MaxRecFullSize];
             auto s = NSyncLog::TSerializeRoutines::SetBlock;
-            ui32 size = s(tmpBuf, 0, key.TabletId, memRec.BlockedGeneration, 0); 
+            ui32 size = s(tmpBuf, 0, key.TabletId, memRec.BlockedGeneration, 0);
             buf->append(tmpBuf, size);
         }
 
@@ -83,7 +83,7 @@ namespace NKikimr {
             auto s = NSyncLog::TSerializeRoutines::SetBarrier;
             ui32 size = s(tmpBuf, 0, key.TabletId, key.Channel, key.Gen,
                           key.GenCounter, memRec.CollectGen,
-                          memRec.CollectStep, key.Hard, memRec.Ingress); 
+                          memRec.CollectStep, key.Hard, memRec.Ingress);
             buf->append(tmpBuf, size);
         }
 
@@ -92,7 +92,7 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             LogoBlobFilter.BuildBarriersEssence(FullSnap.BarriersSnap);
- 
+
             ui32 pres = 0;
             switch (Stage) {
                 case NKikimrBlobStorage::LogoBlobs:
@@ -125,7 +125,7 @@ namespace NKikimr {
             Result->Record.SetBlockTabletFrom(KeyBlock.TabletId);
             KeyBarrier.Serialize(*Result->Record.MutableBarrierFrom());
             // send reply
-            SendVDiskResponse(ctx, Recipient, Result.release(), *this, 0); 
+            SendVDiskResponse(ctx, Recipient, Result.release(), *this, 0);
             // notify parent about death
             ctx.Send(ParentId, new TEvents::TEvActorDied);
             Die(ctx);
@@ -148,7 +148,7 @@ namespace NKikimr {
             TIndexForwardIterator it(HullCtx, &snapshot);
             it.Seek(key);
             // copy data until we have some space
-            while (it.Valid() && (data->size() + NSyncLog::MaxRecFullSize <= data->capacity())) { 
+            while (it.Valid() && (data->size() + NSyncLog::MaxRecFullSize <= data->capacity())) {
                 key = it.GetCurKey();
                 if (filter.Check(key, it.GetMemRec(), it.GetMemRecsMerged(), HullCtx->AllowKeepFlags))
                     Serialize(ctx, data, key, it.GetMemRec());
@@ -159,14 +159,14 @@ namespace NKikimr {
             ui32 result = 0;
             if (!it.Valid())
                 result |= EmptyFlag;
-            if (data->size() + NSyncLog::MaxRecFullSize > data->capacity()) 
+            if (data->size() + NSyncLog::MaxRecFullSize > data->capacity())
                 result |= MsgFullFlag;
             return result;
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_HULL_SYNC_FULL; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_HULL_SYNC_FULL;
         }
 
         THullSyncFullActor(
@@ -180,7 +180,7 @@ namespace NKikimr {
                 const TKeyBlock &keyBlock,
                 const TKeyBarrier &keyBarrier,
                 NKikimrBlobStorage::ESyncFullStage stage,
-                std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result) 
+                std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result)
             : TActorBootstrapped<THullSyncFullActor>()
             , Config(config)
             , HullCtx(hullCtx)
@@ -191,7 +191,7 @@ namespace NKikimr {
             , KeyBlock(keyBlock)
             , KeyBarrier(keyBarrier)
             , Stage(stage)
-            , Result(std::move(result)) 
+            , Result(std::move(result))
             , FakeFilter()
             , LogoBlobFilter(HullCtx, sourceVDisk)
             , SourceVDisk(sourceVDisk)
@@ -212,9 +212,9 @@ namespace NKikimr {
             const TKeyBlock &keyBlock,
             const TKeyBarrier &keyBarrier,
             NKikimrBlobStorage::ESyncFullStage stage,
-            std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result) { 
+            std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result) {
         return new THullSyncFullActor(config, hullCtx, parentId, sourceVDisk, recipient, std::move(fullSnap),
-                                      keyLogoBlob, keyBlock, keyBarrier, stage, std::move(result)); 
+                                      keyLogoBlob, keyBlock, keyBarrier, stage, std::move(result));
     }
 
 } // NKikimr

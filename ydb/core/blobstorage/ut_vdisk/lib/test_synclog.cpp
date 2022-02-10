@@ -34,7 +34,7 @@ public:
 class TDataWriterActor : public TActorBootstrapped<TDataWriterActor> {
     friend class TActorBootstrapped<TDataWriterActor>;
     const TDuration Period = TDuration::MilliSeconds(100);
-    std::shared_ptr<TTestContext> TestCtx; 
+    std::shared_ptr<TTestContext> TestCtx;
     TActorId ParentId;
     ui32 Generation = 0;
     ui32 Iterations = 10;
@@ -63,14 +63,14 @@ class TDataWriterActor : public TActorBootstrapped<TDataWriterActor> {
             TLsnSeg seg = TestCtx->LsnMngr->AllocLsnForHullAndSyncLog();
             ++Generation;
             TEvBlobStorage::TEvVBlock logCmd(tabletId, Generation, TestCtx->SelfVDiskId, TInstant::Max());
-            TAllocChunkSerializer serializer; 
+            TAllocChunkSerializer serializer;
             logCmd.SerializeToArcadiaStream(&serializer);
-            TIntrusivePtr<TEventSerializedData> buffers = serializer.Release(logCmd.IsExtendedFormat()); 
+            TIntrusivePtr<TEventSerializedData> buffers = serializer.Release(logCmd.IsExtendedFormat());
             ctx.Send(TestCtx->LoggerId,
                      new NPDisk::TEvLog(TestCtx->PDiskCtx->Dsk->Owner, TestCtx->PDiskCtx->Dsk->OwnerRound,
                                         TLogSignature::SignatureBlock, buffers->GetString(), seg, nullptr));
             // FIXME: problems on reboot
-            ctx.Send(TestCtx->SyncLogId, new NSyncLog::TEvSyncLogPut(seg.Point(), tabletId, Generation, 0)); 
+            ctx.Send(TestCtx->SyncLogId, new NSyncLog::TEvSyncLogPut(seg.Point(), tabletId, Generation, 0));
         }
     }
 
@@ -81,7 +81,7 @@ class TDataWriterActor : public TActorBootstrapped<TDataWriterActor> {
     )
 
 public:
-    TDataWriterActor(std::shared_ptr<TTestContext> testCtxt, TActorId parentId) 
+    TDataWriterActor(std::shared_ptr<TTestContext> testCtxt, TActorId parentId)
         : TActorBootstrapped<TDataWriterActor>()
         , TestCtx(testCtxt)
         , ParentId(parentId)
@@ -94,7 +94,7 @@ public:
 class TSyncerActor : public TActorBootstrapped<TSyncerActor> {
     friend class TActorBootstrapped<TSyncerActor>;
     const TDuration Period = TDuration::MilliSeconds(200);
-    std::shared_ptr<TTestContext> TestCtx; 
+    std::shared_ptr<TTestContext> TestCtx;
     TSyncState SyncState;
     TVDiskID SourceVDisk;
     TVDiskID TargetVDisk;
@@ -137,7 +137,7 @@ class TSyncerActor : public TActorBootstrapped<TSyncerActor> {
     )
 
 public:
-    TSyncerActor(std::shared_ptr<TTestContext> testCtx, const TVDiskID &sourceVDisk) 
+    TSyncerActor(std::shared_ptr<TTestContext> testCtx, const TVDiskID &sourceVDisk)
         : TActorBootstrapped<TSyncerActor>()
         , TestCtx(std::move(testCtx))
         , SourceVDisk(sourceVDisk)
@@ -150,7 +150,7 @@ public:
 ///////////////////////////////////////////////////////////////////////////////////////////////
 class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor> {
     TConfiguration *Conf;
-    std::shared_ptr<TTestContext> TestCtx = std::make_shared<TTestContext>(); 
+    std::shared_ptr<TTestContext> TestCtx = std::make_shared<TTestContext>();
     TVDiskContextPtr VCtx;
     TIntrusivePtr<TVDiskConfig> VDiskConfig;
     TActorId LogCutterId;
@@ -165,7 +165,7 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters(new NMonitoring::TDynamicCounters);
         auto &vDiskInstance = Conf->VDisks->Get(0);
         auto &groupInfo = Conf->GroupInfo;
-        VCtx = MakeIntrusive<TVDiskContext>(ctx.SelfID, groupInfo->PickTopology(), counters, vDiskInstance.VDiskID, 
+        VCtx = MakeIntrusive<TVDiskContext>(ctx.SelfID, groupInfo->PickTopology(), counters, vDiskInstance.VDiskID,
             ctx.ExecutorThread.ActorSystem, TPDiskCategory::DEVICE_TYPE_UNKNOWN);
         VDiskConfig = vDiskInstance.Cfg;
         TestCtx->SelfVDiskId = groupInfo->GetVDiskId(VCtx->ShortSelfVDisk);
@@ -211,7 +211,7 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
             VCtx->SyncLogCache
         };
         TString explanation;
-        std::unique_ptr<NSyncLog::TSyncLogRepaired> repaired = 
+        std::unique_ptr<NSyncLog::TSyncLogRepaired> repaired =
             NSyncLog::TSyncLogRepaired::Construct(std::move(params), TString(), 0, explanation);
         Y_VERIFY(repaired);
 
@@ -227,7 +227,7 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
                 VDiskConfig->SyncLogMaxMemAmount,
                 VDiskConfig->MaxResponseSize,
                 Db->SyncLogFirstLsnToKeep);
-        TestCtx->SyncLogId = ctx.Register(CreateSyncLogActor(slCtx, Conf->GroupInfo, TestCtx->SelfVDiskId, std::move(repaired))); 
+        TestCtx->SyncLogId = ctx.Register(CreateSyncLogActor(slCtx, Conf->GroupInfo, TestCtx->SelfVDiskId, std::move(repaired)));
         // Send Db birth lsn
         ui64 dbBirthLsn = 0;
         ctx.Send(TestCtx->SyncLogId, new NSyncLog::TEvSyncLogDbBirthLsn(dbBirthLsn));

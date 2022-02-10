@@ -10,7 +10,7 @@
 namespace NKikimr {
 namespace NMsgBusProxy {
 
-template<typename TDerived, NKikimrServices::TActivity::EType Activity> 
+template<typename TDerived, NKikimrServices::TActivity::EType Activity>
 class TMessageBusLocalServiceRequest : public TActorBootstrapped<TDerived>, public TMessageBusSessionIdentHolder {
 protected:
     TActorId  ServiceID;

@@ -5,11 +5,11 @@
 
 namespace NKikimr {
 
-    // ensure that the type of passed variable is the same as given one 
-    template<typename T, typename U> 
-    inline T EnsureType(U &&value) { 
-        static_assert(std::is_same<T, U>::value, "unexpected returned value type"); 
-        return std::move(value); 
-    } 
- 
+    // ensure that the type of passed variable is the same as given one
+    template<typename T, typename U>
+    inline T EnsureType(U &&value) {
+        static_assert(std::is_same<T, U>::value, "unexpected returned value type");
+        return std::move(value);
+    }
+
 }

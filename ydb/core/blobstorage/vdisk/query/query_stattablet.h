@@ -13,6 +13,6 @@ namespace NKikimr {
                                   const TActorId &parentId,
                                   THullDsSnap &&fullSnap,
                                   TEvBlobStorage::TEvVDbStat::TPtr &ev,
-                                  std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result); 
+                                  std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result);
 } // NKikimr
 

@@ -1,11 +1,11 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/events.h>
 #include <util/generic/hash_set.h>
- 
+
 namespace NActors {
- 
+
     ////////////////////////////////////////////////////////////////////////////
     // TActiveActors
     // This class helps manage created actors and kill them all on PoisonPill.
@@ -38,5 +38,5 @@ namespace NActors {
         }
     };
 
-} // NKikimr 
+} // NKikimr
 

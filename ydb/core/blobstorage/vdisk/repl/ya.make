@@ -28,8 +28,8 @@ SRCS(
     blobstorage_replproxy.h
     blobstorage_replrecoverymachine.h
     defs.h
-    query_donor.h 
-    repl_quoter.h 
+    query_donor.h
+    repl_quoter.h
 )
 
 END()

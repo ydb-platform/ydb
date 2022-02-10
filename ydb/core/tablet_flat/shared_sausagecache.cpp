@@ -1031,8 +1031,8 @@ public:
         }
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::SAUSAGE_CACHE; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SAUSAGE_CACHE;
     }
 };
 

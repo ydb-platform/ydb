@@ -101,7 +101,7 @@ public:
         auto &request = vGet.Record;
         Y_VERIFY(request.HasCookie());
         if (IsError) {
-            outVGetResult.MakeError(Status, TString(), request); 
+            outVGetResult.MakeError(Status, TString(), request);
             return;
         }
         //ui64 messageCookie = request->Record.GetCookie();
@@ -515,10 +515,10 @@ public:
         }
     }
 
-    TIntrusivePtr<TGroupQueues> MakeGroupQueues() { 
-        TIntrusivePtr<TGroupQueues> groupQueues(new TGroupQueues(Info->GetTopology())); 
-        ui32 idx = 0; 
-        for (auto& domain : groupQueues->FailDomains) { 
+    TIntrusivePtr<TGroupQueues> MakeGroupQueues() {
+        TIntrusivePtr<TGroupQueues> groupQueues(new TGroupQueues(Info->GetTopology()));
+        ui32 idx = 0;
+        for (auto& domain : groupQueues->FailDomains) {
             for (auto& vDisk : domain.VDisks) {
                 vDisk.Queues.FlowRecordForQueueId(NKikimrBlobStorage::EVDiskQueueId::PutTabletLog).Reset(
                         VDisks[idx].FlowRecord);
@@ -532,10 +532,10 @@ public:
                         VDisks[idx].FlowRecord);
                 vDisk.Queues.FlowRecordForQueueId(NKikimrBlobStorage::EVDiskQueueId::GetDiscover).Reset(
                         VDisks[idx].FlowRecord);
-                ++idx; 
+                ++idx;
             }
         }
-        return groupQueues; 
+        return groupQueues;
     }
 };
 

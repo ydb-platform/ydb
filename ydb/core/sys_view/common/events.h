@@ -63,9 +63,9 @@ struct TEvSysView {
 
         EvUpdateTtlStats,
 
-        EvGetStorageStatsRequest, 
-        EvGetStorageStatsResponse, 
- 
+        EvGetStorageStatsRequest,
+        EvGetStorageStatsResponse,
+
         EvEnd,
     };
 
@@ -353,14 +353,14 @@ struct TEvSysView {
             , ShardIdx(shardIdx)
         {}
     };
- 
-    struct TEvGetStorageStatsRequest 
-        : TEventPB<TEvGetStorageStatsRequest, NKikimrSysView::TEvGetStorageStatsRequest, EvGetStorageStatsRequest> 
-    {}; 
- 
-    struct TEvGetStorageStatsResponse 
-        : TEventPB<TEvGetStorageStatsResponse, NKikimrSysView::TEvGetStorageStatsResponse, EvGetStorageStatsResponse> 
-    {}; 
+
+    struct TEvGetStorageStatsRequest
+        : TEventPB<TEvGetStorageStatsRequest, NKikimrSysView::TEvGetStorageStatsRequest, EvGetStorageStatsRequest>
+    {};
+
+    struct TEvGetStorageStatsResponse
+        : TEventPB<TEvGetStorageStatsResponse, NKikimrSysView::TEvGetStorageStatsResponse, EvGetStorageStatsResponse>
+    {};
 };
 
 } // NSysView

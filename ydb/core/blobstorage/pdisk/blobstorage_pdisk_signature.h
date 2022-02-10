@@ -33,8 +33,8 @@ public:
         SignatureIncrHugeDeletes = 19,
         SignatureAnubisOsirisPut = 20,
         SignatureAddBulkSst = 21,
-        SignatureScrub = 22, 
-        Max = 23 
+        SignatureScrub = 22,
+        Max = 23
     };
 
     TLogSignature(ui8 val = 0, bool hasCommit = false)
@@ -85,7 +85,7 @@ public:
             case SignatureIncrHugeDeletes:              return "IncrHugeDeletes";
             case SignatureAnubisOsirisPut:              return "SignatureAnubisOsirisPut";
             case SignatureAddBulkSst:                   return "SignatureAddBulkSst";
-            case SignatureScrub:                        return "SignatureScrub"; 
+            case SignatureScrub:                        return "SignatureScrub";
             case Max:                                   return "Max";
         }
         return TStringBuilder() << "Unknown(" << static_cast<ui32>(Signature) << "(";

@@ -15,15 +15,15 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupTypeTest) {
     Y_UNIT_TEST(TestCorrectLayout) {
         TBlobStorageGroupType groupType(TBlobStorageGroupType::Erasure3Plus1Stripe);
 
-        ui32 blobSubgroupSize = groupType.BlobSubgroupSize(); 
+        ui32 blobSubgroupSize = groupType.BlobSubgroupSize();
         ui32 totalPartCount = groupType.TotalPartCount();
         TBlobStorageGroupType::TPartLayout layout;
-        layout.VDiskMask = ~((~(ui32)0) << blobSubgroupSize); 
-        layout.VDiskPartMask.resize(blobSubgroupSize); 
+        layout.VDiskMask = ~((~(ui32)0) << blobSubgroupSize);
+        layout.VDiskPartMask.resize(blobSubgroupSize);
         for (ui32 i = 0; i < totalPartCount; ++i) {
             layout.VDiskPartMask[i] = (1 << i);
         }
-        for (ui32 i = totalPartCount; i < blobSubgroupSize; ++i) { 
+        for (ui32 i = totalPartCount; i < blobSubgroupSize; ++i) {
             layout.VDiskPartMask[i] = 0;
         }
         TBlobStorageGroupType::TPartPlacement correction;
@@ -42,12 +42,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupTypeTest) {
         UNIT_ASSERT_C(isCorrectable && correction.Records.size() == 0, CORRECTION_DESCRIPTION);
 
         for (emptyDiskIdx = 0; emptyDiskIdx < totalPartCount; ++emptyDiskIdx) {
-            layout.VDiskMask = ~((~(ui32)0) << blobSubgroupSize); 
-            layout.VDiskPartMask.resize(blobSubgroupSize); 
+            layout.VDiskMask = ~((~(ui32)0) << blobSubgroupSize);
+            layout.VDiskPartMask.resize(blobSubgroupSize);
             for (ui32 i = 0; i < totalPartCount; ++i) {
                 layout.VDiskPartMask[i] = (1 << i);
             }
-            for (ui32 i = totalPartCount; i < blobSubgroupSize; ++i) { 
+            for (ui32 i = totalPartCount; i < blobSubgroupSize; ++i) {
                 layout.VDiskPartMask[i] = 0;
             }
             layout.VDiskPartMask[emptyDiskIdx] = 0;
@@ -67,12 +67,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupTypeTest) {
         }
 
         for (emptyDiskIdx = 0; emptyDiskIdx < totalPartCount; ++emptyDiskIdx) {
-            layout.VDiskMask = ~((~(ui32)0) << blobSubgroupSize); 
-            layout.VDiskPartMask.resize(blobSubgroupSize); 
+            layout.VDiskMask = ~((~(ui32)0) << blobSubgroupSize);
+            layout.VDiskPartMask.resize(blobSubgroupSize);
             for (ui32 i = 0; i < totalPartCount; ++i) {
                 layout.VDiskPartMask[i] = (1 << i);
             }
-            for (ui32 i = totalPartCount; i < blobSubgroupSize; ++i) { 
+            for (ui32 i = totalPartCount; i < blobSubgroupSize; ++i) {
                 layout.VDiskPartMask[i] = 0;
             }
             layout.VDiskMask &= ~((ui32)1 << emptyDiskIdx);
@@ -93,12 +93,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupTypeTest) {
 
         for (emptyDiskIdx = 0; emptyDiskIdx < totalPartCount-1; ++emptyDiskIdx) {
             for (ui32 emptyDisk2Idx = emptyDiskIdx + 1; emptyDisk2Idx < totalPartCount; ++emptyDisk2Idx) {
-                layout.VDiskMask = ~((~(ui32)0) << blobSubgroupSize); 
-                layout.VDiskPartMask.resize(blobSubgroupSize); 
+                layout.VDiskMask = ~((~(ui32)0) << blobSubgroupSize);
+                layout.VDiskPartMask.resize(blobSubgroupSize);
                 for (ui32 i = 0; i < totalPartCount; ++i) {
                     layout.VDiskPartMask[i] = (1 << i);
                 }
-                for (ui32 i = totalPartCount; i < blobSubgroupSize; ++i) { 
+                for (ui32 i = totalPartCount; i < blobSubgroupSize; ++i) {
                     layout.VDiskPartMask[i] = 0;
                 }
                 layout.VDiskMask &= ~((ui32)1 << emptyDiskIdx);

@@ -53,23 +53,23 @@ namespace NKikimr {
         public:
             using TBase = TLevelIndex<TKeyBarrier, TMemRecBarrier>;
 
-            TBarriersDs(const TLevelIndexSettings &settings, std::shared_ptr<TRopeArena> arena); 
+            TBarriersDs(const TLevelIndexSettings &settings, std::shared_ptr<TRopeArena> arena);
             TBarriersDs(
                     const TLevelIndexSettings &settings,
                     const NKikimrVDiskData::TLevelIndex &pb,
-                    ui64 entryPointLsn, 
-                    std::shared_ptr<TRopeArena> arena); 
+                    ui64 entryPointLsn,
+                    std::shared_ptr<TRopeArena> arena);
 
 
             void PutToFresh(ui64 lsn, const TKeyBarrier &key, const TMemRecBarrier &memRec);
-            void PutToFresh(std::shared_ptr<TBase::TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn); 
-            void LoadCompleted() override; 
+            void PutToFresh(std::shared_ptr<TBase::TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn);
+            void LoadCompleted() override;
             TBarriersDsSnapshot GetSnapshot(TActorSystem *as);
             TBarriersDsSnapshot GetIndexSnapshot();
 
         private:
             TString VDiskLogPrefix;
-            std::unique_ptr<TMemView> MemView; 
+            std::unique_ptr<TMemView> MemView;
 
             void BuildMemView();
         };

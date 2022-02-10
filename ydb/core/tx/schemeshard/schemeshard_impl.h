@@ -1081,8 +1081,8 @@ private:
     static NTabletPipe::TClientConfig GetPipeClientConfig();
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR;
     }
 
     TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info);

@@ -35,7 +35,7 @@ class TCounterBlock final : public ICounterBlock {
     NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes;
     NMonitoring::TDynamicCounters::TCounterPtr NotAuthenticated;
     NMonitoring::TDynamicCounters::TCounterPtr ResourceExhausted;
-    bool Percentile = false; 
+    bool Percentile = false;
     NMonitoring::TPercentileTracker<4, 512, 15> RequestHistMs;
     std::array<NMonitoring::TDynamicCounters::TCounterPtr, 2>  GRpcStatusCounters;
 
@@ -46,10 +46,10 @@ public:
             NMonitoring::TDynamicCounters::TCounterPtr notOkResponseCounter,
             NMonitoring::TDynamicCounters::TCounterPtr requestBytes,
             NMonitoring::TDynamicCounters::TCounterPtr inflyRequestBytes,
-            NMonitoring::TDynamicCounters::TCounterPtr responseBytes, 
+            NMonitoring::TDynamicCounters::TCounterPtr responseBytes,
             NMonitoring::TDynamicCounters::TCounterPtr notAuthenticated,
             NMonitoring::TDynamicCounters::TCounterPtr resourceExhausted,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> group) 
+            TIntrusivePtr<NMonitoring::TDynamicCounters> group)
         : TotalCounter(std::move(totalCounter))
         , InflyCounter(std::move(inflyCounter))
         , NotOkRequestCounter(std::move(notOkRequestCounter))
@@ -59,12 +59,12 @@ public:
         , ResponseBytes(std::move(responseBytes))
         , NotAuthenticated(std::move(notAuthenticated))
         , ResourceExhausted(std::move(resourceExhausted))
-    { 
-        if (group) { 
-            RequestHistMs.Initialize(group, "event", "request", "ms", {0.5f, 0.9f, 0.99f, 0.999f, 1.0f}); 
-            Percentile = true; 
-        } 
-    } 
+    {
+        if (group) {
+            RequestHistMs.Initialize(group, "event", "request", "ms", {0.5f, 0.9f, 0.99f, 0.999f, 1.0f});
+            Percentile = true;
+        }
+    }
 
     void CountNotOkRequest() override {
         NotOkRequestCounter->Inc();
@@ -108,20 +108,20 @@ public:
         if (!ok) {
             NotOkResponseCounter->Inc();
         }
-        if (Percentile) { 
-            RequestHistMs.Increment(requestDuration.MilliSeconds()); 
-        } 
+        if (Percentile) {
+            RequestHistMs.Increment(requestDuration.MilliSeconds());
+        }
     }
- 
+
     ICounterBlockPtr Clone() override {
         return this;
     }
 
-    void Update() { 
-        if (Percentile) { 
-            RequestHistMs.Update(); 
-        } 
-    } 
+    void Update() {
+        if (Percentile) {
+            RequestHistMs.Update();
+        }
+    }
 };
 
 using TCounterBlockPtr = TIntrusivePtr<TCounterBlock>;

@@ -20,8 +20,8 @@ SRCS(
     failure_injection.cpp
     failure_injection.h
     fast_tls.cpp
-    format.cpp 
-    format.h 
+    format.cpp
+    format.h
     fragmented_buffer.cpp
     fragmented_buffer.h
     hazard.cpp
@@ -42,12 +42,12 @@ SRCS(
     queue_inplace.h
     queue_oneone_inplace.h
     simple_cache.h
-    single_thread_ic_mock.cpp 
-    single_thread_ic_mock.h 
-    stlog.h 
+    single_thread_ic_mock.cpp
+    single_thread_ic_mock.h
+    stlog.h
     templates.h
-    testactorsys.cpp 
-    testactorsys.h 
+    testactorsys.cpp
+    testactorsys.h
     text.cpp
     text.h
     time_series_vec.h
@@ -62,7 +62,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/interconnect/mock 
+    library/cpp/actors/interconnect/mock
     library/cpp/actors/util
     library/cpp/containers/stack_vector
     library/cpp/html/escape

@@ -12,8 +12,8 @@ public:
         PhantomCheck(phantomCheck) {
     };
 
-    EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info, 
-            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests) override { 
+    EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
+            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests) override {
         // Look at the current layout and set the status if possible
         const ui32 totalPartCount = info.Type.TotalPartCount();
         bool doLook = true;
@@ -46,37 +46,37 @@ public:
             }
         }
 
-        // Prepare new request set 
-        const ui32 partSize = info.Type.PartSize(state.Id); 
-        for (ui32 diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) { 
-            bool isHandoff = (diskIdx >= totalPartCount); 
-            ui32 beginPartIdx = (isHandoff ? 0 : diskIdx); 
-            ui32 endPartIdx = (isHandoff ? totalPartCount : (diskIdx + 1)); 
-            for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) { 
-                TBlobState::TDisk &disk = state.Disks[diskIdx]; 
-                TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation; 
-                if (partSituation == TBlobState::ESituation::Unknown || 
-                        partSituation == TBlobState::ESituation::Present) { 
+        // Prepare new request set
+        const ui32 partSize = info.Type.PartSize(state.Id);
+        for (ui32 diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
+            bool isHandoff = (diskIdx >= totalPartCount);
+            ui32 beginPartIdx = (isHandoff ? 0 : diskIdx);
+            ui32 endPartIdx = (isHandoff ? totalPartCount : (diskIdx + 1));
+            for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
+                TBlobState::TDisk &disk = state.Disks[diskIdx];
+                TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
+                if (partSituation == TBlobState::ESituation::Unknown ||
+                        partSituation == TBlobState::ESituation::Present) {
                     TIntervalSet<i32> fullPartInterval(0, partSize);
-                    fullPartInterval.Subtract(state.Parts[partIdx].Here); 
-                    fullPartInterval.Subtract(disk.DiskParts[partIdx].Requested); 
-                    if (!fullPartInterval.IsEmpty()) { 
-                        // TODO(cthulhu): Consider the case when we just need to know that there is a copy 
-                        //                and make an index request to avoid the data transfer. 
-                        // 
-                        //                Actually consider that we dont need to prove anything if we can 
-                        //                read the data. 
+                    fullPartInterval.Subtract(state.Parts[partIdx].Here);
+                    fullPartInterval.Subtract(disk.DiskParts[partIdx].Requested);
+                    if (!fullPartInterval.IsEmpty()) {
+                        // TODO(cthulhu): Consider the case when we just need to know that there is a copy
+                        //                and make an index request to avoid the data transfer.
+                        //
+                        //                Actually consider that we dont need to prove anything if we can
+                        //                read the data.
 
-                        // TODO(cthulhu): Group logCtx, state, info and groupDiskRequests into a context. 
+                        // TODO(cthulhu): Group logCtx, state, info and groupDiskRequests into a context.
 
-                        AddGetRequest(logCtx, groupDiskRequests, state.Id, partIdx, disk, 
-                                fullPartInterval, "BPG64"); 
+                        AddGetRequest(logCtx, groupDiskRequests, state.Id, partIdx, disk,
+                                fullPartInterval, "BPG64");
                     }
                 }
             }
         }
- 
-        return EStrategyOutcome::IN_PROGRESS; 
+
+        return EStrategyOutcome::IN_PROGRESS;
     }
 };
 

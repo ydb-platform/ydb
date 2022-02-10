@@ -12,8 +12,8 @@ using namespace NKikimrCms;
 
 class TWalleCreateTaskAdapter : public TActorBootstrapped<TWalleCreateTaskAdapter> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::CMS_WALLE_REQ; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::CMS_WALLE_REQ;
     }
 
     TWalleCreateTaskAdapter(TEvCms::TEvWalleCreateTaskRequest::TPtr &event, TActorId cms)

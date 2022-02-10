@@ -1,7 +1,7 @@
 #include <ydb/core/erasure/erasure.h>
 #include "cli.h"
 #include "cli_cmds.h"
-#include "proto_common.h" 
+#include "proto_common.h"
 
 namespace NKikimr {
 namespace NDriverClient {
@@ -50,9 +50,9 @@ public:
     virtual int Run(TConfig& config) override {
         TAutoPtr<NMsgBusProxy::TBusBSAdm> request(new NMsgBusProxy::TBusBSAdm);
         request->Record.SetDomain(Domain);
-        if (config.SecurityToken) { 
-            request->Record.SetSecurityToken(config.SecurityToken); 
-        } 
+        if (config.SecurityToken) {
+            request->Record.SetSecurityToken(config.SecurityToken);
+        }
         auto *x = request->Record.MutableGroupReconfigureWipe();
 
         auto *location = x->MutableLocation();

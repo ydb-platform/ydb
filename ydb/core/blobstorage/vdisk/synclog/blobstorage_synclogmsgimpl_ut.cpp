@@ -11,52 +11,52 @@ using namespace NKikimr::NSyncLog;
 
 #define STR Cnull
 
-std::tuple<TLogoBlobID, ui64, ui64> AsTuple(const TLogoBlobRecWithSerial& x) { 
-    return {x.LogoBlobID(), x.Ingress.Raw(), x.Counter}; 
-} 
- 
-std::tuple<ui64, ui32, ui64> AsTuple(const TBlockRecWithSerial& x) { 
-    return {x.TabletId, x.Generation, x.Counter}; 
-} 
- 
-std::tuple<ui64, ui32, ui64, ui64> AsTuple(const TBlockRecWithSerialV2& x) { 
-    return {x.TabletId, x.Generation, x.IssuerGuid, x.Counter}; 
-} 
- 
-std::tuple<ui64, ui32, ui32, ui32, ui32, ui32, ui32, ui64, ui64> AsTuple(const TBarrierRecWithSerial& x) { 
-    return {x.TabletId, x.Channel, x.Hard, x.Gen, x.GenCounter, x.CollectGeneration, x.CollectStep, x.Ingress.Raw(), x.Counter}; 
-} 
- 
-template<typename T, typename... Tx, typename = std::enable_if<std::is_same_v<decltype(AsTuple(std::declval<const T&>())), std::tuple<Tx...>>>> 
-bool Equal(const T& x, const T& y) { 
-    return AsTuple(x) == AsTuple(y); 
-} 
- 
-template<typename T> 
-bool Equal(const std::vector<T>& x, const std::vector<T>& y) { 
-    if (x.size() != y.size()) { 
-        return false; 
-    } 
-    for (size_t i = 0; i < x.size(); ++i) { 
-        if (!Equal(x[i], y[i])) { 
-            return false; 
-        } 
-    } 
-    return true; 
-} 
- 
-bool Equal(const TRecordsWithSerial& x, const TRecordsWithSerial& y) { 
-    return Equal(x.LogoBlobs, y.LogoBlobs) && Equal(x.Blocks, y.Blocks) && Equal(x.Barriers, y.Barriers) && 
-        Equal(x.BlocksV2, y.BlocksV2); 
-} 
- 
+std::tuple<TLogoBlobID, ui64, ui64> AsTuple(const TLogoBlobRecWithSerial& x) {
+    return {x.LogoBlobID(), x.Ingress.Raw(), x.Counter};
+}
+
+std::tuple<ui64, ui32, ui64> AsTuple(const TBlockRecWithSerial& x) {
+    return {x.TabletId, x.Generation, x.Counter};
+}
+
+std::tuple<ui64, ui32, ui64, ui64> AsTuple(const TBlockRecWithSerialV2& x) {
+    return {x.TabletId, x.Generation, x.IssuerGuid, x.Counter};
+}
+
+std::tuple<ui64, ui32, ui32, ui32, ui32, ui32, ui32, ui64, ui64> AsTuple(const TBarrierRecWithSerial& x) {
+    return {x.TabletId, x.Channel, x.Hard, x.Gen, x.GenCounter, x.CollectGeneration, x.CollectStep, x.Ingress.Raw(), x.Counter};
+}
+
+template<typename T, typename... Tx, typename = std::enable_if<std::is_same_v<decltype(AsTuple(std::declval<const T&>())), std::tuple<Tx...>>>>
+bool Equal(const T& x, const T& y) {
+    return AsTuple(x) == AsTuple(y);
+}
+
+template<typename T>
+bool Equal(const std::vector<T>& x, const std::vector<T>& y) {
+    if (x.size() != y.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < x.size(); ++i) {
+        if (!Equal(x[i], y[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Equal(const TRecordsWithSerial& x, const TRecordsWithSerial& y) {
+    return Equal(x.LogoBlobs, y.LogoBlobs) && Equal(x.Blocks, y.Blocks) && Equal(x.Barriers, y.Barriers) &&
+        Equal(x.BlocksV2, y.BlocksV2);
+}
+
 Y_UNIT_TEST_SUITE(ReorderCodecTest) {
 
     Y_UNIT_TEST(Basic) {
-        TRecordsWithSerial recsSrc; 
- 
+        TRecordsWithSerial recsSrc;
+
         // logoblobs
-        TVector<TLogoBlobRecWithSerial>& logoBlobsSrc = recsSrc.LogoBlobs; 
+        TVector<TLogoBlobRecWithSerial>& logoBlobsSrc = recsSrc.LogoBlobs;
         logoBlobsSrc.emplace_back(TLogoBlobID(66, 1, 0, 0, 110, 20), 0, 0);
         logoBlobsSrc.emplace_back(TLogoBlobID(66, 1, 0, 0, 109, 21), 0, 1);
         logoBlobsSrc.emplace_back(TLogoBlobID(66, 1, 0, 0, 108, 22), 0, 2);
@@ -70,28 +70,28 @@ Y_UNIT_TEST_SUITE(ReorderCodecTest) {
         logoBlobsSrc.emplace_back(TLogoBlobID(42, 2, 0, 0, 100, 20), 0, 10);
 
         // blocks
-        TVector<TBlockRecWithSerial>& blocksSrc = recsSrc.Blocks; 
+        TVector<TBlockRecWithSerial>& blocksSrc = recsSrc.Blocks;
         blocksSrc.emplace_back(42, 1, 11);
         blocksSrc.emplace_back(73, 0, 12);
 
         // barriers
-        TVector<TBarrierRecWithSerial>& barriersSrc = recsSrc.Barriers; 
-        barriersSrc.emplace_back(42, 0, 0, 345, 0, 3, false, 0, 13); 
+        TVector<TBarrierRecWithSerial>& barriersSrc = recsSrc.Barriers;
+        barriersSrc.emplace_back(42, 0, 0, 345, 0, 3, false, 0, 13);
 
         // save original vectors
-        TRecordsWithSerial origRecsSrc(recsSrc); 
+        TRecordsWithSerial origRecsSrc(recsSrc);
 
         // encode
         TReorderCodec codec(TReorderCodec::EEncoding::Trivial);
-        TString encoded = codec.Encode(recsSrc); 
+        TString encoded = codec.Encode(recsSrc);
 
         // decode
-        TRecordsWithSerial recsRes; 
-        bool res = codec.DecodeString(encoded, recsRes); 
+        TRecordsWithSerial recsRes;
+        bool res = codec.DecodeString(encoded, recsRes);
 
         // check
         UNIT_ASSERT_VALUES_EQUAL(res, true);
-        UNIT_ASSERT(Equal(recsRes, origRecsSrc)); 
+        UNIT_ASSERT(Equal(recsRes, origRecsSrc));
     }
 }
 

@@ -76,31 +76,31 @@ namespace NKikimr {
     // compaction has been finished.
     ////////////////////////////////////////////////////////////////////////////
     struct TEvCompactVDisk : public TEventLocal<TEvCompactVDisk, TEvBlobStorage::EvCompactVDisk> {
-        enum class EMode { 
-            FULL, 
-            FRESH_ONLY, 
-        }; 
- 
-        // mask of databases to compact in terms of EHullDbType type (can compact several databases at once)
-        const ui32 Mask; 
-        const EMode Mode; 
+        enum class EMode {
+            FULL,
+            FRESH_ONLY,
+        };
 
-        TEvCompactVDisk(ui32 mask, EMode mode = EMode::FULL) 
+        // mask of databases to compact in terms of EHullDbType type (can compact several databases at once)
+        const ui32 Mask;
+        const EMode Mode;
+
+        TEvCompactVDisk(ui32 mask, EMode mode = EMode::FULL)
             : Mask(mask)
-            , Mode(mode) 
+            , Mode(mode)
         {}
 
         // create a message for compaction one database of type 'type'
-        static TEvCompactVDisk *Create(EHullDbType type, EMode mode = EMode::FULL) { 
-            return new TEvCompactVDisk(::NKikimr::Mask(type), mode); 
+        static TEvCompactVDisk *Create(EHullDbType type, EMode mode = EMode::FULL) {
+            return new TEvCompactVDisk(::NKikimr::Mask(type), mode);
         }
- 
-        static const char *ModeToString(EMode mode) { 
-            switch (mode) { 
-                case EMode::FULL: return "FULL"; 
-                case EMode::FRESH_ONLY: return "FRESH_ONLY"; 
-            } 
-        } 
+
+        static const char *ModeToString(EMode mode) {
+            switch (mode) {
+                case EMode::FULL: return "FULL";
+                case EMode::FRESH_ONLY: return "FRESH_ONLY";
+            }
+        }
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -117,20 +117,20 @@ namespace NKikimr {
     // some database in local VDisk
     ////////////////////////////////////////////////////////////////////////////
     struct TEvHullCompact : public TEventLocal<TEvHullCompact, TEvBlobStorage::EvHullCompact> {
-        const EHullDbType Type; 
-        const ui64 RequestId; 
-        const TEvCompactVDisk::EMode Mode; 
+        const EHullDbType Type;
+        const ui64 RequestId;
+        const TEvCompactVDisk::EMode Mode;
 
-        TEvHullCompact(EHullDbType type, ui64 requestId, TEvCompactVDisk::EMode mode) 
+        TEvHullCompact(EHullDbType type, ui64 requestId, TEvCompactVDisk::EMode mode)
             : Type(type)
             , RequestId(requestId)
-            , Mode(mode) 
+            , Mode(mode)
         {}
 
-        TString ToString() const { 
-            return TStringBuilder() << "{Type# " << EHullDbTypeToString(Type) << " RequestId# " << RequestId 
-                << " Mode# " << TEvCompactVDisk::ModeToString(Mode) << "}"; 
-        } 
+        TString ToString() const {
+            return TStringBuilder() << "{Type# " << EHullDbTypeToString(Type) << " RequestId# " << RequestId
+                << " Mode# " << TEvCompactVDisk::ModeToString(Mode) << "}";
+        }
     };
 
     ////////////////////////////////////////////////////////////////////////////

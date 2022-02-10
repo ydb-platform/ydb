@@ -507,8 +507,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::SS_PROXY_REQUEST; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SS_PROXY_REQUEST;
     }
 
     TStateStorageProxyRequest(const TIntrusivePtr<TStateStorageInfo> &info, const TIntrusivePtr<TStateStorageInfo> &flowControlledInfo)
@@ -607,8 +607,8 @@ protected:
     ui64 UndeliveredCount;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
     TStateStorageDumpRequest(const TActorId &sender, const TIntrusivePtr<TStateStorageInfo> &info)
@@ -675,8 +675,8 @@ protected:
     ui64 TabletID;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
     TStateStorageDeleteRequest(const TActorId &sender, const TIntrusivePtr<TStateStorageInfo> &info, ui64 tabletId)
@@ -946,8 +946,8 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         RegisterDerivedServices(sys, nullptr);
     }
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::SS_PROXY; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SS_PROXY;
     }
 
     TStateStorageProxy(
@@ -996,8 +996,8 @@ class TStateStorageProxyStub : public TActor<TStateStorageProxyStub> {
             nullptr, 0, TMap<TActorId, TActorId>()));
     }
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::SS_PROXY_STUB; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SS_PROXY_STUB;
     }
 
     TStateStorageProxyStub()

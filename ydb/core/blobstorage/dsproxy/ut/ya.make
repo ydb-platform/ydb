@@ -1,15 +1,15 @@
-UNITTEST() 
- 
+UNITTEST()
+
 FORK_SUBTESTS(MODULO)
 
 SPLIT_FACTOR(20)
- 
+
 OWNER(
     alexvru
     cthulhu
     g:kikimr
 )
- 
+
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -19,7 +19,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-PEERDIR( 
+PEERDIR(
     library/cpp/actors/core
     library/cpp/getopt
     library/cpp/svnversion
@@ -33,18 +33,18 @@ PEERDIR(
     ydb/core/testlib
     ydb/core/testlib/actors
     ydb/core/testlib/basics
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
-SRCS( 
+SRCS(
     dsproxy_put_ut.cpp
-    dsproxy_quorum_tracker_ut.cpp 
+    dsproxy_quorum_tracker_ut.cpp
     dsproxy_sequence_ut.cpp
     dsproxy_patch_ut.cpp
     dsproxy_counters_ut.cpp
-) 
- 
+)
+
 
 IF (BUILD_TYPE == "RELEASE")
     SRCS(
@@ -55,4 +55,4 @@ ELSE ()
     MESSAGE(WARNING "It takes too much time to run test in DEBUG mode, some tests are skipped")
 ENDIF ()
 
-END() 
+END()

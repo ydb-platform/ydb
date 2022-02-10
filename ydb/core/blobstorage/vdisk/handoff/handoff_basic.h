@@ -92,7 +92,7 @@ namespace NKikimr {
             bool Restore(const TActorContext &ctx,
                          const TLogoBlobID &id,
                          ui64 fullDataSize,
-                         TRope&& data); 
+                         TRope&& data);
             void FreeElement(ui32 byteSize);
             TString ToString() const;
         };

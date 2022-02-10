@@ -388,7 +388,7 @@ void CheckTenantGeneration(TTenantTestRuntime &runtime,
 void CheckPoolScope(TTenantTestRuntime &runtime,
                     const TString &name)
 {
-    auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>(); 
+    auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
     auto &read = *request->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
     read.SetBoxId(1);
     read.AddName(name);
@@ -1338,7 +1338,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         NKikimrConsole::TConfig config1 = GetCurrentConfig(runtime);
         for (ui64 i = 0; i < config1.GetTenantsConfig().AvailabilityZoneKindsSize(); ++i) {
             if (config1.GetTenantsConfig().GetAvailabilityZoneKinds(i).GetKind() == ZONE1) {
-                config1.MutableTenantsConfig()->MutableAvailabilityZoneKinds(i)->SetDataCenterName(ToString(2)); 
+                config1.MutableTenantsConfig()->MutableAvailabilityZoneKinds(i)->SetDataCenterName(ToString(2));
                 break;
             }
         }
@@ -1348,7 +1348,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         NKikimrConsole::TConfig config2 = GetCurrentConfig(runtime);
         for (ui64 i = 0; i < config2.GetTenantsConfig().AvailabilityZoneKindsSize(); ++i) {
             if (config2.GetTenantsConfig().GetAvailabilityZoneKinds(i).GetKind() == ZONE2) {
-                config2.MutableTenantsConfig()->MutableAvailabilityZoneKinds(i)->SetDataCenterName(ToString(1)); 
+                config2.MutableTenantsConfig()->MutableAvailabilityZoneKinds(i)->SetDataCenterName(ToString(1));
                 break;
             }
         }
@@ -1361,7 +1361,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
         for (ui64 i = 0; i < config2.GetTenantsConfig().AvailabilityZoneKindsSize(); ++i) {
             if (config2.GetTenantsConfig().GetAvailabilityZoneKinds(i).GetKind() == ZONE2) {
-                config2.MutableTenantsConfig()->MutableAvailabilityZoneKinds(i)->SetDataCenterName(ToString(2)); 
+                config2.MutableTenantsConfig()->MutableAvailabilityZoneKinds(i)->SetDataCenterName(ToString(2));
                 break;
             }
         }
@@ -1486,7 +1486,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
             NKikimrConsole::TConfig delta;
             auto zone = delta.MutableTenantsConfig()->AddAvailabilityZoneKinds();
             zone->SetKind(ZONE1);
-            zone->SetDataCenterName(ToString(1)); 
+            zone->SetDataCenterName(ToString(1));
             CheckSetConfig(runtime, delta, Ydb::StatusIds::BAD_REQUEST, NKikimrConsole::TConfigItem::MERGE);
         }
 
@@ -1495,7 +1495,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
             NKikimrConsole::TConfig delta;
             auto zone1 = delta.MutableTenantsConfig()->AddAvailabilityZoneKinds();
             zone1->SetKind(ZONE1);
-            zone1->SetDataCenterName(ToString(1)); 
+            zone1->SetDataCenterName(ToString(1));
             auto set1 = delta.MutableTenantsConfig()->AddAvailabilityZoneSets();
             set1->SetName("all");
             set1->AddZoneKinds(ZONE1);

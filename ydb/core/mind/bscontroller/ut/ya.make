@@ -1,13 +1,13 @@
 UNITTEST_FOR(ydb/core/mind/bscontroller)
- 
-OWNER(alexvru g:kikimr) 
- 
-SRCS( 
-    grouper_ut.cpp 
-    group_mapper_ut.cpp 
-    mv_object_map_ut.cpp 
-) 
- 
+
+OWNER(alexvru g:kikimr)
+
+SRCS(
+    grouper_ut.cpp
+    group_mapper_ut.cpp
+    mv_object_map_ut.cpp
+)
+
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
@@ -19,9 +19,9 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-PEERDIR( 
+PEERDIR(
     library/cpp/actors/util
     ydb/core/yql_testlib
-) 
- 
-END() 
+)
+
+END()

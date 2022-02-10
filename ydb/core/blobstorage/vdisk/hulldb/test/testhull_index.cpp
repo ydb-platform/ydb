@@ -9,7 +9,7 @@ namespace NTest {
     //////////////////////////////////////////////////////////////////////////////////////////////
     class TAllTabletMocks {
     public:
-        using TTabletMockAndWeight = std::pair<std::shared_ptr<ITabletMock>, ui64>; 
+        using TTabletMockAndWeight = std::pair<std::shared_ptr<ITabletMock>, ui64>;
 
         // initialize with a vector of pairs -- tablet mock pointer and tablet weight
         TAllTabletMocks(TVector<TTabletMockAndWeight> &&allMocks)
@@ -32,7 +32,7 @@ namespace NTest {
     private:
         void GenerateSearchVector() {
             size_t reserve = 0;
-            auto reserveCountFunc = [&reserve] (const std::pair<std::shared_ptr<ITabletMock>, ui64> &elem) { 
+            auto reserveCountFunc = [&reserve] (const std::pair<std::shared_ptr<ITabletMock>, ui64> &elem) {
                 reserve += elem.second;
             };
             std::for_each(AllMocks.begin(), AllMocks.end(), reserveCountFunc);
@@ -47,7 +47,7 @@ namespace NTest {
         }
 
         TVector<TTabletMockAndWeight> AllMocks;
-        TVector<std::shared_ptr<ITabletMock>> SearchVector; 
+        TVector<std::shared_ptr<ITabletMock>> SearchVector;
     };
 
 
@@ -63,12 +63,12 @@ namespace NTest {
             size_t SstsNum;
         };
 
-        TSstGenerator(std::shared_ptr<TTestContexts> testCtx, TAllTabletMocks &&allMocks) 
+        TSstGenerator(std::shared_ptr<TTestContexts> testCtx, TAllTabletMocks &&allMocks)
             : TestCtx(std::move(testCtx))
             , AllMocks(std::move(allMocks))
         {}
 
-        TSstGenerator(std::shared_ptr<TTestContexts> testCtx, const TAllTabletMocks &allMocks) 
+        TSstGenerator(std::shared_ptr<TTestContexts> testCtx, const TAllTabletMocks &allMocks)
             : TestCtx(std::move(testCtx))
             , AllMocks(allMocks)
         {}
@@ -100,7 +100,7 @@ namespace NTest {
         }
 
     private:
-        std::shared_ptr<TTestContexts> TestCtx; 
+        std::shared_ptr<TTestContexts> TestCtx;
         TAllTabletMocks AllMocks;
         TVector<TLogoBlobsCmd> LogoBlobs;
         TVector<TBarriersCmd> Barriers;
@@ -126,7 +126,7 @@ namespace NTest {
             const ui64 requiredBytes = ChunkSize;
             ui64 totalBytes = 0;
             TIntrusivePtr<TSst> sst(new TSst(TestCtx->GetVCtx()));
-            sst->Info.CTime = TAppData::TimeProvider->Now(); 
+            sst->Info.CTime = TAppData::TimeProvider->Now();
 
             while (it != end && totalBytes < requiredBytes) {
                 sst->LoadedIndex.emplace_back(it->Key, it->MemRec);
@@ -165,7 +165,7 @@ namespace NTest {
         {}
 
         TIntrusivePtr<THullDs> GenerateHullDs() override {
-            auto testCtx = std::make_shared<TTestContexts>(ChunkSize, CompWorthReadSize); 
+            auto testCtx = std::make_shared<TTestContexts>(ChunkSize, CompWorthReadSize);
             std::shared_ptr<TRopeArena> arena = std::make_shared<TRopeArena>(&TRopeArenaBackend::Allocate);
 
             TSstGenerator gen(testCtx, std::move(AllMocks));
@@ -193,7 +193,7 @@ namespace NTest {
 
         template <class TKey, class TMemRec, class TDs>
         void Allocate17Levels(
-                const std::shared_ptr<TTestContexts> &testCtx, 
+                const std::shared_ptr<TTestContexts> &testCtx,
                 const std::shared_ptr<TRopeArena> &arena,
                 TIntrusivePtr<TDs> &ds)
         {
@@ -220,7 +220,7 @@ namespace NTest {
     //////////////////////////////////////////////////////////////////////////////////////////////
     class TTabletMockLog : public ITabletMock {
     public:
-        TTabletMockLog(std::shared_ptr<TTestContexts> testCtx, ui64 tabletId, ui64 recsToKeep) 
+        TTabletMockLog(std::shared_ptr<TTestContexts> testCtx, ui64 tabletId, ui64 recsToKeep)
             : TabletId(tabletId)
             , RecsToKeep(recsToKeep)
         {
@@ -283,14 +283,14 @@ namespace NTest {
     // GenerateDs_18Level_Logs
     //////////////////////////////////////////////////////////////////////////////////////////////
     TIntrusivePtr<THullDs> GenerateDs_17Level_Logs() {
-        auto testCtx = std::make_shared<TTestContexts>(); 
+        auto testCtx = std::make_shared<TTestContexts>();
         TVector<TAllTabletMocks::TTabletMockAndWeight> vec;
         vec.reserve(10);
-        vec.emplace_back(std::make_shared<TTabletMockLog>(testCtx, 1ul, 10000ul), 64ul); 
-        vec.emplace_back(std::make_shared<TTabletMockLog>(testCtx, 2ul, 10000ul), 64ul); 
-        vec.emplace_back(std::make_shared<TTabletMockLog>(testCtx, 3ul, 10000ul), 64ul); 
-        vec.emplace_back(std::make_shared<TTabletMockLog>(testCtx, 4ul, 10000ul), 64ul); 
-        vec.emplace_back(std::make_shared<TTabletMockLog>(testCtx, 5ul, 10000ul), 4ul); 
+        vec.emplace_back(std::make_shared<TTabletMockLog>(testCtx, 1ul, 10000ul), 64ul);
+        vec.emplace_back(std::make_shared<TTabletMockLog>(testCtx, 2ul, 10000ul), 64ul);
+        vec.emplace_back(std::make_shared<TTabletMockLog>(testCtx, 3ul, 10000ul), 64ul);
+        vec.emplace_back(std::make_shared<TTabletMockLog>(testCtx, 4ul, 10000ul), 64ul);
+        vec.emplace_back(std::make_shared<TTabletMockLog>(testCtx, 5ul, 10000ul), 4ul);
 
         TAllTabletMocks allTabletMocks(std::move(vec));
 

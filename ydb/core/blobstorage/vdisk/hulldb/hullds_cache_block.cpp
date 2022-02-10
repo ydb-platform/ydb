@@ -28,21 +28,21 @@ namespace NKikimr {
         return str.Str();
     }
 
-    TBlocksCache::TBlockRes TBlocksCache::IsBlocked(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const { 
+    TBlocksCache::TBlockRes TBlocksCache::IsBlocked(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const {
         Y_VERIFY(Initialized);
-        if (const auto& st = IsBlockedByPersistent(tabletId, gen, actualGen); st.Status != EStatus::OK) { 
-            return st; 
-        } else if (const auto& st = IsBlockedByInFlight(tabletId, gen, actualGen); st.Status != EStatus::OK) { 
-            return st; 
-        } else { 
+        if (const auto& st = IsBlockedByPersistent(tabletId, gen, actualGen); st.Status != EStatus::OK) {
+            return st;
+        } else if (const auto& st = IsBlockedByInFlight(tabletId, gen, actualGen); st.Status != EStatus::OK) {
+            return st;
+        } else {
             return {EStatus::OK, 0};
         }
     }
 
-    bool TBlocksCache::IsBlockedLegacy(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const { 
+    bool TBlocksCache::IsBlockedLegacy(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const {
         Y_VERIFY(Initialized);
-        auto persRes = IsBlockedByPersistent(tabletId, gen, actualGen); 
-        return persRes.Status != EStatus::OK; 
+        auto persRes = IsBlockedByPersistent(tabletId, gen, actualGen);
+        return persRes.Status != EStatus::OK;
     }
 
     bool TBlocksCache::HasRecord(ui64 tabletId) const {
@@ -52,8 +52,8 @@ namespace NKikimr {
 
     bool TBlocksCache::Find(ui64 tabletId, ui32 *outGen) const {
         Y_VERIFY(Initialized);
-        if (const auto it = PersistentBlocks.find(tabletId); it != PersistentBlocks.end()) { 
-            *outGen = it->second.Generation; 
+        if (const auto it = PersistentBlocks.find(tabletId); it != PersistentBlocks.end()) {
+            *outGen = it->second.Generation;
             return true;
         } else {
             return false;
@@ -82,64 +82,64 @@ namespace NKikimr {
             merger.Finish();
 
             TTabletId tabletId = it.GetCurKey().TabletId;
-            ui32 blockedGen = merger.GetMemRec().BlockedGeneration; 
-            bool inserted = PersistentBlocks.emplace(tabletId, TBlockedGen(blockedGen, 0)).second; 
+            ui32 blockedGen = merger.GetMemRec().BlockedGeneration;
+            bool inserted = PersistentBlocks.emplace(tabletId, TBlockedGen(blockedGen, 0)).second;
             Y_VERIFY(inserted);
 
             it.Next();
         }
     }
 
-    TBlocksCache::TBlockRes TBlocksCache::IsBlockedByInFlight(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const { 
-        if (const auto it = InFlightBlocks.find(tabletId); it != InFlightBlocks.end() && it->second.MaxBlockedGen.IsBlocked(gen)) { 
-            if (actualGen) { 
-                *actualGen = it->second.MaxBlockedGen.Generation; 
+    TBlocksCache::TBlockRes TBlocksCache::IsBlockedByInFlight(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const {
+        if (const auto it = InFlightBlocks.find(tabletId); it != InFlightBlocks.end() && it->second.MaxBlockedGen.IsBlocked(gen)) {
+            if (actualGen) {
+                *actualGen = it->second.MaxBlockedGen.Generation;
             }
-            return {EStatus::BLOCKED_INFLIGH, it->second.LsnForMaxBlockedGen}; 
+            return {EStatus::BLOCKED_INFLIGH, it->second.LsnForMaxBlockedGen};
         }
         return {EStatus::OK, 0};
     }
 
-    TBlocksCache::TBlockRes TBlocksCache::IsBlockedByPersistent(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const { 
-        if (const auto it = PersistentBlocks.find(tabletId); it != PersistentBlocks.end() && it->second.IsBlocked(gen)) { 
-            if (actualGen) { 
-                *actualGen = it->second.Generation; 
+    TBlocksCache::TBlockRes TBlocksCache::IsBlockedByPersistent(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const {
+        if (const auto it = PersistentBlocks.find(tabletId); it != PersistentBlocks.end() && it->second.IsBlocked(gen)) {
+            if (actualGen) {
+                *actualGen = it->second.Generation;
             }
-            return {EStatus::BLOCKED_PERS, 0}; 
+            return {EStatus::BLOCKED_PERS, 0};
         }
         return {EStatus::OK, 0};
     }
 
-    void TBlocksCache::UpdatePersistent(ui64 tabletId, TBlockedGen gen) { 
+    void TBlocksCache::UpdatePersistent(ui64 tabletId, TBlockedGen gen) {
         Y_VERIFY(Initialized);
-        auto& value = PersistentBlocks[tabletId]; 
-        if (value.Generation <= gen.Generation) { 
-            value = gen; 
+        auto& value = PersistentBlocks[tabletId];
+        if (value.Generation <= gen.Generation) {
+            value = gen;
         }
     }
 
-    void TBlocksCache::UpdateInFlight(ui64 tabletId, TBlockedGen gen, ui64 lsn) { 
+    void TBlocksCache::UpdateInFlight(ui64 tabletId, TBlockedGen gen, ui64 lsn) {
         Y_VERIFY(Initialized);
-        if (IsBlockedLegacy(tabletId, gen)) { 
+        if (IsBlockedLegacy(tabletId, gen)) {
             // already blocked and saved
             return;
         }
 
-        auto& state = InFlightBlocks[tabletId]; 
-        if (state.MaxBlockedGen.Generation < gen.Generation) { 
+        auto& state = InFlightBlocks[tabletId];
+        if (state.MaxBlockedGen.Generation < gen.Generation) {
             state.MaxBlockedGen = gen;
             state.LsnForMaxBlockedGen = lsn;
         }
 
         // check that lsns increment in every queue
-        Y_VERIFY(state.InFlightQueue.empty() || state.InFlightQueue.back().Lsn < lsn); 
-        Y_VERIFY(InFlightBlocksQueue.empty() || InFlightBlocksQueue.back().Lsn < lsn); 
+        Y_VERIFY(state.InFlightQueue.empty() || state.InFlightQueue.back().Lsn < lsn);
+        Y_VERIFY(InFlightBlocksQueue.empty() || InFlightBlocksQueue.back().Lsn < lsn);
 
         state.InFlightQueue.push_back({lsn, gen});
         InFlightBlocksQueue.push_back({lsn, tabletId});
     }
 
-    void TBlocksCache::CommitInFlight(ui64 tabletId, TBlockedGen gen, ui64 lsn) { 
+    void TBlocksCache::CommitInFlight(ui64 tabletId, TBlockedGen gen, ui64 lsn) {
         Y_VERIFY(Initialized);
         if (!InFlightBlocksQueue.empty()) {
             Y_VERIFY(lsn <= InFlightBlocksQueue.front().Lsn);
@@ -147,11 +147,11 @@ namespace NKikimr {
                 Y_VERIFY(InFlightBlocksQueue.front().TabletId == tabletId);
                 InFlightBlocksQueue.pop_front();
 
-                const auto it = InFlightBlocks.find(tabletId); 
-                Y_VERIFY(it != InFlightBlocks.end()); 
-                auto& state = it->second; 
-                Y_VERIFY(!state.InFlightQueue.empty() && state.InFlightQueue.front().Lsn == lsn && 
-                    state.InFlightQueue.front().BlockedGen == gen); 
+                const auto it = InFlightBlocks.find(tabletId);
+                Y_VERIFY(it != InFlightBlocks.end());
+                auto& state = it->second;
+                Y_VERIFY(!state.InFlightQueue.empty() && state.InFlightQueue.front().Lsn == lsn &&
+                    state.InFlightQueue.front().BlockedGen == gen);
 
                 UpdatePersistent(tabletId, gen);
                 state.InFlightQueue.pop_front();

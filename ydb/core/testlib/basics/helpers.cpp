@@ -66,7 +66,7 @@ namespace NKikimr {
         TMaybe<ui64> LastLsn;
     };
 
-    void TStrandedPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID, 
+    void TStrandedPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
             const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &mainKey, ui32 poolId, ui32 nodeId)
     {
         Y_UNUSED(ctx);

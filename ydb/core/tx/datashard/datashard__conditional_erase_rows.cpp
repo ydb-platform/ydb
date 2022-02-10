@@ -392,7 +392,7 @@ protected:
         }
 
         for (const auto& [_, keyMap] : Indexes) {
-            for (const auto& [indexColumnId, mainColumnId] : keyMap) { 
+            for (const auto& [indexColumnId, mainColumnId] : keyMap) {
                 Y_UNUSED(indexColumnId);
 
                 if (keys.contains(mainColumnId)) {

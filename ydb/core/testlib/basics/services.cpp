@@ -256,11 +256,11 @@ namespace NPDisk {
 
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
             SetupStateStorageGroups(runtime, nodeIndex, app);
-            NKikimrProto::TKeyConfig keyConfig; 
-            if (const auto it = app.Keys.find(nodeIndex); it != app.Keys.end()) { 
-                keyConfig = it->second; 
-            } 
-            SetupBSNodeWarden(runtime, nodeIndex, disk.MakeWardenConf(*app.Domains, keyConfig)); 
+            NKikimrProto::TKeyConfig keyConfig;
+            if (const auto it = app.Keys.find(nodeIndex); it != app.Keys.end()) {
+                keyConfig = it->second;
+            }
+            SetupBSNodeWarden(runtime, nodeIndex, disk.MakeWardenConf(*app.Domains, keyConfig));
 
             SetupTabletResolver(runtime, nodeIndex);
             SetupTabletPipePeNodeCaches(runtime, nodeIndex);

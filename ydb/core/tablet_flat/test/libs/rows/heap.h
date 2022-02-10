@@ -2,8 +2,8 @@
 
 #include "rows.h"
 
-#include <util/generic/deque.h> 
- 
+#include <util/generic/deque.h>
+
 namespace NKikimr {
 namespace NTable {
 namespace NTest {

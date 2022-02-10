@@ -5,12 +5,12 @@
 
 #include <library/cpp/threading/light_rw_lock/lightrwlock.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
- 
+
 #include <util/generic/cast.h>
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
 #include <util/string/cast.h>
-#include <util/system/rwlock.h> 
+#include <util/system/rwlock.h>
 
 #include <functional>
 
@@ -194,7 +194,7 @@ namespace NMonitoring {
         using TOnLookupPtr = void (*)(const char *methodName, const TString &name, const TString &value);
 
     private:
-        TRWMutex Lock; 
+        TRWMutex Lock;
         TCounterPtr LookupCounter; // Counts lookups by name
         TOnLookupPtr OnLookup = nullptr; // Called on each lookup if not nullptr, intended for lightweight tracing.
 
@@ -210,66 +210,66 @@ namespace NMonitoring {
                 , LabelValue(labelValue)
             {
             }
-            auto AsTuple() const { 
-                return std::make_tuple(std::cref(LabelName), std::cref(LabelValue)); 
+            auto AsTuple() const {
+                return std::make_tuple(std::cref(LabelName), std::cref(LabelValue));
             }
-            friend bool operator <(const TChildId& x, const TChildId& y) { 
-                return x.AsTuple() < y.AsTuple(); 
-            } 
-            friend bool operator ==(const TChildId& x, const TChildId& y) { 
-                return x.AsTuple() == y.AsTuple(); 
-            } 
-            friend bool operator !=(const TChildId& x, const TChildId& y) { 
-                return x.AsTuple() != y.AsTuple(); 
-            } 
+            friend bool operator <(const TChildId& x, const TChildId& y) {
+                return x.AsTuple() < y.AsTuple();
+            }
+            friend bool operator ==(const TChildId& x, const TChildId& y) {
+                return x.AsTuple() == y.AsTuple();
+            }
+            friend bool operator !=(const TChildId& x, const TChildId& y) {
+                return x.AsTuple() != y.AsTuple();
+            }
         };
 
-        using TCounters = TMap<TChildId, TCountablePtr>; 
+        using TCounters = TMap<TChildId, TCountablePtr>;
         using TLabels = TVector<TChildId>;
 
         /// XXX: hack for deferred removal of expired counters. Remove once Output* functions are not used for serialization
         mutable TCounters Counters;
-        mutable TAtomic ExpiringCount = 0; 
+        mutable TAtomic ExpiringCount = 0;
 
     public:
         TDynamicCounters(TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
- 
-        TDynamicCounters(const TDynamicCounters *origin) 
-            : LookupCounter(origin->LookupCounter) 
-            , OnLookup(origin->OnLookup) 
-        {} 
- 
+
+        TDynamicCounters(const TDynamicCounters *origin)
+            : LookupCounter(origin->LookupCounter)
+            , OnLookup(origin->OnLookup)
+        {}
+
         ~TDynamicCounters() override;
 
         // This counter allows to track lookups by name within the whole subtree
         void SetLookupCounter(TCounterPtr lookupCounter) {
-            TWriteGuard g(Lock); 
+            TWriteGuard g(Lock);
             LookupCounter = lookupCounter;
         }
 
         void SetOnLookup(TOnLookupPtr onLookup) {
-            TWriteGuard g(Lock); 
+            TWriteGuard g(Lock);
             OnLookup = onLookup;
         }
 
-        TWriteGuard LockForUpdate(const char *method, const TString& name, const TString& value) { 
-            auto res = TWriteGuard(Lock); 
-            if (LookupCounter) { 
-                ++*LookupCounter; 
-            } 
-            if (OnLookup) { 
-                OnLookup(method, name, value); 
-            } 
-            return res; 
-        } 
- 
-        TStackVec<TCounters::value_type, 256> ReadSnapshot() const { 
-            RemoveExpired(); 
-            TReadGuard g(Lock); 
-            TStackVec<TCounters::value_type, 256> items(Counters.begin(), Counters.end()); 
-            return items; 
-        } 
- 
+        TWriteGuard LockForUpdate(const char *method, const TString& name, const TString& value) {
+            auto res = TWriteGuard(Lock);
+            if (LookupCounter) {
+                ++*LookupCounter;
+            }
+            if (OnLookup) {
+                OnLookup(method, name, value);
+            }
+            return res;
+        }
+
+        TStackVec<TCounters::value_type, 256> ReadSnapshot() const {
+            RemoveExpired();
+            TReadGuard g(Lock);
+            TStackVec<TCounters::value_type, 256> items(Counters.begin(), Counters.end());
+            return items;
+        }
+
         TCounterPtr GetCounter(
             const TString& value,
             bool derivative = false,
@@ -354,13 +354,13 @@ namespace NMonitoring {
             ICountableConsumer& consumer) const override;
 
     private:
-        TCounters Resign() { 
-            TCounters counters; 
-            TWriteGuard g(Lock); 
-            Counters.swap(counters); 
-            return counters; 
-        } 
- 
+        TCounters Resign() {
+            TCounters counters;
+            TWriteGuard g(Lock);
+            Counters.swap(counters);
+            return counters;
+        }
+
         void RegisterCountable(const TString& name, const TString& value, TCountablePtr countable);
         void RemoveExpired() const;
 

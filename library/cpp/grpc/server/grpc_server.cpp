@@ -5,16 +5,16 @@
 #include <util/system/thread.h>
 
 #include <grpc++/resource_quota.h>
-#include <contrib/libs/grpc/src/core/lib/iomgr/socket_mutator.h> 
+#include <contrib/libs/grpc/src/core/lib/iomgr/socket_mutator.h>
 
-#if !defined(_WIN32) && !defined(_WIN64) 
- 
-#include <sys/socket.h> 
-#include <netinet/in.h> 
-#include <netinet/tcp.h> 
- 
-#endif 
- 
+#if !defined(_WIN32) && !defined(_WIN64)
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+
+#endif
+
 namespace NGrpc {
 
 using NThreading::TFuture;

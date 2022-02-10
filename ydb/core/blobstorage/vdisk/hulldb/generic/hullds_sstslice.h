@@ -41,18 +41,18 @@ namespace NKikimr {
         // Max number of ssts at Level 0
         const ui32 MaxSstsAtOnce;
         // Context
-        std::shared_ptr<TLevelIndexCtx> Ctx; 
+        std::shared_ptr<TLevelIndexCtx> Ctx;
         TUnorderedLevelSegmentsPtr Segs;
 
         TLevel0(const TLevelIndexSettings &settings,
-                const std::shared_ptr<TLevelIndexCtx> &ctx) 
+                const std::shared_ptr<TLevelIndexCtx> &ctx)
             : MaxSstsAtOnce(settings.GetMaxSstsAtLevel0AtOnce())
             , Ctx(ctx)
             , Segs(MakeIntrusive<TUnorderedLevelSegments>(settings.HullCtx->VCtx))
         {}
 
         TLevel0(const TLevelIndexSettings &settings,
-                const std::shared_ptr<TLevelIndexCtx> &ctx, 
+                const std::shared_ptr<TLevelIndexCtx> &ctx,
                 const NKikimrVDiskData::TLevel0 &pb)
             : MaxSstsAtOnce(settings.GetMaxSstsAtLevel0AtOnce())
             , Ctx(ctx)
@@ -91,7 +91,7 @@ namespace NKikimr {
         }
 
         void OutputHtml(ui32 &index, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const {
-            Segs->OutputHtml(index, str, sum); 
+            Segs->OutputHtml(index, str, sum);
         }
 
         typename TUnorderedLevelSegments::TSstIterator GetSstIterator(ui32 numLimit) const {
@@ -105,10 +105,10 @@ namespace NKikimr {
         TSatisfactionRank GetSatisfactionRank() const {
             return TSatisfactionRank::MkRatio(Segs->CurSstsNum(), MaxSstsAtOnce);
         }
- 
+
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
-            Segs->GetOwnedChunks(chunks); 
-        } 
+            Segs->GetOwnedChunks(chunks);
+        }
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -160,11 +160,11 @@ namespace NKikimr {
         }
 
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
-            Segs->GetOwnedChunks(chunks); 
-        } 
- 
+            Segs->GetOwnedChunks(chunks);
+        }
+
         void OutputHtml(ui32 &index, ui32 level, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const {
-            Segs->OutputHtml(index, level, str, sum); 
+            Segs->OutputHtml(index, level, str, sum);
         }
     };
 
@@ -185,7 +185,7 @@ namespace NKikimr {
 
         TLevel0 Level0;
         TSortedLevels SortedLevels;
-        std::shared_ptr<TLevelIndexCtx> Ctx; 
+        std::shared_ptr<TLevelIndexCtx> Ctx;
 
         // when slice is destroyed we notify CommitterId about this event (i.e. ChunksToDelete are not used anymore)
         TActorSystem * /*const*/ ActorSystem;
@@ -193,14 +193,14 @@ namespace NKikimr {
         // In ChunksToDelete we store chunks that are old and subject for deletion,
         // but previous snapshot can still use them
         TVector<ui32> ChunksToDelete;
-        // Bulk-formed segments description; they contain only these bulk-formed SST references, which are required 
-        // to recover SyncLog in case of failure 
-        TBulkFormedSstInfoSet BulkFormedSegments; 
-        // last calculated total storage ratio for the whole level slice 
-        NHullComp::TSstRatio LastPublishedRatio; 
+        // Bulk-formed segments description; they contain only these bulk-formed SST references, which are required
+        // to recover SyncLog in case of failure
+        TBulkFormedSstInfoSet BulkFormedSegments;
+        // last calculated total storage ratio for the whole level slice
+        NHullComp::TSstRatio LastPublishedRatio;
 
         TLevelSlice(const TLevelIndexSettings &settings,
-                    const std::shared_ptr<TLevelIndexCtx> &ctx) 
+                    const std::shared_ptr<TLevelIndexCtx> &ctx)
             : Level0(settings, ctx)
             , SortedLevels()
             , Ctx(ctx)
@@ -211,7 +211,7 @@ namespace NKikimr {
         {}
 
         TLevelSlice(const TLevelIndexSettings &settings,
-                    const std::shared_ptr<TLevelIndexCtx> &ctx, 
+                    const std::shared_ptr<TLevelIndexCtx> &ctx,
                     const NKikimrVDiskData::TLevelIndex &pb)
             : Level0(settings, ctx, pb.GetLevel0())
             , SortedLevels()
@@ -358,22 +358,22 @@ namespace NKikimr {
         }
 
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
-            // we include deleted chunks 
-            for (TChunkIdx chunkIdx : ChunksToDelete) { 
-                const bool inserted = chunks.insert(chunkIdx).second; 
-                Y_VERIFY(inserted); 
-            } 
- 
-            // include bulk formed segments 
-            BulkFormedSegments.GetOwnedChunks(chunks); 
- 
-            // include levels 
-            Level0.GetOwnedChunks(chunks); 
-            for (const auto& level : SortedLevels) { 
-                level.GetOwnedChunks(chunks); 
-            } 
-        } 
- 
+            // we include deleted chunks
+            for (TChunkIdx chunkIdx : ChunksToDelete) {
+                const bool inserted = chunks.insert(chunkIdx).second;
+                Y_VERIFY(inserted);
+            }
+
+            // include bulk formed segments
+            BulkFormedSegments.GetOwnedChunks(chunks);
+
+            // include levels
+            Level0.GetOwnedChunks(chunks);
+            for (const auto& level : SortedLevels) {
+                level.GetOwnedChunks(chunks);
+            }
+        }
+
         // iterator through sorted levels (doesn't include Level0)
         class TSortedLevelsIter;
         // iterator through ssts (all SortedLevels)
@@ -385,10 +385,10 @@ namespace NKikimr {
         class TBackwardIterator;
     };
 
-    extern template struct TLevelSlice<TKeyLogoBlob, TMemRecLogoBlob>; 
-    extern template struct TLevelSlice<TKeyBarrier, TMemRecBarrier>; 
-    extern template struct TLevelSlice<TKeyBlock, TMemRecBlock>; 
- 
+    extern template struct TLevelSlice<TKeyLogoBlob, TMemRecLogoBlob>;
+    extern template struct TLevelSlice<TKeyBarrier, TMemRecBarrier>;
+    extern template struct TLevelSlice<TKeyBlock, TMemRecBlock>;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TLevelSliceSnapshot
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -416,7 +416,7 @@ namespace NKikimr {
         {}
 
         TLevelSliceSnapshot(const TLevelSliceSnapshot &snap) = default;
-        TLevelSliceSnapshot(TLevelSliceSnapshot &&snap) = default; 
+        TLevelSliceSnapshot(TLevelSliceSnapshot &&snap) = default;
 
         void Destroy() {
             Slice.Drop();
@@ -479,10 +479,10 @@ namespace NKikimr {
         class TBackwardIterator;
     };
 
-    extern template class TLevelSliceSnapshot<TKeyLogoBlob, TMemRecLogoBlob>; 
-    extern template class TLevelSliceSnapshot<TKeyBarrier, TMemRecBarrier>; 
-    extern template class TLevelSliceSnapshot<TKeyBlock, TMemRecBlock>; 
- 
+    extern template class TLevelSliceSnapshot<TKeyLogoBlob, TMemRecLogoBlob>;
+    extern template class TLevelSliceSnapshot<TKeyBarrier, TMemRecBarrier>;
+    extern template class TLevelSliceSnapshot<TKeyBlock, TMemRecBlock>;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TLevelIndexActorCtx
     // Some data that is used by LevelIndexActor

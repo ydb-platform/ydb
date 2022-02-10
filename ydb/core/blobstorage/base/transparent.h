@@ -9,7 +9,7 @@
 
 #include <ydb/core/blobstorage/vdisk/common/memusage.h>
 #include <ydb/core/blobstorage/base/ptr.h>
- 
+
 namespace NKikimr {
 
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -18,7 +18,7 @@ namespace NKikimr {
     class TTransparentMemoryPool {
     public:
         TTransparentMemoryPool(TMemoryConsumer&& consumer, size_t initial, TMemoryPool::IGrowPolicy* growPolicy)
-            : Consumer(std::move(consumer)) 
+            : Consumer(std::move(consumer))
             , MemoryPool(initial, growPolicy)
             , TotalAllocated(0)
         {}
@@ -34,18 +34,18 @@ namespace NKikimr {
 
         void* Allocate(size_t len) noexcept {
             i64 l = static_cast<i64>(len);
-            Consumer.Add(l); 
+            Consumer.Add(l);
             TotalAllocated += l;
             return MemoryPool.Allocate(len);
         }
 
     protected:
-        TMemoryConsumer Consumer; 
+        TMemoryConsumer Consumer;
         TMemoryPool MemoryPool;
         i64 TotalAllocated;
 
         void TrackingFree() {
-            Consumer.Subtract(TotalAllocated); 
+            Consumer.Subtract(TotalAllocated);
             TotalAllocated = 0;
         }
     };

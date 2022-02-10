@@ -59,8 +59,8 @@ public:
         bool ForceRefresh;
     };
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::MINIKQL_COMPILE_SERVICE; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::MINIKQL_COMPILE_SERVICE;
     }
 
     TMiniKQLCompileService(size_t compileInflightLimit, THolder<NYql::IDbSchemeResolver>&& dbSchemeResolver)

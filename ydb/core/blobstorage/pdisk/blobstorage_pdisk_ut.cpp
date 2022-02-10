@@ -24,20 +24,20 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         // Warning!
         // Kikimr Admins use Integer values of EState in their scripts!
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::Initial == 0); 
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialFormatRead == 1); 
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialFormatReadError == 2); 
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialSysLogRead == 3); 
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialSysLogReadError == 4); 
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialSysLogParseError == 5); 
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialCommonLogRead == 6); 
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError == 7); 
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError == 8); 
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::CommonLoggerInitError == 9); 
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::Normal == 10); 
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::OpenFileError == 11); 
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::ChunkQuotaError == 12); 
-        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::DeviceIoError == 13); 
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::Initial == 0);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialFormatRead == 1);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialFormatReadError == 2);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialSysLogRead == 3);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialSysLogReadError == 4);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialSysLogParseError == 5);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialCommonLogRead == 6);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError == 7);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError == 8);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::CommonLoggerInitError == 9);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::Normal == 10);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::OpenFileError == 11);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::ChunkQuotaError == 12);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::DeviceIoError == 13);
     }
 
 struct TActorTestContext {

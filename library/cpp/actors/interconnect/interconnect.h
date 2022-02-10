@@ -1,74 +1,74 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/interconnect.h>
-#include <util/generic/map.h> 
-#include <util/network/address.h> 
- 
-namespace NActors { 
+#include <util/generic/map.h>
+#include <util/network/address.h>
+
+namespace NActors {
     struct TInterconnectGlobalState: public TThrRefBase {
         TString SelfAddress;
         ui32 SelfPort;
- 
+
         TVector<TActorId> GlobalNameservers; // todo: add some info about (like expected reply time)
     };
- 
+
     struct TInterconnectProxySetup: public TThrRefBase {
         // synchronous (session -> proxy)
         struct IProxy : TNonCopyable {
             virtual ~IProxy() {
             }
- 
+
             virtual void ActivateSession(const TActorContext& ctx) = 0; // session activated
             virtual void DetachSession(const TActorContext& ctx) = 0;   // session is dead
         };
- 
+
         // synchronous (proxy -> session)
         struct ISession : TNonCopyable {
             virtual ~ISession() {
             }
- 
+
             virtual void DetachSession(const TActorContext& ownerCtx, const TActorContext& sessionCtx) = 0;                                      // kill yourself
             virtual void ForwardPacket(TAutoPtr<IEventHandle>& ev, const TActorContext& ownerCtx, const TActorContext& sessionCtx) = 0;          // receive packet for forward
             virtual void Connect(const TActorContext& ownerCtx, const TActorContext& sessionCtx) = 0;                                            // begin connection
             virtual bool ReceiveIncomingSession(TAutoPtr<IEventHandle>& ev, const TActorContext& ownerCtx, const TActorContext& sessionCtx) = 0; // handle incoming session, if returns true - then session is dead and must be recreated with new one
         };
- 
+
         ui32 DestinationNode;
- 
+
         TString StaticAddress; // if set - would be used as main destination address
         int StaticPort;
- 
+
         TIntrusivePtr<TInterconnectGlobalState> GlobalState;
- 
+
         virtual IActor* CreateSession(const TActorId& ownerId, IProxy* owner) = 0; // returned actor is session and would be attached to same mailbox as proxy to allow sync calls
         virtual TActorSetupCmd CreateAcceptor() = 0;
     };
- 
+
     struct TNameserverSetup {
         TActorId ServiceID;
- 
+
         TIntrusivePtr<TInterconnectGlobalState> GlobalState;
     };
- 
+
     struct TTableNameserverSetup: public TThrRefBase {
         struct TNodeInfo {
             TString Address;
             TString Host;
             TString ResolveHost;
             ui16 Port;
-            TNodeLocation Location; 
+            TNodeLocation Location;
             TString& first;
             ui16& second;
- 
+
             TNodeInfo()
                 : first(Address)
                 , second(Port)
             {
             }
- 
-            TNodeInfo(const TNodeInfo&) = default; 
- 
+
+            TNodeInfo(const TNodeInfo&) = default;
+
             // for testing purposes only
             TNodeInfo(const TString& address, const TString& host, ui16 port)
                 : TNodeInfo()
@@ -78,12 +78,12 @@ namespace NActors {
                 ResolveHost = host;
                 Port = port;
             }
- 
+
             TNodeInfo(const TString& address,
                       const TString& host,
                       const TString& resolveHost,
                       ui16 port,
-                      const TNodeLocation& location) 
+                      const TNodeLocation& location)
                 : TNodeInfo()
             {
                 Address = address;
@@ -92,7 +92,7 @@ namespace NActors {
                 Port = port;
                 Location = location;
             }
- 
+
             // for testing purposes only
             TNodeInfo& operator=(const std::pair<TString, ui32>& pr) {
                 Address = pr.first;
@@ -101,7 +101,7 @@ namespace NActors {
                 Port = pr.second;
                 return *this;
             }
- 
+
             TNodeInfo& operator=(const TNodeInfo& ni) {
                 Address = ni.Address;
                 Host = ni.Host;
@@ -111,20 +111,20 @@ namespace NActors {
                 return *this;
             }
         };
- 
+
         TMap<ui32, TNodeInfo> StaticNodeTable;
 
         bool IsEntriesUnique() const;
-    }; 
- 
+    };
+
     struct TNodeRegistrarSetup {
         TActorId ServiceID;
- 
+
         TIntrusivePtr<TInterconnectGlobalState> GlobalState;
     };
- 
+
     TActorId GetNameserviceActorId();
- 
+
     /**
      * Const table-lookup based name service
      */
@@ -132,7 +132,7 @@ namespace NActors {
     IActor* CreateNameserverTable(
         const TIntrusivePtr<TTableNameserverSetup>& setup,
         ui32 poolId = 0);
- 
+
     /**
      * Name service which can be paired with external discovery service.
      * Copies information from setup on the start (table may be empty).
@@ -176,4 +176,4 @@ namespace NActors {
         const TString& host, ui16 port,
         const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline);
 
-} 
+}

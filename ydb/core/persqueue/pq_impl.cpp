@@ -86,8 +86,8 @@ static TMaybe<TPartitionKeyRange> GetPartitionKeyRange(const NKikimrPQ::TPQTable
 //megaqc - remove it when LB will be ready
 class TReadProxy : public TActorBootstrapped<TReadProxy> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR;
     }
 
     TReadProxy(const TActorId& sender, const TActorId& tablet, const NKikimrClient::TPersQueueRequest& request)
@@ -199,7 +199,7 @@ private:
 
     const TActorId Sender;
     const TActorId Tablet;
-    NKikimrClient::TPersQueueRequest Request; 
+    NKikimrClient::TPersQueueRequest Request;
     THolder<TEvPersQueue::TEvResponse> Response;
 };
 
@@ -325,8 +325,8 @@ class TBuilderProxy : public TActorBootstrapped<TBuilderProxy<T,T2,T3>> {
     typedef T TEvent;
     typedef typename TEvent::TPtr TTPtr;
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR;
     }
 
     TBuilderProxy(const ui64 tabletId, const TActorId& sender, const ui32 count)
@@ -413,8 +413,8 @@ TActorId CreateStatusProxyActor(const ui64 tabletId, const TActorId& sender, con
 
 class TMonitoringProxy : public TActorBootstrapped<TMonitoringProxy> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::PERSQUEUE_MON_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::PERSQUEUE_MON_ACTOR;
     }
 
     TMonitoringProxy(const TActorId& sender, const TString& query, const TMap<ui32, TActorId>& partitions, const TActorId& cache,
@@ -646,7 +646,7 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
 
 }
 
-void TPersQueue::HandleConfigWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx) 
+void TPersQueue::HandleConfigWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
 {
     if (resp.GetStatus() != NMsgBusProxy::MSTATUS_OK ||
         resp.WriteResultSize() != 1 ||
@@ -666,7 +666,7 @@ void TPersQueue::HandleConfigWriteResponse(const NKikimrClient::TResponse& resp,
         NewConfigShouldBeApplied = true; //when config will be inited with old value new config will be applied
 }
 
-void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx) 
+void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
 {
     bool ok = (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) && (resp.ReadResultSize() == 2) && (resp.HasSetExecutorFastLogPolicyResult()) &&
                     (resp.GetSetExecutorFastLogPolicyResult().GetStatus() == NKikimrProto::OK);
@@ -681,7 +681,7 @@ void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, 
     ReadState(resp.GetReadResult(1), ctx);
 }
 
-void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx) 
+void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx)
 {
     if (read.GetStatus() != NKikimrProto::OK && read.GetStatus() != NKikimrProto::NODATA) {
         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
@@ -759,7 +759,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
 }
 
-void TPersQueue::ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx) 
+void TPersQueue::ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx)
 {
     Y_UNUSED(ctx);
 
@@ -794,7 +794,7 @@ void TPersQueue::ReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::ER
     TabletStateRequests.clear();
 }
 
-void TPersQueue::HandleStateWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx) 
+void TPersQueue::HandleStateWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
 {
     bool ok = (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) &&
             (resp.WriteResultSize() == 1) &&
@@ -1294,7 +1294,7 @@ void TPersQueue::InitResponseBuilder(const ui64 responseCookie, const ui32 count
 }
 
 void TPersQueue::HandleGetMaxSeqNoRequest(const ui64 responseCookie, const TActorId& partActor,
-                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx) 
+                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_VERIFY(req.HasCmdGetMaxSeqNo());
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_MAX_SEQ_NO);
@@ -1308,7 +1308,7 @@ void TPersQueue::HandleGetMaxSeqNoRequest(const ui64 responseCookie, const TActo
 }
 
 void TPersQueue::HandleDeleteSessionRequest(const ui64 responseCookie, const TActorId& partActor,
-                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx) 
+                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_VERIFY(req.HasCmdDeleteSession());
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_DELETE_SESSION);
@@ -1328,7 +1328,7 @@ void TPersQueue::HandleDeleteSessionRequest(const ui64 responseCookie, const TAc
 }
 
 void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TActorId& partActor,
-                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx) 
+                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_VERIFY(req.HasCmdCreateSession());
     const auto& cmd = req.GetCmdCreateSession();
@@ -1354,7 +1354,7 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
 }
 
 void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, const TActorId& partActor,
-                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx) 
+                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_VERIFY(req.HasCmdSetClientOffset());
     const auto& cmd = req.GetCmdSetClientOffset();
@@ -1378,7 +1378,7 @@ void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, const T
 }
 
 void TPersQueue::HandleGetClientOffsetRequest(const ui64 responseCookie, const TActorId& partActor,
-                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx) 
+                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_VERIFY(req.HasCmdGetClientOffset());
     const auto& cmd = req.GetCmdGetClientOffset();
@@ -1403,7 +1403,7 @@ void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, co
 }
 
 void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& partActor,
-                                    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx) 
+                                    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_VERIFY(req.CmdWriteSize());
     FlushMetrics(false, ctx); // To ensure hours' border;
@@ -1564,7 +1564,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
 
 
 void TPersQueue::HandleReserveBytesRequest(const ui64 responseCookie, const TActorId& partActor,
-                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx, 
+                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
                                           const TActorId& pipeClient, const TActorId&)
 {
     Y_VERIFY(req.HasCmdReserveBytes());
@@ -1593,7 +1593,7 @@ void TPersQueue::HandleReserveBytesRequest(const ui64 responseCookie, const TAct
 
 
 void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TActorId& partActor,
-                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx, 
+                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
                                           const TActorId& pipeClient, const TActorId& sender)
 {
     Y_VERIFY(req.HasCmdGetOwnership());
@@ -1621,7 +1621,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TAct
 
 
 void TPersQueue::HandleReadRequest(const ui64 responseCookie, const TActorId& partActor,
-                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx) 
+                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_VERIFY(req.HasCmdRead());
 
@@ -1789,7 +1789,7 @@ void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, const TActo
 
 void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx)
 {
-    NKikimrClient::TPersQueueRequest& request = ev->Get()->Record; 
+    NKikimrClient::TPersQueueRequest& request = ev->Get()->Record;
     TString s = request.HasRequestId() ? request.GetRequestId() : "<none>";
     ui32 p = request.HasPartitionRequest() && request.GetPartitionRequest().HasPartition() ? request.GetPartitionRequest().GetPartition() : 0;
     ui64 m = request.HasPartitionRequest() && request.GetPartitionRequest().HasMessageNo() ? request.GetPartitionRequest().GetMessageNo() : 0;
@@ -2011,7 +2011,7 @@ void TPersQueue::CreatedHook(const TActorContext& ctx)
 void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorContext& ctx)
 {
     Y_VERIFY(ev->Get()->Node);
-    DCId = ev->Get()->Node->Location.GetDataCenterId(); 
+    DCId = ev->Get()->Node->Location.GetDataCenterId();
 
     ResourceMetrics = Executor()->GetResourceMetrics();
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
@@ -2152,7 +2152,7 @@ void TPersQueue::FlushMetrics(bool force, const TActorContext &ctx) {
 
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
-    SetActivityType(NKikimrServices::TActivity::PERSQUEUE_ACTOR); 
+    SetActivityType(NKikimrServices::TActivity::PERSQUEUE_ACTOR);
     TRACE_EVENT(NKikimrServices::PERSQUEUE);
     switch(ev->GetTypeRewrite())
     {

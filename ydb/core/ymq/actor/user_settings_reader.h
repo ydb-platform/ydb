@@ -18,8 +18,8 @@ public:
 
     void Bootstrap();
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::SQS_USER_SETTINGS_READER_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SQS_USER_SETTINGS_READER_ACTOR;
     }
 
 private:

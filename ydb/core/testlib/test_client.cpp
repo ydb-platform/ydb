@@ -385,7 +385,7 @@ namespace Tests {
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = Runtime->GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
 
-        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>(); 
+        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
 
         NKikimrBlobStorage::TDefineBox boxConfig;
         boxConfig.SetBoxId(Settings->BOX_ID);
@@ -943,7 +943,7 @@ namespace Tests {
 
         TAutoPtr<NBus::TBusMessage> reply;
         UNIT_ASSERT_VALUES_EQUAL(SyncCall(request, reply), NBus::MESSAGE_OK);
-        const NKikimrClient::TTypeMetadataResponse &response = static_cast<NMsgBusProxy::TBusTypesResponse*>(reply.Get())->Record; 
+        const NKikimrClient::TTypeMetadataResponse &response = static_cast<NMsgBusProxy::TBusTypesResponse*>(reply.Get())->Record;
         UNIT_ASSERT_VALUES_EQUAL((ui32)NMsgBusProxy::MSTATUS_OK, response.GetStatus());
         if (!response.HasETag()) {
             UNIT_ASSERT(TypesEtag.Defined());
@@ -1039,7 +1039,7 @@ namespace Tests {
     }
 
 
-    void TClient::ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path) { 
+    void TClient::ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path) {
         TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest());
         request->Record.SetCommand(command);
         if (path)
@@ -1050,13 +1050,13 @@ namespace Tests {
 
     TString TClient::StartTrace(const TString &path) {
         TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest());
-        request->Record.SetCommand(NKikimrClient::TMessageBusTraceRequest::START); 
+        request->Record.SetCommand(NKikimrClient::TMessageBusTraceRequest::START);
         if (path)
             request->Record.SetPath(path);
         TAutoPtr<NBus::TBusMessage> reply;
         UNIT_ASSERT_VALUES_EQUAL(SyncCall(request, reply), NBus::MESSAGE_OK);
         if (reply.Get()->GetHeader()->Type == NMsgBusProxy::MTYPE_CLIENT_MESSAGE_BUS_TRACE_STATUS) {
-            const NKikimrClient::TMessageBusTraceStatus &response = static_cast<NMsgBusProxy::TBusMessageBusTraceStatus *>(reply.Get())->Record; 
+            const NKikimrClient::TMessageBusTraceStatus &response = static_cast<NMsgBusProxy::TBusMessageBusTraceStatus *>(reply.Get())->Record;
             return response.GetPath();
         } else {
             ythrow yexception() << "MessageBus trace not enabled on the server (see mbus/--trace-path option)";
@@ -1065,7 +1065,7 @@ namespace Tests {
 
     void TClient::StopTrace() {
         TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest());
-        request->Record.SetCommand(NKikimrClient::TMessageBusTraceRequest::STOP); 
+        request->Record.SetCommand(NKikimrClient::TMessageBusTraceRequest::STOP);
         TAutoPtr<NBus::TBusMessage> reply;
         UNIT_ASSERT_VALUES_EQUAL(SyncCall(request, reply), NBus::MESSAGE_OK);
     }
@@ -1079,7 +1079,7 @@ namespace Tests {
         NBus::EMessageStatus status;
         const NKikimrClient::TResponse* response = nullptr;
         do {
-            TAutoPtr<NMsgBusProxy::TBusSchemeOperationStatus> msg = new NMsgBusProxy::TBusSchemeOperationStatus(); 
+            TAutoPtr<NMsgBusProxy::TBusSchemeOperationStatus> msg = new NMsgBusProxy::TBusSchemeOperationStatus();
             msg->Record.MutableFlatTxId()->SetTxId(txId);
             msg->Record.MutableFlatTxId()->SetSchemeShardTabletId(schemeshard);
             msg->Record.MutableFlatTxId()->SetPathId(pathId);
@@ -1130,7 +1130,7 @@ namespace Tests {
     }
 
     NMsgBusProxy::EResponseStatus TClient::MkDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
-        NMsgBusProxy::TBusSchemeOperation* request(new NMsgBusProxy::TBusSchemeOperation()); 
+        NMsgBusProxy::TBusSchemeOperation* request(new NMsgBusProxy::TBusSchemeOperation());
         auto* mkDirTx = request->Record.MutableTransaction()->MutableModifyScheme();
         mkDirTx->SetWorkingDir(parent);
         mkDirTx->SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
@@ -1142,7 +1142,7 @@ namespace Tests {
         Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
 #endif
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
@@ -1321,7 +1321,7 @@ namespace Tests {
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         op->SetWorkingDir(parent);
@@ -1329,7 +1329,7 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
@@ -1496,7 +1496,7 @@ namespace Tests {
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& alter, const TString& userToken) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
         op->SetWorkingDir(parent);
@@ -1531,7 +1531,7 @@ namespace Tests {
     }
 
     NMsgBusProxy::EResponseStatus TClient::StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpBackup);
         op->SetWorkingDir(parent);
@@ -1539,12 +1539,12 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
     NMsgBusProxy::EResponseStatus TClient::DeleteTable(const TString& parent, const TString& name) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
         op->SetWorkingDir(parent);
@@ -1552,7 +1552,7 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
@@ -1570,7 +1570,7 @@ namespace Tests {
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::TryDropPersQueueGroup(const TString& parent, const TString& name) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto * op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
         op->SetWorkingDir(parent);
@@ -1608,7 +1608,7 @@ namespace Tests {
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::LsImpl(const TString& path) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe()); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe());
         request->Record.SetPath(path);
         request->Record.MutableOptions()->SetShowPrivateTable(true);
         TAutoPtr<NBus::TBusMessage> reply;
@@ -1686,7 +1686,7 @@ namespace Tests {
     }
 
     void TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
         op->SetWorkingDir(parent);
@@ -1821,7 +1821,7 @@ namespace Tests {
         auto status = SyncCall(request, reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
 
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
 
         if (response.HasExecutionEngineEvaluatedResponse())
@@ -1842,7 +1842,7 @@ namespace Tests {
         auto status = SyncCall(request, reply);
         UNIT_ASSERT_EQUAL(status, NBus::MESSAGE_OK);
 
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         UNIT_ASSERT_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
 
         err = response.GetErrorReason();
@@ -1869,7 +1869,7 @@ namespace Tests {
         NBus::EMessageStatus msgStatus = SyncCall(request, reply);
         UNIT_ASSERT_EQUAL(msgStatus, NBus::MESSAGE_OK);
 
-        const NKikimrClient::TResponse &response = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        const NKikimrClient::TResponse &response = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         if (!response.HasMiniKQLCompileResults())
             return false;
 
@@ -1888,7 +1888,7 @@ namespace Tests {
         return true;
     }
 
-    ui32 TClient::FlatQueryRaw(const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt) { 
+    ui32 TClient::FlatQueryRaw(const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt) {
         while (retryCnt--) {
             TAutoPtr<NMsgBusProxy::TBusRequest> request = new NMsgBusProxy::TBusRequest();
             {
@@ -1925,7 +1925,7 @@ namespace Tests {
     }
 
     bool TClient::FlatQuery(const TString &query, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult &result, const NKikimrClient::TResponse& expectedResponse) {
-        NKikimrClient::TResponse response; 
+        NKikimrClient::TResponse response;
         FlatQueryRaw(query, opts, response);
 
         if (!response.GetDataShardErrors().empty()) {

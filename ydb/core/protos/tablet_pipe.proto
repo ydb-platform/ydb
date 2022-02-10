@@ -28,7 +28,7 @@ message TEvPush {
     optional NActorsProto.TActorId Sender = 3;
     optional bytes Buffer = 4;
     optional uint64 Cookie = 5;
-    optional bool ExtendedFormat = 6; 
+    optional bool ExtendedFormat = 6;
     optional uint64 SeqNo = 7;
 };
 

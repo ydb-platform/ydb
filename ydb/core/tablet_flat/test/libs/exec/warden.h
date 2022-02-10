@@ -28,7 +28,7 @@ namespace NFake {
         using ELnLev = NUtil::ELnLev;
 
         TWarden(ui32 groups)
-            : ::NActors::IActor(static_cast<TReceiveFunc>(&TWarden::Inbox), NKikimrServices::TActivity::FAKE_ENV_A) 
+            : ::NActors::IActor(static_cast<TReceiveFunc>(&TWarden::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
         {
              Y_VERIFY(groups < State.size(), "Too many groups requested");
 

@@ -128,11 +128,11 @@ namespace NKikimr {
                 CurKey = curKey;
             }
 
-            void AddFromFresh(const TMemRec& memRec, const TRope* /*data*/, const TKey& key, ui64 /*lsn*/) { 
+            void AddFromFresh(const TMemRec& memRec, const TRope* /*data*/, const TKey& key, ui64 /*lsn*/) {
                 Y_VERIFY(key == CurKey);
                 if (!Constraint || Constraint->Check(CurKey)) {
                     auto mr = memRec.ToString(HullCtx->IngressCache.Get(), nullptr);
-                    auto ing = IngressToString(HullCtx->VCtx->Top.get(), HullCtx->VCtx->ShortSelfVDisk, CurKey, memRec); 
+                    auto ing = IngressToString(HullCtx->VCtx->Top.get(), HullCtx->VCtx->ShortSelfVDisk, CurKey, memRec);
                     Str << Prefix
                         << Marker
                         << " Key: " << CurKey.ToString()
@@ -155,58 +155,58 @@ namespace NKikimr {
 
         void DumpFreshSegment(TCountingOutput &str,
                               TMaybe<typename TFreshSegmentSnapshot::TForwardIterator>& it,
-                              const char *marker) { 
-            if (!it) { 
+                              const char *marker) {
+            if (!it) {
                 return;
-            } 
+            }
 
             TDumpRecordMerger merger(str, marker, HullCtx, Prefix, Constraint);
-            while (it->Valid()) { 
+            while (it->Valid()) {
                 // check limit
                 if (str.Counter() >= LimitInBytes) {
                     return;
                 }
-                merger.SetCurKey(it->GetCurKey()); 
-                it->PutToMerger(&merger); 
+                merger.SetCurKey(it->GetCurKey());
+                it->PutToMerger(&merger);
                 merger.Finish();
                 merger.Clear();
-                it->Next(); 
+                it->Next();
             }
-            it.Clear(); 
+            it.Clear();
         }
 
-        void DumpFresh(TCountingOutput &str) { 
-            DumpFreshSegment(str, FCurIt, "FCur"); 
-            DumpFreshSegment(str, FDregIt, "FDreg"); 
-            DumpFreshSegment(str, FOldIt, "FOld"); 
+        void DumpFresh(TCountingOutput &str) {
+            DumpFreshSegment(str, FCurIt, "FCur");
+            DumpFreshSegment(str, FDregIt, "FDreg");
+            DumpFreshSegment(str, FOldIt, "FOld");
         }
 
-        // move SstIt/MemIt to next valid item; on exit either SstIt and MemIt are valid, nor SstIt is not valid 
-        void AdjustMemIt() { 
-            while (SstIt->Valid()) { 
-                TLevelSstPtr p = SstIt->Get(); 
-                MemIt = TMemIterator(p.SstPtr.Get()); 
-                MemIt->SeekToFirst(); 
-                if (MemIt->Valid()) { 
-                    break; 
-                } else { 
-                    SstIt->Next(); 
-                } 
-            } 
-        } 
- 
-        void DumpLevels(TCountingOutput &str) { 
-            while (SstIt->Valid()) { 
-                const auto& p = SstIt->Get(); 
-                while (MemIt->Valid()) { 
+        // move SstIt/MemIt to next valid item; on exit either SstIt and MemIt are valid, nor SstIt is not valid
+        void AdjustMemIt() {
+            while (SstIt->Valid()) {
+                TLevelSstPtr p = SstIt->Get();
+                MemIt = TMemIterator(p.SstPtr.Get());
+                MemIt->SeekToFirst();
+                if (MemIt->Valid()) {
+                    break;
+                } else {
+                    SstIt->Next();
+                }
+            }
+        }
+
+        void DumpLevels(TCountingOutput &str) {
+            while (SstIt->Valid()) {
+                const auto& p = SstIt->Get();
+                while (MemIt->Valid()) {
                     // check limit
                     if (str.Counter() >= LimitInBytes) {
                         return;
                     }
-                    const auto& c = *MemIt; 
+                    const auto& c = *MemIt;
                     if (!Constraint || Constraint->Check(c->Key)) {
                         auto mr = c->MemRec.ToString(HullCtx->IngressCache.Get(), c.GetSstPtr()->GetOutbound());
-                        auto ing = IngressToString(HullCtx->VCtx->Top.get(), HullCtx->VCtx->ShortSelfVDisk, 
+                        auto ing = IngressToString(HullCtx->VCtx->Top.get(), HullCtx->VCtx->ShortSelfVDisk,
                                 c->Key, c->MemRec);
                         str << Prefix
                             << "L: " << p.Level
@@ -216,10 +216,10 @@ namespace NKikimr {
                             << " MemRec: " << mr
                             << "\n";
                     }
-                    MemIt->Next(); 
+                    MemIt->Next();
                 }
-                SstIt->Next(); 
-                AdjustMemIt(); 
+                SstIt->Next();
+                AdjustMemIt();
             }
         }
 
@@ -246,7 +246,7 @@ namespace NKikimr {
             , LimitInBytes(limitInBytes)
             , Prefix(prefix)
             , Constraint(constraint)
-        { 
+        {
             FCurIt.ConstructInPlace(HullCtx, &Snapshot.FreshSnap.Cur);
             FCurIt->SeekToFirst();
             FDregIt.ConstructInPlace(HullCtx, &Snapshot.FreshSnap.Dreg);
@@ -254,10 +254,10 @@ namespace NKikimr {
             FOldIt.ConstructInPlace(HullCtx, &Snapshot.FreshSnap.Old);
             FOldIt->SeekToFirst();
 
-            SstIt.ConstructInPlace(&Snapshot.SliceSnap); 
-            SstIt->SeekToFirst(); 
-            AdjustMemIt(); 
-        } 
+            SstIt.ConstructInPlace(&Snapshot.SliceSnap);
+            SstIt->SeekToFirst();
+            AdjustMemIt();
+        }
 
         enum class EDumpRes {
             OK = 0,
@@ -274,10 +274,10 @@ namespace NKikimr {
             return (countedStr.Counter() >= LimitInBytes) ? EDumpRes::Limited : EDumpRes::OK;
         }
 
-        bool Done() const { 
-            return !FCurIt && !FDregIt && !FOldIt && !SstIt->Valid(); 
-        } 
- 
+        bool Done() const {
+            return !FCurIt && !FDregIt && !FOldIt && !SstIt->Valid();
+        }
+
     private:
         TIntrusivePtr<THullCtx> HullCtx;
         TLevelIndexSnapshot Snapshot;
@@ -287,11 +287,11 @@ namespace NKikimr {
         const TString Prefix;
         // We may dump using this constraint (only specific tabletId and channel)
         const TMaybe<TConstraint> Constraint;
- 
-        // Reentrant state 
+
+        // Reentrant state
         TMaybe<typename TFreshSegmentSnapshot::TForwardIterator> FCurIt, FDregIt, FOldIt;
-        TMaybe<TSstIterator> SstIt; 
-        TMaybe<TMemIterator> MemIt; 
+        TMaybe<TSstIterator> SstIt;
+        TMaybe<TMemIterator> MemIt;
     };
 
     template <>

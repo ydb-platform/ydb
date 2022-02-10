@@ -54,7 +54,7 @@ public:
         TAutoPtr<NBus::TBusBufferBase> response(static_cast<NBus::TBusBufferBase*>(pRep));
         IOutputStream& out(Request.Output());
         if (response->GetHeader()->Type == MTYPE_CLIENT_RESPONSE) {
-            NKikimrClient::TResponse* pbResponse(static_cast<NKikimrClient::TResponse*>(response->GetRecord())); 
+            NKikimrClient::TResponse* pbResponse(static_cast<NKikimrClient::TResponse*>(response->GetRecord()));
             NMsgBusProxy::EResponseStatus status = static_cast<NMsgBusProxy::EResponseStatus>(pbResponse->GetStatus());
             switch (status) {
             case MSTATUS_OK:
@@ -85,7 +85,7 @@ public:
             HttpServer->Status200->Inc();
         }
         if (response->GetRecord()->GetDescriptor()->name() == "TJSON") {
-            NKikimrClient::TJSON* json(static_cast<NKikimrClient::TJSON*>(response->GetRecord())); 
+            NKikimrClient::TJSON* json(static_cast<NKikimrClient::TJSON*>(response->GetRecord()));
             const auto& jsonString(json->GetJSON());
             out << jsonString;
             *HttpServer->OutboundSize += jsonString.size();
@@ -180,7 +180,7 @@ void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) {
             *InboundSize += postContent.size();
             const ::google::protobuf::Descriptor* msgDescriptor = message->GetRecord()->GetDescriptor();
             if (msgDescriptor->name() == "TJSON") {
-                NKikimrClient::TJSON* json(static_cast<NKikimrClient::TJSON*>(message->GetRecord())); 
+                NKikimrClient::TJSON* json(static_cast<NKikimrClient::TJSON*>(message->GetRecord()));
                 json->SetJSON(TString(postContent));
             } else {
                 static NJson::TJsonReaderConfig readerConfig;

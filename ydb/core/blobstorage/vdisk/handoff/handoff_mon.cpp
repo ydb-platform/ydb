@@ -88,11 +88,11 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc, 
-            HFunc(TEvHandoffProxyMonResult, Handle) 
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup) 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-        ) 
+        STRICT_STFUNC(StateFunc,
+            HFunc(TEvHandoffProxyMonResult, Handle)
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+        )
 
         // outputs state in HTML
         struct TPrinter {
@@ -110,13 +110,13 @@ namespace NKikimr {
         };
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_HANDOFF_MON_REQUEST; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_HANDOFF_MON_REQUEST;
         }
 
         THandoffMonRequestActor(const TActorId &parentId,
                                 const TVDiskID &selfVDisk,
-                                const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top, 
+                                const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                 TProxiesPtr proxiesPtr,
                                 NMon::TEvHttpInfo::TPtr &ev)
             : TActorBootstrapped<THandoffMonRequestActor>()
@@ -134,14 +134,14 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class THandoffMonActor : public TActor<THandoffMonActor> {
         const TVDiskID SelfVDisk;
-        const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top; 
+        const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
         TProxiesPtr ProxiesPtr;
         TActiveActors ActiveActors;
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
             Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::HandoffMonId);
-            auto actor = std::make_unique<THandoffMonRequestActor>(ctx.SelfID, SelfVDisk, Top, ProxiesPtr, ev); 
-            auto aid = ctx.Register(actor.release()); 
+            auto actor = std::make_unique<THandoffMonRequestActor>(ctx.SelfID, SelfVDisk, Top, ProxiesPtr, ev);
+            auto aid = ctx.Register(actor.release());
             ActiveActors.Insert(aid);
         }
 
@@ -156,19 +156,19 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc, 
-            HFunc(NMon::TEvHttpInfo, Handle) 
-            HFunc(TEvents::TEvActorDied, Handle) 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-        ) 
+        STRICT_STFUNC(StateFunc,
+            HFunc(NMon::TEvHttpInfo, Handle)
+            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+        )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_HANDOFF_MON; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_HANDOFF_MON;
         }
 
         THandoffMonActor(const TVDiskID &selfVDisk,
-                std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
+                std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                 TProxiesPtr proxiesPtr)
             : TActor<THandoffMonActor>(&TThis::StateFunc)
             , SelfVDisk(selfVDisk)
@@ -178,7 +178,7 @@ namespace NKikimr {
     };
 
     IActor *CreateHandoffMonActor(const TVDiskID &selfVDisk,
-            std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
+            std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
             TProxiesPtr proxiesPtr) {
         return new THandoffMonActor(selfVDisk, top, proxiesPtr);
     }

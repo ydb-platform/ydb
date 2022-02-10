@@ -8,7 +8,7 @@
 #include <library/cpp/actors/core/mailbox.h>
 #include <library/cpp/actors/util/should_continue.h>
 #include <library/cpp/actors/interconnect/poller_tcp.h>
-#include <library/cpp/actors/interconnect/mock/ic_mock.h> 
+#include <library/cpp/actors/interconnect/mock/ic_mock.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -467,10 +467,10 @@ namespace NActors {
         const TVector<ui64>& GetTxAllocatorTabletIds() const { return TxAllocatorTabletIds; }
         void SetTxAllocatorTabletIds(const TVector<ui64>& ids) { TxAllocatorTabletIds = ids; }
 
-        void SetUseRealInterconnect() { 
-            UseRealInterconnect = true; 
-        } 
- 
+        void SetUseRealInterconnect() {
+            UseRealInterconnect = true;
+        }
+
     protected:
         struct TNodeDataBase;
         TNodeDataBase* GetRawNode(ui32 node) const {
@@ -508,8 +508,8 @@ namespace NActors {
         const TThread::TId MainThreadId;
 
     protected:
-        bool UseRealInterconnect = false; 
-        TInterconnectMock InterconnectMock; 
+        bool UseRealInterconnect = false;
+        TInterconnectMock InterconnectMock;
         bool IsInitialized = false;
         bool SingleSysEnv = false;
         const TString ClusterUUID;

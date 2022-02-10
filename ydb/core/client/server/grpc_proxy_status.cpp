@@ -37,13 +37,13 @@ class TChooseProxyActorImpl : public TActorBootstrapped<TChooseProxyActorImpl> {
     THolder<NMsgBusProxy::TBusChooseProxy> Request;
     TVector<ui32> Nodes;
     THashMap<ui32, TString> NodeNames;
-    THashMap<ui32, TString> NodeDataCenter; 
+    THashMap<ui32, TString> NodeDataCenter;
     THashMap<ui32, std::shared_ptr<TEvGRpcProxyStatus::TEvGetStatusResponse>> PerNodeResponse;
 
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::FRONT_CHOOSE_RROXY; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::FRONT_CHOOSE_RROXY;
     }
 
     //
@@ -101,7 +101,7 @@ public:
         Nodes.reserve(nodesInfo->Nodes.size());
         for (const auto& ni : nodesInfo->Nodes) {
             NodeNames[ni.NodeId] = ni.Host;
-            NodeDataCenter[ni.NodeId] = ni.Location.GetDataCenterId(); 
+            NodeDataCenter[ni.NodeId] = ni.Location.GetDataCenterId();
             SendRequest(ni.NodeId, ctx);
             ++NodesRequested;
         }
@@ -164,8 +164,8 @@ public:
 ////////////////////////////////////////////
 class TGRpcProxyStatusActor : public TActorBootstrapped<TGRpcProxyStatusActor> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::FRONT_GRPC_PROXY_STATUS; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::FRONT_GRPC_PROXY_STATUS;
     }
 
     //
@@ -321,13 +321,13 @@ class TChooseProxyActor : public TActorBootstrapped<TChooseProxyActor>, public N
     using TBase = TActorBootstrapped<TChooseProxyActor>;
     THolder<NMsgBusProxy::TBusChooseProxy> Request;
     THashMap<ui32, TString> NodeNames;
-    THashMap<ui32, TString> NodeDataCenter; 
+    THashMap<ui32, TString> NodeDataCenter;
     THashMap<ui32, std::shared_ptr<TEvGRpcProxyStatus::TEvGetStatusResponse>> PerNodeResponse;
 
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::FRONT_CHOOSE_RROXY; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::FRONT_CHOOSE_RROXY;
     }
 
     //
@@ -370,9 +370,9 @@ public:
         TString name;
         ui64 totalWeight = 0;
         ui64 cookie = 0;
-        const auto& record = Request->Record; 
-        const std::optional<TString> filterDataCenter = record.HasDataCenter() ? std::make_optional(record.GetDataCenter()) : 
-            record.HasDataCenterNum() ? std::make_optional(DataCenterToString(record.GetDataCenterNum())) : std::nullopt; 
+        const auto& record = Request->Record;
+        const std::optional<TString> filterDataCenter = record.HasDataCenter() ? std::make_optional(record.GetDataCenter()) :
+            record.HasDataCenterNum() ? std::make_optional(DataCenterToString(record.GetDataCenterNum())) : std::nullopt;
         const bool preferLocalProxy = Request->Record.GetPreferLocalProxy();
         const ui32 localNodeId = ctx.SelfID.NodeId();
         //choose random proxy
@@ -382,7 +382,7 @@ public:
             if (!resp.second)
                 continue;
             s << " " << NodeNames[resp.first] << "[" << resp.first << "], " << resp.second->Record.GetWeight() << " ";
-            if (filterDataCenter && filterDataCenter != NodeDataCenter[resp.first]) 
+            if (filterDataCenter && filterDataCenter != NodeDataCenter[resp.first])
                 continue;
 
             ui64 weight = resp.second->Record.GetWeight();

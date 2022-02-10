@@ -42,8 +42,8 @@ class TMessageBusServerRequest : public TMessageBusSecureRequest<TMessageBusServ
     bool AllRequestsCompletedReadTable(const TActorContext& ctx);
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::FRONT_MKQL_REQUEST; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::FRONT_MKQL_REQUEST;
     }
 
     TMessageBusServerRequest(TEvBusProxy::TEvRequest* msg)
@@ -82,7 +82,7 @@ public:
         if (Request->Record.HasExecTimeoutPeriod())
             record.SetExecTimeoutPeriod(Request->Record.GetExecTimeoutPeriod());
         else {
-            ui64 msgBusTimeout = GetTotalTimeout() * 3 / 4; 
+            ui64 msgBusTimeout = GetTotalTimeout() * 3 / 4;
             if (msgBusTimeout > 3600000) // when we see something weird - rewrite with somewhat meaningful
                 msgBusTimeout = 1800000;
             record.SetExecTimeoutPeriod(msgBusTimeout);

@@ -15,8 +15,8 @@ TNodeInfo::TNodeInfo(TNodeId nodeId, THive& hive)
     , ResourceTotalValues()
     , ResourceMaximumValues(GetResourceInitialMaximumValues())
     , StartTime(TInstant::MicroSeconds(0))
-    , Location() 
-    , LocationAcquired(false) 
+    , Location()
+    , LocationAcquired(false)
 {}
 
 void TNodeInfo::ChangeVolatileState(EVolatileState state) {
@@ -99,7 +99,7 @@ bool TNodeInfo::IsAllowedToRunTablet(TTabletDebugState* debugState) const {
         return false;
     }
 
-    if (!LocationAcquired) { 
+    if (!LocationAcquired) {
         if (debugState) {
             debugState->NodesWithoutLocation++;
         }
@@ -200,9 +200,9 @@ bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* 
             ui32 maxFollowersPerDataCenter = (followerGroup.GetComputedFollowerCount(Hive.GetDataCenters()) + dataCenters - 1) / dataCenters; // ceil
             ui32 existingFollowers;
             if (tablet.IsAlive()) {
-                existingFollowers = leader.GetFollowersAliveOnDataCenterExcludingFollower(Location.GetDataCenterId(), tablet); 
+                existingFollowers = leader.GetFollowersAliveOnDataCenterExcludingFollower(Location.GetDataCenterId(), tablet);
             } else {
-                existingFollowers = leader.GetFollowersAliveOnDataCenter(Location.GetDataCenterId()); 
+                existingFollowers = leader.GetFollowersAliveOnDataCenter(Location.GetDataCenterId());
             }
             if (maxFollowersPerDataCenter <= existingFollowers) {
                 if (debugState) {

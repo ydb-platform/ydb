@@ -44,8 +44,8 @@ SRCS(
     test_simplebs.h
     test_synclog.cpp
     test_synclog.h
-    vdisk_mock.cpp 
-    vdisk_mock.h 
+    vdisk_mock.cpp
+    vdisk_mock.h
 )
 
 PEERDIR(

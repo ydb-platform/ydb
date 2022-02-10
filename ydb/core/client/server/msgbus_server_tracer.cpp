@@ -25,9 +25,9 @@ void TMessageBusTracingServer::OnMessage(NBus::TOnMessageContext &msg) {
     if (msgCtx.GetMessage()->GetHeader()->Type == NMsgBusProxy::MTYPE_CLIENT_MESSAGE_BUS_TRACE) {
         const auto &record = static_cast<NMsgBusProxy::TBusMessageBusTraceRequest*>(msgCtx.GetMessage())->Record;
         if (record.HasCommand()) {
-            const NKikimrClient::TMessageBusTraceRequest::ECommand command = record.GetCommand(); 
+            const NKikimrClient::TMessageBusTraceRequest::ECommand command = record.GetCommand();
             switch (command) {
-            case NKikimrClient::TMessageBusTraceRequest::START: 
+            case NKikimrClient::TMessageBusTraceRequest::START:
                 if (record.HasPath()) {
                     TFsPath basePath = TracePath;
                     TFsPath path = record.GetPath();
@@ -42,7 +42,7 @@ void TMessageBusTracingServer::OnMessage(NBus::TOnMessageContext &msg) {
                     }
                 }
                 break;
-            case NKikimrClient::TMessageBusTraceRequest::STOP: 
+            case NKikimrClient::TMessageBusTraceRequest::STOP:
                 if (IActor *x = CreateMessageBusTracerStopTrace(msgCtx)) {
                     TraceActive = false;
                     ActorSystem->Register(x);
@@ -152,10 +152,10 @@ namespace {
 }
 
 template <typename TDerived>
-class TMessageBusTraceSimpleActor : public NMsgBusProxy::TMessageBusLocalServiceRequest<TDerived, NKikimrServices::TActivity::MSGBUS_TRACER_ACTOR> { 
+class TMessageBusTraceSimpleActor : public NMsgBusProxy::TMessageBusLocalServiceRequest<TDerived, NKikimrServices::TActivity::MSGBUS_TRACER_ACTOR> {
 public:
     TMessageBusTraceSimpleActor(NMsgBusProxy::TBusMessageContext &msg)
-        : NMsgBusProxy::TMessageBusLocalServiceRequest<TDerived, NKikimrServices::TActivity::MSGBUS_TRACER_ACTOR>(msg, TDuration::MilliSeconds(DefaultTimeout)) 
+        : NMsgBusProxy::TMessageBusLocalServiceRequest<TDerived, NKikimrServices::TActivity::MSGBUS_TRACER_ACTOR>(msg, TDuration::MilliSeconds(DefaultTimeout))
     {}
 
     void Handle(TEvMessageBusTracer::TEvTraceStatus::TPtr &ev, const TActorContext &ctx) {

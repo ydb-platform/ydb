@@ -8,11 +8,11 @@
 #include <library/cpp/grpc/server/grpc_async_ctx_base.h>
 
 #include <library/cpp/json/json_writer.h>
- 
+
 #include <util/string/join.h>
 
 #include <google/protobuf/text_format.h>
- 
+
 #include <grpc++/resource_quota.h>
 #include <grpc++/security/server_credentials.h>
 #include <grpc++/server_builder.h>
@@ -26,10 +26,10 @@ using grpc::ServerAsyncWriter;
 using grpc::Status;
 using grpc::StatusCode;
 using grpc::ServerCompletionQueue;
-using grpc::CompletionQueue; 
+using grpc::CompletionQueue;
 
-using NKikimrClient::TResponse; 
-using NKikimrClient::TPersQueueRequest; 
+using NKikimrClient::TResponse;
+using NKikimrClient::TPersQueueRequest;
 
 using NGrpc::IQueueEvent;
 
@@ -42,34 +42,34 @@ namespace {
 
 using TGrpcBaseAsyncContext = NGrpc::TBaseAsyncContext<NGRpcProxy::TGRpcService>;
 
-template <typename TIn, typename TOut = TResponse> 
+template <typename TIn, typename TOut = TResponse>
 class TSimpleRequest
     : public IQueueEvent
     , public TGrpcBaseAsyncContext
     , public IRequestContext
 {
-    using TOnRequest = std::function<void (IRequestContext* ctx)>; 
+    using TOnRequest = std::function<void (IRequestContext* ctx)>;
 
-    using TRequestCallback = void (NKikimrClient::TGRpcServer::AsyncService::*)(ServerContext*, TIn*, 
-        ServerAsyncResponseWriter<TOut>*, CompletionQueue*, ServerCompletionQueue*, void*); 
- 
+    using TRequestCallback = void (NKikimrClient::TGRpcServer::AsyncService::*)(ServerContext*, TIn*,
+        ServerAsyncResponseWriter<TOut>*, CompletionQueue*, ServerCompletionQueue*, void*);
+
 public:
 
     TSimpleRequest(TGRpcService* server,
-                   NKikimrClient::TGRpcServer::AsyncService* service, 
+                   NKikimrClient::TGRpcServer::AsyncService* service,
                    ServerCompletionQueue* cq,
-                   TOnRequest cb, 
-                   TRequestCallback requestCallback, 
-                   TActorSystem& as, 
-                   const char* name, 
+                   TOnRequest cb,
+                   TRequestCallback requestCallback,
+                   TActorSystem& as,
+                   const char* name,
                    NGrpc::ICounterBlockPtr counters)
         : TGrpcBaseAsyncContext(service, cq)
         , Server(server)
         , Cb(cb)
         , RequestCallback(requestCallback)
-        , ActorSystem(as) 
-        , Name(name) 
-        , Counters(std::move(counters)) 
+        , ActorSystem(as)
+        , Name(name)
+        , Counters(std::move(counters))
         , Writer(new ServerAsyncResponseWriter<TOut>(&Context))
         , StateFunc(&TSimpleRequest::RequestDone)
         , RequestSize(0)
@@ -77,10 +77,10 @@ public:
         , ResponseStatus(0)
         , InProgress_(false)
     {
-        LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] created request Name# %s", this, Name); 
+        LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] created request Name# %s", this, Name);
     }
 
-    ~TSimpleRequest() { 
+    ~TSimpleRequest() {
         if (InProgress_) {
             //If we are ShuttingDown probably ActorSystem unable to recieve new events
             if (!Server->IsShuttingDown()) {
@@ -89,9 +89,9 @@ public:
             Counters->FinishProcessing(RequestSize, ResponseSize, false, ResponseStatus,
                 TDuration::Seconds(RequestTimer.Passed()));
             Server->DecRequest();
-        } 
-    } 
- 
+        }
+    }
+
     void Start() {
         if (auto guard = Server->ProtectShutdown()) {
             (Service->*RequestCallback)(&Context, &Request, Writer.Get(), CQ, CQ, GetGRpcTag());
@@ -102,14 +102,14 @@ public:
     }
 
 public:
-    //! Start another instance of request to grab next incoming query (only when the server is not shutting down) 
-    void Clone() { 
-        if (!Server->IsShuttingDown()) { 
+    //! Start another instance of request to grab next incoming query (only when the server is not shutting down)
+    void Clone() {
+        if (!Server->IsShuttingDown()) {
             if (RequestCallback)
                 (new TSimpleRequest(Server, Service, CQ, Cb, RequestCallback, ActorSystem, Name, Counters))->Start();
-        } 
-    } 
- 
+        }
+    }
+
     bool Execute(bool ok) override {
         return (this->*StateFunc)(ok);
     }
@@ -122,37 +122,37 @@ public:
         delete this;
     }
 
-public: 
+public:
     //! Get pointer to the request's message.
     const NProtoBuf::Message* GetRequest() const override {
         return &Request;
     }
 
     //! Send reply.
-    void Reply(const NKikimrClient::TResponse& resp) override { 
-        if (const TOut *x = dynamic_cast<const TOut *>(&resp)) { 
+    void Reply(const NKikimrClient::TResponse& resp) override {
+        if (const TOut *x = dynamic_cast<const TOut *>(&resp)) {
             Finish(*x, 0);
-        } else { 
-            ReplyError(resp.GetErrorReason()); 
-        } 
-    } 
- 
-    void Reply(const NKikimrClient::TBsTestLoadResponse& resp) override { 
-        if (const TOut *x = dynamic_cast<const TOut *>(&resp)) { 
+        } else {
+            ReplyError(resp.GetErrorReason());
+        }
+    }
+
+    void Reply(const NKikimrClient::TBsTestLoadResponse& resp) override {
+        if (const TOut *x = dynamic_cast<const TOut *>(&resp)) {
             Finish(*x, 0);
-        } else { 
-            ReplyError("request failed"); 
-        } 
-    } 
- 
-    void Reply(const NKikimrClient::TJSON& resp) override { 
-        try { 
+        } else {
+            ReplyError("request failed");
+        }
+    }
+
+    void Reply(const NKikimrClient::TJSON& resp) override {
+        try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
-        } catch (const std::bad_cast&) { 
-            Y_FAIL("unexpected response type generated"); 
-        } 
-    } 
- 
+        } catch (const std::bad_cast&) {
+            Y_FAIL("unexpected response type generated");
+        }
+    }
+
     void Reply(const NKikimrClient::TNodeRegistrationResponse& resp) override {
         try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
@@ -193,20 +193,20 @@ public:
         }
     }
 
-    //! Send error reply. 
-    void ReplyError(const TString& reason) override { 
-        TOut resp; 
-        GenerateErrorResponse(resp, reason); 
+    //! Send error reply.
+    void ReplyError(const TString& reason) override {
+        TOut resp;
+        GenerateErrorResponse(resp, reason);
         Finish(resp, 0);
     }
 
-    static void GenerateErrorResponse(NKikimrClient::TResponse& resp, const TString& reason) { 
-        resp.SetStatus(NMsgBusProxy::MSTATUS_ERROR); 
-        if (reason) { 
-            resp.SetErrorReason(reason); 
-        } 
-    } 
- 
+    static void GenerateErrorResponse(NKikimrClient::TResponse& resp, const TString& reason) {
+        resp.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+        if (reason) {
+            resp.SetErrorReason(reason);
+        }
+    }
+
     static void GenerateErrorResponse(NKikimrClient::TNodeRegistrationResponse& resp, const TString& reason) {
         resp.MutableStatus()->SetCode(NKikimrNodeBroker::TStatus::ERROR);
         resp.MutableStatus()->SetReason(reason);
@@ -217,12 +217,12 @@ public:
         resp.MutableStatus()->SetReason(reason);
     }
 
-    static void GenerateErrorResponse(NKikimrClient::TJSON& resp, const TString& reason) { 
-        NJson::TJsonValue json(NJson::JSON_MAP); 
-        json["ErrorReason"] = reason; 
-        resp.SetJSON(NJson::WriteJson(json, false)); 
-    } 
- 
+    static void GenerateErrorResponse(NKikimrClient::TJSON& resp, const TString& reason) {
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["ErrorReason"] = reason;
+        resp.SetJSON(NJson::WriteJson(json, false));
+    }
+
     static void GenerateErrorResponse(NKikimrClient::TSqsResponse&, const TString&)
     { }
 
@@ -236,10 +236,10 @@ public:
         resp.MutableStatus()->SetReason(reason);
     }
 
-    NMsgBusProxy::TBusMessageContext BindBusContext(int type) override { 
+    NMsgBusProxy::TBusMessageContext BindBusContext(int type) override {
         return BusContext.ConstructInPlace(this, type);
-    } 
- 
+    }
+
     TString GetPeer() const override {
         return GetPeerName();
     }
@@ -250,16 +250,16 @@ private:
     }
 
     void Finish(const TOut& resp, ui32 status) {
-        auto makeResponseString = [&] { 
-            TString x; 
-            google::protobuf::TextFormat::Printer printer; 
-            printer.SetSingleLineMode(true); 
-            printer.PrintToString(resp, &x); 
-            return x; 
-        }; 
+        auto makeResponseString = [&] {
+            TString x;
+            google::protobuf::TextFormat::Printer printer;
+            printer.SetSingleLineMode(true);
+            printer.PrintToString(resp, &x);
+            return x;
+        };
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s data# %s peer# %s", this,
             Name, makeResponseString().data(), Context.peer().c_str());
-        ResponseSize = resp.ByteSize(); 
+        ResponseSize = resp.ByteSize();
         ResponseStatus = status;
         StateFunc = &TSimpleRequest::FinishDone;
         Writer->Finish(resp, Status::OK, GetGRpcTag());
@@ -278,20 +278,20 @@ private:
     }
 
     bool RequestDone(bool ok) {
-        auto makeRequestString = [&] { 
-            TString resp; 
-            if (ok) { 
-                google::protobuf::TextFormat::Printer printer; 
-                printer.SetSingleLineMode(true); 
-                printer.PrintToString(Request, &resp); 
-            } else { 
-                resp = "<not ok>"; 
-            } 
-            return resp; 
-        }; 
+        auto makeRequestString = [&] {
+            TString resp;
+            if (ok) {
+                google::protobuf::TextFormat::Printer printer;
+                printer.SetSingleLineMode(true);
+                printer.PrintToString(Request, &resp);
+            } else {
+                resp = "<not ok>";
+            }
+            return resp;
+        };
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] received request Name# %s ok# %s data# %s peer# %s current inflight# %li", this,
             Name, ok ? "true" : "false", makeRequestString().data(), Context.peer().c_str(), Server->GetCurrentInFlight());
- 
+
         if (Context.c_call() == nullptr) {
             Y_VERIFY(!ok);
         } else if (!(RequestRegistered_ = Server->RegisterRequestCtx(this))) {
@@ -306,36 +306,36 @@ private:
         Clone();
 
         if (!ok) {
-            Counters->CountNotOkRequest(); 
+            Counters->CountNotOkRequest();
             return false;
         }
 
         if (Server->IncRequest()) {
- 
+
             RequestSize = Request.ByteSize();
             Counters->StartProcessing(RequestSize);
-            RequestTimer.Reset(); 
+            RequestTimer.Reset();
             InProgress_ = true;
- 
+
             Cb(this);
         } else {
             FinishNoResource();
         }
- 
+
         return true;
     }
 
-    bool FinishDone(bool ok) { 
+    bool FinishDone(bool ok) {
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request Name# %s ok# %s peer# %s", this,
             Name, ok ? "true" : "false", Context.peer().c_str());
         Counters->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
             TDuration::Seconds(RequestTimer.Passed()));
         Server->DecRequest();
         InProgress_ = false;
- 
+
         return false;
     }
- 
+
     bool FinishDoneWithoutProcessing(bool ok) {
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request without processing Name# %s ok# %s peer# %s", this,
             Name, ok ? "true" : "false", Context.peer().c_str());
@@ -349,8 +349,8 @@ private:
     TGRpcService* const Server;
     TOnRequest Cb;
     TRequestCallback RequestCallback;
-    TActorSystem& ActorSystem; 
-    const char* const Name; 
+    TActorSystem& ActorSystem;
+    const char* const Name;
     NGrpc::ICounterBlockPtr Counters;
 
     THolder<ServerAsyncResponseWriter<TOut>> Writer;
@@ -360,8 +360,8 @@ private:
     ui32 RequestSize;
     ui32 ResponseSize;
     ui32 ResponseStatus;
-    THPTimer RequestTimer; 
- 
+    THPTimer RequestTimer;
+
     TMaybe<NMsgBusProxy::TBusMessageContext> BusContext;
     bool InProgress_;
     bool RequestRegistered_ = false;
@@ -395,8 +395,8 @@ TFuture<void> TGRpcService::Prepare(TActorSystem* system, const TActorId& pqMeta
         }
     };
     return promise.GetFuture();
-} 
- 
+}
+
 void TGRpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter *limiter) {
     Limiter_ = limiter;
 }
@@ -419,7 +419,7 @@ void TGRpcService::Start() {
     ui32 nodeId = ActorSystem->NodeId;
     ActorSystem->Send(MakeGRpcProxyStatusID(nodeId), new TEvGRpcProxyStatus::TEvSetup(true, PersQueueWriteSessionsMaxCount,
                                         PersQueueReadSessionsMaxCount));
-    SetupIncomingRequests(); 
+    SetupIncomingRequests();
 }
 
 void TGRpcService::RegisterRequestActor(NActors::IActor* req) {
@@ -428,9 +428,9 @@ void TGRpcService::RegisterRequestActor(NActors::IActor* req) {
 
 void TGRpcService::SetupIncomingRequests() {
 
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem); 
- 
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \ 
+    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
+
+#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     (new TSimpleRequest<NKikimrClient::IN, NKikimrClient::OUT>(this, &Service_, CQ, \
         [this](IRequestContext *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \
@@ -438,25 +438,25 @@ void TGRpcService::SetupIncomingRequests() {
         }, &NKikimrClient::TGRpcServer::AsyncService::Request ## NAME, \
         *ActorSystem, #NAME, getCounterBlock("legacy", #NAME)))->Start();
 
-#define ADD_ACTOR_REQUEST(NAME, TYPE, MTYPE) \ 
-    ADD_REQUEST(NAME, TYPE, TResponse, { \ 
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE)); \ 
+#define ADD_ACTOR_REQUEST(NAME, TYPE, MTYPE) \
+    ADD_REQUEST(NAME, TYPE, TResponse, { \
+        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE)); \
         NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \
         RegisterRequestActor(CreateMessageBus ## NAME(msg)); \
-    }) 
- 
+    })
 
-    // actor requests 
-    ADD_ACTOR_REQUEST(BSAdm,                     TBSAdm,                            MTYPE_CLIENT_BSADM) 
-    ADD_ACTOR_REQUEST(BlobStorageConfig,         TBlobStorageConfigRequest,         MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST) 
-    ADD_ACTOR_REQUEST(HiveCreateTablet,          THiveCreateTablet,                 MTYPE_CLIENT_HIVE_CREATE_TABLET) 
-    ADD_ACTOR_REQUEST(LocalEnumerateTablets,     TLocalEnumerateTablets,            MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS) 
-    ADD_ACTOR_REQUEST(KeyValue,                  TKeyValueRequest,                  MTYPE_CLIENT_KEYVALUE) 
-    ADD_ACTOR_REQUEST(TabletStateRequest,        TTabletStateRequest,               MTYPE_CLIENT_TABLET_STATE_REQUEST) 
-    ADD_ACTOR_REQUEST(LocalMKQL,                 TLocalMKQL,                        MTYPE_CLIENT_LOCAL_MINIKQL) 
-    ADD_ACTOR_REQUEST(LocalSchemeTx,             TLocalSchemeTx,                    MTYPE_CLIENT_LOCAL_SCHEME_TX) 
-    ADD_ACTOR_REQUEST(TabletKillRequest,         TTabletKillRequest,                MTYPE_CLIENT_TABLET_KILL_REQUEST) 
-    ADD_ACTOR_REQUEST(SchemeOperationStatus,     TSchemeOperationStatus,            MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST) 
+
+    // actor requests
+    ADD_ACTOR_REQUEST(BSAdm,                     TBSAdm,                            MTYPE_CLIENT_BSADM)
+    ADD_ACTOR_REQUEST(BlobStorageConfig,         TBlobStorageConfigRequest,         MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST)
+    ADD_ACTOR_REQUEST(HiveCreateTablet,          THiveCreateTablet,                 MTYPE_CLIENT_HIVE_CREATE_TABLET)
+    ADD_ACTOR_REQUEST(LocalEnumerateTablets,     TLocalEnumerateTablets,            MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS)
+    ADD_ACTOR_REQUEST(KeyValue,                  TKeyValueRequest,                  MTYPE_CLIENT_KEYVALUE)
+    ADD_ACTOR_REQUEST(TabletStateRequest,        TTabletStateRequest,               MTYPE_CLIENT_TABLET_STATE_REQUEST)
+    ADD_ACTOR_REQUEST(LocalMKQL,                 TLocalMKQL,                        MTYPE_CLIENT_LOCAL_MINIKQL)
+    ADD_ACTOR_REQUEST(LocalSchemeTx,             TLocalSchemeTx,                    MTYPE_CLIENT_LOCAL_SCHEME_TX)
+    ADD_ACTOR_REQUEST(TabletKillRequest,         TTabletKillRequest,                MTYPE_CLIENT_TABLET_KILL_REQUEST)
+    ADD_ACTOR_REQUEST(SchemeOperationStatus,     TSchemeOperationStatus,            MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST)
     ADD_ACTOR_REQUEST(BlobStorageLoadRequest,    TBsTestLoadRequest,                MTYPE_CLIENT_LOAD_REQUEST)
     ADD_ACTOR_REQUEST(BlobStorageGetRequest,     TBsGetRequest,                     MTYPE_CLIENT_GET_REQUEST)
     ADD_ACTOR_REQUEST(ChooseProxy,               TChooseProxyRequest,               MTYPE_CLIENT_CHOOSE_PROXY)
@@ -464,9 +464,9 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_ACTOR_REQUEST(ResolveNode,               TResolveNodeRequest,               MTYPE_CLIENT_RESOLVE_NODE)
     ADD_ACTOR_REQUEST(FillNode,                  TFillNodeRequest,                  MTYPE_CLIENT_FILL_NODE)
     ADD_ACTOR_REQUEST(DrainNode,                 TDrainNodeRequest,                 MTYPE_CLIENT_DRAIN_NODE)
-    ADD_ACTOR_REQUEST(InterconnectDebug,         TInterconnectDebug,                MTYPE_CLIENT_INTERCONNECT_DEBUG) 
-    ADD_ACTOR_REQUEST(TestShardControl,          TTestShardControlRequest,          MTYPE_CLIENT_TEST_SHARD_CONTROL) 
- 
+    ADD_ACTOR_REQUEST(InterconnectDebug,         TInterconnectDebug,                MTYPE_CLIENT_INTERCONNECT_DEBUG)
+    ADD_ACTOR_REQUEST(TestShardControl,          TTestShardControlRequest,          MTYPE_CLIENT_TEST_SHARD_CONTROL)
+
     // dynamic node registration
     ADD_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST));
@@ -497,34 +497,34 @@ void TGRpcService::SetupIncomingRequests() {
         RegisterRequestActor(CreateMessageBusConsoleRequest(msg));
     })
 
-#define ADD_PROXY_REQUEST_BASE(NAME, TYPE, RES_TYPE, EVENT_TYPE, MTYPE) \ 
-    ADD_REQUEST(NAME, TYPE, RES_TYPE, { \ 
+#define ADD_PROXY_REQUEST_BASE(NAME, TYPE, RES_TYPE, EVENT_TYPE, MTYPE) \
+    ADD_REQUEST(NAME, TYPE, RES_TYPE, { \
         if (MsgBusProxy) { \
-            NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE)); \ 
+            NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE)); \
             ActorSystem->Send(MsgBusProxy, new NMsgBusProxy::EVENT_TYPE(msg)); \
-        } else { \ 
-            ctx->ReplyError("no MessageBus proxy"); \ 
-        } \ 
-    }) 
- 
-#define ADD_PROXY_REQUEST(NAME, TYPE, EVENT_TYPE, MTYPE) \ 
-    ADD_PROXY_REQUEST_BASE(NAME, TYPE, TResponse, EVENT_TYPE, MTYPE) 
- 
-    // proxy requests 
+        } else { \
+            ctx->ReplyError("no MessageBus proxy"); \
+        } \
+    })
+
+#define ADD_PROXY_REQUEST(NAME, TYPE, EVENT_TYPE, MTYPE) \
+    ADD_PROXY_REQUEST_BASE(NAME, TYPE, TResponse, EVENT_TYPE, MTYPE)
+
+    // proxy requests
     ADD_PROXY_REQUEST(SchemeInitRoot,  TSchemeInitRoot,  TEvBusProxy::TEvInitRoot,            MTYPE_CLIENT_SCHEME_INITROOT)
- 
+
     ADD_PROXY_REQUEST(PersQueueRequest, TPersQueueRequest, TEvBusProxy::TEvPersQueue,           MTYPE_CLIENT_PERSQUEUE)
     ADD_PROXY_REQUEST(Request,          TRequest,          TEvBusProxy::TEvRequest,             MTYPE_CLIENT_REQUEST)
     ADD_PROXY_REQUEST(SchemeOperation,  TSchemeOperation,  TEvBusProxy::TEvFlatTxRequest,       MTYPE_CLIENT_FLAT_TX_REQUEST)
     ADD_PROXY_REQUEST(SchemeDescribe,   TSchemeDescribe,   TEvBusProxy::TEvFlatDescribeRequest, MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST)
 
-#define ADD_PROXY_REQUEST_JJ(NAME, EVENT_TYPE, MTYPE) \ 
-    ADD_PROXY_REQUEST_BASE(NAME, TJSON, TJSON, EVENT_TYPE, MTYPE) 
- 
-    // DB proxy requests both consuming and returning TJSON 
-    ADD_PROXY_REQUEST_JJ(DbSchema,    TEvBusProxy::TEvDbSchema,    MTYPE_CLIENT_DB_SCHEMA) 
-    ADD_PROXY_REQUEST_JJ(DbOperation, TEvBusProxy::TEvDbOperation, MTYPE_CLIENT_DB_OPERATION) 
-    ADD_PROXY_REQUEST_JJ(DbBatch,     TEvBusProxy::TEvDbBatch,     MTYPE_CLIENT_DB_BATCH) 
+#define ADD_PROXY_REQUEST_JJ(NAME, EVENT_TYPE, MTYPE) \
+    ADD_PROXY_REQUEST_BASE(NAME, TJSON, TJSON, EVENT_TYPE, MTYPE)
+
+    // DB proxy requests both consuming and returning TJSON
+    ADD_PROXY_REQUEST_JJ(DbSchema,    TEvBusProxy::TEvDbSchema,    MTYPE_CLIENT_DB_SCHEMA)
+    ADD_PROXY_REQUEST_JJ(DbOperation, TEvBusProxy::TEvDbOperation, MTYPE_CLIENT_DB_OPERATION)
+    ADD_PROXY_REQUEST_JJ(DbBatch,     TEvBusProxy::TEvDbBatch,     MTYPE_CLIENT_DB_BATCH)
 }
 
 }

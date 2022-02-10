@@ -171,8 +171,8 @@ class TReplicaGuardian : public TActorBootstrapped<TReplicaGuardian> {
         }
     }
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::SS_REPLICA_GUARDIAN; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SS_REPLICA_GUARDIAN;
     }
 
     TReplicaGuardian(TGuardedInfo *info, TActorId replica, TActorId guard)
@@ -295,8 +295,8 @@ class TFollowerGuardian : public TActorBootstrapped<TFollowerGuardian> {
         DowntimeFrom = TInstant::Max();
     }
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::SS_REPLICA_GUARDIAN; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SS_REPLICA_GUARDIAN;
     }
 
     TFollowerGuardian(TFollowerInfo *info, const TActorId replica, const TActorId guard)
@@ -526,8 +526,8 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         }
     }
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::SS_TABLET_GUARDIAN; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SS_TABLET_GUARDIAN;
     }
 
     TTabletGuardian(TGuardedInfo *info)

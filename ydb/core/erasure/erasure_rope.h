@@ -66,7 +66,7 @@ public:
         if (string.Empty()) {
             return rope;
         }
-        rope.Insert(rope.End(), TRope(std::move(string))); 
+        rope.Insert(rope.End(), TRope(std::move(string)));
         return rope;
     }
 
@@ -439,9 +439,9 @@ struct TRopeErasureType {
         Erasure2Plus2Block = 16,
         Erasure2Plus2Stripe = 17, // Not implemented in TRope version of erasure
 
-        ErasureMirror3of4 = 18, 
- 
-        ErasureSpeciesCount = 19 
+        ErasureMirror3of4 = 18,
+
+        ErasureSpeciesCount = 19
     };
 
     static const char *ErasureSpeciesToStr(EErasureSpecies es);

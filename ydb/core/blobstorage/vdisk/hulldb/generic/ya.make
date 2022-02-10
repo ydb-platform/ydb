@@ -18,17 +18,17 @@ SRCS(
     hulldb_events.h
     hullds_idx.cpp
     hullds_idx.h
-    hullds_idxsnap.cpp 
+    hullds_idxsnap.cpp
     hullds_idxsnap.h
     hullds_idxsnap_it.h
     hullds_leveledssts.h
-    hullds_sst.cpp 
+    hullds_sst.cpp
     hullds_sst.h
     hullds_sst_it.h
-    hullds_sstslice.cpp 
+    hullds_sstslice.cpp
     hullds_sstslice.h
     hullds_sstslice_it.h
-    hullds_sstvec.cpp 
+    hullds_sstvec.cpp
     hullds_sstvec.h
     hullds_sstvec_it.h
 )

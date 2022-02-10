@@ -1,16 +1,16 @@
-LIBRARY() 
- 
-OWNER(alexvru) 
- 
-SRCS( 
-    ic_mock.cpp 
-    ic_mock.h 
-) 
- 
+LIBRARY()
+
+OWNER(alexvru)
+
+SRCS(
+    ic_mock.cpp
+    ic_mock.h
+)
+
 SUPPRESSIONS(tsan.supp)
 
-PEERDIR( 
-    library/cpp/actors/interconnect 
-) 
- 
-END() 
+PEERDIR(
+    library/cpp/actors/interconnect
+)
+
+END()

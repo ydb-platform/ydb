@@ -33,9 +33,9 @@ namespace NKikimr {
         TIntrusivePtr<THullCtx> HullCtx;
 
         TIntrusivePtr<TLocalRecoveryInfo> RecovInfo;
-        std::shared_ptr<THullDbRecovery> HullDbRecovery; // for applying recovery log 
+        std::shared_ptr<THullDbRecovery> HullDbRecovery; // for applying recovery log
         TIntrusivePtr<NSyncLog::TSyncLogRecovery> SyncLogRecovery;
-        std::shared_ptr<NHuge::THullHugeKeeperPersState> RepairedHuge; 
+        std::shared_ptr<NHuge::THullHugeKeeperPersState> RepairedHuge;
         TIntrusivePtr<TSyncerData> SyncerData;
 
         // owned chunks as reported by PDisk
@@ -65,6 +65,6 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // CreateRecoveryLogReplayer
     ////////////////////////////////////////////////////////////////////////////
-    IActor* CreateRecoveryLogReplayer(TActorId parentId, std::shared_ptr<TLocalRecoveryContext> locRecCtx); 
+    IActor* CreateRecoveryLogReplayer(TActorId parentId, std::shared_ptr<TLocalRecoveryContext> locRecCtx);
 
 } // NKikimr

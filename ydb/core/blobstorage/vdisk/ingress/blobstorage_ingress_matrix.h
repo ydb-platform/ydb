@@ -11,7 +11,7 @@ namespace NKikimr {
 
     namespace NMatrix {
 
-        static const ui32 BitsInByte = CHAR_BIT; 
+        static const ui32 BitsInByte = CHAR_BIT;
 
         /*
 
@@ -110,12 +110,12 @@ namespace NKikimr {
             }
 
             bool IsSupersetOf(NMatrix::TVectorType v) const {
-                Y_VERIFY_DEBUG(Size == v.Size); 
-                return (Vec & v.Vec) == v.Vec; 
-            } 
- 
+                Y_VERIFY_DEBUG(Size == v.Size);
+                return (Vec & v.Vec) == v.Vec;
+            }
+
             TVectorType &operator =(const TVectorType &v) {
-                Y_VERIFY_DEBUG(Size == 0 || Size == v.Size || v.Size == 0); 
+                Y_VERIFY_DEBUG(Size == 0 || Size == v.Size || v.Size == 0);
                 Size = v.Size;
                 Vec = v.Vec;
                 return *this;
@@ -128,11 +128,11 @@ namespace NKikimr {
             }
 
             TVectorType &operator &=(const TVectorType &v) {
-                Y_VERIFY_DEBUG(Size == v.Size); 
-                Vec &= v.Vec; 
-                return *this; 
-            } 
- 
+                Y_VERIFY_DEBUG(Size == v.Size);
+                Vec &= v.Vec;
+                return *this;
+            }
+
             TVectorType operator ~() const {
                 ui8 v = ~Vec;
                 return TVectorType(v, Size);
@@ -170,10 +170,10 @@ namespace NKikimr {
 
             static TVectorType MakeOneHot(ui8 pos, ui8 size) {
                 TVectorType res(0, size);
-                res.Set(pos); 
-                return res; 
-            } 
- 
+                res.Set(pos);
+                return res;
+            }
+
         private:
             ui8 Vec;
             ui8 Size;

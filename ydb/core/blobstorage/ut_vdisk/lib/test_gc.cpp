@@ -30,13 +30,13 @@ virtual void Scenario(const TActorContext &ctx) {
     // read command
     TAutoPtr<IActor> readCmd;
     auto sendFunc = [part0, &instance](const TActorContext &ctx) {
-        auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(instance.VDiskID, 
-                                                                   TInstant::Max(), 
-                                                                   NKikimrBlobStorage::EGetHandleClass::AsyncRead, 
-                                                                   TEvBlobStorage::TEvVGet::EFlags::None, 
-                                                                   {}, 
-                                                                   {part0}); 
-        ctx.Send(instance.ActorID, req.release()); 
+        auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(instance.VDiskID,
+                                                                   TInstant::Max(),
+                                                                   NKikimrBlobStorage::EGetHandleClass::AsyncRead,
+                                                                   TEvBlobStorage::TEvVGet::EFlags::None,
+                                                                   {},
+                                                                   {part0});
+        ctx.Send(instance.ActorID, req.release());
     };
     auto checkFunc = [](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
         CheckQueryResult(ev, ctx, EQR_OK_NODATA, nullptr);
@@ -84,20 +84,20 @@ virtual void Scenario(const TActorContext &ctx) {
         TLogoBlobID from(0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
         TLogoBlobID to  (0, 0, 0, 0, 0, 0, 1);
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
-        auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID, 
-                                                                  TInstant::Max(), 
-                                                                  NKikimrBlobStorage::EGetHandleClass::AsyncRead, 
-                                                                  TEvBlobStorage::TEvVGet::EFlags::None, 
-                                                                  {}, 
-                                                                  from, 
-                                                                  to, 
-                                                                  10); 
-        ctx.Send(instance.ActorID, req.release()); 
+        auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
+                                                                  TInstant::Max(),
+                                                                  NKikimrBlobStorage::EGetHandleClass::AsyncRead,
+                                                                  TEvBlobStorage::TEvVGet::EFlags::None,
+                                                                  {},
+                                                                  from,
+                                                                  to,
+                                                                  10);
+        ctx.Send(instance.ActorID, req.release());
 
         TString pppp("pppp");
         TString qqqqq("qqqqq");
-        ExpectedSet.Put(TLogoBlobID(0, 1, 471, 0, pppp.size(), 0), NKikimrProto::OK, {}); 
-        ExpectedSet.Put(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0), NKikimrProto::OK, {}); 
+        ExpectedSet.Put(TLogoBlobID(0, 1, 471, 0, pppp.size(), 0), NKikimrProto::OK, {});
+        ExpectedSet.Put(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0), NKikimrProto::OK, {});
     };
     auto checkFunc = [this](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
         CheckQueryResult(ev, ctx, EQR_OK_EXPECTED_SET, &ExpectedSet);
@@ -152,20 +152,20 @@ SYNC_TEST_BEGIN(TGCPutBarrier, TSyncTestWithSmallCommonDataset)
             TLogoBlobID from(0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
             TLogoBlobID to  (0, 0, 0, 0, 0, 0, 1);
             LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
-            auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID, 
-                                                                      TInstant::Max(), 
-                                                                      NKikimrBlobStorage::EGetHandleClass::AsyncRead, 
-                                                                      TEvBlobStorage::TEvVGet::EFlags::None, 
-                                                                      {}, 
-                                                                      from, 
-                                                                      to, 
-                                                                      10); 
-            ctx.Send(instance.ActorID, req.release()); 
+            auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
+                                                                      TInstant::Max(),
+                                                                      NKikimrBlobStorage::EGetHandleClass::AsyncRead,
+                                                                      TEvBlobStorage::TEvVGet::EFlags::None,
+                                                                      {},
+                                                                      from,
+                                                                      to,
+                                                                      10);
+            ctx.Send(instance.ActorID, req.release());
 
             TString pppp("pppp");
             TString qqqqq("qqqqq");
-            ExpectedSet.Put(TLogoBlobID(0, 1, 471, 0, pppp.size(), 0), NKikimrProto::OK, {}); 
-            ExpectedSet.Put(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0), NKikimrProto::OK, {}); 
+            ExpectedSet.Put(TLogoBlobID(0, 1, 471, 0, pppp.size(), 0), NKikimrProto::OK, {});
+            ExpectedSet.Put(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0), NKikimrProto::OK, {});
         };
         auto checkFunc = [this](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
             CheckQueryResult(ev, ctx, EQR_OK_EXPECTED_SET, &ExpectedSet);
@@ -222,17 +222,17 @@ virtual void Scenario(const TActorContext &ctx) {
         TLogoBlobID from(0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
         TLogoBlobID to  (0, 0, 0, 0, 0, 0, 1);
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
-        auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID, 
-                                                                  TInstant::Max(), 
-                                                                  NKikimrBlobStorage::EGetHandleClass::AsyncRead, 
-                                                                  TEvBlobStorage::TEvVGet::EFlags::None, 
-                                                                  {}, 
-                                                                  from, 
-                                                                  to, 
-                                                                  10); 
-        ctx.Send(instance.ActorID, req.release()); 
+        auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
+                                                                  TInstant::Max(),
+                                                                  NKikimrBlobStorage::EGetHandleClass::AsyncRead,
+                                                                  TEvBlobStorage::TEvVGet::EFlags::None,
+                                                                  {},
+                                                                  from,
+                                                                  to,
+                                                                  10);
+        ctx.Send(instance.ActorID, req.release());
 
-        ExpectedSet.Put(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0), NKikimrProto::OK, {}); 
+        ExpectedSet.Put(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0), NKikimrProto::OK, {});
     };
     auto checkFunc = [this](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
         CheckQueryResult(ev, ctx, EQR_OK_EXPECTED_SET, &ExpectedSet);
@@ -283,15 +283,15 @@ virtual void Scenario(const TActorContext &ctx) {
             TLogoBlobID from(0, 0, 0, 0, 0, 0, 1);
             TLogoBlobID to  (0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
             LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s", from.ToString().data(), to.ToString().data());
-            auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID, 
-                                                                      TInstant::Max(), 
-                                                                      NKikimrBlobStorage::EGetHandleClass::FastRead, 
-                                                                      TEvBlobStorage::TEvVGet::EFlags::None, 
-                                                                      {}, 
-                                                                      from, 
-                                                                      to, 
-                                                                      10); 
-            ctx.Send(instance.ActorID, req.release()); 
+            auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
+                                                                      TInstant::Max(),
+                                                                      NKikimrBlobStorage::EGetHandleClass::FastRead,
+                                                                      TEvBlobStorage::TEvVGet::EFlags::None,
+                                                                      {},
+                                                                      from,
+                                                                      to,
+                                                                      10);
+            ctx.Send(instance.ActorID, req.release());
         };
         auto checkFunc = [&done](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
             TEvBlobStorage::TEvVGetResult *msg = ev->Get();
@@ -349,15 +349,15 @@ virtual void Scenario(const TActorContext &ctx) {
             TLogoBlobID from(0, 0, 0, 0, 0, 0, 1);
             TLogoBlobID to  (0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
             LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s", from.ToString().data(), to.ToString().data());
-            auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID, 
-                                                                      TInstant::Max(), 
-                                                                      NKikimrBlobStorage::EGetHandleClass::FastRead, 
-                                                                      TEvBlobStorage::TEvVGet::EFlags::None, 
-                                                                      {}, 
-                                                                      from, 
-                                                                      to, 
-                                                                      10); 
-            ctx.Send(instance.ActorID, req.release()); 
+            auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
+                                                                      TInstant::Max(),
+                                                                      NKikimrBlobStorage::EGetHandleClass::FastRead,
+                                                                      TEvBlobStorage::TEvVGet::EFlags::None,
+                                                                      {},
+                                                                      from,
+                                                                      to,
+                                                                      10);
+            ctx.Send(instance.ActorID, req.release());
         };
         auto checkFunc = [&done](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
             TEvBlobStorage::TEvVGetResult *msg = ev->Get();
@@ -431,7 +431,7 @@ virtual void Scenario(const TActorContext &ctx) {
         TLogoBlobID to  (0, 0, 0, 0, 0, TLogoBlobID::HashGeneric, 0, 1);
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", ~from.ToString(), ~to.ToString());
         req->AddRangeQuery(from, to, 10, nullptr);
-        ctx.Send(instance.ActorID, req.release()); 
+        ctx.Send(instance.ActorID, req.release());
 
         ExpectedSet.Put(TLogoBlobID(0, 1, 37, 0, 0, TLogoBlobID::HashGeneric, 0, 1), NKikimrProto::OK, "pppp");
         ExpectedSet.Put(TLogoBlobID(0, 1, 40, 0, 0, TLogoBlobID::HashGeneric, 0, 1), NKikimrProto::OK, "qqqqq");

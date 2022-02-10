@@ -804,7 +804,7 @@ bool TPartitionConfigMerger::VerifyCreateParams(
             return false;
         }
 
-        if (followerGroup.AllowedDataCenterNumIDsSize() || followerGroup.AllowedDataCentersSize()) { 
+        if (followerGroup.AllowedDataCenterNumIDsSize() || followerGroup.AllowedDataCentersSize()) {
             errDescr = TStringBuilder()
                     << "FollowerGroup: AllowedDataCenterIDs is enabled, hasn't been tested";
             return false;

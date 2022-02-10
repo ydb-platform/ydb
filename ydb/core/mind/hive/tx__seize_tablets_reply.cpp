@@ -114,18 +114,18 @@ public:
             for (const auto& protoFollowerGroup : protoTabletInfo.GetFollowerGroups()) {
                 TFollowerGroup& followerGroup = tablet.AddFollowerGroup();
                 followerGroup = protoFollowerGroup;
- 
-                TVector<ui32> allowedDataCenters; 
-                for (const TDataCenterId& dc : followerGroup.AllowedDataCenters) { 
-                    allowedDataCenters.push_back(DataCenterFromString(dc)); 
-                } 
+
+                TVector<ui32> allowedDataCenters;
+                for (const TDataCenterId& dc : followerGroup.AllowedDataCenters) {
+                    allowedDataCenters.push_back(DataCenterFromString(dc));
+                }
                 db.Table<Schema::TabletFollowerGroup>().Key(tabletId, followerGroup.Id).Update(
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCount>(followerGroup.GetRawFollowerCount()),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowLeaderPromotion>(followerGroup.AllowLeaderPromotion),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowClientRead>(followerGroup.AllowClientRead),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedNodes>(followerGroup.AllowedNodes),
-                            NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedDataCenters>(allowedDataCenters), 
-                            NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedDataCenterIds>(followerGroup.AllowedDataCenters), 
+                            NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedDataCenters>(allowedDataCenters),
+                            NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedDataCenterIds>(followerGroup.AllowedDataCenters),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireAllDataCenters>(followerGroup.RequireAllDataCenters),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireDifferentNodes>(followerGroup.RequireDifferentNodes),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>(followerGroup.FollowerCountPerDataCenter));

@@ -74,7 +74,7 @@ namespace NKikimr {
                 ActorIdToProto(sender, Record.MutableSender());
                 Record.SetBuffer(buffer.data(), buffer.size());
                 Record.SetCookie(cookie);
-                Record.SetExtendedFormat(extendedFormat); 
+                Record.SetExtendedFormat(extendedFormat);
             }
 
             void SetSeqNo(ui64 seqNo) {

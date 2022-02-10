@@ -1,7 +1,7 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(alexvru)
- 
+
 SRCS(
     defs.h
     events.h
@@ -23,12 +23,12 @@ SRCS(
     tx_initialize.cpp
     tx_load_everything.cpp
 )
- 
+
 PEERDIR(
     library/cpp/digest/md5
     ydb/core/keyvalue
     ydb/core/protos
     ydb/core/util
 )
- 
-END() 
+
+END()

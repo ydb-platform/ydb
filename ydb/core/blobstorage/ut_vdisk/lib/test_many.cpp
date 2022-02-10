@@ -10,11 +10,11 @@ using namespace NKikimr;
 class TManyPutOneGetActor : public TSyncTestBase {
 protected:
     const bool WaitForCompaction;
-    std::shared_ptr<TVector<TMsgPackInfo>> MsgPacks; 
+    std::shared_ptr<TVector<TMsgPackInfo>> MsgPacks;
     const ui64 TabletId;
     const ui64 Shift;
-    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen; 
-    std::shared_ptr<TSet<ui32>> BadSteps; 
+    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen;
+    std::shared_ptr<TSet<ui32>> BadSteps;
     const bool WithErrorResponse;
 
     virtual void Scenario(const TActorContext &ctx) {
@@ -45,12 +45,12 @@ public:
         , MsgPacks(new TVector<TMsgPackInfo>{TMsgPackInfo(msgSize, msgNum)})
         , TabletId(tabletId)
         , Shift(shift)
-        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls)) 
-        , BadSteps(std::make_shared<TSet<ui32>>()) 
+        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls))
+        , BadSteps(std::make_shared<TSet<ui32>>())
         , WithErrorResponse(withErrorResponse)
     {}
 
-    TManyPutOneGetActor(TConfiguration *conf, bool waitForCompaction, std::shared_ptr<TVector<TMsgPackInfo>> msgPacks, 
+    TManyPutOneGetActor(TConfiguration *conf, bool waitForCompaction, std::shared_ptr<TVector<TMsgPackInfo>> msgPacks,
                         ui64 tabletId, ui64 shift, NKikimrBlobStorage::EPutHandleClass cls,
                         bool withErrorResponse)
         : TSyncTestBase(conf)
@@ -58,8 +58,8 @@ public:
         , MsgPacks(msgPacks)
         , TabletId(tabletId)
         , Shift(shift)
-        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls)) 
-        , BadSteps(std::make_shared<TSet<ui32>>()) 
+        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls))
+        , BadSteps(std::make_shared<TSet<ui32>>())
         , WithErrorResponse(withErrorResponse)
     {}
 };
@@ -76,8 +76,8 @@ protected:
     const ui32 MsgNum;
     const ui32 MsgSize;
     const ui64 TabletId;
-    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen; 
-    std::shared_ptr<TSet<ui32>> BadSteps; 
+    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen;
+    std::shared_ptr<TSet<ui32>> BadSteps;
 
     virtual void Scenario(const TActorContext &ctx) {
         // load data
@@ -106,8 +106,8 @@ public:
         , MsgNum(msgNum)
         , MsgSize(msgSize)
         , TabletId(tabletId)
-        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls)) 
-        , BadSteps(std::make_shared<TSet<ui32>>()) 
+        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls))
+        , BadSteps(std::make_shared<TSet<ui32>>())
     {}
 };
 
@@ -123,8 +123,8 @@ protected:
     const ui32 MsgSize;
     const ui32 BatchSize;
     const ui64 TabletId;
-    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen; 
-    std::shared_ptr<TSet<ui32>> BadSteps; 
+    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen;
+    std::shared_ptr<TSet<ui32>> BadSteps;
 
     virtual void Scenario(const TActorContext &ctx) {
         // load data
@@ -155,8 +155,8 @@ public:
         , MsgSize(msgSize)
         , BatchSize(batchSize)
         , TabletId(tabletId)
-        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls)) 
-        , BadSteps(std::make_shared<TSet<ui32>>()) 
+        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls))
+        , BadSteps(std::make_shared<TSet<ui32>>())
     {}
 };
 
@@ -172,8 +172,8 @@ protected:
     const bool IndexOnly;
     const ui32 MsgNum;
     const ui32 MsgSize;
-    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen; 
-    std::shared_ptr<TSet<ui32>> BadSteps; 
+    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen;
+    std::shared_ptr<TSet<ui32>> BadSteps;
 
     virtual void Scenario(const TActorContext &ctx) {
         // load data
@@ -203,11 +203,11 @@ public:
         , IndexOnly(indexOnly)
         , MsgNum(msgNum)
         , MsgSize(msgSize)
-        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls)) 
-        , BadSteps(std::make_shared<TSet<ui32>>()) 
-    { 
-        Y_VERIFY(indexOnly); 
-    } 
+        , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls))
+        , BadSteps(std::make_shared<TSet<ui32>>())
+    {
+        Y_VERIFY(indexOnly);
+    }
 };
 
 void TManyPutRangeGet::operator ()(TConfiguration *conf) {
@@ -223,9 +223,9 @@ protected:
     const bool IndexOnly;
     const ui32 MsgNum;
     const ui32 MsgSize;
-    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen1; 
-    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen2; 
-    std::shared_ptr<TSet<ui32>> BadSteps; 
+    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen1;
+    std::shared_ptr<IPutHandleClassGenerator> HandleClassGen2;
+    std::shared_ptr<TSet<ui32>> BadSteps;
 
     virtual void Scenario(const TActorContext &ctx) {
         // load data 1
@@ -259,12 +259,12 @@ public:
         , IndexOnly(indexOnly)
         , MsgNum(msgNum)
         , MsgSize(msgSize)
-        , HandleClassGen1(std::make_shared<TPutHandleClassGenerator>(cls)) 
-        , HandleClassGen2(std::make_shared<TPutHandleClassGenerator>(cls)) 
-        , BadSteps(std::make_shared<TSet<ui32>>()) 
-    { 
-        Y_VERIFY(indexOnly); 
-    } 
+        , HandleClassGen1(std::make_shared<TPutHandleClassGenerator>(cls))
+        , HandleClassGen2(std::make_shared<TPutHandleClassGenerator>(cls))
+        , BadSteps(std::make_shared<TSet<ui32>>())
+    {
+        Y_VERIFY(indexOnly);
+    }
 };
 
 void TManyPutRangeGet2Channels::operator ()(TConfiguration *conf) {

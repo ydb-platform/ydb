@@ -1,15 +1,15 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
- 
+
 #include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <google/protobuf/text_format.h>
 
-using namespace NKikimr; 
+using namespace NKikimr;
 using namespace NSchemeShard;
-using namespace NSchemeShardUT_Private; 
- 
+using namespace NSchemeShardUT_Private;
+
 Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
     Y_UNIT_TEST(Fake) {
     }
@@ -68,18 +68,18 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         )";
         const auto validStatus = NKikimrScheme::StatusAccepted;
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
- 
+
         CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
             TestCreateSolomon(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
-        }); 
-    } 
- 
+        });
+    }
+
     Y_UNIT_TEST(CreateDirWithIntermediateDirsForceDrop) {
         CreateWithIntermediateDirsForceDrop([](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
             AsyncMkDir(runtime, txId, root, "x/y/z");
-        }); 
-    } 
- 
+        });
+    }
+
     Y_UNIT_TEST(CreateTableWithIntermediateDirsForceDrop) {
         CreateWithIntermediateDirsForceDrop([](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
             AsyncCreateTable(runtime, txId, root, R"(
@@ -87,41 +87,41 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
                 Columns { Name: "RowId" Type: "Uint64" }
                 KeyColumnNames: ["RowId"]
             )");
-        }); 
-    } 
- 
+        });
+    }
+
     Y_UNIT_TEST(CreateKesusWithIntermediateDirsForceDrop) {
         CreateWithIntermediateDirsForceDrop([](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
             AsyncCreateKesus(runtime, txId, root, R"(
                 Name: "x/y/z"
             )");
-        }); 
-    } 
- 
+        });
+    }
+
     Y_UNIT_TEST(CreateSolomonWithIntermediateDirsForceDrop) {
         CreateWithIntermediateDirsForceDrop([](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
             AsyncCreateSolomon(runtime, txId, root, R"(
                 Name: "x/y/z"
                 PartitionCount: 2
             )");
-        }); 
-    } 
- 
+        });
+    }
+
     Y_UNIT_TEST(CreateDirWithIntermediateDirsForceDropMiddle) {
-        TTestWithReboots t; 
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) { 
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             AsyncMkDir(runtime, ++t.TxId, "/MyRoot", "x/y/z");
             TestForceDropUnsafe(runtime, ++t.TxId, 4, TVector<NKikimrScheme::EStatus>{NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
- 
+
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/x/y/z"),
                                    {NLs::PathExist});
             }
-        }); 
-    } 
- 
+        });
+    }
+
     Y_UNIT_TEST(CreateSubDomainWithIntermediateDirs) {
         const TString validScheme = R"(
             Name: "Valid/x/y/z"
@@ -163,28 +163,28 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
                 Name: "x/y/z"
                 PartitionsCount: 0
             )");
-        }); 
-    } 
+        });
+    }
 }
- 
+
 Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
     Y_UNIT_TEST(Fake) {
     }
 
     Y_UNIT_TEST(CopyWithData) {
-        TTestWithReboots t; 
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) { 
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
                 TInactiveZone inactive(activeZone);
                 TestMkDir(runtime, ++t.TxId, "/MyRoot", "DirB");
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirB",
                                 "Name: \"src1\""
-                                "Columns { Name: \"key1\"       Type: \"Uint32\"}" 
-                                "Columns { Name: \"key2\"       Type: \"Utf8\"}" 
-                                "Columns { Name: \"key3\"       Type: \"Uint64\"}" 
-                                "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
-                                "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]" 
+                                "Columns { Name: \"key1\"       Type: \"Uint32\"}"
+                                "Columns { Name: \"key2\"       Type: \"Utf8\"}"
+                                "Columns { Name: \"key3\"       Type: \"Uint64\"}"
+                                "Columns { Name: \"Value\"      Type: \"Utf8\"}"
+                                "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
                                 "UniformPartitionsCount: 1"
                                 );
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirB",
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                                 "UniformPartitionsCount: 1"
                                 );
                 t.TestEnv->TestWaitNotification(runtime, {t.TxId-2, t.TxId-1, t.TxId});
- 
+
                 // Write some data to the user table
                 auto fnWriteRow = [&] (ui64 tabletId) {
                     TString writeQuery = R"(
@@ -214,11 +214,11 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                     UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
                 };
                 fnWriteRow(TTestTxConfig::FakeHiveTablets);
- 
+
                 pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                                                  {NLs::PathVersionEqual(7)});
-            } 
- 
+            }
+
             t.TestEnv->ReliablePropose(runtime, ConsistentCopyTablesRequest(++t.TxId, "/", R"(
                            CopyTableDescriptions {
                              SrcPath: "/MyRoot/DirB/src1"
@@ -230,8 +230,8 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                           }
                     )", {pathVersion}),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
-            t.TestEnv->TestWaitNotification(runtime, t.TxId); 
- 
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
@@ -250,8 +250,8 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                                    {NLs::PathVersionEqual(3),
                                     NLs::IsTable});
             }
-        }); 
-    } 
+        });
+    }
 
     Y_UNIT_TEST(DropWithData) {
         TTestWithReboots t;
@@ -654,7 +654,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
             }
         });
     }
-} 
+}
 
 Y_UNIT_TEST_SUITE(TSolomonReboots) {
     Y_UNIT_TEST(CreateDropSolomonWithReboots) {

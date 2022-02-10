@@ -15,9 +15,9 @@ namespace NKikimr {
         const NKikimrBlobStorage::TSyncGuidInfo::EState State;
         const TVDiskEternalGuid Guid;
 
-        virtual std::unique_ptr<TEvBlobStorage::TEvVSyncGuid> GenerateRequest() override { 
+        virtual std::unique_ptr<TEvBlobStorage::TEvVSyncGuid> GenerateRequest() override {
             // write request
-            return std::make_unique<TEvBlobStorage::TEvVSyncGuid>(SelfVDiskId, 
+            return std::make_unique<TEvBlobStorage::TEvVSyncGuid>(SelfVDiskId,
                                                             TargetVDiskId,
                                                             Guid,
                                                             State);

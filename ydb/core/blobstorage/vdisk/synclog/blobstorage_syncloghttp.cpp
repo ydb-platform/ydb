@@ -93,15 +93,15 @@ namespace NKikimr {
                 Die(ctx);
             }
 
-            STRICT_STFUNC(StateFunc, 
-                HFunc(TEvSyncLogSnapshotResult, Handle) 
+            STRICT_STFUNC(StateFunc,
+                HFunc(TEvSyncLogSnapshotResult, Handle)
                 HFunc(TEvInterconnect::TEvNodesInfo, Handle)
-                HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-            ) 
+                HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            )
 
         public:
-            static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-                return NKikimrServices::TActivity::BS_SYNCLOG_HTTPINFO; 
+            static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+                return NKikimrServices::TActivity::BS_SYNCLOG_HTTPINFO;
             }
 
             TSyncLogGetHttpInfoActor(const TIntrusivePtr<TVDiskContext> &vctx,

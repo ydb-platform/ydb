@@ -22,7 +22,7 @@ namespace NKikimr {
             const TLogoBlobID &id,
             ui8 partId,
             const TIngress &ingress,
-            TRope buffer, 
+            TRope buffer,
             ui64 lsn,
             EOpMode mode)
     {
@@ -101,7 +101,7 @@ namespace NKikimr {
             const TActorContext &ctx,
             ui64 tabletId,
             ui32 gen,
-            ui64 issuerGuid, 
+            ui64 issuerGuid,
             ui64 lsn,
             EOpMode mode)
     {
@@ -110,37 +110,37 @@ namespace NKikimr {
                     "Db# Blocks action# add mode# %s tabletId# %" PRIu64
                     " gen# %" PRIu32 " lsn# %" PRIu64, OpMode2Str(mode), tabletId, gen, lsn));
 
-        UpdateBlocksCache(tabletId, gen, issuerGuid, lsn, mode); 
+        UpdateBlocksCache(tabletId, gen, issuerGuid, lsn, mode);
         HullDs->Blocks->PutToFresh(lsn, TKeyBlock(tabletId), TMemRecBlock(gen));
     }
 
-    void THullDbRecovery::UpdateBlocksCache(ui64 tabletId, ui32 gen, ui64 issuerGuid, ui64 lsn, EOpMode mode) { 
+    void THullDbRecovery::UpdateBlocksCache(ui64 tabletId, ui32 gen, ui64 issuerGuid, ui64 lsn, EOpMode mode) {
         switch (mode) {
             case THullDbRecovery::NORMAL:
-                BlocksCache.CommitInFlight(tabletId, {gen, issuerGuid}, lsn); 
+                BlocksCache.CommitInFlight(tabletId, {gen, issuerGuid}, lsn);
                 break;
             case THullDbRecovery::RECOVERY:
                 // Update cache of blocks; we update it even when we replay log as we preinitialize
                 // cache only with SST's
-                BlocksCache.UpdatePersistent(tabletId, {gen, issuerGuid}); 
+                BlocksCache.UpdatePersistent(tabletId, {gen, issuerGuid});
                 break;
         }
     }
 
     void THullDbRecovery::UpdateBlocksCache(
-            const std::shared_ptr<TFreshAppendixBlocks> &blocks, 
+            const std::shared_ptr<TFreshAppendixBlocks> &blocks,
             TLsnSeg seg,
             EOpMode mode)
     {
         Y_VERIFY_DEBUG(blocks);
 
         // update blocks cache with newly inserted elements
-        TFreshAppendixBlocks::TIterator it(HullDs->HullCtx, blocks.get()); 
+        TFreshAppendixBlocks::TIterator it(HullDs->HullCtx, blocks.get());
         it.SeekToFirst();
         ui64 lsnIt = seg.First;
         while (it.Valid()) {
-            // TODO(alexvru): correct handling of fresh appendix with blocks 
-            UpdateBlocksCache(it.GetCurKey().TabletId, it.GetMemRec().BlockedGeneration, 0, lsnIt++, mode); 
+            // TODO(alexvru): correct handling of fresh appendix with blocks
+            UpdateBlocksCache(it.GetCurKey().TabletId, it.GetMemRec().BlockedGeneration, 0, lsnIt++, mode);
             it.Next();
         }
         Y_VERIFY(seg.Last + 1 == lsnIt);
@@ -181,7 +181,7 @@ namespace NKikimr {
     void THullDbRecovery::UpdateBarrierCache(const TKeyBarrier& key) {
         // take a snapshot of the database including new record's LSN
         TBarriersSnapshot snapshot(HullDs->Barriers->GetIndexSnapshot());
- 
+
         // create an iterator and seek to the just added key
         TBarriersSnapshot::TForwardIterator it(HullDs->HullCtx, &snapshot);
         it.Seek(key);
@@ -194,19 +194,19 @@ namespace NKikimr {
         it.PutToMerger(&merger);
         merger.Finish();
         const TMemRecBarrier& memRec = merger.GetMemRec();
- 
+
         // check if the record has quorum
-        if (!HullDs->HullCtx->GCOnlySynced || memRec.Ingress.IsQuorum(HullDs->HullCtx->IngressCache.Get()) || key.Hard) { 
+        if (!HullDs->HullCtx->GCOnlySynced || memRec.Ingress.IsQuorum(HullDs->HullCtx->IngressCache.Get()) || key.Hard) {
             // apply new record to the barrier cache
             BarrierCache.Update(key.TabletId, key.Channel, key.Hard, memRec.CollectGen, memRec.CollectStep);
-        } 
+        }
     }
- 
-    void THullDbRecovery::UpdateBarrierCache(const std::shared_ptr<TFreshAppendixBarriers>& barriers) { 
+
+    void THullDbRecovery::UpdateBarrierCache(const std::shared_ptr<TFreshAppendixBarriers>& barriers) {
         Y_VERIFY_DEBUG(barriers);
 
         // update barriers cache with newly inserted elements
-        TFreshAppendixBarriers::TIterator it(HullDs->HullCtx, barriers.get()); 
+        TFreshAppendixBarriers::TIterator it(HullDs->HullCtx, barriers.get());
         it.SeekToFirst();
         while (it.Valid()) {
             UpdateBarrierCache(it.GetCurKey());
@@ -261,7 +261,7 @@ namespace NKikimr {
 
         // check blocked
         ui32 actualGen = 0;
-        auto res = BlocksCache.IsBlocked(tabletID, {recordGeneration, 0}, &actualGen); 
+        auto res = BlocksCache.IsBlocked(tabletID, {recordGeneration, 0}, &actualGen);
         switch (res.Status) {
             case TBlocksCache::EStatus::OK:
                 return res;
@@ -319,10 +319,10 @@ namespace NKikimr {
             // we check at RECOVERY mode only, because incoming message is being checked early
             Y_VERIFY(CheckGC(ctx, record)); // TODO: CheckGC consume resources just to be sure incoming message is good
         }
- 
+
         // set up keep bits
         TIngress ingressKeep;
-        ingressKeep.SetKeep(TIngress::IngressMode(HullDs->HullCtx->VCtx->Top->GType), CollectModeKeep); 
+        ingressKeep.SetKeep(TIngress::IngressMode(HullDs->HullCtx->VCtx->Top->GType), CollectModeKeep);
         for (ui32 i = 0; i < record.KeepSize(); ++i) {
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetKeep(i));
             Y_VERIFY(id.PartId() == 0);
@@ -335,12 +335,12 @@ namespace NKikimr {
                         VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
                             "Db# LogoBlobs action# set_keep mode# %s id# %s lsn# %" PRIu64,
                             OpMode2Str(mode), id.ToString().data(), lsn));
-            } 
-        } 
- 
+            }
+        }
+
         // set up do not keep bits
         TIngress ingressDontKeep;
-        ingressDontKeep.SetKeep(TIngress::IngressMode(HullDs->HullCtx->VCtx->Top->GType), CollectModeDoNotKeep); 
+        ingressDontKeep.SetKeep(TIngress::IngressMode(HullDs->HullCtx->VCtx->Top->GType), CollectModeDoNotKeep);
         for (ui32 i = 0; i < record.DoNotKeepSize(); ++i) {
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetDoNotKeep(i));
             Y_VERIFY(id.PartId() == 0);
@@ -352,13 +352,13 @@ namespace NKikimr {
                         VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
                             "Db# LogoBlobs action# set_dont_keep mode# %s id# %s lsn# %" PRIu64,
                             OpMode2Str(mode), id.ToString().data(), lsn));
-            } 
+            }
         }
     }
 
     void THullDbRecovery::ReplaySyncDataCmd_LogoBlobsBatch(
             const TActorContext &ctx,
-            std::shared_ptr<TFreshAppendixLogoBlobs> &&logoBlobs, 
+            std::shared_ptr<TFreshAppendixLogoBlobs> &&logoBlobs,
             TLsnSeg seg,
             EOpMode mode)
     {
@@ -371,7 +371,7 @@ namespace NKikimr {
 
     void THullDbRecovery::ReplaySyncDataCmd_BlocksBatch(
             const TActorContext &ctx,
-            std::shared_ptr<TFreshAppendixBlocks> &&blocks, 
+            std::shared_ptr<TFreshAppendixBlocks> &&blocks,
             TLsnSeg seg,
             EOpMode mode)
     {
@@ -385,7 +385,7 @@ namespace NKikimr {
 
     void THullDbRecovery::ReplaySyncDataCmd_BarriersBatch(
             const TActorContext &ctx,
-            std::shared_ptr<TFreshAppendixBarriers> &&barriers, 
+            std::shared_ptr<TFreshAppendixBarriers> &&barriers,
             TLsnSeg seg,
             EOpMode mode)
     {
@@ -405,14 +405,14 @@ namespace NKikimr {
         HullDs->Blocks->GetOwnedChunks(chunks);
         HullDs->Barriers->GetOwnedChunks(chunks);
     }
- 
+
     void THullDbRecovery::BuildBarrierCache()
     {
         if (HullDs->HullCtx->BarrierValidation) {
             BarrierCache.Build(HullDs.Get());
-        } 
+        }
     }
- 
+
     void THullDbRecovery::BuildBlocksCache()
     {
         BlocksCache.Build(HullDs.Get());

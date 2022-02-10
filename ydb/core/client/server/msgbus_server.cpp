@@ -4,121 +4,121 @@
 #include "msgbus_server.h"
 #include "msgbus_server_tracer.h"
 #include "msgbus_http_server.h"
-#include "grpc_server.h" 
+#include "grpc_server.h"
 
 namespace NKikimr {
 namespace NMsgBusProxy {
 
-class TBusMessageContext::TImpl : public TThrRefBase { 
-public: 
-    virtual ~TImpl() = default; 
-    virtual NBus::TBusMessage* GetMessage() = 0; 
-    virtual NBus::TBusMessage* ReleaseMessage() = 0; 
-    virtual void SendReplyMove(NBus::TBusMessageAutoPtr response) = 0; 
-    virtual THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() = 0; 
-}; 
- 
-class TBusMessageContext::TImplMessageBus 
-    : public TBusMessageContext::TImpl 
-    , private NBus::TOnMessageContext 
-    , private TBusMessageWatcher 
-{ 
-public: 
-    TImplMessageBus() 
-    {} 
- 
-    TImplMessageBus(NBus::TOnMessageContext &messageContext, IMessageWatcher *messageWatcher) 
-        : TBusMessageWatcher(messageWatcher) 
-    { 
-        NBus::TOnMessageContext::Swap(messageContext); 
-    } 
- 
-    ~TImplMessageBus() { 
-        if (NBus::TOnMessageContext::IsInWork()) { 
-            NotifyForget(); 
-            NBus::TOnMessageContext::ForgetRequest(); 
-        } 
-    } 
- 
-    NBus::TBusMessage* GetMessage() override { 
-        return NBus::TOnMessageContext::GetMessage(); 
-    } 
- 
-    NBus::TBusMessage* ReleaseMessage() override { 
-        return NBus::TOnMessageContext::ReleaseMessage(); 
-    } 
- 
-    void SendReplyMove(NBus::TBusMessageAutoPtr response) override { 
-        NotifyReply(response.Get()); 
-        NBus::TOnMessageContext::SendReplyMove(response); 
-    } 
- 
-    NBus::TBusKey GetMessageId() override { 
-        return GetMessage()->GetHeader()->Id; 
-    } 
- 
+class TBusMessageContext::TImpl : public TThrRefBase {
+public:
+    virtual ~TImpl() = default;
+    virtual NBus::TBusMessage* GetMessage() = 0;
+    virtual NBus::TBusMessage* ReleaseMessage() = 0;
+    virtual void SendReplyMove(NBus::TBusMessageAutoPtr response) = 0;
+    virtual THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() = 0;
+};
+
+class TBusMessageContext::TImplMessageBus
+    : public TBusMessageContext::TImpl
+    , private NBus::TOnMessageContext
+    , private TBusMessageWatcher
+{
+public:
+    TImplMessageBus()
+    {}
+
+    TImplMessageBus(NBus::TOnMessageContext &messageContext, IMessageWatcher *messageWatcher)
+        : TBusMessageWatcher(messageWatcher)
+    {
+        NBus::TOnMessageContext::Swap(messageContext);
+    }
+
+    ~TImplMessageBus() {
+        if (NBus::TOnMessageContext::IsInWork()) {
+            NotifyForget();
+            NBus::TOnMessageContext::ForgetRequest();
+        }
+    }
+
+    NBus::TBusMessage* GetMessage() override {
+        return NBus::TOnMessageContext::GetMessage();
+    }
+
+    NBus::TBusMessage* ReleaseMessage() override {
+        return NBus::TOnMessageContext::ReleaseMessage();
+    }
+
+    void SendReplyMove(NBus::TBusMessageAutoPtr response) override {
+        NotifyReply(response.Get());
+        NBus::TOnMessageContext::SendReplyMove(response);
+    }
+
+    NBus::TBusKey GetMessageId() override {
+        return GetMessage()->GetHeader()->Id;
+    }
+
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
-}; 
- 
-class TBusMessageContext::TImplGRpc 
-    : public TBusMessageContext::TImpl 
-{ 
-    NGRpcProxy::IRequestContext *RequestContext; 
-    THolder<NBus::TBusMessage> Message; 
- 
-public: 
-    TImplGRpc(NGRpcProxy::IRequestContext *requestContext, int type) 
-        : RequestContext(requestContext) 
-    { 
-        switch (type) { 
-#define MTYPE(TYPE) \ 
-            case TYPE::MessageType: \ 
-                Message.Reset(new TYPE()); \ 
-                try { \ 
-                    static_cast<TYPE&>(*Message).Record = dynamic_cast<const TYPE::RecordType&>(*RequestContext->GetRequest()); \ 
-                } catch (const std::bad_cast&) { \ 
-                    Y_FAIL("incorrect request message type"); \ 
-                } \ 
-                return; 
- 
-            MTYPE(TBusRequest) 
-            MTYPE(TBusResponse) 
-            MTYPE(TBusFakeConfigDummy) 
-            MTYPE(TBusSchemeInitRoot) 
-            MTYPE(TBusBSAdm) 
-            MTYPE(TBusTypesRequest) 
-            MTYPE(TBusTypesResponse) 
-            MTYPE(TBusHiveCreateTablet) 
-            MTYPE(TBusOldHiveCreateTablet) 
-            MTYPE(TBusHiveCreateTabletResult) 
-            MTYPE(TBusLocalEnumerateTablets) 
-            MTYPE(TBusOldLocalEnumerateTablets) 
-            MTYPE(TBusLocalEnumerateTabletsResult) 
-            MTYPE(TBusKeyValue) 
-            MTYPE(TBusOldKeyValue) 
-            MTYPE(TBusKeyValueResponse) 
-            MTYPE(TBusPersQueue) 
-            MTYPE(TBusMessageBusTraceRequest) 
-            MTYPE(TBusMessageBusTraceStatus) 
-            MTYPE(TBusTabletKillRequest) 
-            MTYPE(TBusTabletStateRequest) 
+};
+
+class TBusMessageContext::TImplGRpc
+    : public TBusMessageContext::TImpl
+{
+    NGRpcProxy::IRequestContext *RequestContext;
+    THolder<NBus::TBusMessage> Message;
+
+public:
+    TImplGRpc(NGRpcProxy::IRequestContext *requestContext, int type)
+        : RequestContext(requestContext)
+    {
+        switch (type) {
+#define MTYPE(TYPE) \
+            case TYPE::MessageType: \
+                Message.Reset(new TYPE()); \
+                try { \
+                    static_cast<TYPE&>(*Message).Record = dynamic_cast<const TYPE::RecordType&>(*RequestContext->GetRequest()); \
+                } catch (const std::bad_cast&) { \
+                    Y_FAIL("incorrect request message type"); \
+                } \
+                return;
+
+            MTYPE(TBusRequest)
+            MTYPE(TBusResponse)
+            MTYPE(TBusFakeConfigDummy)
+            MTYPE(TBusSchemeInitRoot)
+            MTYPE(TBusBSAdm)
+            MTYPE(TBusTypesRequest)
+            MTYPE(TBusTypesResponse)
+            MTYPE(TBusHiveCreateTablet)
+            MTYPE(TBusOldHiveCreateTablet)
+            MTYPE(TBusHiveCreateTabletResult)
+            MTYPE(TBusLocalEnumerateTablets)
+            MTYPE(TBusOldLocalEnumerateTablets)
+            MTYPE(TBusLocalEnumerateTabletsResult)
+            MTYPE(TBusKeyValue)
+            MTYPE(TBusOldKeyValue)
+            MTYPE(TBusKeyValueResponse)
+            MTYPE(TBusPersQueue)
+            MTYPE(TBusMessageBusTraceRequest)
+            MTYPE(TBusMessageBusTraceStatus)
+            MTYPE(TBusTabletKillRequest)
+            MTYPE(TBusTabletStateRequest)
             MTYPE(TBusTabletCountersRequest)
-            MTYPE(TBusTabletLocalMKQL) 
-            MTYPE(TBusTabletLocalSchemeTx) 
-            MTYPE(TBusSchemeOperation) 
-            MTYPE(TBusSchemeOperationStatus) 
-            MTYPE(TBusSchemeDescribe) 
-            MTYPE(TBusOldFlatDescribeRequest) 
-            MTYPE(TBusOldFlatDescribeResponse) 
-            MTYPE(TBusBsTestLoadRequest) 
-            MTYPE(TBusBsTestLoadResponse) 
-            MTYPE(TBusBsGetRequest) 
-            MTYPE(TBusBsGetResponse) 
-            MTYPE(TBusDbSchema) 
-            MTYPE(TBusDbOperation) 
-            MTYPE(TBusDbResponse) 
-            MTYPE(TBusDbBatch) 
-            MTYPE(TBusBlobStorageConfigRequest) 
+            MTYPE(TBusTabletLocalMKQL)
+            MTYPE(TBusTabletLocalSchemeTx)
+            MTYPE(TBusSchemeOperation)
+            MTYPE(TBusSchemeOperationStatus)
+            MTYPE(TBusSchemeDescribe)
+            MTYPE(TBusOldFlatDescribeRequest)
+            MTYPE(TBusOldFlatDescribeResponse)
+            MTYPE(TBusBsTestLoadRequest)
+            MTYPE(TBusBsTestLoadResponse)
+            MTYPE(TBusBsGetRequest)
+            MTYPE(TBusBsGetResponse)
+            MTYPE(TBusDbSchema)
+            MTYPE(TBusDbOperation)
+            MTYPE(TBusDbResponse)
+            MTYPE(TBusDbBatch)
+            MTYPE(TBusBlobStorageConfigRequest)
             MTYPE(TBusNodeRegistrationRequest)
             MTYPE(TBusCmsRequest)
             MTYPE(TBusChooseProxy)
@@ -127,205 +127,205 @@ public:
             MTYPE(TBusStreamRequest)
             MTYPE(TBusS3ListingRequest)
             MTYPE(TBusS3ListingResponse)
-            MTYPE(TBusInterconnectDebug) 
+            MTYPE(TBusInterconnectDebug)
             MTYPE(TBusConsoleRequest)
             MTYPE(TBusResolveNode)
             MTYPE(TBusFillNode)
             MTYPE(TBusDrainNode)
-            MTYPE(TBusTestShardControlRequest) 
-#undef MTYPE 
-        } 
- 
-        Y_FAIL(); 
-    } 
- 
-    ~TImplGRpc() { 
-        ForgetRequest(); 
-    } 
- 
-    void ForgetRequest() { 
-        if (RequestContext) { 
+            MTYPE(TBusTestShardControlRequest)
+#undef MTYPE
+        }
+
+        Y_FAIL();
+    }
+
+    ~TImplGRpc() {
+        ForgetRequest();
+    }
+
+    void ForgetRequest() {
+        if (RequestContext) {
             RequestContext->ReplyError("request wasn't processed properly");
-            RequestContext = nullptr; 
-        } 
-    } 
- 
-    NBus::TBusMessage* GetMessage() override { 
-        return Message.Get(); 
-    } 
- 
-    NBus::TBusMessage* ReleaseMessage() override { 
-        return Message.Release(); 
-    } 
- 
-    void SendReply(NBus::TBusMessage *resp) { 
-        Y_VERIFY(RequestContext); 
-        switch (const ui32 type = resp->GetHeader()->Type) { 
-#define REPLY_OPTION(TYPE) \ 
-            case TYPE::MessageType: { \ 
-                auto *msg = dynamic_cast<TYPE *>(resp); \ 
-                Y_VERIFY(msg); \ 
-                RequestContext->Reply(msg->Record); \ 
-                break; \ 
-            } 
- 
-            REPLY_OPTION(TBusResponse) 
-            REPLY_OPTION(TBusDbResponse) 
-            REPLY_OPTION(TBusBsTestLoadResponse) 
+            RequestContext = nullptr;
+        }
+    }
+
+    NBus::TBusMessage* GetMessage() override {
+        return Message.Get();
+    }
+
+    NBus::TBusMessage* ReleaseMessage() override {
+        return Message.Release();
+    }
+
+    void SendReply(NBus::TBusMessage *resp) {
+        Y_VERIFY(RequestContext);
+        switch (const ui32 type = resp->GetHeader()->Type) {
+#define REPLY_OPTION(TYPE) \
+            case TYPE::MessageType: { \
+                auto *msg = dynamic_cast<TYPE *>(resp); \
+                Y_VERIFY(msg); \
+                RequestContext->Reply(msg->Record); \
+                break; \
+            }
+
+            REPLY_OPTION(TBusResponse)
+            REPLY_OPTION(TBusDbResponse)
+            REPLY_OPTION(TBusBsTestLoadResponse)
             REPLY_OPTION(TBusNodeRegistrationResponse)
             REPLY_OPTION(TBusCmsResponse)
             REPLY_OPTION(TBusSqsResponse)
             REPLY_OPTION(TBusS3ListingResponse)
             REPLY_OPTION(TBusConsoleResponse)
- 
-            default: 
-                Y_FAIL("unexpected response type %" PRIu32, type); 
-        } 
+
+            default:
+                Y_FAIL("unexpected response type %" PRIu32, type);
+        }
         RequestContext = nullptr;
-    } 
- 
-    void SendReplyMove(NBus::TBusMessageAutoPtr response) override { 
-        SendReply(response.Get()); 
-    } 
- 
+    }
+
+    void SendReplyMove(NBus::TBusMessageAutoPtr response) override {
+        SendReply(response.Get());
+    }
+
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
-}; 
- 
-TBusMessageContext::TBusMessageContext() 
-{} 
- 
-TBusMessageContext::TBusMessageContext(const TBusMessageContext& other) 
-    : Impl(other.Impl) 
-{} 
- 
-TBusMessageContext::TBusMessageContext(NBus::TOnMessageContext &messageContext, IMessageWatcher *messageWatcher) 
-    : Impl(new TImplMessageBus(messageContext, messageWatcher)) 
-{} 
- 
-TBusMessageContext::TBusMessageContext(NGRpcProxy::IRequestContext *requestContext, int type) 
-    : Impl(new TImplGRpc(requestContext, type)) 
-{} 
- 
-TBusMessageContext::~TBusMessageContext() 
-{} 
- 
-TBusMessageContext& TBusMessageContext::operator =(TBusMessageContext other) { 
-    Impl = std::move(other.Impl); 
-    return *this; 
-} 
- 
-NBus::TBusMessage *TBusMessageContext::GetMessage() { 
-    Y_VERIFY(Impl); 
-    return Impl->GetMessage(); 
-} 
- 
-NBus::TBusMessage *TBusMessageContext::ReleaseMessage() { 
-    Y_VERIFY(Impl); 
-    return Impl->ReleaseMessage(); 
-} 
- 
-void TBusMessageContext::SendReplyMove(NBus::TBusMessageAutoPtr response) { 
-    Y_VERIFY(Impl); 
-    Impl->SendReplyMove(response); 
-} 
- 
-void TBusMessageContext::Swap(TBusMessageContext &msg) { 
-    std::swap(Impl, msg.Impl); 
-} 
- 
-THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::CreateSessionIdentHolder() { 
-    Y_VERIFY(Impl); 
-    return Impl->CreateSessionIdentHolder(); 
-} 
- 
- 
-class TMessageBusSessionIdentHolder::TImpl { 
-public: 
-    virtual ~TImpl() = default; 
-    virtual void SendReply(NBus::TBusMessage *resp) = 0; 
-    virtual void SendReplyMove(NBus::TBusMessageAutoPtr resp) = 0; 
-    virtual ui64 GetTotalTimeout() const = 0; 
-}; 
- 
-class TMessageBusSessionIdentHolder::TImplMessageBus 
-    : public TMessageBusSessionIdentHolder::TImpl 
-    , private TBusMessageWatcher 
-{ 
-    NBus::TBusServerSession *Session; 
-    NBus::TBusIdentity Ident; 
- 
-public: 
-    TImplMessageBus(NBus::TOnMessageContext &ctx) { 
-        Session = ctx.GetSession(); 
-        ctx.AckMessage(Ident); 
-    } 
- 
-    ~TImplMessageBus() { 
-        if (Session && Ident.IsInWork()) { 
-            NotifyForget(); 
-            Session->ForgetRequest(Ident); 
-        } 
-    } 
- 
-    void SendReply(NBus::TBusMessage *resp) override { 
-        NotifyReply(resp); 
-        Session->SendReply(Ident, resp); 
-    } 
- 
-    void SendReplyMove(NBus::TBusMessageAutoPtr resp) override { 
-        NotifyReply(resp.Get()); 
-        Session->SendReplyMove(Ident, resp); 
-    } 
- 
-    NBus::TBusKey GetMessageId() override { 
-        return Ident.MessageId; 
-    } 
- 
-    ui64 GetTotalTimeout() const override { 
-        return Session->GetConfig()->TotalTimeout; 
-    } 
-}; 
- 
+};
+
+TBusMessageContext::TBusMessageContext()
+{}
+
+TBusMessageContext::TBusMessageContext(const TBusMessageContext& other)
+    : Impl(other.Impl)
+{}
+
+TBusMessageContext::TBusMessageContext(NBus::TOnMessageContext &messageContext, IMessageWatcher *messageWatcher)
+    : Impl(new TImplMessageBus(messageContext, messageWatcher))
+{}
+
+TBusMessageContext::TBusMessageContext(NGRpcProxy::IRequestContext *requestContext, int type)
+    : Impl(new TImplGRpc(requestContext, type))
+{}
+
+TBusMessageContext::~TBusMessageContext()
+{}
+
+TBusMessageContext& TBusMessageContext::operator =(TBusMessageContext other) {
+    Impl = std::move(other.Impl);
+    return *this;
+}
+
+NBus::TBusMessage *TBusMessageContext::GetMessage() {
+    Y_VERIFY(Impl);
+    return Impl->GetMessage();
+}
+
+NBus::TBusMessage *TBusMessageContext::ReleaseMessage() {
+    Y_VERIFY(Impl);
+    return Impl->ReleaseMessage();
+}
+
+void TBusMessageContext::SendReplyMove(NBus::TBusMessageAutoPtr response) {
+    Y_VERIFY(Impl);
+    Impl->SendReplyMove(response);
+}
+
+void TBusMessageContext::Swap(TBusMessageContext &msg) {
+    std::swap(Impl, msg.Impl);
+}
+
+THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::CreateSessionIdentHolder() {
+    Y_VERIFY(Impl);
+    return Impl->CreateSessionIdentHolder();
+}
+
+
+class TMessageBusSessionIdentHolder::TImpl {
+public:
+    virtual ~TImpl() = default;
+    virtual void SendReply(NBus::TBusMessage *resp) = 0;
+    virtual void SendReplyMove(NBus::TBusMessageAutoPtr resp) = 0;
+    virtual ui64 GetTotalTimeout() const = 0;
+};
+
+class TMessageBusSessionIdentHolder::TImplMessageBus
+    : public TMessageBusSessionIdentHolder::TImpl
+    , private TBusMessageWatcher
+{
+    NBus::TBusServerSession *Session;
+    NBus::TBusIdentity Ident;
+
+public:
+    TImplMessageBus(NBus::TOnMessageContext &ctx) {
+        Session = ctx.GetSession();
+        ctx.AckMessage(Ident);
+    }
+
+    ~TImplMessageBus() {
+        if (Session && Ident.IsInWork()) {
+            NotifyForget();
+            Session->ForgetRequest(Ident);
+        }
+    }
+
+    void SendReply(NBus::TBusMessage *resp) override {
+        NotifyReply(resp);
+        Session->SendReply(Ident, resp);
+    }
+
+    void SendReplyMove(NBus::TBusMessageAutoPtr resp) override {
+        NotifyReply(resp.Get());
+        Session->SendReplyMove(Ident, resp);
+    }
+
+    NBus::TBusKey GetMessageId() override {
+        return Ident.MessageId;
+    }
+
+    ui64 GetTotalTimeout() const override {
+        return Session->GetConfig()->TotalTimeout;
+    }
+};
+
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplMessageBus::CreateSessionIdentHolder() {
     return MakeHolder<TMessageBusSessionIdentHolder::TImplMessageBus>(static_cast<NBus::TOnMessageContext&>(*this));
 }
 
-class TMessageBusSessionIdentHolder::TImplGRpc 
-    : public TMessageBusSessionIdentHolder::TImpl 
-{ 
-    TIntrusivePtr<TBusMessageContext::TImplGRpc> Context; 
- 
-public: 
-    TImplGRpc(TIntrusivePtr<TBusMessageContext::TImplGRpc> context) 
-        : Context(context) 
+class TMessageBusSessionIdentHolder::TImplGRpc
+    : public TMessageBusSessionIdentHolder::TImpl
+{
+    TIntrusivePtr<TBusMessageContext::TImplGRpc> Context;
+
+public:
+    TImplGRpc(TIntrusivePtr<TBusMessageContext::TImplGRpc> context)
+        : Context(context)
     {
     }
- 
-    ~TImplGRpc() { 
-        if (Context) { 
-            Context->ForgetRequest(); 
-        } 
-    } 
- 
-    void SendReply(NBus::TBusMessage *resp) override { 
+
+    ~TImplGRpc() {
+        if (Context) {
+            Context->ForgetRequest();
+        }
+    }
+
+    void SendReply(NBus::TBusMessage *resp) override {
         Y_VERIFY(Context);
         Context->SendReply(resp);
 
         auto context = std::move(Context);
-    } 
- 
-    void SendReplyMove(NBus::TBusMessageAutoPtr resp) override { 
+    }
+
+    void SendReplyMove(NBus::TBusMessageAutoPtr resp) override {
         Y_VERIFY(Context);
         Context->SendReplyMove(resp);
 
         auto context = std::move(Context);
-    } 
- 
-    ui64 GetTotalTimeout() const override { 
-        return 90000; 
-    } 
-}; 
- 
+    }
+
+    ui64 GetTotalTimeout() const override {
+        return 90000;
+    }
+};
+
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplGRpc::CreateSessionIdentHolder() {
     return MakeHolder<TMessageBusSessionIdentHolder::TImplGRpc>(this);
 }
@@ -333,34 +333,34 @@ THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplGRpc::Cre
 TMessageBusSessionIdentHolder::TMessageBusSessionIdentHolder()
 {}
 
-TMessageBusSessionIdentHolder::TMessageBusSessionIdentHolder(TBusMessageContext &msg) 
-{ 
+TMessageBusSessionIdentHolder::TMessageBusSessionIdentHolder(TBusMessageContext &msg)
+{
     InitSession(msg);
 }
 
-TMessageBusSessionIdentHolder::~TMessageBusSessionIdentHolder() 
-{} 
+TMessageBusSessionIdentHolder::~TMessageBusSessionIdentHolder()
+{}
 
-void TMessageBusSessionIdentHolder::InitSession(TBusMessageContext &msg) { 
-    Impl = msg.CreateSessionIdentHolder(); 
-} 
- 
-ui64 TMessageBusSessionIdentHolder::GetTotalTimeout() const { 
-    Y_VERIFY(Impl); 
-    return Impl->GetTotalTimeout(); 
-} 
- 
-void TMessageBusSessionIdentHolder::SendReply(NBus::TBusMessage *resp) { 
-    Y_VERIFY(Impl); 
-    Impl->SendReply(resp); 
-} 
- 
-void TMessageBusSessionIdentHolder::SendReplyMove(NBus::TBusMessageAutoPtr resp) { 
-    Y_VERIFY(Impl); 
-    Impl->SendReplyMove(resp); 
-} 
- 
- 
+void TMessageBusSessionIdentHolder::InitSession(TBusMessageContext &msg) {
+    Impl = msg.CreateSessionIdentHolder();
+}
+
+ui64 TMessageBusSessionIdentHolder::GetTotalTimeout() const {
+    Y_VERIFY(Impl);
+    return Impl->GetTotalTimeout();
+}
+
+void TMessageBusSessionIdentHolder::SendReply(NBus::TBusMessage *resp) {
+    Y_VERIFY(Impl);
+    Impl->SendReply(resp);
+}
+
+void TMessageBusSessionIdentHolder::SendReplyMove(NBus::TBusMessageAutoPtr resp) {
+    Y_VERIFY(Impl);
+    Impl->SendReplyMove(resp);
+}
+
+
 void TBusMessageWatcher::NotifyForget() {
     if (MessageWatcher) {
         MessageWatcher->OnMessageDied(GetMessageId());
@@ -376,7 +376,7 @@ void TBusMessageWatcher::NotifyReply(NBus::TBusMessage *response) {
 }
 
 
- 
+
 class TMessageBusMonitorActor : public TActorBootstrapped<TMessageBusMonitorActor> {
     struct TEvPrivate {
         enum EEv {
@@ -397,7 +397,7 @@ public:
         , SessionConfig(sessionConfig)
     {}
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::MSGBUS_COMMON; } 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::MSGBUS_COMMON; }
 
     void Bootstrap(const TActorContext &ctx) {
         WhiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
@@ -516,13 +516,13 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     case MTYPE_CLIENT_FLAT_TX_REQUEST:
         return ClientProxyRequest<TEvBusProxy::TEvFlatTxRequest>(msg);
     case MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST:
-        return ClientActorRequest(CreateMessageBusSchemeOperationStatus, msg); 
+        return ClientActorRequest(CreateMessageBusSchemeOperationStatus, msg);
     case MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST:
     case MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST:
         return ClientProxyRequest<TEvBusProxy::TEvFlatDescribeRequest>(msg);
-    case MTYPE_CLIENT_LOAD_REQUEST: 
+    case MTYPE_CLIENT_LOAD_REQUEST:
         return ClientActorRequest(CreateMessageBusBlobStorageLoadRequest, msg);
-    case MTYPE_CLIENT_GET_REQUEST: 
+    case MTYPE_CLIENT_GET_REQUEST:
         return ClientActorRequest(CreateMessageBusBlobStorageGetRequest, msg);
     case MTYPE_CLIENT_DB_SCHEMA:
         return ClientProxyRequest<TEvBusProxy::TEvDbSchema>(msg);
@@ -530,8 +530,8 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientProxyRequest<TEvBusProxy::TEvDbOperation>(msg);
     case MTYPE_CLIENT_DB_BATCH:
         return ClientProxyRequest<TEvBusProxy::TEvDbBatch>(msg);
-    case MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST: 
-        return ClientActorRequest(CreateMessageBusBlobStorageConfig, msg); 
+    case MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST:
+        return ClientActorRequest(CreateMessageBusBlobStorageConfig, msg);
     case MTYPE_CLIENT_DRAIN_NODE:
         return ClientActorRequest(CreateMessageBusDrainNode, msg);
     case MTYPE_CLIENT_FILL_NODE:
@@ -546,12 +546,12 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusWhoAmI, msg);
     case MTYPE_CLIENT_S3_LISTING_REQUEST:
         return ClientActorRequest(CreateMessageBusS3ListingRequest, msg);
-    case MTYPE_CLIENT_INTERCONNECT_DEBUG: 
-        return ClientActorRequest(CreateMessageBusInterconnectDebug, msg); 
+    case MTYPE_CLIENT_INTERCONNECT_DEBUG:
+        return ClientActorRequest(CreateMessageBusInterconnectDebug, msg);
     case MTYPE_CLIENT_CONSOLE_REQUEST:
         return ClientActorRequest(CreateMessageBusConsoleRequest, msg);
-    case MTYPE_CLIENT_TEST_SHARD_CONTROL: 
-        return ClientActorRequest(CreateMessageBusTestShardControl, msg); 
+    case MTYPE_CLIENT_TEST_SHARD_CONTROL:
+        return ClientActorRequest(CreateMessageBusTestShardControl, msg);
     default:
         return UnknownMessage(msg);
     }
@@ -580,7 +580,7 @@ void TMessageBusServer::ClientProxyRequest(TBusMessageContext &msg) {
 void TMessageBusServer::ClientActorRequest(ActorCreationFunc func, TBusMessageContext &msg) {
     if (IActor *x = func(msg))
         ActorSystem->Register(x, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
-    else 
+    else
         msg.SendReplyMove(new TBusResponseStatus(MSTATUS_ERROR));
 }
 

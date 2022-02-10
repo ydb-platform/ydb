@@ -118,7 +118,7 @@ class TPDiskReaderTestLoadActor : public TActorBootstrapped<TPDiskReaderTestLoad
     TString ErrorReason;
 public:
     static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::BS_LOAD_PDISK_READ; 
+        return NKikimrServices::TActivity::BS_LOAD_PDISK_READ;
     }
 
     TPDiskReaderTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskReadLoadStart& cmd, const TActorId& parent,
@@ -202,7 +202,7 @@ public:
         AppData(ctx)->Icb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskReadLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
         if (IsWardenlessTest) {
             ErrorReason = "Still waiting for YardInitResult";
-            SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid)); 
+            SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid));
         } else {
             Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvRegisterPDiskLoadActor());
         }
@@ -211,7 +211,7 @@ public:
     void Handle(TEvRegisterPDiskLoadActorResult::TPtr& ev, const TActorContext& ctx) {
         OwnerRound = ev->Get()->OwnerRound;
         ErrorReason = "Still waiting for YardInitResult";
-        SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid)); 
+        SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid));
     }
 
     void Handle(NPDisk::TEvYardInitResult::TPtr& ev, const TActorContext& ctx) {
@@ -221,7 +221,7 @@ public:
             str << "yard init failed, Status# " << NKikimrProto::EReplyStatus_Name(msg->Status);
             ErrorReason = str.Str();
             LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
-            SendRequest(ctx, std::make_unique<TEvents::TEvPoisonPill>()); 
+            SendRequest(ctx, std::make_unique<TEvents::TEvPoisonPill>());
             return;
         }
         ErrorReason = "OK";
@@ -242,7 +242,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void StartAllReservations(const TActorContext& ctx) {
-        SendRequest(ctx, std::make_unique<NPDisk::TEvChunkReserve>(PDiskParams->Owner, 
+        SendRequest(ctx, std::make_unique<NPDisk::TEvChunkReserve>(PDiskParams->Owner,
                     PDiskParams->OwnerRound, (ui32)Chunks.size()));
         ++ChunkReserve_RequestsSent;
     }
@@ -262,7 +262,7 @@ public:
                 Chunks[i].Idx = chunkIdx;
                 ui64 requestIdx = NewTRequestInfo((ui32)DataBuffer.size(), chunkIdx, TAppData::TimeProvider->Now());
                 TString tmp = DataBuffer;
-                SendRequest(ctx, std::make_unique<NPDisk::TEvChunkWrite>(PDiskParams->Owner, PDiskParams->OwnerRound, 
+                SendRequest(ctx, std::make_unique<NPDisk::TEvChunkWrite>(PDiskParams->Owner, PDiskParams->OwnerRound,
                             chunkIdx, 0u, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(tmp),
                             reinterpret_cast<void*>(requestIdx), true, NPriWrite::HullHugeAsyncBlob, Sequential));
                 ++ChunkWrite_RequestsSent;
@@ -284,7 +284,7 @@ public:
                 << NKikimrProto::EReplyStatus_Name(msg->Status);
             ErrorReason = str.Str();
             LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
-            SendRequest(ctx, std::make_unique<TEvents::TEvPoisonPill>()); 
+            SendRequest(ctx, std::make_unique<TEvents::TEvPoisonPill>());
         }
         if (ChunkWrite_OK == Chunks.size()) {
             TestStartTime = TAppData::TimeProvider->Now();
@@ -317,7 +317,7 @@ public:
     void CheckDie(const TActorContext& ctx) {
         if (!MaxInFlight && !InFlight && !LogInFlight && !Harakiri) {
             if (PDiskParams) {
-                SendRequest(ctx, std::make_unique<NPDisk::TEvHarakiri>(PDiskParams->Owner, PDiskParams->OwnerRound)); 
+                SendRequest(ctx, std::make_unique<NPDisk::TEvHarakiri>(PDiskParams->Owner, PDiskParams->OwnerRound));
                 Harakiri = true;
             } else {
                 ctx.Send(Parent, new TEvTestLoadFinished(Tag, nullptr, ErrorReason));
@@ -409,7 +409,7 @@ public:
             Report->Size = size;
             ui32 offset = SlotIndex * size;
             ui64 requestIdx = NewTRequestInfo(size, chunkIdx, TAppData::TimeProvider->Now());
-            SendRequest(ctx, std::make_unique<NPDisk::TEvChunkRead>(PDiskParams->Owner, PDiskParams->OwnerRound, 
+            SendRequest(ctx, std::make_unique<NPDisk::TEvChunkRead>(PDiskParams->Owner, PDiskParams->OwnerRound,
                     chunkIdx, offset, size, ui8(0), reinterpret_cast<void*>(requestIdx)));
             ++ChunkRead_RequestsSent;
 
@@ -440,7 +440,7 @@ public:
         record.CommitChunks.push_back(chunkIdx);
         TLsnSeg seg(Lsn, Lsn);
         ++Lsn;
-        SendRequest(ctx, std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, PDiskParams->OwnerRound, 
+        SendRequest(ctx, std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, PDiskParams->OwnerRound,
                 TLogSignature::SignatureHugeLogoBlob, record, logRecord, seg,
                 reinterpret_cast<void*>(requestIdx)));
         ++LogInFlight;
@@ -486,8 +486,8 @@ public:
     }
 
     template<typename TRequest>
-    void SendRequest(const TActorContext& ctx, std::unique_ptr<TRequest>&& request) { 
-        ctx.Send(MakeBlobStoragePDiskID(ctx.ExecutorThread.ActorSystem->NodeId, PDiskId), request.release()); 
+    void SendRequest(const TActorContext& ctx, std::unique_ptr<TRequest>&& request) {
+        ctx.Send(MakeBlobStoragePDiskID(ctx.ExecutorThread.ActorSystem->NodeId, PDiskId), request.release());
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {

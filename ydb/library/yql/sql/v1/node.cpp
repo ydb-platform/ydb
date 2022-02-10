@@ -942,7 +942,7 @@ bool TColumns::IsColumnPossible(TContext& ctx, const TString& name) {
         if (ctx.SimpleColumns) {
             return true;
         }
-        for (const auto& real: Real) { 
+        for (const auto& real: Real) {
             const auto pos = real.find_first_of("*");
             if (pos == TString::npos) {
                 continue;
@@ -1949,7 +1949,7 @@ TNodePtr ISource::BuildCalcOverWindow(TContext& ctx, const TString& label) {
         frames = L(frames, callOnFrame);
 
         auto keysTuple = Y();
-        for (const auto& key: spec->Partitions) { 
+        for (const auto& key: spec->Partitions) {
             if (!dynamic_cast<TSessionWindow*>(key.Get())) {
                 keysTuple = L(keysTuple, AliasOrColumn(key, GetJoin()));
             }
@@ -2855,7 +2855,7 @@ public:
         YQL_ENSURE(!Node, "TAccessNode::Clone: Node should not be initialized");
         TVector<TIdPart> cloneIds;
         cloneIds.reserve(Ids.size());
-        for (const auto& id: Ids) { 
+        for (const auto& id: Ids) {
             cloneIds.emplace_back(id.Clone());
         }
         auto copy = new TAccessNode(Pos, cloneIds, IsLookup);

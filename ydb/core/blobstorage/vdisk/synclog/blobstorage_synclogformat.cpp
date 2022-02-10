@@ -28,22 +28,22 @@ namespace NKikimr {
         }
 
         // Block
-        ui32 TSerializeRoutines::SetBlock(char *buf, ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid) { 
-            if (issuerGuid) { 
-                TRecordHdr *hdr = (TRecordHdr *)buf; 
-                hdr->RecType = TRecordHdr::RecBlockV2; 
-                hdr->Lsn = lsn; 
-                new(hdr + 1) TBlockRecV2(tabletId, gen, issuerGuid); 
-                return sizeof(TRecordHdr) + sizeof(TBlockRecV2); 
-            } else { 
-                TRecordHdr *hdr = (TRecordHdr *)buf; 
-                TBlockRec *rec = (TBlockRec *)(hdr + 1); 
-                hdr->RecType = TRecordHdr::RecBlock; 
-                hdr->Lsn = lsn; 
-                rec->TabletId = tabletId; 
-                rec->Generation = gen; 
-                return sizeof(TRecordHdr) + sizeof(TBlockRec); 
-            } 
+        ui32 TSerializeRoutines::SetBlock(char *buf, ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid) {
+            if (issuerGuid) {
+                TRecordHdr *hdr = (TRecordHdr *)buf;
+                hdr->RecType = TRecordHdr::RecBlockV2;
+                hdr->Lsn = lsn;
+                new(hdr + 1) TBlockRecV2(tabletId, gen, issuerGuid);
+                return sizeof(TRecordHdr) + sizeof(TBlockRecV2);
+            } else {
+                TRecordHdr *hdr = (TRecordHdr *)buf;
+                TBlockRec *rec = (TBlockRec *)(hdr + 1);
+                hdr->RecType = TRecordHdr::RecBlock;
+                hdr->Lsn = lsn;
+                rec->TabletId = tabletId;
+                rec->Generation = gen;
+                return sizeof(TRecordHdr) + sizeof(TBlockRec);
+            }
         }
 
         // Barrier
@@ -67,7 +67,7 @@ namespace NKikimr {
             rec->GenCounter = genCounter;
             rec->CollectGeneration = collGen;
             rec->CollectStep = collStep;
-            rec->Hard = hard; 
+            rec->Hard = hard;
             rec->Ingress = ingress;
             return sizeof(TRecordHdr) + sizeof(TBarrierRec);
         }
@@ -88,7 +88,7 @@ namespace NKikimr {
             const ui32 genCounter = record.GetPerGenerationCounter();
             const ui32 collectGeneration = record.GetCollectGeneration();
             const ui32 collectStep = record.GetCollectStep();
-            const bool hard = record.GetHard(); 
+            const bool hard = record.GetHard();
 
             ui64 lsnAdvance = !!collect + record.KeepSize() + record.DoNotKeepSize();
             ui64 lsnPos = lsn - lsnAdvance + 1;
@@ -96,7 +96,7 @@ namespace NKikimr {
 
             // set up keep bits
             TIngress ingressKeep;
-            ingressKeep.SetKeep(TIngress::IngressMode(gtype), CollectModeKeep); 
+            ingressKeep.SetKeep(TIngress::IngressMode(gtype), CollectModeKeep);
             for (ui32 i = 0; i < record.KeepSize(); ++i, ++lsnPos) {
                 if (lsnPos > lastLsnOfIndexRecord) {
                     TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetKeep(i));
@@ -108,7 +108,7 @@ namespace NKikimr {
 
             // set up do not keep bits
             TIngress ingressDontKeep;
-            ingressDontKeep.SetKeep(TIngress::IngressMode(gtype), CollectModeDoNotKeep); 
+            ingressDontKeep.SetKeep(TIngress::IngressMode(gtype), CollectModeDoNotKeep);
             for (ui32 i = 0; i < record.DoNotKeepSize(); ++i, ++lsnPos) {
                 if (lsnPos > lastLsnOfIndexRecord) {
                     TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetDoNotKeep(i));
@@ -122,7 +122,7 @@ namespace NKikimr {
             if (collect && (lsnPos > lastLsnOfIndexRecord)) {
                 ui32 size = SetBarrier(pos, lsnPos++, tabletId, channel, gen,
                                        genCounter, collectGeneration,
-                                       collectStep, hard, ingress); 
+                                       collectStep, hard, ingress);
                 pos += size;
             }
 
@@ -133,17 +133,17 @@ namespace NKikimr {
                                        char *buf,
                                        ui64 lsn,
                                        const TDeque<TLogoBlobID>& phantoms) {
-            char *pos = buf; 
- 
-            TIngress ingressDontKeep; 
-            ingressDontKeep.SetKeep(TIngress::IngressMode(gtype), CollectModeDoNotKeep); 
-            for (const TLogoBlobID& id : phantoms) { 
+            char *pos = buf;
+
+            TIngress ingressDontKeep;
+            ingressDontKeep.SetKeep(TIngress::IngressMode(gtype), CollectModeDoNotKeep);
+            for (const TLogoBlobID& id : phantoms) {
                 pos += SetLogoBlob(gtype, pos, lsn++, id, ingressDontKeep);
-            } 
- 
-            return pos - buf; 
-        } 
- 
+            }
+
+            return pos - buf;
+        }
+
         bool TSerializeRoutines::CheckData(const TString &data, TString &errorString) {
             const TRecordHdr *begin = (const TRecordHdr *)(data.data());
             const TRecordHdr *end = (const TRecordHdr *)(data.data() + data.size());
@@ -153,7 +153,7 @@ namespace NKikimr {
                     case TRecordHdr::RecLogoBlob:
                     case TRecordHdr::RecBlock:
                     case TRecordHdr::RecBarrier:
-                    case TRecordHdr::RecBlockV2: 
+                    case TRecordHdr::RecBlockV2:
                         break;
                     default: {
                         TStringStream str;
@@ -178,9 +178,9 @@ namespace NKikimr {
             Size = TSerializeRoutines::SetLogoBlob(gtype, Buf, lsn, id, ingress);
         }
 
-        void TSequenceOfRecs::SetBlock(ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid) { 
+        void TSequenceOfRecs::SetBlock(ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid) {
             Y_VERIFY(Size == 0);
-            Size = TSerializeRoutines::SetBlock(Buf, lsn, tabletId, gen, issuerGuid); 
+            Size = TSerializeRoutines::SetBlock(Buf, lsn, tabletId, gen, issuerGuid);
         }
 
         void TSequenceOfRecs::SetBarrier(ui64 lsn,
@@ -190,11 +190,11 @@ namespace NKikimr {
                                          ui32 genCounter,
                                          ui32 collGen,
                                          ui32 collStep,
-                                         bool hard, 
+                                         bool hard,
                                          const TBarrierIngress &ingress) {
             Y_VERIFY(Size == 0);
             Size = TSerializeRoutines::SetBarrier(Buf, lsn, tabletId, channel, gen, genCounter,
-                                                  collGen, collStep, hard, ingress); 
+                                                  collGen, collStep, hard, ingress);
         }
 
         void TSequenceOfRecs::SetGC(const TBlobStorageGroupType &gtype,

@@ -1,55 +1,55 @@
 #include <util/random/shuffle.h>
-#include "test_load_actor.h" 
+#include "test_load_actor.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <util/random/fast.h> 
-#include <util/generic/queue.h> 
- 
-namespace NKikimr { 
- 
-class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoadActor> { 
-    struct TChunkInfo { 
+#include <util/random/fast.h>
+#include <util/generic/queue.h>
+
+namespace NKikimr {
+
+class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoadActor> {
+    struct TChunkInfo {
         TDeque<std::pair<TChunkIdx, ui32>> WriteQueue;
-        ui32 NumSlots; 
-        ui32 SlotSizeBlocks; 
-        ui32 Weight; 
-        ui64 AccumWeight; 
- 
-        struct TFindByWeight { 
-            bool operator ()(ui64 left, const TChunkInfo& right) const { 
-                return left < right.AccumWeight; 
-            } 
-        }; 
-    }; 
- 
+        ui32 NumSlots;
+        ui32 SlotSizeBlocks;
+        ui32 Weight;
+        ui64 AccumWeight;
+
+        struct TFindByWeight {
+            bool operator ()(ui64 left, const TChunkInfo& right) const {
+                return left < right.AccumWeight;
+            }
+        };
+    };
+
     struct TParts : public NPDisk::TEvChunkWrite::IParts {
-        const void *Buffer; 
-        ui32 Len; 
- 
-        TParts(const void *buffer, ui32 len) 
-            : Buffer(buffer) 
-            , Len(len) 
-        {} 
- 
-        TDataRef operator [](ui32 index) const override { 
-            Y_VERIFY(index == 0); 
-            return std::make_pair(Buffer, Len); 
-        } 
- 
-        ui32 Size() const override { 
-            return 1; 
-        } 
-    }; 
- 
-    struct TRequestInfo { 
-        ui32 Size; 
-        TChunkIdx ChunkIdx; 
-        TInstant StartTime; 
+        const void *Buffer;
+        ui32 Len;
+
+        TParts(const void *buffer, ui32 len)
+            : Buffer(buffer)
+            , Len(len)
+        {}
+
+        TDataRef operator [](ui32 index) const override {
+            Y_VERIFY(index == 0);
+            return std::make_pair(Buffer, Len);
+        }
+
+        ui32 Size() const override {
+            return 1;
+        }
+    };
+
+    struct TRequestInfo {
+        ui32 Size;
+        TChunkIdx ChunkIdx;
+        TInstant StartTime;
         TInstant LogStartTime;
-        bool DataWritten; 
-        bool LogWritten; 
+        bool DataWritten;
+        bool LogWritten;
 
         TRequestInfo(ui32 size, TChunkIdx chunkIdx, TInstant startTime, TInstant logStartTime, bool dataWritten,
                 bool logWritten)
@@ -64,57 +64,57 @@ class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoad
         TRequestInfo(const TRequestInfo &) = default;
         TRequestInfo() = default;
 
-    }; 
- 
-    struct TRequestStat { 
-        ui64 BytesWrittenTotal; 
-        ui32 Size; 
-        TDuration Latency; 
-    }; 
- 
+    };
+
+    struct TRequestStat {
+        ui64 BytesWrittenTotal;
+        ui32 Size;
+        TDuration Latency;
+    };
+
     THashMap<ui64, TRequestInfo> RequestInfo;
     ui64 NextRequestIdx = 0;
 
     const TActorId Parent;
-    ui64 Tag; 
-    ui32 DurationSeconds; 
+    ui64 Tag;
+    ui32 DurationSeconds;
     ui32 IntervalMsMin = 0;
     ui32 IntervalMsMax = 0;
     TControlWrapper MaxInFlight;
-    ui32 InFlight = 0; 
+    ui32 InFlight = 0;
     ui32 LogInFlight = 0;
     TInstant LastRequest;
     ui32 IntervalMs = 0;
-    ui32 PDiskId; 
-    TVDiskID VDiskId; 
+    ui32 PDiskId;
+    TVDiskID VDiskId;
     NPDisk::TOwnerRound OwnerRound;
-    ui64 PDiskGuid; 
-    TIntrusivePtr<TPDiskParams> PDiskParams; 
+    ui64 PDiskGuid;
+    TIntrusivePtr<TPDiskParams> PDiskParams;
     TVector<TChunkInfo> Chunks;
-    TReallyFastRng32 Rng; 
-    TBuffer DataBuffer; 
-    ui64 Lsn = 1; 
-    TChunkInfo *ReservePending = nullptr; 
-    NKikimrBlobStorage::TEvTestLoadRequest::ELogMode LogMode; 
+    TReallyFastRng32 Rng;
+    TBuffer DataBuffer;
+    ui64 Lsn = 1;
+    TChunkInfo *ReservePending = nullptr;
+    NKikimrBlobStorage::TEvTestLoadRequest::ELogMode LogMode;
     THashMap<TChunkIdx, ui32> ChunkUsageCount;
     TQueue<TChunkIdx> AllocationQueue;
     TMultiMap<TInstant, TRequestStat> TimeSeries;
     TVector<TChunkIdx> DeleteChunks;
-    bool Sequential; 
-    bool Reuse; 
+    bool Sequential;
+    bool Reuse;
     bool IsWardenlessTest;
-    bool Harakiri = false; 
- 
+    bool Harakiri = false;
+
     TInstant TestStartTime;
     TInstant MeasurementStartTime;
 
-    // statistics 
-    ui64 ChunkWrite_RequestsSent = 0; 
-    ui64 ChunkWrite_OK = 0; 
-    ui64 ChunkWrite_NonOK = 0; 
-    ui64 ChunkReserve_RequestsSent = 0; 
-    ui64 DeletedChunksCount = 0; 
- 
+    // statistics
+    ui64 ChunkWrite_RequestsSent = 0;
+    ui64 ChunkWrite_OK = 0;
+    ui64 ChunkWrite_NonOK = 0;
+    ui64 ChunkReserve_RequestsSent = 0;
+    ui64 DeletedChunksCount = 0;
+
     // Monitoring
     TIntrusivePtr<NMonitoring::TDynamicCounters> LoadCounters;
     NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
@@ -126,62 +126,62 @@ class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoad
     TIntrusivePtr<NMonitoring::TCounterForPtr> PDiskBytesWritten;
     TMap<double, TIntrusivePtr<NMonitoring::TCounterForPtr>> DevicePercentiles;
 
-public: 
+public:
     static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::BS_LOAD_PDISK_WRITE; 
-    } 
- 
+        return NKikimrServices::TActivity::BS_LOAD_PDISK_WRITE;
+    }
+
     TPDiskWriterTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLoadStart& cmd, const TActorId& parent,
             const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
-        : Parent(parent) 
+        : Parent(parent)
         , Tag(tag)
         , MaxInFlight(4, 0, 65536)
         , OwnerRound(1000 + index)
-        , Rng(Now().GetValue()) 
+        , Rng(Now().GetValue())
         , Report(new TLoadReport())
-    { 
- 
-        VERIFY_PARAM(DurationSeconds); 
-        DurationSeconds = cmd.GetDurationSeconds(); 
+    {
+
+        VERIFY_PARAM(DurationSeconds);
+        DurationSeconds = cmd.GetDurationSeconds();
         Y_ASSERT(DurationSeconds > DelayBeforeMeasurements.Seconds());
         Report->Duration = TDuration::Seconds(DurationSeconds);
- 
+
         IntervalMsMin = cmd.GetIntervalMsMin();
         IntervalMsMax = cmd.GetIntervalMsMax();
 
-        VERIFY_PARAM(InFlightWrites); 
-        MaxInFlight = cmd.GetInFlightWrites(); 
+        VERIFY_PARAM(InFlightWrites);
+        MaxInFlight = cmd.GetInFlightWrites();
         Report->InFlight = MaxInFlight;
- 
-        VERIFY_PARAM(PDiskId); 
-        PDiskId = cmd.GetPDiskId(); 
- 
-        VERIFY_PARAM(PDiskGuid); 
-        PDiskGuid = cmd.GetPDiskGuid(); 
- 
-        VERIFY_PARAM(VDiskId); 
-        VDiskId = VDiskIDFromVDiskID(cmd.GetVDiskId()); 
- 
-        VERIFY_PARAM(LogMode); 
-        LogMode = cmd.GetLogMode(); 
- 
-        Sequential = cmd.GetSequential(); 
-        Reuse = cmd.GetReuse(); 
+
+        VERIFY_PARAM(PDiskId);
+        PDiskId = cmd.GetPDiskId();
+
+        VERIFY_PARAM(PDiskGuid);
+        PDiskGuid = cmd.GetPDiskGuid();
+
+        VERIFY_PARAM(VDiskId);
+        VDiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
+
+        VERIFY_PARAM(LogMode);
+        LogMode = cmd.GetLogMode();
+
+        Sequential = cmd.GetSequential();
+        Reuse = cmd.GetReuse();
         IsWardenlessTest = cmd.GetIsWardenlessTest();
- 
-        for (const auto& chunk : cmd.GetChunks()) { 
-            if (!chunk.HasSlots() || !chunk.HasWeight() || !chunk.GetSlots() || !chunk.GetWeight()) { 
-                ythrow TLoadActorException() << "chunk.Slots/Weight fields are either missing or zero"; 
-            } 
-            Chunks.push_back(TChunkInfo{ 
-                    {}, 
-                    chunk.GetSlots(), 
-                    0, 
-                    chunk.GetWeight(), 
-                    0, 
-                }); 
-        } 
- 
+
+        for (const auto& chunk : cmd.GetChunks()) {
+            if (!chunk.HasSlots() || !chunk.HasWeight() || !chunk.GetSlots() || !chunk.GetWeight()) {
+                ythrow TLoadActorException() << "chunk.Slots/Weight fields are either missing or zero";
+            }
+            Chunks.push_back(TChunkInfo{
+                    {},
+                    chunk.GetSlots(),
+                    0,
+                    chunk.GetWeight(),
+                    0,
+                });
+        }
+
         // Monitoring initialization
         LoadCounters = counters->GetSubgroup("tag", Sprintf("%" PRIu64, tag))->
                                  GetSubgroup("pdisk", Sprintf("%09" PRIu32, PDiskId));
@@ -202,22 +202,22 @@ public:
         }
 
 
-        if (Chunks.empty()) { 
-            ythrow TLoadActorException() << "Chunks may not be empty"; 
-        } 
-    } 
- 
+        if (Chunks.empty()) {
+            ythrow TLoadActorException() << "Chunks may not be empty";
+        }
+    }
+
     ~TPDiskWriterTestLoadActor() {
         LoadCounters->ResetCounters();
     }
 
-    void Bootstrap(const TActorContext& ctx) { 
-        Become(&TPDiskWriterTestLoadActor::StateFunc); 
+    void Bootstrap(const TActorContext& ctx) {
+        Become(&TPDiskWriterTestLoadActor::StateFunc);
         ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
         AppData(ctx)->Icb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskWriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
         if (IsWardenlessTest) {
-            SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid)); 
+            SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid));
         } else {
             Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvRegisterPDiskLoadActor());
         }
@@ -225,11 +225,11 @@ public:
 
     void Handle(TEvRegisterPDiskLoadActorResult::TPtr& ev, const TActorContext& ctx) {
         OwnerRound = ev->Get()->OwnerRound;
-        SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid)); 
-    } 
- 
+        SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid));
+    }
+
     void Handle(NPDisk::TEvYardInitResult::TPtr& ev, const TActorContext& ctx) {
-        auto msg = ev->Get(); 
+        auto msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
             TStringStream str;
             str << "yard init failed, Status# " << NKikimrProto::EReplyStatus_Name(msg->Status);
@@ -238,24 +238,24 @@ public:
             Die(ctx);
             return;
         }
-        PDiskParams = msg->PDiskParams; 
-        DataBuffer.Resize(PDiskParams->ChunkSize); 
+        PDiskParams = msg->PDiskParams;
+        DataBuffer.Resize(PDiskParams->ChunkSize);
         char *data = DataBuffer.data();
-        for (ui32 i = 0; i < PDiskParams->ChunkSize; ++i) { 
-            data[i] = Rng(); 
-        } 
-        for (TChunkInfo& chunk : Chunks) { 
-            chunk.SlotSizeBlocks = PDiskParams->ChunkSize / PDiskParams->AppendBlockSize / chunk.NumSlots; 
-        } 
+        for (ui32 i = 0; i < PDiskParams->ChunkSize; ++i) {
+            data[i] = Rng();
+        }
+        for (TChunkInfo& chunk : Chunks) {
+            chunk.SlotSizeBlocks = PDiskParams->ChunkSize / PDiskParams->AppendBlockSize / chunk.NumSlots;
+        }
         TestStartTime = TAppData::TimeProvider->Now();
         MeasurementStartTime = TestStartTime + DelayBeforeMeasurements;
-        CheckForReserve(ctx); 
-    } 
- 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    // Chunk reservation 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
- 
+        CheckForReserve(ctx);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Chunk reservation
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     ui64 NewTRequestInfo(ui32 size, TChunkIdx chunkIdx, TInstant startTime, TInstant logStartTime, bool dataWritten,
                 bool logWritten) {
         ui64 requestIdx = NextRequestIdx;
@@ -264,53 +264,53 @@ public:
         return requestIdx;
     }
 
-    void CheckForReserve(const TActorContext& ctx) { 
-        if (!ReservePending && MaxInFlight) { 
-            for (TChunkInfo& chunkInfo : Chunks) { 
-                if (chunkInfo.WriteQueue.size() <= chunkInfo.NumSlots * 2 / 3) { 
-                    if (AllocationQueue) { 
-                        TChunkIdx chunkIdx = AllocationQueue.front(); 
-                        AllocationQueue.pop(); 
-                        ApplyNewChunk(chunkIdx, chunkInfo); 
-                    } else { 
-                        SendRequest(ctx, std::make_unique<NPDisk::TEvChunkReserve>(PDiskParams->Owner, 
+    void CheckForReserve(const TActorContext& ctx) {
+        if (!ReservePending && MaxInFlight) {
+            for (TChunkInfo& chunkInfo : Chunks) {
+                if (chunkInfo.WriteQueue.size() <= chunkInfo.NumSlots * 2 / 3) {
+                    if (AllocationQueue) {
+                        TChunkIdx chunkIdx = AllocationQueue.front();
+                        AllocationQueue.pop();
+                        ApplyNewChunk(chunkIdx, chunkInfo);
+                    } else {
+                        SendRequest(ctx, std::make_unique<NPDisk::TEvChunkReserve>(PDiskParams->Owner,
                                     PDiskParams->OwnerRound, 1U));
-                        ReservePending = &chunkInfo; 
-                        ++ChunkReserve_RequestsSent; 
-                    } 
-                    break; 
-                } 
-            } 
-        } 
-    } 
- 
+                        ReservePending = &chunkInfo;
+                        ++ChunkReserve_RequestsSent;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
     void Handle(NPDisk::TEvChunkReserveResult::TPtr& ev, const TActorContext& ctx) {
-        auto msg = ev->Get(); 
-        Y_VERIFY(msg->Status == NKikimrProto::OK); 
-        TChunkInfo& chunkInfo = *ReservePending; 
-        ReservePending = nullptr; 
-        for (TChunkIdx chunkIdx : msg->ChunkIds) { 
-            ApplyNewChunk(chunkIdx, chunkInfo); 
-        } 
-        CheckForReserve(ctx); 
-        SendWriteRequests(ctx); 
-    } 
- 
-    void ApplyNewChunk(TChunkIdx chunkIdx, TChunkInfo& chunkInfo) { 
-        std::vector<ui32> slots; 
-        for (ui32 i = 0; i < chunkInfo.NumSlots; ++i) { 
-            slots.push_back(i); 
-        } 
-        if (!Sequential) { 
+        auto msg = ev->Get();
+        Y_VERIFY(msg->Status == NKikimrProto::OK);
+        TChunkInfo& chunkInfo = *ReservePending;
+        ReservePending = nullptr;
+        for (TChunkIdx chunkIdx : msg->ChunkIds) {
+            ApplyNewChunk(chunkIdx, chunkInfo);
+        }
+        CheckForReserve(ctx);
+        SendWriteRequests(ctx);
+    }
+
+    void ApplyNewChunk(TChunkIdx chunkIdx, TChunkInfo& chunkInfo) {
+        std::vector<ui32> slots;
+        for (ui32 i = 0; i < chunkInfo.NumSlots; ++i) {
+            slots.push_back(i);
+        }
+        if (!Sequential) {
             Shuffle(slots.begin(), slots.end());
-        } 
-        for (ui32 slot : slots) { 
-            chunkInfo.WriteQueue.emplace_back(chunkIdx, slot); 
-        } 
-        ChunkUsageCount[chunkIdx] = chunkInfo.NumSlots; 
-    } 
- 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        }
+        for (ui32 slot : slots) {
+            chunkInfo.WriteQueue.emplace_back(chunkIdx, slot);
+        }
+        ChunkUsageCount[chunkIdx] = chunkInfo.NumSlots;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Rate management
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -319,33 +319,33 @@ public:
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Death management 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
- 
+    // Death management
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     void HandlePoisonPill(const TActorContext& ctx) {
         Report->LoadType = TLoadReport::LOAD_WRITE;
-        MaxInFlight = 0; 
-        CheckDie(ctx); 
-    } 
- 
-    void CheckDie(const TActorContext& ctx) { 
+        MaxInFlight = 0;
+        CheckDie(ctx);
+    }
+
+    void CheckDie(const TActorContext& ctx) {
         if (!MaxInFlight && !InFlight && !LogInFlight && !Harakiri) {
             if (PDiskParams) {
-                SendRequest(ctx, std::make_unique<NPDisk::TEvHarakiri>(PDiskParams->Owner, PDiskParams->OwnerRound)); 
+                SendRequest(ctx, std::make_unique<NPDisk::TEvHarakiri>(PDiskParams->Owner, PDiskParams->OwnerRound));
                 Harakiri = true;
             } else {
                 ctx.Send(Parent, new TEvTestLoadFinished(Tag, Report, "OK, but can't send TEvHarakiri to PDisk"));
                 Die(ctx);
             }
-        } 
-    } 
- 
+        }
+    }
+
     void Handle(NPDisk::TEvHarakiriResult::TPtr& /*ev*/, const TActorContext& ctx) {
         ctx.Send(Parent, new TEvTestLoadFinished(Tag, Report, "OK"));
-        Die(ctx); 
-    } 
- 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        Die(ctx);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Monitoring
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -372,11 +372,11 @@ public:
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Chunk writing 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
- 
-    void SendWriteRequests(const TActorContext& ctx) { 
-        while (InFlight < MaxInFlight) { 
+    // Chunk writing
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    void SendWriteRequests(const TActorContext& ctx) {
+        while (InFlight < MaxInFlight) {
             // Randomize interval (if required)
             if (!IntervalMs && IntervalMsMax && IntervalMsMin) {
                 IntervalMs = IntervalMsMin;
@@ -399,117 +399,117 @@ public:
             }
 
             // Prepare to send request
-            ui64 accumWeight = 0; 
-            for (TChunkInfo& chunkInfo : Chunks) { 
-                chunkInfo.AccumWeight = accumWeight; 
-                if (!chunkInfo.WriteQueue.empty()) { 
-                    accumWeight += chunkInfo.Weight; 
-                } 
-            } 
-            if (!accumWeight) { 
-                break; 
-            } 
- 
-            ui64 w = (ui64(Rng()) << 32 | Rng()) % accumWeight; 
-            auto it = std::prev(std::upper_bound(Chunks.begin(), Chunks.end(), w, TChunkInfo::TFindByWeight())); 
-            TChunkInfo& chunkInfo = *it; 
- 
-            Y_VERIFY(!chunkInfo.WriteQueue.empty()); 
- 
-            auto& front = chunkInfo.WriteQueue.front(); 
-            TChunkIdx chunkIdx = front.first; 
-            ui32 slotIndex = front.second; 
-            chunkInfo.WriteQueue.pop_front(); 
- 
-            ui32 size = chunkInfo.SlotSizeBlocks * PDiskParams->AppendBlockSize; 
+            ui64 accumWeight = 0;
+            for (TChunkInfo& chunkInfo : Chunks) {
+                chunkInfo.AccumWeight = accumWeight;
+                if (!chunkInfo.WriteQueue.empty()) {
+                    accumWeight += chunkInfo.Weight;
+                }
+            }
+            if (!accumWeight) {
+                break;
+            }
+
+            ui64 w = (ui64(Rng()) << 32 | Rng()) % accumWeight;
+            auto it = std::prev(std::upper_bound(Chunks.begin(), Chunks.end(), w, TChunkInfo::TFindByWeight()));
+            TChunkInfo& chunkInfo = *it;
+
+            Y_VERIFY(!chunkInfo.WriteQueue.empty());
+
+            auto& front = chunkInfo.WriteQueue.front();
+            TChunkIdx chunkIdx = front.first;
+            ui32 slotIndex = front.second;
+            chunkInfo.WriteQueue.pop_front();
+
+            ui32 size = chunkInfo.SlotSizeBlocks * PDiskParams->AppendBlockSize;
             Report->Size = size;
-            ui32 offset = slotIndex * size; 
+            ui32 offset = slotIndex * size;
             const TInstant now = TAppData::TimeProvider->Now();
             // like the parallel mode, but log is treated already written
             bool isLogWritten = (LogMode == NKikimrBlobStorage::TEvTestLoadRequest::LOG_NONE);
             ui64 requestIdx = NewTRequestInfo(size, chunkIdx, now, now, false, isLogWritten);
-            SendRequest(ctx, std::make_unique<NPDisk::TEvChunkWrite>(PDiskParams->Owner, PDiskParams->OwnerRound, 
+            SendRequest(ctx, std::make_unique<NPDisk::TEvChunkWrite>(PDiskParams->Owner, PDiskParams->OwnerRound,
                     chunkIdx, offset,
                     new TParts{DataBuffer.data() + Rng() % (DataBuffer.size() - size), size},
                     reinterpret_cast<void*>(requestIdx), true, NPriWrite::HullHugeAsyncBlob, Sequential));
-            ++ChunkWrite_RequestsSent; 
- 
-            if (LogMode == NKikimrBlobStorage::TEvTestLoadRequest::LOG_PARALLEL) { 
+            ++ChunkWrite_RequestsSent;
+
+            if (LogMode == NKikimrBlobStorage::TEvTestLoadRequest::LOG_PARALLEL) {
                 SendLogRequest(ctx, requestIdx, chunkIdx);
-            } 
- 
-            ++InFlight; 
-        } 
- 
-        CheckForReserve(ctx); 
-        CheckDie(ctx); 
-    } 
- 
+            }
+
+            ++InFlight;
+        }
+
+        CheckForReserve(ctx);
+        CheckDie(ctx);
+    }
+
     void Handle(NPDisk::TEvChunkWriteResult::TPtr& ev, const TActorContext& ctx) {
-        auto msg = ev->Get(); 
-        if (msg->Status == NKikimrProto::OK) { 
-            ++ChunkWrite_OK; 
-        } else { 
-            ++ChunkWrite_NonOK; 
-        } 
+        auto msg = ev->Get();
+        if (msg->Status == NKikimrProto::OK) {
+            ++ChunkWrite_OK;
+        } else {
+            ++ChunkWrite_NonOK;
+        }
         ui64 requestIdx = reinterpret_cast<ui64>(msg->Cookie);
         TRequestInfo *info = &RequestInfo[requestIdx];
-        info->DataWritten = true; 
+        info->DataWritten = true;
         *BytesWritten += info->Size;
- 
-        if (info->LogWritten) { 
-            // both data and log are written, this could happen only in LOG_PARALLEL mode; this request is done 
+
+        if (info->LogWritten) {
+            // both data and log are written, this could happen only in LOG_PARALLEL mode; this request is done
             FinishRequest(ctx, requestIdx);
-        } else if (LogMode == NKikimrBlobStorage::TEvTestLoadRequest::LOG_SEQUENTIAL) { 
-            // in sequential mode we send log request after completion of data write request 
+        } else if (LogMode == NKikimrBlobStorage::TEvTestLoadRequest::LOG_SEQUENTIAL) {
+            // in sequential mode we send log request after completion of data write request
             SendLogRequest(ctx, requestIdx, msg->ChunkIdx);
-        } else if (LogMode == NKikimrBlobStorage::TEvTestLoadRequest::LOG_PARALLEL) { 
-            // this is parallel mode and log is not written yet, so request is not complete; we release it to avoid 
-            // being deleted 
-        } 
- 
-        CheckDie(ctx); 
-    } 
- 
+        } else if (LogMode == NKikimrBlobStorage::TEvTestLoadRequest::LOG_PARALLEL) {
+            // this is parallel mode and log is not written yet, so request is not complete; we release it to avoid
+            // being deleted
+        }
+
+        CheckDie(ctx);
+    }
+
     void SendLogRequest(const TActorContext& ctx, ui64 requestIdx, TChunkIdx chunkIdx) {
         RequestInfo[requestIdx].LogStartTime = TAppData::TimeProvider->Now();
         TString logRecord = "Hello, my dear log! I've just written a chunk!";
         NPDisk::TCommitRecord record;
-        record.CommitChunks.push_back(chunkIdx); 
-        record.DeleteChunks.swap(DeleteChunks); 
-        DeletedChunksCount += record.DeleteChunks.size(); 
+        record.CommitChunks.push_back(chunkIdx);
+        record.DeleteChunks.swap(DeleteChunks);
+        DeletedChunksCount += record.DeleteChunks.size();
         TLsnSeg seg(Lsn, Lsn);
         ++Lsn;
-        SendRequest(ctx, std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, PDiskParams->OwnerRound, 
+        SendRequest(ctx, std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, PDiskParams->OwnerRound,
                 TLogSignature::SignatureHugeLogoBlob, record, logRecord, seg,
                 reinterpret_cast<void*>(requestIdx)));
         ++LogInFlight;
-    } 
- 
+    }
+
     void Handle(NPDisk::TEvLogResult::TPtr& ev, const TActorContext& ctx) {
-        auto msg = ev->Get(); 
+        auto msg = ev->Get();
         TInstant now = TAppData::TimeProvider->Now();
-        for (const auto& res : msg->Results) { 
+        for (const auto& res : msg->Results) {
             ui64 requestIdx = reinterpret_cast<ui64>(res.Cookie);
             TRequestInfo *info = &RequestInfo[requestIdx];
-            info->LogWritten = true; 
+            info->LogWritten = true;
             *LogEntriesWritten += 1;
             LogResponseTimes.Increment((now - info->LogStartTime).MicroSeconds());
-            if (info->DataWritten) { 
-                // both data and log are written, complete request and send another one if possible 
+            if (info->DataWritten) {
+                // both data and log are written, complete request and send another one if possible
                 FinishRequest(ctx, requestIdx);
-            } else { 
-                // log is written, but data is not; this is parallel mode and this request will be deleted in chunk write 
-                // completion handler 
-            } 
+            } else {
+                // log is written, but data is not; this is parallel mode and this request will be deleted in chunk write
+                // completion handler
+            }
             --LogInFlight;
-        } 
- 
-        CheckDie(ctx); 
-    } 
- 
+        }
+
+        CheckDie(ctx);
+    }
+
     void FinishRequest(const TActorContext& ctx, ui64 requestIdx) {
-        TInstant now = TAppData::TimeProvider->Now(); 
+        TInstant now = TAppData::TimeProvider->Now();
         TRequestInfo *request = &RequestInfo[requestIdx];
 
         if (now > MeasurementStartTime) {
@@ -519,48 +519,48 @@ public:
             }
         }
 
-        TimeSeries.emplace(now, TRequestStat{ 
+        TimeSeries.emplace(now, TRequestStat{
                 static_cast<ui64>(*BytesWritten), // current state of bytes written counter
-                request->Size, 
-                now - request->StartTime 
-            }); 
+                request->Size,
+                now - request->StartTime
+            });
         ResponseTimes.Increment((now - request->StartTime).MicroSeconds());
-        // cut time series to 60 seconds 
-        auto pos = TimeSeries.upper_bound(now - TDuration::Seconds(60)); 
-        TimeSeries.erase(TimeSeries.begin(), pos); 
-        auto it = ChunkUsageCount.find(request->ChunkIdx); 
-        Y_VERIFY(it != ChunkUsageCount.end()); 
-        if (!--it->second) { 
-            // chunk is completely written and can be destroyed 
-            if (Reuse) { 
-                AllocationQueue.push(it->first); 
-            } else { 
-                DeleteChunks.push_back(it->first); 
-            } 
-            ChunkUsageCount.erase(it); 
-        } 
-        --InFlight; 
+        // cut time series to 60 seconds
+        auto pos = TimeSeries.upper_bound(now - TDuration::Seconds(60));
+        TimeSeries.erase(TimeSeries.begin(), pos);
+        auto it = ChunkUsageCount.find(request->ChunkIdx);
+        Y_VERIFY(it != ChunkUsageCount.end());
+        if (!--it->second) {
+            // chunk is completely written and can be destroyed
+            if (Reuse) {
+                AllocationQueue.push(it->first);
+            } else {
+                DeleteChunks.push_back(it->first);
+            }
+            ChunkUsageCount.erase(it);
+        }
+        --InFlight;
         RequestInfo.erase(requestIdx);
-        SendWriteRequests(ctx); 
-    } 
- 
-    template<typename TRequest> 
-    void SendRequest(const TActorContext& ctx, std::unique_ptr<TRequest>&& request) { 
-        ctx.Send(MakeBlobStoragePDiskID(ctx.ExecutorThread.ActorSystem->NodeId, PDiskId), request.release()); 
-    } 
- 
-    void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) { 
-        TStringStream str; 
-#define PARAM(NAME, VALUE) \ 
+        SendWriteRequests(ctx);
+    }
+
+    template<typename TRequest>
+    void SendRequest(const TActorContext& ctx, std::unique_ptr<TRequest>&& request) {
+        ctx.Send(MakeBlobStoragePDiskID(ctx.ExecutorThread.ActorSystem->NodeId, PDiskId), request.release());
+    }
+
+    void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+        TStringStream str;
+#define PARAM(NAME, VALUE) \
     TABLER() { \
         TABLED() { str << NAME; } \
         TABLED() { str << VALUE; } \
     }
         TMap<ui32, TVector<TDuration>> latmap;
-        for (const auto& pair : TimeSeries) { 
-            const TRequestStat& stat = pair.second; 
-            latmap[stat.Size].push_back(stat.Latency); 
-        } 
+        for (const auto& pair : TimeSeries) {
+            const TRequestStat& stat = pair.second;
+            latmap[stat.Size].push_back(stat.Latency);
+        }
         HTML(str) {
             TABLE() {
                 TABLEHEAD() {
@@ -573,44 +573,44 @@ public:
 
                     PARAM("Elapsed time / Duration", (TAppData::TimeProvider->Now() - TestStartTime).Seconds() << "s / "
                             << DurationSeconds << "s");
-                    PARAM("TEvChunkWrite msgs sent", ChunkWrite_RequestsSent); 
-                    PARAM("TEvChunkWriteResult msgs received, OK", ChunkWrite_OK); 
-                    PARAM("TEvChunkWriteResult msgs received, not OK", ChunkWrite_NonOK); 
-                    PARAM("TEvChunkReserve msgs sent", ChunkReserve_RequestsSent); 
+                    PARAM("TEvChunkWrite msgs sent", ChunkWrite_RequestsSent);
+                    PARAM("TEvChunkWriteResult msgs received, OK", ChunkWrite_OK);
+                    PARAM("TEvChunkWriteResult msgs received, not OK", ChunkWrite_NonOK);
+                    PARAM("TEvChunkReserve msgs sent", ChunkReserve_RequestsSent);
                     PARAM("Bytes written", static_cast<ui64>(*BytesWritten));
-                    PARAM("Number of deleted chunks", DeletedChunksCount); 
-                    if (PDiskParams) { 
+                    PARAM("Number of deleted chunks", DeletedChunksCount);
+                    if (PDiskParams) {
                         PARAM("Owner", PDiskParams->Owner);
-                        PARAM("Chunk size", PDiskParams->ChunkSize); 
-                        PARAM("Append block size", PDiskParams->AppendBlockSize); 
-                    } 
- 
-                    for (ui32 dt : {5, 10, 15, 20, 60}) { 
-                        TInstant now = TAppData::TimeProvider->Now(); 
-                        auto it = TimeSeries.upper_bound(now - TDuration::Seconds(dt)); 
-                        if (it != TimeSeries.begin()) { 
-                            --it; 
-                        } 
-                        if (it != TimeSeries.end()) { 
-                            auto end = std::prev(TimeSeries.end()); 
-                            if (end != it) { 
-                                double seconds = (end->first - it->first).GetValue() * 1e-6; 
-                                double speed = (end->second.BytesWrittenTotal - it->second.BytesWrittenTotal) / seconds; 
+                        PARAM("Chunk size", PDiskParams->ChunkSize);
+                        PARAM("Append block size", PDiskParams->AppendBlockSize);
+                    }
+
+                    for (ui32 dt : {5, 10, 15, 20, 60}) {
+                        TInstant now = TAppData::TimeProvider->Now();
+                        auto it = TimeSeries.upper_bound(now - TDuration::Seconds(dt));
+                        if (it != TimeSeries.begin()) {
+                            --it;
+                        }
+                        if (it != TimeSeries.end()) {
+                            auto end = std::prev(TimeSeries.end());
+                            if (end != it) {
+                                double seconds = (end->first - it->first).GetValue() * 1e-6;
+                                double speed = (end->second.BytesWrittenTotal - it->second.BytesWrittenTotal) / seconds;
                                 speed /= 1e6;
-                                PARAM("Average write speed at last " << dt << " seconds, MB/s", Sprintf("%.3f", speed)); 
-                            } 
-                        } 
-                    } 
- 
-                    for (auto& pair : latmap) { 
-                        str << "<br/>"; 
+                                PARAM("Average write speed at last " << dt << " seconds, MB/s", Sprintf("%.3f", speed));
+                            }
+                        }
+                    }
+
+                    for (auto& pair : latmap) {
+                        str << "<br/>";
                         TVector<TDuration>& latencies = pair.second;
-                        std::sort(latencies.begin(), latencies.end()); 
-                        for (double percentile : {0.5, 0.9, 0.95, 0.99, 0.999, 1.0}) { 
-                            TDuration value = latencies[size_t(percentile * (latencies.size() - 1))]; 
-                            PARAM(Sprintf("Size# %" PRIu32 " Percentile# %.3f", pair.first, percentile), value); 
-                        } 
-                    } 
+                        std::sort(latencies.begin(), latencies.end());
+                        for (double percentile : {0.5, 0.9, 0.95, 0.99, 0.999, 1.0}) {
+                            TDuration value = latencies[size_t(percentile * (latencies.size() - 1))];
+                            PARAM(Sprintf("Size# %" PRIu32 " Percentile# %.3f", pair.first, percentile), value);
+                        }
+                    }
                     PARAM("Average speed since start, MB/s", Report->GetAverageSpeed() / 1e6);
                     PARAM("Speed standard deviation since start, MB/s", Report->GetSpeedDeviation() / 1e6);
                     for (double percentile : {0.5, 0.9, 0.95, 0.99, 0.999, 1.0}) {
@@ -621,26 +621,26 @@ public:
             }
         }
 
-        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId)); 
-    } 
- 
-    STRICT_STFUNC(StateFunc, 
-        CFunc(TEvents::TSystem::Wakeup, HandleWakeup) 
-        CFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill) 
+        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
+    }
+
+    STRICT_STFUNC(StateFunc,
+        CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
+        CFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill)
         HFunc(TEvRegisterPDiskLoadActorResult, Handle)
-        HFunc(NPDisk::TEvYardInitResult, Handle) 
-        HFunc(NPDisk::TEvHarakiriResult, Handle) 
+        HFunc(NPDisk::TEvYardInitResult, Handle)
+        HFunc(NPDisk::TEvHarakiriResult, Handle)
         HFunc(TEvUpdateMonitoring, Handle)
-        HFunc(NPDisk::TEvChunkWriteResult, Handle) 
-        HFunc(NPDisk::TEvChunkReserveResult, Handle) 
-        HFunc(NPDisk::TEvLogResult, Handle) 
-        HFunc(NMon::TEvHttpInfo, Handle) 
-    ) 
-}; 
- 
-IActor *CreatePDiskWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLoadStart& cmd, 
+        HFunc(NPDisk::TEvChunkWriteResult, Handle)
+        HFunc(NPDisk::TEvChunkReserveResult, Handle)
+        HFunc(NPDisk::TEvLogResult, Handle)
+        HFunc(NMon::TEvHttpInfo, Handle)
+    )
+};
+
+IActor *CreatePDiskWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLoadStart& cmd,
         const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
     return new TPDiskWriterTestLoadActor(cmd, parent, counters, index, tag);
-} 
- 
-} // NKikimr 
+}
+
+} // NKikimr

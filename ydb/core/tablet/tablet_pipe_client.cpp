@@ -28,8 +28,8 @@ namespace NTabletPipe {
 
     class TClient : public TActorBootstrapped<TClient> {
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::TABLET_PIPE_CLIENT; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::TABLET_PIPE_CLIENT;
         }
 
         TClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config)
@@ -706,7 +706,7 @@ namespace NTabletPipe {
     }
 
     void SendData(TActorId self, TActorId clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie) {
-        auto ev = new IEventHandle(eventType, 0, clientId, self, buffer, cookie); 
+        auto ev = new IEventHandle(eventType, 0, clientId, self, buffer, cookie);
         ev->Rewrite(TEvTabletPipe::EvSend, clientId);
         TActivationContext::Send(ev);
     }
@@ -718,7 +718,7 @@ namespace NTabletPipe {
     }
 
     void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie) {
-        auto ev = new IEventHandle(eventType, 0, clientId, ctx.SelfID, buffer, cookie); 
+        auto ev = new IEventHandle(eventType, 0, clientId, ctx.SelfID, buffer, cookie);
         ev->Rewrite(TEvTabletPipe::EvSend, clientId);
         ctx.ExecutorThread.Send(ev);
     }

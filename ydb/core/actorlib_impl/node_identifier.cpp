@@ -142,7 +142,7 @@ class TNodeIdentifier : public TActorBootstrapped<TNodeIdentifier> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::NODE_IDENTIFIER; } 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::NODE_IDENTIFIER; }
 
     void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {

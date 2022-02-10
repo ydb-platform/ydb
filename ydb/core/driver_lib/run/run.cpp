@@ -68,7 +68,7 @@
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
 #include <ydb/core/blobstorage/other/mon_blob_range_page.h>
 #include <ydb/core/blobstorage/other/mon_vdisk_stream.h>
- 
+
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
@@ -737,7 +737,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         opts.SetHost(grpcConfig.GetHost());
         opts.SetPort(grpcConfig.GetPort());
         opts.SetWorkerThreads(grpcConfig.GetWorkerThreads());
-        opts.SetGRpcMemoryQuotaBytes(grpcConfig.GetGRpcMemoryQuotaBytes()); 
+        opts.SetGRpcMemoryQuotaBytes(grpcConfig.GetGRpcMemoryQuotaBytes());
         opts.SetMaxMessageSize(grpcConfig.HasMaxMessageSize() ? grpcConfig.GetMaxMessageSize() : DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
         opts.SetMaxGlobalRequestInFlight(grpcConfig.GetMaxInFlight());
         opts.SetLogger(NGrpc::CreateActorSystemLogger(*ActorSystem.Get(), NKikimrServices::GRPC_SERVER));
@@ -748,21 +748,21 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             opts.SetUseAuth(appConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement());
         }
 
-        if (grpcConfig.HasKeepAliveEnable()) { 
-            if (grpcConfig.GetKeepAliveEnable()) { 
-                Y_VERIFY(grpcConfig.HasKeepAliveIdleTimeoutTriggerSec(), "KeepAliveIdleTimeoutTriggerSec not set"); 
-                Y_VERIFY(grpcConfig.HasKeepAliveMaxProbeCount(), "KeepAliveMaxProbeCount not set"); 
-                Y_VERIFY(grpcConfig.HasKeepAliveProbeIntervalSec(), "KeepAliveProbeIntervalSec not set"); 
-                opts.SetKeepAliveEnable(true); 
-                opts.SetKeepAliveIdleTimeoutTriggerSec(grpcConfig.GetKeepAliveIdleTimeoutTriggerSec()); 
-                opts.SetKeepAliveMaxProbeCount(grpcConfig.GetKeepAliveMaxProbeCount()); 
-                opts.SetKeepAliveProbeIntervalSec(grpcConfig.GetKeepAliveProbeIntervalSec()); 
+        if (grpcConfig.HasKeepAliveEnable()) {
+            if (grpcConfig.GetKeepAliveEnable()) {
+                Y_VERIFY(grpcConfig.HasKeepAliveIdleTimeoutTriggerSec(), "KeepAliveIdleTimeoutTriggerSec not set");
+                Y_VERIFY(grpcConfig.HasKeepAliveMaxProbeCount(), "KeepAliveMaxProbeCount not set");
+                Y_VERIFY(grpcConfig.HasKeepAliveProbeIntervalSec(), "KeepAliveProbeIntervalSec not set");
+                opts.SetKeepAliveEnable(true);
+                opts.SetKeepAliveIdleTimeoutTriggerSec(grpcConfig.GetKeepAliveIdleTimeoutTriggerSec());
+                opts.SetKeepAliveMaxProbeCount(grpcConfig.GetKeepAliveMaxProbeCount());
+                opts.SetKeepAliveProbeIntervalSec(grpcConfig.GetKeepAliveProbeIntervalSec());
             }
             else {
-                opts.SetKeepAliveEnable(false); 
-            } 
-        } 
- 
+                opts.SetKeepAliveEnable(false);
+            }
+        }
+
         NGrpc::TServerOptions sslOpts = opts;
         if (grpcConfig.HasSslPort() && grpcConfig.GetSslPort()) {
             Y_VERIFY(grpcConfig.HasCA(), "CA not set");
@@ -867,7 +867,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->Mon = Monitoring.Get();
     AppData->BusMonPage = BusMonPage.Get();
     AppData->PollerThreads = PollerThreads;
-    AppData->LocalScopeId = runConfig.ScopeId; 
+    AppData->LocalScopeId = runConfig.ScopeId;
 
     // setup streaming config
     if (runConfig.AppConfig.GetGRpcConfig().HasStreamingConfig()) {
@@ -1036,11 +1036,11 @@ void TKikimrRunner::InitializeActorSystem(
 
     serviceInitializers->InitializeServices(setup.Get(), AppData.Get());
 
-    if (Monitoring) { 
-        setup->LocalServices.emplace_back(NCrossRef::MakeCrossRefActorId(), TActorSetupCmd(NCrossRef::CreateCrossRefActor(), 
-            TMailboxType::HTSwap, AppData->SystemPoolId)); 
-    } 
- 
+    if (Monitoring) {
+        setup->LocalServices.emplace_back(NCrossRef::MakeCrossRefActorId(), TActorSetupCmd(NCrossRef::CreateCrossRefActor(),
+            TMailboxType::HTSwap, AppData->SystemPoolId));
+    }
+
     ApplyLogSettings(runConfig);
 
     ActorSystem.Reset(new TActorSystem(setup, AppData.Get(), LogSettings));
@@ -1055,7 +1055,7 @@ void TKikimrRunner::InitializeActorSystem(
                 ActorSystem.Get(),
                 LogSettings->LoggerActorId);
         }
- 
+
         if (servicesMask.EnableProfiler) {
             Monitoring->RegisterActorPage(
                 ActorsMonPage,
@@ -1086,17 +1086,17 @@ void TKikimrRunner::InitializeActorSystem(
                 MakeBlobStorageFailureInjectionID(runConfig.NodeId));
         }
 
-        Monitoring->Register(CreateMonGetBlobPage("get_blob", ActorSystem.Get())); 
-        Monitoring->Register(CreateMonBlobRangePage("blob_range", ActorSystem.Get())); 
-        Monitoring->Register(CreateMonVDiskStreamPage("vdisk_stream", ActorSystem.Get())); 
- 
-        Monitoring->RegisterActorPage( 
-                ActorsMonPage->RegisterIndexPage("interconnect", "Interconnect"), 
-                "overview", 
-                "Interconnect overview", 
-                false, 
-                ActorSystem.Get(), 
-                NInterconnect::MakeInterconnectMonActorId(runConfig.NodeId)); 
+        Monitoring->Register(CreateMonGetBlobPage("get_blob", ActorSystem.Get()));
+        Monitoring->Register(CreateMonBlobRangePage("blob_range", ActorSystem.Get()));
+        Monitoring->Register(CreateMonVDiskStreamPage("vdisk_stream", ActorSystem.Get()));
+
+        Monitoring->RegisterActorPage(
+                ActorsMonPage->RegisterIndexPage("interconnect", "Interconnect"),
+                "overview",
+                "Interconnect overview",
+                false,
+                ActorSystem.Get(),
+                NInterconnect::MakeInterconnectMonActorId(runConfig.NodeId));
 
         if (servicesMask.EnableGRpcService) {
             Monitoring->RegisterActorPage(nullptr, "grpc", "GRPC", false, ActorSystem.Get(), NGRpcService::GrpcMonServiceId());
@@ -1139,7 +1139,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableBasicServices) {
-        sil->AddServiceInitializer(new TBasicServicesInitializer(runConfig)); 
+        sil->AddServiceInitializer(new TBasicServicesInitializer(runConfig));
     }
     if (serviceMask.EnableIcbService) {
         sil->AddServiceInitializer(new TImmediateControlBoardInitializer(runConfig));
@@ -1247,9 +1247,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableLoadService) {
         sil->AddServiceInitializer(new TLoadInitializer(runConfig));
     }
-    if (serviceMask.EnableFailureInjectionService) { 
-        sil->AddServiceInitializer(new TFailureInjectionInitializer(runConfig)); 
-    } 
+    if (serviceMask.EnableFailureInjectionService) {
+        sil->AddServiceInitializer(new TFailureInjectionInitializer(runConfig));
+    }
     if (serviceMask.EnablePersQueueL2Cache) {
         sil->AddServiceInitializer(new TPersQueueL2CacheInitializer(runConfig));
     }
@@ -1334,9 +1334,9 @@ void RegisterBaseTagForMemoryProfiling(TActorSystem* as) {
         return;
     TVector<TString> holders;
     TVector<const char*> activityNames;
-    for (ui32 i = 0; i < NKikimrServices::TActivity::EType_ARRAYSIZE; ++i) { 
-        auto current = (NKikimrServices::TActivity::EType)i; 
-        const char* currName = NKikimrServices::TActivity::EType_Name(current).c_str(); 
+    for (ui32 i = 0; i < NKikimrServices::TActivity::EType_ARRAYSIZE; ++i) {
+        auto current = (NKikimrServices::TActivity::EType)i;
+        const char* currName = NKikimrServices::TActivity::EType_Name(current).c_str();
         if (currName[0] == '\0') {
             holders.push_back("EActivityType_" + ToString<ui32>(i));
             currName = holders.back().c_str();
@@ -1375,8 +1375,8 @@ void TKikimrRunner::KikimrStart() {
             ActorSystem->Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ActorSystem->NodeId),
                               new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(server.first, endpoint));
         }
-    } 
- 
+    }
+
     if (SqsHttp) {
         SqsHttp->Start();
     }
@@ -1425,14 +1425,14 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         }
     }
 
-    if (ActorSystem) { 
+    if (ActorSystem) {
         ActorSystem->BroadcastToProxies([](const TActorId& proxyId) {
-            return new IEventHandle(proxyId, {}, new TEvInterconnect::TEvTerminate); 
-        }); 
-        ActorSystem->Send(new IEventHandle(MakeInterconnectListenerActorId(false), {}, new TEvents::TEvPoisonPill)); 
-        ActorSystem->Send(new IEventHandle(MakeInterconnectListenerActorId(true), {}, new TEvents::TEvPoisonPill)); 
-    } 
- 
+            return new IEventHandle(proxyId, {}, new TEvInterconnect::TEvTerminate);
+        });
+        ActorSystem->Send(new IEventHandle(MakeInterconnectListenerActorId(false), {}, new TEvents::TEvPoisonPill));
+        ActorSystem->Send(new IEventHandle(MakeInterconnectListenerActorId(true), {}, new TEvents::TEvPoisonPill));
+    }
+
     if (SqsHttp) {
         SqsHttp->Shutdown();
     }

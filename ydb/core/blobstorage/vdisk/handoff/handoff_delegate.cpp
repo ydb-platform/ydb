@@ -38,7 +38,7 @@ namespace NKikimr {
     THandoffDelegate::THandoffDelegate(const TVDiskIdShort &self,
                                        TIntrusivePtr<TBlobStorageGroupInfo> info,
                                        const THandoffParams &params)
-        : Fields(std::make_unique<TFields>(self, info, params)) 
+        : Fields(std::make_unique<TFields>(self, info, params))
     {}
 
     TActiveActors THandoffDelegate::RunProxies(const TActorContext &ctx) {
@@ -66,13 +66,13 @@ namespace NKikimr {
                                    const TVDiskIdShort &vdisk,
                                    const TLogoBlobID &id,
                                    ui64 fullDataSize,
-                                   TRope&& data) { 
+                                   TRope&& data) {
         TVDiskInfo &ref = (*Fields->ProxiesPtr)[vdisk];
         Y_VERIFY_DEBUG(Fields->ProxiesStarted &&
                        vdisk == Fields->Info->GetVDiskId(ref.OrderNumber) &&
                        vdisk != Fields->SelfVDisk &&
                        vdisk == ref.Get().TargetVDiskID);
-        return ref.Get().Restore(ctx, id, fullDataSize, std::move(data)); 
+        return ref.Get().Restore(ctx, id, fullDataSize, std::move(data));
     }
 
     TActorId THandoffDelegate::GetMonActorID() const {

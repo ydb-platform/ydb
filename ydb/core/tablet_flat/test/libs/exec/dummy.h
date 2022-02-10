@@ -34,7 +34,7 @@ namespace NFake {
 
         TDummy(const TActorId &tablet, TInfo *info, const TActorId& owner,
                 ui32 flags = 0 /* ORed EFlg enum */)
-            : ::NActors::IActor(static_cast<TReceiveFunc>(&TDummy::Inbox), NKikimrServices::TActivity::FAKE_ENV_A) 
+            : ::NActors::IActor(static_cast<TReceiveFunc>(&TDummy::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , Owner(owner)
             , Flags(flags)

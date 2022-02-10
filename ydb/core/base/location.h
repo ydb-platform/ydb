@@ -7,7 +7,7 @@
 namespace NKikimr {
     inline ui32 DataCenterFromString(const TString &dc)
     {
-        ui32 res = 0; 
+        ui32 res = 0;
         strncpy(reinterpret_cast<char *>(&res), dc.data(), sizeof(res));
         return res;
     }

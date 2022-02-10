@@ -36,15 +36,15 @@ namespace NKikimr {
 
         TLogoBlobID LogoBlobID() const {
             return TLogoBlobID();
-        } 
- 
+        }
+
         static TKeyBlock First() {
             return TKeyBlock();
         }
- 
-        bool IsSameAs(const TKeyBlock& other) const { 
-            return TabletId == other.TabletId; 
-        } 
+
+        bool IsSameAs(const TKeyBlock& other) const {
+            return TabletId == other.TabletId;
+        }
     };
 #pragma pack(pop)
 
@@ -91,7 +91,7 @@ namespace NKikimr {
             : BlockedGeneration(blockGen)
         {}
 
-        void Merge(const TMemRecBlock& rec, const TKeyBlock& /*key*/) { 
+        void Merge(const TMemRecBlock& rec, const TKeyBlock& /*key*/) {
             BlockedGeneration = Max(BlockedGeneration, rec.BlockedGeneration);
         }
 
@@ -116,7 +116,7 @@ namespace NKikimr {
             Y_FAIL("Must not be called");
         }
 
-        void SetMemBlob(ui64, ui32) { 
+        void SetMemBlob(ui64, ui32) {
             Y_FAIL("Must not be called");
         }
 
@@ -128,7 +128,7 @@ namespace NKikimr {
             Y_UNUSED(t);
         }
 
-        TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr, const TDiskPart *) const { 
+        TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr, const TDiskPart *) const {
             extr->Clear();
             return extr;
         }
@@ -137,13 +137,13 @@ namespace NKikimr {
             Y_FAIL("Must not be called");
         }
 
-        NMatrix::TVectorType GetLocalParts(TBlobStorageGroupType) const { 
+        NMatrix::TVectorType GetLocalParts(TBlobStorageGroupType) const {
             return NMatrix::TVectorType();
         }
 
-        void ClearLocalParts(TBlobStorageGroupType) 
-        {} 
- 
+        void ClearLocalParts(TBlobStorageGroupType)
+        {}
+
         TBlobType::EType GetType() const {
             return TBlobType::DiskBlob;
         }

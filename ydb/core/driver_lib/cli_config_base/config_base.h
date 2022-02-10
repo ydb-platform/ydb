@@ -15,7 +15,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
-#include <util/generic/variant.h> 
+#include <util/generic/variant.h>
 
 #include <util/stream/file.h>
 #include <util/stream/format.h>

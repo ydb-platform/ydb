@@ -71,7 +71,7 @@ struct Schema : NIceDb::Schema {
         struct ActorToNotify : Column<11, NScheme::NTypeIds::ActorId> {}; // deprecated because of ActorsToNotify down here
         //struct Weight : Column<12, NScheme::NTypeIds::Uint64> {};
         struct Category : Column<13, NScheme::NTypeIds::Uint64> {};
-        struct AllowedDataCenters : Column<17, NScheme::NTypeIds::String> { using Type = TVector<ui32>; }; 
+        struct AllowedDataCenters : Column<17, NScheme::NTypeIds::String> { using Type = TVector<ui32>; };
         struct TabletStorageVersion : Column<18, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 0; };
         struct ObjectID : Column<19, NScheme::NTypeIds::Uint64> { using Type = TObjectId; };
         struct ActorsToNotify : Column<111, NScheme::NTypeIds::String> { using Type = TVector<TActorId>; };
@@ -90,7 +90,7 @@ struct Schema : NIceDb::Schema {
         };
         struct Statistics : Column<120, NScheme::NTypeIds::String> { using Type = NKikimrHive::TTabletStatistics; };
         struct DataCentersPreference : Column<121, NScheme::NTypeIds::String> { using Type = NKikimrHive::TDataCentersPreference; };
-        struct AllowedDataCenterIds : Column<122, NScheme::NTypeIds::String> { using Type = TVector<TString>; }; 
+        struct AllowedDataCenterIds : Column<122, NScheme::NTypeIds::String> { using Type = TVector<TString>; };
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<
@@ -116,8 +116,8 @@ struct Schema : NIceDb::Schema {
             NeedToReleaseFromParent,
             ReassignReason,
             Statistics,
-            DataCentersPreference, 
-            AllowedDataCenterIds 
+            DataCentersPreference,
+            AllowedDataCenterIds
         >;
     };
 
@@ -128,17 +128,17 @@ struct Schema : NIceDb::Schema {
         struct AllowLeaderPromotion : Column<4, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
         struct AllowClientRead : Column<5, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
         struct AllowedNodes : Column<6, NScheme::NTypeIds::String> { using Type = TVector<TNodeId>; };
-        struct AllowedDataCenters : Column<7, NScheme::NTypeIds::String> { using Type = TVector<ui32>; }; 
+        struct AllowedDataCenters : Column<7, NScheme::NTypeIds::String> { using Type = TVector<ui32>; };
         struct RequireAllDataCenters : Column<8, NScheme::NTypeIds::Bool> {};
         struct LocalNodeOnly : Column<9, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
         struct FollowerCountPerDataCenter : Column<10, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
         struct RequireDifferentNodes : Column<11, NScheme::NTypeIds::Bool> {};
-        struct AllowedDataCenterIds : Column<12, NScheme::NTypeIds::String> { using Type = TVector<TString>; }; 
+        struct AllowedDataCenterIds : Column<12, NScheme::NTypeIds::String> { using Type = TVector<TString>; };
 
         using TKey = TableKey<TabletID, GroupID>;
         using TColumns = TableColumns<TabletID, GroupID, FollowerCount, AllowLeaderPromotion, AllowClientRead,
                                       AllowedNodes, AllowedDataCenters, RequireAllDataCenters, LocalNodeOnly,
-                                      FollowerCountPerDataCenter, RequireDifferentNodes, AllowedDataCenterIds>; 
+                                      FollowerCountPerDataCenter, RequireDifferentNodes, AllowedDataCenterIds>;
     };
 
     struct TabletFollowerTablet : Table<10> {

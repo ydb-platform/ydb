@@ -192,10 +192,10 @@ void SetupServices(TTestActorRuntime &runtime) {
 //            nodeWardenConfig->Monitoring = monitoring;
         google::protobuf::TextFormat::ParseFromString(staticConfig, &nodeWardenConfig->ServiceSet);
 
-        app.SetKeyForNode(keyfile, nodeIndex); 
-        ObtainTenantKey(&nodeWardenConfig->TenantKey, app.Keys[nodeIndex]); 
-        ObtainStaticKey(&nodeWardenConfig->StaticKey); 
- 
+        app.SetKeyForNode(keyfile, nodeIndex);
+        ObtainTenantKey(&nodeWardenConfig->TenantKey, app.Keys[nodeIndex]);
+        ObtainStaticKey(&nodeWardenConfig->StaticKey);
+
         if (nodeIndex == 0) {
             static TTempDir tempDir;
             TString pDiskPath = tempDir() + "/pdisk0.dat";
@@ -253,62 +253,62 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     }
 
     void CreatePDiskInBox(TTestActorRuntime& runtime, const TActorId& sender, ui32 nodeId, ui64 boxId, TString pdiskPath,
-            std::optional<ui64> size) { 
-        if (size) { 
-            TFile file(pdiskPath, CreateAlways | RdWr | ARW); 
-            file.Resize(0); 
-            file.Resize(*size); 
-            file.Close(); 
-        } 
+            std::optional<ui64> size) {
+        if (size) {
+            TFile file(pdiskPath, CreateAlways | RdWr | ARW);
+            file.Resize(0);
+            file.Resize(*size);
+            file.Close();
+        }
 
-        auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>(); 
-        auto& record = ev->Record; 
-        auto *request = record.MutableRequest(); 
-        auto *cmd1 = request->AddCommand()->MutableDefineHostConfig(); 
-        cmd1->SetHostConfigId(boxId); 
-        auto *drive = cmd1->AddDrive(); 
-        drive->SetPath(pdiskPath); 
-        drive->SetType(NKikimrBlobStorage::ROT); 
-        drive->MutablePDiskConfig()->SetChunkSize(32 << 20); // 16 MB 
-        auto *cmd2 = request->AddCommand()->MutableDefineBox(); 
-        cmd2->SetBoxId(boxId); 
-        auto *host = cmd2->AddHost(); 
-        host->MutableKey()->SetNodeId(nodeId); 
-        host->SetHostConfigId(boxId); 
-        runtime.SendToPipe(GetBsc(runtime), sender, ev.Release(), sender.NodeId() - runtime.GetNodeId(0), GetPipeConfigWithRetries()); 
+        auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto& record = ev->Record;
+        auto *request = record.MutableRequest();
+        auto *cmd1 = request->AddCommand()->MutableDefineHostConfig();
+        cmd1->SetHostConfigId(boxId);
+        auto *drive = cmd1->AddDrive();
+        drive->SetPath(pdiskPath);
+        drive->SetType(NKikimrBlobStorage::ROT);
+        drive->MutablePDiskConfig()->SetChunkSize(32 << 20); // 16 MB
+        auto *cmd2 = request->AddCommand()->MutableDefineBox();
+        cmd2->SetBoxId(boxId);
+        auto *host = cmd2->AddHost();
+        host->MutableKey()->SetNodeId(nodeId);
+        host->SetHostConfigId(boxId);
+        runtime.SendToPipe(GetBsc(runtime), sender, ev.Release(), sender.NodeId() - runtime.GetNodeId(0), GetPipeConfigWithRetries());
 
         TAutoPtr<IEventHandle> handle;
-        auto res = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handle); 
-        UNIT_ASSERT(res); 
-        UNIT_ASSERT_C(res->Record.GetResponse().GetSuccess(), res->Record.GetResponse().GetErrorDescription().data()); 
+        auto res = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handle);
+        UNIT_ASSERT(res);
+        UNIT_ASSERT_C(res->Record.GetResponse().GetSuccess(), res->Record.GetResponse().GetErrorDescription().data());
     }
 
     ui32 CreateGroupInBox(TTestActorRuntime& runtime, const TActorId& sender, ui64 boxId, ui64 poolId,
             ui32 encryptionMode) {
-        auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>(); 
-        auto& record = ev->Record; 
-        auto *request = record.MutableRequest(); 
-        auto *cmd = request->AddCommand()->MutableDefineStoragePool(); 
-        cmd->SetBoxId(boxId); 
-        cmd->SetStoragePoolId(poolId); 
+        auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto& record = ev->Record;
+        auto *request = record.MutableRequest();
+        auto *cmd = request->AddCommand()->MutableDefineStoragePool();
+        cmd->SetBoxId(boxId);
+        cmd->SetStoragePoolId(poolId);
         cmd->SetEncryptionMode(encryptionMode);
-        cmd->SetErasureSpecies("none"); 
-        cmd->SetVDiskKind("Default"); 
-        cmd->SetNumGroups(1); 
-        cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::ROT); 
-        request->AddCommand()->MutableQueryBaseConfig(); 
-        runtime.SendToPipe(GetBsc(runtime), sender, ev.Release(), sender.NodeId() - runtime.GetNodeId(0), GetPipeConfigWithRetries()); 
+        cmd->SetErasureSpecies("none");
+        cmd->SetVDiskKind("Default");
+        cmd->SetNumGroups(1);
+        cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::ROT);
+        request->AddCommand()->MutableQueryBaseConfig();
+        runtime.SendToPipe(GetBsc(runtime), sender, ev.Release(), sender.NodeId() - runtime.GetNodeId(0), GetPipeConfigWithRetries());
 
         TAutoPtr<IEventHandle> handle;
-        auto res = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handle); 
-        UNIT_ASSERT(res); 
-        UNIT_ASSERT_C(res->Record.GetResponse().GetSuccess(), res->Record.GetResponse().GetErrorDescription().data()); 
-        for (const auto& gr : res->Record.GetResponse().GetStatus(1).GetBaseConfig().GetGroup()) { 
-            if (gr.GetBoxId() == boxId && gr.GetStoragePoolId() == poolId) { 
-                return gr.GetGroupId(); 
+        auto res = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handle);
+        UNIT_ASSERT(res);
+        UNIT_ASSERT_C(res->Record.GetResponse().GetSuccess(), res->Record.GetResponse().GetErrorDescription().data());
+        for (const auto& gr : res->Record.GetResponse().GetStatus(1).GetBaseConfig().GetGroup()) {
+            if (gr.GetBoxId() == boxId && gr.GetStoragePoolId() == poolId) {
+                return gr.GetGroupId();
             }
         }
-        return 0; 
+        return 0;
     }
 
     void Put(TTestActorRuntime &runtime, TActorId &sender, ui32 groupId, TLogoBlobID logoBlobId, TString data) {
@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 TEvBlobStorage::TEvVGet::EFlags::None,
                 cookie,
                 {id});
-        runtime.Send(new IEventHandle(vDiskActor, sender, x.release()), sender.NodeId() - runtime.GetNodeId(0)); 
+        runtime.Send(new IEventHandle(vDiskActor, sender, x.release()), sender.NodeId() - runtime.GetNodeId(0));
 
         TAutoPtr<IEventHandle> handle;
         auto vgetResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGetResult>(handle);
@@ -392,9 +392,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TActorId sender0 = runtime.AllocateEdgeActor(0);
         TActorId sender1 = runtime.AllocateEdgeActor(1);
 
-        CreatePDiskInBox(runtime, sender0, runtime.GetNodeId(0), 1, TFsPath(tempDir()) / "new_pdisk.dat", 16ULL << 30); 
+        CreatePDiskInBox(runtime, sender0, runtime.GetNodeId(0), 1, TFsPath(tempDir()) / "new_pdisk.dat", 16ULL << 30);
         const ui32 groupId = CreateGroupInBox(runtime, sender0, 1, 1, 0);
-        UNIT_ASSERT(groupId != 0); 
+        UNIT_ASSERT(groupId != 0);
         Put(runtime, sender0, groupId, TLogoBlobID(100, 0, 0, 0, 3, 0), "xxx");
         Get(runtime, sender0, groupId, TLogoBlobID(100, 0, 0, 0, 3, 0), "xxx");
         VGet(runtime, sender0, groupId, runtime.GetNodeId(0), TLogoBlobID(100, 0, 0, 0, 3, 0), "xxx", EExpectedEqualData);

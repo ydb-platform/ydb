@@ -503,8 +503,8 @@ protected:
     void RestartPipeTx(ui64 tabletId);
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::HIVE_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HIVE_ACTOR;
     }
 
     THive(TTabletStorageInfo *info, const TActorId &tablet);
@@ -566,7 +566,7 @@ public:
     TStoragePoolInfo& GetStoragePool(const TString& name);
     TStoragePoolInfo* FindStoragePool(const TString& name);
     TDomainInfo* FindDomain(TSubDomainKey key);
-    const TNodeLocation& GetNodeLocation(TNodeId nodeId) const; 
+    const TNodeLocation& GetNodeLocation(TNodeId nodeId) const;
     void DeleteTablet(TTabletId tabletId);
     void DeleteNode(TNodeId nodeId);
     TVector<TNodeId> GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn = 3);
@@ -776,7 +776,7 @@ protected:
     void RemoveSubActor(ISubActor* subActor);
     const NKikimrLocal::TLocalConfig &GetLocalConfig() const { return LocalConfig; }
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForObject(TObjectId objectId);
-    NKikimrTabletBase::TMetrics GetDefaultResourceValuesForTabletType(TTabletTypes::EType type); 
+    NKikimrTabletBase::TMetrics GetDefaultResourceValuesForTabletType(TTabletTypes::EType type);
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForProfile(TTabletTypes::EType type, const TString& resourceProfile);
     static void AggregateMetricsMax(NKikimrTabletBase::TMetrics& aggregate, const NKikimrTabletBase::TMetrics& value);
     static void AggregateMetricsDiff(NKikimrTabletBase::TMetrics& aggregate,

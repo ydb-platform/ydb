@@ -36,10 +36,10 @@ public:
     void MutableKeyBytes(ui8** outKey, ui32 *outSizeBytes);
     void Wipe();
     ~TCypherKey();
- 
-    friend bool operator ==(const TCypherKey& x, const TCypherKey& y) { 
-        return x.IsKeySet == y.IsKeySet && !memcmp(x.Key8, y.Key8, sizeof(x.Key8)); 
-    } 
+
+    friend bool operator ==(const TCypherKey& x, const TCypherKey& y) {
+        return x.IsKeySet == y.IsKeySet && !memcmp(x.Key8, y.Key8, sizeof(x.Key8));
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////
@@ -51,7 +51,7 @@ class THashCalculator {
         ui64 HashResult[2];
         ui8 HashBytes[16];
     };
-    std::unique_ptr<Poly1305Vec> Poly; 
+    std::unique_ptr<Poly1305Vec> Poly;
     alignas(16) ui8 Key[32] = {'p', 'o', 'l', 'y', '1', '3', '0', '5', 'V', 'e', 'c', 'K', 'e', 'y', '1',
         'D', 'u', 'm', 'm', 'y', 'C', 'o', 'n', 's', 't', 'a', 'n', 't', 'V', 'a'};
 public:
@@ -96,7 +96,7 @@ class TStreamCypher {
     alignas(16) ui8 Leftover[64 * 4];
     alignas(16) ui64 Key[4];
     alignas(16) i64 Nonce;
-    std::unique_ptr<ChaChaVec> Cypher; 
+    std::unique_ptr<ChaChaVec> Cypher;
     ui32 UnusedBytes;
 public:
     TStreamCypher();

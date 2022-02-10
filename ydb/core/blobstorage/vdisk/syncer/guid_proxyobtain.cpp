@@ -12,8 +12,8 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TObtainVDiskGuidProxy : public TVDiskGuidProxyBase {
     protected:
-        virtual std::unique_ptr<TEvBlobStorage::TEvVSyncGuid> GenerateRequest() override { 
-            return std::make_unique<TEvBlobStorage::TEvVSyncGuid>(SelfVDiskId, TargetVDiskId); 
+        virtual std::unique_ptr<TEvBlobStorage::TEvVSyncGuid> GenerateRequest() override {
+            return std::make_unique<TEvBlobStorage::TEvVSyncGuid>(SelfVDiskId, TargetVDiskId);
         }
 
         virtual void HandleReply(const TActorContext &ctx,

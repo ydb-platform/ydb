@@ -1,7 +1,7 @@
 #include "config.h"
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
-#include "version.h" 
+#include "version.h"
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
 #include <ydb/core/actorlib_impl/load_network.h>
@@ -26,7 +26,7 @@
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
 #include <ydb/core/blobstorage/testload/test_load_actor.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.h>
- 
+
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/client/server/grpc_proxy_status.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
@@ -54,7 +54,7 @@
 
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/test_tablet/state_server_interface.h>
- 
+
 #include <ydb/core/health_check/health_check.h>
 
 #include <ydb/core/kqp/kqp.h>
@@ -157,14 +157,14 @@
 #include <library/cpp/actors/core/probes.h>
 #include <library/cpp/actors/core/process_stats.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
-#include <library/cpp/actors/core/io_dispatcher.h> 
+#include <library/cpp/actors/core/io_dispatcher.h>
 #include <library/cpp/actors/dnsresolver/dnsresolver.h>
 #include <library/cpp/actors/helpers/selfping_actor.h>
 #include <library/cpp/actors/http/http_proxy.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect_mon.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
-#include <library/cpp/actors/interconnect/interconnect_proxy_wrapper.h> 
+#include <library/cpp/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
 #include <library/cpp/actors/interconnect/load.h>
 #include <library/cpp/actors/interconnect/poller_actor.h>
@@ -194,9 +194,9 @@ ui32 TYandexQueryInitializer::IcPort = 0;
 
 IKikimrServicesInitializer::IKikimrServicesInitializer(const TKikimrRunConfig& runConfig)
     : Config(runConfig.AppConfig)
-    , NodeId(runConfig.NodeId) 
-    , ScopeId(runConfig.ScopeId) 
-{} 
+    , NodeId(runConfig.NodeId)
+    , ScopeId(runConfig.ScopeId)
+{}
 
 // TBasicServicesInitializer
 
@@ -352,9 +352,9 @@ static TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSystemC
     return TSchedulerConfig(resolution, spinThreshold, progressThreshold, useSchedulerActor);
 }
 
-TBasicServicesInitializer::TBasicServicesInitializer(const TKikimrRunConfig& runConfig) 
+TBasicServicesInitializer::TBasicServicesInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
-{ 
+{
 }
 
 static ui32 GetInterconnectThreadPoolId(const NKikimr::TAppData* appData) {
@@ -366,86 +366,86 @@ static ui32 GetInterconnectThreadPoolId(const NKikimr::TAppData* appData) {
         return appData->SystemPoolId;
 }
 
-static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInterconnectConfig& config, ui32 numNodes, ui32 numDataCenters) { 
-    TInterconnectSettings result; 
- 
-    if (config.HasSelfKickDelayDuration() || config.HasSelfKickDelay()) { 
-        Cerr << "SelfKickDelayDuration/SelfKickDelay option is deprecated" << Endl; 
-    } 
+static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInterconnectConfig& config, ui32 numNodes, ui32 numDataCenters) {
+    TInterconnectSettings result;
 
-    if (config.HasHandshakeTimeoutDuration()) { 
-        result.Handshake = DurationFromProto(config.GetHandshakeTimeoutDuration()); 
-    } else if (config.HasHandshakeTimeout()) { 
-        result.Handshake = TDuration::MilliSeconds(config.GetHandshakeTimeout()); 
-    } 
+    if (config.HasSelfKickDelayDuration() || config.HasSelfKickDelay()) {
+        Cerr << "SelfKickDelayDuration/SelfKickDelay option is deprecated" << Endl;
+    }
 
-    if (config.HasHeartbeatIntervalDuration() || config.HasHeartbeatInterval()) { 
-        Cerr << "HeartbeatIntervalDuration/HeartbeatInterval option is deprecated" << Endl; 
-    } 
+    if (config.HasHandshakeTimeoutDuration()) {
+        result.Handshake = DurationFromProto(config.GetHandshakeTimeoutDuration());
+    } else if (config.HasHandshakeTimeout()) {
+        result.Handshake = TDuration::MilliSeconds(config.GetHandshakeTimeout());
+    }
 
-    if (config.HasDeadPeerTimeoutDuration()) { 
-        result.DeadPeer = DurationFromProto(config.GetDeadPeerTimeoutDuration()); 
-    } else if (config.HasDeadPeerTimeout()) { 
-        result.DeadPeer = TDuration::MilliSeconds(config.GetDeadPeerTimeout()); 
-    } 
+    if (config.HasHeartbeatIntervalDuration() || config.HasHeartbeatInterval()) {
+        Cerr << "HeartbeatIntervalDuration/HeartbeatInterval option is deprecated" << Endl;
+    }
 
-    if (config.HasSendBufferDieLimitInMB()) { 
+    if (config.HasDeadPeerTimeoutDuration()) {
+        result.DeadPeer = DurationFromProto(config.GetDeadPeerTimeoutDuration());
+    } else if (config.HasDeadPeerTimeout()) {
+        result.DeadPeer = TDuration::MilliSeconds(config.GetDeadPeerTimeout());
+    }
+
+    if (config.HasSendBufferDieLimitInMB()) {
         result.SendBufferDieLimitInMB = config.GetSendBufferDieLimitInMB();
-    } else { 
+    } else {
         result.SendBufferDieLimitInMB = 512;
-    } 
+    }
 
-    if (config.HasCloseOnIdleTimeoutDuration()) { 
-        result.CloseOnIdle = DurationFromProto(config.GetCloseOnIdleTimeoutDuration()); 
-    } else if (config.HasCloseOnIdleTimeout()) { 
+    if (config.HasCloseOnIdleTimeoutDuration()) {
+        result.CloseOnIdle = DurationFromProto(config.GetCloseOnIdleTimeoutDuration());
+    } else if (config.HasCloseOnIdleTimeout()) {
         result.CloseOnIdle = TDuration::Seconds(config.GetCloseOnIdleTimeout());
-    } 
+    }
 
-    auto mode = config.GetCounterMergeMode(); 
-    if (config.HasMergePerPeerCounters() && !config.HasCounterMergeMode()) { 
-        mode = !config.GetMergePerPeerCounters() 
-            ? NKikimrConfig::TInterconnectConfig::NO_MERGE : numDataCenters > 1 
-            ? NKikimrConfig::TInterconnectConfig::PER_DATA_CENTER 
-            : NKikimrConfig::TInterconnectConfig::PER_PEER; 
-    } 
-    switch (mode) { 
-        case NKikimrConfig::TInterconnectConfig::AUTO: 
-            if (numNodes > 100) { 
-                if (numDataCenters > 1) { 
-                    result.MergePerDataCenterCounters = true; 
-                } else { 
-                    result.MergePerPeerCounters = true; 
-                } 
-            } 
-            break; 
-        case NKikimrConfig::TInterconnectConfig::PER_PEER: 
-            result.MergePerPeerCounters = true; 
-            break; 
-        case NKikimrConfig::TInterconnectConfig::PER_DATA_CENTER: 
-            result.MergePerDataCenterCounters = true; 
-            break; 
-        case NKikimrConfig::TInterconnectConfig::NO_MERGE: 
-            break; 
-    } 
+    auto mode = config.GetCounterMergeMode();
+    if (config.HasMergePerPeerCounters() && !config.HasCounterMergeMode()) {
+        mode = !config.GetMergePerPeerCounters()
+            ? NKikimrConfig::TInterconnectConfig::NO_MERGE : numDataCenters > 1
+            ? NKikimrConfig::TInterconnectConfig::PER_DATA_CENTER
+            : NKikimrConfig::TInterconnectConfig::PER_PEER;
+    }
+    switch (mode) {
+        case NKikimrConfig::TInterconnectConfig::AUTO:
+            if (numNodes > 100) {
+                if (numDataCenters > 1) {
+                    result.MergePerDataCenterCounters = true;
+                } else {
+                    result.MergePerPeerCounters = true;
+                }
+            }
+            break;
+        case NKikimrConfig::TInterconnectConfig::PER_PEER:
+            result.MergePerPeerCounters = true;
+            break;
+        case NKikimrConfig::TInterconnectConfig::PER_DATA_CENTER:
+            result.MergePerDataCenterCounters = true;
+            break;
+        case NKikimrConfig::TInterconnectConfig::NO_MERGE:
+            break;
+    }
 
-    switch (config.GetEncryptionMode()) { 
-        case NKikimrConfig::TInterconnectConfig::DISABLED: 
-            result.EncryptionMode = EEncryptionMode::DISABLED; 
-            break; 
-        case NKikimrConfig::TInterconnectConfig::OPTIONAL: 
-            result.EncryptionMode = EEncryptionMode::OPTIONAL; 
-            break; 
-        case NKikimrConfig::TInterconnectConfig::REQUIRED: 
-            result.EncryptionMode = EEncryptionMode::REQUIRED; 
-            break; 
-    } 
-    result.TlsAuthOnly = config.GetTlsAuthOnly(); 
- 
+    switch (config.GetEncryptionMode()) {
+        case NKikimrConfig::TInterconnectConfig::DISABLED:
+            result.EncryptionMode = EEncryptionMode::DISABLED;
+            break;
+        case NKikimrConfig::TInterconnectConfig::OPTIONAL:
+            result.EncryptionMode = EEncryptionMode::OPTIONAL;
+            break;
+        case NKikimrConfig::TInterconnectConfig::REQUIRED:
+            result.EncryptionMode = EEncryptionMode::REQUIRED;
+            break;
+    }
+    result.TlsAuthOnly = config.GetTlsAuthOnly();
+
     if (config.HasTCPSocketBufferSize())
         result.TCPSocketBufferSize = config.GetTCPSocketBufferSize();
 
     if (config.HasMaxTimePerEventInMks()) {
-        Cerr << "MaxTimePerEventInMks option is deprecated" << Endl; 
+        Cerr << "MaxTimePerEventInMks option is deprecated" << Endl;
     }
 
     if (config.HasTotalInflightAmountOfData()) {
@@ -464,43 +464,43 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.LostConnection = DurationFromProto(config.GetLostConnectionDuration());
     }
 
-    if (config.HasBatchPeriodDuration()) { 
-        result.BatchPeriod = DurationFromProto(config.GetBatchPeriodDuration()); 
-    } else { 
+    if (config.HasBatchPeriodDuration()) {
+        result.BatchPeriod = DurationFromProto(config.GetBatchPeriodDuration());
+    } else {
         result.BatchPeriod = TDuration();
-    } 
- 
-    result.BindOnAllAddresses = config.GetBindOnAllAddresses(); 
- 
-    auto readFile = [](std::optional<TString> value, std::optional<TString> path, const char *name) { 
-        if (value) { 
-            return *value; 
-        } else if (path) { 
-            try { 
-                return TFileInput(*path).ReadAll(); 
-            } catch (const std::exception& ex) { 
-                Cerr << "failed to read " << name << " file '" << *path << "': " << ex.what() << Endl; 
-                exit(1); 
-            } 
-        } 
-        return TString(); 
-    }; 
-    result.Certificate = readFile(config.HasCertificate() ? std::make_optional(config.GetCertificate()) : std::nullopt, 
-        config.HasPathToCertificateFile() ? std::make_optional(config.GetPathToCertificateFile()) : std::nullopt, 
-        "certificate"); 
-    result.PrivateKey = readFile(config.HasPrivateKey() ? std::make_optional(config.GetPrivateKey()) : std::nullopt, 
-        config.HasPathToPrivateKeyFile() ? std::make_optional(config.GetPathToPrivateKeyFile()) : std::nullopt, 
-        "private key"); 
-    result.CaFilePath = config.GetPathToCaFile(); 
-    result.CipherList = config.GetCipherList(); 
- 
-    if (config.HasMessagePendingTimeout()) { 
-        result.MessagePendingTimeout = DurationFromProto(config.GetMessagePendingTimeout()); 
-    } 
-    if (config.HasMessagePendingSize()) { 
-        result.MessagePendingSize = config.GetMessagePendingSize(); 
-    } 
- 
+    }
+
+    result.BindOnAllAddresses = config.GetBindOnAllAddresses();
+
+    auto readFile = [](std::optional<TString> value, std::optional<TString> path, const char *name) {
+        if (value) {
+            return *value;
+        } else if (path) {
+            try {
+                return TFileInput(*path).ReadAll();
+            } catch (const std::exception& ex) {
+                Cerr << "failed to read " << name << " file '" << *path << "': " << ex.what() << Endl;
+                exit(1);
+            }
+        }
+        return TString();
+    };
+    result.Certificate = readFile(config.HasCertificate() ? std::make_optional(config.GetCertificate()) : std::nullopt,
+        config.HasPathToCertificateFile() ? std::make_optional(config.GetPathToCertificateFile()) : std::nullopt,
+        "certificate");
+    result.PrivateKey = readFile(config.HasPrivateKey() ? std::make_optional(config.GetPrivateKey()) : std::nullopt,
+        config.HasPathToPrivateKeyFile() ? std::make_optional(config.GetPathToPrivateKeyFile()) : std::nullopt,
+        "private key");
+    result.CaFilePath = config.GetPathToCaFile();
+    result.CipherList = config.GetCipherList();
+
+    if (config.HasMessagePendingTimeout()) {
+        result.MessagePendingTimeout = DurationFromProto(config.GetMessagePendingTimeout());
+    }
+    if (config.HasMessagePendingSize()) {
+        result.MessagePendingSize = config.GetMessagePendingSize();
+    }
+
     return result;
 }
 
@@ -530,8 +530,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     auto schedulerConfig = CreateSchedulerConfig(systemConfig.GetScheduler());
     schedulerConfig.MonCounters = GetServiceCounters(counters, "utils");
     setup->Scheduler.Reset(CreateSchedulerThread(schedulerConfig));
-    setup->LocalServices.emplace_back(MakeIoDispatcherActorId(), TActorSetupCmd(CreateIoDispatcherActor( 
-        schedulerConfig.MonCounters->GetSubgroup("subsystem", "io_dispatcher")), TMailboxType::HTSwap, systemPoolId)); 
+    setup->LocalServices.emplace_back(MakeIoDispatcherActorId(), TActorSetupCmd(CreateIoDispatcherActor(
+        schedulerConfig.MonCounters->GetSubgroup("subsystem", "io_dispatcher")), TMailboxType::HTSwap, systemPoolId));
 
     NLwTraceMonPage::DashboardRegistry().Register(NActors::LWTraceDashboards(setup));
 
@@ -540,9 +540,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         const TActorId resolverId = NDnsResolver::MakeDnsResolverActorId();
         const TActorId nameserviceId = GetNameserviceActorId();
 
-        ui32 numNodes = 0; 
-        TSet<TString> dataCenters; 
- 
+        ui32 numNodes = 0;
+        TSet<TString> dataCenters;
+
         TIntrusivePtr<TTableNameserverSetup> table(new TTableNameserverSetup());
         for (const auto &node : nsConfig.GetNode()) {
             const ui32 nodeId = node.GetNodeId();
@@ -555,17 +555,17 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             // Use ip address only when dns host not specified
             const TString addr = resolveHost ? TString() : node.GetAddress();
 
-            TNodeLocation location; 
+            TNodeLocation location;
             if (node.HasWalleLocation()) {
-                location = TNodeLocation(node.GetWalleLocation()); 
-            } else if (node.HasLocation()) { 
-                location = TNodeLocation(node.GetLocation()); 
+                location = TNodeLocation(node.GetWalleLocation());
+            } else if (node.HasLocation()) {
+                location = TNodeLocation(node.GetLocation());
             }
- 
-            table->StaticNodeTable[nodeId] = TTableNameserverSetup::TNodeInfo(addr, host, resolveHost, port, location); 
- 
-            ++numNodes; 
-            dataCenters.insert(location.GetDataCenterId()); 
+
+            table->StaticNodeTable[nodeId] = TTableNameserverSetup::TNodeInfo(addr, host, resolveHost, port, location);
+
+            ++numNodes;
+            dataCenters.insert(location.GetDataCenterId());
         }
 
         NDnsResolver::TOnDemandDnsResolverOptions resolverOptions;
@@ -600,15 +600,15 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             nameserviceId,
             TActorSetupCmd(nameservice, TMailboxType::HTSwap, systemPoolId));
 
-        if (Config.HasInterconnectConfig() && Config.GetInterconnectConfig().GetStartTcp()) { 
+        if (Config.HasInterconnectConfig() && Config.GetInterconnectConfig().GetStartTcp()) {
             const auto& icConfig = Config.GetInterconnectConfig();
 
             TChannelsConfig channels;
-            auto settings = GetInterconnectSettings(icConfig, numNodes, dataCenters.size()); 
+            auto settings = GetInterconnectSettings(icConfig, numNodes, dataCenters.size());
             ui32 interconnectPoolId = GetInterconnectThreadPoolId(appData);
 
-            for (const auto& channel : icConfig.GetChannel()) { 
-                const auto index = channel.GetIndex(); 
+            for (const auto& channel : icConfig.GetChannel()) {
+                const auto index = channel.GetIndex();
                 ui32 weight = 0;
                 Y_VERIFY(!(channel.HasQuota() && channel.HasWeight()), "Only one field should be set: Weight or Quota, Weight is preffered");
                 if (channel.HasWeight()) {
@@ -623,66 +623,66 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 channels.insert({ui16(index), TChannelSettings{ui16(weight)}});
             }
 
-            // create poller actor (whether platform supports it) 
-            setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, systemPoolId)); 
- 
+            // create poller actor (whether platform supports it)
+            setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, systemPoolId));
+
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
- 
+
             TIntrusivePtr<TInterconnectProxyCommon> icCommon;
             icCommon.Reset(new TInterconnectProxyCommon);
             icCommon->NameserviceId = nameserviceId;
             icCommon->MonCounters = GetServiceCounters(counters, "interconnect");
             icCommon->ChannelsConfig = channels;
-            icCommon->Settings = settings; 
+            icCommon->Settings = settings;
             icCommon->DestructorId = GetDestructActorID();
-            icCommon->DestructorQueueSize = destructorQueueSize; 
-            icCommon->HandshakeBallastSize = icConfig.GetHandshakeBallastSize(); 
-            icCommon->LocalScopeId = ScopeId.GetInterconnectScopeId(); 
-            icCommon->Cookie = icConfig.GetSuppressConnectivityCheck() ? TString() : CreateGuidAsString(); 
+            icCommon->DestructorQueueSize = destructorQueueSize;
+            icCommon->HandshakeBallastSize = icConfig.GetHandshakeBallastSize();
+            icCommon->LocalScopeId = ScopeId.GetInterconnectScopeId();
+            icCommon->Cookie = icConfig.GetSuppressConnectivityCheck() ? TString() : CreateGuidAsString();
 
-#define CHANNEL(NAME) {TInterconnectChannels::NAME, #NAME} 
-            icCommon->ChannelName = { 
-                CHANNEL(IC_COMMON), 
-                CHANNEL(IC_BLOBSTORAGE), 
-                CHANNEL(IC_BLOBSTORAGE_ASYNC_DATA), 
-                CHANNEL(IC_BLOBSTORAGE_SYNCER), 
-                CHANNEL(IC_BLOBSTORAGE_DISCOVER), 
-                CHANNEL(IC_BLOBSTORAGE_SMALL_MSG), 
-                CHANNEL(IC_TABLETS_SMALL), 
-                CHANNEL(IC_TABLETS_MEDIUM), 
-                CHANNEL(IC_TABLETS_LARGE), 
-            }; 
- 
-            if (icConfig.GetEnforceScopeValidation()) { 
-                icCommon->EventFilter = std::make_shared<TEventFilter>(); 
+#define CHANNEL(NAME) {TInterconnectChannels::NAME, #NAME}
+            icCommon->ChannelName = {
+                CHANNEL(IC_COMMON),
+                CHANNEL(IC_BLOBSTORAGE),
+                CHANNEL(IC_BLOBSTORAGE_ASYNC_DATA),
+                CHANNEL(IC_BLOBSTORAGE_SYNCER),
+                CHANNEL(IC_BLOBSTORAGE_DISCOVER),
+                CHANNEL(IC_BLOBSTORAGE_SMALL_MSG),
+                CHANNEL(IC_TABLETS_SMALL),
+                CHANNEL(IC_TABLETS_MEDIUM),
+                CHANNEL(IC_TABLETS_LARGE),
+            };
+
+            if (icConfig.GetEnforceScopeValidation()) {
+                icCommon->EventFilter = std::make_shared<TEventFilter>();
                 RegisterBlobStorageEventScopes(icCommon->EventFilter);
                 RegisterStateStorageEventScopes(icCommon->EventFilter);
-            } 
- 
-            if (const auto& whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId)) { 
+            }
+
+            if (const auto& whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId)) {
                 icCommon->InitWhiteboard = [whiteboardId](ui16 port, TActorSystem *actorSystem) {
                     actorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint("ic", Sprintf(":%d", port)));
                 };
-                icCommon->UpdateWhiteboard = [whiteboardId](const TString& peer, bool connected, bool green, bool yellow, 
-                        bool orange, bool red, TActorSystem *actorSystem) { 
-                    actorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvNodeStateUpdate( 
-                        peer, connected, 
-                        green ? NKikimrWhiteboard::EFlag::Green : 
-                        yellow ? NKikimrWhiteboard::EFlag::Yellow : 
-                        orange ? NKikimrWhiteboard::EFlag::Orange : 
-                        red ? NKikimrWhiteboard::EFlag::Red : NKikimrWhiteboard::EFlag())); 
-                }; 
-            } 
- 
-            if (const auto& mon = appData->Mon) { 
+                icCommon->UpdateWhiteboard = [whiteboardId](const TString& peer, bool connected, bool green, bool yellow,
+                        bool orange, bool red, TActorSystem *actorSystem) {
+                    actorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvNodeStateUpdate(
+                        peer, connected,
+                        green ? NKikimrWhiteboard::EFlag::Green :
+                        yellow ? NKikimrWhiteboard::EFlag::Yellow :
+                        orange ? NKikimrWhiteboard::EFlag::Orange :
+                        red ? NKikimrWhiteboard::EFlag::Red : NKikimrWhiteboard::EFlag()));
+                };
+            }
+
+            if (const auto& mon = appData->Mon) {
                 icCommon->RegisterMonPage = [mon](const TString& path, const TString& title, TActorSystem *actorSystem, const TActorId& actorId) {
-                    NMonitoring::TIndexMonPage *page = mon->RegisterIndexPage("actors", "Actors")->RegisterIndexPage("interconnect", "Interconnect"); 
-                    mon->RegisterActorPage(page, path, title, false, actorSystem, actorId); 
-                }; 
-                setup->LocalServices.emplace_back(NInterconnect::MakeInterconnectMonActorId(NodeId), TActorSetupCmd( 
-                    NInterconnect::CreateInterconnectMonActor(icCommon), TMailboxType::ReadAsFilled, systemPoolId)); 
-            } 
- 
+                    NMonitoring::TIndexMonPage *page = mon->RegisterIndexPage("actors", "Actors")->RegisterIndexPage("interconnect", "Interconnect");
+                    mon->RegisterActorPage(page, path, title, false, actorSystem, actorId);
+                };
+                setup->LocalServices.emplace_back(NInterconnect::MakeInterconnectMonActorId(NodeId), TActorSetupCmd(
+                    NInterconnect::CreateInterconnectMonActor(icCommon), TMailboxType::ReadAsFilled, systemPoolId));
+            }
+
             if (nsConfig.HasClusterUUID()) {
                 icCommon->ClusterUUID = nsConfig.GetClusterUUID();
             }
@@ -691,30 +691,30 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 icCommon->AcceptUUID.emplace_back(item);
             }
 
-            if (!nsConfig.GetSuppressVersionCheck()) { 
-                icCommon->VersionInfo = VERSION; 
-                CheckVersionTag(); 
-            } 
- 
-            setup->LocalServices.emplace_back(GetDestructActorID(), TActorSetupCmd(new TDestructActor, 
-                TMailboxType::ReadAsFilled, interconnectPoolId)); 
+            if (!nsConfig.GetSuppressVersionCheck()) {
+                icCommon->VersionInfo = VERSION;
+                CheckVersionTag();
+            }
 
-            Y_VERIFY(!table->StaticNodeTable.empty()); 
-            ui32 maxNode = 0; 
+            setup->LocalServices.emplace_back(GetDestructActorID(), TActorSetupCmd(new TDestructActor,
+                TMailboxType::ReadAsFilled, interconnectPoolId));
+
+            Y_VERIFY(!table->StaticNodeTable.empty());
+            ui32 maxNode = 0;
             for (const auto &node : table->StaticNodeTable) {
-                maxNode = Max(maxNode, node.first); 
-            } 
-            setup->Interconnect.ProxyActors.resize(maxNode + 1); 
-            setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(icCommon, interconnectPoolId); 
- 
+                maxNode = Max(maxNode, node.first);
+            }
+            setup->Interconnect.ProxyActors.resize(maxNode + 1);
+            setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(icCommon, interconnectPoolId);
+
             std::unordered_set<ui32> staticIds;
 
             for (const auto& node : table->StaticNodeTable) {
                 const ui32 destId = node.first;
                 if (destId != NodeId) {
                     staticIds.insert(destId);
-                    setup->Interconnect.ProxyActors[destId] = TActorSetupCmd(new TInterconnectProxyTCP(destId, icCommon), 
-                        TMailboxType::ReadAsFilled, interconnectPoolId); 
+                    setup->Interconnect.ProxyActors[destId] = TActorSetupCmd(new TInterconnectProxyTCP(destId, icCommon),
+                        TMailboxType::ReadAsFilled, interconnectPoolId);
                 } else {
                     TYandexQueryInitializer::SetIcPort(node.second.second);
                     icCommon->TechnicalSelfHostName = node.second.Host;
@@ -723,13 +723,13 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                         address = node.second.first;
                     auto listener = new TInterconnectListenerTCP(
                         address, node.second.second, icCommon);
-                    if (int err = listener->Bind()) { 
-                        Cerr << "Failed to set up IC listener on port " << node.second.second 
-                            << " errno# " << err << " (" << strerror(err) << ")" << Endl; 
-                        exit(1); 
-                    } 
-                    setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(false), TActorSetupCmd(listener, 
-                        TMailboxType::ReadAsFilled, interconnectPoolId)); 
+                    if (int err = listener->Bind()) {
+                        Cerr << "Failed to set up IC listener on port " << node.second.second
+                            << " errno# " << err << " (" << strerror(err) << ")" << Endl;
+                        exit(1);
+                    }
+                    setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(false), TActorSetupCmd(listener,
+                        TMailboxType::ReadAsFilled, interconnectPoolId));
                 }
             }
 
@@ -743,20 +743,20 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     address = info.GetAddress();
                 }
                 auto listener = new TInterconnectListenerTCP(address, info.GetPort(), icCommon);
-                if (int err = listener->Bind()) { 
-                    Cerr << "Failed to set up IC listener on port " << info.GetPort() 
-                        << " errno# " << err << " (" << strerror(err) << ")" << Endl; 
-                    exit(1); 
-                } 
-                setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(true), TActorSetupCmd(listener, 
-                    TMailboxType::ReadAsFilled, interconnectPoolId)); 
+                if (int err = listener->Bind()) {
+                    Cerr << "Failed to set up IC listener on port " << info.GetPort()
+                        << " errno# " << err << " (" << strerror(err) << ")" << Endl;
+                    exit(1);
+                }
+                setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(true), TActorSetupCmd(listener,
+                    TMailboxType::ReadAsFilled, interconnectPoolId));
             }
 
-            // create load responder for interconnect 
-            // TODO(alexvru): pool? 
-            setup->LocalServices.emplace_back(NInterconnect::MakeLoadResponderActorId(NodeId), 
-                TActorSetupCmd(NInterconnect::CreateLoadResponderActor(), TMailboxType::ReadAsFilled, systemPoolId)); 
- 
+            // create load responder for interconnect
+            // TODO(alexvru): pool?
+            setup->LocalServices.emplace_back(NInterconnect::MakeLoadResponderActorId(NodeId),
+                TActorSetupCmd(NInterconnect::CreateLoadResponderActor(), TMailboxType::ReadAsFilled, systemPoolId));
+
             //IC_Load::InitializeService(setup, appData, maxNode);
         }
     }
@@ -793,34 +793,34 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
                                                   const NKikimr::TAppData* appData) {
     TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(new TRealPDiskServiceFactory()));
     if (Config.HasBlobStorageConfig()) {
-        const auto& bsc = Config.GetBlobStorageConfig(); 
-        appData->StaticBlobStorageConfig->MergeFrom(bsc.GetServiceSet()); 
+        const auto& bsc = Config.GetBlobStorageConfig();
+        appData->StaticBlobStorageConfig->MergeFrom(bsc.GetServiceSet());
         nodeWardenConfig->FeatureFlags = Config.GetFeatureFlags();
-        nodeWardenConfig->ServiceSet.MergeFrom(bsc.GetServiceSet()); 
+        nodeWardenConfig->ServiceSet.MergeFrom(bsc.GetServiceSet());
         if (Config.HasVDiskConfig()) {
             nodeWardenConfig->AllVDiskKinds->Merge(Config.GetVDiskConfig());
         }
         if (Config.HasDriveModelConfig()) {
             nodeWardenConfig->AllDriveModels->Merge(Config.GetDriveModelConfig());
         }
-        if (bsc.HasCacheFilePath()) { 
-            nodeWardenConfig->CacheAccessor = CreateFileCacheAccessor(bsc.GetCacheFilePath()); 
-        } 
-        nodeWardenConfig->CachePDisks = bsc.GetCachePDisks(); 
-        nodeWardenConfig->CacheVDisks = bsc.GetCacheVDisks(); 
-        nodeWardenConfig->EnableVDiskCooldownTimeout = true; 
+        if (bsc.HasCacheFilePath()) {
+            nodeWardenConfig->CacheAccessor = CreateFileCacheAccessor(bsc.GetCacheFilePath());
+        }
+        nodeWardenConfig->CachePDisks = bsc.GetCachePDisks();
+        nodeWardenConfig->CacheVDisks = bsc.GetCacheVDisks();
+        nodeWardenConfig->EnableVDiskCooldownTimeout = true;
     }
 
-    ObtainTenantKey(&nodeWardenConfig->TenantKey, Config.GetKeyConfig()); 
-    ObtainStaticKey(&nodeWardenConfig->StaticKey); 
+    ObtainTenantKey(&nodeWardenConfig->TenantKey, Config.GetKeyConfig());
+    ObtainStaticKey(&nodeWardenConfig->StaticKey);
     ObtainPDiskKey(&nodeWardenConfig->PDiskKey, Config.GetPDiskKeyConfig());
- 
+
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeBlobStorageNodeWardenID(NodeId),
                                                                        TActorSetupCmd(CreateBSNodeWarden(nodeWardenConfig.Release()),
                                                                                       TMailboxType::ReadAsFilled, appData->SystemPoolId)));
- 
-    setup->LocalServices.emplace_back(MakeUniversalSchedulerActorId(), TActorSetupCmd(CreateUniversalSchedulerActor(), 
-        TMailboxType::ReadAsFilled, appData->SystemPoolId)); 
+
+    setup->LocalServices.emplace_back(MakeUniversalSchedulerActorId(), TActorSetupCmd(CreateUniversalSchedulerActor(),
+        TMailboxType::ReadAsFilled, appData->SystemPoolId));
 }
 
 // TStateStorageServiceInitializer
@@ -920,8 +920,8 @@ void TLocalServiceInitializer::InitializeServices(
         new TTabletSetupInfo(&CreateDefaultHive, TMailboxType::ReadAsFilled, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.SysViewProcessor] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&NSysView::CreateSysViewProcessor, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[appData->DefaultTabletTypes.TestShard] = TLocalConfig::TTabletClassInfo( 
-        new TTabletSetupInfo(&NTestShard::CreateTestShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId)); 
+    localConfig->TabletClassInfo[appData->DefaultTabletTypes.TestShard] = TLocalConfig::TTabletClassInfo(
+        new TTabletSetupInfo(&NTestShard::CreateTestShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.ColumnShard] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&CreateColumnShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.SequenceShard] = TLocalConfig::TTabletClassInfo(
@@ -950,9 +950,9 @@ void TLocalServiceInitializer::InitializeServices(
         TActorSetupCmd(CreateLabelsMaintainer(Config.GetMonitoringConfig()),
                        TMailboxType::ReadAsFilled, 0)));
 
-    setup->LocalServices.emplace_back(NTestShard::MakeStateServerInterfaceActorId(), TActorSetupCmd( 
-        NTestShard::CreateStateServerInterfaceActor(), TMailboxType::ReadAsFilled, 0)); 
- 
+    setup->LocalServices.emplace_back(NTestShard::MakeStateServerInterfaceActorId(), TActorSetupCmd(
+        NTestShard::CreateStateServerInterfaceActor(), TMailboxType::ReadAsFilled, 0));
+
     NKesus::AddKesusProbesList();
 }
 
@@ -1766,31 +1766,31 @@ void TViewerInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                                                       appData->BatchPoolId)));
 }
 
-// TLoadInitializer 
- 
-TLoadInitializer::TLoadInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) 
-{} 
- 
-void TLoadInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) { 
+// TLoadInitializer
+
+TLoadInitializer::TLoadInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TLoadInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
     IActor *actor = CreateTestLoadActor(appData->Counters);
     setup->LocalServices.emplace_back(MakeBlobStorageLoadID(NodeId), TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
-    // FIXME: correct service id 
-} 
- 
-// TFailureInjectionInitializer 
+    // FIXME: correct service id
+}
 
-TFailureInjectionInitializer::TFailureInjectionInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) 
-{} 
- 
-void TFailureInjectionInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) { 
-    IActor *actor = CreateFailureInjectionActor(); 
-    setup->LocalServices.emplace_back(MakeBlobStorageFailureInjectionID(NodeId), 
+// TFailureInjectionInitializer
+
+TFailureInjectionInitializer::TFailureInjectionInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TFailureInjectionInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
+    IActor *actor = CreateFailureInjectionActor();
+    setup->LocalServices.emplace_back(MakeBlobStorageFailureInjectionID(NodeId),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
-    // FIXME: correct service id 
-} 
- 
+    // FIXME: correct service id
+}
+
 // TPersQueueL2CacheInitializer
 
 TPersQueueL2CacheInitializer::TPersQueueL2CacheInitializer(const TKikimrRunConfig& runConfig)

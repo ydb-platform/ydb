@@ -857,8 +857,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::LOCAL_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::LOCAL_ACTOR;
     }
 
     TLocalNodeRegistrar(const TActorId &owner, ui64 hiveId, TVector<TSubDomainKey> servicedDomains,
@@ -1344,8 +1344,8 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::LOCAL_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::LOCAL_ACTOR;
     }
 
     TDomainLocal(const TDomainsInfo &domainsInfo, const TDomainsInfo::TDomain &domain,
@@ -1398,8 +1398,8 @@ class TLocal : public TActorBootstrapped<TLocal> {
     THashMap<TString, TActorId> DomainLocals;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::LOCAL_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::LOCAL_ACTOR;
     }
 
     TLocal(TLocalConfig *cfg)

@@ -12,21 +12,21 @@ namespace NKikimr {
 using TPutResultVec = TPutImpl::TPutResultVec;
 
 bool TPutImpl::RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults) {
-    switch (Info->Type.GetErasure()) { 
-        case TBlobStorageGroupType::ErasureMirror3dc: 
+    switch (Info->Type.GetErasure()) {
+        case TBlobStorageGroupType::ErasureMirror3dc:
             return RunStrategy(logCtx, TPut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy), outPutResults);
-        case TBlobStorageGroupType::ErasureMirror3of4: 
-            return RunStrategy(logCtx, TPut3of4Strategy(Tactic), outPutResults); 
-        default: 
-            return RunStrategy(logCtx, TRestoreStrategy(), outPutResults); 
+        case TBlobStorageGroupType::ErasureMirror3of4:
+            return RunStrategy(logCtx, TPut3of4Strategy(Tactic), outPutResults);
+        default:
+            return RunStrategy(logCtx, TRestoreStrategy(), outPutResults);
     }
 }
 
-bool TPutImpl::RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutResultVec &outPutResults) { 
-    TBatchedVec<TBlackboard::TBlobStates::value_type*> finished; 
-    const EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, strategy, &finished); 
-    if (finished) { 
-        PrepareReply(logCtx, outcome.ErrorReason, finished, outPutResults); 
+bool TPutImpl::RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutResultVec &outPutResults) {
+    TBatchedVec<TBlackboard::TBlobStates::value_type*> finished;
+    const EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, strategy, &finished);
+    if (finished) {
+        PrepareReply(logCtx, outcome.ErrorReason, finished, outPutResults);
         return true;
     }
     return false;
@@ -81,16 +81,16 @@ void TPutImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logC
 }
 
 void TPutImpl::PrepareReply(TLogContext &logCtx, TString errorReason,
-        TBatchedVec<TBlackboard::TBlobStates::value_type*>& finished, TPutResultVec &outPutResults) { 
+        TBatchedVec<TBlackboard::TBlobStates::value_type*>& finished, TPutResultVec &outPutResults) {
     A_LOG_DEBUG_SX(logCtx, "BPP36", "PrepareReply errorReason# " << errorReason);
     Y_VERIFY(IsInitialized);
-    for (auto item : finished) { 
-        auto &[blobId, state] = *item; 
-        const ui64 idx = state.BlobIdx; 
+    for (auto item : finished) {
+        auto &[blobId, state] = *item;
+        const ui64 idx = state.BlobIdx;
         Y_VERIFY(blobId == BlobIds[idx], "BlobIdx# %" PRIu64 " BlobState# %s Blackboard# %s",
             idx, state.ToString().c_str(), Blackboard.ToString().c_str());
         Y_VERIFY(!IsDone[idx]);
-        Y_VERIFY(state.Status != NKikimrProto::UNKNOWN); 
+        Y_VERIFY(state.Status != NKikimrProto::UNKNOWN);
         outPutResults.emplace_back(idx, new TEvBlobStorage::TEvPutResult(state.Status, blobId, StatusFlags,
             Info->GroupID, ApproximateFreeSpaceShare));
         outPutResults.back().second->ErrorReason = errorReason;
@@ -98,7 +98,7 @@ void TPutImpl::PrepareReply(TLogContext &logCtx, TString errorReason,
         NLog::EPriority priority = GetPriorityForReply(Info->PutErrorMuteChecker, state.Status);
         A_LOG_LOG_SX(logCtx, true, priority, "BPP37",
                 "PrepareReply Result# " << outPutResults.back().second->Print(false));
-        MarkBlobAsSent(idx); 
+        MarkBlobAsSent(idx);
     }
 }
 
@@ -111,7 +111,7 @@ ui64 TPutImpl::GetTimeToAccelerateNs(TLogContext &logCtx) {
         // Find the slowest disk
         i32 worstSubgroupIdx = -1;
         ui64 worstPredictedNs = 0;
-        state.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues, HandleClassToQueueId(Blackboard.PutHandleClass), 
+        state.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues, HandleClassToQueueId(Blackboard.PutHandleClass),
                 &worstPredictedNs, &nextToWorstPredictedNsVec[idx], &worstSubgroupIdx);
         idx++;
     }

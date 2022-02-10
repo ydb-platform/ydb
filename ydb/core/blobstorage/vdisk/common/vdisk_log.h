@@ -20,7 +20,7 @@ namespace NKikimr {
     TString AppendVDiskLogPrefix(const TString &prefix, const char *c, ...);
 
     struct TVDiskID;
-    TString GenerateVDiskLogPrefix(const TVDiskID &vdisk, bool donorMode); 
+    TString GenerateVDiskLogPrefix(const TVDiskID &vdisk, bool donorMode);
 
 
     // logger

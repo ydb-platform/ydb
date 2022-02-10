@@ -340,15 +340,15 @@ namespace NKikimr {
                                                                PagesInChunk,
                                                                IndexBulk));
             ptr->ManyIdxChunks = ManyIdxChunks;
-            if (!ManyIdxChunks.empty()) { 
-                auto& lastChunk = ptr->ManyIdxChunks.back(); 
-                lastChunk = lastChunk->DeepCopy(); 
-            } 
+            if (!ManyIdxChunks.empty()) {
+                auto& lastChunk = ptr->ManyIdxChunks.back();
+                lastChunk = lastChunk->DeepCopy();
+            }
             return ptr;
         }
 
         ui32 TDiskRecLog::TrimLog(ui64 confirmedCutLsn,
-                                  std::shared_ptr<IActorNotify> notifier, 
+                                  std::shared_ptr<IActorNotify> notifier,
                                   TVector<ui32> &chunks) {
             auto m = Guard(Lock);
             ui32 nchunks = 0;
@@ -367,7 +367,7 @@ namespace NKikimr {
 
         // force to delete nchunks (if we don't have space for instance)
         ui64 TDiskRecLog::DeleteChunks(ui32 nchunks,
-                                       std::shared_ptr<IActorNotify> notifier, 
+                                       std::shared_ptr<IActorNotify> notifier,
                                        TVector<ui32> &chunks) {
             auto m = Guard(Lock);
             const ui32 curChunks = ManyIdxChunks.size();
@@ -462,11 +462,11 @@ namespace NKikimr {
         }
 
         void TDiskRecLog::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
-            for (const TIndexedChunkPtr& chunk : ManyIdxChunks) { 
-                chunk->GetOwnedChunks(chunks); 
-            } 
-        } 
- 
+            for (const TIndexedChunkPtr& chunk : ManyIdxChunks) {
+                chunk->GetOwnedChunks(chunks);
+            }
+        }
+
         ui32 TDiskRecLog::HowManyChunksAdds(const TMemRecLogSnapshotPtr &swapSnap) const {
             auto m = Guard(Lock);
             // find out how many new chunks swapSnap adds

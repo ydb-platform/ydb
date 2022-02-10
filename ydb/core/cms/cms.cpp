@@ -26,7 +26,7 @@ void TCms::TNodeCounter::CountNode(const TNodeInfo &node,
 {
     ++Total;
     TErrorInfo error;
-    if (node.IsLocked(error, TDuration(), TActivationContext::Now(), TDuration())) { 
+    if (node.IsLocked(error, TDuration(), TActivationContext::Now(), TDuration())) {
         ++Locked;
         if (error.Code == TStatus::DISALLOW)
             Code = error.Code;
@@ -86,9 +86,9 @@ void TCms::TGroupCounter::CountVDisk(const TVDiskInfo &vdisk,
 
     // Check locks.
     TErrorInfo error;
-    if (node.IsLocked(error, retryTime, TActivationContext::Now(), duration) 
-        || pdisk.IsLocked(error, retryTime, TActivationContext::Now(), duration) 
-        || vdisk.IsLocked(error, retryTime, TActivationContext::Now(), duration)) { 
+    if (node.IsLocked(error, retryTime, TActivationContext::Now(), duration)
+        || pdisk.IsLocked(error, retryTime, TActivationContext::Now(), duration)
+        || vdisk.IsLocked(error, retryTime, TActivationContext::Now(), duration)) {
         if (error.Code == TStatus::DISALLOW)
             Code = error.Code;
         ++Locked;
@@ -107,7 +107,7 @@ void TCms::TGroupCounter::CountVDisk(const TVDiskInfo &vdisk,
     }
 
     // Check if disk is down.
-    auto defaultDeadline = TActivationContext::Now()  + retryTime; 
+    auto defaultDeadline = TActivationContext::Now()  + retryTime;
     if ((node.NodeId != VDisk.NodeId && node.IsDown(error, defaultDeadline))
         || (pdisk.PDiskId != VDisk.PDiskId && pdisk.IsDown(error, defaultDeadline))
         || vdisk.IsDown(error, defaultDeadline)) {
@@ -500,7 +500,7 @@ bool TCms::CheckActionShutdownHost(const TAction &action,
         }
     }
 
-    error.Deadline = TActivationContext::Now() + opts.PermissionDuration; 
+    error.Deadline = TActivationContext::Now() + opts.PermissionDuration;
     return true;
 }
 
@@ -512,7 +512,7 @@ bool TCms::TryToLockNode(const TAction& action,
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());
     duration += opts.PermissionDuration;
 
-    if (node.IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration)) 
+    if (node.IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration))
         return false;
 
     ui32 tenantLimit = State->Config.TenantLimits.GetDisabledNodesLimit();
@@ -547,7 +547,7 @@ bool TCms::TryToLockNode(const TAction& action,
                                             << " down: " << tenantNodes.Down
                                             << " total: " << tenantNodes.Total
                                             << " limit: " << tenantLimit;
-            error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime; 
+            error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
             return false;
         }
         if (!tenantNodes.CheckRatio(tenantRatioLimit, opts.AvailabilityMode)) {
@@ -557,7 +557,7 @@ bool TCms::TryToLockNode(const TAction& action,
                                             << " down: " << tenantNodes.Down
                                             << " total: " << tenantNodes.Total
                                             << " limit: " << tenantRatioLimit << "%";
-            error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime; 
+            error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
             return false;
         }
     }
@@ -569,7 +569,7 @@ bool TCms::TryToLockNode(const TAction& action,
                                         << " down: " << clusterNodes.Down
                                         << " total: " << clusterNodes.Total
                                         << " limit: " << clusterLimit;
-        error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime; 
+        error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
         return false;
     }
     if (!clusterNodes.CheckRatio(clusterRatioLimit, opts.AvailabilityMode)) {
@@ -579,7 +579,7 @@ bool TCms::TryToLockNode(const TAction& action,
                                         << " down: " << clusterNodes.Down
                                         << " total: " << clusterNodes.Total
                                         << " limit: " << clusterRatioLimit << "%";
-        error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime; 
+        error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
         return false;
     }
 
@@ -594,7 +594,7 @@ bool TCms::TryToLockPDisk(const TAction &action,
     if (!TryToLockVDisks(action, opts, pdisk.VDisks, error))
         return false;
 
-    error.Deadline = TActivationContext::Now() + opts.PermissionDuration; 
+    error.Deadline = TActivationContext::Now() + opts.PermissionDuration;
     return true;
 }
 
@@ -627,22 +627,22 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
                           TDuration duration,
                           TErrorInfo &error) const
 {
-    if (vdisk.IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration)) 
+    if (vdisk.IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration))
        return false;
 
     if (vdisk.NodeId
         && ClusterInfo->Node(vdisk.NodeId)
-        .IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration)) 
+        .IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration))
         return false;
 
     if (vdisk.PDiskId
         && ClusterInfo->PDisk(vdisk.PDiskId)
-        .IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration)) 
+        .IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration))
         return false;
 
     for (auto groupId : vdisk.BSGroups) {
         const auto &group = ClusterInfo->BSGroup(groupId);
-        TInstant defaultDeadline = TActivationContext::Now() + State->Config.DefaultRetryTime; 
+        TInstant defaultDeadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
 
         if (group.Erasure.GetErasure() == TErasureType::ErasureSpeciesCount) {
             error.Code = TStatus::ERROR;
@@ -753,7 +753,7 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
     ClusterInfo->RollbackLocks(point);
 
     if (res)
-        error.Deadline = TActivationContext::Now() + opts.PermissionDuration; 
+        error.Deadline = TActivationContext::Now() + opts.PermissionDuration;
 
     return res;
 }

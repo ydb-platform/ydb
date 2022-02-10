@@ -40,7 +40,7 @@ namespace NKikimr {
             TAtomicBase resultCount = Counter_.Sub(d);
             Y_ASSERT(resultCount >= 0);
             if (resultCount == 0) {
-                Deleter_.Destroy(std::unique_ptr<T>(static_cast<T*>(this))); 
+                Deleter_.Destroy(std::unique_ptr<T>(static_cast<T*>(this)));
             }
         }
 
@@ -87,22 +87,22 @@ namespace NKikimr {
         friend class TActorBootstrapped<TThis>;
 
         void Bootstrap(const TActorContext &ctx) {
-            Obj.reset(); 
+            Obj.reset();
             TThis::Die(ctx);
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_LEVEL_INDEX_STAT_QUERY; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_LEVEL_INDEX_STAT_QUERY;
         }
 
-        TObjDeleterActor(std::unique_ptr<T> obj) 
+        TObjDeleterActor(std::unique_ptr<T> obj)
             : TActorBootstrapped<TThis>()
-            , Obj(std::move(obj)) 
+            , Obj(std::move(obj))
         {}
 
     private:
-        std::unique_ptr<T> Obj; 
+        std::unique_ptr<T> Obj;
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -115,12 +115,12 @@ namespace NKikimr {
         {}
 
         template <class T>
-        inline void Destroy(std::unique_ptr<T> t) noexcept { 
+        inline void Destroy(std::unique_ptr<T> t) noexcept {
             AssertTypeComplete<T>();
 
             if (ActorSystem) {
                 ui32 poolId = ActorSystem->AppData<::NKikimr::TAppData>()->BatchPoolId;
-                ActorSystem->Register(new TObjDeleterActor<T>(std::move(t)), TMailboxType::HTSwap, poolId); 
+                ActorSystem->Register(new TObjDeleterActor<T>(std::move(t)), TMailboxType::HTSwap, poolId);
             }
         }
 

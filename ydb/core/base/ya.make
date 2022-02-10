@@ -27,11 +27,11 @@ SRCS(
     counters.h
     defs.h
     domain.h
-    event_filter.cpp 
-    event_filter.h 
+    event_filter.cpp
+    event_filter.h
     events.h
-    group_stat.cpp 
-    group_stat.h 
+    group_stat.cpp
+    group_stat.h
     hive.h
     interconnect_channels.h
     kikimr_issue.cpp

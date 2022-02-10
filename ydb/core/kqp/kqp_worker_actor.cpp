@@ -140,8 +140,8 @@ EKikimrStatsMode GetStatsMode(const NKikimrKqp::TQueryRequest& queryRequest, EKi
 
 class TKqpWorkerActor : public TActorBootstrapped<TKqpWorkerActor> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::KQP_WORKER_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::KQP_WORKER_ACTOR;
     }
 
     TKqpWorkerActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,

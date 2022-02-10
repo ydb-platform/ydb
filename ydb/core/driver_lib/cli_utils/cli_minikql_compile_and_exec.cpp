@@ -43,7 +43,7 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
     NMiniKQL::TScopedAlloc alloc(countersStub);
     NMiniKQL::TTypeEnvironment TypeEnv(alloc);
 
-    TAutoPtr<NMsgBusProxy::TBusRequest> request(new NMsgBusProxy::TBusRequest()); 
+    TAutoPtr<NMsgBusProxy::TBusRequest> request(new NMsgBusProxy::TBusRequest());
 
     auto* mkqlTx = request->Record.MutableTransaction()->MutableMiniKQLTransaction();
     if (config.PathToBinPgm) {
@@ -65,13 +65,13 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
     mkqlTx->SetFlatMKQL(true);
 
     TAutoPtr<NBus::TBusMessage> reply;
-    NBus::EMessageStatus msgStatus = config.SyncCall(request, reply); 
+    NBus::EMessageStatus msgStatus = config.SyncCall(request, reply);
 
     if (msgStatus != NBus::MESSAGE_OK) {
         Cerr << "Can't send request, msgstatus=" << msgStatus << ".\n";
         return 1;
     }
-    const NKikimrClient::TResponse& response = static_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record; 
+    const NKikimrClient::TResponse& response = static_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record;
 
     auto txRes = response.GetMiniKQLCompileResults();
 

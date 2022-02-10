@@ -32,7 +32,7 @@ void FillColumnDescriptionImpl(TYdbProto& out,
         splitKeyType.MutableTuple()->AddElement();
     }
 
-    for (const auto& column : in.GetColumns()) { 
+    for (const auto& column : in.GetColumns()) {
         NYql::NProto::TypeIds protoType;
         if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
             throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)

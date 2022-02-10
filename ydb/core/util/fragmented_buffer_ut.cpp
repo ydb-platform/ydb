@@ -159,27 +159,27 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
         TString res = fb.GetMonolith();
         UNIT_ASSERT_VALUES_EQUAL(inData, res);
     }
- 
-    Y_UNIT_TEST(CopyFrom) { 
+
+    Y_UNIT_TEST(CopyFrom) {
         TFragmentedBuffer buffer;
         buffer.Write(0, "HELLO", 5);
         buffer.Write(10, "WORLD", 5);
-        TFragmentedBuffer copy; 
+        TFragmentedBuffer copy;
         copy.CopyFrom(buffer, TIntervalSet<i32>(0, 5));
         buffer.Write(5, "BRAVE", 5);
         copy.CopyFrom(buffer, TIntervalSet<i32>(5, 15));
-        UNIT_ASSERT(copy.Get(0).second == 5); 
-        UNIT_ASSERT(!memcmp(copy.Get(0).first, "HELLO", 5)); 
-        UNIT_ASSERT(copy.Get(10).second == 5); 
-        UNIT_ASSERT(!memcmp(copy.Get(10).first, "WORLD", 5)); 
-        UNIT_ASSERT(copy.Get(12).second == 3); 
-        UNIT_ASSERT(!memcmp(copy.Get(12).first, "RLD", 3)); 
+        UNIT_ASSERT(copy.Get(0).second == 5);
+        UNIT_ASSERT(!memcmp(copy.Get(0).first, "HELLO", 5));
+        UNIT_ASSERT(copy.Get(10).second == 5);
+        UNIT_ASSERT(!memcmp(copy.Get(10).first, "WORLD", 5));
+        UNIT_ASSERT(copy.Get(12).second == 3);
+        UNIT_ASSERT(!memcmp(copy.Get(12).first, "RLD", 3));
         copy.CopyFrom(buffer, TIntervalSet<i32>(0, 15));
-        UNIT_ASSERT(copy.Get(0).second == 5); 
-        UNIT_ASSERT(!memcmp(copy.Get(0).first, "HELLO", 5)); 
-        UNIT_ASSERT(copy.Get(5).second == 5); 
-        UNIT_ASSERT(!memcmp(copy.Get(5).first, "BRAVE", 5)); 
-    } 
+        UNIT_ASSERT(copy.Get(0).second == 5);
+        UNIT_ASSERT(!memcmp(copy.Get(0).first, "HELLO", 5));
+        UNIT_ASSERT(copy.Get(5).second == 5);
+        UNIT_ASSERT(!memcmp(copy.Get(5).first, "BRAVE", 5));
+    }
 }
 
 } // NKikimr

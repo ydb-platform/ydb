@@ -1,53 +1,53 @@
-#include "event_pb.h" 
-#include "events.h" 
- 
+#include "event_pb.h"
+#include "events.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/actors/protos/unittests.pb.h>
- 
-using namespace NActors; 
- 
-enum { 
-    EvMessageWithPayload = EventSpaceBegin(TEvents::ES_PRIVATE), 
+
+using namespace NActors;
+
+enum {
+    EvMessageWithPayload = EventSpaceBegin(TEvents::ES_PRIVATE),
     EvArenaMessage,
     EvArenaMessageBig,
     EvMessageWithPayloadPreSerialized
-}; 
- 
-struct TEvMessageWithPayload : TEventPB<TEvMessageWithPayload, TMessageWithPayload, EvMessageWithPayload> { 
+};
+
+struct TEvMessageWithPayload : TEventPB<TEvMessageWithPayload, TMessageWithPayload, EvMessageWithPayload> {
     TEvMessageWithPayload() = default;
     explicit TEvMessageWithPayload(const TMessageWithPayload& p)
         : TEventPB<TEvMessageWithPayload, TMessageWithPayload, EvMessageWithPayload>(p)
     {}
-}; 
- 
+};
+
 struct TEvMessageWithPayloadPreSerialized : TEventPreSerializedPB<TEvMessageWithPayloadPreSerialized, TMessageWithPayload, EvMessageWithPayloadPreSerialized> {
 };
 
 
-TRope MakeStringRope(const TString& message) { 
-    return message ? TRope(message) : TRope(); 
-} 
- 
-TString MakeString(size_t len) { 
-    TString res; 
-    for (size_t i = 0; i < len; ++i) { 
-        res += RandomNumber<char>(); 
-    } 
-    return res; 
-} 
- 
-Y_UNIT_TEST_SUITE(TEventProtoWithPayload) { 
- 
+TRope MakeStringRope(const TString& message) {
+    return message ? TRope(message) : TRope();
+}
+
+TString MakeString(size_t len) {
+    TString res;
+    for (size_t i = 0; i < len; ++i) {
+        res += RandomNumber<char>();
+    }
+    return res;
+}
+
+Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
+
     template <class TEventFrom, class TEventTo>
     void TestSerializeDeserialize(size_t size1, size_t size2) {
         static_assert(TEventFrom::EventType == TEventTo::EventType, "Must be same event type");
- 
+
         TEventFrom msg;
         msg.Record.SetMeta("hello, world!");
         msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(MakeString(size1))));
         msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(MakeString(size2))));
         msg.Record.AddSomeData(MakeString((size1 + size2) % 50 + 11));
- 
+
         auto serializer = MakeHolder<TAllocChunkSerializer>();
         msg.SerializeToArcadiaStream(serializer.Get());
         auto buffers = serializer->Release(msg.IsExtendedFormat());
@@ -59,11 +59,11 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         chunker.SetSerializingEvent(&msg);
         while (!chunker.IsComplete()) {
             char buffer[4096];
-            auto range = chunker.FeedBuf(buffer, sizeof(buffer)); 
-            for (auto p = range.first; p != range.second; ++p) { 
-                chunkerRes += TString(p->first, p->second); 
-            } 
-        } 
+            auto range = chunker.FeedBuf(buffer, sizeof(buffer));
+            for (auto p = range.first; p != range.second; ++p) {
+                chunkerRes += TString(p->first, p->second);
+            }
+        }
         UNIT_ASSERT_VALUES_EQUAL(chunkerRes, ser);
 
         THolder<IEventBase> ev2 = THolder(TEventTo::Load(buffers));
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         UNIT_ASSERT_VALUES_EQUAL(msg2.Record.GetMeta(), msg.Record.GetMeta());
         UNIT_ASSERT_EQUAL(msg2.GetPayload(msg2.Record.GetPayloadId(0)), msg.GetPayload(msg.Record.GetPayloadId(0)));
         UNIT_ASSERT_EQUAL(msg2.GetPayload(msg2.Record.GetPayloadId(1)), msg.GetPayload(msg.Record.GetPayloadId(1)));
-    } 
+    }
 
     template <class TEvent>
     void TestAllSizes(size_t step1 = 100, size_t step2 = 111) {
@@ -151,4 +151,4 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPayloadId(0), msg.GetPayloadId(0));
         UNIT_ASSERT_VALUES_EQUAL(record.GetPayloadId(1), msg.GetPayloadId(1));
     }
-} 
+}

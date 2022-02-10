@@ -17,7 +17,7 @@ namespace NKikimr {
                                                  const TActorId &skeletonID,
                                                  const TActorId &skeletonFrontID,
                                                  TIntrusivePtr<TVDiskConfig> cfg,
-                                                 const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top, 
+                                                 const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                                  NMon::TEvHttpInfo::TPtr &ev,
                                                  const TString &frontHtml);
 

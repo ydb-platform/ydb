@@ -34,7 +34,7 @@ void WriteLocalTime(IOutputStream* out) {
     out->Write(buf, sizeof(buf) - 1);
 }
 
-class TLimitedLogBackend final : public TLogBackend { 
+class TLimitedLogBackend final : public TLogBackend {
 public:
     TLimitedLogBackend(TAutoPtr<TLogBackend> b, TAtomic& flag, ui64 limit) noexcept
         : Backend(b)

@@ -14,7 +14,7 @@ namespace NKikimr {
 namespace NMsgBusProxy {
 
 
-template <NKikimrServices::TActivity::EType acitvityType> 
+template <NKikimrServices::TActivity::EType acitvityType>
 class TS3ListingRequestBase : public TActorBootstrapped<TS3ListingRequestBase<acitvityType>> {
 private:
     typedef TS3ListingRequestBase<acitvityType> TSelf;
@@ -47,7 +47,7 @@ private:
     TVector<TSerializedCellVec> ContentsRows;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return acitvityType;
     }
 
@@ -568,7 +568,7 @@ private:
 //////////////////////////////////////////////////////
 // MsgBus and old GRPC API implementation
 
-class TS3ListingRequestMsgbus : public TMessageBusSessionIdentHolder, public TS3ListingRequestBase<NKikimrServices::TActivity::MSGBUS_COMMON> { 
+class TS3ListingRequestMsgbus : public TMessageBusSessionIdentHolder, public TS3ListingRequestBase<NKikimrServices::TActivity::MSGBUS_COMMON> {
 private:
     TAutoPtr<TBusS3ListingRequest> RequestHolder;
 
@@ -710,7 +710,7 @@ protected:
 };
 
 
-class TS3ListingRequestGrpc : protected TMessageConverter, public NMsgBusProxy::TS3ListingRequestBase<NKikimrServices::TActivity::GRPC_REQ> { 
+class TS3ListingRequestGrpc : protected TMessageConverter, public NMsgBusProxy::TS3ListingRequestBase<NKikimrServices::TActivity::GRPC_REQ> {
 private:
     TAutoPtr<TEvS3ListingRequest> GrpcRequest;
     NKikimrClient::TS3ListingRequest MsgbusRequest;

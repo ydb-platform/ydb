@@ -10,15 +10,15 @@ namespace NKikimr {
 
 class TAcceleratePutStrategy : public TStrategyBase {
 public:
-    EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info, 
-            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests) override { 
+    EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
+            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests) override {
         // Find the unput part and disk
         i32 badDiskIdx = -1;
         for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
             TBlobState::TDisk &disk = state.Disks[diskIdx];
             for (size_t partIdx = 0; partIdx < disk.DiskParts.size(); ++partIdx) {
                 TBlobState::TDiskPart &diskPart = disk.DiskParts[partIdx];
-                if (diskPart.Situation == TBlobState::ESituation::Sent) { 
+                if (diskPart.Situation == TBlobState::ESituation::Sent) {
                     badDiskIdx = diskIdx;
                 }
             }
@@ -36,8 +36,8 @@ public:
                 PreparePutsForPartPlacement(logCtx, state, info, groupDiskRequests, partPlacement);
             }
         }
- 
-        return EStrategyOutcome::DONE; 
+
+        return EStrategyOutcome::DONE;
     }
 };
 

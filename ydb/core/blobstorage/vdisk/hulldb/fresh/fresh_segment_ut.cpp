@@ -12,7 +12,7 @@
 
 namespace NKikimr {
 
-    static std::shared_ptr<TRopeArena> Arena = std::make_shared<TRopeArena>(&TRopeArenaBackend::Allocate); 
+    static std::shared_ptr<TRopeArena> Arena = std::make_shared<TRopeArena>(&TRopeArenaBackend::Allocate);
 
     Y_UNIT_TEST_SUITE(TBlobStorageHullFreshSegment) {
 
@@ -94,7 +94,7 @@ namespace NKikimr {
 
             void ReinitAps() {
                 for (Part = From; Part <= To; ++Part) {
-                    Aps[Part - From] = std::make_shared<TAppendix>(MemConsumer); 
+                    Aps[Part - From] = std::make_shared<TAppendix>(MemConsumer);
                 }
             }
 
@@ -134,7 +134,7 @@ namespace NKikimr {
             ui32 Part = 0;
             ui32 Inserts = 0;
             ui32 Compactions = 0;
-            TVector<std::shared_ptr<TAppendix>> Aps; 
+            TVector<std::shared_ptr<TAppendix>> Aps;
         };
 
         template <class TOtherVDisks>
@@ -186,49 +186,49 @@ namespace NKikimr {
         Y_UNIT_TEST(PerfSkipList) {
             Load<TOtherVDisksSkipList>();
         }
- 
-        Y_UNIT_TEST(IteratorTest) { 
-            ui64 compThreshold = 128 << 20; 
-            auto hullCtx = GetLevelIndexSetting().HullCtx; 
-            auto seg = MakeIntrusive<TFreshSegment>(hullCtx, compThreshold, TAppData::TimeProvider->Now(), Arena); 
- 
-            std::deque<TLogoBlobID> withMerge, withoutMerge; 
- 
-            ui64 lsn = 1; 
-            const ui64 tabletId = 0x100100000010003ul; 
-            const ui32 gen = 5; 
- 
-            TMemRecLogoBlob memRec; 
-            memRec.SetNoBlob(); 
- 
-            for (ui32 i = 1; i < 500000; i++) { 
-                const ui32 step = i; 
- 
-                TLogoBlobID id(tabletId, gen, step, 0, 0, 0); 
-                seg->Put(lsn++, TKeyLogoBlob(id), memRec); 
-                withMerge.push_back(id); 
-                withoutMerge.push_back(id); 
-                if (RandomNumber<ui32>() % 2) { 
-                    seg->Put(lsn++, TKeyLogoBlob(id), memRec); 
-                    withoutMerge.push_back(id); 
-                } 
-            } 
- 
-            auto snap = seg->GetSnapshot(); 
-            using T = std::decay_t<decltype(snap)>; 
- 
-            auto check = [&](auto iter, auto& queue, auto&& getKey) { 
-                for (iter.SeekToFirst(); iter.Valid(); iter.Next()) { 
-                    UNIT_ASSERT(!queue.empty()); 
-                    UNIT_ASSERT_VALUES_EQUAL(queue.front(), getKey(iter).LogoBlobID()); 
-                    queue.pop_front(); 
-                } 
-                UNIT_ASSERT(queue.empty()); 
-            }; 
- 
-            check(T::TForwardIterator(hullCtx, &snap), withMerge, [](auto& iter) { return iter.GetCurKey(); }); 
-            check(T::TIteratorWOMerge(hullCtx, &snap), withoutMerge, [](auto& iter) { return iter.GetUnmergedKey(); }); 
-        } 
+
+        Y_UNIT_TEST(IteratorTest) {
+            ui64 compThreshold = 128 << 20;
+            auto hullCtx = GetLevelIndexSetting().HullCtx;
+            auto seg = MakeIntrusive<TFreshSegment>(hullCtx, compThreshold, TAppData::TimeProvider->Now(), Arena);
+
+            std::deque<TLogoBlobID> withMerge, withoutMerge;
+
+            ui64 lsn = 1;
+            const ui64 tabletId = 0x100100000010003ul;
+            const ui32 gen = 5;
+
+            TMemRecLogoBlob memRec;
+            memRec.SetNoBlob();
+
+            for (ui32 i = 1; i < 500000; i++) {
+                const ui32 step = i;
+
+                TLogoBlobID id(tabletId, gen, step, 0, 0, 0);
+                seg->Put(lsn++, TKeyLogoBlob(id), memRec);
+                withMerge.push_back(id);
+                withoutMerge.push_back(id);
+                if (RandomNumber<ui32>() % 2) {
+                    seg->Put(lsn++, TKeyLogoBlob(id), memRec);
+                    withoutMerge.push_back(id);
+                }
+            }
+
+            auto snap = seg->GetSnapshot();
+            using T = std::decay_t<decltype(snap)>;
+
+            auto check = [&](auto iter, auto& queue, auto&& getKey) {
+                for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
+                    UNIT_ASSERT(!queue.empty());
+                    UNIT_ASSERT_VALUES_EQUAL(queue.front(), getKey(iter).LogoBlobID());
+                    queue.pop_front();
+                }
+                UNIT_ASSERT(queue.empty());
+            };
+
+            check(T::TForwardIterator(hullCtx, &snap), withMerge, [](auto& iter) { return iter.GetCurKey(); });
+            check(T::TIteratorWOMerge(hullCtx, &snap), withoutMerge, [](auto& iter) { return iter.GetUnmergedKey(); });
+        }
     }
 
 } // NKikimr

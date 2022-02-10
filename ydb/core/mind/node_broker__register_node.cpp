@@ -10,10 +10,10 @@ using namespace NKikimrNodeBroker;
 
 class TNodeBroker::TTxRegisterNode : public TTransactionBase<TNodeBroker> {
 public:
-    TTxRegisterNode(TNodeBroker *self, TEvNodeBroker::TEvRegistrationRequest::TPtr &ev, const NActors::TScopeId& scopeId) 
+    TTxRegisterNode(TNodeBroker *self, TEvNodeBroker::TEvRegistrationRequest::TPtr &ev, const NActors::TScopeId& scopeId)
         : TBase(self)
         , Event(ev)
-        , ScopeId(scopeId) 
+        , ScopeId(scopeId)
         , NodeId(0)
         , ExtendLease(false)
         , FixNodeId(false)
@@ -50,7 +50,7 @@ public:
                     << (rec.GetFixedNodeId() ? "(fixed)" : "(not fixed)") << " "
                     << "tenant: " << (rec.HasPath() ? rec.GetPath() : "<unspecified>"));
 
-        TNodeLocation loc(rec.GetLocation()); 
+        TNodeLocation loc(rec.GetLocation());
 
         Response = new TEvNodeBroker::TEvRegistrationResponse;
 
@@ -73,15 +73,15 @@ public:
                              << host << ":" << port,
                              ctx);
 
-            if (node.Location != loc && node.Location != TNodeLocation()) { 
-                return Error(TStatus::WRONG_REQUEST, 
-                             TStringBuilder() << "Another location is registered for " 
-                             << host << ":" << port, 
-                             ctx); 
-            } else if (node.Location != loc || node.LegacyUpdatePending) { 
-                node.Location = loc; 
-                Self->DbUpdateNodeLocation(node, txc); 
-                node.LegacyUpdatePending = false; 
+            if (node.Location != loc && node.Location != TNodeLocation()) {
+                return Error(TStatus::WRONG_REQUEST,
+                             TStringBuilder() << "Another location is registered for "
+                             << host << ":" << port,
+                             ctx);
+            } else if (node.Location != loc || node.LegacyUpdatePending) {
+                node.Location = loc;
+                Self->DbUpdateNodeLocation(node, txc);
+                node.LegacyUpdatePending = false;
             }
 
             if (!node.IsFixed() && rec.GetFixedNodeId()) {
@@ -104,14 +104,14 @@ public:
         NodeId = Self->FreeIds.FirstNonZeroBit();
         Self->FreeIds.Reset(NodeId);
 
-        Node = MakeHolder<TNodeInfo>(NodeId, rec.GetAddress(), host, rec.GetResolveHost(), port, loc, false); 
+        Node = MakeHolder<TNodeInfo>(NodeId, rec.GetAddress(), host, rec.GetResolveHost(), port, loc, false);
         Node->Lease = 1;
         Node->Expire = expire;
 
         Response->Record.MutableStatus()->SetCode(TStatus::OK);
 
         Self->DbAddNode(*Node, txc);
-        Self->DbUpdateEpochVersion(Self->Epoch.Version + 1, txc); 
+        Self->DbUpdateEpochVersion(Self->Epoch.Version + 1, txc);
 
         return true;
     }
@@ -135,13 +135,13 @@ public:
             Self->FillNodeInfo(Self->Nodes.at(NodeId), *Response->Record.MutableNode());
         LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
                     "TTxRegisterNode reply with: " << Response->Record.ShortDebugString());
- 
-        if (ScopeId != NActors::TScopeId()) { 
-            auto& record = Response->Record; 
-            record.SetScopeTabletId(ScopeId.first); 
-            record.SetScopePathId(ScopeId.second); 
-        } 
- 
+
+        if (ScopeId != NActors::TScopeId()) {
+            auto& record = Response->Record;
+            record.SetScopeTabletId(ScopeId.first);
+            record.SetScopePathId(ScopeId.second);
+        }
+
         ctx.Send(Event->Sender, Response.Release());
 
         Self->TxCompleted(this, ctx);
@@ -149,7 +149,7 @@ public:
 
 private:
     TEvNodeBroker::TEvRegistrationRequest::TPtr Event;
-    const NActors::TScopeId ScopeId; 
+    const NActors::TScopeId ScopeId;
     TAutoPtr<TEvNodeBroker::TEvRegistrationResponse> Response;
     THolder<TNodeInfo> Node;
     ui32 NodeId;
@@ -157,9 +157,9 @@ private:
     bool FixNodeId;
 };
 
-ITransaction *TNodeBroker::CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev, const NActors::TScopeId& scopeId) 
+ITransaction *TNodeBroker::CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev, const NActors::TScopeId& scopeId)
 {
-    return new TTxRegisterNode(this, ev, scopeId); 
+    return new TTxRegisterNode(this, ev, scopeId);
 }
 
 } // NNodeBroker

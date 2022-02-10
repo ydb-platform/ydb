@@ -117,9 +117,9 @@ namespace NKikimr {
             TIntrusivePtr<TVDiskContext> VCtx;
             // current pos
             THullHugeRecoveryLogPos LogPos;
-            // last committed log pos 
-            THullHugeRecoveryLogPos CommittedLogPos; 
-            std::unique_ptr<NHuge::THeap> Heap; 
+            // last committed log pos
+            THullHugeRecoveryLogPos CommittedLogPos;
+            std::unique_ptr<NHuge::THeap> Heap;
             // slots that are already allocated, but not written to log
             TAllocatedSlots AllocatedSlots;
             // guard to avoid using structure before recovery has been completed
@@ -202,7 +202,7 @@ namespace NKikimr {
                         ui64 lsn,
                         const TString &data);
             void FinishRecovery(const TActorContext &ctx);
- 
+
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
         };
 

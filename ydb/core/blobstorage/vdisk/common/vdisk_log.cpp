@@ -25,10 +25,10 @@ namespace  NKikimr {
         return prefix + formatted;
     }
 
-    TString GenerateVDiskLogPrefix(const TVDiskID &vdisk, bool donorMode) { 
-        return donorMode 
-            ? Sprintf("VDISK%s(DONOR): ", vdisk.ToString().data()) 
-            : Sprintf("VDISK%s: ", vdisk.ToStringWOGeneration().data()); 
+    TString GenerateVDiskLogPrefix(const TVDiskID &vdisk, bool donorMode) {
+        return donorMode
+            ? Sprintf("VDISK%s(DONOR): ", vdisk.ToString().data())
+            : Sprintf("VDISK%s: ", vdisk.ToStringWOGeneration().data());
     }
 
     ////////////////////////////////////////////////////////////////////////////

@@ -479,7 +479,7 @@ private:
     }
 
     void MarkAllActiveResourcesForOfflineAllocation() {
-        const TInstant now = TActivationContext::Now(); 
+        const TInstant now = TActivationContext::Now();
         for (auto&& [path, resState] : Resources) {
             Y_UNUSED(path);
             if (resState->ResId != Max<ui64>() && resState->SessionIsActive) {
@@ -532,7 +532,7 @@ private:
         } else {
             if (activate) {
                 res.AverageAllocationParams = res.AllocStats.GetAverageAllocationParams();
-                MarkResourceForOfflineAllocation(res, TActivationContext::Now()); 
+                MarkResourceForOfflineAllocation(res, TActivationContext::Now());
             }
         }
     }
@@ -655,7 +655,7 @@ private:
                  "Got EvClientDestroyed with tablet %" PRIu64 ", but kesus tablet is %" PRIu64, ev->Get()->TabletId, GetKesusTabletId());
         KESUS_PROXY_LOG_WARN("Disconnected from tablet");
         ConnectToKesus(true);
-        DisconnectTime = TActivationContext::Now(); 
+        DisconnectTime = TActivationContext::Now();
         OfflineAllocationCookie = NextCookie++;
         MarkAllActiveResourcesForOfflineAllocation();
         if (Counters.Disconnects) {
@@ -699,7 +699,7 @@ private:
 
     void Handle(NKesus::TEvKesus::TEvResourcesAllocated::TPtr& ev) {
         KESUS_PROXY_LOG_TRACE("ResourcesAllocated(" << ev->Get()->Record << ")");
-        const TInstant now = TActivationContext::Now(); 
+        const TInstant now = TActivationContext::Now();
         for (const NKikimrKesus::TEvResourcesAllocated::TResourceInfo& allocatedInfo : ev->Get()->Record.GetResourcesInfo()) {
             TResourceState* res = FindResource(allocatedInfo.GetResourceId());
             if (!res) {
@@ -730,7 +730,7 @@ private:
         }
 
         KESUS_PROXY_LOG_TRACE("OfflineResourceAllocation(" << PrintResources(*ev->Get()) << ")");
-        const TInstant now = TActivationContext::Now(); 
+        const TInstant now = TActivationContext::Now();
         for (const TEvPrivate::TEvOfflineResourceAllocation::TResourceInfo& allocatedInfo : ev->Get()->Resources) {
             TResourceState* res = FindResource(allocatedInfo.ResourceId);
             if (!res) {
@@ -856,8 +856,8 @@ private:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::QUOTER_PROXY_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::QUOTER_PROXY_ACTOR;
     }
 
     TKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const TActorId& quoterServiceId, THolder<ITabletPipeFactory> tabletPipeFactory)

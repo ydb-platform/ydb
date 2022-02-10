@@ -307,7 +307,7 @@ namespace {
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
 
-        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>(); 
+        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
 
         NKikimrBlobStorage::TDefineBox boxConfig;
         boxConfig.SetBoxId(1);
@@ -1734,7 +1734,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         SendReassignTablet(runtime, hiveTablet, tabletId, {}, 0);
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerSelectGroupsResult)); 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerSelectGroupsResult));
             runtime.DispatchEvents(options);
         }
         MakeSureTabletIsUp(runtime, tabletId, 0);
@@ -2374,7 +2374,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         /*{
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerSelectGroupsResult)); 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerSelectGroupsResult));
             runtime.DispatchEvents(options);
         }*/
 
@@ -3005,21 +3005,21 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
-    TNodeLocation GetLocation(ui32 nodeId) { 
-        NActorsInterconnect::TNodeLocation location; 
-        location.SetDataCenter(ToString(nodeId / 2 + 1)); 
-        location.SetModule("1"); 
-        location.SetRack("1"); 
-        location.SetUnit("1"); 
-        return TNodeLocation(location); // DC = [1,1,2,2,3,3] 
-    } 
- 
+    TNodeLocation GetLocation(ui32 nodeId) {
+        NActorsInterconnect::TNodeLocation location;
+        location.SetDataCenter(ToString(nodeId / 2 + 1));
+        location.SetModule("1");
+        location.SetRack("1");
+        location.SetUnit("1");
+        return TNodeLocation(location); // DC = [1,1,2,2,3,3]
+    }
+
     Y_UNIT_TEST(TestHiveBalancerWithPrefferedDC1) {
         static const int NUM_NODES = 6;
         static const int NUM_TABLETS = NUM_NODES * 3;
         TTestBasicRuntime runtime(NUM_NODES, false);
 
-        runtime.LocationCallback = GetLocation; 
+        runtime.LocationCallback = GetLocation;
 
         Setup(runtime, true);
         const int nodeBase = runtime.GetNodeId(0);
@@ -3039,8 +3039,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         for (int i = 0; i < NUM_TABLETS; ++i) {
             THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
             ev->Record.SetFollowerCount(3);
-            ev->Record.MutableDataCentersPreference()->AddDataCentersGroups()->AddDataCenter(ToString(1)); 
-            ev->Record.MutableDataCentersPreference()->AddDataCentersGroups()->AddDataCenter(ToString(2)); 
+            ev->Record.MutableDataCentersPreference()->AddDataCentersGroups()->AddDataCenter(ToString(1));
+            ev->Record.MutableDataCentersPreference()->AddDataCentersGroups()->AddDataCenter(ToString(2));
             ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
             tablets.emplace_back(tabletId);
             MakeSureTabletIsUp(runtime, tabletId, 0);
@@ -3084,7 +3084,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         static const int NUM_TABLETS = NUM_NODES * 3;
         TTestBasicRuntime runtime(NUM_NODES, false);
 
-        runtime.LocationCallback = GetLocation; 
+        runtime.LocationCallback = GetLocation;
 
         Setup(runtime, true);
         const int nodeBase = runtime.GetNodeId(0);
@@ -3105,8 +3105,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
             ev->Record.SetFollowerCount(3);
             auto* group = ev->Record.MutableDataCentersPreference()->AddDataCentersGroups();
-            group->AddDataCenter(ToString(1)); 
-            group->AddDataCenter(ToString(2)); 
+            group->AddDataCenter(ToString(1));
+            group->AddDataCenter(ToString(2));
             ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
             tablets.emplace_back(tabletId);
             MakeSureTabletIsUp(runtime, tabletId, 0);
@@ -3150,7 +3150,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         static const int NUM_TABLETS = 12;
         TTestBasicRuntime runtime(NUM_NODES, false);
 
-        runtime.LocationCallback = GetLocation; 
+        runtime.LocationCallback = GetLocation;
 
         Setup(runtime, true);
         const int nodeBase = runtime.GetNodeId(0);
@@ -3176,16 +3176,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // checking distribution, all leaders should be on the first node
         {
-            std::unordered_map<TString, ui64> dcTablets; 
+            std::unordered_map<TString, ui64> dcTablets;
             {
                 THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
                 runtime.SendToPipe(hiveTablet, senderA, request.Release());
                 TAutoPtr<IEventHandle> handle;
                 TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
                 for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
-                    dcTablets[runtime.LocationCallback(tablet.GetNodeID() - nodeBase).GetDataCenterId()]++; 
+                    dcTablets[runtime.LocationCallback(tablet.GetNodeID() - nodeBase).GetDataCenterId()]++;
                     Ctest << "tablet " << tablet.GetTabletID() << "." << tablet.GetFollowerID() << " on node " << tablet.GetNodeID()
-                          << " on DC " << runtime.LocationCallback(tablet.GetNodeID() - nodeBase).GetDataCenterId() << Endl; 
+                          << " on DC " << runtime.LocationCallback(tablet.GetNodeID() - nodeBase).GetDataCenterId() << Endl;
                 }
             }
             UNIT_ASSERT_VALUES_EQUAL(dcTablets.size(), 1);

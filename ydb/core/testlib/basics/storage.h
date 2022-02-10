@@ -81,7 +81,7 @@ namespace NKikimr {
             return conf;
         }
 
-        TIntrusivePtr<TNodeWardenConfig> MakeWardenConf(const TDomainsInfo &domains, const NKikimrProto::TKeyConfig& keyConfig) const 
+        TIntrusivePtr<TNodeWardenConfig> MakeWardenConf(const TDomainsInfo &domains, const NKikimrProto::TKeyConfig& keyConfig) const
         {
             TIntrusivePtr<TNodeWardenConfig> conf(new TNodeWardenConfig(Factory));
 
@@ -108,9 +108,9 @@ namespace NKikimr {
             vDisk->LevelCompaction = true;
             vDisk->MaxLogoBlobDataSize = Conf.UseDisk ? CHUNK_SIZE / 3 : MEM_CHUNK_SIZE / 3;
 
-            ObtainTenantKey(&conf->TenantKey, keyConfig); 
-            ObtainStaticKey(&conf->StaticKey); 
- 
+            ObtainTenantKey(&conf->TenantKey, keyConfig);
+            ObtainStaticKey(&conf->StaticKey);
+
             return conf;
         }
 

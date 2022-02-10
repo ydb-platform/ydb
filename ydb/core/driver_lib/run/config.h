@@ -38,7 +38,7 @@ union TBasicKikimrServicesMask {
         bool EnableTabletMonitor:1;
         bool EnableViewerService:1;
         bool EnableLoadService:1;
-        bool EnableFailureInjectionService:1; 
+        bool EnableFailureInjectionService:1;
         bool EnablePersQueueL2Cache:1;
         bool EnableKqp:1;
         bool EnableMemoryLog:1;
@@ -87,12 +87,12 @@ static_assert(sizeof(TBasicKikimrServicesMask) == 8, "expected sizeof(TBasicKiki
 struct TKikimrRunConfig {
     NKikimrConfig::TAppConfig& AppConfig;
     ui32                       NodeId;
-    TKikimrScopeId             ScopeId; 
+    TKikimrScopeId             ScopeId;
 
     TString                    PathToConfigCacheFile;
 
     TKikimrRunConfig(NKikimrConfig::TAppConfig& appConfig,
-                     ui32 nodeId = 0, const TKikimrScopeId& scopeId = {}); 
+                     ui32 nodeId = 0, const TKikimrScopeId& scopeId = {});
 };
 
 }

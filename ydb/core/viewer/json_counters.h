@@ -27,8 +27,8 @@ class TJsonCounters : public TActorBootstrapped<TJsonCounters> {
     TMap<ui32, THolder<TEvWhiteboard::TEvBSGroupStateResponse>> BSGroupInfo;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::VIEWER_HANDLER; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
     TJsonCounters(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
@@ -303,7 +303,7 @@ public:
             }
         }
 
-        static TEvInterconnect::TNodeInfo totals(0, "", "cluster", "", 0, TNodeLocation()); 
+        static TEvInterconnect::TNodeInfo totals(0, "", "cluster", "", 0, TNodeLocation());
 
         for (size_t p = 0; p < pDiskUserSpaceHistogram.size(); ++p) {
             json << ",{\"labels\":{";

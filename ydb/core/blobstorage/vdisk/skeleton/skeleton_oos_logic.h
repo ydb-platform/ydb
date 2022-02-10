@@ -16,7 +16,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TOutOfSpaceLogic {
     public:
-        TOutOfSpaceLogic(TIntrusivePtr<TVDiskContext> vctx, std::shared_ptr<THull> hull); 
+        TOutOfSpaceLogic(TIntrusivePtr<TVDiskContext> vctx, std::shared_ptr<THull> hull);
         ~TOutOfSpaceLogic();
 
         // Check if we allow this write
@@ -33,9 +33,9 @@ namespace NKikimr {
 
     private:
         TIntrusivePtr<TVDiskContext> VCtx;
-        std::shared_ptr<THull> Hull; 
+        std::shared_ptr<THull> Hull;
         class TStat;
-        mutable std::unique_ptr<TStat> Stat; 
+        mutable std::unique_ptr<TStat> Stat;
 
         bool DefaultAllow(ESpaceColor color) const;
 

@@ -33,8 +33,8 @@ private:
 public:
     using TBase = TActorBootstrapped<TLeaseHolder>;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::NODE_BROKER_LEASE_HOLDER; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::NODE_BROKER_LEASE_HOLDER;
     }
 
     TLeaseHolder(TInstant expire)

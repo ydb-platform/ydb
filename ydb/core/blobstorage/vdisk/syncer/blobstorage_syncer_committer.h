@@ -49,14 +49,14 @@ namespace NKikimr {
         TEvSyncerCommit();
 
         // create commit msg for local state (not Final)
-        static std::unique_ptr<TEvSyncerCommit> Local(ELocalState state, TVDiskEternalGuid guid); 
+        static std::unique_ptr<TEvSyncerCommit> Local(ELocalState state, TVDiskEternalGuid guid);
         // create commit msg for local state (Final)
-        static std::unique_ptr<TEvSyncerCommit> LocalFinal(TVDiskEternalGuid guid, ui64 dbBirthLsn); 
+        static std::unique_ptr<TEvSyncerCommit> LocalFinal(TVDiskEternalGuid guid, ui64 dbBirthLsn);
         // create commit msg for remote vdisk (save sync status, initiated locally)
-        static std::unique_ptr<TEvSyncerCommit> Remote(const TVDiskID &vdisk, 
+        static std::unique_ptr<TEvSyncerCommit> Remote(const TVDiskID &vdisk,
                                                const NSyncer::TPeerSyncState &p);
         // create commit msg for remote vdisk (save eternal guid, initiated by remote VDisk)
-        static std::unique_ptr<TEvSyncerCommit> Remote(const TVDiskID &vdisk, 
+        static std::unique_ptr<TEvSyncerCommit> Remote(const TVDiskID &vdisk,
                                                ESyncState state,
                                                TVDiskEternalGuid guid,
                                                void *cookie);

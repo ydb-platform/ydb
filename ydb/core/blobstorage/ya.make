@@ -54,10 +54,10 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
-    ut_blobstorage 
-    ut_group 
-    ut_mirror3of4 
+    ut_blobstorage
+    ut_group
+    ut_mirror3of4
     ut_pdiskfit
     ut_vdisk
-    ut_vdisk2 
+    ut_vdisk2
 )

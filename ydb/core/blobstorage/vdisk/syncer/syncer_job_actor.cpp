@@ -7,7 +7,7 @@
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/core/base/interconnect_channels.h>
 #include <library/cpp/actors/core/interconnect.h>
- 
+
 using namespace NKikimrServices;
 using namespace NKikimr::NSyncer;
 
@@ -24,7 +24,7 @@ namespace NKikimr {
         using TBase = TActorBootstrapped<TSyncerJob>;
 
         TIntrusivePtr<TSyncerContext> SyncerCtx;
-        std::unique_ptr<TSyncerJobTask> Task; 
+        std::unique_ptr<TSyncerJobTask> Task;
         const ui32 NodeId;
         const TActorId NotifyId;
         const ui64 JobId;       // just unique job id for log readability
@@ -39,9 +39,9 @@ namespace NKikimr {
 
             if (outcome.ActorActivity) {
                 if (outcome.RunInBatchPool) {
-                    RunInBatchPool(ctx, outcome.ActorActivity.release()); 
+                    RunInBatchPool(ctx, outcome.ActorActivity.release());
                 } else {
-                    ctx.Register(outcome.ActorActivity.release()); 
+                    ctx.Register(outcome.ActorActivity.release());
                 }
             }
 
@@ -51,20 +51,20 @@ namespace NKikimr {
                     TVDiskIdShort vd = Task->VDiskId;
                     ctx.Send(SyncerCtx->AnubisRunnerId, new TEvFullSyncedWith(vd));
                 }
-                ctx.Send(NotifyId, new TEvSyncerJobDone(std::move(Task))); 
+                ctx.Send(NotifyId, new TEvSyncerJobDone(std::move(Task)));
                 Die(ctx);
             }
         }
 
         // function for sending a message
-        void SendOutcomeMsg(std::unique_ptr<IEventBase> &&ev, TActorId &&to, const TActorContext &ctx) { 
+        void SendOutcomeMsg(std::unique_ptr<IEventBase> &&ev, TActorId &&to, const TActorContext &ctx) {
             Y_VERIFY(ev && to != TActorId());
             // subscribe on Interconnect Session/Message tracking
             ui32 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession;
             const auto channel = TInterconnectChannels::IC_BLOBSTORAGE_SYNCER;
             flags = IEventHandle::MakeFlags(channel, flags);
 
-            ctx.Send(to, ev.release(), flags); 
+            ctx.Send(to, ev.release(), flags);
         }
 
         // overridden Die (unsubsribe from Message/Session tracking)
@@ -125,7 +125,7 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             // don't run sync job for too long
-            ctx.Schedule(SyncerCtx->Config->SyncJobTimeout, new TEvents::TEvWakeup()); 
+            ctx.Schedule(SyncerCtx->Config->SyncJobTimeout, new TEvents::TEvWakeup());
 
             // initiate requests
             TSjOutcome outcome = Task->NextRequest();
@@ -146,7 +146,7 @@ namespace NKikimr {
                                 " id# %s ignress# %s",
                                 JobId, unsigned(Task->IsFullRecoveryTask()),
                                 rec->LogoBlobID().ToString().data(),
-                                rec->Ingress.ToString(SyncerCtx->VCtx->Top.get(), 
+                                rec->Ingress.ToString(SyncerCtx->VCtx->Top.get(),
                                                        SyncerCtx->VCtx->ShortSelfVDisk,
                                                        rec->LogoBlobID()).data()));
             };
@@ -162,39 +162,39 @@ namespace NKikimr {
                             "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u rec# %s",
                                 JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
             };
-            auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) { 
-                LOG_ERROR(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64 
-                    " FullRecover# %u rec# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data())); 
-            }; 
+            auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) {
+                LOG_ERROR(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64
+                    " FullRecover# %u rec# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
+            };
 
             NSyncLog::TFragmentReader fragment(data);
-            fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2); 
+            fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2);
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_SYNCER_JOB; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_SYNCER_JOB;
         }
 
-        STRICT_STFUNC(StateFunc, 
-            HFunc(TEvBlobStorage::TEvVSyncFullResult, Handle) 
-            HFunc(TEvBlobStorage::TEvVSyncResult, Handle) 
-            HFunc(TEvLocalSyncDataResult, Handle) 
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup) 
-            HFunc(TEvInterconnect::TEvNodeDisconnected, Handle) 
-            IgnoreFunc(TEvInterconnect::TEvNodeConnected) 
-            HFunc(TEvents::TEvUndelivered, Handle) 
-            IgnoreFunc(TEvBlobStorage::TEvVWindowChange) // ignore TEvVWindowChange 
-        ) 
+        STRICT_STFUNC(StateFunc,
+            HFunc(TEvBlobStorage::TEvVSyncFullResult, Handle)
+            HFunc(TEvBlobStorage::TEvVSyncResult, Handle)
+            HFunc(TEvLocalSyncDataResult, Handle)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
+            HFunc(TEvInterconnect::TEvNodeDisconnected, Handle)
+            IgnoreFunc(TEvInterconnect::TEvNodeConnected)
+            HFunc(TEvents::TEvUndelivered, Handle)
+            IgnoreFunc(TEvBlobStorage::TEvVWindowChange) // ignore TEvVWindowChange
+        )
 
     public:
         TSyncerJob(const TIntrusivePtr<TSyncerContext> &sc,
-                   std::unique_ptr<TSyncerJobTask> task, 
+                   std::unique_ptr<TSyncerJobTask> task,
                    const TActorId &notifyId)
             : TActorBootstrapped<TSyncerJob>()
             , SyncerCtx(sc)
-            , Task(std::move(task)) 
+            , Task(std::move(task))
             , NodeId(Task->ServiceId.NodeId())
             , NotifyId(notifyId)
             , JobId(TAppData::RandomProvider->GenRand64())
@@ -205,9 +205,9 @@ namespace NKikimr {
     // TSyncerJob CREATOR
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateSyncerJob(const TIntrusivePtr<TSyncerContext> &sc,
-                            std::unique_ptr<TSyncerJobTask> task, 
+                            std::unique_ptr<TSyncerJobTask> task,
                             const TActorId &notifyId) {
-        return new TSyncerJob(sc, std::move(task), notifyId); 
+        return new TSyncerJob(sc, std::move(task), notifyId);
     }
 
 } // NKikimr

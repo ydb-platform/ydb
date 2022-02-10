@@ -57,7 +57,7 @@ void TReadDataProtocolImpl::TryAgain(const TActorContext& ctx) noexcept {
                 continue;
             }
         } else {
-            if (-recvResult == EAGAIN || -recvResult == EWOULDBLOCK) { 
+            if (-recvResult == EAGAIN || -recvResult == EWOULDBLOCK) {
                 if (Filled > 0) {
                     if (Catcher->CatchReadDataComplete(ctx, Filled)) {
                         return;
@@ -69,26 +69,26 @@ void TReadDataProtocolImpl::TryAgain(const TActorContext& ctx) noexcept {
 
                     break;
                 }
-            } else if (-recvResult == EINTR) { 
-                continue; 
-            } else if (!recvResult) { 
-                if (Filled > 0 && Catcher->CatchReadDataComplete(ctx, Filled)) { 
-                    return; 
-                } 
-                Catcher->CatchReadDataClosed(); 
-                return; 
+            } else if (-recvResult == EINTR) {
+                continue;
+            } else if (!recvResult) {
+                if (Filled > 0 && Catcher->CatchReadDataComplete(ctx, Filled)) {
+                    return;
+                }
+                Catcher->CatchReadDataClosed();
+                return;
             }
             break;
         }
     }
 
-    if (-recvResult == EAGAIN || -recvResult == EWOULDBLOCK) { 
-        IPoller* poller = NKikimr::AppData(ctx)->PollerThreads.Get(); 
-        poller->StartRead(Socket, 
-            std::bind(NotifyReadyRead, std::placeholders::_1, ctx)); 
-        return; 
-    } 
- 
+    if (-recvResult == EAGAIN || -recvResult == EWOULDBLOCK) {
+        IPoller* poller = NKikimr::AppData(ctx)->PollerThreads.Get();
+        poller->StartRead(Socket,
+            std::bind(NotifyReadyRead, std::placeholders::_1, ctx));
+        return;
+    }
+
     switch (-recvResult) {
     case ECONNRESET:
         Catcher->CatchReadDataError("Connection reset by peer");
@@ -118,10 +118,10 @@ void TReadDataProtocolImpl::TryAgain(const TActorContext& ctx) noexcept {
     }
 }
 
-void TReadDataProtocolImpl::CancelReadData(const TActorContext& /*ctx*/) noexcept { 
+void TReadDataProtocolImpl::CancelReadData(const TActorContext& /*ctx*/) noexcept {
     Cancelled = true;
-//    IPoller* poller = NKikimr::AppData(ctx)->PollerThreads.Get(); 
-//    poller->CancelRead(Socket); 
+//    IPoller* poller = NKikimr::AppData(ctx)->PollerThreads.Get();
+//    poller->CancelRead(Socket);
 }
 
 }

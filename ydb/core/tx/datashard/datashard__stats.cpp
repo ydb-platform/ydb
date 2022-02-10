@@ -24,7 +24,7 @@ public:
     {}
 
     static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::DATASHARD_STATS_BUILDER; 
+        return NKikimrServices::TActivity::DATASHARD_STATS_BUILDER;
     }
 
     void Bootstrap(const TActorContext& ctx) {

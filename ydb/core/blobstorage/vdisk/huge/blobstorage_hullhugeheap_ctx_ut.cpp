@@ -18,11 +18,11 @@ namespace NKikimr {
         constexpr ui32 ChunkSize = 135249920;
         constexpr ui32 AppendBlockSize = 4064;
 
-        std::shared_ptr<THugeBlobCtx> CreateHugeBlobCtx() { 
+        std::shared_ptr<THugeBlobCtx> CreateHugeBlobCtx() {
             TVDiskConfig cfg(TVDiskConfig::TBaseInfo::SampleForTests());
             auto logFunc = [] (const TString &) {};
 
-            auto repairedHuge = std::make_shared<NHuge::THullHugeKeeperPersState>( 
+            auto repairedHuge = std::make_shared<NHuge::THullHugeKeeperPersState>(
                     Contexts.GetVCtx(),
                     ChunkSize,
                     AppendBlockSize,
@@ -34,7 +34,7 @@ namespace NKikimr {
                     cfg.HugeBlobOldMapCompatible,
                     logFunc);
 
-            return std::make_shared<THugeBlobCtx>( 
+            return std::make_shared<THugeBlobCtx>(
                     repairedHuge->GetMinREALHugeBlobInBytes(),
                     repairedHuge->Heap->BuildHugeSlotsMap());
         }

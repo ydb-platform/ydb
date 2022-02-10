@@ -21,7 +21,7 @@ public:
 
         LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxUpdatePoolStatus execute for node " << nodeId);
 
-        TString dc = ANY_DATA_CENTER; 
+        TString dc = ANY_DATA_CENTER;
         if (Self->NodeIdToDataCenter.contains(nodeId))
             dc = Self->NodeIdToDataCenter[nodeId];
 

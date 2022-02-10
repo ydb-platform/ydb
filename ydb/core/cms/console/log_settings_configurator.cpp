@@ -13,9 +13,9 @@ namespace NConsole {
 
 class TLogSettingsConfigurator : public TActorBootstrapped<TLogSettingsConfigurator> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
-        return NKikimrServices::TActivity::LOG_SETTINGS_CONFIGURATOR; 
+        return NKikimrServices::TActivity::LOG_SETTINGS_CONFIGURATOR;
     }
 
     TLogSettingsConfigurator();

@@ -766,7 +766,7 @@ TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name) {
 TVector<TString> ConvertACLMaskToYdbPermissionNames(ui32 mask) {
     static const TVector<std::pair<ui32, TString>> maskByPower = CalcMaskByPower();
     TVector<TString> result;
-    for (const auto& pair : maskByPower) { 
+    for (const auto& pair : maskByPower) {
         if ((mask & pair.first ^ pair.first) == 0) {
             result.push_back(pair.second);
             mask &= ~pair.first;

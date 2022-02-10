@@ -16,7 +16,7 @@ TString TEvWhiteboardReportResult::ToString(const TEvWhiteboardReportResult &rec
     if (record.PDiskState) {
         str << "PDiskState# " << record.PDiskState->Record;
     }
-    for (const auto& p : record.VDiskStateVect) { 
+    for (const auto& p : record.VDiskStateVect) {
         str << " VDiskState# " << std::get<1>(p);
     }
     if (record.DiskMetrics) {

@@ -5,7 +5,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/event.h>
-#include <util/system/condvar.h> 
+#include <util/system/condvar.h>
 #include <util/folder/tempdir.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/erasure/erasure.h>
@@ -76,7 +76,7 @@ public:
 private:
     TAllPDisksConfiguration Cfg;
     TVector<TOnePDisk> PDisks;
-    std::shared_ptr<TTempDir> TempDir; 
+    std::shared_ptr<TTempDir> TempDir;
 };
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -154,12 +154,12 @@ struct TConfiguration {
     TAllPDisksConfiguration PCfg;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    std::unique_ptr<NActors::TMon> Monitoring; 
-    std::unique_ptr<NKikimr::TAppData> AppData; 
+    std::unique_ptr<NActors::TMon> Monitoring;
+    std::unique_ptr<NKikimr::TAppData> AppData;
     std::shared_ptr<NKikimr::NPDisk::IIoContextFactory> IoContext;
-    std::unique_ptr<NActors::TActorSystem> ActorSystem1; 
-    std::unique_ptr<TAllPDisks> PDisks; 
-    std::unique_ptr<TAllVDisks> VDisks; 
+    std::unique_ptr<NActors::TActorSystem> ActorSystem1;
+    std::unique_ptr<TAllPDisks> PDisks;
+    std::unique_ptr<TAllVDisks> VDisks;
     TIntrusivePtr<NKikimr::TBlobStorageGroupInfo> GroupInfo;
 
     TAtomic DoneCounter = 0;
@@ -167,11 +167,11 @@ struct TConfiguration {
     TSystemEvent DbInitEvent { TSystemEvent::rAuto };
 
     using TTimeoutCallbackList = TList<std::function<void ()>>;
-    using TTimeoutCallbackId = TTimeoutCallbackList::iterator; 
-    TTimeoutCallbackList TimeoutCallbacks; 
-    TMutex TimeoutCallbacksLock; 
-    TCondVar TimeoutCallbacksCV; 
- 
+    using TTimeoutCallbackId = TTimeoutCallbackList::iterator;
+    TTimeoutCallbackList TimeoutCallbacks;
+    TMutex TimeoutCallbacksLock;
+    TCondVar TimeoutCallbacksCV;
+
     TConfiguration(const TAllPDisksConfiguration &pcfg =
                       TAllPDisksConfiguration::MkOneTmp(512u << 10u, 16ull << 30ull, "ROT"),
                    ui32 domainsNum = 4u,
@@ -206,40 +206,40 @@ struct TConfiguration {
             doneCount = AtomicGet(DoneCounter);
         }
 
-        for (;;) { 
-            TGuard<TMutex> lock(TimeoutCallbacksLock); 
-            if (TimeoutCallbacks.empty()) { 
-                break; 
-            } 
-            for (std::function<void ()>& callback : TimeoutCallbacks) { 
-                if (callback) { 
-                    callback(); 
-                    callback = {}; 
-                } 
-            } 
-            TimeoutCallbacksCV.WaitI(TimeoutCallbacksLock); 
-        } 
- 
+        for (;;) {
+            TGuard<TMutex> lock(TimeoutCallbacksLock);
+            if (TimeoutCallbacks.empty()) {
+                break;
+            }
+            for (std::function<void ()>& callback : TimeoutCallbacks) {
+                if (callback) {
+                    callback();
+                    callback = {};
+                }
+            }
+            TimeoutCallbacksCV.WaitI(TimeoutCallbacksLock);
+        }
+
         UNIT_ASSERT_VALUES_EQUAL(doneCount, instances);
         UNIT_ASSERT_VALUES_EQUAL(SuccessCount, instances);
 
         return doneCount == instances && SuccessCount == instances;
     }
 
-    TTimeoutCallbackId RegisterTimeoutCallback(std::function<void ()> callback) { 
-        TGuard<TMutex> lock(TimeoutCallbacksLock); 
-        auto res = TimeoutCallbacks.insert(TimeoutCallbacks.end(), std::move(callback)); 
-        TimeoutCallbacksCV.Signal(); 
-        return res; 
-    } 
+    TTimeoutCallbackId RegisterTimeoutCallback(std::function<void ()> callback) {
+        TGuard<TMutex> lock(TimeoutCallbacksLock);
+        auto res = TimeoutCallbacks.insert(TimeoutCallbacks.end(), std::move(callback));
+        TimeoutCallbacksCV.Signal();
+        return res;
+    }
 
-    void UnregisterTimeoutCallback(TTimeoutCallbackId handle) { 
-        TGuard<TMutex> lock(TimeoutCallbacksLock); 
-        TimeoutCallbacks.erase(handle); 
-        TimeoutCallbacksCV.Signal(); 
-    } 
- 
-    void Prepare(IVDiskSetup *vdiskSetup, bool newPDisks = true, bool runRepl = true); 
+    void UnregisterTimeoutCallback(TTimeoutCallbackId handle) {
+        TGuard<TMutex> lock(TimeoutCallbacksLock);
+        TimeoutCallbacks.erase(handle);
+        TimeoutCallbacksCV.Signal();
+    }
+
+    void Prepare(IVDiskSetup *vdiskSetup, bool newPDisks = true, bool runRepl = true);
     void Shutdown();
     void DbInitWait();
     void PoisonVDisks();

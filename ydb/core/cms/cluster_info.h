@@ -184,7 +184,7 @@ public:
             if (notification.Notification.HasTime())
                 LockStart = TInstant::MicroSeconds(notification.Notification.GetTime());
             else
-                LockStart = TActivationContext::Now(); 
+                LockStart = TActivationContext::Now();
             LockDeadline = LockStart + TDuration::MicroSeconds(action.GetDuration());
         }
 
@@ -318,7 +318,7 @@ public:
     TString Host;
     TString Address;
     ui16 IcPort = 0;
-    TNodeLocation Location; 
+    TNodeLocation Location;
     TString Version;
     TSet<ui64> Tablets;
     TSet<TPDiskID> PDisks;

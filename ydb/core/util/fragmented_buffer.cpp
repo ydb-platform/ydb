@@ -23,7 +23,7 @@ TString TFragmentedBuffer::GetMonolith() {
 }
 
 void TFragmentedBuffer::SetMonolith(TString &data) {
-    Y_VERIFY(data); 
+    Y_VERIFY(data);
     BufferForOffset.clear();
     BufferForOffset.emplace(0, data);
 }
@@ -120,26 +120,26 @@ TString TFragmentedBuffer::Print() const {
 }
 
 std::pair<const char*, i32> TFragmentedBuffer::Get(i32 begin) const {
-    auto it = BufferForOffset.upper_bound(begin); 
-    Y_VERIFY(it != BufferForOffset.begin()); 
-    --it; 
+    auto it = BufferForOffset.upper_bound(begin);
+    Y_VERIFY(it != BufferForOffset.begin());
+    --it;
     const i32 offset = begin - it->first;
-    Y_VERIFY(offset >= 0 && (size_t)offset < it->second.size()); 
-    return std::make_pair(it->second.data() + offset, it->second.size() - offset); 
-} 
- 
+    Y_VERIFY(offset >= 0 && (size_t)offset < it->second.size());
+    return std::make_pair(it->second.data() + offset, it->second.size() - offset);
+}
+
 void TFragmentedBuffer::CopyFrom(const TFragmentedBuffer& from, const TIntervalSet<i32>& range) {
-    Y_VERIFY(range); 
+    Y_VERIFY(range);
     for (auto it = range.begin(); it != range.end(); ++it) {
         auto [begin, end] = *it;
         i32 offset = begin;
-        while (offset < end) { 
-            const auto& [data, maxLen] = from.Get(offset); 
+        while (offset < end) {
+            const auto& [data, maxLen] = from.Get(offset);
             i32 len = Min(maxLen, end - offset);
-            Write(offset, data, len); 
-            offset += len; 
-        } 
-    } 
-} 
- 
+            Write(offset, data, len);
+            offset += len;
+        }
+    }
+}
+
 } // NKikimr

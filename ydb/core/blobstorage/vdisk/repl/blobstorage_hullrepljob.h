@@ -11,12 +11,12 @@ namespace NKikimr {
     // CreateReplJobActor
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateReplJobActor(
-            std::shared_ptr<TReplCtx> replCtx, 
+            std::shared_ptr<TReplCtx> replCtx,
             const TActorId &parentId,
             const TLogoBlobID &startKey,
-            TQueueActorMapPtr queueActorMapPtr, 
-            TBlobIdQueuePtr blobsToReplicatePtr, 
-            TBlobIdQueuePtr unreplicatedBlobsPtr, 
-            const std::optional<std::pair<TVDiskID, TActorId>>& donor); 
+            TQueueActorMapPtr queueActorMapPtr,
+            TBlobIdQueuePtr blobsToReplicatePtr,
+            TBlobIdQueuePtr unreplicatedBlobsPtr,
+            const std::optional<std::pair<TVDiskID, TActorId>>& donor);
 
 } // NKikimr

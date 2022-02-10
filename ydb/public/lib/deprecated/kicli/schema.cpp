@@ -215,7 +215,7 @@ TVector<TSchemaObject> TSchemaObject::GetChildren() const {
     NThreading::TFuture<TResult> future = Kikimr.DescribeObject(*this);
     TResult result = future.GetValue(TDuration::Max());
     result.GetError().Throw();
-    const NKikimrClient::TResponse& objects = result.GetResult<NKikimrClient::TResponse>(); 
+    const NKikimrClient::TResponse& objects = result.GetResult<NKikimrClient::TResponse>();
     TVector<TSchemaObject> children;
     children.reserve(objects.GetPathDescription().ChildrenSize());
     for (const auto& child : objects.GetPathDescription().GetChildren()) {
@@ -228,7 +228,7 @@ TVector<TColumn> TSchemaObject::GetColumns() const {
     NThreading::TFuture<TResult> future = Kikimr.DescribeObject(*this);
     TResult result = future.GetValue(TDuration::Max());
     result.GetError().Throw();
-    const NKikimrClient::TResponse& objects = result.GetResult<NKikimrClient::TResponse>(); 
+    const NKikimrClient::TResponse& objects = result.GetResult<NKikimrClient::TResponse>();
     Y_VERIFY(objects.GetPathDescription().HasTable());
     const auto& table = objects.GetPathDescription().GetTable();
 
@@ -257,7 +257,7 @@ TSchemaObjectStats TSchemaObject::GetStats() const {
     NThreading::TFuture<TResult> future = Kikimr.DescribeObject(*this);
     TResult result = future.GetValue(TDuration::Max());
     result.GetError().Throw();
-    const NKikimrClient::TResponse& objects = result.GetResult<NKikimrClient::TResponse>(); 
+    const NKikimrClient::TResponse& objects = result.GetResult<NKikimrClient::TResponse>();
     Y_VERIFY(objects.GetPathDescription().HasTable());
     TSchemaObjectStats stats;
     stats.PartitionsCount = objects.GetPathDescription().TablePartitionsSize();

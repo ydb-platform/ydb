@@ -18,22 +18,22 @@ static constexpr ui32 DefaultErrorStateLimit = 60;
 auto DefaultStateLimits = NCms::TCmsSentinelConfig::DefaultStateLimits();
 
 static constexpr NCms::EPDiskState ErrorStates[] = {
-    NKikimrBlobStorage::TPDiskState::InitialFormatReadError, 
-    NKikimrBlobStorage::TPDiskState::InitialSysLogReadError, 
-    NKikimrBlobStorage::TPDiskState::InitialSysLogParseError, 
-    NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError, 
-    NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError, 
-    NKikimrBlobStorage::TPDiskState::CommonLoggerInitError, 
-    NKikimrBlobStorage::TPDiskState::OpenFileError, 
-    NKikimrBlobStorage::TPDiskState::ChunkQuotaError, 
-    NKikimrBlobStorage::TPDiskState::DeviceIoError, 
+    NKikimrBlobStorage::TPDiskState::InitialFormatReadError,
+    NKikimrBlobStorage::TPDiskState::InitialSysLogReadError,
+    NKikimrBlobStorage::TPDiskState::InitialSysLogParseError,
+    NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError,
+    NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError,
+    NKikimrBlobStorage::TPDiskState::CommonLoggerInitError,
+    NKikimrBlobStorage::TPDiskState::OpenFileError,
+    NKikimrBlobStorage::TPDiskState::ChunkQuotaError,
+    NKikimrBlobStorage::TPDiskState::DeviceIoError,
 };
 
 constexpr NCms::EPDiskState FaultyStates[] = {
-    NKikimrBlobStorage::TPDiskState::Initial, 
-    NKikimrBlobStorage::TPDiskState::InitialFormatRead, 
-    NKikimrBlobStorage::TPDiskState::InitialSysLogRead, 
-    NKikimrBlobStorage::TPDiskState::InitialCommonLogRead, 
+    NKikimrBlobStorage::TPDiskState::Initial,
+    NKikimrBlobStorage::TPDiskState::InitialFormatRead,
+    NKikimrBlobStorage::TPDiskState::InitialSysLogRead,
+    NKikimrBlobStorage::TPDiskState::InitialCommonLogRead,
 };
 
 Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
@@ -146,17 +146,17 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
                     const ui64 id = (dc << 32) | (rack << 16) | node;
                     const TString name = TStringBuilder() << "dc_" << dc << "-rack_" << rack << "-node_" << node;
 
-                    NActorsInterconnect::TNodeLocation location; 
-                    if (!anyDC) { 
-                        location.SetDataCenter(ToString(dc + 1)); 
-                    } 
-                    if (!anyRack) { 
-                        location.SetRack(ToString(rack + 1)); 
-                    } 
-                    location.SetUnit(ToString(id)); 
+                    NActorsInterconnect::TNodeLocation location;
+                    if (!anyDC) {
+                        location.SetDataCenter(ToString(dc + 1));
+                    }
+                    if (!anyRack) {
+                        location.SetRack(ToString(rack + 1));
+                    }
+                    location.SetUnit(ToString(id));
 
                     state->ClusterInfo->AddNode(TEvInterconnect::TNodeInfo(id, name, name, name, 10000, TNodeLocation(location)), nullptr);
- 
+
                     NKikimrBlobStorage::TBaseConfig::TPDisk pdisk;
                     pdisk.SetNodeId(id);
                     pdisk.SetPDiskId(0);
@@ -499,9 +499,9 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         TTestEnv env(8, 4);
 
         const auto reservedStates = TVector<EPDiskState>{
-            NKikimrBlobStorage::TPDiskState::Reserved14, 
-            NKikimrBlobStorage::TPDiskState::Reserved15, 
-            NKikimrBlobStorage::TPDiskState::Reserved16, 
+            NKikimrBlobStorage::TPDiskState::Reserved14,
+            NKikimrBlobStorage::TPDiskState::Reserved15,
+            NKikimrBlobStorage::TPDiskState::Reserved16,
         };
 
         for (const auto state : reservedStates) {

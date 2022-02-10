@@ -73,8 +73,8 @@ public:
         ui64 KeyHash;
     };
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::PERSQUEUE_CACHE_L2_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::PERSQUEUE_CACHE_L2_ACTOR;
     }
 
     TPersQueueCacheL2(const TCacheL2Parameters& params, TIntrusivePtr<NMonitoring::TDynamicCounters> countersGroup)

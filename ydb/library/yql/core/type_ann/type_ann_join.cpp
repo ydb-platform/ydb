@@ -344,7 +344,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        for (const auto& child : input->Child(3)->Children()) { 
+        for (const auto& child : input->Child(3)->Children()) {
             if (!GetFieldPosition(leftItemType, child->Content())) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Unknown key column: " << child->Content()));
                 return IGraphTransformer::TStatus::Error;
@@ -558,7 +558,7 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            for (const auto& child : input->Child(2)->Children()) { 
+            for (const auto& child : input->Child(2)->Children()) {
                 if (!EnsureAtom(*child, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -590,7 +590,7 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            for (const auto& child : input->Child(3)->Children()) { 
+            for (const auto& child : input->Child(3)->Children()) {
                 if (!EnsureAtom(*child, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -617,7 +617,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        for (const auto& child : input->Child(4)->Children()) { 
+        for (const auto& child : input->Child(4)->Children()) {
             if (!EnsureAtom(*child, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -649,7 +649,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        for (const auto& child : input->Child(5)->Children()) { 
+        for (const auto& child : input->Child(5)->Children()) {
             if (!EnsureAtom(*child, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -665,7 +665,7 @@ namespace NTypeAnnImpl {
         }
 
         TSet<TStringBuf> seenOptions;
-        for (const auto& child : input->Child(6)->Children()) { 
+        for (const auto& child : input->Child(6)->Children()) {
             if (!EnsureTupleMinSize(*child, 1, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -747,7 +747,7 @@ namespace NTypeAnnImpl {
         std::conditional_t<ByStruct, TVector<const TItemExprType*>, TVector<const TTypeAnnotationNode*>> resultItems;
         resultItems.reserve(fullColumns.size());
 
-        for (const auto& child : input->Child(2)->Children()) { 
+        for (const auto& child : input->Child(2)->Children()) {
             const auto pos = GetFieldPosition(inputItemType, child->Content());
             auto inputColumnType = GetFieldType(inputItemType, *pos);
             if (requiredColumns.contains(child->Content())) {
@@ -760,7 +760,7 @@ namespace NTypeAnnImpl {
                 resultItems.emplace_back(inputColumnType);
         }
 
-        for (const auto& child : input->Child(3)->Children()) { 
+        for (const auto& child : input->Child(3)->Children()) {
             const auto pos = GetFieldPosition(inputItemType, child->Content());
             auto inputColumnType = GetFieldType(inputItemType, *pos);
             if (requiredColumns.contains(child->Content())) {

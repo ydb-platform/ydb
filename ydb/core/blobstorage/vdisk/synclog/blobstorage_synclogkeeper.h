@@ -16,7 +16,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         IActor* CreateSyncLogKeeperActor(
                 TIntrusivePtr<TSyncLogCtx> slCtx,
-                std::unique_ptr<TSyncLogRepaired> repaired); 
+                std::unique_ptr<TSyncLogRepaired> repaired);
 
     } // NSyncLog
 } // NKikimr

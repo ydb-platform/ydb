@@ -2,7 +2,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NKikimr {
 
@@ -40,7 +40,7 @@ namespace NKikimr {
     bool TLevelIndexBase::CheckEntryPoint(const char *begin, const char *end, size_t keySizeOf, ui32 signature,
                                           TString &explanation) {
         // OLD Data Format
-        // data ::= [signature=4b] [nextSstId=8b] deleted_chunks level0 otherLevels; 
+        // data ::= [signature=4b] [nextSstId=8b] deleted_chunks level0 otherLevels;
         // deleted_chunks ::= [size=4b] [chunkIdx=4b]*
         // level0 ::= [size=4b] [TDiskPart=12b] * size
         // otherLevels ::= levelX *
@@ -60,9 +60,9 @@ namespace NKikimr {
         }
         pos += sizeof(ui32);
 
-        // skip next SST index 
-        pos += sizeof(ui64); 
- 
+        // skip next SST index
+        pos += sizeof(ui64);
+
         // check deleted_chunks
         if (size_t(end - pos) < sizeof(ui32)) {
             explanation = "deleted chunks size";
@@ -132,7 +132,7 @@ namespace NKikimr {
         ui32 chunks = *(const ui32*)pos;
         pos += sizeof(ui32); // array size
         for (ui32 i = 0; i < chunks; i++) {
-            pb.AddDeletedChunks(*reinterpret_cast<const ui32 *>(pos)); 
+            pb.AddDeletedChunks(*reinterpret_cast<const ui32 *>(pos));
             pos += sizeof(ui32);
         }
 
@@ -167,58 +167,58 @@ namespace NKikimr {
     }
 
 
-    bool TLevelIndexBase::CheckBulkFormedSegments(const char *begin, const char *end) { 
-        // empty string is correct bulk-formed segment set 
-        if (begin == end) 
-            return true; 
- 
-        TMemoryInput stream(begin, end - begin); 
+    bool TLevelIndexBase::CheckBulkFormedSegments(const char *begin, const char *end) {
+        // empty string is correct bulk-formed segment set
+        if (begin == end)
+            return true;
+
+        TMemoryInput stream(begin, end - begin);
         return NKikimrVDiskData::TBulkFormedSstInfoSet().ParseFromArcadiaStream(&stream);
-    } 
- 
-    template <class TKey, class TMemRec> 
-    void TLevelIndex<TKey, TMemRec>::OutputHtml(const TString &name, IOutputStream &str) const 
-    { 
-        HTML(str) { 
-            DIV_CLASS("panel panel-info") { 
-                DIV_CLASS("panel-heading") { 
-                    str << name; 
+    }
+
+    template <class TKey, class TMemRec>
+    void TLevelIndex<TKey, TMemRec>::OutputHtml(const TString &name, IOutputStream &str) const
+    {
+        HTML(str) {
+            DIV_CLASS("panel panel-info") {
+                DIV_CLASS("panel-heading") {
+                    str << name;
                     // output main db page
                     str << "<a class=\"btn btn-primary btn-xs navbar-right\""
                         << " href=\"?type=dbmainpage&dbname=" << name << "\">Database Main Page</a>";
-                    // stat db 
-                    str << "<a class=\"btn btn-primary btn-xs navbar-right\"" 
-                        << " href=\"?type=stat&dbname=" << name << "\">Database Stat</a>"; 
-                    // dump db 
-                    str << "<a class=\"btn btn-primary btn-xs navbar-right\"" 
-                        << " href=\"?type=dump&dbname=" << name << "\">Dump Database</a>"; 
-                    OutputHugeStatButton(name, str); 
-                    OutputQueryDbButton(name, str); 
-                } 
-                DIV_CLASS("panel-body") { 
-                    DIV_CLASS("row") { 
-                        DIV_CLASS("col-md-1") { 
-                            H5() { str << "Fresh"; } 
-                            const char *comp = Fresh.CompactionInProgress() ? "Compaction In Progress" : "No Compaction"; 
-                            H6_CLASS ("text-info") {str << comp << " W:" << FreshCompWritesInFlight;} 
-                        } 
-                        DIV_CLASS("col-md-11") {Fresh.OutputHtml(str);} 
-                    } 
-                    DIV_CLASS("row") { 
-                        DIV_CLASS("col-md-1") { 
-                            H5() { str << "Levels"; } 
-                            H6_CLASS ("text-info") {str << GetCompStateStr(HullCompReadsInFlight, HullCompWritesInFlight);} 
-                        } 
-                        DIV_CLASS("col-md-11") {CurSlice->OutputHtml(str);} 
-                    } 
+                    // stat db
+                    str << "<a class=\"btn btn-primary btn-xs navbar-right\""
+                        << " href=\"?type=stat&dbname=" << name << "\">Database Stat</a>";
+                    // dump db
+                    str << "<a class=\"btn btn-primary btn-xs navbar-right\""
+                        << " href=\"?type=dump&dbname=" << name << "\">Dump Database</a>";
+                    OutputHugeStatButton(name, str);
+                    OutputQueryDbButton(name, str);
+                }
+                DIV_CLASS("panel-body") {
+                    DIV_CLASS("row") {
+                        DIV_CLASS("col-md-1") {
+                            H5() { str << "Fresh"; }
+                            const char *comp = Fresh.CompactionInProgress() ? "Compaction In Progress" : "No Compaction";
+                            H6_CLASS ("text-info") {str << comp << " W:" << FreshCompWritesInFlight;}
+                        }
+                        DIV_CLASS("col-md-11") {Fresh.OutputHtml(str);}
+                    }
+                    DIV_CLASS("row") {
+                        DIV_CLASS("col-md-1") {
+                            H5() { str << "Levels"; }
+                            H6_CLASS ("text-info") {str << GetCompStateStr(HullCompReadsInFlight, HullCompWritesInFlight);}
+                        }
+                        DIV_CLASS("col-md-11") {CurSlice->OutputHtml(str);}
+                    }
 
                 }
             }
         }
     }
 
-    template class TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>; 
-    template class TLevelIndex<TKeyBarrier, TMemRecBarrier>; 
-    template class TLevelIndex<TKeyBlock, TMemRecBlock>; 
+    template class TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>;
+    template class TLevelIndex<TKeyBarrier, TMemRecBarrier>;
+    template class TLevelIndex<TKeyBlock, TMemRecBlock>;
 
 } // NKikimr

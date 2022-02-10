@@ -1,10 +1,10 @@
 #include "defs.h"
 #include "keyvalue.h"
-#include "keyvalue_state.h" 
+#include "keyvalue_state.h"
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/random/fast.h> 
+#include <util/random/fast.h>
 
 const bool ENABLE_DETAILED_KV_LOG = false;
 
@@ -128,8 +128,8 @@ void DoWithRetry(std::function<bool(void)> action, i32 retryCount = 2) {
 }
 
 void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
-        const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, 
-        const NKikimrClient::TKeyValueRequest::EPriority priority, TTestContext &tc) { 
+        const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
+        const NKikimrClient::TKeyValueRequest::EPriority priority, TTestContext &tc) {
     Y_VERIFY(keys.size() == values.size());
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
@@ -164,15 +164,15 @@ void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
 }
 
 void CmdWrite(const TString &key, const TString &value,
-        const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, 
-        const NKikimrClient::TKeyValueRequest::EPriority priority, TTestContext &tc) { 
+        const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
+        const NKikimrClient::TKeyValueRequest::EPriority priority, TTestContext &tc) {
     TDeque<TString> keys = {key};
     TDeque<TString> values = {value};
     CmdWrite(keys, values, storageChannel, priority, tc);
 }
 
 void CmdRead(const TDeque<TString> &keys,
-        const NKikimrClient::TKeyValueRequest::EPriority priority, 
+        const NKikimrClient::TKeyValueRequest::EPriority priority,
         const TDeque<TString> &expectedValues, const TDeque<bool> expectedNodatas, TTestContext &tc) {
     Y_VERIFY(keys.size() == expectedValues.size());
     Y_VERIFY(expectedNodatas.size() == 0 || expectedNodatas.size() == keys.size());
@@ -405,7 +405,7 @@ void RunRequest(TDesiredPair<TEvKeyValue::TEvRequest> &dp, TTestContext &tc, ui6
         return true;
     });
 }
- 
+
 void AddCmdReadRange(const TString &from, const bool includeFrom, const TString &to, const bool includeTo,
         const bool includeData, const ui64 limitBytes,
         const NKikimrClient::TKeyValueRequest::EPriority priority,
@@ -441,7 +441,7 @@ void AddCmdReadRange(const TString &from, const bool includeFrom, const TString 
     }
 }
 
-void CmdGetStatus(const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, 
+void CmdGetStatus(const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
         const ui32 expectedStatusFlags, TTestContext &tc) {
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
@@ -820,7 +820,7 @@ void ExecuteObtainLock(TTestContext &tc, ui64 expectedLockGeneration) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TEST CASES
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
- 
+
 Y_UNIT_TEST(TestBasicWriteRead) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -858,16 +858,16 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsThenResponseOk) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
-        CmdWrite("key", "value", NKikimrClient::TKeyValueRequest::MAIN, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
-        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, 
+        CmdWrite("key", "value", NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
             {"value"}, {}, tc);
         CmdDeleteRange("key", true, "key", true, tc);
-        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, 
+        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
             {""}, {true}, tc);
-    }); 
-} 
- 
+    });
+}
+
 
 Y_UNIT_TEST(TestWriteReadDeleteWithRestartsThenResponseOkWithNewApi) {
     TTestContext tc;
@@ -1013,16 +1013,16 @@ Y_UNIT_TEST(TestInlineWriteReadDeleteWithRestartsThenResponseOk) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
-        CmdWrite("key", "value", NKikimrClient::TKeyValueRequest::INLINE, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
-        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, 
+        CmdWrite("key", "value", NKikimrClient::TKeyValueRequest::INLINE,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
             {"value"}, {}, tc);
         CmdDeleteRange("key", true, "key", true, tc);
-        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, 
+        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
             {""}, {true}, tc);
     });
 }
- 
+
 
 Y_UNIT_TEST(TestInlineWriteReadDeleteWithRestartsThenResponseOkNewApi) {
     TTestContext tc;
@@ -1152,17 +1152,17 @@ Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOk) {
                 value << "x";
                 keys.push_back(Sprintf("key%" PRIu32, itemIdx));
                 values.push_back(value.Str());
-            } 
-        } 
+            }
+        }
         CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::EXTRA9,
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
- 
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
         TDeque<TString> expectedKeys;
         TDeque<TString> expectedValues;
         for (ui32 itemIdx = 1; itemIdx < 4; ++itemIdx) {
             expectedKeys.push_back(keys[itemIdx]);
             expectedValues.push_back(values[itemIdx]);
-        } 
+        }
         {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
             AddCmdReadRange("key1", true, "key4", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
@@ -1183,7 +1183,7 @@ Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOk) {
         }
     });
 }
- 
+
 
 Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOkNewApi) {
     TTestContext tc;
@@ -1237,9 +1237,9 @@ Y_UNIT_TEST(TestInlineWriteReadWithRestartsThenResponseOk) {
                 values.push_back(value.Str());
                 CmdWrite(keys1, values1,
                     itemIdx % 2 == 0 ?
-                        NKikimrClient::TKeyValueRequest::INLINE : 
-                        NKikimrClient::TKeyValueRequest::MAIN, 
-                    NKikimrClient::TKeyValueRequest::REALTIME, tc); 
+                        NKikimrClient::TKeyValueRequest::INLINE :
+                        NKikimrClient::TKeyValueRequest::MAIN,
+                    NKikimrClient::TKeyValueRequest::REALTIME, tc);
             }
         }
 
@@ -1324,9 +1324,9 @@ Y_UNIT_TEST(TestEmptyWriteReadDeleteWithRestartsThenResponseOk) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
-        CmdWrite("key", "", NKikimrClient::TKeyValueRequest::MAIN, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
-        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, 
+        CmdWrite("key", "", NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
             {""}, {}, tc);
 
         TDeque<TString> expectedKeys;
@@ -1341,7 +1341,7 @@ Y_UNIT_TEST(TestEmptyWriteReadDeleteWithRestartsThenResponseOk) {
         }
 
         CmdDeleteRange("key", true, "key", true, tc);
-        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, 
+        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
             {""}, {true}, tc);
     });
 }
@@ -1373,9 +1373,9 @@ Y_UNIT_TEST(TestInlineEmptyWriteReadDeleteWithRestartsThenResponseOk) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
-        CmdWrite("key", "", NKikimrClient::TKeyValueRequest::INLINE, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
-        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, 
+        CmdWrite("key", "", NKikimrClient::TKeyValueRequest::INLINE,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
             {""}, {}, tc);
 
         TDeque<TString> expectedKeys;
@@ -1390,7 +1390,7 @@ Y_UNIT_TEST(TestInlineEmptyWriteReadDeleteWithRestartsThenResponseOk) {
         }
 
         CmdDeleteRange("key", true, "key", true, tc);
-        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, 
+        CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
             {""}, {true}, tc);
     });
 }
@@ -1531,10 +1531,10 @@ Y_UNIT_TEST(TestWriteReadRangeDataLimitThenLimitWorks) {
         for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) {
             keys.push_back(Sprintf("k%07" PRIu32, itemIdx));
             values.push_back(PrepareData(8, itemIdx));
-        } 
-        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::MAIN, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
- 
+        }
+        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
         TDeque<TString> expectedKeys;
         TDeque<TString> expectedValues;
         ui64 totalSize = 0;
@@ -1543,12 +1543,12 @@ Y_UNIT_TEST(TestWriteReadRangeDataLimitThenLimitWorks) {
             totalSize += values[itemIdx].size() + keys[itemIdx].size() + 32;
             if (totalSize > sizeLimit) {
                 break;
-            } 
+            }
             expectedKeys.push_back(keys[itemIdx]);
             expectedValues.push_back(values[itemIdx]);
-        } 
+        }
         Y_VERIFY(expectedKeys.size());
- 
+
         {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
             AddCmdReadRange("k0000000", true, "k9999999", true, true, sizeLimit,
@@ -1563,9 +1563,9 @@ Y_UNIT_TEST(TestWriteReadRangeDataLimitThenLimitWorks) {
                 NKikimrClient::TKeyValueRequest::REALTIME, {}, {}, NKikimrProto::OVERRUN, tc, dp);
             RunRequest(dp, tc, __LINE__);
         }
-    }); 
-} 
- 
+    });
+}
+
 
 void MakeTestWriteReadRangeDataLimitThenLimitWorksNewApi(ui32 storageChannel) {
     TTestContext tc;
@@ -1620,9 +1620,9 @@ Y_UNIT_TEST(TestInlineWriteReadRangeLimitThenLimitWorks) {
             keys.push_back(Sprintf("k%07" PRIu32, itemIdx));
             values.push_back(PrepareData(8, itemIdx));
         }
-        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::INLINE, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
- 
+        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::INLINE,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
         TDeque<TString> expectedKeys;
         TDeque<TString> expectedValues;
         ui64 totalSize = 0;
@@ -1674,26 +1674,26 @@ Y_UNIT_TEST(TestCopyRangeWorks) {
             keys.push_back(Sprintf("k%07" PRIu32, itemIdx));
             values.push_back(Sprintf("v%07" PRIu32, (ui32)itemIdx));
         }
-        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::MAIN, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
- 
+        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
         CmdCopyRange("", false, "~", false, "p", "", tc);
-        CmdWrite("0", "0", NKikimrClient::TKeyValueRequest::MAIN, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
- 
+        CmdWrite("0", "0", NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
         TDeque<TString> expectedKeys;
         TDeque<TString> expectedValues;
         for (ui32 itemIdx = 0; itemIdx < itemCount; ++itemIdx) {
             expectedKeys.push_back(Sprintf("pk%07" PRIu32, itemIdx));
             expectedValues.push_back(Sprintf("v%07" PRIu32, (ui32)itemIdx));
-        } 
+        }
         TDesiredPair<TEvKeyValue::TEvRequest> dp;
         AddCmdReadRange("p", false, "q", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
             expectedKeys, expectedValues, NKikimrProto::OK, tc, dp);
         RunRequest(dp, tc, __LINE__);
     });
 }
- 
+
 
 void MakeTestCopyRangeWorksNewApi(ui64 storageChannel) {
     TTestContext tc;
@@ -1748,14 +1748,14 @@ Y_UNIT_TEST(TestInlineCopyRangeWorks) {
             }
             CmdWrite(keys, values,
                     ((itemIdx / 20) % 2 == 0) ?
-                        NKikimrClient::TKeyValueRequest::INLINE : 
-                        NKikimrClient::TKeyValueRequest::INLINE, 
-                    NKikimrClient::TKeyValueRequest::REALTIME, tc); 
+                        NKikimrClient::TKeyValueRequest::INLINE :
+                        NKikimrClient::TKeyValueRequest::INLINE,
+                    NKikimrClient::TKeyValueRequest::REALTIME, tc);
         }
- 
+
         CmdCopyRange("", false, "~", false, "p", "", tc);
-        CmdWrite("0", "0", NKikimrClient::TKeyValueRequest::INLINE, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
+        CmdWrite("0", "0", NKikimrClient::TKeyValueRequest::INLINE,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
 
         TDeque<TString> expectedKeys;
         TDeque<TString> expectedValues;
@@ -1783,8 +1783,8 @@ Y_UNIT_TEST(TestConcatWorks) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
-        CmdWrite({"1", "2", "3", "4"}, {"hello", ", ", "world", "!"}, NKikimrClient::TKeyValueRequest::MAIN, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
+        CmdWrite({"1", "2", "3", "4"}, {"hello", ", ", "world", "!"}, NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
         CmdConcat({"1", "2", "3", "4"}, "5", false, tc);
         {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
@@ -1799,9 +1799,9 @@ Y_UNIT_TEST(TestConcatWorks) {
                 {"5"}, {"hello, world!hello, world!"}, NKikimrProto::OK, tc, dp);
             RunRequest(dp, tc, __LINE__);
         }
-    }); 
-} 
- 
+    });
+}
+
 
 Y_UNIT_TEST(TestConcatWorksNewApi) {
     TTestContext tc;
@@ -1833,8 +1833,8 @@ Y_UNIT_TEST(TestRenameWorks) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
-        CmdWrite({"1", "2", "3", "4"}, {"123", "456", "789", "012"}, NKikimrClient::TKeyValueRequest::MAIN, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
+        CmdWrite({"1", "2", "3", "4"}, {"123", "456", "789", "012"}, NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
         CmdRename("2", "3", tc);
         {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
@@ -1843,8 +1843,8 @@ Y_UNIT_TEST(TestRenameWorks) {
             RunRequest(dp, tc, __LINE__);
         }
    });
-} 
- 
+}
+
 
 Y_UNIT_TEST(TestRenameWorksewApi) {
     TTestContext tc;
@@ -1875,13 +1875,13 @@ Y_UNIT_TEST(TestWriteToExtraChannelThenReadMixedChannelsReturnsOk) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
-        CmdWrite("key1", "value1", NKikimrClient::TKeyValueRequest::MAIN, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
-        CmdWrite("key2", "value2", NKikimrClient::TKeyValueRequest::EXTRA, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
-        CmdWrite("key3", "value3", NKikimrClient::TKeyValueRequest::MAIN, 
-            NKikimrClient::TKeyValueRequest::REALTIME, tc); 
-        CmdRead({"key1", "key2", "key3"}, NKikimrClient::TKeyValueRequest::REALTIME, 
+        CmdWrite("key1", "value1", NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        CmdWrite("key2", "value2", NKikimrClient::TKeyValueRequest::EXTRA,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        CmdWrite("key3", "value3", NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        CmdRead({"key1", "key2", "key3"}, NKikimrClient::TKeyValueRequest::REALTIME,
             {"value1", "value2", "value3"}, {}, tc);
         {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
@@ -1890,8 +1890,8 @@ Y_UNIT_TEST(TestWriteToExtraChannelThenReadMixedChannelsReturnsOk) {
             RunRequest(dp, tc, __LINE__);
         }
     });
-} 
- 
+}
+
 
 Y_UNIT_TEST(TestWriteToExtraChannelThenReadMixedChannelsReturnsOkNewApi) {
     TTestContext tc;
@@ -1911,84 +1911,84 @@ Y_UNIT_TEST(TestWriteToExtraChannelThenReadMixedChannelsReturnsOkNewApi) {
 
 
 Y_UNIT_TEST(TestIncrementalKeySet) {
-    // generate initial key set 
+    // generate initial key set
     TSet<TString> keys;
-    for (ui32 i = 0; i < 100; ++i) { 
-        keys.insert(Sprintf("%04d", i)); 
-    } 
- 
-    // fill index to match those keys 
+    for (ui32 i = 0; i < 100; ++i) {
+        keys.insert(Sprintf("%04d", i));
+    }
+
+    // fill index to match those keys
     TMap<TString, NKeyValue::TIndexRecord> index;
     for (const TString& key : keys) {
-        index[key]; 
-    } 
- 
-    TReallyFastRng32 rng(1); 
- 
-    NKeyValue::TKeyValueState::TIncrementalKeySet incr(index); 
-    for (ui32 iteration = 0; iteration < 1500; ++iteration) { 
-        // compare 
-        auto iter = keys.begin(); 
-        auto iiter = incr.begin(); 
-        while (iter != keys.end() && iiter != incr.end()) { 
-            UNIT_ASSERT_VALUES_EQUAL(*iter, *iiter); 
-            ++iter; 
-            ++iiter; 
-        } 
-        UNIT_ASSERT_EQUAL(iter, keys.end()); 
-        UNIT_ASSERT_EQUAL(iiter, incr.end()); 
- 
-        // find 
+        index[key];
+    }
+
+    TReallyFastRng32 rng(1);
+
+    NKeyValue::TKeyValueState::TIncrementalKeySet incr(index);
+    for (ui32 iteration = 0; iteration < 1500; ++iteration) {
+        // compare
+        auto iter = keys.begin();
+        auto iiter = incr.begin();
+        while (iter != keys.end() && iiter != incr.end()) {
+            UNIT_ASSERT_VALUES_EQUAL(*iter, *iiter);
+            ++iter;
+            ++iiter;
+        }
+        UNIT_ASSERT_EQUAL(iter, keys.end());
+        UNIT_ASSERT_EQUAL(iiter, incr.end());
+
+        // find
         for (const TString& key : keys) {
-            auto iiter = incr.find(key); 
-            UNIT_ASSERT_UNEQUAL(iiter, incr.end()); 
-            UNIT_ASSERT_VALUES_EQUAL(key, *iiter); 
-        } 
- 
-        // lower_bound 
-        for (ui32 i = 0; i < 150; ++i) { 
+            auto iiter = incr.find(key);
+            UNIT_ASSERT_UNEQUAL(iiter, incr.end());
+            UNIT_ASSERT_VALUES_EQUAL(key, *iiter);
+        }
+
+        // lower_bound
+        for (ui32 i = 0; i < 150; ++i) {
             TString key = Sprintf("%04d", i);
-            auto iter = keys.lower_bound(key); 
-            auto iiter = incr.lower_bound(key); 
-            if (iter == keys.end()) { 
-                UNIT_ASSERT_EQUAL(iiter, incr.end()); 
-            } else { 
-                UNIT_ASSERT_VALUES_EQUAL(*iiter, *iter); 
-            } 
-        } 
- 
-        // same for upper_bound 
-        for (ui32 i = 0; i < 150; ++i) { 
+            auto iter = keys.lower_bound(key);
+            auto iiter = incr.lower_bound(key);
+            if (iter == keys.end()) {
+                UNIT_ASSERT_EQUAL(iiter, incr.end());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(*iiter, *iter);
+            }
+        }
+
+        // same for upper_bound
+        for (ui32 i = 0; i < 150; ++i) {
             TString key = Sprintf("%04d", i);
-            auto iter = keys.upper_bound(key); 
-            auto iiter = incr.upper_bound(key); 
-            if (iter == keys.end()) { 
-                UNIT_ASSERT_EQUAL(iiter, incr.end()); 
-            } else { 
-                UNIT_ASSERT_VALUES_EQUAL(*iiter, *iter); 
-            } 
-        } 
- 
-        if (!keys.empty() && rng() % 2 == 1) { 
-            // generate delete command 
-            ui32 index = rng() % keys.size(); 
+            auto iter = keys.upper_bound(key);
+            auto iiter = incr.upper_bound(key);
+            if (iter == keys.end()) {
+                UNIT_ASSERT_EQUAL(iiter, incr.end());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(*iiter, *iter);
+            }
+        }
+
+        if (!keys.empty() && rng() % 2 == 1) {
+            // generate delete command
+            ui32 index = rng() % keys.size();
             TSet<TString>::iterator iter = keys.begin();
-            std::advance(iter, index); 
+            std::advance(iter, index);
             TString key = *iter;
-            auto iiter = incr.find(key); 
-            UNIT_ASSERT_UNEQUAL(iiter, incr.end()); 
-            UNIT_ASSERT_VALUES_EQUAL(*iiter, key); 
-            keys.erase(iter); 
-            incr.erase(iiter); 
-        } else { 
-            // generate insert command 
+            auto iiter = incr.find(key);
+            UNIT_ASSERT_UNEQUAL(iiter, incr.end());
+            UNIT_ASSERT_VALUES_EQUAL(*iiter, key);
+            keys.erase(iter);
+            incr.erase(iiter);
+        } else {
+            // generate insert command
             TString key = Sprintf("%04d", rng() % 150);
-            keys.insert(key); 
-            incr.insert(key); 
-        } 
-    } 
-} 
- 
+            keys.insert(key);
+            incr.insert(key);
+        }
+    }
+}
+
 Y_UNIT_TEST(TestGetStatusWorks) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1996,7 +1996,7 @@ Y_UNIT_TEST(TestGetStatusWorks) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
-        CmdGetStatus(NKikimrClient::TKeyValueRequest::MAIN, 
+        CmdGetStatus(NKikimrClient::TKeyValueRequest::MAIN,
             ui32(NKikimrBlobStorage::StatusIsValid), tc);
         CmdGetStatus(NKikimrClient::TKeyValueRequest::INLINE,
             ui32(NKikimrBlobStorage::StatusIsValid), tc);

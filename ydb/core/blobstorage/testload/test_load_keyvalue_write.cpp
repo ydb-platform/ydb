@@ -58,15 +58,15 @@ public:
         LoopAtKeyCount = cmd.GetLoopAtKeyCount();
     }
 
-    std::unique_ptr<TEvKeyValue::TEvRequest> TrySend() { 
+    std::unique_ptr<TEvKeyValue::TEvRequest> TrySend() {
         if (IsDying) {
             return {};
         }
 
-        std::unique_ptr<TEvKeyValue::TEvRequest> ev; 
+        std::unique_ptr<TEvKeyValue::TEvRequest> ev;
 
         if (ItemsInFlight < MaxInFlight) {
-            ev = std::make_unique<TEvKeyValue::TEvRequest>(); 
+            ev = std::make_unique<TEvKeyValue::TEvRequest>();
             auto write = ev->Record.AddCmdWrite();
             write->SetKey(Sprintf("%s%08" PRIu64,
                         KeyPrefix.c_str(),
@@ -109,7 +109,7 @@ class TKeyValueWriterTestLoadActor : public TActorBootstrapped<TKeyValueWriterTe
         ui64 Size;
     };
 
-    TVector<std::unique_ptr<TWorker>> Workers; 
+    TVector<std::unique_ptr<TWorker>> Workers;
 
     ui64 WrittenBytes = 0;
 
@@ -149,7 +149,7 @@ public:
 
         ui32 idx = 0;
         for (const auto& workerCmd : cmd.GetWorkers()) {
-            Workers.push_back(std::make_unique<TWorker>(workerCmd, idx, &Rng)); 
+            Workers.push_back(std::make_unique<TWorker>(workerCmd, idx, &Rng));
             ++idx;
         }
 
@@ -246,13 +246,13 @@ public:
         ui64 sent = 0;
         for (auto& worker : Workers) {
             auto now = TAppData::TimeProvider->Now();
-            while (std::unique_ptr<TEvKeyValue::TEvRequest> ev = worker->TrySend()) { 
+            while (std::unique_ptr<TEvKeyValue::TEvRequest> ev = worker->TrySend()) {
                 ui64 size = ev->Record.GetCmdWrite(0).GetValue().size();
                 *KeyValueBytesWritten += size;
                 ev->Record.SetCookie(ReqIdx);
                 InFlightWrites.insert({ReqIdx, {worker->Idx, now, size}});
                 ++ReqIdx;
-                NTabletPipe::SendData(ctx, Pipe, ev.release()); 
+                NTabletPipe::SendData(ctx, Pipe, ev.release());
                 ++sent;
             }
         }

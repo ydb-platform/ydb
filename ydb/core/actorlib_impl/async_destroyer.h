@@ -9,8 +9,8 @@ namespace NKikimr {
 template <class TVictim>
 class TAsyncDestroyer : public NActors::TActorBootstrapped<TAsyncDestroyer<TVictim>> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::ASYNC_DESTROYER; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::ASYNC_DESTROYER;
     }
 
     explicit TAsyncDestroyer(TAutoPtr<TVictim> victim)

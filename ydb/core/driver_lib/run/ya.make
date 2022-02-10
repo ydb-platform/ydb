@@ -37,8 +37,8 @@ SRCS(
     run.h
     service_initializer.cpp
     service_initializer.h
-    version.cpp 
-    version.h 
+    version.cpp
+    version.h
 )
 
 PEERDIR(

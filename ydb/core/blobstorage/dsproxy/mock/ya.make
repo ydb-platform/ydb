@@ -1,4 +1,4 @@
-LIBRARY() 
+LIBRARY()
 
 OWNER(
     alexvru
@@ -17,4 +17,4 @@ SRCS(
     dsproxy_mock.h
 )
 
-END() 
+END()

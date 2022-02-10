@@ -82,8 +82,8 @@ class TMessageBusTracerService : public TActor<TMessageBusTracerService> {
 public:
     using TProtocol = NKikimr::NMsgBusProxy::TProtocol;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::MSGBUS_TRACER_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::MSGBUS_TRACER_ACTOR;
     }
 
     TMessageBusTracerService();

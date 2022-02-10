@@ -20,8 +20,8 @@ class TDsProxyNodeMonActor : public TActorBootstrapped<TDsProxyNodeMonActor> {
     TIntrusivePtr<TDsProxyNodeMon> Mon;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::DS_PROXY_NODE_MON_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::DS_PROXY_NODE_MON_ACTOR;
     }
 
     TDsProxyNodeMonActor(TIntrusivePtr<TDsProxyNodeMon> mon)
@@ -38,20 +38,20 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Bootstrap state
-    void Bootstrap() { 
-        NActors::TMon* mon = AppData()->Mon; 
+    void Bootstrap() {
+        NActors::TMon* mon = AppData()->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(actorsMonPage, "dsproxynode", "DsProxyNode", false, TlsActivationContext->ExecutorThread.ActorSystem, 
-                SelfId()); 
+            mon->RegisterActorPage(actorsMonPage, "dsproxynode", "DsProxyNode", false, TlsActivationContext->ExecutorThread.ActorSystem,
+                SelfId());
         }
 
         Become(&TThis::StateOnline);
-        HandleWakeup(); 
+        HandleWakeup();
     }
 
-    void HandleWakeup() { 
-        Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup); 
+    void HandleWakeup() {
+        Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
         Mon->PutResponseTime.Update();
 
         Mon->PutTabletLogResponseTime.Update();
@@ -70,7 +70,7 @@ public:
         Mon->PatchResponseTime.Update();
     }
 
-    void Handle(NMon::TEvHttpInfo::TPtr &ev) { 
+    void Handle(NMon::TEvHttpInfo::TPtr &ev) {
         TStringStream str;
 
         HTML(str) {
@@ -81,18 +81,18 @@ public:
             }
         }
 
-        Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str())); 
+        Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Actor state functions
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    STATEFN(StateOnline) { 
+    STATEFN(StateOnline) {
         switch (ev->GetTypeRewrite()) {
-            cFunc(NActors::TEvents::TSystem::Poison, PassAway); 
-            hFunc(NMon::TEvHttpInfo, Handle); 
-            cFunc(TEvents::TSystem::Wakeup, HandleWakeup); 
+            cFunc(NActors::TEvents::TSystem::Poison, PassAway);
+            hFunc(NMon::TEvHttpInfo, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
         default:
             break;
         }

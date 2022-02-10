@@ -21,8 +21,8 @@ struct TEvKeyValue {
         EvCollect,
         EvEraseCollect,
         EvPeriodicRefresh,
-        EvReportWriteLatency, 
-        EvUpdateWeights, 
+        EvReportWriteLatency,
+        EvUpdateWeights,
 
         EvRead = EvRequest + 16,
         EvReadRange,
@@ -116,12 +116,12 @@ struct TEvKeyValue {
     };
 
     struct TEvRequest : public TEventPB<TEvRequest,
-            NKikimrClient::TKeyValueRequest, EvRequest> { 
+            NKikimrClient::TKeyValueRequest, EvRequest> {
         TEvRequest() { }
     };
 
     struct TEvResponse : public TEventPB<TEvResponse,
-            NKikimrClient::TResponse, EvResponse> { 
+            NKikimrClient::TResponse, EvResponse> {
         TEvResponse() { }
     };
 

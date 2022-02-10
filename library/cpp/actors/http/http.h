@@ -62,7 +62,7 @@ struct TCookies {
 };
 
 struct TCookiesBuilder : TCookies {
-    TDeque<std::pair<TString, TString>> Data; 
+    TDeque<std::pair<TString, TString>> Data;
 
     TCookiesBuilder();
     void Set(TStringBuf name, TStringBuf data);

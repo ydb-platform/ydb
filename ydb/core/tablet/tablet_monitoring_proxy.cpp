@@ -20,8 +20,8 @@ namespace {
 
 class TForwardingActor : public TActorBootstrapped<TForwardingActor> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
     TForwardingActor(const TTabletMonitoringProxyConfig& config, ui64 targetTablet, bool forceFollower, const TActorId& sender, const TString& query, HTTP_METHOD method)
@@ -124,8 +124,8 @@ private:
 ////////////////////////////////////////////
 class TTabletMonitoringProxyActor : public TActorBootstrapped<TTabletMonitoringProxyActor> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TABLET_MONITORING_PROXY; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TABLET_MONITORING_PROXY;
     }
 
     //

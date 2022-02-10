@@ -14,7 +14,7 @@
 #include <library/cpp/actors/interconnect/interconnect.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
- 
+
 #include <util/folder/dirut.h>
 
 using namespace NKikimr;
@@ -105,7 +105,7 @@ TAllPDisks::TAllPDisks(const TAllPDisksConfiguration &cfg)
         // using filesystem
         TString entryDir;
         if (cfg.Dir.empty()) {
-            TempDir = std::make_shared<TTempDir>(); 
+            TempDir = std::make_shared<TTempDir>();
             entryDir = (*TempDir)();
         } else {
             entryDir = cfg.Dir;
@@ -169,7 +169,7 @@ TOnePDisk &TAllPDisks::Get(ui32 pDiskID) {
 
 void TAllPDisks::EraseDisk(ui32 diskNum, ui64 newGuid) {
     TOnePDisk &inst = PDisks.at(diskNum);
-    inst.PDiskGuid = newGuid; 
+    inst.PDiskGuid = newGuid;
     inst.FormatDisk(true);
 }
 
@@ -238,8 +238,8 @@ TDefaultVDiskSetup::TDefaultVDiskSetup() {
 bool TDefaultVDiskSetup::SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pdisks, ui32 id, ui32 d, ui32 j,
                                ui32 pDiskID, ui32 slotId, bool runRepl, ui64 initOwnerRound) {
     TOnePDisk &pdisk = pdisks->Get(pDiskID);
-    vdisk.ActorID = MakeBlobStorageVDiskID(1, id + 1, 0); 
-    vdisk.VDiskID = TVDiskID(0, 1, 0, d, j); 
+    vdisk.ActorID = MakeBlobStorageVDiskID(1, id + 1, 0);
+    vdisk.VDiskID = TVDiskID(0, 1, 0, d, j);
 
     NKikimr::TVDiskConfig::TBaseInfo baseInfo(vdisk.VDiskID, pdisk.PDiskActorID, pdisk.PDiskGuid,
             pdisk.PDiskID, NKikimr::TPDiskCategory::DEVICE_TYPE_ROT, slotId,
@@ -269,18 +269,18 @@ TConfiguration::TConfiguration(const TAllPDisksConfiguration &pcfg,
 {}
 
 TConfiguration::~TConfiguration() {
-    if (ActorSystem1) { 
-        Shutdown(); 
-    } 
+    if (ActorSystem1) {
+        Shutdown();
+    }
 }
 
 static TProgramShouldContinue KikimrShouldContinue;
 
-void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRepl) { // FIXME: put newPDisks into configuration (see up) 
+void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRepl) { // FIXME: put newPDisks into configuration (see up)
     Counters = TIntrusivePtr<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
 
     TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());
-    TPortManager pm; 
+    TPortManager pm;
     nameserverTable->StaticNodeTable[1] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12001));
     nameserverTable->StaticNodeTable[2] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12002));
 
@@ -301,16 +301,16 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     ui64 initOwnerRound = 1;
     // setup pdisks
     if (newPDisks) {
-        PDisks.reset(new TAllPDisks(PCfg)); 
+        PDisks.reset(new TAllPDisks(PCfg));
     }
     PDisks->ActorSetupCmd(setup1.Get(), setup1->NodeId, Counters);
 
     // setup GroupInfo
-    GroupInfo = new TBlobStorageGroupInfo(Erasure, DisksInDomain, DomainsNum); 
+    GroupInfo = new TBlobStorageGroupInfo(Erasure, DisksInDomain, DomainsNum);
 
     // create vdisks
     initOwnerRound += 100;
-    VDisks.reset(new TAllVDisks(PDisks.get(), DomainsNum, DisksInDomain, vdiskSetup, 
+    VDisks.reset(new TAllVDisks(PDisks.get(), DomainsNum, DisksInDomain, vdiskSetup,
                                 (PCfg.PDisksNum == 1), runRepl, &initOwnerRound));
     VDisks->ActorSetupCmd(setup1.Get(), GroupInfo.Get(), Counters);
 
@@ -330,10 +330,10 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
         NKikimrServices::EServiceKikimr_Name
     );
     TString explanation;
-    //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_SKELETON, explanation); 
-    //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, explanation); 
+    //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_SKELETON, explanation);
+    //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, explanation);
     //logSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_HULLQUERY, explanation);
-    //logSettings->SetLevel(NLog::PRI_ERROR, NKikimrServices::BS_SYNCLOG, explanation); 
+    //logSettings->SetLevel(NLog::PRI_ERROR, NKikimrServices::BS_SYNCLOG, explanation);
     //logSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_SYNCJOB, explanation);
     //logSettings->SetLevel(NLog::PRI_NOTICE, NKikimrServices::BS_SYNCER, explanation);
     //logSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_REPL, explanation);
@@ -370,15 +370,15 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     //////////////////////////////////////////////////////////////////////////////
 
     TIntrusivePtr<NScheme::TTypeRegistry> typeRegistry(new NScheme::TKikimrTypeRegistry());
-    AppData.reset(new NKikimr::TAppData(0, 1, 2, 3, TMap<TString, ui32>(), typeRegistry.Get(), 
+    AppData.reset(new NKikimr::TAppData(0, 1, 2, 3, TMap<TString, ui32>(), typeRegistry.Get(),
                                         nullptr, nullptr, &KikimrShouldContinue));
-    AppData->Counters = Counters; 
-    AppData->Mon = Monitoring.get(); 
+    AppData->Counters = Counters;
+    AppData->Mon = Monitoring.get();
     IoContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();
     AppData->IoContextFactory = IoContext.get();
 
-    ActorSystem1.reset(new TActorSystem(setup1, AppData.get(), logSettings)); 
-    Monitoring->RegisterActorPage(actorsMonPage, "logger", "Logger", false, ActorSystem1.get(), loggerActorId); 
+    ActorSystem1.reset(new TActorSystem(setup1, AppData.get(), logSettings));
+    Monitoring->RegisterActorPage(actorsMonPage, "logger", "Logger", false, ActorSystem1.get(), loggerActorId);
     loggerActor->Log(Now(), NKikimr::NLog::PRI_NOTICE, NActorsServices::TEST, "Actor system created");
 
     ActorSystem1->Start();
@@ -388,7 +388,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
 
 void TConfiguration::Shutdown() {
     ActorSystem1->Stop();
-    ActorSystem1.reset(); 
+    ActorSystem1.reset();
 }
 
 
@@ -406,9 +406,9 @@ class TDbInitWaitActor : public TActorBootstrapped<TDbInitWaitActor> {
         for (ui32 i = 0; i < Conf->VDisks->GetSize(); ++i) {
             TAllVDisks::TVDiskInstance &vdisk = Conf->VDisks->Get(i);
             if (vdisk.Initialized) {
-                auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdisk.VDiskID, TInstant::Max(), 
-                    NKikimrBlobStorage::EGetHandleClass::FastRead, TEvBlobStorage::TEvVGet::EFlags::NotifyIfNotReady, {}, {id}); 
-                ctx.Send(vdisk.ActorID, req.release()); 
+                auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdisk.VDiskID, TInstant::Max(),
+                    NKikimrBlobStorage::EGetHandleClass::FastRead, TEvBlobStorage::TEvVGet::EFlags::NotifyIfNotReady, {}, {id});
+                ctx.Send(vdisk.ActorID, req.release());
                 ++Count;
             }
         }

@@ -11,11 +11,11 @@ namespace NMonitoring {
 }
 
 namespace NKikimr {
- 
-namespace NGRpcProxy { 
-    class IRequestContext; 
-} // NGRpcProxy 
- 
+
+namespace NGRpcProxy {
+    class IRequestContext;
+} // NGRpcProxy
+
 namespace NMsgBusProxy {
 
 class IMessageWatcher {
@@ -37,57 +37,57 @@ protected:
     virtual NBus::TBusKey GetMessageId() = 0;
 };
 
-class TBusMessageContext; 
- 
-class TMessageBusSessionIdentHolder { 
-    class TImpl; 
-    THolder<TImpl> Impl; 
- 
-    class TImplMessageBus; 
-    class TImplGRpc; 
- 
-    // to create session 
-    friend class TBusMessageContext; 
- 
-protected: 
-    TMessageBusSessionIdentHolder(); 
-    void InitSession(TBusMessageContext &msg); 
-    ui64 GetTotalTimeout() const; 
- 
-public: 
-    TMessageBusSessionIdentHolder(TBusMessageContext &msg); 
-    ~TMessageBusSessionIdentHolder(); 
-    void SendReply(NBus::TBusMessage *resp); 
-    void SendReplyMove(NBus::TBusMessageAutoPtr resp); 
- 
-    template <typename U /* <: TBusMessage */> 
-    void SendReplyAutoPtr(TAutoPtr<U>& resp) { SendReplyMove(resp); } 
-}; 
- 
-class TBusMessageContext { 
-    class TImpl; 
-    TIntrusivePtr<TImpl> Impl; 
- 
-    class TImplMessageBus; 
-    class TImplGRpc; 
- 
+class TBusMessageContext;
+
+class TMessageBusSessionIdentHolder {
+    class TImpl;
+    THolder<TImpl> Impl;
+
+    class TImplMessageBus;
+    class TImplGRpc;
+
+    // to create session
+    friend class TBusMessageContext;
+
+protected:
+    TMessageBusSessionIdentHolder();
+    void InitSession(TBusMessageContext &msg);
+    ui64 GetTotalTimeout() const;
+
 public:
-    TBusMessageContext(); 
-    TBusMessageContext(const TBusMessageContext& other); 
+    TMessageBusSessionIdentHolder(TBusMessageContext &msg);
+    ~TMessageBusSessionIdentHolder();
+    void SendReply(NBus::TBusMessage *resp);
+    void SendReplyMove(NBus::TBusMessageAutoPtr resp);
+
+    template <typename U /* <: TBusMessage */>
+    void SendReplyAutoPtr(TAutoPtr<U>& resp) { SendReplyMove(resp); }
+};
+
+class TBusMessageContext {
+    class TImpl;
+    TIntrusivePtr<TImpl> Impl;
+
+    class TImplMessageBus;
+    class TImplGRpc;
+
+public:
+    TBusMessageContext();
+    TBusMessageContext(const TBusMessageContext& other);
     TBusMessageContext(NBus::TOnMessageContext &messageContext, IMessageWatcher *messageWatcher = nullptr);
-    TBusMessageContext(NGRpcProxy::IRequestContext *requestContext, int type); 
+    TBusMessageContext(NGRpcProxy::IRequestContext *requestContext, int type);
     ~TBusMessageContext();
 
-    TBusMessageContext& operator =(TBusMessageContext other); 
- 
-    NBus::TBusMessage* GetMessage(); 
-    NBus::TBusMessage* ReleaseMessage(); 
-    void SendReplyMove(NBus::TBusMessageAutoPtr response); 
-    void Swap(TBusMessageContext& msg); 
- 
-private: 
-    friend class TMessageBusSessionIdentHolder; 
-    THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder(); 
+    TBusMessageContext& operator =(TBusMessageContext other);
+
+    NBus::TBusMessage* GetMessage();
+    NBus::TBusMessage* ReleaseMessage();
+    void SendReplyMove(NBus::TBusMessageAutoPtr response);
+    void Swap(TBusMessageContext& msg);
+
+private:
+    friend class TMessageBusSessionIdentHolder;
+    THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder();
 };
 
 struct TEvBusProxy {
@@ -293,11 +293,11 @@ IActor* CreateMessageBusPersQueue(TBusMessageContext &msg);
 IActor* CreateMessageBusChooseProxy(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletStateRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletKillRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusSchemeOperationStatus(TBusMessageContext &msg); 
+IActor* CreateMessageBusSchemeOperationStatus(TBusMessageContext &msg);
 IActor* CreateMessageBusBlobStorageLoadRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusBlobStorageGetRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusHiveLookupTablet(TBusMessageContext &msg);
-IActor* CreateMessageBusBlobStorageConfig(TBusMessageContext &msg); 
+IActor* CreateMessageBusBlobStorageConfig(TBusMessageContext &msg);
 IActor* CreateMessageBusDrainNode(TBusMessageContext &msg);
 IActor* CreateMessageBusFillNode(TBusMessageContext &msg);
 IActor* CreateMessageBusResolveNode(TBusMessageContext &msg);
@@ -306,9 +306,9 @@ IActor* CreateMessageBusCmsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSqsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusWhoAmI(TBusMessageContext &msg);
 IActor* CreateMessageBusS3ListingRequest(TBusMessageContext& msg);
-IActor* CreateMessageBusInterconnectDebug(TBusMessageContext& msg); 
+IActor* CreateMessageBusInterconnectDebug(TBusMessageContext& msg);
 IActor* CreateMessageBusConsoleRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusTestShardControl(TBusMessageContext &msg); 
+IActor* CreateMessageBusTestShardControl(TBusMessageContext &msg);
 
 TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result);
 

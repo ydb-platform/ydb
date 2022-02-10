@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
 #include <ydb/core/blobstorage/vdisk/handoff/handoff_delegate.h>
@@ -46,9 +46,9 @@ namespace NKikimr {
             Y_VERIFY(LsnMngr && PDiskCtx && LevelIndex);
         }
 
-        void CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg) { 
+        void CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg) {
             if (LevelIndex)
-                ctx.Send(LevelIndex->LIActor, msg.release()); 
+                ctx.Send(LevelIndex->LIActor, msg.release());
         }
 
         void SetFreeUpToLsn(ui64 freeUpToLsn) {
@@ -83,13 +83,13 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     void CompactFreshSegment(
             TIntrusivePtr<THullDs> &hullDs,
-            std::shared_ptr<TLevelIndexRunTimeCtx<TKey, TMemRec>> &rtCtx, 
+            std::shared_ptr<TLevelIndexRunTimeCtx<TKey, TMemRec>> &rtCtx,
             const TActorContext &ctx);
 
     template <class TKey, class TMemRec>
     bool CompactFreshSegmentIfRequired(
             TIntrusivePtr<THullDs> &hullDs,
-            std::shared_ptr<TLevelIndexRunTimeCtx<TKey, TMemRec>> &rtCtx, 
+            std::shared_ptr<TLevelIndexRunTimeCtx<TKey, TMemRec>> &rtCtx,
             const TActorContext &ctx)
     {
         ui64 yardFreeUpToLsn = rtCtx->GetFreeUpToLsn();
@@ -106,25 +106,25 @@ namespace NKikimr {
     NActors::IActor* CreateLogoBlobsActor(
             TIntrusivePtr<TVDiskConfig> config,
             TIntrusivePtr<THullDs> hullDs,
-            std::shared_ptr<THullLogCtx> hullLogCtx, 
+            std::shared_ptr<THullLogCtx> hullLogCtx,
             TActorId loggerId,
-            std::shared_ptr<TLevelIndexRunTimeCtx<TKeyLogoBlob, TMemRecLogoBlob>> rtCtx, 
-            std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep); 
+            std::shared_ptr<TLevelIndexRunTimeCtx<TKeyLogoBlob, TMemRecLogoBlob>> rtCtx,
+            std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep);
 
     NActors::IActor* CreateBlocksActor(
             TIntrusivePtr<TVDiskConfig> config,
             TIntrusivePtr<THullDs> hullDs,
-            std::shared_ptr<THullLogCtx> hullLogCtx, 
+            std::shared_ptr<THullLogCtx> hullLogCtx,
             TActorId loggerId,
-            std::shared_ptr<TLevelIndexRunTimeCtx<TKeyBlock, TMemRecBlock>> rtCtx, 
-            std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep); 
+            std::shared_ptr<TLevelIndexRunTimeCtx<TKeyBlock, TMemRecBlock>> rtCtx,
+            std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep);
 
     NActors::IActor* CreateBarriersActor(
             TIntrusivePtr<TVDiskConfig> config,
             TIntrusivePtr<THullDs> hullDs,
-            std::shared_ptr<THullLogCtx> hullLogCtx, 
+            std::shared_ptr<THullLogCtx> hullLogCtx,
             TActorId loggerId,
-            std::shared_ptr<TLevelIndexRunTimeCtx<TKeyBarrier, TMemRecBarrier>> rtCtx, 
-            std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep); 
- 
+            std::shared_ptr<TLevelIndexRunTimeCtx<TKeyBarrier, TMemRecBarrier>> rtCtx,
+            std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep);
+
 } // NKikimr

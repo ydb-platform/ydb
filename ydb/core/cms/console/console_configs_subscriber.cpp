@@ -133,7 +133,7 @@ public:
     }
 
     void Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev, const TActorContext &ctx) {
-        NActors::TActivationContext::Send(ev->Forward(OwnerId)); 
+        NActors::TActivationContext::Send(ev->Forward(OwnerId));
 
         Generation = 0;
         Die(ctx);

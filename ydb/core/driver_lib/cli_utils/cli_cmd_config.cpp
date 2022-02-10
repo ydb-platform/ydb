@@ -10,7 +10,7 @@ namespace NDriverClient {
             opts.AddHelpOption('h');
 
             opts.AddLongOption('s', "server", "server address to connect")
-                    .RequiredArgument("ADDR").StoreResult(&Address); 
+                    .RequiredArgument("ADDR").StoreResult(&Address);
 
             opts.SetFreeArgTitle(0, "mbus", "- use to override message bus client default settings");
             opts.SetFreeArgsMin(0);
@@ -39,20 +39,20 @@ namespace NDriverClient {
                                 endpoint.Address,
                                 MsgBusClientConfig.Ip,
                                 MsgBusClientConfig.Port);
-                } 
-                SetMsgBusDefaults(MsgBusClientConfig.BusSessionConfig, MsgBusClientConfig.BusQueueConfig); 
-                if ((res.GetFreeArgCount() > 0) && (res.GetFreeArgs().at(0) == "mbus")) { 
-                    size_t freeArgsPos = res.GetFreeArgsPos(); 
-                    argc -= freeArgsPos; 
-                    argv += freeArgsPos; 
-                    NLastGetopt::TOpts msgBusOpts = NLastGetopt::TOpts::Default(); 
-                    msgBusOpts.AddHelpOption('h'); 
-                    MsgBusClientConfig.ConfigureLastGetopt(msgBusOpts); 
-                    NLastGetopt::TOptsParseResult mbusRes(&msgBusOpts, argc, argv); 
-                    Y_UNUSED(mbusRes); 
-                } 
- 
-                ClientConfig = MsgBusClientConfig; 
+                }
+                SetMsgBusDefaults(MsgBusClientConfig.BusSessionConfig, MsgBusClientConfig.BusQueueConfig);
+                if ((res.GetFreeArgCount() > 0) && (res.GetFreeArgs().at(0) == "mbus")) {
+                    size_t freeArgsPos = res.GetFreeArgsPos();
+                    argc -= freeArgsPos;
+                    argv += freeArgsPos;
+                    NLastGetopt::TOpts msgBusOpts = NLastGetopt::TOpts::Default();
+                    msgBusOpts.AddHelpOption('h');
+                    MsgBusClientConfig.ConfigureLastGetopt(msgBusOpts);
+                    NLastGetopt::TOptsParseResult mbusRes(&msgBusOpts, argc, argv);
+                    Y_UNUSED(mbusRes);
+                }
+
+                ClientConfig = MsgBusClientConfig;
                 break;
             }
         }

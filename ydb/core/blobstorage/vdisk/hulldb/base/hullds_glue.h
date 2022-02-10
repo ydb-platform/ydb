@@ -57,22 +57,22 @@ namespace NKikimr {
             void Output(IOutputStream &str) const {
                 str << "[" << (IsCreatedByRepl() ? "REPL" : "COMP") << " CTime# "<< CTime << "]";
             }
- 
-            friend bool operator ==(const TInfo& x, const TInfo& y) { 
-                return x.FirstLsn == y.FirstLsn && 
-                    x.LastLsn == y.LastLsn && 
-                    x.InplaceDataTotalSize == y.InplaceDataTotalSize && 
-                    x.HugeDataTotalSize == y.HugeDataTotalSize && 
-                    x.IdxTotalSize == y.IdxTotalSize && 
-                    x.Chunks == y.Chunks && 
-                    x.IndexParts == y.IndexParts && 
-                    x.Items == y.Items && 
-                    x.ItemsWithInplacedData == y.ItemsWithInplacedData && 
-                    x.ItemsWithHugeData == y.ItemsWithHugeData && 
-                    x.OutboundItems == y.OutboundItems && 
-                    x.Flags == y.Flags && 
-                    x.CTime == y.CTime; 
-            } 
+
+            friend bool operator ==(const TInfo& x, const TInfo& y) {
+                return x.FirstLsn == y.FirstLsn &&
+                    x.LastLsn == y.LastLsn &&
+                    x.InplaceDataTotalSize == y.InplaceDataTotalSize &&
+                    x.HugeDataTotalSize == y.HugeDataTotalSize &&
+                    x.IdxTotalSize == y.IdxTotalSize &&
+                    x.Chunks == y.Chunks &&
+                    x.IndexParts == y.IndexParts &&
+                    x.Items == y.Items &&
+                    x.ItemsWithInplacedData == y.ItemsWithInplacedData &&
+                    x.ItemsWithHugeData == y.ItemsWithHugeData &&
+                    x.OutboundItems == y.OutboundItems &&
+                    x.Flags == y.Flags &&
+                    x.CTime == y.CTime;
+            }
         };
 
         ui32 MagicNumber;
@@ -88,13 +88,13 @@ namespace NKikimr {
         {
             Y_VERIFY_DEBUG(PrevPart.Empty());
         }
- 
-        friend bool operator ==(const TIdxDiskPlaceHolder& x, const TIdxDiskPlaceHolder& y) { 
-            return x.MagicNumber == y.MagicNumber && 
-                x.PrevPart == y.PrevPart && 
-                x.SstId == y.SstId && 
-                x.Info == y.Info; 
-        } 
+
+        friend bool operator ==(const TIdxDiskPlaceHolder& x, const TIdxDiskPlaceHolder& y) {
+            return x.MagicNumber == y.MagicNumber &&
+                x.PrevPart == y.PrevPart &&
+                x.SstId == y.SstId &&
+                x.Info == y.Info;
+        }
     };
 
     /////////////////////////////////////////////////////////////////////////
@@ -110,10 +110,10 @@ namespace NKikimr {
         TIdxDiskLinker(const TDiskPart &part)
             : PrevPart(part)
         {}
- 
-        friend bool operator ==(const TIdxDiskLinker& x, const TIdxDiskLinker& y) { 
-            return x.PrevPart == y.PrevPart; 
-        } 
+
+        friend bool operator ==(const TIdxDiskLinker& x, const TIdxDiskLinker& y) {
+            return x.PrevPart == y.PrevPart;
+        }
     };
 
 } // NKikimr

@@ -137,8 +137,8 @@ public:
         TxProcessor->Clear();
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::CMS_SERVICE; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::CMS_SERVICE;
     }
 
     void Execute(ITransaction *transaction, const TActorContext &ctx) override

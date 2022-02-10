@@ -18,8 +18,8 @@ class TJsonConfig : public TActorBootstrapped<TJsonConfig> {
     NMon::TEvHttpInfo::TPtr Event;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::VIEWER_HANDLER; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
     TJsonConfig(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)

@@ -114,7 +114,7 @@ public:
     void Die(const NActors::TActorContext& ctx) override;
 
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_PARTITION; } 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_PARTITION; }
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {

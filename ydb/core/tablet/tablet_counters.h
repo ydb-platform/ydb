@@ -142,17 +142,17 @@ class TTabletPercentileCounter : TNonCopyable {
     friend class TCountersArray<TTabletPercentileCounter>;
 public:
     //
-    struct TRangeDef { 
+    struct TRangeDef {
         ui64 RangeVal;
         const char* RangeName;
- 
-        friend bool operator <(const TRangeDef& x, const TRangeDef& y) { return x.RangeVal < y.RangeVal; } 
-        friend bool operator <(const ui64 x, const TRangeDef& y) { return x < y.RangeVal; } 
+
+        friend bool operator <(const TRangeDef& x, const TRangeDef& y) { return x.RangeVal < y.RangeVal; }
+        friend bool operator <(const ui64 x, const TRangeDef& y) { return x < y.RangeVal; }
     };
 
     template <ui32 rangeCount>
-    void Initialize(const TRangeDef(&ranges)[rangeCount], bool integral) { 
-        Initialize(rangeCount, ranges, integral); 
+    void Initialize(const TRangeDef(&ranges)[rangeCount], bool integral) {
+        Initialize(rangeCount, ranges, integral);
     }
 
     TTabletPercentileCounter& IncrementFor(ui64 what) {
@@ -194,10 +194,10 @@ public:
         return TVector<TRangeDef>(Ranges, Ranges + RangeCount);
     }
 
-    bool GetIntegral() const { 
-        return Integral; 
-    } 
- 
+    bool GetIntegral() const {
+        return Integral;
+    }
+
     void PopulateFrom(const TTabletPercentileCounter& rp) {
         Populate(rp);
     }
@@ -209,9 +209,9 @@ private:
     void AdjustToBaseLine(const TTabletPercentileCounter& baseLine) {
         //
         Y_VERIFY_DEBUG(RangeCount == baseLine.RangeCount);
-        if (Integral) { 
-            return; 
-        } 
+        if (Integral) {
+            return;
+        }
 
         for (ui32 i = 0; i < RangeCount; ++i) {
             Y_VERIFY_DEBUG(Values[i] >= baseLine.Values[i]);
@@ -237,7 +237,7 @@ private:
     }
 
 public:
-    void Initialize(ui32 rangeCount, const TRangeDef* ranges, bool integral) { 
+    void Initialize(ui32 rangeCount, const TRangeDef* ranges, bool integral) {
         Y_VERIFY_DEBUG(!Ranges);
         Y_VERIFY_DEBUG(!Values);
         Y_VERIFY_DEBUG(rangeCount > 0);
@@ -245,7 +245,7 @@ public:
 
         RangeCount = rangeCount;
         Ranges = ranges;
-        Integral = integral; 
+        Integral = integral;
 
         Y_VERIFY_DEBUG(IsSorted());
 
@@ -254,18 +254,18 @@ public:
 
     void Clear() {
         if (IsInitialized()) {
-            std::fill(&Values[0], &Values[RangeCount], 0); 
+            std::fill(&Values[0], &Values[RangeCount], 0);
         }
     }
 
 private:
     //
-    ui32 FindSlot(ui64 what) const { 
-        return Max<ssize_t>(0, std::upper_bound(Ranges, Ranges + RangeCount, what) - Ranges - 1); 
+    ui32 FindSlot(ui64 what) const {
+        return Max<ssize_t>(0, std::upper_bound(Ranges, Ranges + RangeCount, what) - Ranges - 1);
     }
- 
-    bool IsSorted() const { 
-        return std::is_sorted(Ranges, Ranges + RangeCount); 
+
+    bool IsSorted() const {
+        return std::is_sorted(Ranges, Ranges + RangeCount);
     }
 
     bool IsInitialized() const {
@@ -284,9 +284,9 @@ private:
     }
 
     //
-    ui32 RangeCount = 0; 
-    const TRangeDef* Ranges = nullptr; 
-    bool Integral = false; 
+    ui32 RangeCount = 0;
+    const TRangeDef* Ranges = nullptr;
+    bool Integral = false;
 
     TArrayHolder<ui64> Values;
 };

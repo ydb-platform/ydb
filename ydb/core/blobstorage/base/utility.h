@@ -1,12 +1,12 @@
-#pragma once 
- 
+#pragma once
+
 #include "defs.h"
 #include <library/cpp/actors/helpers/activeactors.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
     inline TString ToStringLocalTimeUpToSeconds(const TInstant &time) {
         return time.GetValue() ? time.ToStringLocalUpToSeconds() : "0";
     }
@@ -15,42 +15,42 @@ namespace NKikimr {
     // RunInBatchPool
     ////////////////////////////////////////////////////////////////////////////
     inline TActorId RunInBatchPool(const TActorContext &ctx, IActor *actor) {
-        ui32 poolId = AppData(ctx)->BatchPoolId; 
+        ui32 poolId = AppData(ctx)->BatchPoolId;
         TActorId actorID = ctx.Register(actor, TMailboxType::HTSwap, poolId);
-        return actorID; 
-    } 
- 
-    template<typename T, typename A> 
+        return actorID;
+    }
+
+    template<typename T, typename A>
     inline void AppendToVector(TVector<T, A>& to, TVector<T, A>&& from) {
-        if (to) { 
-            to.insert(to.end(), from.begin(), from.end()); 
-        } else { 
-            to.swap(from); 
-        } 
-    } 
+        if (to) {
+            to.insert(to.end(), from.begin(), from.end());
+        } else {
+            to.swap(from);
+        }
+    }
 
-    template<typename T, typename A> 
+    template<typename T, typename A>
     inline void AppendToVector(TVector<T, A>& to, const TVector<T, A>& from) {
-        to.insert(to.end(), from.begin(), from.end()); 
-    } 
- 
+        to.insert(to.end(), from.begin(), from.end());
+    }
 
-    template<typename TContainer> 
+
+    template<typename TContainer>
     inline TString FormatList(const TContainer& cont) {
-        TStringStream str; 
-        str << "["; 
-        bool first = true; 
-        for (const auto& item : cont) { 
-            if (first) { 
-                first = false; 
-            } else { 
-                str << " "; 
-            } 
-            str << item; 
-        } 
-        str << "]"; 
-        return str.Str(); 
-    } 
+        TStringStream str;
+        str << "[";
+        bool first = true;
+        for (const auto& item : cont) {
+            if (first) {
+                first = false;
+            } else {
+                str << " ";
+            }
+            str << item;
+        }
+        str << "]";
+        return str.Str();
+    }
 
     template<typename TContainer>
     inline void FormatList(IOutputStream &str, const TContainer& cont) {
@@ -147,5 +147,5 @@ namespace NKikimr {
         TActorId NotifyId;
     };
 
-} // NKikimr 
+} // NKikimr
 

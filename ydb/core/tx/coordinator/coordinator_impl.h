@@ -501,8 +501,8 @@ private:
     void MaybeFlushAcquireReadStep(const TActorContext &ctx);
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TX_COORDINATOR_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TX_COORDINATOR_ACTOR;
     }
 
     TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet);

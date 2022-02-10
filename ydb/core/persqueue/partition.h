@@ -82,16 +82,16 @@ private:
     void HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
 
     void HandleGetDiskStatus(const NKikimrClient::TResponse& res, const TActorContext& ctx);
-    void HandleInfoRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx); 
-    void HandleDataRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx); 
+    void HandleInfoRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx);
+    void HandleDataRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx);
     void HandleMetaRead(const NKikimrClient::TKeyValueResponse::TReadResult& response, const TActorContext& ctx);
 
     //forms DataKeysBody and other partition's info
     //ctx here only for logging
-    void FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx); 
+    void FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx);
     //will form head and request data keys from head or finish initialization
     void FormHeadAndProceed(const TActorContext& ctx);
-    void HandleDataRead(const NKikimrClient::TResponse& range, const TActorContext& ctx); 
+    void HandleDataRead(const NKikimrClient::TResponse& range, const TActorContext& ctx);
     void InitComplete(const TActorContext& ctx);
 
 
@@ -176,7 +176,7 @@ private:
     ui64 GetSizeLag(i64 offset);
 
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
-    void HandleSetOffsetResponse(NKikimrClient::TResponse& response, const TActorContext& ctx); 
+    void HandleSetOffsetResponse(NKikimrClient::TResponse& response, const TActorContext& ctx);
     void HandleWriteResponse(const TActorContext& ctx);
     void Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx);
 
@@ -214,12 +214,12 @@ private:
     void SetupStreamCounters(const TActorContext& ctx);
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
     }
 
     TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
-               const TString& topicName, const TString& topicPath, const bool localDC, TString dcId, 
+               const TString& topicName, const TString& topicPath, const bool localDC, TString dcId,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
                const TActorContext& ctx, bool newPartition = false);
 
@@ -418,7 +418,7 @@ private:
     TString TopicName;
     TString TopicPath;
     bool LocalDC;
-    TString DCId; 
+    TString DCId;
 
     ui32 MaxBlobSize;
     const ui32 TotalLevels = 4;

@@ -12,8 +12,8 @@
 
 namespace NKikimr {
 
-static constexpr ui32 BlobProtobufHeaderMaxSize = 80; 
- 
+static constexpr ui32 BlobProtobufHeaderMaxSize = 80;
+
 struct TBloblStorageErasureParameters;
 
 struct TBlobStorageGroupType : public TErasureType {
@@ -132,18 +132,18 @@ struct TBlobStorageGroupType : public TErasureType {
         }
     };
 
-    ui32 BlobSubgroupSize() const; // _4_+_2_+_1_ 
+    ui32 BlobSubgroupSize() const; // _4_+_2_+_1_
     ui32 Handoff() const; // 4 + 2 + _1_
     bool IsHandoffInSubgroup(ui32 idxInSubgroup) const; // True for idx of a handoff disk in blob subgoup
 
     bool CorrectLayout(const TPartLayout &layout, TPartPlacement &outCorrection) const;
- 
+
     ui32 GetExpectedVGetReplyProtobufSize(const TLogoBlobID &id) const {
         return (BlobProtobufHeaderMaxSize + PartSize(id)) * TotalPartCount();
-    } 
+    }
 
     ui64 PartSize(const TLogoBlobID &id) const;
-    ui64 MaxPartSize(const TLogoBlobID &id) const; 
+    ui64 MaxPartSize(const TLogoBlobID &id) const;
 };
 
 }

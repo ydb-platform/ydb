@@ -10,7 +10,7 @@ public:
     const TActorId Owner;
     const TActorId Poller;
     TIntrusivePtr<TSocketDescriptor> Socket;
-    NActors::TPollerToken::TPtr PollerToken; 
+    NActors::TPollerToken::TPtr PollerToken;
     THashSet<TActorId> Connections;
     TDeque<THttpIncomingRequestPtr> RecycledRequests;
     TEndpointInfo Endpoint;
@@ -31,8 +31,8 @@ public:
 protected:
     STFUNC(StateListening) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NActors::TEvPollerRegisterResult, Handle); 
-            HFunc(NActors::TEvPollerReady, Handle); 
+            HFunc(NActors::TEvPollerRegisterResult, Handle);
+            HFunc(NActors::TEvPollerReady, Handle);
             HFunc(TEvHttpProxy::TEvHttpConnectionClosed, Handle);
             HFunc(TEvHttpProxy::TEvReportSensors, Handle);
         }
@@ -70,7 +70,7 @@ protected:
             if (err == 0) {
                 LOG_INFO_S(ctx, HttpLog, "Listening on " << bindAddress.ToString());
                 SetNonBlock(Socket->Socket);
-                ctx.Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId())); 
+                ctx.Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 TBase::Become(&TAcceptorActor::StateListening);
                 ctx.Send(event->Sender, new TEvHttpProxy::TEvConfirmListen(bindAddress), 0, event->Cookie);
                 return;
@@ -87,16 +87,16 @@ protected:
         }
     }
 
-    void Handle(NActors::TEvPollerRegisterResult::TPtr ev, const NActors::TActorContext& /*ctx*/) { 
-        PollerToken = std::move(ev->Get()->PollerToken); 
-        PollerToken->Request(true, false); // request read polling 
-    } 
- 
-    void Handle(NActors::TEvPollerReady::TPtr, const NActors::TActorContext& ctx) { 
+    void Handle(NActors::TEvPollerRegisterResult::TPtr ev, const NActors::TActorContext& /*ctx*/) {
+        PollerToken = std::move(ev->Get()->PollerToken);
+        PollerToken->Request(true, false); // request read polling
+    }
+
+    void Handle(NActors::TEvPollerReady::TPtr, const NActors::TActorContext& ctx) {
         TIntrusivePtr<TSocketDescriptor> socket = new TSocketDescriptor();
         SocketAddressType addr;
-        int err; 
-        while ((err = Socket->Socket.Accept(&socket->Socket, &addr)) == 0) { 
+        int err;
+        while ((err = Socket->Socket.Accept(&socket->Socket, &addr)) == 0) {
             NActors::IActor* connectionSocket = nullptr;
             if (RecycledRequests.empty()) {
                 connectionSocket = CreateIncomingConnectionActor(Endpoint, socket, addr);
@@ -105,14 +105,14 @@ protected:
                 RecycledRequests.pop_front();
             }
             NActors::TActorId connectionId = ctx.Register(connectionSocket);
-            ctx.Send(Poller, new NActors::TEvPollerRegister(socket, connectionId, connectionId)); 
+            ctx.Send(Poller, new NActors::TEvPollerRegister(socket, connectionId, connectionId));
             Connections.emplace(connectionId);
             socket = new TSocketDescriptor();
         }
-        if (err == -EAGAIN || err == -EWOULDBLOCK) { // request poller for further connection polling 
-            Y_VERIFY(PollerToken); 
-            PollerToken->Request(true, false); 
-        } 
+        if (err == -EAGAIN || err == -EWOULDBLOCK) { // request poller for further connection polling
+            Y_VERIFY(PollerToken);
+            PollerToken->Request(true, false);
+        }
     }
 
     void Handle(TEvHttpProxy::TEvHttpConnectionClosed::TPtr event, const NActors::TActorContext&) {

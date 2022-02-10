@@ -197,8 +197,8 @@ class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
         }
     }
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::BOARD_REPLICA_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::BOARD_REPLICA_ACTOR;
     }
 
     TBoardReplicaActor()

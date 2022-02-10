@@ -130,8 +130,8 @@ namespace NActors {
                     // priority <= sampling level ==> apply sampling
                     ui32 samplingRate = settings.Raw.X.SamplingRate;
                     if (samplingRate) {
-                        ui32 samplingValue = sampleBy ? MurmurHash<ui32>((const char*)&sampleBy, sizeof(sampleBy)) 
-                            : samplingRate != 1 ? RandomNumber<ui32>() : 0; 
+                        ui32 samplingValue = sampleBy ? MurmurHash<ui32>((const char*)&sampleBy, sizeof(sampleBy))
+                            : samplingRate != 1 ? RandomNumber<ui32>() : 0;
                         return (samplingValue % samplingRate == 0);
                     } else {
                         // sampling rate not set ==> do not log

@@ -52,13 +52,13 @@ bool MergeFromStringNoSizeLimit(TProto& proto, TArrayRef<const char> str) {
     return proto.MergeFromCodedStream(&input) && input.ConsumedEntireMessage();
 }
 
-inline TString SingleLineProto(const NProtoBuf::Message& message) { 
-    NProtoBuf::TextFormat::Printer p; 
-    p.SetSingleLineMode(true); 
-    TString res; 
-    const bool success = p.PrintToString(message, &res); 
-    Y_VERIFY(success); 
-    return res; 
+inline TString SingleLineProto(const NProtoBuf::Message& message) {
+    NProtoBuf::TextFormat::Printer p;
+    p.SetSingleLineMode(true);
+    TString res;
+    const bool success = p.PrintToString(message, &res);
+    Y_VERIFY(success);
+    return res;
 }
- 
-} 
+
+}

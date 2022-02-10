@@ -42,8 +42,8 @@ void TNodeWarden::Handle(NMon::TEvHttpInfo::TPtr &ev) {
 void TNodeWarden::RenderJsonGroupInfo(IOutputStream& out, const std::set<ui32>& groupIds) {
     std::set<ui32> allGroups;
     if (groupIds.empty()) {
-        allGroups.insert(EjectedGroups.begin(), EjectedGroups.end()); 
-        for (const auto& [groupId, _] : Groups) { 
+        allGroups.insert(EjectedGroups.begin(), EjectedGroups.end());
+        for (const auto& [groupId, _] : Groups) {
             allGroups.emplace(groupId);
         }
     }
@@ -51,27 +51,27 @@ void TNodeWarden::RenderJsonGroupInfo(IOutputStream& out, const std::set<ui32>& 
     NJson::TJsonArray array;
     for (auto& groupId : (!groupIds.empty() ? groupIds : allGroups)) {
         NJson::TJsonValue groupInfo;
- 
-        groupInfo["GroupId"] = groupId; 
- 
-        if (EjectedGroups.count(groupId)) { 
-            groupInfo["Status"] = "ejected"; 
-        } else { 
-            TGroupRecord& group = Groups[groupId]; 
-            groupInfo["Status"] = group.ProxyRunning ? "started" : "stopped"; 
 
-            if (const auto& info = group.Info) { 
-                groupInfo["Generation"] = info->GroupGeneration; 
-                groupInfo["ErasureType"] = info->Type.ToString(); 
-                groupInfo["EncryptionMode"] = TStringBuilder() << info->GetEncryptionMode(); 
-                groupInfo["LifeCyclePhase"] = TStringBuilder() << info->GetLifeCyclePhase(); 
+        groupInfo["GroupId"] = groupId;
 
-                NJson::TJsonArray vdisks; 
-                for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) { 
-                    vdisks.AppendValue(info->GetVDiskId(i).ToString()); 
-                } 
-                groupInfo["VDisks"] = std::move(vdisks); 
-            } 
+        if (EjectedGroups.count(groupId)) {
+            groupInfo["Status"] = "ejected";
+        } else {
+            TGroupRecord& group = Groups[groupId];
+            groupInfo["Status"] = group.ProxyRunning ? "started" : "stopped";
+
+            if (const auto& info = group.Info) {
+                groupInfo["Generation"] = info->GroupGeneration;
+                groupInfo["ErasureType"] = info->Type.ToString();
+                groupInfo["EncryptionMode"] = TStringBuilder() << info->GetEncryptionMode();
+                groupInfo["LifeCyclePhase"] = TStringBuilder() << info->GetLifeCyclePhase();
+
+                NJson::TJsonArray vdisks;
+                for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+                    vdisks.AppendValue(info->GetVDiskId(i).ToString());
+                }
+                groupInfo["VDisks"] = std::move(vdisks);
+            }
         }
 
         array.AppendValue(std::move(groupInfo));
@@ -89,7 +89,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             </style>
             )__";
 
-        H2() { out << "NodeWarden on node " << LocalNodeId; } 
+        H2() { out << "NodeWarden on node " << LocalNodeId; }
         RenderLocalDrives(out);
 
         H3() { out << "PDisks"; }
@@ -120,7 +120,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                 TABLER() {
                     TABLEH() { out << "Location (NodeId, PDiskId, VSlotId)"; }
                     TABLEH() { out << "VDiskId"; }
-                    TABLEH() { out << "Running"; } 
+                    TABLEH() { out << "Running"; }
                     TABLEH() { out << "StoragePoolName"; }
                     TABLEH() { out << "DonorMode"; }
                     TABLEH() { out << "CurrentStatus"; }
@@ -131,12 +131,12 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                 for (auto& [key, value] : LocalVDisks) {
                     TABLER() {
                         TABLED() { out << "(" << key.NodeId << "," << key.PDiskId << "," << key.VDiskSlotId << ")"; }
-                        TABLED() { out << value.GetVDiskId(); } 
-                        TABLED() { out << (value.RuntimeData ? "true" : "false"); } 
-                        TABLED() { out << value.Config.GetStoragePoolName(); } 
-                        TABLED() { out << (value.Config.HasDonorMode() ? "true" : "false"); } 
+                        TABLED() { out << value.GetVDiskId(); }
+                        TABLED() { out << (value.RuntimeData ? "true" : "false"); }
+                        TABLED() { out << value.Config.GetStoragePoolName(); }
+                        TABLED() { out << (value.Config.HasDonorMode() ? "true" : "false"); }
                         TABLED() {
-                            out << value.Status; 
+                            out << value.Status;
                         }
                         TABLED() {
                             if (value.ReportedVDiskStatus) {
@@ -218,16 +218,16 @@ void TNodeWarden::RenderDSProxies(IOutputStream& out) {
             out << "</table>";
         };
 
-        ui32 numStarted = 0, numEjected = EjectedGroups.size(); 
-        for (const auto& [groupId, group] : Groups) { 
-            numStarted += group.ProxyRunning; 
-        } 
- 
+        ui32 numStarted = 0, numEjected = EjectedGroups.size();
+        for (const auto& [groupId, group] : Groups) {
+            numStarted += group.ProxyRunning;
+        }
+
         H3() { out << "Started DSProxies"; }
-        createTable(out, "started", numStarted); 
+        createTable(out, "started", numStarted);
 
         H3() { out << "Ejected DSProxies"; }
-        createTable(out, "ejected", numEjected); 
+        createTable(out, "ejected", numEjected);
     }
 }
 

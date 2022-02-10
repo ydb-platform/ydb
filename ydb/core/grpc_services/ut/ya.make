@@ -7,10 +7,10 @@ OWNER(
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND) 
-    SIZE(MEDIUM) 
-ENDIF() 
- 
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    SIZE(MEDIUM)
+ENDIF()
+
 SRCS(
     rpc_calls_ut.cpp
     operation_helpers_ut.cpp

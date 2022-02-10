@@ -22,9 +22,9 @@ private:
     TSchedulerCookieHolder TimeoutTimerCookieHolder;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
-        return NKikimrServices::TActivity::CMS_CONFIGS_PROVIDER; 
+        return NKikimrServices::TActivity::CMS_CONFIGS_PROVIDER;
     }
 
     TTabletConfigSender(TSubscription::TPtr subscription, TActorId ownerId)
@@ -159,9 +159,9 @@ private:
     bool ScheduledRetry;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
-        return NKikimrServices::TActivity::CMS_CONFIGS_PROVIDER; 
+        return NKikimrServices::TActivity::CMS_CONFIGS_PROVIDER;
     }
 
     TServiceConfigSender(TSubscription::TPtr subscription, TActorId ownerId)

@@ -40,7 +40,7 @@ public:
                     continue;
             } else if (onlyMisplaced) {
                 Y_VERIFY(!onlySplit);
-                Y_VERIFY(allocation->Description.DataCenter != ANY_DATA_CENTER); 
+                Y_VERIFY(allocation->Description.DataCenter != ANY_DATA_CENTER);
                 if (!allocation->MisplacedCount)
                     return;
                 if (slot->DataCenter == allocation->Description.DataCenter)

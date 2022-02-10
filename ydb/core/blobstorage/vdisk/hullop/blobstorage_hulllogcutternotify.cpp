@@ -29,13 +29,13 @@ namespace NKikimr {
                         "THullLogCutterNotifier: lsn# %" PRIu64 " PreviousCutLsn# %s",
                         lsn, PreviousCutLsnToString().data()));
 
-            if (lsn != ui64(-1)) { 
+            if (lsn != ui64(-1)) {
                 Y_VERIFY(!PreviousCutLsn || *PreviousCutLsn <= lsn);
                 if (!PreviousCutLsn || PreviousCutLsn < lsn) {
                     ctx.Send(LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::Hull, lsn));
                     PreviousCutLsn = lsn;
                 }
-            } 
+            }
         }
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
@@ -43,14 +43,14 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        STRICT_STFUNC(StateFunc, 
+        STRICT_STFUNC(StateFunc,
             HFunc(TEvents::TEvCompleted, Handle);
-            HFunc(TEvents::TEvPoisonPill, HandlePoison) 
-        ) 
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+        )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_HULL_LOG_CUTTER_NOTIFY; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_HULL_LOG_CUTTER_NOTIFY;
         }
 
         THullLogCutterNotifier(

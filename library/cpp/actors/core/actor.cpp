@@ -8,13 +8,13 @@ namespace NActors {
     TlsActivationContext((TActivationContext*)nullptr);
 
     bool TActorContext::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
-        return Send(new IEventHandle(recipient, SelfID, ev, flags, cookie, nullptr, std::move(traceId))); 
+        return Send(new IEventHandle(recipient, SelfID, ev, flags, cookie, nullptr, std::move(traceId)));
     }
 
-    bool TActorContext::Send(TAutoPtr<IEventHandle> ev) const { 
-        return ExecutorThread.Send(ev); 
-    } 
- 
+    bool TActorContext::Send(TAutoPtr<IEventHandle> ev) const {
+        return ExecutorThread.Send(ev);
+    }
+
     void IActor::Registered(TActorSystem* sys, const TActorId& owner) {
         // fallback to legacy method, do not use it anymore
         if (auto eh = AfterRegister(SelfId(), owner))
@@ -49,18 +49,18 @@ namespace NActors {
         return TActivationContext::Send(new IEventHandle(recipient, *this, ev, flags, cookie, nullptr, std::move(traceId)));
     }
 
-    void TActorIdentity::Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie) const { 
-        return TActivationContext::Schedule(deadline, new IEventHandle(*this, {}, ev), cookie); 
-    } 
- 
-    void TActorIdentity::Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie) const { 
-        return TActivationContext::Schedule(deadline, new IEventHandle(*this, {}, ev), cookie); 
-    } 
- 
-    void TActorIdentity::Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie) const { 
-        return TActivationContext::Schedule(delta, new IEventHandle(*this, {}, ev), cookie); 
-    } 
- 
+    void TActorIdentity::Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie) const {
+        return TActivationContext::Schedule(deadline, new IEventHandle(*this, {}, ev), cookie);
+    }
+
+    void TActorIdentity::Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie) const {
+        return TActivationContext::Schedule(deadline, new IEventHandle(*this, {}, ev), cookie);
+    }
+
+    void TActorIdentity::Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie) const {
+        return TActivationContext::Schedule(delta, new IEventHandle(*this, {}, ev), cookie);
+    }
+
     TActorId TActivationContext::RegisterWithSameMailbox(IActor* actor, TActorId parentId) {
         Y_VERIFY_DEBUG(parentId);
         auto& ctx = *TlsActivationContext;
@@ -135,18 +135,18 @@ namespace NActors {
         return TlsActivationContext->ExecutorThread.ActorSystem->Monotonic();
     }
 
-    TInstant TActorContext::Now() const { 
-        return ExecutorThread.ActorSystem->Timestamp(); 
+    TInstant TActorContext::Now() const {
+        return ExecutorThread.ActorSystem->Timestamp();
     }
 
-    TMonotonic TActorContext::Monotonic() const { 
-        return ExecutorThread.ActorSystem->Monotonic(); 
-    } 
- 
-    NLog::TSettings* TActivationContext::LoggerSettings() const { 
-        return ExecutorThread.ActorSystem->LoggerSettings(); 
-    } 
- 
+    TMonotonic TActorContext::Monotonic() const {
+        return ExecutorThread.ActorSystem->Monotonic();
+    }
+
+    NLog::TSettings* TActivationContext::LoggerSettings() const {
+        return ExecutorThread.ActorSystem->LoggerSettings();
+    }
+
     std::pair<ui32, ui32> TActorContext::CountMailboxEvents(ui32 maxTraverse) const {
         return Mailbox.CountMailboxEvents(SelfID.LocalId(), maxTraverse);
     }

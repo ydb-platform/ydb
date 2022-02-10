@@ -17,15 +17,15 @@ namespace NKikimr {
         TIntrusivePtr<THullCtx> HullCtx;
         TPDiskCtxPtr PDiskCtx;
         NMonGroup::TInterfaceGroup MonGroup;
-        std::atomic<ui64> PDiskReadBytes; 
-        TActorId SkeletonId; 
+        std::atomic<ui64> PDiskReadBytes;
+        TActorId SkeletonId;
 
         TQueryCtx(TIntrusivePtr<THullCtx> hullCtx, TPDiskCtxPtr pdiskCtx, TActorId skeletonId)
             : HullCtx(std::move(hullCtx))
             , PDiskCtx(std::move(pdiskCtx))
             , MonGroup(HullCtx->VCtx->VDiskCounters, "subsystem", "interface")
             , PDiskReadBytes(0)
-            , SkeletonId(skeletonId) 
+            , SkeletonId(skeletonId)
         {}
     };
 
@@ -39,14 +39,14 @@ namespace NKikimr {
     // Handle a TEvVGet query on Hull database snapshot
     //////////////////////////////////////////////////////////////////////////////////////
     IActor *CreateLevelIndexQueryActor(
-                std::shared_ptr<TQueryCtx> &queryCtx, 
+                std::shared_ptr<TQueryCtx> &queryCtx,
                 TReadQueryKeepChecker &&keepChecker,
                 const TActorContext &ctx,
                 THullDsSnap &&fullSnap,
                 const TActorId &parentId,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
-                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result, 
-                TActorId replSchedulerId); 
+                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
+                TActorId replSchedulerId);
 
     //////////////////////////////////////////////////////////////////////////////////////
     // TEvVGet query check
@@ -63,7 +63,7 @@ namespace NKikimr {
                 const TActorId &parentId,
                 TBarriersSnapshot &&barriersSnap,
                 TEvBlobStorage::TEvVGetBarrier::TPtr &ev,
-                std::unique_ptr<TEvBlobStorage::TEvVGetBarrierResult> result); 
+                std::unique_ptr<TEvBlobStorage::TEvVGetBarrierResult> result);
 
     ////////////////////////////////////////////////////////////////////////////
     // Check Barrier Query
@@ -78,14 +78,14 @@ namespace NKikimr {
     class THugeBlobCtx;
     IActor *CreateDbStatActor(
             const TIntrusivePtr<THullCtx> &hullCtx,
-            const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx, 
+            const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
             const TActorContext &ctx,
             THullDsSnap &&fullSnap,
             const TActorId &parentId,
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
-            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result, 
+            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result,
             const IActor& actor);
 
-    IActor *CreateMonStreamActor(THullDsSnap&& fullSnap, TEvBlobStorage::TEvMonStreamQuery::TPtr& ev); 
- 
+    IActor *CreateMonStreamActor(THullDsSnap&& fullSnap, TEvBlobStorage::TEvMonStreamQuery::TPtr& ev);
+
 } // NKikimr

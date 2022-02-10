@@ -3,7 +3,7 @@
 #include "query_statdb.h"
 #include "query_stathuge.h"
 #include "query_stattablet.h"
-#include "query_stream.h" 
+#include "query_stream.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 
 using namespace NKikimrServices;
@@ -12,23 +12,23 @@ namespace NKikimr {
 
     // Extreme Query Declaration
     IActor *CreateLevelIndexExtremeQueryActor(
-                std::shared_ptr<TQueryCtx> &queryCtx, 
+                std::shared_ptr<TQueryCtx> &queryCtx,
                 const TActorId &parentId,
                 TLogoBlobsSnapshot &&logoBlobsSnapshot,
                 TBarriersSnapshot &&barrierSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
-                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result, 
-                TActorId replSchedulerId); 
+                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
+                TActorId replSchedulerId);
 
     // Range Query Declaration
     IActor *CreateLevelIndexRangeQueryActor(
-                std::shared_ptr<TQueryCtx> &queryCtx, 
+                std::shared_ptr<TQueryCtx> &queryCtx,
                 const TActorId &parentId,
                 TLogoBlobsSnapshot &&logoBlobsSnapshot,
                 TBarriersSnapshot &&barrierSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
-                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result, 
-                TActorId replSchedulerId); 
+                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
+                TActorId replSchedulerId);
 
 
     // NOTES
@@ -65,13 +65,13 @@ namespace NKikimr {
             it.Seek(full);
             if (it.Valid() && it.GetCurKey() == full) {
                 const TIngress& ingress = it.GetMemRec().GetIngress();
-                const bool keep = ingress.KeepUnconditionally(TIngress::IngressMode(hullCtx->VCtx->Top->GType)); 
+                const bool keep = ingress.KeepUnconditionally(TIngress::IngressMode(hullCtx->VCtx->Top->GType));
                 TString explanation;
                 if (!suppressBarrierCheck && !keepChecker(full, keep, &explanation)) {
                     LOG_INFO(ctx, NKikimrServices::BS_HULLRECS,
                             VDISKP(hullCtx->VCtx->VDiskLogPrefix,
                                 "Db# LogoBlobs getting blob beyond the barrier id# %s ingress# %s barrier# %s",
-                                id.ToString().data(), ingress.ToString(hullCtx->VCtx->Top.get(), 
+                                id.ToString().data(), ingress.ToString(hullCtx->VCtx->Top.get(),
                                 hullCtx->VCtx->ShortSelfVDisk, id).data(), explanation.data()));
                 }
             }
@@ -79,14 +79,14 @@ namespace NKikimr {
     }
 
     IActor *CreateLevelIndexQueryActor(
-                    std::shared_ptr<TQueryCtx> &queryCtx, 
+                    std::shared_ptr<TQueryCtx> &queryCtx,
                     TReadQueryKeepChecker &&keepChecker,
                     const TActorContext &ctx,
                     THullDsSnap &&fullSnap,
                     const TActorId &parentId,
                     TEvBlobStorage::TEvVGet::TPtr &ev,
-                    std::unique_ptr<TEvBlobStorage::TEvVGetResult> result, 
-                    TActorId replSchedulerId) { 
+                    std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
+                    TActorId replSchedulerId) {
 
         const auto& record = ev->Get()->Record;
         if (queryCtx->HullCtx->BarrierValidation) {
@@ -98,10 +98,10 @@ namespace NKikimr {
             // we pass barriers snap to the query actor when we are doing range read -- we need barriers
             // to ensure that no blobs that are subject to GC are reported to the request origin actor
             return CreateLevelIndexRangeQueryActor(queryCtx, parentId,
-                    std::move(fullSnap.LogoBlobsSnap), std::move(fullSnap.BarriersSnap), ev, std::move(result), replSchedulerId); 
+                    std::move(fullSnap.LogoBlobsSnap), std::move(fullSnap.BarriersSnap), ev, std::move(result), replSchedulerId);
         } else if (record.ExtremeQueriesSize() > 0) {
             return CreateLevelIndexExtremeQueryActor(queryCtx, parentId,
-                    std::move(fullSnap.LogoBlobsSnap), std::move(fullSnap.BarriersSnap), ev, std::move(result), replSchedulerId); 
+                    std::move(fullSnap.LogoBlobsSnap), std::move(fullSnap.BarriersSnap), ev, std::move(result), replSchedulerId);
         } else {
             Y_FAIL("Impossible case");
         }
@@ -152,14 +152,14 @@ namespace NKikimr {
             const TVDiskContextPtr &vctx,
             const TActorContext &ctx,
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
-            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result, 
+            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result,
             const IActor& actor)
     {
         result->SetError();
         LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_OTHER,
                 VDISKP(vctx->VDiskLogPrefix,
                     "TEvVDbStatResult: %s", result->ToString().data()));
-        SendVDiskResponse(ctx, ev->Sender, result.release(), actor, ev->Cookie); 
+        SendVDiskResponse(ctx, ev->Sender, result.release(), actor, ev->Cookie);
     }
 
     template <class TKey, class TMemRec>
@@ -169,21 +169,21 @@ namespace NKikimr {
             TLevelIndexSnapshot<TKey, TMemRec> &&levelSnap,
             const TActorId &parentId,
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
-            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result, 
+            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result,
             const IActor& actor)
     {
         const NKikimrBlobStorage::TEvVDbStat &record = ev->Get()->Record;
         switch (record.GetAction()) {
             case NKikimrBlobStorage::DumpDb: {
                 using TDumpActor = TLevelIndexDumpActor<TKey, TMemRec>;
-                return new TDumpActor(hullCtx, parentId, std::move(levelSnap), ev, std::move(result)); 
+                return new TDumpActor(hullCtx, parentId, std::move(levelSnap), ev, std::move(result));
             }
             case NKikimrBlobStorage::StatDb: {
                 using TStatActor = TLevelIndexStatActor<TKey, TMemRec>;
-                return new TStatActor(hullCtx, parentId, std::move(levelSnap), ev, std::move(result)); 
+                return new TStatActor(hullCtx, parentId, std::move(levelSnap), ev, std::move(result));
             }
             default: {
-                DbStatError(hullCtx->VCtx, ctx, ev, std::move(result), actor); 
+                DbStatError(hullCtx->VCtx, ctx, ev, std::move(result), actor);
                 return nullptr;
             }
         }
@@ -196,39 +196,39 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateDbStatActor(
             const TIntrusivePtr<THullCtx> &hullCtx,
-            const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx, 
+            const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
             const TActorContext &ctx,
             THullDsSnap &&fullSnap,
             const TActorId &parentId,
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
-            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result, 
+            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result,
             const IActor& actor) {
         const NKikimrBlobStorage::TEvVDbStat &record = ev->Get()->Record;
         switch (record.GetType()) {
             case NKikimrBlobStorage::StatLogoBlobs: {
-                return RunDbStatAction(hullCtx, ctx, std::move(fullSnap.LogoBlobsSnap), parentId, ev, std::move(result), actor); 
+                return RunDbStatAction(hullCtx, ctx, std::move(fullSnap.LogoBlobsSnap), parentId, ev, std::move(result), actor);
             }
             case NKikimrBlobStorage::StatBlocks: {
-                return RunDbStatAction(hullCtx, ctx, std::move(fullSnap.BlocksSnap), parentId, ev, std::move(result), actor); 
+                return RunDbStatAction(hullCtx, ctx, std::move(fullSnap.BlocksSnap), parentId, ev, std::move(result), actor);
             }
             case NKikimrBlobStorage::StatBarriers: {
-                return RunDbStatAction(hullCtx, ctx, std::move(fullSnap.BarriersSnap), parentId, ev, std::move(result), actor); 
+                return RunDbStatAction(hullCtx, ctx, std::move(fullSnap.BarriersSnap), parentId, ev, std::move(result), actor);
             }
             case NKikimrBlobStorage::StatTabletType: {
-                return CreateTabletStatActor(hullCtx, parentId, std::move(fullSnap), ev, std::move(result)); 
+                return CreateTabletStatActor(hullCtx, parentId, std::move(fullSnap), ev, std::move(result));
             }
             case NKikimrBlobStorage::StatHugeType: {
-                return CreateHugeStatActor(hullCtx, hugeBlobCtx, parentId, std::move(fullSnap), ev, std::move(result)); 
+                return CreateHugeStatActor(hullCtx, hugeBlobCtx, parentId, std::move(fullSnap), ev, std::move(result));
             }
             default: {
-                DbStatError(hullCtx->VCtx, ctx, ev, std::move(result), actor); 
+                DbStatError(hullCtx->VCtx, ctx, ev, std::move(result), actor);
                 return nullptr;
             }
         }
     }
 
-    IActor *CreateMonStreamActor(THullDsSnap&& fullSnap, TEvBlobStorage::TEvMonStreamQuery::TPtr& ev) { 
-        return new TLevelIndexStreamActor(std::move(fullSnap), ev); 
-    } 
- 
+    IActor *CreateMonStreamActor(THullDsSnap&& fullSnap, TEvBlobStorage::TEvMonStreamQuery::TPtr& ev) {
+        return new TLevelIndexStreamActor(std::move(fullSnap), ev);
+    }
+
 } // NKikimr

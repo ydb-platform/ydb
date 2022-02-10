@@ -35,8 +35,8 @@ private:
         return Die(ctx);
     }
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TABLET_KILLER; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TABLET_KILLER;
     }
 
     TTabletKillRequest(ui64 tabletId, ui32 nodeId, ui32 maxGeneration)

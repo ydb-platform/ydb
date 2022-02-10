@@ -35,7 +35,7 @@ virtual void Scenario(const TActorContext &ctx) {
     TPDiskPutStatusHandler hndl = PDiskPutStatusHandlerDefault;
 
     // load huge and small blobs
-    const ui32 maxBlobs = Max<ui32>(); 
+    const ui32 maxBlobs = Max<ui32>();
     const ui64 hugeMaxDataSize = 20 << 20;
     const ui32 hugeMinBlobSize = 64 << 10;
     const ui32 hugeMaxBlobSize = 64 << 10;
@@ -92,13 +92,13 @@ virtual void Scenario(const TActorContext &ctx) {
     SyncRunner->Run(ctx, defragCmd);
     LOG_NOTICE(ctx, NActorsServices::TEST, "  Defrag completed");
 
-    // repeat 
-    defragCmd.Reset(CreateDefrag(SyncRunner->NotifyID(), instance, true, check)); 
-    SyncRunner->Run(ctx, defragCmd); 
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Defrag completed"); 
- 
+    // repeat
+    defragCmd.Reset(CreateDefrag(SyncRunner->NotifyID(), instance, true, check));
+    SyncRunner->Run(ctx, defragCmd);
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  Defrag completed");
+
     // check actually freed chunks
-    UNIT_ASSERT_VALUES_EQUAL(freedChunks, 3); 
+    UNIT_ASSERT_VALUES_EQUAL(freedChunks, 3);
 }
 SYNC_TEST_END(TDefrag50PercentGarbage, TSyncTestBase)
 

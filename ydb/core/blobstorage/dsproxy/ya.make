@@ -1,26 +1,26 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     alexvru
     cthulhu
     g:kikimr
 )
- 
+
 SRCS(
     dsproxy.h
-    dsproxy_impl.cpp 
-    dsproxy_impl.h 
-    dsproxy_encrypt.cpp 
-    dsproxy_request.cpp 
-    dsproxy_stat.cpp 
-    dsproxy_state.cpp 
+    dsproxy_impl.cpp
+    dsproxy_impl.h
+    dsproxy_encrypt.cpp
+    dsproxy_request.cpp
+    dsproxy_stat.cpp
+    dsproxy_state.cpp
     dsproxy_blackboard.h
     dsproxy_blackboard.cpp
     dsproxy_block.cpp
     dsproxy_collect.cpp
     dsproxy_discover.cpp
     dsproxy_discover_m3dc.cpp
-    dsproxy_discover_m3of4.cpp 
+    dsproxy_discover_m3of4.cpp
     dsproxy_get.cpp
     dsproxy_get_impl.cpp
     dsproxy_get_impl.h
@@ -44,25 +44,25 @@ SRCS(
     dsproxy_responsiveness.h
     dsproxy_status.cpp
     dsproxy_strategy_accelerate_put.h
-    dsproxy_strategy_accelerate_put_m3dc.h 
+    dsproxy_strategy_accelerate_put_m3dc.h
     dsproxy_strategy_base.cpp
     dsproxy_strategy_base.h
     dsproxy_strategy_get_bold.h
     dsproxy_strategy_get_m3dc_basic.h
     dsproxy_strategy_get_m3dc_restore.h
-    dsproxy_strategy_get_m3of4.h 
+    dsproxy_strategy_get_m3of4.h
     dsproxy_strategy_get_min_iops_block.h
     dsproxy_strategy_get_min_iops_mirror.h
-    dsproxy_strategy_m3of4_base.h 
-    dsproxy_strategy_put_m3dc.h 
-    dsproxy_strategy_put_m3of4.h 
+    dsproxy_strategy_m3of4_base.h
+    dsproxy_strategy_put_m3dc.h
+    dsproxy_strategy_put_m3of4.h
     dsproxy_strategy_restore.h
-    group_sessions.cpp 
-    group_sessions.h 
-    log_acc.h 
+    group_sessions.cpp
+    group_sessions.h
+    log_acc.h
     blobstorage_backoff.cpp
 )
- 
+
 PEERDIR(
     library/cpp/monlib/dynamic_counters/percentile
     ydb/core/base
@@ -75,11 +75,11 @@ PEERDIR(
     ydb/core/util
 )
 
-END() 
- 
-RECURSE( 
-    mock 
-) 
+END()
+
+RECURSE(
+    mock
+)
 
 RECURSE_FOR_TESTS(
     ut

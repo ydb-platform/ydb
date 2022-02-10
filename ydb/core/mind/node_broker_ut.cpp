@@ -243,10 +243,10 @@ MakeRegistrationRequest(const TString &host,
     event->Record.SetResolveHost(resolveHost);
     event->Record.SetAddress(address);
     auto &loc = *event->Record.MutableLocation();
-    loc.SetDataCenter(ToString(dc)); 
-    loc.SetModule(ToString(room)); 
-    loc.SetRack(ToString(rack)); 
-    loc.SetUnit(ToString(body)); 
+    loc.SetDataCenter(ToString(dc));
+    loc.SetModule(ToString(room));
+    loc.SetRack(ToString(rack));
+    loc.SetUnit(ToString(body));
     event->Record.SetFixedNodeId(fixed);
     return event;
 }
@@ -282,10 +282,10 @@ void CheckRegistration(TTestActorRuntime &runtime,
         UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetPort(), port);
         UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetResolveHost(), resolveHost);
         UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetAddress(), address);
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetDataCenter(), ToString(dc)); 
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetModule(), ToString(room)); 
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetRack(), ToString(rack)); 
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetUnit(), ToString(body)); 
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetDataCenter(), ToString(dc));
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetModule(), ToString(room));
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetRack(), ToString(rack));
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetUnit(), ToString(body));
         if (expire)
             UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetExpire(), expire);
     }
@@ -458,10 +458,10 @@ void CheckNodeInfo(TTestActorRuntime &runtime,
     UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetPort(), port);
     UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetResolveHost(), resolveHost);
     UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetAddress(), address);
-    UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetDataCenter(), ToString(dc)); 
-    UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetModule(), ToString(room)); 
-    UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetRack(), ToString(rack)); 
-    UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetUnit(), ToString(body)); 
+    UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetDataCenter(), ToString(dc));
+    UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetModule(), ToString(room));
+    UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetRack(), ToString(rack));
+    UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetUnit(), ToString(body));
     UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetExpire(), expire);
 }
 
@@ -576,12 +576,12 @@ TEvInterconnect::TNodeInfo MakeICNodeInfo(ui32 nodeId,
                                           ui64 rack,
                                           ui64 body)
 {
-    NActorsInterconnect::TNodeLocation location; 
-    location.SetDataCenter(ToString(dc)); 
-    location.SetModule(ToString(room)); 
-    location.SetRack(ToString(rack)); 
-    location.SetUnit(ToString(body)); 
-    return TEvInterconnect::TNodeInfo(nodeId, address, host, resolveHost, port, TNodeLocation(location)); 
+    NActorsInterconnect::TNodeLocation location;
+    location.SetDataCenter(ToString(dc));
+    location.SetModule(ToString(room));
+    location.SetRack(ToString(rack));
+    location.SetUnit(ToString(body));
+    return TEvInterconnect::TNodeInfo(nodeId, address, host, resolveHost, port, TNodeLocation(location));
 }
 
 void CheckNameserverDynamicNodesList(const THashMap<ui32, TEvInterconnect::TNodeInfo> &nodes,

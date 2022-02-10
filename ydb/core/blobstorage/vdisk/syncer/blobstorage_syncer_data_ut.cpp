@@ -8,9 +8,9 @@ using namespace NSync;
 
 Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
 
-    template<typename... TArgs> 
-    void SerDes(TArgs&&... args) { 
-        auto info = MakeIntrusive<TBlobStorageGroupInfo>(std::forward<TArgs>(args)...); 
+    template<typename... TArgs>
+    void SerDes(TArgs&&... args) {
+        auto info = MakeIntrusive<TBlobStorageGroupInfo>(std::forward<TArgs>(args)...);
         auto it = info->VDisksBegin();
         ++it;
         auto vd = info->GetVDiskId(it->OrderNumber);
@@ -49,14 +49,14 @@ Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
     }
 
     Y_UNIT_TEST(SerDes1) {
-        SerDes(TBlobStorageGroupType::ErasureMirror3, 2U, 4U); 
+        SerDes(TBlobStorageGroupType::ErasureMirror3, 2U, 4U);
     }
 
     Y_UNIT_TEST(SerDes2) {
-        SerDes(TBlobStorageGroupType::Erasure4Plus2Block, 1U, 8U); 
+        SerDes(TBlobStorageGroupType::Erasure4Plus2Block, 1U, 8U);
     }
 
     Y_UNIT_TEST(SerDes3) {
-        SerDes(TBlobStorageGroupType::Erasure4Plus2Block, 2U, 8U); 
+        SerDes(TBlobStorageGroupType::Erasure4Plus2Block, 2U, 8U);
     }
 }

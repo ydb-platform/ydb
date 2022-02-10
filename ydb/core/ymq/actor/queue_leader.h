@@ -35,7 +35,7 @@ public:
 
     void Bootstrap();
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SQS_QUEUE_LEADER_ACTOR;
     }
 

@@ -1,4 +1,4 @@
-UNITTEST() 
+UNITTEST()
 
 OWNER(
     alexvru
@@ -31,4 +31,4 @@ SRCS(
 
 REQUIREMENTS(ram:9)
 
-END() 
+END()

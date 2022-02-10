@@ -432,8 +432,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
     std::deque<TAutoPtr<TEvPersQueue::TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::PERSQUEUE_READ_BALANCER_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::PERSQUEUE_READ_BALANCER_ACTOR;
     }
 
     TPersQueueReadBalancer(const TActorId &tablet, TTabletStorageInfo *info)

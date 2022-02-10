@@ -136,7 +136,7 @@ void CheckConfigureSlot(TTenantTestRuntime &runtime, ui32 domain,
 }
 
 void CheckTenantPoolStatus(TTenantTestRuntime &runtime,
-                           const TString &d1s1 = "", const TString &d1s2 = "", const TString &d1s3 = "") 
+                           const TString &d1s1 = "", const TString &d1s2 = "", const TString &d1s3 = "")
 {
     THashMap<TString, NKikimrTenantPool::TSlotStatus> domain1;
     domain1[DOMAIN1_SLOT1] = MakeSlotStatus(DOMAIN1_SLOT1, SLOT1_TYPE, d1s1, 1, 1, 1);
@@ -282,9 +282,9 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
                                    {TENANT1_1_NAME, 1, 1, 1},
-                                   {TENANT1_2_NAME, 2, 2, 2}}}); 
+                                   {TENANT1_2_NAME, 2, 2, 2}}});
 
-        CheckTenantPoolStatus(runtime, TENANT1_1_NAME, TENANT1_2_NAME, ""); 
+        CheckTenantPoolStatus(runtime, TENANT1_1_NAME, TENANT1_2_NAME, "");
     }
 
     Y_UNIT_TEST(TestAssignTenantStatic) {
@@ -293,10 +293,10 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
         CheckConfigureSlot(runtime, 0,
                            DOMAIN1_SLOT1, DOMAIN1_NAME, NKikimrTenantPool::SUCCESS);
 
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 2, 2, 2}}}); 
+        runtime.WaitForHiveState({{{DOMAIN1_NAME, 2, 2, 2}}});
 
         CheckTenantPoolStatus(runtime,
-                              DOMAIN1_NAME, "", ""); 
+                              DOMAIN1_NAME, "", "");
     }
 
     Y_UNIT_TEST(TestAssignTenantMultiple) {
@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
                            DOMAIN1_SLOT3, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS);
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
-                                   {TENANT1_1_NAME, 6, 6, 6}}}); 
+                                   {TENANT1_1_NAME, 6, 6, 6}}});
 
         CheckTenantPoolStatus(runtime,
                               TENANT1_1_NAME, TENANT1_1_NAME, TENANT1_1_NAME);
@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 4, 4, 4},
                                    {TENANT1_1_NAME, 1, 1, 1},
-                                   {TENANT1_2_NAME, 2, 2, 2}}}); 
+                                   {TENANT1_2_NAME, 2, 2, 2}}});
 
         CheckTenantPoolStatus(runtime,
                               TENANT1_1_NAME, TENANT1_2_NAME, DOMAIN1_NAME);
@@ -357,7 +357,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
                            DOMAIN1_SLOT3, "", NKikimrTenantPool::SUCCESS);
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
-                                   {TENANT1_1_NAME, 1, 1, 1}}}); 
+                                   {TENANT1_1_NAME, 1, 1, 1}}});
 
         CheckTenantPoolStatus(runtime,
                               TENANT1_1_NAME, "", "");
@@ -369,7 +369,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
         CheckConfigureSlot(runtime, 0,
                            DOMAIN1_SLOT1, TENANT1_U_NAME, NKikimrTenantPool::UNKNOWN_TENANT);
 
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1}}}); 
+        runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1}}});
 
         CheckTenantPoolStatus(runtime);
     }
@@ -390,7 +390,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
                                    {TENANT1_1_NAME, 1, 1, 1},
-                                   {TENANT1_2_NAME, 2, 2, 2}}}); 
+                                   {TENANT1_2_NAME, 2, 2, 2}}});
 
         CheckTenantPoolStatus(runtime,
                               TENANT1_1_NAME, TENANT1_2_NAME, "");
@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
         UNIT_ASSERT_VALUES_EQUAL((int)reply4->Record.GetStatus(), (int)NKikimrTenantPool::SUCCESS);
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
-                                   {TENANT1_2_NAME, 3, 3, 3}}}); 
+                                   {TENANT1_2_NAME, 3, 3, 3}}});
 
         CheckTenantPoolStatus(runtime,
                               TENANT1_2_NAME, TENANT1_2_NAME, "");
@@ -456,7 +456,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
     Y_UNIT_TEST(TestSensorLabels) {
         const TTenantTestConfig config = {
             // Domains {name, schemeshard {{ subdomain_names }}}
-            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }}, 
+            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }},
             // HiveId
             HIVE_ID,
             // FakeTenantSlotBroker
@@ -543,7 +543,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
     Y_UNIT_TEST(TestForcedSensorLabels) {
         const TTenantTestConfig config = {
             // Domains {name, schemeshard {{ subdomain_names }}}
-            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }}, 
+            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }},
             // HiveId
             HIVE_ID,
             // FakeTenantSlotBroker
@@ -649,7 +649,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
     Y_UNIT_TEST(TestSensorLabelsForStaticConfig) {
         const TTenantTestConfig config = {
             // Domains {name, schemeshard {{ subdomain_names }}}
-            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }}, 
+            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }},
             // HiveId
             HIVE_ID,
             // FakeTenantSlotBroker
@@ -789,7 +789,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
     Y_UNIT_TEST(TestForcedSensorLabelsForStaticConfig) {
         const TTenantTestConfig config = {
             // Domains {name, schemeshard {{ subdomain_names }}}
-            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }}, 
+            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }},
             // HiveId
             HIVE_ID,
             // FakeTenantSlotBroker

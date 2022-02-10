@@ -115,7 +115,7 @@ namespace NKikimr {
             }
 
             TSyncLogNeighbors(const TVDiskIdShort &selfVDisk,
-                              std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, 
+                              std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                               const TString &logPrefix, TActorSystem *actorSystem)
                 : Neighbors(selfVDisk, top)
                 , SyncPosQueue()

@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(alexvru) 
+OWNER(alexvru)
 
 PEERDIR(
     contrib/libs/protobuf
@@ -13,18 +13,18 @@ PEERDIR(
 )
 
 SRCS(
-    common.h 
+    common.h
     defs.h
-    event.cpp 
-    event.h 
-    queue.cpp 
-    queue.h 
+    event.cpp
+    event.h
+    queue.cpp
+    queue.h
     queue_backpressure_client.cpp
     queue_backpressure_client.h
     queue_backpressure_common.h
     queue_backpressure_server.h
-    unisched.cpp 
-    unisched.h 
+    unisched.cpp
+    unisched.h
 )
 
 END()

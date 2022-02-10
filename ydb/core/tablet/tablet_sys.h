@@ -593,8 +593,8 @@ class TTablet : public TActor<TTablet> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TABLET_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TABLET_ACTOR;
     }
 
     TTablet(

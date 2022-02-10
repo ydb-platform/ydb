@@ -22,9 +22,9 @@ Y_UNIT_TEST_SUITE(THugeMigration) {
     }
 
     void ExtendMap(ui32 msgSize) {
-        auto vdiskWriteSetup = std::make_shared<TFastVDiskSetup>(); 
+        auto vdiskWriteSetup = std::make_shared<TFastVDiskSetup>();
         vdiskWriteSetup->AddConfigModifier(OldMap);
-        auto vdiskReadSetup = std::make_shared <TFastVDiskSetup>(); 
+        auto vdiskReadSetup = std::make_shared <TFastVDiskSetup>();
         vdiskReadSetup->AddConfigModifier(NewMap);
         TWriteRestartReadSettings settings(100, msgSize, HUGEB, vdiskWriteSetup, vdiskReadSetup);
         WriteRestartRead(settings, TIMEOUT);
@@ -48,9 +48,9 @@ Y_UNIT_TEST_SUITE(THugeMigration) {
         // 1. New Map: we write huge blobs (both for new and old maps)
         // 2. Rollback map and restart
         // 3. We successfully read these blobs
-        auto vdiskWriteSetup = std::make_shared<TFastVDiskSetup>(); 
+        auto vdiskWriteSetup = std::make_shared<TFastVDiskSetup>();
         vdiskWriteSetup->AddConfigModifier(NewMap);
-        auto vdiskReadSetup = std::make_shared <TFastVDiskSetup>(); 
+        auto vdiskReadSetup = std::make_shared <TFastVDiskSetup>();
         vdiskReadSetup->AddConfigModifier(OldMap);
         TWriteRestartReadSettings settings(100, 66u << 10u, HUGEB, vdiskWriteSetup, vdiskReadSetup);
         WriteRestartRead(settings, TIMEOUT);

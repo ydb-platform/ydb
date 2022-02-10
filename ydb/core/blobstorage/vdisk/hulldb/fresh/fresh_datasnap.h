@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include "fresh_segment.h" 
+#include "fresh_segment.h"
 #include <library/cpp/threading/skip_list/skiplist.h>
 #include <util/system/align.h>
 #include <util/generic/set.h>
@@ -34,7 +34,7 @@ namespace NKikimr {
             , Cur(std::move(cur))
         {}
 
-        class TForwardOldDregSegsMerger;    // forward iterator, merges Old and Dreg 
+        class TForwardOldDregSegsMerger;    // forward iterator, merges Old and Dreg
         class TBackwardCurDregSegsMerger;   // backward iterator, merges Cur and Dreg
 
     public:
@@ -53,19 +53,19 @@ namespace NKikimr {
         TFreshSegmentSnapshot Dreg;
         TFreshSegmentSnapshot Cur;
 
-        class TForwardIterator;     // forward iterator, merges TForwardOldDregSegsMerger and Cur 
+        class TForwardIterator;     // forward iterator, merges TForwardOldDregSegsMerger and Cur
         class TBackwardIterator;    // backward iterator, merges TBackwardCurDregSegsMerger and Old
     };
 
-    extern template class TFreshDataSnapshot<TKeyLogoBlob, TMemRecLogoBlob>; 
-    extern template class TFreshDataSnapshot<TKeyBarrier, TMemRecBarrier>; 
-    extern template class TFreshDataSnapshot<TKeyBlock, TMemRecBlock>; 
- 
+    extern template class TFreshDataSnapshot<TKeyLogoBlob, TMemRecLogoBlob>;
+    extern template class TFreshDataSnapshot<TKeyBarrier, TMemRecBarrier>;
+    extern template class TFreshDataSnapshot<TKeyBlock, TMemRecBlock>;
+
     /////////////////////////////////////////////////////////////////////////////////////////
-    // TFreshDataSnapshot::TForwardOldDregSegsMerger 
+    // TFreshDataSnapshot::TForwardOldDregSegsMerger
     /////////////////////////////////////////////////////////////////////////////////////////
     template <class TKey, class TMemRec>
-    class TFreshDataSnapshot<TKey, TMemRec>::TForwardOldDregSegsMerger 
+    class TFreshDataSnapshot<TKey, TMemRec>::TForwardOldDregSegsMerger
         : public TGenericForwardIterator<TKey, TSegForwardIterator, TSegForwardIterator>
     {
     public:
@@ -73,8 +73,8 @@ namespace NKikimr {
         typedef ::NKikimr::TFreshDataSnapshot<TKey, TMemRec> TFreshDataSnapshot;
         typedef TFreshDataSnapshot TContType;
 
-        TForwardOldDregSegsMerger(const THullCtxPtr &hullCtx, const TContType *freshData) 
-            : TBase(hullCtx, &freshData->Old, &freshData->Dreg) 
+        TForwardOldDregSegsMerger(const THullCtxPtr &hullCtx, const TContType *freshData)
+            : TBase(hullCtx, &freshData->Old, &freshData->Dreg)
         {}
 
         using TBase::PutToMerger;
@@ -111,15 +111,15 @@ namespace NKikimr {
     /////////////////////////////////////////////////////////////////////////////////////////
     template <class TKey, class TMemRec>
     class TFreshDataSnapshot<TKey, TMemRec>::TForwardIterator
-        : public TGenericForwardIterator<TKey, TForwardOldDregSegsMerger, TSegForwardIterator> 
+        : public TGenericForwardIterator<TKey, TForwardOldDregSegsMerger, TSegForwardIterator>
     {
     public:
-        typedef ::NKikimr::TGenericForwardIterator<TKey, TForwardOldDregSegsMerger, TSegForwardIterator> TBase; 
+        typedef ::NKikimr::TGenericForwardIterator<TKey, TForwardOldDregSegsMerger, TSegForwardIterator> TBase;
         typedef ::NKikimr::TFreshDataSnapshot<TKey, TMemRec> TFreshDataSnapshot;
         typedef TFreshDataSnapshot TContType;
 
         TForwardIterator(const THullCtxPtr &hullCtx, const TContType *freshData)
-            : TBase(hullCtx, freshData, &freshData->Cur) 
+            : TBase(hullCtx, freshData, &freshData->Cur)
         {}
 
         using TBase::PutToMerger;

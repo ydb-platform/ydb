@@ -28,7 +28,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         TSyncLogKeeperState::TSyncLogKeeperState(
                 TIntrusivePtr<TVDiskContext> vctx,
-                std::unique_ptr<TSyncLogRepaired> repaired, 
+                std::unique_ptr<TSyncLogRepaired> repaired,
                 ui64 syncLogMaxMemAmount,
                 ui64 syncLogMaxDiskAmount,
                 ui64 syncLogMaxEntryPointSize)
@@ -39,7 +39,7 @@ namespace NKikimr {
             , MaxMemPages(CalcMaxMemPages(syncLogMaxMemAmount, SyncLogPtr->GetAppendBlockSize()))
             , MaxDiskChunks(CalcMaxDiskChunks(syncLogMaxDiskAmount, SyncLogPtr->GetChunkSize()))
             , SyncLogMaxEntryPointSize(syncLogMaxEntryPointSize)
-            , NeedsInitialCommit(repaired->NeedsInitialCommit) 
+            , NeedsInitialCommit(repaired->NeedsInitialCommit)
         {}
 
         // Calculate first lsn in recovery log we must to keep
@@ -252,10 +252,10 @@ namespace NKikimr {
             return !ChunksToDelete.empty();
         }
 
-        bool TSyncLogKeeperState::PerformInitialCommit() { 
-            return std::exchange(NeedsInitialCommit, false); 
-        } 
- 
+        bool TSyncLogKeeperState::PerformInitialCommit() {
+            return std::exchange(NeedsInitialCommit, false);
+        }
+
         TSyncLogKeeperCommitData TSyncLogKeeperState::PrepareCommitData(ui64 recoveryLogConfirmedLsn) {
             // we _copy_ ChunksToDeleteDelayed and _move_ ChunksToDelete
 

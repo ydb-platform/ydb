@@ -26,8 +26,8 @@ namespace NKikimr {
                 SeqOfRecs.SetLogoBlob(gtype, lsn, id, ingress);
             }
 
-            TEvSyncLogPut(ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid) { 
-                SeqOfRecs.SetBlock(lsn, tabletId, gen, issuerGuid); 
+            TEvSyncLogPut(ui64 lsn, ui64 tabletId, ui32 gen, ui64 issuerGuid) {
+                SeqOfRecs.SetBlock(lsn, tabletId, gen, issuerGuid);
             }
 
             TEvSyncLogPut(const TBlobStorageGroupType &gtype,
@@ -147,7 +147,7 @@ namespace NKikimr {
             const ui64 SyncLogMaxEntryPointSize;
             const ui64 SyncLogMaxMemAmount;
             const ui32 MaxResponseSize;
-            std::shared_ptr<TSyncLogFirstLsnToKeep> SyncLogFirstLsnToKeep; 
+            std::shared_ptr<TSyncLogFirstLsnToKeep> SyncLogFirstLsnToKeep;
 
             NMonGroup::TSyncLogIFaceGroup IFaceMonGroup;
             NMonGroup::TSyncLogCountersGroup CountersMonGroup;
@@ -161,7 +161,7 @@ namespace NKikimr {
                     ui64 syncLogMaxEntryPointSize,
                     ui64 syncLogMaxMemAmount,
                     ui32 maxResponseSize,
-                    std::shared_ptr<TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep) 
+                    std::shared_ptr<TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep)
                 : VCtx(std::move(vctx))
                 , LsnMngr(std::move(lsnMngr))
                 , PDiskCtx(std::move(pdiskCtx))

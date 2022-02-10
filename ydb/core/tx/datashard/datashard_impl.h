@@ -1058,8 +1058,8 @@ class TDataShard
     TReadWriteVersions GetLocalReadWriteVersions() const;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TX_DATASHARD_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TX_DATASHARD_ACTOR;
     }
 
     TDataShard(const TActorId &tablet, TTabletStorageInfo *info);

@@ -25,9 +25,9 @@ private:
     using TBase = TActorBootstrapped<TJsonProxyProto>;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
-        return NKikimrServices::TActivity::CMS_SERVICE_PROXY; 
+        return NKikimrServices::TActivity::CMS_SERVICE_PROXY;
     }
 
     TJsonProxyProto(NMon::TEvHttpInfo::TPtr &event)
@@ -62,7 +62,7 @@ protected:
             else if (name == "NKikimrCms::TLogRecordData::EType")
                 return ReplyWithEnumDescription(*NKikimrCms::TLogRecordData::EType_descriptor(), ctx);
             else if (name == "NCms::EPDiskState")
-                return ReplyWithEnumDescription(*NKikimrBlobStorage::TPDiskState::E_descriptor(), ctx); 
+                return ReplyWithEnumDescription(*NKikimrBlobStorage::TPDiskState::E_descriptor(), ctx);
         } else if (cgi.Has("type")) {
             TString name = cgi.Get("type");
             if (name == ".NKikimrConfig.TImmediateControlsConfig")

@@ -70,8 +70,8 @@ message TTabletCategory {
 }
 
 message TDataCentersGroup {
-    repeated uint64 DataCenterNum = 1 [deprecated=true];  // array of DC IDs preffered to run the tablet; obsolete 
-    repeated string DataCenter = 2; 
+    repeated uint64 DataCenterNum = 1 [deprecated=true];  // array of DC IDs preffered to run the tablet; obsolete
+    repeated string DataCenter = 2;
 }
 
 message TDataCentersPreference {
@@ -84,7 +84,7 @@ message TEvCreateTablet {
     optional NKikimrTabletBase.TTabletTypes.EType TabletType = 3;
     optional uint32 AssignStateStorage = 4;
     repeated uint32 AllowedNodeIDs = 7;
-    repeated uint64 AllowedDataCenterNumIDs = 14 [deprecated=true]; // array of DC IDs allowed to run the tablet; obsolete; use AllowedDataCenters instead 
+    repeated uint64 AllowedDataCenterNumIDs = 14 [deprecated=true]; // array of DC IDs allowed to run the tablet; obsolete; use AllowedDataCenters instead
     optional TTabletCategory TabletCategory = 16;
     repeated TFollowerGroup FollowerGroups = 17;
     optional NKikimrSubDomains.TDomainKey ObjectDomain = 18;
@@ -94,7 +94,7 @@ message TEvCreateTablet {
     optional fixed64 TabletID = 22;
     repeated NKikimrSubDomains.TDomainKey AllowedDomains = 23;
     optional TDataCentersPreference DataCentersPreference = 24;
-    repeated string AllowedDataCenters = 25; 
+    repeated string AllowedDataCenters = 25;
 
     optional uint32 ChannelsProfile = 5 [deprecated = true]; // DEPRECATED
     optional uint32 Flags = 6 [deprecated = true]; // DEPRECATED

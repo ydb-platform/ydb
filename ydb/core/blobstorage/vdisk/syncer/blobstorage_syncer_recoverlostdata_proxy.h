@@ -37,7 +37,7 @@ namespace NKikimr {
                                            const NSyncer::TPeerSyncState& peerSyncState,
                                            const TActorId &committerId,
                                            const TActorId &notifyId,
-                                           const std::shared_ptr<NSyncer::TSjCtx> &jobCtx, 
+                                           const std::shared_ptr<NSyncer::TSjCtx> &jobCtx,
                                            const TVDiskID &targetVDiskId,
                                            const TActorId &targetActorId);
 

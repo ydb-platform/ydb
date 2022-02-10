@@ -196,9 +196,9 @@ public:
         ClearState();
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
-        return NKikimrServices::TActivity::CMS_CONFIGS_PROVIDER; 
+        return NKikimrServices::TActivity::CMS_CONFIGS_PROVIDER;
     }
 
     void Bootstrap(const TActorContext &ctx);

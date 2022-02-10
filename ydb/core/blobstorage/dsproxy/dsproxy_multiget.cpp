@@ -1,5 +1,5 @@
-#include "dsproxy.h" 
-#include "dsproxy_mon.h" 
+#include "dsproxy.h"
+#include "dsproxy_mon.h"
 
 #include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/blobstorage/vdisk/query/query_spacetracker.h>
@@ -22,7 +22,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
     const ui64 QuerySize;
     const TArrayHolder<TEvBlobStorage::TEvGet::TQuery> Queries;
     const TInstant Deadline;
-    const bool IsInternal; 
+    const bool IsInternal;
     TArrayHolder<TEvBlobStorage::TEvGetResult::TResponse> Responses;
 
     const TInstant StartTime;
@@ -30,21 +30,21 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
     const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
     const ui32 ForceBlockedGeneration;
 
-    static constexpr ui64 MaxRequestsInFlight = 3; 
-    ui64 RequestsInFlight = 0; 
-    std::deque<std::pair<std::unique_ptr<TEvBlobStorage::TEvGet>, ui64>> PendingGets; 
+    static constexpr ui64 MaxRequestsInFlight = 3;
+    ui64 RequestsInFlight = 0;
+    std::deque<std::pair<std::unique_ptr<TEvBlobStorage::TEvGet>, ui64>> PendingGets;
 
     TStackVec<TRequestInfo, TypicalDisksInGroup> RequestInfos;
 
-    void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev) { 
+    void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev) {
         RequestsInFlight--;
 
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetResultReceived, MergedNode = std::move(ev->TraceId)); 
- 
+        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetResultReceived, MergedNode = std::move(ev->TraceId));
+
         const TEvBlobStorage::TEvGetResult &res = *ev->Get();
         if (res.Status != NKikimrProto::OK) {
-            R_LOG_ERROR_S("BPMG1", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(res.Status)); 
-            ReplyAndDie(res.Status); 
+            R_LOG_ERROR_S("BPMG1", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(res.Status));
+            ReplyAndDie(res.Status);
             return;
         }
 
@@ -58,107 +58,107 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
             Responses[info.BeginIdx + offset] = res.Responses[offset];
         }
 
-        SendRequests(); 
+        SendRequests();
     }
 
     friend class TBlobStorageGroupRequestActor<TBlobStorageGroupMultiGetRequest>;
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) { 
-        std::unique_ptr<TEvBlobStorage::TEvGetResult> ev(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID)); 
-        for (ui32 i = 0, e = QuerySize; i != e; ++i) { 
-            const TEvBlobStorage::TEvGet::TQuery &query = Queries[i]; 
-            TEvBlobStorage::TEvGetResult::TResponse &x = ev->Responses[i]; 
-            x.Status = NKikimrProto::UNKNOWN; 
-            x.Id = query.Id; 
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+        std::unique_ptr<TEvBlobStorage::TEvGetResult> ev(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID));
+        for (ui32 i = 0, e = QuerySize; i != e; ++i) {
+            const TEvBlobStorage::TEvGet::TQuery &query = Queries[i];
+            TEvBlobStorage::TEvGetResult::TResponse &x = ev->Responses[i];
+            x.Status = NKikimrProto::UNKNOWN;
+            x.Id = query.Id;
         }
         ev->ErrorReason = ErrorReason;
-        Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(), TActivationContext::Now() - StartTime); 
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, MultiGetResultSent); 
-        Y_VERIFY(status != NKikimrProto::OK); 
-        SendResponseAndDie(std::move(ev)); 
+        Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(), TActivationContext::Now() - StartTime);
+        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, MultiGetResultSent);
+        Y_VERIFY(status != NKikimrProto::OK);
+        SendResponseAndDie(std::move(ev));
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32) { 
-        Y_FAIL(); 
-    } 
- 
+    std::unique_ptr<IEventBase> RestartQuery(ui32) {
+        Y_FAIL();
+    }
+
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::BS_PROXY_MULTIGET_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::BS_PROXY_MULTIGET_ACTOR;
     }
 
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) { 
-        return mon->ActiveMultiGet; 
-    } 
- 
+    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
+        return mon->ActiveMultiGet;
+    }
+
     TBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source, 
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev, ui64 cookie, 
+            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
+            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev, ui64 cookie,
             NWilson::TTraceId traceId, TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId), 
-                NKikimrServices::BS_PROXY_MULTIGET, false, latencyQueueKind, now, storagePoolCounters, 0) 
+        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
+                NKikimrServices::BS_PROXY_MULTIGET, false, latencyQueueKind, now, storagePoolCounters, 0)
         , QuerySize(ev->QuerySize)
         , Queries(ev->Queries.Release())
         , Deadline(ev->Deadline)
-        , IsInternal(ev->IsInternal) 
+        , IsInternal(ev->IsInternal)
         , Responses(new TEvBlobStorage::TEvGetResult::TResponse[QuerySize])
         , StartTime(now)
         , MustRestoreFirst(ev->MustRestoreFirst)
         , GetHandleClass(ev->GetHandleClass)
         , ForceBlockedGeneration(ev->ForceBlockedGeneration)
-    {} 
+    {}
 
-    void PrepareRequest(ui32 beginIdx, ui32 endIdx) { 
-        Y_VERIFY(endIdx > beginIdx); 
+    void PrepareRequest(ui32 beginIdx, ui32 endIdx) {
+        Y_VERIFY(endIdx > beginIdx);
         ui64 cookie = RequestInfos.size();
         RequestInfos.push_back({beginIdx, endIdx, false});
         TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[endIdx - beginIdx]);
         for (ui32 idx = beginIdx; idx < endIdx; ++idx) {
             queries[idx - beginIdx] = Queries[idx];
         }
-        auto ev = std::make_unique<TEvBlobStorage::TEvGet>(queries, endIdx - beginIdx, Deadline, GetHandleClass, 
-            MustRestoreFirst, false, ForceBlockedGeneration); 
-        ev->IsInternal = IsInternal; 
-        PendingGets.emplace_back(std::move(ev), cookie); 
-    } 
-
-    void SendRequests() { 
-        for (; RequestsInFlight < MaxRequestsInFlight && !PendingGets.empty(); ++RequestsInFlight, PendingGets.pop_front()) { 
-            auto& [ev, cookie] = PendingGets.front(); 
-            WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetSent); 
-            SendToBSProxy(SelfId(), Info->GroupID, ev.release(), cookie, TraceId.SeparateBranch()); 
-        } 
-        if (!RequestsInFlight && PendingGets.empty()) { 
-            auto ev = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, 0, Info->GroupID); 
-            ev->ResponseSz = QuerySize; 
-            ev->Responses = std::move(Responses); 
-            Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(), TActivationContext::Now() - StartTime); 
-            WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, MultiGetResultSent); 
-            SendResponseAndDie(std::move(ev)); 
-        } 
+        auto ev = std::make_unique<TEvBlobStorage::TEvGet>(queries, endIdx - beginIdx, Deadline, GetHandleClass,
+            MustRestoreFirst, false, ForceBlockedGeneration);
+        ev->IsInternal = IsInternal;
+        PendingGets.emplace_back(std::move(ev), cookie);
     }
 
-    void Bootstrap() { 
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, MultiGetReceived); 
- 
-        auto dumpQuery = [this] { 
-            TStringStream str; 
-            str << "{"; 
-            for (ui32 i = 0; i < QuerySize; ++i) { 
-                str << (i ? " " : "") 
-                    << Queries[i].Id 
-                    << "@" << Queries[i].Shift 
-                    << ":" << Queries[i].Size; 
-            } 
-            str << "}"; 
-            return str.Str(); 
-        }; 
-        A_LOG_INFO_S("BPMG3", "bootstrap" 
-            << " ActorId# " << SelfId() 
-            << " Group# " << Info->GroupID 
-            << " Query# " << dumpQuery() 
-            << " Deadline# " << Deadline); 
- 
+    void SendRequests() {
+        for (; RequestsInFlight < MaxRequestsInFlight && !PendingGets.empty(); ++RequestsInFlight, PendingGets.pop_front()) {
+            auto& [ev, cookie] = PendingGets.front();
+            WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetSent);
+            SendToBSProxy(SelfId(), Info->GroupID, ev.release(), cookie, TraceId.SeparateBranch());
+        }
+        if (!RequestsInFlight && PendingGets.empty()) {
+            auto ev = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, 0, Info->GroupID);
+            ev->ResponseSz = QuerySize;
+            ev->Responses = std::move(Responses);
+            Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(), TActivationContext::Now() - StartTime);
+            WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, MultiGetResultSent);
+            SendResponseAndDie(std::move(ev));
+        }
+    }
+
+    void Bootstrap() {
+        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, MultiGetReceived);
+
+        auto dumpQuery = [this] {
+            TStringStream str;
+            str << "{";
+            for (ui32 i = 0; i < QuerySize; ++i) {
+                str << (i ? " " : "")
+                    << Queries[i].Id
+                    << "@" << Queries[i].Shift
+                    << ":" << Queries[i].Size;
+            }
+            str << "}";
+            return str.Str();
+        };
+        A_LOG_INFO_S("BPMG3", "bootstrap"
+            << " ActorId# " << SelfId()
+            << " Group# " << Info->GroupID
+            << " Query# " << dumpQuery()
+            << " Deadline# " << Deadline);
+
         Y_VERIFY(QuerySize != 0); // reply with error?
         ui32 beginIdx = 0;
         TLogoBlobID lastBlobId;
@@ -173,37 +173,37 @@ public:
             resultSize.AddAllPartsOfLogoBlob(Info->Type, query.Id);
 
             if (queryIdx != beginIdx) {
-                if (resultSize.IsOverflow() || queryIdx - beginIdx == 10000) { 
-                    PrepareRequest(beginIdx, queryIdx); 
+                if (resultSize.IsOverflow() || queryIdx - beginIdx == 10000) {
+                    PrepareRequest(beginIdx, queryIdx);
                     beginIdx = queryIdx;
                     resultSize.Init();
                     resultSize.AddAllPartsOfLogoBlob(Info->Type, query.Id);
                 }
             }
         }
-        PrepareRequest(beginIdx, QuerySize); 
+        PrepareRequest(beginIdx, QuerySize);
 
-        SendRequests(); 
- 
+        SendRequests();
+
         Become(&TThis::StateWait);
     }
 
-    STATEFN(StateWait) { 
-        if (ProcessEvent(ev)) { 
-            return; 
-        } 
+    STATEFN(StateWait) {
+        if (ProcessEvent(ev)) {
+            return;
+        }
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvBlobStorage::TEvGetResult, Handle); 
+            hFunc(TEvBlobStorage::TEvGetResult, Handle);
         }
     }
 };
 
 IActor* CreateBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source, 
+        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
         const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TMaybe<TGroupStat::EKind> latencyQueueKind, 
+        ui64 cookie, NWilson::TTraceId traceId, TMaybe<TGroupStat::EKind> latencyQueueKind,
         TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupMultiGetRequest(info, state, source, mon, ev, cookie, std::move(traceId), 
+    return new TBlobStorageGroupMultiGetRequest(info, state, source, mon, ev, cookie, std::move(traceId),
         latencyQueueKind, now, storagePoolCounters);
 }
 

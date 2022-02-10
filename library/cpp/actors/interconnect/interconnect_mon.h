@@ -1,15 +1,15 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/actors/core/actor.h>
-#include "interconnect_common.h" 
- 
-namespace NInterconnect { 
- 
-    NActors::IActor *CreateInterconnectMonActor(TIntrusivePtr<NActors::TInterconnectProxyCommon> common = nullptr); 
- 
+#include "interconnect_common.h"
+
+namespace NInterconnect {
+
+    NActors::IActor *CreateInterconnectMonActor(TIntrusivePtr<NActors::TInterconnectProxyCommon> common = nullptr);
+
     static inline NActors::TActorId MakeInterconnectMonActorId(ui32 nodeId) {
-        char s[12] = {'I', 'C', 'O', 'v', 'e', 'r', 'v', 'i', 'e', 'w', 0, 0}; 
+        char s[12] = {'I', 'C', 'O', 'v', 'e', 'r', 'v', 'i', 'e', 'w', 0, 0};
         return NActors::TActorId(nodeId, TStringBuf(s, 12));
-    } 
- 
-} // NInterconnect 
+    }
+
+} // NInterconnect

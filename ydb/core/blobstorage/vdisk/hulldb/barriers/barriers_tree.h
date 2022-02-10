@@ -4,7 +4,7 @@
 #include "barriers_chain.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
-#include <util/system/sanitizers.h> 
+#include <util/system/sanitizers.h>
 
 namespace NKikimr {
     namespace NBarriers {
@@ -91,37 +91,37 @@ namespace NKikimr {
                     TMaybe<TCurrentBarrier> &soft,
                     TMaybe<TCurrentBarrier> &hard) const;
             void Output(IOutputStream &str) const;
- 
-        private: 
-            mutable std::atomic_intptr_t Lock{0}; 
- 
-            void LockWrite() { 
-                if constexpr (NSan::TSanIsOn()) { 
-                    const intptr_t x = Lock.exchange(-1); 
-                    Y_VERIFY(x == 0); 
-                } 
-            } 
- 
-            void UnlockWrite() { 
-                if constexpr (NSan::TSanIsOn()) { 
-                    const intptr_t x = Lock.exchange(0); 
-                    Y_VERIFY(x == -1); 
-                } 
-            } 
- 
-            void LockRead() const { 
-                if constexpr (NSan::TSanIsOn()) { 
-                    const intptr_t x = Lock++; 
-                    Y_VERIFY(x >= 0); 
-                } 
-            } 
- 
-            void UnlockRead() const { 
-                if constexpr (NSan::TSanIsOn()) { 
-                    const intptr_t x = --Lock; 
-                    Y_VERIFY(x >= 0); 
-                } 
-            } 
+
+        private:
+            mutable std::atomic_intptr_t Lock{0};
+
+            void LockWrite() {
+                if constexpr (NSan::TSanIsOn()) {
+                    const intptr_t x = Lock.exchange(-1);
+                    Y_VERIFY(x == 0);
+                }
+            }
+
+            void UnlockWrite() {
+                if constexpr (NSan::TSanIsOn()) {
+                    const intptr_t x = Lock.exchange(0);
+                    Y_VERIFY(x == -1);
+                }
+            }
+
+            void LockRead() const {
+                if constexpr (NSan::TSanIsOn()) {
+                    const intptr_t x = Lock++;
+                    Y_VERIFY(x >= 0);
+                }
+            }
+
+            void UnlockRead() const {
+                if constexpr (NSan::TSanIsOn()) {
+                    const intptr_t x = --Lock;
+                    Y_VERIFY(x >= 0);
+                }
+            }
         };
 
         ////////////////////////////////////////////////////////////////////////////////////////////
@@ -129,10 +129,10 @@ namespace NKikimr {
         // Barriers Database Memory View Snapshot
         ////////////////////////////////////////////////////////////////////////////////////////////
         class TMemViewSnap {
-            std::shared_ptr<TTree> Tree; 
+            std::shared_ptr<TTree> Tree;
 
         public:
-            TMemViewSnap(std::shared_ptr<TTree> tree) 
+            TMemViewSnap(std::shared_ptr<TTree> tree)
                 : Tree(std::move(tree))
             {}
             TMemViewSnap(const TMemViewSnap &) = default;
@@ -157,7 +157,7 @@ namespace NKikimr {
                 using TLogRec = std::pair<TKeyBarrier, TMemRecBarrier>;
                 using TLog = TDeque<TLogRec>;
 
-                std::shared_ptr<TTree> Tree; 
+                std::shared_ptr<TTree> Tree;
                 TLog Log;
 
                 TTreeWithLog(TIntrusivePtr<TIngressCache> ingressCache, const TString &vdiskLogPrefix);
@@ -172,8 +172,8 @@ namespace NKikimr {
             };
 
             const bool GCOnlySynced;
-            std::unique_ptr<TTreeWithLog> Active; 
-            std::unique_ptr<TTreeWithLog> Passive; 
+            std::unique_ptr<TTreeWithLog> Active;
+            std::unique_ptr<TTreeWithLog> Passive;
 
         public:
             TMemView(TIntrusivePtr<TIngressCache> ingrCache, const TString &vdiskLogPrefix, bool gcOnlySynced);

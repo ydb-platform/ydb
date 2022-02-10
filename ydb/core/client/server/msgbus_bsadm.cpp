@@ -13,7 +13,7 @@ class TMessageBusBSAdmGroupReconfigureWipe : public TMessageBusSecureRequest<
         TMessageBusSimpleTabletRequest<
         TMessageBusBSAdmGroupReconfigureWipe,
         TEvBlobStorage::TEvControllerGroupReconfigureWipeResult,
-        NKikimrServices::TActivity::FRONT_BSADM_RECONF_REPLACE>> { 
+        NKikimrServices::TActivity::FRONT_BSADM_RECONF_REPLACE>> {
     TAutoPtr<TEvBlobStorage::TEvControllerGroupReconfigureWipe> Ev;
 public:
     TMessageBusBSAdmGroupReconfigureWipe(TBusMessageContext &msg, ui64 tabletId,
@@ -46,18 +46,18 @@ public:
         }
     }
 
-    TEvBlobStorage::TEvControllerGroupReconfigureWipe* MakeReq(const TActorContext&) { 
+    TEvBlobStorage::TEvControllerGroupReconfigureWipe* MakeReq(const TActorContext&) {
         return Ev.Release();
     }
 };
 
 IActor* CreateMessageBusBSAdm(TBusMessageContext &msg) {
-    const NKikimrClient::TBSAdm &record = static_cast<TBusBSAdm *>(msg.GetMessage())->Record; 
+    const NKikimrClient::TBSAdm &record = static_cast<TBusBSAdm *>(msg.GetMessage())->Record;
 
     const ui32 targetDomain = record.GetDomain();
     const ui64 tabletId = MakeBSControllerID(targetDomain);
 
-    if (record.HasGroupReconfigureWipe()) { 
+    if (record.HasGroupReconfigureWipe()) {
         const auto &x = record.GetGroupReconfigureWipe();
         if (!x.HasLocation()) {
             return nullptr;

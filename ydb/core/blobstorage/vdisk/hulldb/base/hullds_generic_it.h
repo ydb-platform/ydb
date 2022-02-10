@@ -172,7 +172,7 @@ namespace NKikimr {
 
         template <class TKey, class TIter, class TRecordMerger, class TPQueue>
         void PutToMerger(TRecordMerger *merger, TPQueue &pqueue) {
-            using TIterPtr = std::shared_ptr<TIter>; 
+            using TIterPtr = std::shared_ptr<TIter>;
             Y_VERIFY_DEBUG(!pqueue.empty());
             TStackVec<TIterPtr, 32> tmp;
             TIterPtr it = pqueue.top();
@@ -193,7 +193,7 @@ namespace NKikimr {
 
         template <class TKey, class TIter, class TPQueue>
         TString ToString(TPQueue &pqueue) {
-            using TIterPtr = std::shared_ptr<TIter>; 
+            using TIterPtr = std::shared_ptr<TIter>;
             TStringStream str;
             Y_VERIFY_DEBUG(!pqueue.empty());
             TStackVec<TIterPtr, 32> tmp;
@@ -218,16 +218,16 @@ namespace NKikimr {
 
         template <class TPQueue, class TIter>
         void Copy(
-                TVector<std::shared_ptr<TIter>> &dstIters, 
+                TVector<std::shared_ptr<TIter>> &dstIters,
                 TPQueue &dstPQueue,
-                const TVector<std::shared_ptr<TIter>> &srcIters) 
+                const TVector<std::shared_ptr<TIter>> &srcIters)
         {
             // copy iterators
             dstIters.clear();
             dstPQueue.clear();
             dstIters.reserve(srcIters.size());
             for (const auto &x : srcIters) {
-                dstIters.push_back(std::make_shared<TIter>(*x)); 
+                dstIters.push_back(std::make_shared<TIter>(*x));
             }
             // set up PQueue
             for (auto &x : dstIters) {
@@ -259,7 +259,7 @@ namespace NKikimr {
             Iters.reserve(elements.size());
             for (const auto &x : elements) {
                 if (!x->Empty()) {
-                    Iters.push_back(std::make_shared<TIter>(hullCtx, x)); 
+                    Iters.push_back(std::make_shared<TIter>(hullCtx, x));
                 }
             }
         }
@@ -322,7 +322,7 @@ namespace NKikimr {
         }
 
     protected:
-        using TIterPtr = std::shared_ptr<TIter>; 
+        using TIterPtr = std::shared_ptr<TIter>;
         class TGreater {
         public:
             bool operator () (const TIterPtr &c1, const TIterPtr &c2) const {
@@ -355,7 +355,7 @@ namespace NKikimr {
             Iters.reserve(elements.size());
             for (const auto &x : elements) {
                 if (!x->Empty()) {
-                    Iters.push_back(std::make_shared<TIter>(hullCtx, x)); 
+                    Iters.push_back(std::make_shared<TIter>(hullCtx, x));
                 }
             }
         }
@@ -419,7 +419,7 @@ namespace NKikimr {
         }
 
     protected:
-        using TIterPtr = std::shared_ptr<TIter>; 
+        using TIterPtr = std::shared_ptr<TIter>;
         class TLess {
         public:
             bool operator () (const TIterPtr &c1, const TIterPtr &c2) const {

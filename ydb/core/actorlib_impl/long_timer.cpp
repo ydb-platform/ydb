@@ -38,7 +38,7 @@ class TLongTimer : public TActor<TLongTimer> {
     }
 public:
     static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::ACTORLIB_LONG_TIMER; 
+        return NKikimrServices::TActivity::ACTORLIB_LONG_TIMER;
     }
 
     TLongTimer(TMonotonic startTime, TMonotonic signalTime, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie)

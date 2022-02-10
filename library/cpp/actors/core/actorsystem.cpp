@@ -80,29 +80,29 @@ namespace NActors {
                 recipient.ToString().c_str());
             recipient = InterconnectProxy(recpNodeId);
             ev->Rewrite(TEvInterconnect::EvForward, recipient);
-        } 
-        if (recipient.IsService()) { 
-            TActorId target = ServiceMap->LookupLocal(recipient); 
-            if (!target && IsInterconnectProxyId(recipient) && ProxyWrapperFactory) { 
-                const TActorId actorId = ProxyWrapperFactory(const_cast<TActorSystem*>(this), 
-                    GetInterconnectProxyNode(recipient)); 
-                with_lock(ProxyCreationLock) { 
-                    target = ServiceMap->LookupLocal(recipient); 
-                    if (!target) { 
-                        target = actorId; 
-                        ServiceMap->RegisterLocalService(recipient, target); 
-                    } 
-                } 
-                if (target != actorId) { 
-                    // a race has occured, terminate newly created actor 
-                    Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0)); 
-                } 
-            } 
-            recipient = target; 
-            ev->Rewrite(ev->GetTypeRewrite(), recipient); 
+        }
+        if (recipient.IsService()) {
+            TActorId target = ServiceMap->LookupLocal(recipient);
+            if (!target && IsInterconnectProxyId(recipient) && ProxyWrapperFactory) {
+                const TActorId actorId = ProxyWrapperFactory(const_cast<TActorSystem*>(this),
+                    GetInterconnectProxyNode(recipient));
+                with_lock(ProxyCreationLock) {
+                    target = ServiceMap->LookupLocal(recipient);
+                    if (!target) {
+                        target = actorId;
+                        ServiceMap->RegisterLocalService(recipient, target);
+                    }
+                }
+                if (target != actorId) {
+                    // a race has occured, terminate newly created actor
+                    Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
+                }
+            }
+            recipient = target;
+            ev->Rewrite(ev->GetTypeRewrite(), recipient);
         }
 
-        Y_VERIFY_DEBUG(recipient == ev->GetRecipientRewrite()); 
+        Y_VERIFY_DEBUG(recipient == ev->GetRecipientRewrite());
         const ui32 recpPool = recipient.PoolID();
         if (recipient && recpPool < ExecutorPoolCount) {
             if (CpuManager->GetExecutorPool(recpPool)->Send(ev)) {
@@ -153,7 +153,7 @@ namespace NActors {
         return promise.GetFuture();
     }
 
-    ui64 TActorSystem::AllocateIDSpace(ui64 count) { 
+    ui64 TActorSystem::AllocateIDSpace(ui64 count) {
         Y_VERIFY_DEBUG(count < Max<ui32>() / 65536);
 
         static_assert(sizeof(TAtomic) == sizeof(ui64), "expect sizeof(TAtomic) == sizeof(ui64)");
@@ -176,21 +176,21 @@ namespace NActors {
     TActorId TActorSystem::InterconnectProxy(ui32 destinationNode) const {
         if (destinationNode < InterconnectCount)
             return Interconnect[destinationNode];
-        else if (destinationNode != NodeId) 
-            return MakeInterconnectProxyId(destinationNode); 
+        else if (destinationNode != NodeId)
+            return MakeInterconnectProxyId(destinationNode);
         else
             return TActorId();
     }
 
     ui32 TActorSystem::BroadcastToProxies(const std::function<IEventHandle*(const TActorId&)>& eventFabric) {
-        // TODO: get rid of this method 
+        // TODO: get rid of this method
         for (ui32 i = 0; i < InterconnectCount; ++i) {
             Send(eventFabric(Interconnect[i]));
         }
         return InterconnectCount;
     }
 
-    TActorId TActorSystem::LookupLocalService(const TActorId& x) const { 
+    TActorId TActorSystem::LookupLocalService(const TActorId& x) const {
         return ServiceMap->LookupLocal(x);
     }
 
@@ -225,7 +225,7 @@ namespace NActors {
                     Y_VERIFY(!!Interconnect[i]);
                 }
             }
-            ProxyWrapperFactory = std::move(SystemSetup->Interconnect.ProxyWrapperFactory); 
+            ProxyWrapperFactory = std::move(SystemSetup->Interconnect.ProxyWrapperFactory);
         }
 
         // setup local services
@@ -254,10 +254,10 @@ namespace NActors {
 
         StopExecuted = true;
 
-        for (auto&& fn : std::exchange(DeferredPreStop, {})) { 
-            fn(); 
-        } 
- 
+        for (auto&& fn : std::exchange(DeferredPreStop, {})) {
+            fn();
+        }
+
         Scheduler->PrepareStop();
         CpuManager->PrepareStop();
         Scheduler->Stop();

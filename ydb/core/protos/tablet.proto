@@ -43,7 +43,7 @@ message TTabletTypes {
         FileStore = 33;
         OlapShard = 34;
         ColumnShard = 35;
-        TestShard = 36; 
+        TestShard = 36;
         SequenceShard = 37;
         ReplicationController = 38;
 
@@ -51,7 +51,7 @@ message TTabletTypes {
         // rename existing reserved item to desired one, and add new reserved item to
         // the end of reserved list
         Reserved39 = 39;
-        Reserved40 = 40; 
+        Reserved40 = 40;
         Reserved41 = 41;
         Reserved42 = 42;
 

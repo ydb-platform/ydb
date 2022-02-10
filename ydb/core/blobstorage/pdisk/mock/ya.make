@@ -1,4 +1,4 @@
-LIBRARY() 
+LIBRARY()
 
 OWNER(g:kikimr)
 
@@ -12,4 +12,4 @@ PEERDIR(
     ydb/core/blobstorage/pdisk
 )
 
-END() 
+END()

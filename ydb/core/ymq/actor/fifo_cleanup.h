@@ -19,8 +19,8 @@ public:
 
     void Bootstrap();
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::SQS_CLEANUP_BACKGROUND_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SQS_CLEANUP_BACKGROUND_ACTOR;
     }
 
 private:

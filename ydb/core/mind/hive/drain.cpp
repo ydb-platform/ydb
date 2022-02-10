@@ -141,8 +141,8 @@ protected:
 
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::HIVE_BALANCER_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HIVE_BALANCER_ACTOR;
     }
 
     THiveDrain(THive* hive, TNodeId nodeId, TDrainSettings settings)

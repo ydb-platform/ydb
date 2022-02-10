@@ -93,9 +93,9 @@ public:
     }
 
     void PassAway() override {
-        for (const TNodeId nodeId : NodeIds) { 
+        for (const TNodeId nodeId : NodeIds) {
             Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
-        } 
+        }
         TBase::PassAway();
     }
 

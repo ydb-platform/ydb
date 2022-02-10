@@ -54,10 +54,10 @@ THolder<IActor> CreateSystemViewScan(const TActorId& ownerId, ui32 scanId, const
         return CreateStoragePoolsScan(ownerId, scanId, tableId, tableRange, columns);
     }
 
-    if (tableId.SysViewInfo == StorageStatsName) { 
-        return CreateStorageStatsScan(ownerId, scanId, tableId, tableRange, columns); 
-    } 
- 
+    if (tableId.SysViewInfo == StorageStatsName) {
+        return CreateStorageStatsScan(ownerId, scanId, tableId, tableRange, columns);
+    }
+
     if (tableId.SysViewInfo == TabletsName) {
         return CreateTabletsScan(ownerId, scanId, tableId, tableRange, columns);
     }

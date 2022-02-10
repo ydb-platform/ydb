@@ -1,13 +1,13 @@
-UNITTEST() 
- 
+UNITTEST()
+
 OWNER(g:kikimr)
- 
+
 SRCS(
     main.cpp
 )
- 
+
 SIZE(MEDIUM)
- 
+
 TIMEOUT(600)
 
 PEERDIR(
@@ -25,4 +25,4 @@ PEERDIR(
     ydb/core/util
 )
 
-END() 
+END()

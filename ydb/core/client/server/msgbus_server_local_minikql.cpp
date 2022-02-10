@@ -8,8 +8,8 @@ namespace {
     const ui64 DefaultTimeout = 90000;
 }
 
-class TMessageBusLocalMKQL : public TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TMessageBusLocalMKQL, TEvTablet::TEvLocalMKQLResponse, NKikimrServices::TActivity::FRONT_LOCAL_MQKL>> { 
-    const NKikimrClient::TLocalMKQL Request; 
+class TMessageBusLocalMKQL : public TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TMessageBusLocalMKQL, TEvTablet::TEvLocalMKQLResponse, NKikimrServices::TActivity::FRONT_LOCAL_MQKL>> {
+    const NKikimrClient::TLocalMKQL Request;
 public:
     TMessageBusLocalMKQL(TBusMessageContext &msg, const NKikimrClient::TLocalMKQL &request, ui64 tabletId, bool withRetry, TDuration timeout, bool connectToFollower)
         : TMessageBusSecureRequest(msg, tabletId, withRetry, timeout, connectToFollower)

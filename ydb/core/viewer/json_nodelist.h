@@ -18,8 +18,8 @@ class TJsonNodeList : public TActorBootstrapped<TJsonNodeList> {
     TAutoPtr<TEvInterconnect::TEvNodesInfo> NodesInfo;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::VIEWER_HANDLER; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
     TJsonNodeList(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
@@ -62,15 +62,15 @@ public:
                 }
                 jsonNodeInfo["Address"] = nodeInfo.Address;
                 jsonNodeInfo["Port"] = nodeInfo.Port;
-                if (nodeInfo.Location != TNodeLocation()) { 
+                if (nodeInfo.Location != TNodeLocation()) {
                     NJson::TJsonValue& jsonPhysicalLocation = jsonNodeInfo["PhysicalLocation"];
-                    const auto& x = nodeInfo.Location.GetLegacyValue(); 
-                    jsonPhysicalLocation["DataCenter"] = x.DataCenter; 
-                    jsonPhysicalLocation["Room"] = x.Room; 
-                    jsonPhysicalLocation["Rack"] = x.Rack; 
-                    jsonPhysicalLocation["Body"] = x.Body; 
-                    jsonPhysicalLocation["DataCenterId"] = nodeInfo.Location.GetDataCenterId(); 
-                    jsonPhysicalLocation["Location"] = nodeInfo.Location.ToString(); 
+                    const auto& x = nodeInfo.Location.GetLegacyValue();
+                    jsonPhysicalLocation["DataCenter"] = x.DataCenter;
+                    jsonPhysicalLocation["Room"] = x.Room;
+                    jsonPhysicalLocation["Rack"] = x.Rack;
+                    jsonPhysicalLocation["Body"] = x.Body;
+                    jsonPhysicalLocation["DataCenterId"] = nodeInfo.Location.GetDataCenterId();
+                    jsonPhysicalLocation["Location"] = nodeInfo.Location.ToString();
                 }
             }
         }

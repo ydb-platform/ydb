@@ -24,8 +24,8 @@ class TBrowseRoot : public TActorBootstrapped<TBrowseRoot> {
     TActorId Owner;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::VIEWER_HANDLER; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
     TBrowseRoot(const TActorId& owner, const IViewer::TBrowseContext&)
@@ -283,8 +283,8 @@ public:
 
 class TBrowseConsumers : public TBrowseCommon {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::VIEWER_HANDLER; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
     TBrowseConsumers(const TActorId& owner, const IViewer::TBrowseContext& browseContext)

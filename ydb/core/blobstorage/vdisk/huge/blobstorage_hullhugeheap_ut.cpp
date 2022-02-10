@@ -296,16 +296,16 @@ namespace NKikimr {
             heap.AddChunk(3);
 
             THugeSlot slot;
-            ui32 slotSize; 
+            ui32 slotSize;
             bool res = false;
             for (ui32 i = 0; i < heap.SlotNumberOfThisSize(hugeBlobSize); i++) {
-                res = heap.Allocate(hugeBlobSize, &slot, &slotSize); 
+                res = heap.Allocate(hugeBlobSize, &slot, &slotSize);
 
                 UNIT_ASSERT_EQUAL(res, true);
                 STR << "Allocated: " << slot.ToString() << "\n";
                 UNIT_ASSERT(slot.GetChunkId() == 3);
             }
-            res = heap.Allocate(hugeBlobSize, &slot, &slotSize); 
+            res = heap.Allocate(hugeBlobSize, &slot, &slotSize);
             UNIT_ASSERT_EQUAL(res, true);
             UNIT_ASSERT(slot.GetChunkId() == 5);
             STR << "Allocated: " << slot.ToString() << "\n";
@@ -322,16 +322,16 @@ namespace NKikimr {
             heap.AddChunk(3);
 
             THugeSlot slot;
-            ui32 slotSize; 
+            ui32 slotSize;
             bool res = false;
             for (ui32 i = 0; i < heap.SlotNumberOfThisSize(hugeBlobSize) * 2; i++) {
-                res = heap.Allocate(hugeBlobSize, &slot, &slotSize); 
+                res = heap.Allocate(hugeBlobSize, &slot, &slotSize);
                 UNIT_ASSERT_EQUAL(res, true);
                 arr.push_back(slot);
                 STR << "Allocated: " << slot.ToString() << "\n";
             }
             STR << "Allocated all\n";
-            UNIT_ASSERT_EQUAL(heap.Allocate(hugeBlobSize, &slot, &slotSize), false); 
+            UNIT_ASSERT_EQUAL(heap.Allocate(hugeBlobSize, &slot, &slotSize), false);
         }
 
         void FreeScenary(THeap &heap, TVector<THugeSlot> &arr) {
@@ -416,19 +416,19 @@ namespace NKikimr {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
             ui32 minHugeBlobInBytes = 512u << 10u;
-            ui32 maxBlobInBytes = MaxVDiskBlobSize; 
+            ui32 maxBlobInBytes = MaxVDiskBlobSize;
             ui32 overhead = 8u;
             ui32 freeChunksReservation = 1;
             THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes,
                     maxBlobInBytes, overhead, freeChunksReservation, false);
 
             THugeSlot hugeSlot;
-            ui32 slotSize; 
+            ui32 slotSize;
             ui32 minREALHugeBlobInBytes = heap.GetMinREALHugeBlobInBytes();
             bool res = false;
-            res = heap.Allocate(minREALHugeBlobInBytes, &hugeSlot, &slotSize); 
+            res = heap.Allocate(minREALHugeBlobInBytes, &hugeSlot, &slotSize);
             UNIT_ASSERT_EQUAL(res, false); // no chunks
-            res = heap.Allocate(maxBlobInBytes, &hugeSlot, &slotSize); 
+            res = heap.Allocate(maxBlobInBytes, &hugeSlot, &slotSize);
             UNIT_ASSERT_EQUAL(res, false); // no chunks
         }
 

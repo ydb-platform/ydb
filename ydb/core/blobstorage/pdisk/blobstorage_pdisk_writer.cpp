@@ -12,7 +12,7 @@ namespace NPDisk {
 
 void TBufferedWriter::WriteBufferWithFlush(TReqId reqId, NWilson::TTraceId *traceId,
         TCompletionAction *flushAction, ui32 chunkIdx) {
-    static NWilson::TTraceId noTrace; 
+    static NWilson::TTraceId noTrace;
     if (DirtyFrom != DirtyTo) {
         ui8 *source = CurrentBuffer->Data() + DirtyFrom - StartOffset;
         ui32 sizeToWrite = (ui32)(DirtyTo - DirtyFrom);

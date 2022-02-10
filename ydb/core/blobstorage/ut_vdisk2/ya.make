@@ -1,13 +1,13 @@
-UNITTEST() 
- 
+UNITTEST()
+
 OWNER(alexvru)
- 
+
 FORK_SUBTESTS()
- 
+
 SIZE(MEDIUM)
- 
+
 TIMEOUT(600)
- 
+
 SRCS(
     defs.h
     env.h
@@ -25,4 +25,4 @@ PEERDIR(
     ydb/library/yql/public/udf/service/stub
 )
 
-END() 
+END()

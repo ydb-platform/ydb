@@ -7,7 +7,7 @@ namespace NKikimr {
 
 class TMinIopsBlockStrategy : public TStrategyBase {
 public:
-    std::optional<EStrategyOutcome> RestoreWholeFromDataParts(TLogContext& /*logCtx*/, TBlobState &state, 
+    std::optional<EStrategyOutcome> RestoreWholeFromDataParts(TLogContext& /*logCtx*/, TBlobState &state,
             const TBlobStorageGroupInfo &info) {
         TIntervalSet<i32> missing(state.Whole.NotHere);
         TString tmp;
@@ -42,13 +42,13 @@ public:
             }
         }
         if (state.Whole.NotHere.IsEmpty()) {
-            state.WholeSituation = TBlobState::ESituation::Present; 
-            return EStrategyOutcome::DONE; 
+            state.WholeSituation = TBlobState::ESituation::Present;
+            return EStrategyOutcome::DONE;
         }
-        return std::nullopt; 
+        return std::nullopt;
     }
 
-    std::optional<EStrategyOutcome> RestoreWholeWithErasure(TLogContext& /*logCtx*/, TBlobState &state, 
+    std::optional<EStrategyOutcome> RestoreWholeWithErasure(TLogContext& /*logCtx*/, TBlobState &state,
             const TBlobStorageGroupInfo &info) {
         const ui32 totalPartCount = info.Type.TotalPartCount();
         const i32 handoff = info.Type.Handoff();
@@ -61,7 +61,7 @@ public:
                 TBlobState::TDisk &disk = state.Disks[diskIdx];
                 TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
                 TIntervalSet<i32> &requested = disk.DiskParts[partIdx].Requested;
-                if (partSituation == TBlobState::ESituation::Present) { 
+                if (partSituation == TBlobState::ESituation::Present) {
                     isMissing = false;
                 }
                 if (!requested.IsEmpty()) {
@@ -74,7 +74,7 @@ public:
         }
 
         if (partsMissing > info.Type.ParityParts() && responsesPending > 0) {
-            return std::nullopt; 
+            return std::nullopt;
         }
 
         // get intervals needed to restore the requested full data
@@ -98,7 +98,7 @@ public:
             }
         }
         if (partsWithEnoughData < info.Type.MinimalRestorablePartCount()) {
-            return std::nullopt; 
+            return std::nullopt;
         }
 
         // We have enough parts for each interval needed and we can restore all the missing whole intervals
@@ -239,8 +239,8 @@ public:
             }
         }
         Y_VERIFY(state.Whole.NotHere.IsEmpty());
-        state.WholeSituation = TBlobState::ESituation::Present; 
-        return EStrategyOutcome::DONE; 
+        state.WholeSituation = TBlobState::ESituation::Present;
+        return EStrategyOutcome::DONE;
     }
 
     void IssueGetRequestsForMinimal(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
@@ -263,8 +263,8 @@ public:
                             TBlobState::TDisk &disk = state.Disks[diskIdx];
                             if (!considerSlowAsError || !disk.IsSlow) {
                                 TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                                if (partSituation == TBlobState::ESituation::Unknown || 
-                                        partSituation == TBlobState::ESituation::Present) { 
+                                if (partSituation == TBlobState::ESituation::Unknown ||
+                                        partSituation == TBlobState::ESituation::Present) {
                                     TIntervalSet<i32> unrequestedInterval(partInterval);
                                     unrequestedInterval.Subtract(disk.DiskParts[partIdx].Requested);
                                     if (!unrequestedInterval.IsEmpty()) {
@@ -300,8 +300,8 @@ public:
                             TBlobState::TDisk &disk = state.Disks[diskIdx];
                             if (!considerSlowAsError || !disk.IsSlow) {
                                 TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                                if (partSituation == TBlobState::ESituation::Unknown || 
-                                        partSituation == TBlobState::ESituation::Present) { 
+                                if (partSituation == TBlobState::ESituation::Unknown ||
+                                        partSituation == TBlobState::ESituation::Present) {
                                     isThereAGoodPart = true;
                                 }
                             }
@@ -344,9 +344,9 @@ public:
                 TBlobState::TDisk &disk = state.Disks[diskIdx];
                 if (!considerSlowAsError || !disk.IsSlow) {
                     TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                    if (partSituation != TBlobState::ESituation::Error && 
-                            partSituation != TBlobState::ESituation::Absent && 
-                            partSituation != TBlobState::ESituation::Lost) { 
+                    if (partSituation != TBlobState::ESituation::Error &&
+                            partSituation != TBlobState::ESituation::Absent &&
+                            partSituation != TBlobState::ESituation::Lost) {
                         isMissing = false;
                     }
                 }
@@ -377,8 +377,8 @@ public:
                 TBlobState::TDisk &disk = state.Disks[diskIdx];
                 if (!considerSlowAsError || !disk.IsSlow) {
                     TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                    if (partSituation == TBlobState::ESituation::Unknown || 
-                            partSituation == TBlobState::ESituation::Present) { 
+                    if (partSituation == TBlobState::ESituation::Unknown ||
+                            partSituation == TBlobState::ESituation::Present) {
                         TIntervalSet<i32> partIntervals(toRestore);
                         partIntervals.Subtract(state.Parts[partIdx].Here);
                         partIntervals.Subtract(disk.DiskParts[partIdx].Requested);
@@ -408,12 +408,12 @@ public:
         }
     }
 
-    EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info, 
-            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests) override { 
-        if (auto res = RestoreWholeFromDataParts(logCtx, state, info)) { 
-            return *res; 
-        } else if (auto res = RestoreWholeWithErasure(logCtx, state, info)) { 
-            return *res; 
+    EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
+            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests) override {
+        if (auto res = RestoreWholeFromDataParts(logCtx, state, info)) {
+            return *res;
+        } else if (auto res = RestoreWholeWithErasure(logCtx, state, info)) {
+            return *res;
         }
         // Look at the current layout and set the status if possible
         TBlobStorageGroupInfo::EBlobState pessimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
@@ -421,35 +421,35 @@ public:
         TBlobStorageGroupInfo::EBlobState altruisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
         EvaluateCurrentLayout(logCtx, state, info, &pessimisticState, &optimisticState, &altruisticState, false);
 
-        if (auto res = SetAbsentForUnrecoverableAltruistic(altruisticState, state)) { 
-            return *res; 
-        } else if (auto res = ProcessOptimistic(altruisticState, optimisticState, false, state)) { 
-            return *res; 
-        } else if (auto res = ProcessPessimistic(info, pessimisticState, false, state)) { 
-            return *res; 
-        }
- 
-        // Try excluding the slow disk 
-        bool isDone = false; 
-        // TODO: Mark disk that does not answer when accelerating requests 
-        i32 slowDiskSubgroupIdx = MarkSlowSubgroupDisk(state, info, blackboard, false); 
-        if (slowDiskSubgroupIdx >= 0) { 
-            TBlobStorageGroupInfo::EBlobState fastPessimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED; 
-            TBlobStorageGroupInfo::EBlobState fastOptimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED; 
-            TBlobStorageGroupInfo::EBlobState fastAltruisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED; 
-            EvaluateCurrentLayout(logCtx, state, info, &fastPessimisticState, &fastOptimisticState, 
-                    &fastAltruisticState, true); 
-            if (!IsUnrecoverableAltruistic(fastAltruisticState) 
-                    && !ProcessOptimistic(fastAltruisticState, fastOptimisticState, true, state)) { 
-                IssueGetRequests(logCtx, state, info, true, groupDiskRequests); 
-                isDone = true; 
-            } 
-        }
-        if (!isDone) { 
-            IssueGetRequests(logCtx, state, info, false, groupDiskRequests); 
+        if (auto res = SetAbsentForUnrecoverableAltruistic(altruisticState, state)) {
+            return *res;
+        } else if (auto res = ProcessOptimistic(altruisticState, optimisticState, false, state)) {
+            return *res;
+        } else if (auto res = ProcessPessimistic(info, pessimisticState, false, state)) {
+            return *res;
         }
 
-        return EStrategyOutcome::IN_PROGRESS; 
+        // Try excluding the slow disk
+        bool isDone = false;
+        // TODO: Mark disk that does not answer when accelerating requests
+        i32 slowDiskSubgroupIdx = MarkSlowSubgroupDisk(state, info, blackboard, false);
+        if (slowDiskSubgroupIdx >= 0) {
+            TBlobStorageGroupInfo::EBlobState fastPessimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
+            TBlobStorageGroupInfo::EBlobState fastOptimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
+            TBlobStorageGroupInfo::EBlobState fastAltruisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
+            EvaluateCurrentLayout(logCtx, state, info, &fastPessimisticState, &fastOptimisticState,
+                    &fastAltruisticState, true);
+            if (!IsUnrecoverableAltruistic(fastAltruisticState)
+                    && !ProcessOptimistic(fastAltruisticState, fastOptimisticState, true, state)) {
+                IssueGetRequests(logCtx, state, info, true, groupDiskRequests);
+                isDone = true;
+            }
+        }
+        if (!isDone) {
+            IssueGetRequests(logCtx, state, info, false, groupDiskRequests);
+        }
+
+        return EStrategyOutcome::IN_PROGRESS;
     }
 };
 

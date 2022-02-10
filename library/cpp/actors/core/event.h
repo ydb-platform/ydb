@@ -6,9 +6,9 @@
 #include "event_load.h"
 
 #include <library/cpp/actors/wilson/wilson_trace.h>
- 
+
 #include <util/system/hp_timer.h>
-#include <util/generic/maybe.h> 
+#include <util/generic/maybe.h>
 
 namespace NActors {
     class TChunkSerializer;
@@ -36,13 +36,13 @@ namespace NActors {
         }
         virtual ui32 Type() const = 0;
         virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
-        virtual bool IsSerializable() const = 0; 
-        virtual bool IsExtendedFormat() const { 
-            return false; 
-        } 
-        virtual ui32 CalculateSerializedSizeCached() const { 
-            return CalculateSerializedSize(); 
-        } 
+        virtual bool IsSerializable() const = 0;
+        virtual bool IsExtendedFormat() const {
+            return false;
+        }
+        virtual ui32 CalculateSerializedSizeCached() const {
+            return CalculateSerializedSize();
+        }
     };
 
     // fat handle
@@ -70,12 +70,12 @@ namespace NActors {
                 Y_FAIL("Event type %" PRIu32 " doesn't match the expected type %" PRIu32, Type, TEventType::EventType);
 
             if (!Event) {
-                Event.Reset(TEventType::Load(Buffer.Get())); 
+                Event.Reset(TEventType::Load(Buffer.Get()));
             }
 
-            if (Event) { 
+            if (Event) {
                 return static_cast<TEventType*>(Event.Get());
-            } 
+            }
 
             Y_FAIL("Failed to Load() event type %" PRIu32 " class %s", Type, TypeName<TEventType>().data());
         }
@@ -93,8 +93,8 @@ namespace NActors {
             FlagForwardOnNondelivery = 1 << 1,
             FlagSubscribeOnSession = 1 << 2,
             FlagUseSubChannel = 1 << 3,
-            FlagGenerateUnsureUndelivered = 1 << 4, 
-            FlagExtendedFormat = 1 << 5, 
+            FlagGenerateUnsureUndelivered = 1 << 4,
+            FlagExtendedFormat = 1 << 5,
         };
 
         const ui32 Type;
@@ -102,11 +102,11 @@ namespace NActors {
         const TActorId Recipient;
         const TActorId Sender;
         const ui64 Cookie;
-        const TScopeId OriginScopeId = TScopeId::LocallyGenerated; // filled in when the message is received from Interconnect 
+        const TScopeId OriginScopeId = TScopeId::LocallyGenerated; // filled in when the message is received from Interconnect
 
         // if set, used by ActorSystem/Interconnect to report tracepoints
         NWilson::TTraceId TraceId;
- 
+
         // filled if feeded by interconnect session
         const TActorId InterconnectSession;
 
@@ -142,7 +142,7 @@ namespace NActors {
         ui32 RewriteType;
 
         THolder<TOnNondelivery> OnNondeliveryHolder; // only for local events
- 
+
     public:
         void Rewrite(ui32 typeRewrite, TActorId recipientRewrite) {
             RewriteRecipient = recipientRewrite;
@@ -218,14 +218,14 @@ namespace NActors {
                      const TActorId& sender,
                      TIntrusivePtr<TEventSerializedData> buffer,
                      ui64 cookie,
-                     TScopeId originScopeId, 
-                     NWilson::TTraceId traceId) noexcept 
+                     TScopeId originScopeId,
+                     NWilson::TTraceId traceId) noexcept
             : Type(type)
             , Flags(flags)
             , Recipient(recipient)
             , Sender(sender)
             , Cookie(cookie)
-            , OriginScopeId(originScopeId) 
+            , OriginScopeId(originScopeId)
             , TraceId(std::move(traceId))
             , InterconnectSession(session)
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
@@ -237,16 +237,16 @@ namespace NActors {
         {
         }
 
-        TIntrusivePtr<TEventSerializedData> GetChainBuffer(); 
-        TIntrusivePtr<TEventSerializedData> ReleaseChainBuffer(); 
+        TIntrusivePtr<TEventSerializedData> GetChainBuffer();
+        TIntrusivePtr<TEventSerializedData> ReleaseChainBuffer();
 
-        ui32 GetSize() const { 
+        ui32 GetSize() const {
             if (Buffer) {
-                return Buffer->GetSize(); 
-            } else if (Event) { 
-                return Event->CalculateSerializedSize(); 
-            } else { 
-                return 0; 
+                return Buffer->GetSize();
+            } else if (Event) {
+                return Event->CalculateSerializedSize();
+            } else {
+                return 0;
             }
         }
 
@@ -283,7 +283,7 @@ namespace NActors {
                 return new IEventHandle(Type, Flags, dest, Sender, Buffer, Cookie, nullptr, std::move(TraceId));
         }
 
-        TAutoPtr<IEventHandle> ForwardOnNondelivery(ui32 reason, bool unsure = false); 
+        TAutoPtr<IEventHandle> ForwardOnNondelivery(ui32 reason, bool unsure = false);
     };
 
     template <typename TEventType>
@@ -314,31 +314,31 @@ namespace NActors {
         typedef TAutoPtr<THandle> TPtr;
     };
 
-#define DEFINE_SIMPLE_LOCAL_EVENT(eventType, header)                    \ 
-    TString ToStringHeader() const override {                           \ 
-        return TString(header);                                         \ 
-    }                                                                   \ 
+#define DEFINE_SIMPLE_LOCAL_EVENT(eventType, header)                    \
+    TString ToStringHeader() const override {                           \
+        return TString(header);                                         \
+    }                                                                   \
     bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
-        Y_FAIL("Local event " #eventType " is not serializable");       \ 
-    }                                                                   \ 
-    static IEventBase* Load(NActors::TEventSerializedData*) {           \ 
-        Y_FAIL("Local event " #eventType " has no load method");        \ 
-    }                                                                   \ 
-    bool IsSerializable() const override {                              \ 
-        return false;                                                   \ 
+        Y_FAIL("Local event " #eventType " is not serializable");       \
+    }                                                                   \
+    static IEventBase* Load(NActors::TEventSerializedData*) {           \
+        Y_FAIL("Local event " #eventType " has no load method");        \
+    }                                                                   \
+    bool IsSerializable() const override {                              \
+        return false;                                                   \
     }
 
-#define DEFINE_SIMPLE_NONLOCAL_EVENT(eventType, header)                 \ 
-    TString ToStringHeader() const override {                           \ 
-        return TString(header);                                         \ 
-    }                                                                   \ 
+#define DEFINE_SIMPLE_NONLOCAL_EVENT(eventType, header)                 \
+    TString ToStringHeader() const override {                           \
+        return TString(header);                                         \
+    }                                                                   \
     bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
-        return true;                                                    \ 
-    }                                                                   \ 
-    static IEventBase* Load(NActors::TEventSerializedData*) {           \ 
-        return new eventType();                                         \ 
-    }                                                                   \ 
-    bool IsSerializable() const override {                              \ 
-        return true;                                                    \ 
+        return true;                                                    \
+    }                                                                   \
+    static IEventBase* Load(NActors::TEventSerializedData*) {           \
+        return new eventType();                                         \
+    }                                                                   \
+    bool IsSerializable() const override {                              \
+        return true;                                                    \
     }
 }

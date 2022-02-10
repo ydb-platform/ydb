@@ -55,9 +55,9 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         void Bootstrap(const TActorContext &ctx) {
             // prepare a list of candidates
-            std::unique_ptr<IActor> finder(CreateAnubisCandidatesFinder(HullCtx, ctx.SelfID, Pos, std::move(LogoBlobsSnap), 
+            std::unique_ptr<IActor> finder(CreateAnubisCandidatesFinder(HullCtx, ctx.SelfID, Pos, std::move(LogoBlobsSnap),
                     std::move(BarriersSnap)));
-            TActorId aid = RunInBatchPool(ctx, finder.release()); 
+            TActorId aid = RunInBatchPool(ctx, finder.release());
             ActiveActors.Insert(aid);
             Become(&TThis::WaitForCandidatesStateFunc);
         }
@@ -238,8 +238,8 @@ namespace NKikimr {
         }
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_SYNCER_ANUBIS; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_SYNCER_ANUBIS;
         }
 
         TAnubisQuantumActor(const TIntrusivePtr<THullCtx> &hullCtx,
@@ -259,7 +259,7 @@ namespace NKikimr {
             , LogoBlobsSnap(std::move(logoBlobsSnap))
             , BarriersSnap(std::move(barriersSnap))
             , MaxInFly(anubisOsirisMaxInFly)
-            , BlobsStatusMngr(HullCtx->VCtx->Top.get()) 
+            , BlobsStatusMngr(HullCtx->VCtx->Top.get())
         {}
     };
 
@@ -285,10 +285,10 @@ namespace NKikimr {
         friend class TActorBootstrapped<TAnubis>;
 
         void CreateQueueActorMap(const TActorContext &ctx) {
-            QueueActorMapPtr = std::make_shared<TQueueActorMap>(); 
+            QueueActorMapPtr = std::make_shared<TQueueActorMap>();
             for (const auto &x : HullCtx->VCtx->Top->GetVDisks()) {
                 if (HullCtx->VCtx->ShortSelfVDisk != x.VDiskIdShort) {
-                    auto aid = ctx.Register(CreateAnubisProxy(HullCtx->VCtx, GInfo, x.VDiskIdShort, ReplInterconnectChannel)); 
+                    auto aid = ctx.Register(CreateAnubisProxy(HullCtx->VCtx, GInfo, x.VDiskIdShort, ReplInterconnectChannel));
                     ActiveActors.Insert(aid);
                     (*QueueActorMapPtr)[x.VDiskIdShort] = aid;
                 }
@@ -304,9 +304,9 @@ namespace NKikimr {
         void Handle(TEvTakeHullSnapshotResult::TPtr &ev, const TActorContext &ctx) {
             Become(&TThis::QuantumStateFunc);
             auto &snap = ev->Get()->Snap;
-            auto a = std::make_unique<TAnubisQuantumActor>(HullCtx, QueueActorMapPtr, ctx.SelfID, SkeletonId, Pos, 
+            auto a = std::make_unique<TAnubisQuantumActor>(HullCtx, QueueActorMapPtr, ctx.SelfID, SkeletonId, Pos,
                     std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap), AnubisOsirisMaxInFly);
-            auto aid = ctx.Register(a.release()); 
+            auto aid = ctx.Register(a.release());
             ActiveActors.Insert(aid);
         }
 
@@ -370,8 +370,8 @@ namespace NKikimr {
                       )
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::BS_SYNCER_ANUBIS; 
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_SYNCER_ANUBIS;
         }
 
         TAnubis(const TIntrusivePtr<THullCtx> &hullCtx,

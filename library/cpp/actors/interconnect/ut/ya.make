@@ -1,7 +1,7 @@
 UNITTEST()
 
 OWNER(
-    alexvru 
+    alexvru
     g:kikimr
 )
 
@@ -16,11 +16,11 @@ ENDIF()
 
 SRCS(
     channel_scheduler_ut.cpp
-    event_holder_pool_ut.cpp 
-    interconnect_ut.cpp 
-    large.cpp 
+    event_holder_pool_ut.cpp
+    interconnect_ut.cpp
+    large.cpp
     poller_actor_ut.cpp
-    dynamic_proxy_ut.cpp 
+    dynamic_proxy_ut.cpp
 )
 
 PEERDIR(
@@ -29,7 +29,7 @@ PEERDIR(
     library/cpp/actors/interconnect/ut/lib
     library/cpp/actors/interconnect/ut/protos
     library/cpp/actors/testlib
-    library/cpp/digest/md5 
+    library/cpp/digest/md5
     library/cpp/testing/unittest
 )
 

@@ -77,7 +77,7 @@ NActors::IActor *CreateRangeGet(const NActors::TActorId &notifyID, const TAllVDi
 NActors::IActor *CreateManyPuts(TConfiguration *conf, const NActors::TActorId &notifyID,
                                 const TAllVDisks::TVDiskInstance &vdiskInfo,
                                 ui32 msgDataSize, ui32 msgNum, ui64 tabletId, ui32 channel, ui32 gen,
-                                std::shared_ptr<IPutHandleClassGenerator> cls, std::shared_ptr<TSet<ui32>> badSteps, 
+                                std::shared_ptr<IPutHandleClassGenerator> cls, std::shared_ptr<TSet<ui32>> badSteps,
                                 TDuration requestTimeout);
 
 struct TMsgPackInfo {
@@ -97,27 +97,27 @@ struct TMsgPackInfo {
 
 NActors::IActor *CreateManyPuts(TConfiguration *conf, const NActors::TActorId &notifyID,
                                 const TAllVDisks::TVDiskInstance &vdiskInfo,
-                                std::shared_ptr<TVector<TMsgPackInfo>> msgPacks, ui64 tabletId, ui32 channel, ui32 gen, 
-                                std::shared_ptr<IPutHandleClassGenerator> cls, std::shared_ptr<TSet<ui32>> badSteps, 
+                                std::shared_ptr<TVector<TMsgPackInfo>> msgPacks, ui64 tabletId, ui32 channel, ui32 gen,
+                                std::shared_ptr<IPutHandleClassGenerator> cls, std::shared_ptr<TSet<ui32>> badSteps,
                                 TDuration requestTimeout);
 
 NActors::IActor *CreateManyMultiPuts(TConfiguration *conf, const NActors::TActorId &notifyID,
                                      const TAllVDisks::TVDiskInstance &vdiskInfo,
                                      ui32 msgDataSize, ui32 msgNum, ui32 batchSize,
                                      ui64 tabletId, ui32 channel, ui32 gen,
-                                     std::shared_ptr<IPutHandleClassGenerator> cls, 
-                                     std::shared_ptr<TSet<ui32>> badSteps, TDuration requestTimeout); 
+                                     std::shared_ptr<IPutHandleClassGenerator> cls,
+                                     std::shared_ptr<TSet<ui32>> badSteps, TDuration requestTimeout);
 
 NActors::IActor *CreateManyGets(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
                                 ui32 msgDataSize, ui32 msgNum, ui64 tabletId, ui32 channel, ui32 gen,
-                                std::shared_ptr<TSet<ui32>> badSteps); 
+                                std::shared_ptr<TSet<ui32>> badSteps);
 
 NActors::IActor *CreateGet(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
                            ui32 msgDataSize, ui32 msgNum, ui64 tabletId, ui32 channel, ui32 gen, ui64 shift,
                            bool withErrorResponse);
 
 NActors::IActor *CreateGet(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
-                           std::shared_ptr<TVector<TMsgPackInfo>> msgPacks, ui64 tabletId, ui32 channel, ui32 gen, 
+                           std::shared_ptr<TVector<TMsgPackInfo>> msgPacks, ui64 tabletId, ui32 channel, ui32 gen,
                            ui64 shift, bool withErrorResponse);
 
 NActors::IActor *CreatePutGC(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
@@ -291,7 +291,7 @@ public:
         TReturnValue(ui32 id, ui32 status);
     };
 
-    TSyncRunner(NActors::TActorSystem *system, TConfiguration *conf); 
+    TSyncRunner(NActors::TActorSystem *system, TConfiguration *conf);
     NActors::TActorId NotifyID() const;
     // returns pair<Id, Status>
     TReturnValue Run(const NActors::TActorContext &ctx, TAutoPtr<NActors::IActor> actor);
@@ -299,9 +299,9 @@ public:
 private:
     NActors::TActorSystem *ActorSystem;
     NActors::TActorId WorkerID;
-    std::shared_ptr<TSystemEvent> _Event; 
-    std::shared_ptr<TReturnValue> ReturnValue; 
-    TConfiguration *Conf; 
+    std::shared_ptr<TSystemEvent> _Event;
+    std::shared_ptr<TReturnValue> ReturnValue;
+    TConfiguration *Conf;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

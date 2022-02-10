@@ -74,11 +74,11 @@
         HandleFunc(ev, ctx);          \
         break;
 
-#define fFunc(TEventType, HandleFunc) \ 
-    case TEventType:                  \ 
-        HandleFunc(ev);               \ 
-        break; 
- 
+#define fFunc(TEventType, HandleFunc) \
+    case TEventType:                  \
+        HandleFunc(ev);               \
+        break;
+
 #define IgnoreFunc(TEvType)  \
     case TEvType::EventType: \
         break;

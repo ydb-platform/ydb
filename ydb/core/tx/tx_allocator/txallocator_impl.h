@@ -75,8 +75,8 @@ public:
     };
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TX_ALLOCATOR_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TX_ALLOCATOR_ACTOR;
     }
 
     TTxAllocator(const TActorId &tablet, TTabletStorageInfo *info);

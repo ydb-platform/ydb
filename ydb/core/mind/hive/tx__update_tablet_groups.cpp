@@ -40,15 +40,15 @@ public:
                << tablet->Id << "," << tablet->ChannelProfileReassignReason << "," << Groups << ")");
 
         Y_VERIFY(tablet->TabletStorageInfo);
- 
+
         if (tablet->ChannelProfileNewGroup.count() != Groups.size() && !Groups.empty()) {
             BLOG_W("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
                    << tablet->Id
                    << " ChannelProfileNewGroup has incorrect size");
             Ignored = true;
             return true;
-        } 
- 
+        }
+
         if (!tablet->ChannelProfileNewGroup.any()) {
             BLOG_W("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
                    << tablet->Id

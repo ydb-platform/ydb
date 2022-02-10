@@ -23,8 +23,8 @@ class TJsonDescribe : public TViewerPipeClient<TJsonDescribe> {
     ui32 Timeout = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::VIEWER_HANDLER; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
     TJsonDescribe(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)

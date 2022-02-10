@@ -20,8 +20,8 @@ using namespace NNodeWhiteboard;
 
 class TNodeList : public TActorBootstrapped<TNodeList> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
     TNodeList(const TActorId &sender)
@@ -132,8 +132,8 @@ protected:
 
 class TTabletList : public TActorBootstrapped<TTabletList> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
     TTabletList(const TActorId &sender, ui32 filterNodeId,
@@ -297,8 +297,8 @@ protected:
 
 class TStateStorageTabletList : public TActorBootstrapped<TStateStorageTabletList> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
     TStateStorageTabletList(const TActorId &sender, ui32 stateStorageId)
@@ -416,8 +416,8 @@ private:
 
 public:
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::TABLET_MONITORING_PROXY; 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TABLET_MONITORING_PROXY;
     }
 
     TNodeTabletMonitor(const TIntrusivePtr<ITabletStateClassifier>& stateClassifier,

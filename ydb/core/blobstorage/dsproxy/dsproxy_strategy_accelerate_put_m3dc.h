@@ -17,9 +17,9 @@ public:
     const bool EnableRequestMod3x3ForMinLatecy;
 
     TAcceleratePut3dcStrategy(TEvBlobStorage::TEvPut::ETactic tactic, bool enableRequestMod3x3ForMinLatecy)
-        : Tactic(tactic) 
+        : Tactic(tactic)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
-    {} 
+    {}
 
     ui8 PreferredReplicasPerRealm(bool isDegraded) const {
         // calculate the least number of replicas we have to provide per each realm
@@ -29,15 +29,15 @@ public:
         return isDegraded ? 2 : 1;
     }
 
-    EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info, 
-            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests) override { 
+    EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
+            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests) override {
         // Find the unput part and disk
         i32 badDiskIdx = -1;
         for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
             TBlobState::TDisk &disk = state.Disks[diskIdx];
             for (size_t partIdx = 0; partIdx < disk.DiskParts.size(); ++partIdx) {
                 TBlobState::TDiskPart &diskPart = disk.DiskParts[partIdx];
-                if (diskPart.Situation == TBlobState::ESituation::Sent) { 
+                if (diskPart.Situation == TBlobState::ESituation::Sent) {
                     badDiskIdx = diskIdx;
                 }
             }
@@ -57,7 +57,7 @@ public:
             // check if we are in degraded mode -- that means that we have one fully failed realm
             TBlobStorageGroupInfo::TSubgroupVDisks success(&info.GetTopology());
             TBlobStorageGroupInfo::TSubgroupVDisks error(&info.GetTopology());
-            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, true, success, error, degraded); 
+            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, true, success, error, degraded);
 
             // check for failure tolerance; we issue ERROR in case when it is not possible to achieve success condition in
             // any way; also check if we have already finished writing replicas
@@ -65,20 +65,20 @@ public:
             if (checker.CheckFailModelForSubgroup(error)) {
                 if (checker.CheckQuorumForSubgroup(success)) {
                     // OK
-                    return EStrategyOutcome::DONE; 
+                    return EStrategyOutcome::DONE;
                 }
 
                 // now check every realm and check if we have to issue some write requests to it
                 Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
-                    PreferredReplicasPerRealm(degraded), true, partPlacement); 
+                    PreferredReplicasPerRealm(degraded), true, partPlacement);
 
                 if (IsPutNeeded(state, partPlacement)) {
                     PreparePutsForPartPlacement(logCtx, state, info, groupDiskRequests, partPlacement);
                 }
             }
         }
- 
-        return EStrategyOutcome::DONE; 
+
+        return EStrategyOutcome::DONE;
     }
 };
 

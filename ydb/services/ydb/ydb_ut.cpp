@@ -4216,7 +4216,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             profile.set_preset_name("profile1");
             profile.mutable_storage_policy()->mutable_syslog()->set_media("ssd");
             profile.mutable_storage_policy()->mutable_data()->set_media("ssd");
-            profile.mutable_storage_policy()->set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
+            profile.mutable_storage_policy()->set_keep_in_memory(Ydb::FeatureFlag::ENABLED); 
             CreateTable(server, "/Root/ydb_ut_tenant/table-3", profile);
 
             NKikimrSchemeOp::TTableDescription description;
@@ -4242,7 +4242,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             profile.mutable_storage_policy()->set_preset_name("storage2");
             profile.mutable_storage_policy()->mutable_log()->set_media("hdd");
             profile.mutable_storage_policy()->mutable_external()->set_media("hdd");
-            profile.mutable_storage_policy()->set_keep_in_memory(Ydb::FeatureFlag::DISABLED);
+            profile.mutable_storage_policy()->set_keep_in_memory(Ydb::FeatureFlag::DISABLED); 
             CreateTable(server, "/Root/ydb_ut_tenant/table-4", profile);
 
             NKikimrSchemeOp::TTableDescription description;
@@ -4268,7 +4268,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
             profile.mutable_storage_policy()->set_preset_name("default");
             profile.mutable_storage_policy()->mutable_syslog()->set_media("ssd");
             profile.mutable_storage_policy()->mutable_log()->set_media("ssd");
-            profile.mutable_storage_policy()->set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
+            profile.mutable_storage_policy()->set_keep_in_memory(Ydb::FeatureFlag::ENABLED); 
             CreateTable(server, "/Root/ydb_ut_tenant/table-5", profile);
 
             NKikimrSchemeOp::TTableDescription description;

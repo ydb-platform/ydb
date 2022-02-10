@@ -48,15 +48,15 @@ inline RECODE_RESULT RecodeFromUnicode(ECharset to, const TCharType* in, char* o
 
 inline RECODE_RESULT RecodeFromUnicode(ECharset theEncoding, const wchar16* chars, size_t length,
                                        char* bytes, size_t size, size_t* read = nullptr, size_t* written = nullptr) {
-    size_t w = 0, r = 0;
+    size_t w = 0, r = 0; 
     RECODE_RESULT rc = ::RecodeFromUnicode(theEncoding, chars, bytes, length, size, r, w);
-    if (read)
-        *read = r;
-    if (written)
-        *written = w;
-    return rc;
-}
-
+    if (read) 
+        *read = r; 
+    if (written) 
+        *written = w; 
+    return rc; 
+} 
+ 
 inline RECODE_RESULT Recode(ECharset from, ECharset to, const char* in, char* out, size_t inSize, size_t outSize, size_t& inRead, size_t& outWritten) {
     inRead = 0;
     outWritten = 0;

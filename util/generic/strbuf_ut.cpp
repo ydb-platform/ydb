@@ -224,47 +224,47 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
 
     Y_UNIT_TEST(TestRFind) {
         TStringBuf buf1 = "123123456";
-        UNIT_ASSERT_EQUAL(buf1.rfind('3'), 5); 
-        UNIT_ASSERT_EQUAL(buf1.rfind('4'), 6); 
-        UNIT_ASSERT_EQUAL(buf1.rfind('7'), TStringBuf::npos); 
+        UNIT_ASSERT_EQUAL(buf1.rfind('3'), 5);
+        UNIT_ASSERT_EQUAL(buf1.rfind('4'), 6);
+        UNIT_ASSERT_EQUAL(buf1.rfind('7'), TStringBuf::npos);
 
         TStringBuf buf2;
-        UNIT_ASSERT_EQUAL(buf2.rfind('3'), TStringBuf::npos); 
+        UNIT_ASSERT_EQUAL(buf2.rfind('3'), TStringBuf::npos);
 
         TStringBuf buf3 = TStringBuf("123123456", 6);
         UNIT_ASSERT_EQUAL(buf3.rfind('3'), 5);
-        UNIT_ASSERT_EQUAL(buf3.rfind('4'), TStringBuf::npos); 
-        UNIT_ASSERT_EQUAL(buf3.rfind('7'), TStringBuf::npos); 
+        UNIT_ASSERT_EQUAL(buf3.rfind('4'), TStringBuf::npos);
+        UNIT_ASSERT_EQUAL(buf3.rfind('7'), TStringBuf::npos);
 
         TStringBuf buf4 = TStringBuf("123123456", 5);
         UNIT_ASSERT_EQUAL(buf4.rfind('3'), 2);
     }
- 
+
     Y_UNIT_TEST(TestRNextTok) {
-        TStringBuf buf1("a.b.c"); 
+        TStringBuf buf1("a.b.c");
         UNIT_ASSERT_EQUAL(buf1.RNextTok('.'), TStringBuf("c"));
         UNIT_ASSERT_EQUAL(buf1, TStringBuf("a.b"));
- 
-        TStringBuf buf2("a"); 
+
+        TStringBuf buf2("a");
         UNIT_ASSERT_EQUAL(buf2.RNextTok('.'), TStringBuf("a"));
-        UNIT_ASSERT_EQUAL(buf2, TStringBuf()); 
+        UNIT_ASSERT_EQUAL(buf2, TStringBuf());
 
         TStringBuf buf3("ab cd ef"), tok;
         UNIT_ASSERT(buf3.RNextTok(' ', tok) && tok == "ef" && buf3 == "ab cd");
         UNIT_ASSERT(buf3.RNextTok(' ', tok) && tok == "cd" && buf3 == "ab");
         UNIT_ASSERT(buf3.RNextTok(' ', tok) && tok == "ab" && buf3 == "");
         UNIT_ASSERT(!buf3.RNextTok(' ', tok) && tok == "ab" && buf3 == ""); // not modified
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestRSplitOff) {
-        TStringBuf buf1("a.b.c"); 
+        TStringBuf buf1("a.b.c");
         UNIT_ASSERT_EQUAL(buf1.RSplitOff('.'), TStringBuf("a.b"));
         UNIT_ASSERT_EQUAL(buf1, TStringBuf("c"));
- 
-        TStringBuf buf2("a"); 
-        UNIT_ASSERT_EQUAL(buf2.RSplitOff('.'), TStringBuf()); 
+
+        TStringBuf buf2("a");
+        UNIT_ASSERT_EQUAL(buf2.RSplitOff('.'), TStringBuf());
         UNIT_ASSERT_EQUAL(buf2, TStringBuf("a"));
-    } 
+    }
 
     Y_UNIT_TEST(TestCBeginCEnd) {
         const char helloThere[] = "Hello there";

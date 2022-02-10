@@ -1,11 +1,11 @@
-#include "json_writer.h" 
- 
+#include "json_writer.h"
+
 #include <util/charset/utf8.h>
 #include <util/generic/algorithm.h>
-#include <util/string/cast.h> 
-#include <util/system/yassert.h> 
- 
-namespace NJson { 
+#include <util/string/cast.h>
+#include <util/system/yassert.h>
+
+namespace NJson {
     TJsonWriter::TJsonWriter(IOutputStream* out, bool formatOutput, bool sortkeys, bool validateUtf8)
         : Out(out)
         , Buf(NJsonWriter::HEM_UNSAFE)
@@ -19,7 +19,7 @@ namespace NJson {
     {
         Buf.SetIndentSpaces(formatOutput ? 2 : 0);
     }
- 
+
     TJsonWriter::TJsonWriter(IOutputStream* out, const TJsonWriterConfig& config, bool DFID)
         : Out(config.Unbuffered ? nullptr : out)
         , Buf(NJsonWriter::HEM_UNSAFE, config.Unbuffered ? out : nullptr)
@@ -34,7 +34,7 @@ namespace NJson {
         Buf.SetIndentSpaces(config.FormatOutput ? 2 : 0);
         Buf.SetWriteNanAsString(config.WriteNanAsString);
     }
- 
+
     TJsonWriter::~TJsonWriter() {
         // if we write to socket it's possible to get exception here
         // don't use exceptions in destructors
@@ -51,23 +51,23 @@ namespace NJson {
             Buf.FlushTo(Out);
         }
     }
- 
+
     void TJsonWriter::OpenMap() {
         Buf.BeginObject();
     }
- 
+
     void TJsonWriter::CloseMap() {
         Buf.EndObject();
     }
- 
+
     void TJsonWriter::OpenArray() {
         Buf.BeginList();
     }
- 
+
     void TJsonWriter::CloseArray() {
         Buf.EndList();
     }
- 
+
     void TJsonWriter::Write(const TStringBuf& value) {
         if (ValidateUtf8 && !IsUtf(value))
             throw yexception() << "JSON writer: invalid UTF-8";
@@ -81,7 +81,7 @@ namespace NJson {
             }
         }
     }
- 
+
     void TJsonWriter::WriteNull() {
         Buf.WriteNull();
     }
@@ -93,11 +93,11 @@ namespace NJson {
     void TJsonWriter::Write(double value) {
         Buf.WriteDouble(value, FloatToStringMode, DoubleNDigits);
     }
- 
+
     void TJsonWriter::Write(long long value) {
         Buf.WriteLongLong(value);
     }
- 
+
     void TJsonWriter::Write(unsigned long long value) {
         Buf.WriteULongLong(value);
     }
@@ -105,7 +105,7 @@ namespace NJson {
     void TJsonWriter::Write(bool value) {
         Buf.WriteBool(value);
     }
- 
+
     namespace {
         struct TLessStrPtr {
             bool operator()(const TString* a, const TString* b) const {

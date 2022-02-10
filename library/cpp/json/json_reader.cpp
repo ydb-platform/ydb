@@ -5,13 +5,13 @@
 #include <contrib/libs/rapidjson/include/rapidjson/error/en.h>
 #include <contrib/libs/rapidjson/include/rapidjson/error/error.h>
 #include <contrib/libs/rapidjson/include/rapidjson/reader.h>
- 
+
 #include <util/generic/stack.h>
 #include <util/string/cast.h>
 #include <util/system/yassert.h>
 #include <util/string/builder.h>
- 
-namespace NJson { 
+
+namespace NJson {
     namespace {
         TString PrintError(const rapidjson::ParseResult& result) {
             return TStringBuilder() << TStringBuf("Offset: ") << result.Offset()
@@ -21,7 +21,7 @@ namespace NJson {
     }
 
     static const size_t DEFAULT_BUFFER_LEN = 65536;
- 
+
     bool TParserCallbacks::OpenComplexValue(EJsonValueType type) {
         TJsonValue* pvalue;
         switch (CurrentState) {
@@ -42,12 +42,12 @@ namespace NJson {
                 return false;
         }
         return true;
-    } 
- 
+    }
+
     bool TParserCallbacks::CloseComplexValue() {
         if (ValuesStack.empty()) {
-            return false; 
-        } 
+            return false;
+        }
 
         ValuesStack.pop_back();
         if (!ValuesStack.empty()) {
@@ -65,8 +65,8 @@ namespace NJson {
             CurrentState = FINISH;
         }
         return true;
-    } 
- 
+    }
+
     TParserCallbacks::TParserCallbacks(TJsonValue& value, bool throwOnError, bool notClosedBracketIsError)
         : TJsonCallbacks(throwOnError)
         , Value(value)
@@ -74,23 +74,23 @@ namespace NJson {
         , CurrentState(START)
     {
     }
- 
+
     bool TParserCallbacks::OnNull() {
         return SetValue(JSON_NULL);
     }
- 
+
     bool TParserCallbacks::OnBoolean(bool val) {
         return SetValue(val);
     }
- 
+
     bool TParserCallbacks::OnInteger(long long val) {
         return SetValue(val);
     }
- 
+
     bool TParserCallbacks::OnUInteger(unsigned long long val) {
         return SetValue(val);
     }
- 
+
     bool TParserCallbacks::OnString(const TStringBuf& val) {
         return SetValue(val);
     }
@@ -98,29 +98,29 @@ namespace NJson {
     bool TParserCallbacks::OnDouble(double val) {
         return SetValue(val);
     }
- 
+
     bool TParserCallbacks::OnOpenArray() {
         bool res = OpenComplexValue(JSON_ARRAY);
         if (res)
             CurrentState = IN_ARRAY;
         return res;
     }
- 
+
     bool TParserCallbacks::OnCloseArray() {
         return CloseComplexValue();
     }
- 
+
     bool TParserCallbacks::OnOpenMap() {
         bool res = OpenComplexValue(JSON_MAP);
         if (res)
             CurrentState = IN_MAP;
         return res;
     }
- 
+
     bool TParserCallbacks::OnCloseMap() {
         return CloseComplexValue();
     }
- 
+
     bool TParserCallbacks::OnMapKey(const TStringBuf& val) {
         switch (CurrentState) {
             case IN_MAP:
@@ -131,8 +131,8 @@ namespace NJson {
                 return false;
         }
         return true;
-    } 
- 
+    }
+
     bool TParserCallbacks::OnEnd() {
         if (NotClosedBracketIsError){
             return ValuesStack.empty();
@@ -144,7 +144,7 @@ namespace NJson {
         : BufferSize(DEFAULT_BUFFER_LEN)
     {
     }
- 
+
     void TJsonReaderConfig::SetBufferSize(size_t bufferSize) {
         BufferSize = Max((size_t)1, Min(bufferSize, DEFAULT_BUFFER_LEN));
     }
@@ -441,7 +441,7 @@ namespace NJson {
             bool Null() {
                 return Impl.OnNull();
             }
- 
+
             bool Bool(bool b) {
                 return Impl.OnBoolean(b);
             }

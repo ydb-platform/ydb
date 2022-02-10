@@ -1,15 +1,15 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/json/common/defs.h>
 
 #include <util/generic/string.h>
-#include <util/generic/hash.h> 
-#include <util/generic/vector.h> 
+#include <util/generic/hash.h>
+#include <util/generic/vector.h>
 #include <util/generic/deque.h>
 #include <util/generic/utility.h>
-#include <util/generic/yexception.h> 
- 
-namespace NJson { 
+#include <util/generic/yexception.h>
+
+namespace NJson {
     enum EJsonValueType {
         JSON_UNDEFINED /* "Undefined" */,
         JSON_NULL /* "Null" */,
@@ -21,9 +21,9 @@ namespace NJson {
         JSON_ARRAY /* "Array" */,
         JSON_UINTEGER /* "UInteger" */
     };
- 
+
     class TJsonValue;
- 
+
     class IScanCallback {
     public:
         virtual ~IScanCallback() = default;
@@ -37,7 +37,7 @@ namespace NJson {
     public:
         typedef THashMap<TString, TJsonValue> TMapType;
         typedef TDeque<TJsonValue> TArray;
- 
+
         TJsonValue() noexcept = default;
         TJsonValue(EJsonValueType type);
         TJsonValue(bool value) noexcept;
@@ -61,20 +61,20 @@ namespace NJson {
 
         TJsonValue(const TJsonValue& vval);
         TJsonValue(TJsonValue&& vval) noexcept;
- 
+
         TJsonValue& operator=(const TJsonValue& val);
         TJsonValue& operator=(TJsonValue&& val) noexcept;
- 
+
         ~TJsonValue() {
             Clear();
         }
 
         EJsonValueType GetType() const noexcept;
         TJsonValue& SetType(EJsonValueType type);
- 
+
         TJsonValue& SetValue(const TJsonValue& value);
         TJsonValue& SetValue(TJsonValue&& value);
- 
+
         // for Map
         TJsonValue& InsertValue(const TString& key, const TJsonValue& value);
         TJsonValue& InsertValue(TStringBuf key, const TJsonValue& value);
@@ -82,13 +82,13 @@ namespace NJson {
         TJsonValue& InsertValue(const TString& key, TJsonValue&& value);
         TJsonValue& InsertValue(TStringBuf key, TJsonValue&& value);
         TJsonValue& InsertValue(const char* key, TJsonValue&& value);
- 
+
         // for Array
         TJsonValue& AppendValue(const TJsonValue& value);
         TJsonValue& AppendValue(TJsonValue&& value);
         TJsonValue& Back();
         const TJsonValue& Back() const;
- 
+
         bool GetValueByPath(TStringBuf path, TJsonValue& result, char delimiter = '.') const;
         bool SetValueByPath(TStringBuf path, const TJsonValue& value, char delimiter = '.');
         bool SetValueByPath(TStringBuf path, TJsonValue&& value, char delimiter = '.');
@@ -112,7 +112,7 @@ namespace NJson {
         const TString& GetString() const;
         const TMapType& GetMap() const;
         const TArray& GetArray() const;
- 
+
         //throwing TJsonException possible
         bool GetBooleanSafe() const;
         long long GetIntegerSafe() const;
@@ -123,7 +123,7 @@ namespace NJson {
         TMapType& GetMapSafe();
         const TArray& GetArraySafe() const;
         TArray& GetArraySafe();
- 
+
         bool GetBooleanSafe(bool defaultValue) const;
         long long GetIntegerSafe(long long defaultValue) const;
         unsigned long long GetUIntegerSafe(unsigned long long defaultValue) const;
@@ -157,7 +157,7 @@ namespace NJson {
         bool IsDefined() const noexcept {
             return Type != JSON_UNDEFINED && Type != JSON_NULL;
         }
- 
+
         bool IsNull() const noexcept;
         bool IsBoolean() const noexcept;
         bool IsDouble() const noexcept;
@@ -167,7 +167,7 @@ namespace NJson {
 
         /// @return true if JSON_INTEGER or (JSON_UINTEGER and Value <= Max<long long>)
         bool IsInteger() const noexcept;
- 
+
         /// @return true if JSON_UINTEGER or (JSON_INTEGER and Value >= 0)
         bool IsUInteger() const noexcept;
 
@@ -175,7 +175,7 @@ namespace NJson {
         bool Has(size_t key) const noexcept;
 
         void Scan(IScanCallback& callback);
- 
+
         /// Non-robust comparison.
         bool operator==(const TJsonValue& rhs) const;
 
@@ -219,7 +219,7 @@ namespace NJson {
          */
         void BackChecks() const;
     };
- 
+
     inline bool GetBoolean(const TJsonValue& jv, size_t index, bool* value) noexcept {
         return jv[index].GetBoolean(value);
     }
@@ -246,11 +246,11 @@ namespace NJson {
     inline bool GetBoolean(const TJsonValue& jv, TStringBuf key, bool* value) noexcept {
         return jv[key].GetBoolean(value);
     }
- 
+
     inline bool GetInteger(const TJsonValue& jv, TStringBuf key, long long* value) noexcept {
         return jv[key].GetInteger(value);
     }
- 
+
     inline bool GetUInteger(const TJsonValue& jv, TStringBuf key, unsigned long long* value) noexcept {
         return jv[key].GetUInteger(value);
     }

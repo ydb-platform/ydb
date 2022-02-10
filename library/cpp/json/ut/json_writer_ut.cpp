@@ -1,46 +1,46 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include <util/stream/str.h> 
- 
-using namespace NJson; 
- 
+
+#include <util/stream/str.h>
+
+using namespace NJson;
+
 Y_UNIT_TEST_SUITE(TJsonWriterTest) {
     Y_UNIT_TEST(SimpleWriteTest) {
         TString expected1 = "{\"key1\":1,\"key2\":2,\"key3\":3";
         TString expected2 = expected1 + ",\"array\":[\"stroka\",false]";
         TString expected3 = expected2 + "}";
- 
+
         TStringStream out;
- 
+
         TJsonWriter json(&out, false);
         json.OpenMap();
         json.Write("key1", (ui16)1);
         json.WriteKey("key2");
         json.Write((i32)2);
         json.Write("key3", (ui64)3);
- 
+
         UNIT_ASSERT(out.Empty());
         json.Flush();
         UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected1);
- 
+
         json.Write("array");
         json.OpenArray();
         json.Write("stroka");
         json.Write(false);
         json.CloseArray();
- 
+
         UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected1);
         json.Flush();
         UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected2);
- 
+
         json.CloseMap();
- 
+
         UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected2);
         json.Flush();
         UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected3);
     }
- 
+
     Y_UNIT_TEST(SimpleWriteValueTest) {
         TString expected = "{\"key1\":null,\"key2\":{\"subkey1\":[1,{\"subsubkey\":\"test2\"},null,true],\"subkey2\":\"test\"}}";
         TJsonValue v;
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
         TStringStream out;
         WriteJson(&out, &v);
         UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected);
-    } 
+    }
 
     Y_UNIT_TEST(FormatOutput) {
         TString expected = "{\n  \"key1\":null,\n  \"key2\":\n    {\n      \"subkey1\":\n        [\n          1,\n          {\n            \"subsubkey\":\"test2\"\n          },\n          null,\n          true\n        ],\n      \"subkey2\":\"test\"\n    }\n}";
@@ -225,4 +225,4 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
             UNIT_ASSERT_VALUES_EQUAL(actual, expected);
         }
     }
-} 
+}

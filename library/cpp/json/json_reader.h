@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include "json_value.h"
 
 #include <library/cpp/json/common/defs.h>
@@ -7,14 +7,14 @@
 
 #include <util/generic/yexception.h>
 
-#include <util/stream/input.h> 
+#include <util/stream/input.h>
 #include <util/stream/str.h>
 #include <util/stream/mem.h>
- 
-namespace NJson { 
+
+namespace NJson {
     struct TJsonReaderConfig {
         TJsonReaderConfig();
- 
+
         // js-style comments (both // and /**/)
         bool AllowComments = false;
         bool DontValidateUtf8 = false;

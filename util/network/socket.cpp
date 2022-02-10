@@ -272,7 +272,7 @@ void SetSocketTimeout(SOCKET s, long timeout) {
 void SetSocketTimeout(SOCKET s, long sec, long msec) {
 #ifdef SO_SNDTIMEO
     #ifdef _darwin_
-    const timeval timeout = {sec, (__darwin_suseconds_t)msec * 1000}; 
+    const timeval timeout = {sec, (__darwin_suseconds_t)msec * 1000};
     #elif defined(_unix_)
     const timeval timeout = {sec, msec * 1000};
     #else

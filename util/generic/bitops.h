@@ -10,7 +10,7 @@
     #include <intrin.h>
 #endif
 
-namespace NBitOps {
+namespace NBitOps { 
     namespace NPrivate {
         template <unsigned N, typename T>
         struct TClp2Helper {

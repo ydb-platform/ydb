@@ -510,9 +510,9 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             return blobstorage_controller_has_started_on_some_node(monitors)
 
         timeout_seconds = yatest_common.plain_or_under_sanitizer(120, 240)
-        bs_controller_started = wait_for( 
-            predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3 
-        ) 
+        bs_controller_started = wait_for(
+            predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
+        )
         assert bs_controller_started
 
 

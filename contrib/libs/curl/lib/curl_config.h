@@ -18,10 +18,10 @@
 #   include "curl_config-linux.h"
 #endif
 
-#if defined(_musl_) 
-#   include "curl_config-musl.h" 
-#endif 
- 
+#if defined(_musl_)
+#   include "curl_config-musl.h"
+#endif
+
 // Do not misrepresent host on Android and iOS.
 #undef OS
 #define OS "arcadia"

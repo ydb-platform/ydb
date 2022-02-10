@@ -40,10 +40,10 @@ RECURSE(
     aiotg
     aiounittest
     aiozipkin
-    aiozk 
+    aiozk
     alabaster
     alembic
-    allpairspy 
+    allpairspy
     amqp
     aniso8601
     annoy

@@ -139,7 +139,7 @@ namespace {
 
 #define STRING_UNSAFE_UDF_MAP(XX)  \
     XX(Base64Decode, Base64Decode) \
-    XX(Base64StrictDecode, Base64StrictDecode)         \
+    XX(Base64StrictDecode, Base64StrictDecode)         \ 
     XX(HexDecode, HexDecode)
 
 #define STROKA_CASE_UDF_MAP(XX) \

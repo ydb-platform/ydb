@@ -79,7 +79,7 @@ enum ExtHttpCodes {
     EXT_HTTP_CUSTOM_PARTIAL_CONTENT = 2023,
     EXT_HTTP_EMPTY_RESPONSE = 2024,
     EXT_HTTP_REL_CANONICAL = 2025,
- 
+
     EXT_HTTP_EXT_SUCCESS_END = 3000, // to check if code variable is in success interval
     EXT_HTTP_HOSTFILTER = 3001,
     EXT_HTTP_URLFILTER = 3002,
@@ -131,7 +131,7 @@ enum HttpFlags {
     CanBeFake = 2048,
 };
 
-const size_t EXT_HTTP_CODE_MAX = 1 << 12; 
+const size_t EXT_HTTP_CODE_MAX = 1 << 12;
 
 static inline int Http2Status(int code) {
     extern ui16* http2status;

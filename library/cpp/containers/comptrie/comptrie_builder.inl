@@ -46,12 +46,12 @@ protected:
     };
 
 protected:
-    void ConvertSymbolArrayToChar(const TSymbol* key, size_t keylen, TTempBuf& buf, size_t ckeylen) const; 
+    void ConvertSymbolArrayToChar(const TSymbol* key, size_t keylen, TTempBuf& buf, size_t ckeylen) const;
     void NodeLinkTo(TNode* thiz, const TBlob& label, TNode* node);
     TNode* NodeForwardAdd(TNode* thiz, const char* label, size_t len, size_t& passed, size_t* nodeCount);
     bool FindEntryImpl(const char* key, size_t keylen, TData* value) const;
     bool FindLongestPrefixImpl(const char* keyptr, size_t keylen, size_t* prefixLen, TData* value) const;
- 
+
     size_t NodeMeasureSubtree(TNode* thiz) const;
     ui64 NodeSaveSubtree(TNode* thiz, IOutputStream& os) const;
     ui64 NodeSaveSubtreeAndDestroy(TNode* thiz, IOutputStream& osy);
@@ -140,7 +140,7 @@ public:
 
         iterator Find(char ch);
         const_iterator Find(char ch) const;
-        void Add(const TBlob& s, TNode* node); 
+        void Add(const TBlob& s, TNode* node);
 
         bool IsLast() const override {
             return this->Empty();
@@ -504,21 +504,21 @@ TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::~TCompactTrieBuilderImpl(
 template <class T, class D, class S>
 void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ConvertSymbolArrayToChar(
                 const TSymbol* key, size_t keylen, TTempBuf& buf, size_t buflen) const {
-    char* ckeyptr = buf.Data(); 
- 
-    for (size_t i = 0; i < keylen; ++i) { 
-        TSymbol label = key[i]; 
+    char* ckeyptr = buf.Data();
+
+    for (size_t i = 0; i < keylen; ++i) {
+        TSymbol label = key[i];
         for (int j = (int)NCompactTrie::ExtraBits<TSymbol>(); j >= 0; j -= 8) {
             Y_ASSERT(ckeyptr < buf.Data() + buflen);
-            *(ckeyptr++) = (char)(label >> j); 
-        } 
-    } 
- 
-    buf.Proceed(buflen); 
+            *(ckeyptr++) = (char)(label >> j);
+        }
+    }
+
+    buf.Proceed(buflen);
     Y_ASSERT(ckeyptr == buf.Data() + buf.Filled());
-} 
- 
-template <class T, class D, class S> 
+}
+
+template <class T, class D, class S>
 void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::DestroyNode(TNode* thiz) {
     thiz->Subtree()->Destroy(this);
     NodeReleasePayload(thiz);
@@ -786,31 +786,31 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
         ythrow yexception() << "Bad input order - expected input strings to be prefix-grouped.";
 
     typename TNode::TArcSet::iterator it = arcSet->Find(*label);
- 
+
     if (it != arcSet->end()) {
-        const char* arcLabel = it->Label.AsCharPtr(); 
-        size_t arcLabelLen = it->Label.Length(); 
- 
-        for (passed = 0; (passed < len) && (passed < arcLabelLen) && (label[passed] == arcLabel[passed]); ++passed) { 
-            //just count 
-        } 
- 
-        if (passed < arcLabelLen) { 
-            (*nodeCount)++; 
+        const char* arcLabel = it->Label.AsCharPtr();
+        size_t arcLabelLen = it->Label.Length();
+
+        for (passed = 0; (passed < len) && (passed < arcLabelLen) && (label[passed] == arcLabel[passed]); ++passed) {
+            //just count
+        }
+
+        if (passed < arcLabelLen) {
+            (*nodeCount)++;
             TNode* node = new (*NodeAllocator) TNode();
             NodeLinkTo(node, it->Label.SubBlob(passed, arcLabelLen), it->Node);
- 
-            it->Node = node; 
-            it->Label = it->Label.SubBlob(passed); 
-        } 
- 
-        return it->Node; 
-    } 
- 
+
+            it->Node = node;
+            it->Label = it->Label.SubBlob(passed);
+        }
+
+        return it->Node;
+    }
+
     return nullptr;
-} 
- 
-template <class T, class D, class S> 
+}
+
+template <class T, class D, class S>
 void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeLinkTo(TNode* thiz, const TBlob& label, TNode* node) {
     typename TNode::TArcSet* arcSet = dynamic_cast<typename TNode::TArcSet*>(thiz->Subtree());
     if (!arcSet)
@@ -889,7 +889,7 @@ TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TArc::TArc(const TBlob& l
     , Node(nd)
     , LeftOffset(0)
     , RightOffset(0)
-{} 
+{}
 
 template <class T, class D, class S>
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcMeasure(
@@ -901,7 +901,7 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcMeasure(
 
     if (thiz->Label.Length() > 0)
         treesize += 2 * (thiz->Label.Length() - 1);
- 
+
     // Triple measurements are needed because the space needed to store the offset
     // shall be added to the offset itself. Hence three iterations.
     size_t leftoffsetsize = leftsize ? MeasureOffset(coresize + treesize) : 0;
@@ -929,34 +929,34 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveSelf(const TA
 
     size_t labelLen = thiz->Label.Length();
 
-    for (size_t i = 0; i < labelLen; ++i) { 
-        char flags = 0; 
+    for (size_t i = 0; i < labelLen; ++i) {
+        char flags = 0;
 
-        if (i == 0) { 
-            flags |= (leftoffsetsize << MT_LEFTSHIFT); 
-            flags |= (rightoffsetsize << MT_RIGHTSHIFT); 
-        } 
+        if (i == 0) {
+            flags |= (leftoffsetsize << MT_LEFTSHIFT);
+            flags |= (rightoffsetsize << MT_RIGHTSHIFT);
+        }
 
-        if (i == labelLen-1) { 
+        if (i == labelLen-1) {
             if (thiz->Node->IsFinal())
-               flags |= MT_FINAL; 
+               flags |= MT_FINAL;
 
             if (!thiz->Node->IsLast())
-                flags |= MT_NEXT; 
-        } else { 
-            flags |= MT_NEXT; 
-        } 
+                flags |= MT_NEXT;
+        } else {
+            flags |= MT_NEXT;
+        }
 
-        os.Write(&flags, 1); 
+        os.Write(&flags, 1);
         os.Write(&thiz->Label.AsCharPtr()[i], 1);
         written += 2;
 
-        if (i == 0) { 
+        if (i == 0) {
             written += ArcSaveOffset(thiz->LeftOffset, os);
             written += ArcSaveOffset(thiz->RightOffset, os);
-        } 
-    } 
- 
+        }
+    }
+
     written += NodeSaveLeafValue(thiz->Node, os);
     return written;
 }
@@ -983,7 +983,7 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::
     using namespace NCompTriePrivate;
     iterator it = LowerBound(this->begin(), this->end(), ch, TCmp());
 
-    if (it != this->end() && it->Label[0] == (unsigned char)ch) { 
+    if (it != this->end() && it->Label[0] == (unsigned char)ch) {
         return it;
     }
 
@@ -1004,9 +1004,9 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::
 }
 
 template <class T, class D, class S>
-void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Add(const TBlob& s, TNode* node) { 
+void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Add(const TBlob& s, TNode* node) {
     using namespace NCompTriePrivate;
-    this->insert(LowerBound(this->begin(), this->end(), s[0], TCmp()), TArc(s, node)); 
+    this->insert(LowerBound(this->begin(), this->end(), s[0], TCmp()), TArc(s, node));
 }
 
 template <class T, class D, class S>

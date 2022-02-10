@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import re
-import sys
+import sys 
 import copy
 import logging
 
@@ -48,14 +48,14 @@ def apply(func, value, apply_to_keys=False):
     return _apply(func, value, None)
 
 
-def is_coroutine(val):
-    if sys.version_info[0] < 3:
-        return False
-    else:
-        import asyncio
+def is_coroutine(val): 
+    if sys.version_info[0] < 3: 
+        return False 
+    else: 
+        import asyncio 
         return asyncio.iscoroutinefunction(val) or asyncio.iscoroutine(val)
-
-
+ 
+ 
 def serialize(value):
     """
     Serialize value to json-convertible object
@@ -75,7 +75,7 @@ def serialize(value):
             return dict(val)
         if isinstance(val, (date, datetime)):
             return repr(val)
-        if is_coroutine(val):
+        if is_coroutine(val): 
             return None
         raise ValueError("Cannot serialize value '{}' of type {}".format(val, type(val)))
     return apply(_serialize, value, apply_to_keys=True)

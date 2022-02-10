@@ -133,8 +133,8 @@ namespace NTvmAuth::NTvmApi {
         void SetTvmHostPort(const TString& host, ui16 port) {
             TvmHost = host;
             TvmPort = port;
-        }
-
+        } 
+ 
         // Deprecated: set attributes directly
         void SetTiroleHostPort(const TString& host, ui16 port) {
             TiroleHost = host;
@@ -238,12 +238,12 @@ namespace NTvmAuth::NTvmApi {
 
         const TString& GetTvmHost() const {
             return TvmHost;
-        }
-
+        } 
+ 
         ui16 GetTvmPort() const {
             return TvmPort;
-        }
-
+        } 
+ 
         bool IsRolesFetchingEnabled() const {
             return bool(FetchRolesForIdmSystemSlug);
         }

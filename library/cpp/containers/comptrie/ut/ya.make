@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/containers/comptrie)
 
-OWNER(alzobnin)
+OWNER(alzobnin) 
 
 SRCS(
     comptrie_ut.cpp

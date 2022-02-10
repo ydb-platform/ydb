@@ -23,8 +23,8 @@ public:
     }
 
     TLabelsMaintainer(const NKikimrConfig::TMonitoringConfig &config)
-        : InitializedLocalOptions(false) 
-        , CurrentHostLabel("") 
+        : InitializedLocalOptions(false)
+        , CurrentHostLabel("")
     {
         ParseConfig(config);
     }
@@ -49,7 +49,7 @@ public:
 
         Send(MakeTenantPoolRootID(), new TEvents::TEvSubscribe);
         SubscribeForConfig(ctx);
-        ReportHistoryCounter(ctx); 
+        ReportHistoryCounter(ctx);
 
         Become(&TThis::StateWork);
     }
@@ -92,7 +92,7 @@ private:
         THashSet<TString> tenants;
         THashMap<TString, TString> attrs;
         TString database;
-        TString host = ""; 
+        TString host = "";
         TString slot;
 
         for (auto &slotStatus : CurrentStatus.GetSlots()) {
@@ -105,8 +105,8 @@ private:
         }
 
         if (tenants.empty()) {
-            host = ForceDatabaseLabels ? "unassigned": ""; 
-            database = ForceDatabaseLabels ? NoneDatabasetLabelValue : ""; 
+            host = ForceDatabaseLabels ? "unassigned": "";
+            database = ForceDatabaseLabels ? NoneDatabasetLabelValue : "";
         } else if (tenants.size() == 1) {
             database = *tenants.begin();
             TString domain = TString(ExtractDomain(database));
@@ -117,30 +117,30 @@ private:
                     database = "";
                 }
             }
-            if (slot.StartsWith("slot-")) { 
-                // dynamic slot 
-                host = slot; 
-                if (!DataCenter.empty()) 
-                    host = to_lower(DataCenter) + "-" + slot; 
-            } else { 
-                // static slot 
-                if (!HostLabelOverride.empty()) 
-                    host = HostLabelOverride; 
-            } 
+            if (slot.StartsWith("slot-")) {
+                // dynamic slot
+                host = slot;
+                if (!DataCenter.empty())
+                    host = to_lower(DataCenter) + "-" + slot;
+            } else {
+                // static slot
+                if (!HostLabelOverride.empty())
+                    host = HostLabelOverride;
+            }
         } else {
-            host = "multiple"; 
+            host = "multiple";
             database = MultipleDatabaseLabelValue;
             attrs.clear();
         }
 
         std::pair<bool, bool> res;
         res.first = (CurrentDatabaseLabel != database
-                     || CurrentHostLabel != host 
+                     || CurrentHostLabel != host
                      || CurrentAttributes != attrs);
         res.second = CurrentTenants != tenants;
 
         CurrentDatabaseLabel = database;
-        CurrentHostLabel = host; 
+        CurrentHostLabel = host;
         CurrentAttributes = attrs;
         CurrentTenants = tenants;
 
@@ -183,15 +183,15 @@ private:
         }
     }
 
-    void ReportHistoryCounter(const TActorContext &ctx) 
-    { 
-        if (!ProcessLocation.empty()) { 
-            auto root = AppData(ctx)->Counters; 
-            auto historyCounter = GetServiceCounters(root, "utils")->GetSubgroup("location", ProcessLocation)->GetCounter("history", false); 
-            *historyCounter = 1; 
-        } 
-    } 
- 
+    void ReportHistoryCounter(const TActorContext &ctx)
+    {
+        if (!ProcessLocation.empty()) {
+            auto root = AppData(ctx)->Counters;
+            auto historyCounter = GetServiceCounters(root, "utils")->GetSubgroup("location", ProcessLocation)->GetCounter("history", false);
+            *historyCounter = 1;
+        }
+    }
+
     void RemoveAttributeLabels(const TActorContext &ctx)
     {
         auto root = AppData(ctx)->Counters;
@@ -218,28 +218,28 @@ private:
             return;
 
         auto root = AppData(ctx)->Counters;
-        TSmallVec<std::pair<TString, TString>> labels; 
-        if (GroupAllMetrics) { 
-            labels.push_back({DATABASE_LABEL, ""}); 
-        } else { 
-            labels.push_back({DATABASE_LABEL, CurrentDatabaseLabel}); 
-        } 
-
-        labels.push_back({SLOT_LABEL, "static"}); 
-        if (!CurrentHostLabel.empty()) { 
-            labels.push_back({"host", CurrentHostLabel}); 
+        TSmallVec<std::pair<TString, TString>> labels;
+        if (GroupAllMetrics) {
+            labels.push_back({DATABASE_LABEL, ""});
+        } else {
+            labels.push_back({DATABASE_LABEL, CurrentDatabaseLabel});
         }
- 
-        AddLabelsToServices(ctx, labels, DatabaseSensorServices); 
+
+        labels.push_back({SLOT_LABEL, "static"});
+        if (!CurrentHostLabel.empty()) {
+            labels.push_back({"host", CurrentHostLabel});
+        }
+
+        AddLabelsToServices(ctx, labels, DatabaseSensorServices);
     }
 
-    void AddLabelsToServices(const TActorContext& ctx, const TSmallVec<std::pair<TString, TString>> &labels, const THashSet<TString> &services) { 
+    void AddLabelsToServices(const TActorContext& ctx, const TSmallVec<std::pair<TString, TString>> &labels, const THashSet<TString> &services) {
         if (!labels.empty()) {
             auto root = AppData(ctx)->Counters;
-            for(auto &service: services) { 
+            for(auto &service: services) {
                 LOG_DEBUG_S(ctx, NKikimrServices::LABELS_MAINTAINER,
-                            "Add labels to service " << service << " counters" 
-                            << " labels=" << PrintLabels(labels)); 
+                            "Add labels to service " << service << " counters"
+                            << " labels=" << PrintLabels(labels));
                 const auto &[svc, subSvc] = ExtractSubServiceName(service);
                 auto oldGroup = root->GetSubgroup("counters", svc);
                 if (!subSvc.empty())
@@ -272,19 +272,19 @@ private:
         }
     }
 
-    void AddAttributeLabels(const TActorContext &ctx) 
-    { 
-        if (!DatabaseAttributeLabelsEnabled) 
-            return; 
- 
-        TSmallVec<std::pair<TString, TString>> labels; 
-        for (auto &attr : GetDatabaseAttributeLabels()) 
-            if (CurrentAttributes.contains(attr)) 
-                labels.push_back(*CurrentAttributes.find(attr)); 
- 
-        AddLabelsToServices(ctx, labels, DatabaseAttributeSensorServices); 
-    } 
- 
+    void AddAttributeLabels(const TActorContext &ctx)
+    {
+        if (!DatabaseAttributeLabelsEnabled)
+            return;
+
+        TSmallVec<std::pair<TString, TString>> labels;
+        for (auto &attr : GetDatabaseAttributeLabels())
+            if (CurrentAttributes.contains(attr))
+                labels.push_back(*CurrentAttributes.find(attr));
+
+        AddLabelsToServices(ctx, labels, DatabaseAttributeSensorServices);
+    }
+
     void ApplyConfig(const NKikimrConfig::TMonitoringConfig &config,
                      const TActorContext &ctx)
     {
@@ -321,16 +321,16 @@ private:
                 DatabaseAttributeSensorServices.insert(service);
         if (DatabaseAttributeSensorServices.empty())
             DatabaseAttributeSensorServices = GetDatabaseAttributeSensorServices();
- 
-        if (!InitializedLocalOptions) { 
-            InitializedLocalOptions = true; 
-            DataCenter = config.GetDataCenter(); 
-            HostLabelOverride = config.GetHostLabelOverride(); 
-            ProcessLocation = config.GetProcessLocation(); 
-        } 
+
+        if (!InitializedLocalOptions) {
+            InitializedLocalOptions = true;
+            DataCenter = config.GetDataCenter();
+            HostLabelOverride = config.GetHostLabelOverride();
+            ProcessLocation = config.GetProcessLocation();
+        }
     }
 
-    TString PrintLabels(const TSmallVec<std::pair<TString, TString>> &labels) const 
+    TString PrintLabels(const TSmallVec<std::pair<TString, TString>> &labels) const
     {
         TStringStream ss;
         for (auto &pr : labels)
@@ -372,7 +372,7 @@ private:
     bool GroupAllMetrics;
     bool DatabaseAttributeLabelsEnabled;
     bool ForceDatabaseLabels;
-    bool InitializedLocalOptions; 
+    bool InitializedLocalOptions;
 
     THashSet<TString> DatabaseSensorServices;
     THashSet<TString> DatabaseAttributeSensorServices;
@@ -381,10 +381,10 @@ private:
     TString MultipleDatabaseLabelValue;
     TString CurrentDatabaseLabel;
 
-    TString CurrentHostLabel; 
-    TString HostLabelOverride; 
-    TString DataCenter; 
-    TString ProcessLocation; 
+    TString CurrentHostLabel;
+    TString HostLabelOverride;
+    TString DataCenter;
+    TString ProcessLocation;
 
     THashSet<TString> CurrentTenants;
     THashMap<TString, TString> CurrentAttributes;

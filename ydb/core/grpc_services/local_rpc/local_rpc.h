@@ -135,8 +135,8 @@ public:
 
     void SetClientLostAction(std::function<void()>&&) override {}
 
-    void AddServerHint(const TString&) override {} 
- 
+    void AddServerHint(const TString&) override {}
+
     void SetRuHeader(ui64) override {}
 
     // Unimplemented methods

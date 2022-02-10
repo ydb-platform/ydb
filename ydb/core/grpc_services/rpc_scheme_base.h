@@ -99,8 +99,8 @@ protected:
                     case NKikimrScheme::EStatus::StatusSchemeError:
                     case NKikimrScheme::EStatus::StatusNameConflict:
                     case NKikimrScheme::EStatus::StatusPathDoesNotExist: {
-                        return this->ReplyWithResult(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx); 
-                    } 
+                        return this->ReplyWithResult(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx);
+                    }
                     case NKikimrScheme::EStatus::StatusQuotaExceeded: {
                         // FIXME: clients may start aggressive retries when receiving 'overloaded'
                         return this->ReplyWithResult(Ydb::StatusIds::OVERLOADED, issueMessage, ctx);

@@ -1,4 +1,4 @@
-RECURSE( 
+RECURSE(
     client
     kicli
-) 
+)

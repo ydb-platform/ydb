@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 from hamcrest import anything, contains_inanyorder
 
-from ydb.tests.library.common.msgbus_types import EReplyStatus 
-from ydb.tests.library.common.msgbus_types import MessageBusStatus 
-from ydb.tests.library.matchers.response_matchers import AbstractProtobufMatcher, FakeProtobuf 
+from ydb.tests.library.common.msgbus_types import EReplyStatus
+from ydb.tests.library.common.msgbus_types import MessageBusStatus
+from ydb.tests.library.matchers.response_matchers import AbstractProtobufMatcher, FakeProtobuf
 
 
 class CreateTabletsResponseMatcher(AbstractProtobufMatcher):

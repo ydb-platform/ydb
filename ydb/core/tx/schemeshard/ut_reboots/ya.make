@@ -1,4 +1,4 @@
-IF (NOT WITH_VALGRIND) 
+IF (NOT WITH_VALGRIND)
     UNITTEST_FOR(ydb/core/tx/schemeshard)
 
     OWNER(
@@ -7,7 +7,7 @@ IF (NOT WITH_VALGRIND)
     )
 
     FORK_SUBTESTS()
- 
+
     SPLIT_FACTOR(60)
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
@@ -37,4 +37,4 @@ IF (NOT WITH_VALGRIND)
     )
 
     END()
-ENDIF() 
+ENDIF()

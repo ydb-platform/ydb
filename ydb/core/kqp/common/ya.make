@@ -15,8 +15,8 @@ SRCS(
     kqp_transform.h
     kqp_yql.cpp
     kqp_yql.h
-    kqp_timeouts.h 
-    kqp_timeouts.cpp 
+    kqp_timeouts.h
+    kqp_timeouts.cpp
 )
 
 PEERDIR(

@@ -53,8 +53,8 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
     }
 
     Y_UNIT_TEST(CreateTableOutsideDatabaseFailToStartTabletsButDropIsOk) {
-        return; 
- 
+        return;
+
         TTestEnvWithEncryptedPoolsSupport env(1, 1);
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 

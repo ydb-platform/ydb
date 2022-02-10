@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
                 auto promise = NThreading::NewPromise<void>();
                 Ydb::Table::CreateSessionRequest request;
                 NGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
-                    [&status, &gStatus, promise](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable { 
+                    [&status, &gStatus, promise](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable {
                         UNIT_ASSERT(!grpcStatus.InternalError);
                         gStatus = grpcStatus.GRpcStatusCode;
                         auto deferred = response.operation();
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
                     };
 
                 connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncCreateSession, meta);
-                promise.GetFuture().Wait(); 
+                promise.GetFuture().Wait();
             } while (status == Ydb::StatusIds::UNAVAILABLE);
             return std::make_pair(status, gStatus);
         };
@@ -554,7 +554,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
             };
 
         client.CreateSession().Apply(createSessionHandler).Wait();
-        connection.Stop(true); 
+        connection.Stop(true);
     }
 
     Y_UNIT_TEST(YqlQueryWithParams) {

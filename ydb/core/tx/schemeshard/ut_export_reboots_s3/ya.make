@@ -18,7 +18,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/supp/ubsan_supp.inc) 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/supp/ubsan_supp.inc)
 
 PEERDIR(
     library/cpp/getopt

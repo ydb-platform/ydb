@@ -1,52 +1,52 @@
-{ 
-    "meta": { 
-        "version": "0.1", 
-        "type": "query" 
-    }, 
-    "tables": [ 
-        { 
-            "name": "/local/base_pk_predicate_pk_predicate_ranges_rp_1_sql_plan/Input1", 
-            "reads": [ 
-                { 
-                    "type": "Scan", 
-                    "scan_by": [ 
-                        "Group [\"3\", \"5\")", 
-                        "Name" 
-                    ], 
-                    "columns": [ 
-                        "Amount", 
-                        "Comment", 
-                        "Group", 
-                        "Name" 
-                    ] 
-                }, 
-                { 
-                    "type": "Lookup", 
-                    "lookup_by": [ 
-                        "Group (\"10\")", 
-                        "Name (\"Name5\")" 
-                    ], 
-                    "columns": [ 
-                        "Amount", 
-                        "Comment", 
-                        "Group", 
-                        "Name" 
-                    ] 
-                }, 
-                { 
-                    "type": "Lookup", 
-                    "lookup_by": [ 
-                        "Group (\"6\")", 
-                        "Name (\"Name1\")" 
-                    ], 
-                    "columns": [ 
-                        "Amount", 
-                        "Comment", 
-                        "Group", 
-                        "Name" 
-                    ] 
-                } 
-            ] 
-        } 
-    ] 
-} 
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_pk_predicate_pk_predicate_ranges_rp_1_sql_plan/Input1",
+            "reads": [
+                {
+                    "type": "Scan",
+                    "scan_by": [
+                        "Group [\"3\", \"5\")",
+                        "Name"
+                    ],
+                    "columns": [
+                        "Amount",
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ]
+                },
+                {
+                    "type": "Lookup",
+                    "lookup_by": [
+                        "Group (\"10\")",
+                        "Name (\"Name5\")"
+                    ],
+                    "columns": [
+                        "Amount",
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ]
+                },
+                {
+                    "type": "Lookup",
+                    "lookup_by": [
+                        "Group (\"6\")",
+                        "Name (\"Name1\")"
+                    ],
+                    "columns": [
+                        "Amount",
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ]
+                }
+            ]
+        }
+    ]
+}

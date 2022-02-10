@@ -19,16 +19,16 @@ class Storage(object):
         def transaction(session):
             tx = session.transaction(ydb.SerializableReadWrite()).begin()
             prepared_query = session.prepare(query)
-            rs = tx.execute(prepared_query, parameters={"$cnt": cnt}, commit_tx=True) 
+            rs = tx.execute(prepared_query, parameters={"$cnt": cnt}, commit_tx=True)
             return rs[0].rows
 
         with session_pool_context(self._driver_config) as session_pool:
             tables = session_pool.retry_operation_sync(transaction)
-            return list(map(lambda x: getattr(x, "table_id"), tables)) 
+            return list(map(lambda x: getattr(x, "table_id"), tables))
 
-    def find_reserved_table_ids( 
-        self, *, cnt: int, dt: datetime.datetime 
-    ) -> typing.List[int]: 
+    def find_reserved_table_ids(
+        self, *, cnt: int, dt: datetime.datetime
+    ) -> typing.List[int]:
         query = f"""PRAGMA TablePathPrefix("{self._database}");
         DECLARE $dt AS DateTime;
         DECLARE $reservation_period_minutes AS Int32;
@@ -45,11 +45,11 @@ class Storage(object):
             rs = tx.execute(
                 prepared_query,
                 parameters={
-                    "$cnt": cnt, 
-                    "$dt": int(dt.timestamp()), 
-                    "$reservation_period_minutes": Config.reservation_period_minutes(), 
+                    "$cnt": cnt,
+                    "$dt": int(dt.timestamp()),
+                    "$reservation_period_minutes": Config.reservation_period_minutes(),
                 },
-                commit_tx=True, 
+                commit_tx=True,
             )
             if len(rs[0].rows) > 0:
                 return rs[0].rows
@@ -57,17 +57,17 @@ class Storage(object):
 
         with session_pool_context(self._driver_config) as session_pool:
             tables = session_pool.retry_operation_sync(transaction)
-            return list(map(lambda x: getattr(x, "table_id"), tables)) 
+            return list(map(lambda x: getattr(x, "table_id"), tables))
 
-    def save_reservation( 
-        self, 
-        *, 
-        dt: datetime.datetime, 
-        table_id: int, 
-        cnt: int, 
-        description: str = "", 
-        phone: str, 
-    ) -> None: 
+    def save_reservation(
+        self,
+        *,
+        dt: datetime.datetime,
+        table_id: int,
+        cnt: int,
+        description: str = "",
+        phone: str,
+    ) -> None:
         query = f"""PRAGMA TablePathPrefix("{self._database}");
         DECLARE $dt AS DateTime;
         DECLARE $cnt AS Uint64;
@@ -84,13 +84,13 @@ class Storage(object):
             tx.execute(
                 prepared_query,
                 parameters={
-                    "$dt": int(dt.timestamp()), 
-                    "$cnt": cnt, 
-                    "$table_id": table_id, 
-                    "$description": "" if description is None else description, 
-                    "$phone": phone.encode(), 
+                    "$dt": int(dt.timestamp()),
+                    "$cnt": cnt,
+                    "$table_id": table_id,
+                    "$description": "" if description is None else description,
+                    "$phone": phone.encode(),
                 },
-                commit_tx=True, 
+                commit_tx=True,
             )
 
         with session_pool_context(self._driver_config) as session_pool:
@@ -108,8 +108,8 @@ class Storage(object):
             prepared_query = session.prepare(query)
             tx.execute(
                 prepared_query,
-                parameters={"$dt": dt, "$phone": phone.encode()}, 
-                commit_tx=True, 
+                parameters={"$dt": dt, "$phone": phone.encode()},
+                commit_tx=True,
             )
 
         with session_pool_context(self._driver_config) as session_pool:

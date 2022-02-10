@@ -1,16 +1,16 @@
-[ 
-    [ 
-        { 
-            "column0": 1, 
-            "column1": "a" 
-        }, 
-        { 
-            "column0": 1, 
-            "column1": "c" 
-        }, 
-        { 
-            "column0": 1, 
-            "column1": "b" 
-        } 
-    ] 
-] 
+[
+    [
+        {
+            "column0": 1,
+            "column1": "a"
+        },
+        {
+            "column0": 1,
+            "column1": "c"
+        },
+        {
+            "column0": 1,
+            "column1": "b"
+        }
+    ]
+]

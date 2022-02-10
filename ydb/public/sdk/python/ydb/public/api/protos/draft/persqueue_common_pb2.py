@@ -13,7 +13,7 @@ _sym_db = _symbol_database.Default()
 
 
 from google.protobuf import descriptor_pb2 as google_dot_protobuf_dot_descriptor__pb2
-from ydb.public.api.protos.draft import persqueue_error_codes_pb2 as ydb_dot_public_dot_api_dot_protos_dot_draft_dot_persqueue__error__codes__pb2 
+from ydb.public.api.protos.draft import persqueue_error_codes_pb2 as ydb_dot_public_dot_api_dot_protos_dot_draft_dot_persqueue__error__codes__pb2
 
 
 DESCRIPTOR = _descriptor.FileDescriptor(
@@ -22,9 +22,9 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=b'\n\030com.yandex.ydb.persqueue\370\001\001',
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n2ydb/public/api/protos/draft/persqueue_common.proto\x12\x10NPersQueueCommon\x1a google/protobuf/descriptor.proto\x1a\x37ydb/public/api/protos/draft/persqueue_error_codes.proto\"M\n\x05\x45rror\x12/\n\x04\x63ode\x18\x01 \x01(\x0e\x32!.NPersQueue.NErrorCode.EErrorCode\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\"Q\n\x0b\x43redentials\x12\x1c\n\x12tvm_service_ticket\x18\x01 \x01(\x0cH\x00\x12\x15\n\x0boauth_token\x18\x02 \x01(\x0cH\x00\x42\r\n\x0b\x63redentials*<\n\x06\x45\x43odec\x12\x07\n\x03RAW\x10\x00\x12\x08\n\x04GZIP\x10\x01\x12\x08\n\x04LZOP\x10\x02\x12\x08\n\x04ZSTD\x10\x03\x12\x0b\n\x07\x44\x45\x46\x41ULT\x10\x64:7\n\x0fGenerateYaStyle\x12\x1c.google.protobuf.FileOptions\x18\xf6\x88\x04 \x01(\x08\x42\x1d\n\x18\x63om.yandex.ydb.persqueue\xf8\x01\x01\x62\x06proto3' 
+  serialized_pb=b'\n2ydb/public/api/protos/draft/persqueue_common.proto\x12\x10NPersQueueCommon\x1a google/protobuf/descriptor.proto\x1a\x37ydb/public/api/protos/draft/persqueue_error_codes.proto\"M\n\x05\x45rror\x12/\n\x04\x63ode\x18\x01 \x01(\x0e\x32!.NPersQueue.NErrorCode.EErrorCode\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\"Q\n\x0b\x43redentials\x12\x1c\n\x12tvm_service_ticket\x18\x01 \x01(\x0cH\x00\x12\x15\n\x0boauth_token\x18\x02 \x01(\x0cH\x00\x42\r\n\x0b\x63redentials*<\n\x06\x45\x43odec\x12\x07\n\x03RAW\x10\x00\x12\x08\n\x04GZIP\x10\x01\x12\x08\n\x04LZOP\x10\x02\x12\x08\n\x04ZSTD\x10\x03\x12\x0b\n\x07\x44\x45\x46\x41ULT\x10\x64:7\n\x0fGenerateYaStyle\x12\x1c.google.protobuf.FileOptions\x18\xf6\x88\x04 \x01(\x08\x42\x1d\n\x18\x63om.yandex.ydb.persqueue\xf8\x01\x01\x62\x06proto3'
   ,
-  dependencies=[google_dot_protobuf_dot_descriptor__pb2.DESCRIPTOR,ydb_dot_public_dot_api_dot_protos_dot_draft_dot_persqueue__error__codes__pb2.DESCRIPTOR,]) 
+  dependencies=[google_dot_protobuf_dot_descriptor__pb2.DESCRIPTOR,ydb_dot_public_dot_api_dot_protos_dot_draft_dot_persqueue__error__codes__pb2.DESCRIPTOR,])
 
 _ECODEC = _descriptor.EnumDescriptor(
   name='ECodec',
@@ -61,8 +61,8 @@ _ECODEC = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=325, 
-  serialized_end=385, 
+  serialized_start=325,
+  serialized_end=385,
 )
 _sym_db.RegisterEnumDescriptor(_ECODEC)
 
@@ -117,8 +117,8 @@ _ERROR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=163, 
-  serialized_end=240, 
+  serialized_start=163,
+  serialized_end=240,
 )
 
 
@@ -161,11 +161,11 @@ _CREDENTIALS = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=242, 
-  serialized_end=323, 
+  serialized_start=242,
+  serialized_end=323,
 )
 
-_ERROR.fields_by_name['code'].enum_type = ydb_dot_public_dot_api_dot_protos_dot_draft_dot_persqueue__error__codes__pb2._EERRORCODE 
+_ERROR.fields_by_name['code'].enum_type = ydb_dot_public_dot_api_dot_protos_dot_draft_dot_persqueue__error__codes__pb2._EERRORCODE
 _CREDENTIALS.oneofs_by_name['credentials'].fields.append(
   _CREDENTIALS.fields_by_name['tvm_service_ticket'])
 _CREDENTIALS.fields_by_name['tvm_service_ticket'].containing_oneof = _CREDENTIALS.oneofs_by_name['credentials']

@@ -39,7 +39,7 @@ RECURSE(
     messagebus
     push_client
     service
-    service/auth/tvm 
+    service/auth/tvm
     service/pages
     service/pages/tablesorter
 )

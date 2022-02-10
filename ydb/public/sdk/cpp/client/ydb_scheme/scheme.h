@@ -133,7 +133,7 @@ private:
 
 class TListDirectoryResult : public TDescribePathResult {
 public:
-    TListDirectoryResult(TVector<TSchemeEntry>&& children, TSchemeEntry&& self, TStatus&& status); 
+    TListDirectoryResult(TVector<TSchemeEntry>&& children, TSchemeEntry&& self, TStatus&& status);
     TVector<TSchemeEntry> GetChildren() const;
 
 private:

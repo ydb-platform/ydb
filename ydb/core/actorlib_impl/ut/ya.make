@@ -9,14 +9,14 @@ OWNER(
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(2400) 
-    SPLIT_FACTOR(20) 
-    SIZE(LARGE) 
-    TAG(ya:fat) 
-ELSE() 
-    TIMEOUT(600) 
-    SIZE(MEDIUM) 
-ENDIF() 
+    TIMEOUT(2400)
+    SPLIT_FACTOR(20)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    TIMEOUT(600)
+    SIZE(MEDIUM)
+ENDIF()
 
 PEERDIR(
     library/cpp/actors/core

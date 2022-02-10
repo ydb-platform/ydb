@@ -1,20 +1,20 @@
 UNITTEST_FOR(ydb/core/cms/console)
 
-OWNER(g:kikimr) 
+OWNER(g:kikimr)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND) 
-    TIMEOUT(1200) 
-    SIZE(LARGE) 
-    SPLIT_FACTOR(20) 
-    TAG(ya:fat) 
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    TIMEOUT(1200)
+    SIZE(LARGE)
+    SPLIT_FACTOR(20)
+    TAG(ya:fat)
     REQUIREMENTS(ram:16)
-ELSE() 
-    TIMEOUT(600) 
-    SIZE(MEDIUM) 
+ELSE()
+    TIMEOUT(600)
+    SIZE(MEDIUM)
     REQUIREMENTS(ram:16)
-ENDIF() 
+ENDIF()
 
 PEERDIR(
     library/cpp/getopt

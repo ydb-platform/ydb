@@ -1,33 +1,33 @@
-{ 
-    "meta": { 
-        "version": "0.1", 
-        "type": "query" 
-    }, 
-    "tables": [ 
-        { 
-            "name": "/local/base_write_delete_same_sql_plan/Input1", 
-            "reads": [ 
-                { 
-                    "type": "FullScan", 
-                    "scan_by": [ 
-                        "Group", 
-                        "Name" 
-                    ], 
-                    "columns": [ 
-                        "Group", 
-                        "Name" 
-                    ] 
-                } 
-            ], 
-            "writes": [ 
-                { 
-                    "type": "MultiErase", 
-                    "key": [ 
-                        "Group (expr)", 
-                        "Name (expr)" 
-                    ] 
-                } 
-            ] 
-        } 
-    ] 
-} 
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_write_delete_same_sql_plan/Input1",
+            "reads": [
+                {
+                    "type": "FullScan",
+                    "scan_by": [
+                        "Group",
+                        "Name"
+                    ],
+                    "columns": [
+                        "Group",
+                        "Name"
+                    ]
+                }
+            ],
+            "writes": [
+                {
+                    "type": "MultiErase",
+                    "key": [
+                        "Group (expr)",
+                        "Name (expr)"
+                    ]
+                }
+            ]
+        }
+    ]
+}

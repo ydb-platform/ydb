@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from ydb.tests.library.common import yatest_common 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory 
-import ydb 
+from ydb.tests.library.common import yatest_common
+from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+import ydb
 from hamcrest import assert_that, is_, is_not, contains_inanyorder, has_item, has_items
 import os
 import logging
@@ -20,21 +20,21 @@ def upsert_simple(session, full_path):
     session.transaction().execute(
         """
         PRAGMA TablePathPrefix("{0}");
-        UPSERT INTO {1} (`id`, `number`, `string`, `fixed_point`) VALUES (2, 6,  "pen",       CAST("2.4" AS Decimal(22,9))); 
-        UPSERT INTO {1} (`id`,           `string`, `fixed_point`) VALUES (3,     "pineapple", CAST("3.5" AS Decimal(22,9))); 
-        UPSERT INTO {1} (`id`, `number`,          `fixed_point`) VALUES (5, 12,              CAST("512.6" AS Decimal(22,9))); 
-        UPSERT INTO {1} (`id`, `number`, `string`             ) VALUES (7, 15, "pen"          ); 
+        UPSERT INTO {1} (`id`, `number`, `string`, `fixed_point`) VALUES (2, 6,  "pen",       CAST("2.4" AS Decimal(22,9)));
+        UPSERT INTO {1} (`id`,           `string`, `fixed_point`) VALUES (3,     "pineapple", CAST("3.5" AS Decimal(22,9)));
+        UPSERT INTO {1} (`id`, `number`,          `fixed_point`) VALUES (5, 12,              CAST("512.6" AS Decimal(22,9)));
+        UPSERT INTO {1} (`id`, `number`, `string`             ) VALUES (7, 15, "pen"          );
         """.format(path, table),
         commit_tx=True,
     )
 
 
-def output_path(*args): 
-    path = os.path.join(yatest_common.output_path(), *args) 
-    os.makedirs(path) 
-    return path 
- 
- 
+def output_path(*args):
+    path = os.path.join(yatest_common.output_path(), *args)
+    os.makedirs(path)
+    return path
+
+
 def list_to_string(arr, formatter=lambda x: x):
     string = "{"
     needsComma = False
@@ -69,9 +69,9 @@ def create_table_with_data(session, path):
 def is_tables_the_same(session, path_left, path_right, check_data=True):
     table_desc_left = session.describe_table(path_left)
     table_desc_right = session.describe_table(path_right)
-    if ( 
-        sorted(table_desc_left.columns, key=lambda x: x.name) != sorted(table_desc_right.columns, key=lambda x: x.name) 
-            or table_desc_left.primary_key != table_desc_right.primary_key): 
+    if (
+        sorted(table_desc_left.columns, key=lambda x: x.name) != sorted(table_desc_right.columns, key=lambda x: x.name)
+            or table_desc_left.primary_key != table_desc_right.primary_key):
         left_cols = columns_to_string(table_desc_left.columns)
         left_pk = list_to_string(table_desc_left.primary_key)
         right_cols = columns_to_string(table_desc_right.columns)
@@ -137,12 +137,12 @@ def list_all_dirs(prefix, path=""):
     return paths
 
 
-class BaseTestBackupInFiles(object): 
+class BaseTestBackupInFiles(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory() 
+        cls.cluster = kikimr_cluster_factory()
         cls.cluster.start()
-        cls.root_dir = "/Root" 
+        cls.root_dir = "/Root"
         driver_config = ydb.DriverConfig(
             database="/Root",
             endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
@@ -151,26 +151,26 @@ class BaseTestBackupInFiles(object):
 
     @classmethod
     def teardown_class(cls):
-        cls.cluster.stop() 
+        cls.cluster.stop()
 
     @classmethod
     def create_backup(cls, path, expected_dirs, check_data, additional_args=[]):
         _, name = os.path.split(path)
-        backup_files_dir = output_path("backup_files_dir_" + path.replace("/", "_")) 
+        backup_files_dir = output_path("backup_files_dir_" + path.replace("/", "_"))
         execution = yatest_common.execute(
             [
                 backup_bin(),
                 "--verbose",
-                "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port, 
+                "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
                 "--database", "/Root",
-                "tools", "dump", 
-                "--path", os.path.join('/Root', path), 
-                "--output", backup_files_dir 
+                "tools", "dump",
+                "--path", os.path.join('/Root', path),
+                "--output", backup_files_dir
             ] +
             additional_args
         )
 
-        logger.debug("std_out:\n" + execution.std_out.decode('utf-8')) 
+        logger.debug("std_out:\n" + execution.std_out.decode('utf-8'))
         list_all_dirs(backup_files_dir)
         logger.debug("list_all_dirs(backup_files_dir)# " + str(list_all_dirs(backup_files_dir)))
         logger.debug("expected_dirs# " + str(expected_dirs))
@@ -192,8 +192,8 @@ class BaseTestBackupInFiles(object):
                     has_item("scheme.pb")
                 )
 
- 
-class TestBackupSingle(BaseTestBackupInFiles): 
+
+class TestBackupSingle(BaseTestBackupInFiles):
     def test_single_table_backup(self):
         session = self.driver.table_client.session().create()
         # Create table
@@ -205,11 +205,11 @@ class TestBackupSingle(BaseTestBackupInFiles):
 
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["table", ".sys"]) 
+            is_(["table", ".sys"])
         )
 
- 
-class TestBaseSingleFromDifPlaces(BaseTestBackupInFiles): 
+
+class TestBaseSingleFromDifPlaces(BaseTestBackupInFiles):
     def test_single_table_backup_from_different_places(self):
         session = self.driver.table_client.session().create()
         # Create table
@@ -235,7 +235,7 @@ class TestBaseSingleFromDifPlaces(BaseTestBackupInFiles):
             _, table_name = os.path.split(path)
             self.create_backup(path, [table_name], True)
 
- 
+
 class TestRecursiveNonConsistent(BaseTestBackupInFiles):
     def test_recursive_table_backup_from_different_places(self):
         session = self.driver.table_client.session().create()
@@ -278,7 +278,7 @@ class TestRecursiveNonConsistent(BaseTestBackupInFiles):
         ]
         self.create_backup("folder/sub_folder", tables_paths, True, ["--consistency-level", "table"])
 
- 
+
 class TestRecursiveSchemeOnly(BaseTestBackupInFiles):
     def test_recursive_table_backup_from_different_places(self):
         session = self.driver.table_client.session().create()
@@ -301,7 +301,7 @@ class TestRecursiveSchemeOnly(BaseTestBackupInFiles):
             create_table_with_data(session, path)
 
         # Backup all tables from Root recursively
-        self.create_backup("/Root", tables_paths, False, ["--scheme-only"]) 
+        self.create_backup("/Root", tables_paths, False, ["--scheme-only"])
 
         # Backup single table
         self.create_backup("first", ["first"], False, ["--scheme-only"])
@@ -313,13 +313,13 @@ class TestRecursiveSchemeOnly(BaseTestBackupInFiles):
             "fourth",
             "sub_folder/fifth",
         ]
-        self.create_backup("folder", tables_paths, False, ["--scheme-only"]) 
+        self.create_backup("folder", tables_paths, False, ["--scheme-only"])
 
         # Backup table from sub_folder recursively
         tables_paths = [
             "fifth",
         ]
-        self.create_backup("folder/sub_folder", tables_paths, False, ["--scheme-only"]) 
+        self.create_backup("folder/sub_folder", tables_paths, False, ["--scheme-only"])
 
 
 class TestRecursiveConsistent(BaseTestBackupInFiles):
@@ -344,7 +344,7 @@ class TestRecursiveConsistent(BaseTestBackupInFiles):
             create_table_with_data(session, path)
 
         # Backup all tables from Root recursively
-        self.create_backup("/Root", tables_paths, True, ["--consistency-level", "database"]) 
+        self.create_backup("/Root", tables_paths, True, ["--consistency-level", "database"])
 
         # Backup single table
         self.create_backup("first", ["first"], True, ["--consistency-level", "database"])
@@ -365,7 +365,7 @@ class TestRecursiveConsistent(BaseTestBackupInFiles):
         self.create_backup("folder/sub_folder", tables_paths, True, ["--consistency-level", "database"])
 
 
-class TestSingleBackupRestore(BaseTestBackupInFiles): 
+class TestSingleBackupRestore(BaseTestBackupInFiles):
     def test_single_table_with_data_backup_restore(self):
         self.test_single_table_with_data_backup_restore_impl(False)
         self.test_single_table_with_data_backup_restore_impl(True)
@@ -388,11 +388,11 @@ class TestSingleBackupRestore(BaseTestBackupInFiles):
             [
                 backup_bin(),
                 "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port, 
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
                 "--database", "/Root",
-                "tools", "dump", 
-                "--path", "/Root/folder", 
-                "--output", backup_files_dir 
+                "tools", "dump",
+                "--path", "/Root/folder",
+                "--output", backup_files_dir
             ]
         )
         assert_that(
@@ -401,14 +401,14 @@ class TestSingleBackupRestore(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"]) 
+            is_(["folder", ".sys"])
         )
 
         # Restore table
         restore_cmd = [
             backup_bin(),
             "--verbose",
-            "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port, 
+            "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
             "--database", "/Root",
             "tools", "restore",
             "--path", "/Root/restored" + postfix,
@@ -420,7 +420,7 @@ class TestSingleBackupRestore(BaseTestBackupInFiles):
 
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "restored" + postfix, ".sys") 
+            contains_inanyorder("folder", "restored" + postfix, ".sys")
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root/restored" + postfix).children],
@@ -433,7 +433,7 @@ class TestSingleBackupRestore(BaseTestBackupInFiles):
         session.drop_table("/Root/restored" + postfix + "/table")
         self.driver.scheme_client.remove_directory("/Root/restored" + postfix)
 
- 
+
 class TestBackupRestoreInRoot(BaseTestBackupInFiles):
     def test_table_backup_restore_in_root(self):
         self.driver.scheme_client.make_directory(
@@ -451,7 +451,7 @@ class TestBackupRestoreInRoot(BaseTestBackupInFiles):
             [
                 backup_bin(),
                 "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port, 
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
                 "--database", "/Root",
                 "tools", "dump",
                 "--path", "/Root/folder",
@@ -464,7 +464,7 @@ class TestBackupRestoreInRoot(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"]) 
+            is_(["folder", ".sys"])
         )
 
         # Restore table
@@ -472,7 +472,7 @@ class TestBackupRestoreInRoot(BaseTestBackupInFiles):
             [
                 backup_bin(),
                 "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port, 
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
                 "--database", "/Root",
                 "tools", "restore",
                 "--path", "/Root/",
@@ -481,7 +481,7 @@ class TestBackupRestoreInRoot(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "table", ".sys") 
+            contains_inanyorder("folder", "table", ".sys")
         )
         assert_that(
             is_tables_the_same(session, "/Root/folder/table", "/Root/table"),
@@ -506,7 +506,7 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
             [
                 backup_bin(),
                 "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port, 
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
                 "--database", "/Root",
                 "tools", "dump",
                 "--scheme-only",
@@ -520,7 +520,7 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"]) 
+            is_(["folder", ".sys"])
         )
 
         # Restore table
@@ -528,7 +528,7 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
             [
                 backup_bin(),
                 "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port, 
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
                 "--database", "/Root",
                 "tools", "restore",
                 "--path", "/Root/",
@@ -537,7 +537,7 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "table", ".sys") 
+            contains_inanyorder("folder", "table", ".sys")
         )
         assert_that(
             is_tables_the_same(session, "/Root/folder/table", "/Root/table", False),
@@ -545,7 +545,7 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
         )
 
 
-class TestIncompleteBackup(BaseTestBackupInFiles): 
+class TestIncompleteBackup(BaseTestBackupInFiles):
     def test_incomplete_backup_will_not_be_restored(self):
         self.driver.scheme_client.make_directory(
             '/Root/folder'
@@ -556,16 +556,16 @@ class TestIncompleteBackup(BaseTestBackupInFiles):
         create_table_with_data(session, "folder/table")
 
         # Backup table
-        backup_files_dir = output_path("backup_files_dir") 
+        backup_files_dir = output_path("backup_files_dir")
         yatest_common.execute(
             [
                 backup_bin(),
                 "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port, 
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
                 "--database", "/Root",
-                'tools', 'dump', 
-                "--path", '/Root/folder', 
-                "--output", backup_files_dir 
+                'tools', 'dump',
+                "--path", '/Root/folder',
+                "--output", backup_files_dir
             ]
         )
         assert_that(
@@ -574,7 +574,7 @@ class TestIncompleteBackup(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"]) 
+            is_(["folder", ".sys"])
         )
 
         # Create "incomplete" file in folder with backup files
@@ -586,11 +586,11 @@ class TestIncompleteBackup(BaseTestBackupInFiles):
             [
                 backup_bin(),
                 "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port, 
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
                 "--database", "/Root",
-                'tools', 'restore', 
-                "--path", "/Root/restored", 
-                "--input", backup_files_dir 
+                'tools', 'restore',
+                "--path", "/Root/restored",
+                "--input", backup_files_dir
             ],
             check_exit_code=False
         )
@@ -600,7 +600,7 @@ class TestIncompleteBackup(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"]) 
+            is_(["folder", ".sys"])
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root/folder").children],
@@ -612,10 +612,10 @@ class TestIncompleteBackup(BaseTestBackupInFiles):
                 backup_bin(),
                 "--verbose",
                 "--endpoint", "localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database", "/Root" 
-                'tools', 'restore', 
-                "--path", "/Root/restored", 
-                "--input", os.path.join(backup_files_dir, "table") 
+                "--database", "/Root"
+                'tools', 'restore',
+                "--path", "/Root/restored",
+                "--input", os.path.join(backup_files_dir, "table")
             ],
             check_exit_code=False
         )
@@ -626,7 +626,7 @@ class TestIncompleteBackup(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"]) 
+            is_(["folder", ".sys"])
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root/folder").children],
@@ -677,7 +677,7 @@ class TestAlterBackupRestore(BaseTestBackupInFiles):
             [
                 backup_bin(),
                 "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port, 
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
                 "--database", "/Root",
                 "tools", "dump",
                 "--path", "/Root/folder",
@@ -690,7 +690,7 @@ class TestAlterBackupRestore(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_(["folder", ".sys"]) 
+            is_(["folder", ".sys"])
         )
 
         # Restore table
@@ -698,7 +698,7 @@ class TestAlterBackupRestore(BaseTestBackupInFiles):
             [
                 backup_bin(),
                 "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port, 
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
                 "--database", "/Root",
                 "tools", "restore",
                 "--path", "/Root/restored",
@@ -707,7 +707,7 @@ class TestAlterBackupRestore(BaseTestBackupInFiles):
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", "restored", ".sys") 
+            contains_inanyorder("folder", "restored", ".sys")
         )
         assert_that(
             [child.name for child in self.driver.scheme_client.list_directory("/Root/restored").children],

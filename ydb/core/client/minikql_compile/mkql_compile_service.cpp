@@ -63,35 +63,35 @@ public:
         return NKikimrServices::TActivity::MINIKQL_COMPILE_SERVICE;
     }
 
-    TMiniKQLCompileService(size_t compileInflightLimit, THolder<NYql::IDbSchemeResolver>&& dbSchemeResolver) 
+    TMiniKQLCompileService(size_t compileInflightLimit, THolder<NYql::IDbSchemeResolver>&& dbSchemeResolver)
         : COMPILE_INFLIGHT_LIMIT(compileInflightLimit)
-        , DbSchemeResolver(std::move(dbSchemeResolver)) 
-    { 
-    } 
+        , DbSchemeResolver(std::move(dbSchemeResolver))
+    {
+    }
 
     void Bootstrap(const TActorContext& ctx) {
 
         Counters = GetServiceCounters(AppData(ctx)->Counters, "compile")->GetSubgroup("subsystem", "cache");
         AllocPoolCounters = TAlignedPagePoolCounters(AppData(ctx)->Counters, "compile");
 
-        if (!DbSchemeResolver) { 
-            DbSchemeResolver.Reset(MakeDbSchemeResolver(ctx)); 
-        } 
- 
-        Become(&TThis::StateWork); 
-    } 
- 
-    NYql::IDbSchemeResolver* MakeDbSchemeResolver(const TActorContext& ctx) { 
+        if (!DbSchemeResolver) {
+            DbSchemeResolver.Reset(MakeDbSchemeResolver(ctx));
+        }
+
+        Become(&TThis::StateWork);
+    }
+
+    NYql::IDbSchemeResolver* MakeDbSchemeResolver(const TActorContext& ctx) {
         auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), Counters);
         SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
-        return NSchCache::CreateDbSchemeResolver(ctx.ExecutorThread.ActorSystem, SchemeCache); 
+        return NSchCache::CreateDbSchemeResolver(ctx.ExecutorThread.ActorSystem, SchemeCache);
     }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TMiniKQLCompileServiceEvents::TEvCompile, Handle);
             HFunc(NYql::TMiniKQLCompileActorEvents::TEvCompileResult, Handle);
-            cFunc(TEvents::TEvPoison::EventType, PassAway); 
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 Y_FAIL("");
         }
@@ -182,12 +182,12 @@ const TActorId& GetMiniKQLCompileServiceID() {
 }
 
 IActor* CreateMiniKQLCompileService(size_t compileInflightLimit) {
-    THolder<NYql::IDbSchemeResolver> resolver; 
-    return new TMiniKQLCompileService(compileInflightLimit, std::move(resolver)); 
+    THolder<NYql::IDbSchemeResolver> resolver;
+    return new TMiniKQLCompileService(compileInflightLimit, std::move(resolver));
 }
 
-IActor* CreateMiniKQLCompileService(size_t compileInflightLimit, THolder<NYql::IDbSchemeResolver>&& dbSchemeResolver) { 
-    return new TMiniKQLCompileService(compileInflightLimit, std::move(dbSchemeResolver)); 
-} 
- 
+IActor* CreateMiniKQLCompileService(size_t compileInflightLimit, THolder<NYql::IDbSchemeResolver>&& dbSchemeResolver) {
+    return new TMiniKQLCompileService(compileInflightLimit, std::move(dbSchemeResolver));
+}
+
 } // namespace NKikimr

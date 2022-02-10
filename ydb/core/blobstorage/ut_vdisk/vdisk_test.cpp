@@ -368,8 +368,8 @@ Y_UNIT_TEST_SUITE(TBsVDiskGC) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 Y_UNIT_TEST_SUITE(TBsVDiskOutOfSpace) {
     Y_UNIT_TEST(WriteUntilOrangeZone) {
-        return; // Test is ignored. FIX: KIKIMR-8019 
- 
+        return; // Test is ignored. FIX: KIKIMR-8019
+
         TWriteUntilOrangeZone test;
         const ui32 chunkSize = 512u << 10u;
         const ui64 diskSize = 500ull << 20ull;
@@ -537,7 +537,7 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
     }
 
     Y_UNIT_TEST(ChaoticWriteRestartHuge) {
-        return; // https://st.yandex-team.ru/KIKIMR-5314 
+        return; // https://st.yandex-team.ru/KIKIMR-5314
         auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         TChaoticWriteRestartWriteSettings settings(
             TWriteRestartReadSettings::OneSetup(100000, 65u << 10u, HUGEB, vdiskSetup),

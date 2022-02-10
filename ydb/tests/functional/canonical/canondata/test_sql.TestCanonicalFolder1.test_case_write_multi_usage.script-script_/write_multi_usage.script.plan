@@ -1,91 +1,91 @@
-{ 
-    "meta": { 
-        "version": "0.2", 
-        "type": "script" 
-    }, 
-    "queries": [ 
-        { 
-            "tables": [ 
-                { 
-                    "name": "/local/base_write_multi_usage_script_script/Input1", 
-                    "reads": [ 
-                        { 
-                            "lookup_by": [ 
-                                "Group (\"2\")" 
-                            ], 
-                            "columns": [ 
-                                "Amount" 
-                            ], 
-                            "scan_by": [ 
-                                "Name" 
-                            ], 
-                            "type": "Lookup" 
-                        } 
-                    ], 
-                    "writes": [ 
-                        { 
-                            "key": [ 
-                                "Group (\"1\")", 
-                                "Name (expr)" 
-                            ], 
-                            "type": "Erase" 
-                        } 
-                    ] 
-                }, 
-                { 
-                    "name": "/local/base_write_multi_usage_script_script/Temp", 
-                    "writes": [ 
-                        { 
-                            "columns": [ 
-                                "Value" 
-                            ], 
-                            "key": [ 
-                                "Name (expr)" 
-                            ], 
-                            "type": "MultiUpsert" 
-                        } 
-                    ] 
-                } 
-            ] 
-        }, 
-        { 
-            "tables": [ 
-                { 
-                    "name": "/local/base_write_multi_usage_script_script/Input1", 
-                    "reads": [ 
-                        { 
-                            "columns": [ 
-                                "Amount", 
-                                "Comment", 
-                                "Group", 
-                                "Name" 
-                            ], 
-                            "limit": "\"1001\"", 
-                            "scan_by": [ 
-                                "Group", 
-                                "Name" 
-                            ], 
-                            "type": "FullScan" 
-                        } 
-                    ] 
-                }, 
-                { 
-                    "name": "/local/base_write_multi_usage_script_script/Temp", 
-                    "reads": [ 
-                        { 
-                            "columns": [ 
-                                "Name", 
-                                "Value" 
-                            ], 
-                            "limit": "\"1001\"", 
-                            "scan_by": [ 
-                                "Name" 
-                            ], 
-                            "type": "FullScan" 
-                        } 
-                    ] 
-                } 
-            ] 
-        } 
-    ] 
-} 
+{
+    "meta": {
+        "version": "0.2",
+        "type": "script"
+    },
+    "queries": [
+        {
+            "tables": [
+                {
+                    "name": "/local/base_write_multi_usage_script_script/Input1",
+                    "reads": [
+                        {
+                            "lookup_by": [
+                                "Group (\"2\")"
+                            ],
+                            "columns": [
+                                "Amount"
+                            ],
+                            "scan_by": [
+                                "Name"
+                            ],
+                            "type": "Lookup"
+                        }
+                    ],
+                    "writes": [
+                        {
+                            "key": [
+                                "Group (\"1\")",
+                                "Name (expr)"
+                            ],
+                            "type": "Erase"
+                        }
+                    ]
+                },
+                {
+                    "name": "/local/base_write_multi_usage_script_script/Temp",
+                    "writes": [
+                        {
+                            "columns": [
+                                "Value"
+                            ],
+                            "key": [
+                                "Name (expr)"
+                            ],
+                            "type": "MultiUpsert"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "tables": [
+                {
+                    "name": "/local/base_write_multi_usage_script_script/Input1",
+                    "reads": [
+                        {
+                            "columns": [
+                                "Amount",
+                                "Comment",
+                                "Group",
+                                "Name"
+                            ],
+                            "limit": "\"1001\"",
+                            "scan_by": [
+                                "Group",
+                                "Name"
+                            ],
+                            "type": "FullScan"
+                        }
+                    ]
+                },
+                {
+                    "name": "/local/base_write_multi_usage_script_script/Temp",
+                    "reads": [
+                        {
+                            "columns": [
+                                "Name",
+                                "Value"
+                            ],
+                            "limit": "\"1001\"",
+                            "scan_by": [
+                                "Name"
+                            ],
+                            "type": "FullScan"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

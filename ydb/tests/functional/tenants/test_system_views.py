@@ -11,10 +11,10 @@ from hamcrest import (
     has_properties,
 )
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory 
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator 
-from ydb.tests.library.harness.util import LogLevels 
-import ydb 
+from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.util import LogLevels
+import ydb
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,8 @@ class BaseSystemViews(object):
 
     def setup_method(self, method=None):
         self.database = "/Root/users/{class_name}_{method_name}".format(
-            class_name=self.__class__.__name__, 
-            method_name=method.__name__, 
+            class_name=self.__class__.__name__,
+            method_name=method.__name__,
         )
         logger.debug("Create database %s" % self.database)
         self.cluster.create_database(
@@ -48,8 +48,8 @@ class BaseSystemViews(object):
                 'hdd': 1
             }
         )
-        self.cluster.register_and_start_slots(self.database, count=1) 
-        self.cluster.wait_tenant_up(self.database) 
+        self.cluster.register_and_start_slots(self.database, count=1)
+        self.cluster.wait_tenant_up(self.database)
 
     def teardown_method(self, method=None):
         logger.debug("Remove database %s" % self.database)
@@ -87,7 +87,7 @@ class BaseSystemViews(object):
         )
 
     def _stream_query_result(self, driver, query):
-        it = driver.table_client.scan_query(query) 
+        it = driver.table_client.scan_query(query)
         result = []
 
         while True:
@@ -96,9 +96,9 @@ class BaseSystemViews(object):
             except StopIteration:
                 break
 
-            for row in response.result_set.rows: 
-                result.append(row) 
- 
+            for row in response.result_set.rows:
+                result.append(row)
+
         return result
 
     def check_query_metrics_and_stats(self, query_count):

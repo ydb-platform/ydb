@@ -1,5 +1,5 @@
 #include "kqp_impl.h"
-#include "kqp_metadata_loader.h" 
+#include "kqp_metadata_loader.h"
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -76,40 +76,40 @@ struct TKqpQueryState {
     TMaybe<NKikimrKqp::TRlPath> RlPath;
 };
 
- 
-struct TSessionShutdownState { 
-    TSessionShutdownState(ui32 softTimeout, ui32 hardTimeout) 
-        : HardTimeout(hardTimeout) 
-        , SoftTimeout(softTimeout) 
-    {} 
- 
-    ui32 Step = 0; 
-    ui32 HardTimeout; 
-    ui32 SoftTimeout; 
- 
-    void MoveToNextState() { 
-        ++Step; 
-    } 
- 
-    ui32 GetNextTickMs() const { 
-        if (Step == 0) { 
-            return std::min(HardTimeout, SoftTimeout); 
-        } else if (Step == 1) { 
-            return std::max(HardTimeout, SoftTimeout) - std::min(HardTimeout, SoftTimeout) + 1; 
-        } else { 
-            return 50; 
-        } 
-    } 
- 
-    bool SoftTimeoutReached() const { 
-        return Step == 1; 
-    } 
- 
-    bool HardTimeoutReached() const { 
-        return Step == 2; 
-    } 
-}; 
- 
+
+struct TSessionShutdownState {
+    TSessionShutdownState(ui32 softTimeout, ui32 hardTimeout)
+        : HardTimeout(hardTimeout)
+        , SoftTimeout(softTimeout)
+    {}
+
+    ui32 Step = 0;
+    ui32 HardTimeout;
+    ui32 SoftTimeout;
+
+    void MoveToNextState() {
+        ++Step;
+    }
+
+    ui32 GetNextTickMs() const {
+        if (Step == 0) {
+            return std::min(HardTimeout, SoftTimeout);
+        } else if (Step == 1) {
+            return std::max(HardTimeout, SoftTimeout) - std::min(HardTimeout, SoftTimeout) + 1;
+        } else {
+            return 50;
+        }
+    }
+
+    bool SoftTimeoutReached() const {
+        return Step == 1;
+    }
+
+    bool HardTimeoutReached() const {
+        return Step == 2;
+    }
+};
+
 struct TKqpCleanupState {
     bool Final = false;
     TInstant Start;
@@ -156,7 +156,7 @@ public:
         , CreationTime(TInstant::Now())
         , QueryId(0)
         , IdleTimerId(0)
-        , ShutdownState(std::nullopt) 
+        , ShutdownState(std::nullopt)
     {
         Y_VERIFY(ModuleResolverState);
         Y_VERIFY(ModuleResolverState->ModuleResolver);
@@ -181,9 +181,9 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, "Worker bootstrapped, workerId: " << ctx.SelfID);
         Counters->ReportWorkerCreated(Settings.DbCounters);
 
-        std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(TlsActivationContext->ActorSystem(), false); 
-        Gateway = CreateKikimrIcGateway(Settings.Cluster, Settings.Database, std::move(loader), 
-            ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), RequestCounters, MakeMiniKQLCompileServiceID()); 
+        std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(TlsActivationContext->ActorSystem(), false);
+        Gateway = CreateKikimrIcGateway(Settings.Cluster, Settings.Database, std::move(loader),
+            ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), RequestCounters, MakeMiniKQLCompileServiceID());
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
@@ -213,13 +213,13 @@ public:
             return;
         }
 
-        if (ShutdownState) { 
+        if (ShutdownState) {
             ReplyProcessError(ev->Sender, proxyRequestId, requestInfo, Ydb::StatusIds::BAD_SESSION,
                 "Session is under shutdown.", ctx);
-            FinalCleanup(ctx); 
-            return; 
-        } 
- 
+            FinalCleanup(ctx);
+            return;
+        }
+
         StartIdleTimer(ctx);
 
         ReplyPingStatus(ev->Sender, proxyRequestId, true, ctx);
@@ -246,18 +246,18 @@ public:
             return;
         }
 
-        if (ShutdownState && ShutdownState->SoftTimeoutReached()) { 
-            // we reached the soft timeout, so at this point we don't allow to accept new 
-            // queries for session. 
-            LOG_NOTICE_S(ctx, NKikimrServices::KQP_WORKER, TKqpRequestInfo("", SessionId) 
-                << "System shutdown requested: soft timeout reached, no queries can be accepted. Closing session."); 
- 
+        if (ShutdownState && ShutdownState->SoftTimeoutReached()) {
+            // we reached the soft timeout, so at this point we don't allow to accept new
+            // queries for session.
+            LOG_NOTICE_S(ctx, NKikimrServices::KQP_WORKER, TKqpRequestInfo("", SessionId)
+                << "System shutdown requested: soft timeout reached, no queries can be accepted. Closing session.");
+
             ReplyProcessError(ev->Sender, proxyRequestId, requestInfo,
-                Ydb::StatusIds::BAD_SESSION, "Session is under shutdown.", ctx); 
-            FinalCleanup(ctx); 
-            return; 
-        } 
- 
+                Ydb::StatusIds::BAD_SESSION, "Session is under shutdown.", ctx);
+            FinalCleanup(ctx);
+            return;
+        }
+
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, requestInfo << "Received request, proxyRequestId: "
             << proxyRequestId);
 
@@ -297,8 +297,8 @@ public:
             QueryState->QueryDeadlines.CancelAt = now + TDuration::MilliSeconds(queryRequest.GetCancelAfterMs());
         }
 
-        auto timeoutMs = GetQueryTimeout(queryRequest.GetType(), queryRequest.GetTimeoutMs(), Settings.Service); 
-        QueryState->QueryDeadlines.TimeoutAt = now + timeoutMs; 
+        auto timeoutMs = GetQueryTimeout(queryRequest.GetType(), queryRequest.GetTimeoutMs(), Settings.Service);
+        QueryState->QueryDeadlines.TimeoutAt = now + timeoutMs;
 
         auto onError = [this, &ctx, &requestInfo] (Ydb::StatusIds::StatusCode status, const TString& message) {
             ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, requestInfo, status, message, ctx);
@@ -425,21 +425,21 @@ public:
         }
     }
 
-    void HandleContinueShutdown(TEvKqp::TEvContinueShutdown::TPtr &ev, const TActorContext &ctx) { 
-        Y_UNUSED(ev); 
-        CheckContinueShutdown(ctx); 
-    } 
- 
-    void HandleInitiateShutdown(TEvKqp::TEvInitiateSessionShutdown::TPtr &ev, const TActorContext &ctx) { 
-        if (!ShutdownState) { 
-            LOG_NOTICE_S(ctx, NKikimrServices::KQP_WORKER, "Started session shutdown " << TKqpRequestInfo("", SessionId)); 
-            auto softTimeout = ev->Get()->SoftTimeoutMs; 
-            auto hardTimeout = ev->Get()->HardTimeoutMs; 
-            ShutdownState = TSessionShutdownState(softTimeout, hardTimeout); 
-            ScheduleNextShutdownTick(ctx); 
-        } 
-    } 
- 
+    void HandleContinueShutdown(TEvKqp::TEvContinueShutdown::TPtr &ev, const TActorContext &ctx) {
+        Y_UNUSED(ev);
+        CheckContinueShutdown(ctx);
+    }
+
+    void HandleInitiateShutdown(TEvKqp::TEvInitiateSessionShutdown::TPtr &ev, const TActorContext &ctx) {
+        if (!ShutdownState) {
+            LOG_NOTICE_S(ctx, NKikimrServices::KQP_WORKER, "Started session shutdown " << TKqpRequestInfo("", SessionId));
+            auto softTimeout = ev->Get()->SoftTimeoutMs;
+            auto hardTimeout = ev->Get()->HardTimeoutMs;
+            ShutdownState = TSessionShutdownState(softTimeout, hardTimeout);
+            ScheduleNextShutdownTick(ctx);
+        }
+    }
+
     void HandleReady(TEvKqp::TEvIdleTimeout::TPtr &ev, const TActorContext &ctx) {
         auto timerId = ev->Get()->TimerId;
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, "Received TEvIdleTimeout in ready state, timer id: "
@@ -713,8 +713,8 @@ public:
             HFunc(TEvKqp::TEvPingSessionRequest, HandleReady);
             HFunc(TEvKqp::TEvContinueProcess, HandleReady);
             HFunc(TEvKqp::TEvIdleTimeout, HandleReady);
-            HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown); 
-            HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown); 
+            HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
+            HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown);
         default:
             Y_FAIL("TKqpWorkerActor, ReadyState: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
@@ -727,8 +727,8 @@ public:
             HFunc(TEvKqp::TEvCloseSessionRequest, HandleCompileQuery);
             HFunc(TEvKqp::TEvPingSessionRequest, HandleCompileQuery);
             HFunc(TEvKqp::TEvIdleTimeout, HandleCompileQuery);
-            HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown); 
-            HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown); 
+            HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
+            HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown);
         default:
             Y_FAIL("TKqpWorkerActor, CompileQueryState: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
@@ -742,8 +742,8 @@ public:
             HFunc(TEvKqp::TEvPingSessionRequest, HandlePerformQuery);
             HFunc(TEvKqp::TEvContinueProcess, HandlePerformQuery);
             HFunc(TEvKqp::TEvIdleTimeout, HandlePerformQuery);
-            HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown); 
-            HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown); 
+            HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
+            HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown);
         default:
             Y_FAIL("TKqpWorkerActor, PerformQueryState: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
@@ -757,8 +757,8 @@ public:
             HFunc(TEvKqp::TEvPingSessionRequest, HandlePerformCleanup);
             HFunc(TEvKqp::TEvContinueProcess, HandlePerformCleanup);
             HFunc(TEvKqp::TEvIdleTimeout, HandlePerformCleanup);
-            HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown); 
-            HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown); 
+            HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
+            HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown);
         default:
             Y_FAIL("TKqpWorkerActor, PerformCleanupState: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
@@ -1628,7 +1628,7 @@ private:
             } else if (maxReadType == ETableReadType::Scan) {
                 Counters->ReportQueryWithRangeScan(Settings.DbCounters);
             }
- 
+
             ui32 affectedShardsCount = 0;
             ui64 readBytesCount = 0;
             ui64 readRowsCount = 0;
@@ -1732,18 +1732,18 @@ private:
             record.MutableResponse()->SetQueryPlan(queryResult.QueryPlan);
         }
 
-        AddTrailingInfo(responseEv->Record.GetRef()); 
+        AddTrailingInfo(responseEv->Record.GetRef());
         return Reply(std::move(responseEv), ctx);
     }
 
-    template<class TEvRecord> 
-    void AddTrailingInfo(TEvRecord& record) { 
-        if (ShutdownState) { 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, "Session ["  << SessionId  << "] is closing, set trailing metadata to request session shutdown"); 
-            record.SetWorkerIsClosing(true); 
-        } 
-    } 
- 
+    template<class TEvRecord>
+    void AddTrailingInfo(TEvRecord& record) {
+        if (ShutdownState) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, "Session ["  << SessionId  << "] is closing, set trailing metadata to request session shutdown");
+            record.SetWorkerIsClosing(true);
+        }
+    }
+
     bool ReplyPingStatus(const TActorId& sender, ui64 proxyRequestId, bool ready, const TActorContext& ctx) {
         auto ev = MakeHolder<TEvKqp::TEvPingSessionResponse>();
         auto& record = ev->Record;
@@ -1752,7 +1752,7 @@ private:
             ? Ydb::Table::KeepAliveResult::SESSION_STATUS_READY
             : Ydb::Table::KeepAliveResult::SESSION_STATUS_BUSY);
 
-        AddTrailingInfo(record); 
+        AddTrailingInfo(record);
         return ctx.Send(sender, ev.Release(), 0, proxyRequestId);
     }
 
@@ -1762,8 +1762,8 @@ private:
         LOG_WARN_S(ctx, NKikimrServices::KQP_WORKER, requestInfo << message);
 
         auto response = TEvKqp::TEvProcessResponse::Error(ydbStatus, message);
- 
-        AddTrailingInfo(response->Record); 
+
+        AddTrailingInfo(response->Record);
         return ctx.Send(sender, response.Release(), 0, proxyRequestId);
     }
 
@@ -2063,32 +2063,32 @@ private:
         return compileResult.Uid;
     }
 
-    void ScheduleNextShutdownTick(const TActorContext& ctx) { 
-        ctx.Schedule(TDuration::MilliSeconds(ShutdownState->GetNextTickMs()), new TEvKqp::TEvContinueShutdown()); 
-    } 
- 
-    void CheckContinueShutdown(const TActorContext& ctx) { 
-        Y_VERIFY(ShutdownState); 
-        ShutdownState->MoveToNextState(); 
-        if (ShutdownState->HardTimeoutReached()){ 
-            LOG_NOTICE_S(ctx, NKikimrServices::KQP_WORKER, "Reached hard shutdown timeout " << TKqpRequestInfo("", SessionId)); 
-            if (CleanupState) { 
-                if (!CleanupState->Final) { 
-                    Y_VERIFY(QueryState); 
-                    QueryState->KeepSession = false; 
-                } 
-            } else if (QueryState) { 
-                QueryState->KeepSession = false; 
-            } else { 
-                FinalCleanup(ctx); 
-            } 
- 
-        } else { 
-            ScheduleNextShutdownTick(ctx); 
+    void ScheduleNextShutdownTick(const TActorContext& ctx) {
+        ctx.Schedule(TDuration::MilliSeconds(ShutdownState->GetNextTickMs()), new TEvKqp::TEvContinueShutdown());
+    }
+
+    void CheckContinueShutdown(const TActorContext& ctx) {
+        Y_VERIFY(ShutdownState);
+        ShutdownState->MoveToNextState();
+        if (ShutdownState->HardTimeoutReached()){
+            LOG_NOTICE_S(ctx, NKikimrServices::KQP_WORKER, "Reached hard shutdown timeout " << TKqpRequestInfo("", SessionId));
+            if (CleanupState) {
+                if (!CleanupState->Final) {
+                    Y_VERIFY(QueryState);
+                    QueryState->KeepSession = false;
+                }
+            } else if (QueryState) {
+                QueryState->KeepSession = false;
+            } else {
+                FinalCleanup(ctx);
+            }
+
+        } else {
+            ScheduleNextShutdownTick(ctx);
             LOG_INFO_S(ctx, NKikimrServices::KQP_WORKER, "Schedule next shutdown tick " << TKqpRequestInfo("", SessionId));
-        } 
-    } 
- 
+        }
+    }
+
     void StartIdleTimer(const TActorContext& ctx) {
         StopIdleTimer(ctx);
 
@@ -2177,7 +2177,7 @@ private:
     THolder<TKqpCleanupState> CleanupState;
     ui32 IdleTimerId;
     TActorId IdleTimerActorId;
-    std::optional<TSessionShutdownState> ShutdownState; 
+    std::optional<TSessionShutdownState> ShutdownState;
 };
 
 } // namespace

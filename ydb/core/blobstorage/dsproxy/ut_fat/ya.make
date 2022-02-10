@@ -8,16 +8,16 @@ OWNER(
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(30) 
+SPLIT_FACTOR(30)
 
-IF (WITH_VALGRIND) 
-    SIZE(LARGE) 
-    TAG(ya:fat) 
-    TIMEOUT(1800) 
-ELSE() 
-    SIZE(MEDIUM) 
-    TIMEOUT(600) 
-ENDIF() 
+IF (WITH_VALGRIND)
+    SIZE(LARGE)
+    TAG(ya:fat)
+    TIMEOUT(1800)
+ELSE()
+    SIZE(MEDIUM)
+    TIMEOUT(600)
+ENDIF()
 
 PEERDIR(
     library/cpp/actors/protos

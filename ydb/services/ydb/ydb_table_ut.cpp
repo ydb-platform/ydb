@@ -34,18 +34,18 @@ TSession CreateSession(TDriver driver, const TString& token = "", const TString&
     return session.GetSession();
 }
 
- 
-void EnsureTablePartitions(NYdb::NTable::TTableClient& client, TString table, ui32 expectedPartitions) { 
-    auto session = client.CreateSession().ExtractValueSync().GetSession(); 
-    auto describeTableSettings = TDescribeTableSettings() 
-        .WithTableStatistics(true).WithPartitionStatistics(true).WithKeyShardBoundary(true); 
-    auto description = session.DescribeTable(table, describeTableSettings).ExtractValueSync(); 
- 
-    UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString()); 
-    UNIT_ASSERT_VALUES_EQUAL(description.GetTableDescription().GetPartitionsCount(), expectedPartitions); 
-    UNIT_ASSERT_VALUES_EQUAL(description.GetTableDescription().GetPartitionStats().size(), expectedPartitions); 
-} 
- 
+
+void EnsureTablePartitions(NYdb::NTable::TTableClient& client, TString table, ui32 expectedPartitions) {
+    auto session = client.CreateSession().ExtractValueSync().GetSession();
+    auto describeTableSettings = TDescribeTableSettings()
+        .WithTableStatistics(true).WithPartitionStatistics(true).WithKeyShardBoundary(true);
+    auto description = session.DescribeTable(table, describeTableSettings).ExtractValueSync();
+
+    UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(description.GetTableDescription().GetPartitionsCount(), expectedPartitions);
+    UNIT_ASSERT_VALUES_EQUAL(description.GetTableDescription().GetPartitionStats().size(), expectedPartitions);
+}
+
 static void MultiTenantSDK(bool asyncDiscovery) {
     TKikimrWithGrpcAndRootSchemaWithAuthAndSsl server;
     ui16 grpc = server.GetPort();
@@ -108,7 +108,7 @@ static void MultiTenantSDK(bool asyncDiscovery) {
         UNIT_ASSERT(sessionValue.IsTransportError());
     });
 */
-    driver.Stop(true); 
+    driver.Stop(true);
 }
 
 Y_UNIT_TEST_SUITE(YdbYqlClient) {
@@ -3920,18 +3920,18 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint32(20).EndTuple().Build());
 
             auto tableSettings = TCreateTableSettings().PartitioningPolicy(
-                TPartitioningPolicy().ExplicitPartitions(partitions).AutoPartitioning( 
-                        EAutoPartitioningPolicy::AutoSplitMerge)); 
+                TPartitioningPolicy().ExplicitPartitions(partitions).AutoPartitioning(
+                        EAutoPartitioningPolicy::AutoSplitMerge));
 
             auto result = session.CreateTable("/Root/Foo", tableBuilder.Build(), tableSettings).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
- 
-            for(ui32 idx = 0; idx < 25; ++idx) { 
-                // trying to wait for split merge to complete (if enabled...???) 
-                EnsureTablePartitions(client, "/Root/Foo", 3); 
-                Sleep(TDuration::Seconds(1)); 
-            } 
- 
+
+            for(ui32 idx = 0; idx < 25; ++idx) {
+                // trying to wait for split merge to complete (if enabled...???)
+                EnsureTablePartitions(client, "/Root/Foo", 3);
+                Sleep(TDuration::Seconds(1));
+            }
+
         }
 
         {
@@ -3958,7 +3958,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             }
         }
 
-        EnsureTablePartitions(client, "/Root/Foo", 3); 
+        EnsureTablePartitions(client, "/Root/Foo", 3);
     }
 
     Y_UNIT_TEST(CreateAndAltertTableWithCompactionPolicy) {

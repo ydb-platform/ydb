@@ -1,5 +1,5 @@
-OWNER(g:kikimr) 
- 
-RECURSE( 
-    cmds 
-) 
+OWNER(g:kikimr)
+
+RECURSE(
+    cmds
+)

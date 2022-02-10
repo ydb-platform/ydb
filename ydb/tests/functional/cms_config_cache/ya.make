@@ -1,6 +1,6 @@
 OWNER(g:kikimr)
 
-PY3TEST() 
+PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TEST_SRCS(
     main.py
@@ -15,8 +15,8 @@ DEPENDS(
 )
 
 PEERDIR(
-    ydb/tests/library 
-    ydb/public/sdk/python/ydb 
+    ydb/tests/library
+    ydb/public/sdk/python/ydb
 )
 
 FORK_SUBTESTS()

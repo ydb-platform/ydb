@@ -7,10 +7,10 @@ OWNER(
 )
 
 FORK_SUBTESTS()
- 
-TIMEOUT(600) 
 
-SIZE(MEDIUM) 
+TIMEOUT(600)
+
+SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/getopt

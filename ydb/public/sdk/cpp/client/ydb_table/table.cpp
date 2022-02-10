@@ -1385,18 +1385,18 @@ static TStatus GetStatus(const TStatus& status) {
     return status;
 }
 
-static bool IsSessionCloseRequested(const TStatus& status) { 
-    const auto& meta = status.GetResponseMetadata(); 
-    auto hints = meta.equal_range(NYdb::YDB_SERVER_HINTS); 
-    for(auto it = hints.first; it != hints.second; ++it) { 
-        if (it->second == NYdb::YDB_SESSION_CLOSE) { 
-            return true; 
-        } 
-    } 
- 
-    return false; 
-} 
- 
+static bool IsSessionCloseRequested(const TStatus& status) {
+    const auto& meta = status.GetResponseMetadata();
+    auto hints = meta.equal_range(NYdb::YDB_SERVER_HINTS);
+    for(auto it = hints.first; it != hints.second; ++it) {
+        if (it->second == NYdb::YDB_SESSION_CLOSE) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 template<typename TResponse>
 NThreading::TFuture<TResponse> InjectSessionStatusInterception(
         std::shared_ptr<TSession::TImpl>& impl, NThreading::TFuture<TResponse> asyncResponse,
@@ -1425,8 +1425,8 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
             impl->MarkDisconnected();
         } else if (status.GetStatus() == EStatus::BAD_SESSION) {
             impl->MarkBroken();
-        } else if (IsSessionCloseRequested(status)) { 
-            impl->MarkAsClosing(); 
+        } else if (IsSessionCloseRequested(status)) {
+            impl->MarkAsClosing();
         } else {
             // NOTE: About GetState and lock
             // Simultanious call multiple requests on the same session make no sence, due to server limitation.
@@ -4228,7 +4228,7 @@ std::function<void(TSession::TImpl*)> TSession::TImpl::GetSmartDeleter(std::shar
         switch (sessionImpl->GetState()) {
             case TSession::TImpl::S_STANDALONE:
             case TSession::TImpl::S_BROKEN:
-            case TSession::TImpl::S_CLOSING: 
+            case TSession::TImpl::S_CLOSING:
                 client->DeleteSession(sessionImpl);
             break;
             case TSession::TImpl::S_IDLE:

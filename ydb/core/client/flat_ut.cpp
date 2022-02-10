@@ -16,7 +16,7 @@
 #include <google/protobuf/text_format.h>
 #include <util/generic/xrange.h>
 #include <util/random/mersenne.h>
-#include <util/system/sanitizers.h> 
+#include <util/system/sanitizers.h>
 
 namespace NKikimr {
 namespace NFlatTests {
@@ -3225,7 +3225,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
 
         // Wait for merge to happen
-        for (int retry = 0; retry < 45 && annoyingClient.GetTablePartitions("/dc-1/Dir/T1").size() != 1; ++retry) { 
+        for (int retry = 0; retry < 45 && annoyingClient.GetTablePartitions("/dc-1/Dir/T1").size() != 1; ++retry) {
             Sleep(TDuration::Seconds(1));
         }
 

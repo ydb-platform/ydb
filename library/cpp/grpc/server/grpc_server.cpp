@@ -133,14 +133,14 @@ void TGRpcServer::Start() {
     }
 
     if (Options_.GRpcMemoryQuotaBytes) {
-        // See details KIKIMR-6932 
+        // See details KIKIMR-6932
         /*
         grpc::ResourceQuota quota("memory_bound");
         quota.Resize(Options_.GRpcMemoryQuotaBytes);
 
         builder.SetResourceQuota(quota);
         */
-        Cerr << "GRpc memory quota temporarily disabled due to issues with grpc quoter" << Endl; 
+        Cerr << "GRpc memory quota temporarily disabled due to issues with grpc quoter" << Endl;
     }
     Options_.ServerBuilderMutator(builder);
     builder.SetDefaultCompressionLevel(Options_.DefaultCompressionLevel);
@@ -191,7 +191,7 @@ void TGRpcServer::Stop() {
         Server_->Shutdown(gpr_timespec{sec, nanosecOfSec, GPR_TIMESPAN});
     }
 
-    for (ui64 attempt = 0; ; ++attempt) { 
+    for (ui64 attempt = 0; ; ++attempt) {
         bool unsafe = false;
         size_t infly = 0;
         for (auto& service : Services_) {
@@ -201,13 +201,13 @@ void TGRpcServer::Stop() {
 
         if (!unsafe && !infly)
             break;
- 
+
         auto spent = (TInstant::Now() - now).SecondsFloat();
-        if (attempt % 300 == 0) { 
-            // don't log too much 
-            Cerr << "GRpc shutdown warning: left infly: " << infly << ", spent: " << spent << " sec" <<  Endl; 
-        } 
- 
+        if (attempt % 300 == 0) {
+            // don't log too much
+            Cerr << "GRpc shutdown warning: left infly: " << infly << ", spent: " << spent << " sec" <<  Endl;
+        }
+
         if (!unsafe && spent > Options_.GRpcShutdownDeadline.SecondsFloat())
             break;
         Sleep(TDuration::MilliSeconds(10));

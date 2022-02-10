@@ -1,23 +1,23 @@
-#!/usr/bin/env python 
-# -*- coding: utf-8 -*- 
-import time 
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import time
 from collections import OrderedDict
- 
+
 import pytest
 from hamcrest import assert_that, equal_to, greater_than, not_none, none, has_item, has_items, raises, empty, instance_of
- 
+
 from sqs_matchers import ReadResponseMatcher
 
 from sqs_test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, IS_FIFO_PARAMS
-from sqs_test_base import to_bytes 
-from ydb import issues as ydb_issues 
+from sqs_test_base import to_bytes
+from ydb import issues as ydb_issues
 
 
 class QueuesManagingTest(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(QueuesManagingTest, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['account_settings_defaults'] = {'max_queues_count': 10} 
+        config_generator.yaml_config['sqs_config']['account_settings_defaults'] = {'max_queues_count': 10}
         return config_generator
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
@@ -33,14 +33,14 @@ class QueuesManagingTest(KikimrSqsTestBase):
         attributes['VisibilityTimeout'] = '42'
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True)
         existing_queues = self._sqs_api.list_queues()
-        assert_that( 
-            created_queue_url in existing_queues 
-        ) 
+        assert_that(
+            created_queue_url in existing_queues
+        )
         got_queue_url = self._sqs_api.get_queue_url(self.queue_name)
-        assert_that( 
-            got_queue_url, equal_to(created_queue_url) 
-        ) 
- 
+        assert_that(
+            got_queue_url, equal_to(created_queue_url)
+        )
+
         created_attributes = self._sqs_api.get_queue_attributes(got_queue_url)
         assert_that(equal_to(created_attributes.get('DelaySeconds')), attributes['DelaySeconds'])
         assert_that(equal_to(created_attributes.get('MaximumMessageSize')), attributes['MaximumMessageSize'])
@@ -57,25 +57,25 @@ class QueuesManagingTest(KikimrSqsTestBase):
 
         assert_that(
             call_create,
-            raises( 
-                RuntimeError, 
+            raises(
+                RuntimeError,
                 pattern='failed with status 400.*\n.*FIFO queue should end with &quot;\\.fifo&quot;'
-            ) 
+            )
         )
 
     def test_create_queue_generates_event(self):
         pytest.skip("Outdated")
         self._create_queue_and_assert(self.queue_name, is_fifo=False)
-        table_path = '{}/.Queues'.format(self.sqs_root) 
+        table_path = '{}/.Queues'.format(self.sqs_root)
         assert_that(self._get_table_lines_count(table_path), equal_to(1))
 
-        table_path = '{}/.Events'.format(self.sqs_root) 
+        table_path = '{}/.Events'.format(self.sqs_root)
         assert_that(self._get_table_lines_count(table_path), equal_to(1))
 
     def test_remove_queue_generates_event(self):
         pytest.skip("Outdated")
         queue_url = self._create_queue_and_assert(self.queue_name)
-        table_path = '{}/.Events'.format(self.sqs_root) 
+        table_path = '{}/.Events'.format(self.sqs_root)
         lines_count = self._get_table_lines_count(table_path)
         assert_that(lines_count, greater_than(0))
 
@@ -113,23 +113,23 @@ class QueuesManagingTest(KikimrSqsTestBase):
         assert_that(sends, equal_to(1))
 
         delete_result = self._sqs_api.delete_queue(created_queue_url)
-        assert_that( 
-            delete_result, not_none() 
-        ) 
- 
+        assert_that(
+            delete_result, not_none()
+        )
+
         existing_queues = self._sqs_api.list_queues()
-        assert_that( 
-            created_queue_url not in existing_queues, 
-            "Deleted queue appears in list_queues()" 
-        ) 
- 
+        assert_that(
+            created_queue_url not in existing_queues,
+            "Deleted queue appears in list_queues()"
+        )
+
         time.sleep(2)
         counters = self._get_sqs_counters()
         sends = self._get_counter_value(counters, send_message_labels)
         assert_that(sends, none())
 
         def describe_queue_path():
-            self._driver.scheme_client.describe_path('{}/{}/{}'.format(self.sqs_root, self._username, self.queue_name)) 
+            self._driver.scheme_client.describe_path('{}/{}/{}'.format(self.sqs_root, self._username, self.queue_name))
 
         assert_that(
             describe_queue_path,
@@ -146,13 +146,13 @@ class QueuesManagingTest(KikimrSqsTestBase):
         url1 = self._create_queue_and_assert('{}_1.fifo'.format(self.queue_name), is_fifo=True)
         url2 = self._create_queue_and_assert('{}_2'.format(self.queue_name), is_fifo=False)
         url3 = self._create_queue_and_assert('{}_3'.format(self.queue_name), is_fifo=False)
-        url4 = to_bytes(url2) + to_bytes('_incorrect_url') 
-        existing_queues = [to_bytes(y) for y in self._sqs_api.list_queues()] 
+        url4 = to_bytes(url2) + to_bytes('_incorrect_url')
+        existing_queues = [to_bytes(y) for y in self._sqs_api.list_queues()]
         assert_that(
             len(existing_queues), equal_to(3)
         )
         assert_that(
-            existing_queues, has_items(to_bytes(url1), to_bytes(url2)) 
+            existing_queues, has_items(to_bytes(url1), to_bytes(url2))
         )
 
         delete_queue_batch_result = self._sqs_api.private_delete_queue_batch([url1, url2, url4])
@@ -166,12 +166,12 @@ class QueuesManagingTest(KikimrSqsTestBase):
             delete_queue_batch_result['BatchResultErrorEntry'], instance_of(OrderedDict)  # that means that we have only one entry for error
         )
 
-        existing_queues = [to_bytes(y) for y in self._sqs_api.list_queues()] 
+        existing_queues = [to_bytes(y) for y in self._sqs_api.list_queues()]
         assert_that(
             len(existing_queues), equal_to(1)
         )
         assert_that(
-            existing_queues, has_item(to_bytes(url3)) 
+            existing_queues, has_item(to_bytes(url3))
         )
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
@@ -206,7 +206,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
     def test_purge_queue_batch(self):
         created_queue_url1 = self._create_queue_and_assert(self.queue_name)
         created_queue_url2 = self._create_queue_and_assert(self.queue_name + '1')
-        created_queue_url3 = to_bytes(created_queue_url2) + to_bytes('_nonexistent_queue_url') 
+        created_queue_url3 = to_bytes(created_queue_url2) + to_bytes('_nonexistent_queue_url')
         self._send_messages(created_queue_url1, 10, self._msg_body_template)
         self._send_messages(created_queue_url2, 10, self._msg_body_template)
         purge_queue_batch_result = self._sqs_api.private_purge_queue_batch([created_queue_url1, created_queue_url2, created_queue_url3])
@@ -251,7 +251,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True)
 
         master_is_updated = False
-        for i in range(100): 
+        for i in range(100):
             try:
                 self._read_messages_and_assert(
                     created_queue_url, 10, ReadResponseMatcher().with_n_messages(0)
@@ -284,7 +284,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
 
     def test_queues_count_over_limit(self):
         urls = []
-        for i in range(10): 
+        for i in range(10):
             urls.append(self._create_queue_and_assert('queue_{}'.format(i), shards=1, retries=1))
 
         def call_create():
@@ -299,12 +299,12 @@ class QueuesManagingTest(KikimrSqsTestBase):
         )
 
         def set_max_queues_count(count):
-            self._execute_yql_query('UPSERT INTO `{}/.Settings` (Account, Name, Value) VALUES (\'{}\', \'MaxQueuesCount\', \'{}\')' 
-                                    .format(self.sqs_root, self._username, count)) 
+            self._execute_yql_query('UPSERT INTO `{}/.Settings` (Account, Name, Value) VALUES (\'{}\', \'MaxQueuesCount\', \'{}\')'
+                                    .format(self.sqs_root, self._username, count))
 
         set_max_queues_count(12)
 
-        for i in range(10, 12): 
+        for i in range(10, 12):
             urls.append(self._create_queue_and_assert('queue_{}'.format(i), shards=1, retries=1))
 
         assert_that(

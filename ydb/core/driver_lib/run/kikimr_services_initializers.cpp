@@ -1547,7 +1547,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             }
         };
 
-        TVector<TIntrusivePtr<NGRpcService::TGrpcEndpointDescription>> endpoints; 
+        TVector<TIntrusivePtr<NGRpcService::TGrpcEndpointDescription>> endpoints;
         const TString &address = config.GetHost() && config.GetHost() != "[::]" ? config.GetHost() : FQDNHostName();
         if (const ui32 port = config.GetPort()) {
             TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
@@ -1561,7 +1561,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             if (serveRootDomain)
                 desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
             desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end());
-            endpoints.push_back(std::move(desc)); 
+            endpoints.push_back(std::move(desc));
         }
 
         if (const ui32 sslPort = config.GetSslPort()) {
@@ -1578,7 +1578,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                 desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
 
             desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end());
-            endpoints.push_back(std::move(desc)); 
+            endpoints.push_back(std::move(desc));
         }
 
         for (auto &sx : config.GetExtEndpoints()) {
@@ -1595,7 +1595,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                 if (serveRootDomain)
                     desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
                 desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end());
-                endpoints.push_back(std::move(desc)); 
+                endpoints.push_back(std::move(desc));
             }
 
             if (const ui32 sslPort = sx.GetSslPort()) {
@@ -1611,14 +1611,14 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                 if (serveRootDomain)
                     desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
                 desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end());
-                endpoints.push_back(std::move(desc)); 
+                endpoints.push_back(std::move(desc));
             }
         }
- 
-        setup->LocalServices.emplace_back( 
-           NGRpcService::CreateGrpcPublisherServiceActorId(), 
-           TActorSetupCmd(CreateGrpcPublisherServiceActor(std::move(endpoints)), TMailboxType::ReadAsFilled, appData->UserPoolId) 
-        ); 
+
+        setup->LocalServices.emplace_back(
+           NGRpcService::CreateGrpcPublisherServiceActorId(),
+           TActorSetupCmd(CreateGrpcPublisherServiceActor(std::move(endpoints)), TMailboxType::ReadAsFilled, appData->UserPoolId)
+        );
     }
 }
 

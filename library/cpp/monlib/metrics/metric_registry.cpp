@@ -160,7 +160,7 @@ namespace NMonitoring {
     template <typename TMetric, EMetricType type, typename TLabelsType, typename... Args>
     TMetric* TMetricRegistry::Metric(TLabelsType&& labels, Args&&... args) {
         {
-            TReadGuard g{Lock_}; 
+            TReadGuard g{Lock_};
 
             auto it = Metrics_.find(labels);
             if (it != Metrics_.end()) {
@@ -174,7 +174,7 @@ namespace NMonitoring {
         {
             IMetricPtr metric = MakeHolder<TMetric>(std::forward<Args>(args)...);
 
-            TWriteGuard g{Lock_}; 
+            TWriteGuard g{Lock_};
             // decltype(Metrics_)::iterator breaks build on windows
             THashMap<ILabelsPtr, IMetricPtr>::iterator it;
             if constexpr (!std::is_convertible_v<TLabelsType, ILabelsPtr>) {
@@ -188,7 +188,7 @@ namespace NMonitoring {
     }
 
     void TMetricRegistry::RemoveMetric(const ILabels& labels) noexcept {
-        TWriteGuard g{Lock_}; 
+        TWriteGuard g{Lock_};
         Metrics_.erase(labels);
     }
 
@@ -216,7 +216,7 @@ namespace NMonitoring {
     }
 
     void TMetricRegistry::Append(TInstant time, IMetricConsumer* consumer) const {
-        TReadGuard g{Lock_}; 
+        TReadGuard g{Lock_};
 
         for (const auto& it: Metrics_) {
             ILabels* labels = it.first.Get();

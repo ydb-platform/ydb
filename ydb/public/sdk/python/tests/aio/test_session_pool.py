@@ -15,7 +15,7 @@ async def test_simple_acquire(driver):
     assert session.initialized()
 
     await pool.release(session)
-    await pool.acquire() 
+    await pool.acquire()
     assert session.initialized()
     await pool.stop(timeout=10)
 
@@ -137,5 +137,5 @@ async def test_no_session_leak(driver, docker_project):
         pass
     assert pool._active_count == 0
 
-    docker_project.start() 
+    docker_project.start()
     await pool.stop()

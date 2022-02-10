@@ -2,10 +2,10 @@ UNITTEST_FOR(ydb/library/yql/minikql/comp_nodes)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(60) 
+SPLIT_FACTOR(60)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    TIMEOUT(3600) 
+    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()

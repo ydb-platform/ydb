@@ -9,19 +9,19 @@ OWNER(
     g:kikimr
 )
 
-IF (WITH_VALGRIND) 
-    ENV(VALGRIND_OPTS=--max-stackframe=16000000) 
-ENDIF() 
- 
+IF (WITH_VALGRIND)
+    ENV(VALGRIND_OPTS=--max-stackframe=16000000)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(2400) 
-    SPLIT_FACTOR(20) 
-    SIZE(LARGE) 
-    TAG(ya:fat) 
-ELSE() 
-    TIMEOUT(600) 
-    SIZE(MEDIUM) 
-ENDIF() 
+    TIMEOUT(2400)
+    SPLIT_FACTOR(20)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    TIMEOUT(600)
+    SIZE(MEDIUM)
+ENDIF()
 
 PEERDIR(
     library/cpp/getopt

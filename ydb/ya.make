@@ -7,5 +7,5 @@ RECURSE(
     library
     public
     services
-    tests 
+    tests
 )

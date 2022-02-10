@@ -1,56 +1,56 @@
-{ 
-    "meta": { 
-        "version": "0.1", 
-        "type": "query" 
-    }, 
-    "tables": [ 
-        { 
-            "name": "/local/base_write_insert_revert_sql_plan/Input", 
-            "reads": [ 
-                { 
-                    "type": "MultiLookup", 
-                    "lookup_by": [ 
-                        "key (expr)", 
-                        "subkey (expr)" 
-                    ] 
-                } 
-            ], 
-            "writes": [ 
-                { 
-                    "type": "MultiUpsert", 
-                    "key": [ 
-                        "key (expr)", 
-                        "subkey (expr)" 
-                    ], 
-                    "columns": [ 
-                        "value" 
-                    ] 
-                } 
-            ] 
-        }, 
-        { 
-            "name": "/local/base_write_insert_revert_sql_plan/Input1", 
-            "reads": [ 
-                { 
-                    "type": "MultiLookup", 
-                    "lookup_by": [ 
-                        "Group (expr)", 
-                        "Name (expr)" 
-                    ] 
-                } 
-            ], 
-            "writes": [ 
-                { 
-                    "type": "MultiUpsert", 
-                    "key": [ 
-                        "Group (expr)", 
-                        "Name (expr)" 
-                    ], 
-                    "columns": [ 
-                        "Comment" 
-                    ] 
-                } 
-            ] 
-        } 
-    ] 
-} 
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_write_insert_revert_sql_plan/Input",
+            "reads": [
+                {
+                    "type": "MultiLookup",
+                    "lookup_by": [
+                        "key (expr)",
+                        "subkey (expr)"
+                    ]
+                }
+            ],
+            "writes": [
+                {
+                    "type": "MultiUpsert",
+                    "key": [
+                        "key (expr)",
+                        "subkey (expr)"
+                    ],
+                    "columns": [
+                        "value"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "/local/base_write_insert_revert_sql_plan/Input1",
+            "reads": [
+                {
+                    "type": "MultiLookup",
+                    "lookup_by": [
+                        "Group (expr)",
+                        "Name (expr)"
+                    ]
+                }
+            ],
+            "writes": [
+                {
+                    "type": "MultiUpsert",
+                    "key": [
+                        "Group (expr)",
+                        "Name (expr)"
+                    ],
+                    "columns": [
+                        "Comment"
+                    ]
+                }
+            ]
+        }
+    ]
+}

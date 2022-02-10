@@ -100,8 +100,8 @@ Y_UNIT_TEST_SUITE(TNetClassifierTest) {
             UNIT_ASSERT_VALUES_EQUAL(counters->BrokenConfigNotificationsCount->GetAtomic(), 1);
             UNIT_ASSERT_VALUES_EQUAL(counters->NetDataSourceType->GetAtomic(), ENetDataSourceType::File);
 
-            const auto prevLagSeconds = AtomicGet(counters->NetDataUpdateLagSeconds->GetAtomic()); 
-            while (prevLagSeconds >= AtomicGet(counters->NetDataUpdateLagSeconds->GetAtomic())) { 
+            const auto prevLagSeconds = AtomicGet(counters->NetDataUpdateLagSeconds->GetAtomic());
+            while (prevLagSeconds >= AtomicGet(counters->NetDataUpdateLagSeconds->GetAtomic())) {
                 Wait();
             }
         }
@@ -205,11 +205,11 @@ Y_UNIT_TEST_SUITE(TNetClassifierTest) {
         {
             auto counters = ExtractCounters(cleverServer);
 
-            UNIT_ASSERT_VALUES_EQUAL(AtomicGet(counters->SubscribersCount->GetAtomic()), 1); 
-            UNIT_ASSERT_VALUES_EQUAL(AtomicGet(counters->NetDataSourceType->GetAtomic()), ENetDataSourceType::DistributableConfig); 
+            UNIT_ASSERT_VALUES_EQUAL(AtomicGet(counters->SubscribersCount->GetAtomic()), 1);
+            UNIT_ASSERT_VALUES_EQUAL(AtomicGet(counters->NetDataSourceType->GetAtomic()), ENetDataSourceType::DistributableConfig);
 
-            const auto prevLagSeconds = AtomicGet(counters->NetDataUpdateLagSeconds->GetAtomic()); 
-            while (prevLagSeconds >= AtomicGet(counters->NetDataUpdateLagSeconds->GetAtomic())) { 
+            const auto prevLagSeconds = AtomicGet(counters->NetDataUpdateLagSeconds->GetAtomic());
+            while (prevLagSeconds >= AtomicGet(counters->NetDataUpdateLagSeconds->GetAtomic())) {
                 Wait();
             }
         }

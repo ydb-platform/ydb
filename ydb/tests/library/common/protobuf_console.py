@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import ydb.core.protos.msgbus_pb2 as msgbus
 
-from ydb.tests.library.common.protobuf import AbstractProtobufBuilder 
+from ydb.tests.library.common.protobuf import AbstractProtobufBuilder
 
 
 class CreateTenantRequest(AbstractProtobufBuilder):
@@ -46,7 +46,7 @@ class CreateTenantRequest(AbstractProtobufBuilder):
 
     def disable_external_subdomain(self):
         self.protobuf.CreateTenantRequest.Request.options.disable_external_subdomain = True
- 
+
     def set_schema_quotas(self, schema_quotas):
         quotas = self.protobuf.CreateTenantRequest.Request.schema_operation_quotas
         quotas.SetInParent()
@@ -68,7 +68,7 @@ class CreateTenantRequest(AbstractProtobufBuilder):
     def set_attribute(self, name, value):
         self.protobuf.CreateTenantRequest.Request.attributes[name] = value
 
- 
+
 class AlterTenantRequest(AbstractProtobufBuilder):
     """
     See /arcadia/ydb/public/api/protos/ydb_cms.proto
@@ -106,7 +106,7 @@ class GetTenantStatusRequest(AbstractProtobufBuilder):
         super(GetTenantStatusRequest, self).__init__(msgbus.TConsoleRequest())
         self.protobuf.GetTenantStatusRequest.Request.path = path
 
- 
+
 class RemoveTenantRequest(AbstractProtobufBuilder):
     """
     See /arcadia/ydb/public/api/protos/ydb_cms.proto
@@ -125,11 +125,11 @@ class SetConfigRequest(AbstractProtobufBuilder):
     def __init__(self):
         super(SetConfigRequest, self).__init__(msgbus.TConsoleRequest())
 
-    def set_restrictions(self, tenant_usage_scope_kinds=()): 
-        restrictions = self.protobuf.SetConfigRequest.Config.ConfigsConfig.UsageScopeRestrictions 
-        restrictions.AllowedTenantUsageScopeKinds.extend(tenant_usage_scope_kinds) 
-        return self 
- 
+    def set_restrictions(self, tenant_usage_scope_kinds=()):
+        restrictions = self.protobuf.SetConfigRequest.Config.ConfigsConfig.UsageScopeRestrictions
+        restrictions.AllowedTenantUsageScopeKinds.extend(tenant_usage_scope_kinds)
+        return self
+
     def add_zone(self, kind, dc):
         zone = self.protobuf.SetConfigRequest.Config.TenantsConfig.AvailabilityZoneKinds.add()
         zone.Kind = kind
@@ -139,7 +139,7 @@ class SetConfigRequest(AbstractProtobufBuilder):
     def add_zone_set(self, name, zones):
         zone_set = self.protobuf.SetConfigRequest.Config.TenantsConfig.AvailabilityZoneSets.add()
         zone_set.Name = name
-        zone_set.ZoneKinds.extend(zones) 
+        zone_set.ZoneKinds.extend(zones)
         return self
 
     def add_unit_kind(self, kind, slot_type, zone_set):

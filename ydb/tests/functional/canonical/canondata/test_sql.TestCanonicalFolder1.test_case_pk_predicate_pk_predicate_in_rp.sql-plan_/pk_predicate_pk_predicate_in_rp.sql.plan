@@ -1,46 +1,46 @@
-{ 
-    "meta": { 
-        "version": "0.1", 
-        "type": "query" 
-    }, 
-    "tables": [ 
-        { 
-            "name": "/local/base_pk_predicate_pk_predicate_in_rp_sql_plan/Input2", 
-            "reads": [ 
-                { 
-                    "type": "Lookup", 
-                    "lookup_by": [ 
-                        "Key (\"1\")" 
-                    ], 
-                    "columns": [ 
-                        "Key", 
-                        "Value1", 
-                        "Value2" 
-                    ] 
-                }, 
-                { 
-                    "type": "Lookup", 
-                    "lookup_by": [ 
-                        "Key (\"3\")" 
-                    ], 
-                    "columns": [ 
-                        "Key", 
-                        "Value1", 
-                        "Value2" 
-                    ] 
-                }, 
-                { 
-                    "type": "Lookup", 
-                    "lookup_by": [ 
-                        "Key (\"5\")" 
-                    ], 
-                    "columns": [ 
-                        "Key", 
-                        "Value1", 
-                        "Value2" 
-                    ] 
-                } 
-            ] 
-        } 
-    ] 
-} 
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_pk_predicate_pk_predicate_in_rp_sql_plan/Input2",
+            "reads": [
+                {
+                    "type": "Lookup",
+                    "lookup_by": [
+                        "Key (\"1\")"
+                    ],
+                    "columns": [
+                        "Key",
+                        "Value1",
+                        "Value2"
+                    ]
+                },
+                {
+                    "type": "Lookup",
+                    "lookup_by": [
+                        "Key (\"3\")"
+                    ],
+                    "columns": [
+                        "Key",
+                        "Value1",
+                        "Value2"
+                    ]
+                },
+                {
+                    "type": "Lookup",
+                    "lookup_by": [
+                        "Key (\"5\")"
+                    ],
+                    "columns": [
+                        "Key",
+                        "Value1",
+                        "Value2"
+                    ]
+                }
+            ]
+        }
+    ]
+}

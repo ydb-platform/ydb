@@ -1,6 +1,6 @@
-OWNER(g:kikimr) 
- 
-RECURSE( 
-    ydb_serializable 
-    ydb_serializable/replay 
-) 
+OWNER(g:kikimr)
+
+RECURSE(
+    ydb_serializable
+    ydb_serializable/replay
+)

@@ -8,16 +8,16 @@ OWNER(
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(40) 
+SPLIT_FACTOR(40)
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    SIZE(LARGE) 
-    TAG(ya:fat) 
-    TIMEOUT(3000) 
-ELSE() 
-    SIZE(MEDIUM) 
-    TIMEOUT(600) 
-ENDIF() 
+    SIZE(LARGE)
+    TAG(ya:fat)
+    TIMEOUT(3000)
+ELSE()
+    SIZE(MEDIUM)
+    TIMEOUT(600)
+ENDIF()
 
 PEERDIR(
     library/cpp/getopt

@@ -1,4 +1,4 @@
-PY3TEST() 
+PY3TEST()
 
 OWNER(
     ilnaz
@@ -18,8 +18,8 @@ DEPENDS(
 )
 
 PEERDIR(
-    ydb/tests/library 
-    ydb/public/sdk/python/ydb 
+    ydb/tests/library
+    ydb/public/sdk/python/ydb
     contrib/python/PyHamcrest
 )
 

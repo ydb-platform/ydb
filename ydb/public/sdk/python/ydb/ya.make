@@ -1,10 +1,10 @@
-PY23_LIBRARY() 
- 
-OWNER(g:kikimr) 
- 
-PY_SRCS( 
-    NAMESPACE ydb 
-    __init__.py 
+PY23_LIBRARY()
+
+OWNER(g:kikimr)
+
+PY_SRCS(
+    NAMESPACE ydb
+    __init__.py
     _apis.py
     _session_impl.py
     _sp_impl.py
@@ -40,27 +40,27 @@ PY_SRCS(
     tracing.py
     types.py
     ydb_version.py
-) 
- 
-IF (PYTHON3) 
- 
-    PY_SRCS( 
-        NAMESPACE ydb 
+)
+
+IF (PYTHON3)
+
+    PY_SRCS(
+        NAMESPACE ydb
         aio/__init__.py
         aio/_utilities.py
-        aio/connection.py 
-        aio/driver.py 
-        aio/iam.py 
-        aio/pool.py 
-        aio/resolver.py 
-        aio/scheme.py 
-        aio/table.py 
+        aio/connection.py
+        aio/driver.py
+        aio/iam.py
+        aio/pool.py
+        aio/resolver.py
+        aio/scheme.py
+        aio/table.py
         tornado/__init__.py
         tornado/tornado_helpers.py
-    ) 
- 
-ENDIF() 
- 
+    )
+
+ENDIF()
+
 IF (PYTHON2)
     PEERDIR(
         contrib/python/enum34
@@ -68,12 +68,12 @@ IF (PYTHON2)
     )
 ENDIF()
 
-PEERDIR( 
+PEERDIR(
     contrib/libs/grpc/python
     contrib/python/protobuf
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos
-) 
- 
-END() 
+)
+
+END()

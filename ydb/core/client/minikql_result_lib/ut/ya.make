@@ -4,9 +4,9 @@ OWNER(g:kikimr)
 
 FORK_SUBTESTS()
 
-TIMEOUT(300) 
+TIMEOUT(300)
 
-SIZE(MEDIUM) 
+SIZE(MEDIUM)
 
 SRCS(
     converter_ut.cpp

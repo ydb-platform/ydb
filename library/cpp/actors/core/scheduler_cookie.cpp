@@ -11,7 +11,7 @@ namespace NActors {
         }
 
         bool IsArmed() noexcept override {
-            return (AtomicGet(Value) == 2); 
+            return (AtomicGet(Value) == 2);
         }
 
         bool Detach() noexcept override {
@@ -46,7 +46,7 @@ namespace NActors {
         }
 
         bool IsArmed() noexcept override {
-            return (AtomicGet(Value) == 3); 
+            return (AtomicGet(Value) == 3);
         }
 
         bool Detach() noexcept override {

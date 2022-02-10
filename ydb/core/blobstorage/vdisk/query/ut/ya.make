@@ -2,16 +2,16 @@ UNITTEST_FOR(ydb/core/blobstorage/vdisk/query)
 
 OWNER(g:kikimr)
 
-IF (WITH_VALGRIND) 
-    FORK_SUBTESTS() 
-    TIMEOUT(1800) 
-    SIZE(LARGE) 
-    TAG(ya:fat) 
-ELSE() 
-    FORK_SUBTESTS() 
-    TIMEOUT(600) 
-    SIZE(MEDIUM) 
-ENDIF() 
+IF (WITH_VALGRIND)
+    FORK_SUBTESTS()
+    TIMEOUT(1800)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    FORK_SUBTESTS()
+    TIMEOUT(600)
+    SIZE(MEDIUM)
+ENDIF()
 
 PEERDIR(
     ydb/core/blobstorage/vdisk/huge

@@ -1,38 +1,38 @@
-{ 
-    "meta": { 
-        "version": "0.1", 
-        "type": "query" 
-    }, 
-    "tables": [ 
-        { 
-            "name": "/local/base_join_join_to_idx_lookup_leftonly_sql_plan/InputJoin2", 
-            "reads": [ 
-                { 
-                    "type": "FullScan", 
-                    "scan_by": [ 
-                        "Key1", 
-                        "Key2" 
-                    ], 
-                    "columns": [ 
-                        "Fk3", 
-                        "Value" 
-                    ] 
-                } 
-            ] 
-        }, 
-        { 
-            "name": "/local/base_join_join_to_idx_lookup_leftonly_sql_plan/InputJoin3", 
-            "reads": [ 
-                { 
-                    "type": "MultiLookup", 
-                    "lookup_by": [ 
-                        "Key (expr)" 
-                    ], 
-                    "columns": [ 
-                        "Key" 
-                    ] 
-                } 
-            ] 
-        } 
-    ] 
-} 
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_join_join_to_idx_lookup_leftonly_sql_plan/InputJoin2",
+            "reads": [
+                {
+                    "type": "FullScan",
+                    "scan_by": [
+                        "Key1",
+                        "Key2"
+                    ],
+                    "columns": [
+                        "Fk3",
+                        "Value"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "/local/base_join_join_to_idx_lookup_leftonly_sql_plan/InputJoin3",
+            "reads": [
+                {
+                    "type": "MultiLookup",
+                    "lookup_by": [
+                        "Key (expr)"
+                    ],
+                    "columns": [
+                        "Key"
+                    ]
+                }
+            ]
+        }
+    ]
+}

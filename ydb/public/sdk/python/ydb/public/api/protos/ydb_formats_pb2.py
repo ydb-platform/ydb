@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=b'\n\026com.yandex.ydb.formats\370\001\001',
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\'ydb/public/api/protos/ydb_formats.proto\x12\x0bYdb.Formats\"$\n\x12\x41rrowBatchSettings\x12\x0e\n\x06schema\x18\x01 \x01(\x0c\"W\n\x0b\x43svSettings\x12\x11\n\tskip_rows\x18\x01 \x01(\r\x12\x11\n\tdelimiter\x18\x02 \x01(\x0c\x12\x12\n\nnull_value\x18\x03 \x01(\x0c\x12\x0e\n\x06header\x18\x04 \x01(\x08\x42\x1b\n\x16\x63om.yandex.ydb.formats\xf8\x01\x01\x62\x06proto3' 
+  serialized_pb=b'\n\'ydb/public/api/protos/ydb_formats.proto\x12\x0bYdb.Formats\"$\n\x12\x41rrowBatchSettings\x12\x0e\n\x06schema\x18\x01 \x01(\x0c\"W\n\x0b\x43svSettings\x12\x11\n\tskip_rows\x18\x01 \x01(\r\x12\x11\n\tdelimiter\x18\x02 \x01(\x0c\x12\x12\n\nnull_value\x18\x03 \x01(\x0c\x12\x0e\n\x06header\x18\x04 \x01(\x08\x42\x1b\n\x16\x63om.yandex.ydb.formats\xf8\x01\x01\x62\x06proto3'
 )
 
 
@@ -52,8 +52,8 @@ _ARROWBATCHSETTINGS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=56, 
-  serialized_end=92, 
+  serialized_start=56,
+  serialized_end=92,
 )
 
 
@@ -105,8 +105,8 @@ _CSVSETTINGS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=94, 
-  serialized_end=181, 
+  serialized_start=94,
+  serialized_end=181,
 )
 
 DESCRIPTOR.message_types_by_name['ArrowBatchSettings'] = _ARROWBATCHSETTINGS

@@ -1,40 +1,40 @@
-{ 
-    "meta": { 
-        "version": "0.1", 
-        "type": "query" 
-    }, 
-    "tables": [ 
-        { 
-            "name": "/local/base_write_upsert_cast_sql_plan/Input", 
-            "reads": [ 
-                { 
-                    "type": "FullScan", 
-                    "scan_by": [ 
-                        "key", 
-                        "subkey" 
-                    ], 
-                    "columns": [ 
-                        "key", 
-                        "subkey", 
-                        "value" 
-                    ] 
-                } 
-            ] 
-        }, 
-        { 
-            "name": "/local/base_write_upsert_cast_sql_plan/Input1", 
-            "writes": [ 
-                { 
-                    "type": "MultiUpsert", 
-                    "key": [ 
-                        "Group (expr)", 
-                        "Name (expr)" 
-                    ], 
-                    "columns": [ 
-                        "Amount" 
-                    ] 
-                } 
-            ] 
-        } 
-    ] 
-} 
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_write_upsert_cast_sql_plan/Input",
+            "reads": [
+                {
+                    "type": "FullScan",
+                    "scan_by": [
+                        "key",
+                        "subkey"
+                    ],
+                    "columns": [
+                        "key",
+                        "subkey",
+                        "value"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "/local/base_write_upsert_cast_sql_plan/Input1",
+            "writes": [
+                {
+                    "type": "MultiUpsert",
+                    "key": [
+                        "Group (expr)",
+                        "Name (expr)"
+                    ],
+                    "columns": [
+                        "Amount"
+                    ]
+                }
+            ]
+        }
+    ]
+}

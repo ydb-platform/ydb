@@ -176,7 +176,7 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
 class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
-    explicit TUploadRowsRPCPublic(TAutoPtr<TEvBulkUpsertRequest> request) 
+    explicit TUploadRowsRPCPublic(TAutoPtr<TEvBulkUpsertRequest> request)
         : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout()))
         , Request(request)
     {}
@@ -314,7 +314,7 @@ private:
     }
 
     void SendResult(const NActors::TActorContext&, const StatusIds::StatusCode& status) override {
-        const Ydb::Table::BulkUpsertResult result; 
+        const Ydb::Table::BulkUpsertResult result;
         if (status == StatusIds::SUCCESS) {
             ui64 cost = std::ceil(RuCost);
             Request->SetRuHeader(cost);
@@ -432,7 +432,7 @@ private:
     }
 
 private:
-    TAutoPtr<TEvBulkUpsertRequest> Request; 
+    TAutoPtr<TEvBulkUpsertRequest> Request;
     TVector<std::pair<TSerializedCellVec, TString>> AllRows;
 };
 

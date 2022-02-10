@@ -4,8 +4,8 @@
 #include <util/random/fast.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/system/sanitizers.h> 
- 
+#include <util/system/sanitizers.h>
+
 using namespace NKikimr;
 
 const TBlobStorageGroupType GType(TBlobStorageGroupType::ErasureNone);

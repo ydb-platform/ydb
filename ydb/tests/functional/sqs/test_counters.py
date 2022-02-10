@@ -13,9 +13,9 @@ class TestSqsCountersFeatures(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(TestSqsCountersFeatures, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['create_lazy_counters'] = False 
-        config_generator.yaml_config['sqs_config']['queue_attributes_cache_time_ms'] = 1000 
-        config_generator.yaml_config['sqs_config']['user_settings_update_time_ms'] = 1000  # Checking settings table. 
+        config_generator.yaml_config['sqs_config']['create_lazy_counters'] = False
+        config_generator.yaml_config['sqs_config']['queue_attributes_cache_time_ms'] = 1000
+        config_generator.yaml_config['sqs_config']['user_settings_update_time_ms'] = 1000  # Checking settings table.
         return config_generator
 
     def enable_detailed_queue_counters(self):
@@ -23,7 +23,7 @@ class TestSqsCountersFeatures(KikimrSqsTestBase):
         attributes_path = self._smart_make_table_path(self._username, self.queue_name, version, None, 'Attributes')
 
         deadline = int((time.time() + 600) * 1000)
-        self._execute_yql_query('UPSERT INTO `{}` (State, ShowDetailedCountersDeadline) VALUES (0, {})' 
+        self._execute_yql_query('UPSERT INTO `{}` (State, ShowDetailedCountersDeadline) VALUES (0, {})'
                                 .format(attributes_path, deadline))
 
     def test_creates_counter(self):
@@ -57,8 +57,8 @@ class TestSqsCountersFeatures(KikimrSqsTestBase):
 
         if switch_user:
             deadline = int((time.time() + 600) * 1000)
-            self._execute_yql_query('UPSERT INTO `{}/.Settings` (Account, Name, Value) VALUES (\'{}\', \'ShowDetailedCountersDeadlineMs\', \'{}\')' 
-                                    .format(self.sqs_root, self._username, deadline)) 
+            self._execute_yql_query('UPSERT INTO `{}/.Settings` (Account, Name, Value) VALUES (\'{}\', \'ShowDetailedCountersDeadlineMs\', \'{}\')'
+                                    .format(self.sqs_root, self._username, deadline))
         else:
             self.enable_detailed_queue_counters()
 
@@ -82,8 +82,8 @@ class TestSqsCountersFeatures(KikimrSqsTestBase):
         assert_that(counter, equal_to(0))
 
         def disable_user_counters(disable):
-            self._execute_yql_query('UPSERT INTO `{}/.Settings` (Account, Name, Value) VALUES (\'{}\', \'DisableCounters\', \'{}\')' 
-                                    .format(self.sqs_root, self._username, '1' if disable else '0')) 
+            self._execute_yql_query('UPSERT INTO `{}/.Settings` (Account, Name, Value) VALUES (\'{}\', \'DisableCounters\', \'{}\')'
+                                    .format(self.sqs_root, self._username, '1' if disable else '0'))
 
         disable_user_counters(True)
 
@@ -175,8 +175,8 @@ class TestSqsCountersFeatures(KikimrSqsTestBase):
         assert_that(total_counter, not_(none()))
 
         if switch_user:
-            self._execute_yql_query('UPSERT INTO `{}/.Settings` (Account, Name, Value) VALUES (\'{}\', \'ExportTransactionCounters\', \'1\')' 
-                                    .format(self.sqs_root, self._username)) 
+            self._execute_yql_query('UPSERT INTO `{}/.Settings` (Account, Name, Value) VALUES (\'{}\', \'ExportTransactionCounters\', \'1\')'
+                                    .format(self.sqs_root, self._username))
         else:
             self.enable_detailed_queue_counters()
 
@@ -234,8 +234,8 @@ class TestSqsCountersExportDelay(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(TestSqsCountersExportDelay, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['create_lazy_counters'] = False 
-        config_generator.yaml_config['sqs_config']['queue_counters_export_delay_ms'] = 2000 
+        config_generator.yaml_config['sqs_config']['create_lazy_counters'] = False
+        config_generator.yaml_config['sqs_config']['queue_counters_export_delay_ms'] = 2000
         return config_generator
 
     def test_export_delay(self):

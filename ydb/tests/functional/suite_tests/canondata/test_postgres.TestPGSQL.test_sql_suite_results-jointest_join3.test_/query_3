@@ -1,17 +1,17 @@
-[ 
-    { 
-        "k": 1, 
-        "pd": 10, 
-        "linked": true 
-    }, 
-    { 
-        "k": 2, 
-        "pd": 20, 
-        "linked": null 
-    }, 
-    { 
-        "k": 3, 
-        "pd": 30, 
-        "linked": null 
-    } 
-] 
+[
+    {
+        "k": 1,
+        "pd": 10,
+        "linked": true
+    },
+    {
+        "k": 2,
+        "pd": 20,
+        "linked": null
+    },
+    {
+        "k": 3,
+        "pd": 30,
+        "linked": null
+    }
+]

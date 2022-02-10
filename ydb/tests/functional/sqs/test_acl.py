@@ -1,14 +1,14 @@
-#!/usr/bin/env python 
-# -*- coding: utf-8 -*- 
-import logging 
-import time 
- 
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import logging
+import time
+
 import pytest
 from hamcrest import assert_that, equal_to, none, is_not, is_, raises
- 
-import ydb.tests.library.common.yatest_common as yatest_common 
 
-from sqs_test_base import KikimrSqsTestBase, get_sqs_client_path, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, to_bytes 
+import ydb.tests.library.common.yatest_common as yatest_common
+
+from sqs_test_base import KikimrSqsTestBase, get_sqs_client_path, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, to_bytes
 
 
 class SqsACLTest(KikimrSqsTestBase):
@@ -73,8 +73,8 @@ class SqsACLTest(KikimrSqsTestBase):
         return resp
 
     def __clean_and_compare(self, s1, s2):
-        s1 = to_bytes(s1)[to_bytes(s1).find(to_bytes('AccountPermissions')):].replace(to_bytes('\n'), to_bytes('')).replace(to_bytes(' '), to_bytes('')) 
-        s2 = to_bytes(s2)[to_bytes(s2).find(to_bytes('AccountPermissions')):].replace(to_bytes('\n'), to_bytes('')).replace(to_bytes(' '), to_bytes('')) 
+        s1 = to_bytes(s1)[to_bytes(s1).find(to_bytes('AccountPermissions')):].replace(to_bytes('\n'), to_bytes('')).replace(to_bytes(' '), to_bytes(''))
+        s2 = to_bytes(s2)[to_bytes(s2).find(to_bytes('AccountPermissions')):].replace(to_bytes('\n'), to_bytes('')).replace(to_bytes(' '), to_bytes(''))
 
         assert_that(s1, equal_to(s2))
 
@@ -174,7 +174,7 @@ class SqsWithForceAuthorizationTest(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(SqsWithForceAuthorizationTest, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['force_access_control'] = True 
+        config_generator.yaml_config['sqs_config']['force_access_control'] = True
         return config_generator
 
     def _setup_user(self, _username, retries_count=3):

@@ -209,7 +209,7 @@ public:
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record.GetRef();
         SetCost(record.GetConsumedRu());
-        AddServerHintsIfAny(record); 
+        AddServerHintsIfAny(record);
 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             const auto& kqpResponse = record.GetResponse();

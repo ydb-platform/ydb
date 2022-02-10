@@ -16,7 +16,7 @@
         }
     },
     "select_params.sql": {
-        "check_scan_query": true, 
+        "check_scan_query": true,
         "parameters": {
             "$param1": "-345.678",
             "$param2": "0.00001"

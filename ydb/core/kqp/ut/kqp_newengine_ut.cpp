@@ -674,7 +674,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         Cout << "Total upload latency: " << totalLatency << Endl;
     }
 
-#if !defined(_ubsan_enabled_) 
+#if !defined(_ubsan_enabled_)
     Y_UNIT_TEST(Aggregate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -708,7 +708,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             [[3];["Value1"];2u];[[3];["Value2"];3u];[[3];["Value3"];3u]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
-#endif 
+#endif
 
     Y_UNIT_TEST(PureExpr) {
         TKikimrRunner kikimr;

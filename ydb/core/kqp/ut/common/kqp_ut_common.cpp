@@ -67,8 +67,8 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     // EnableKikimrBacktraceFormat(); // Very slow, enable only when required locally
 
-    auto mbusPort = PortManager.GetPort(); 
-    auto grpcPort = PortManager.GetPort(); 
+    auto mbusPort = PortManager.GetPort();
+    auto grpcPort = PortManager.GetPort();
 
     Cerr << "Trying to start KiKiMR, gRPC: " << grpcPort << ", MsgBus: " << mbusPort << Endl;
 

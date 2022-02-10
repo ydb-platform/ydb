@@ -6,9 +6,9 @@
 
 #include <library/cpp/actors/core/actor.h>
 
-#include <util/generic/ptr.h> 
-#include <util/generic/vector.h> 
- 
+#include <util/generic/ptr.h>
+#include <util/generic/vector.h>
+
 namespace NKikimrConfig {
 class TAppConfig;
 }

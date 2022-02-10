@@ -23,9 +23,9 @@ def wrap(func, alternative):
 
 PortManager = ya_common_network.PortManager
 
-canonical_file = wrap(ya_common.canonical_file, lambda x: x) 
+canonical_file = wrap(ya_common.canonical_file, lambda x: x)
 source_path = wrap(ya_common.source_path, lambda x: x)
-build_path = wrap(ya_common.build_path, lambda x: x) 
+build_path = wrap(ya_common.build_path, lambda x: x)
 binary_path = wrap(ya_common.binary_path, lambda x: x)
 output_path = wrap(ya_common.output_path, lambda x: x)
 work_path = wrap(ya_common.work_path, lambda x: x)
@@ -36,12 +36,12 @@ get_param_dict_copy = wrap(ya_common.get_param_dict_copy, lambda: dict())
 
 def get_bool_param(key, default):
     val = get_param(key, default)
-    if isinstance(val, bool): 
-        return val 
+    if isinstance(val, bool):
+        return val
 
-    return val.lower() == 'true' 
+    return val.lower() == 'true'
 
- 
+
 class Context(object):
 
     @property

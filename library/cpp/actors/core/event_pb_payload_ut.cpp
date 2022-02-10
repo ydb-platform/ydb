@@ -82,11 +82,11 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         }
     }
 
-#if (!defined(_tsan_enabled_)) 
+#if (!defined(_tsan_enabled_))
     Y_UNIT_TEST(SerializeDeserialize) {
         TestAllSizes<TEvMessageWithPayload>();
     }
-#endif 
+#endif
 
 
     struct TEvArenaMessage : TEventPBWithArena<TEvArenaMessage, TMessageWithPayload, EvArenaMessage> {

@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import enum 
+import enum
 
 
-@enum.unique 
-class MessageBusStatus(enum.IntEnum): 
+@enum.unique
+class MessageBusStatus(enum.IntEnum):
     """
     Message Bus response statuses.
 
@@ -26,14 +26,14 @@ class MessageBusStatus(enum.IntEnum):
 
     @staticmethod
     def is_ok_status(status):
-        return status in ( 
-            MessageBusStatus.MSTATUS_OK, 
-            MessageBusStatus.MSTATUS_INPROGRESS 
-        ) 
+        return status in (
+            MessageBusStatus.MSTATUS_OK,
+            MessageBusStatus.MSTATUS_INPROGRESS
+        )
 
 
-@enum.unique 
-class EMessageStatus(enum.IntEnum): 
+@enum.unique
+class EMessageStatus(enum.IntEnum):
     """
     See /arcadia/library/cpp/messagebus/message_status.h
     """
@@ -55,8 +55,8 @@ class EMessageStatus(enum.IntEnum):
     MESSAGE_DONT_ASK = 15
 
 
-@enum.unique 
-class EReplyStatus(enum.IntEnum): 
+@enum.unique
+class EReplyStatus(enum.IntEnum):
     """
     See /arcadia/ydb/core/protos/base.proto
     """
@@ -77,8 +77,8 @@ class EReplyStatus(enum.IntEnum):
     UNKNOWN = 255
 
 
-@enum.unique 
-class TStorageStatusFlags(enum.IntEnum): 
+@enum.unique
+class TStorageStatusFlags(enum.IntEnum):
     """
     See /arcadia/kikimr/core/base/blobstorage.h
     TStorageStatusFlags::EStatus
@@ -89,8 +89,8 @@ class TStorageStatusFlags(enum.IntEnum):
     StatusDiskSpaceRed = 1 << 3
 
 
-@enum.unique 
-class SchemeStatus(enum.IntEnum): 
+@enum.unique
+class SchemeStatus(enum.IntEnum):
     """
     See /arcadia/ydb/core/protos/flat_tx_scheme.proto
     enum EStatus
@@ -105,13 +105,13 @@ class SchemeStatus(enum.IntEnum):
     StatusInvalidParameter = 7
     StatusMultipleModifications = 8
     ProxyShardNotAvailable = 13
- 
- 
-@enum.unique 
-class EDriveStatus(enum.IntEnum): 
-    UNKNOWN = 0 
-    ACTIVE = 1 
-    INACTIVE = 2 
-    BROKEN = 3 
-    SPARE = 4 
-    FAULTY = 5 
+
+
+@enum.unique
+class EDriveStatus(enum.IntEnum):
+    UNKNOWN = 0
+    ACTIVE = 1
+    INACTIVE = 2
+    BROKEN = 3
+    SPARE = 4
+    FAULTY = 5

@@ -1781,7 +1781,7 @@ void TPDisk::Slay(TSlay &evSlay) {
         if (it == VDiskOwners.end()) {
             TStringStream str;
             str << "PDiskId# " << (ui32)PDiskId << " Can't slay VDiskId# " << evSlay.VDiskId;
-            str << " as it is not created yet or is already slain" 
+            str << " as it is not created yet or is already slain"
                 << " Marker# BPD31";
             LOG_ERROR(*ActorSystem, NKikimrServices::BS_PDISK, "%s", str.Str().c_str());
             THolder<NPDisk::TEvSlayResult> result(new NPDisk::TEvSlayResult(

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-import enum 
+import enum
 
 
-@enum.unique 
-class LogLevels(enum.IntEnum): 
+@enum.unique
+class LogLevels(enum.IntEnum):
     EMERG = 0,
     ALERT = 1,
     CRIT = 2,
@@ -14,22 +14,22 @@ class LogLevels(enum.IntEnum):
     DEBUG = 7,
     TRACE = 8
 
-    @staticmethod 
-    def from_string(val): 
-        names = [] 
-        for x in list(LogLevels): 
-            names.append(x.name) 
-            if val == x.name: 
-                return x 
-        raise ValueError("Invalid LogLevel: valid are %s" % names) 
+    @staticmethod
+    def from_string(val):
+        names = []
+        for x in list(LogLevels):
+            names.append(x.name)
+            if val == x.name:
+                return x
+        raise ValueError("Invalid LogLevel: valid are %s" % names)
 
- 
+
 def _pdisk_state(id_, is_valid_state):
     return id_, is_valid_state
 
 
-@enum.unique 
-class PDiskState(enum.Enum): 
+@enum.unique
+class PDiskState(enum.Enum):
     Initial = _pdisk_state(0, is_valid_state=True)
     InitialFormatRead = _pdisk_state(1, is_valid_state=True)
     InitialFormatReadError = _pdisk_state(2, is_valid_state=False)

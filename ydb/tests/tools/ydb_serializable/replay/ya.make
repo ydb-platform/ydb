@@ -1,9 +1,9 @@
-PY3_PROGRAM() 
+PY3_PROGRAM()
 
 OWNER(g:kikimr)
 
 PEERDIR(
-    ydb/tests/tools/ydb_serializable/lib 
+    ydb/tests/tools/ydb_serializable/lib
 )
 
 PY_SRCS(__main__.py)

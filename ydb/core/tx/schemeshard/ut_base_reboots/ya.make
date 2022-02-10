@@ -1,4 +1,4 @@
-IF (NOT WITH_VALGRIND) 
+IF (NOT WITH_VALGRIND)
     UNITTEST_FOR(ydb/core/tx/schemeshard)
 
     OWNER(
@@ -37,4 +37,4 @@ IF (NOT WITH_VALGRIND)
     )
 
     END()
-ENDIF() 
+ENDIF()

@@ -2,16 +2,16 @@ UNITTEST_FOR(ydb/core/blobstorage)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(20) 
+SPLIT_FACTOR(20)
 
 OWNER(
     fomichev
     g:kikimr
 )
 
-SIZE(MEDIUM) 
+SIZE(MEDIUM)
 
-TIMEOUT(600) 
+TIMEOUT(600)
 
 SRCS(
     defaults.h

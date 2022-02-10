@@ -1,18 +1,18 @@
-[ 
-    { 
-        "Five": 1, 
-        "Category": "one" 
-    }, 
-    { 
-        "Five": 1, 
-        "Category": "two" 
-    }, 
-    { 
-        "Five": 1, 
-        "Category": "big" 
-    }, 
-    { 
-        "Five": 1, 
-        "Category": "big" 
-    } 
-] 
+[
+    {
+        "Five": 1,
+        "Category": "one"
+    },
+    {
+        "Five": 1,
+        "Category": "two"
+    },
+    {
+        "Five": 1,
+        "Category": "big"
+    },
+    {
+        "Five": 1,
+        "Category": "big"
+    }
+]

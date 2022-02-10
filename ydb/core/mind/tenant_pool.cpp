@@ -865,11 +865,11 @@ public:
             ctx.Send(new IEventHandle(pr.second, ev->Sender, new TEvents::TEvUnsubscribe()));
     }
 
-    void Handle(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext &ctx) { 
-        LOG_NOTICE_S(ctx, NKikimrServices::TENANT_POOL, "Forward drain node to local."); 
-        ctx.Send(ev->Forward(LocalID)); 
-    } 
- 
+    void Handle(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext &ctx) {
+        LOG_NOTICE_S(ctx, NKikimrServices::TENANT_POOL, "Forward drain node to local.");
+        ctx.Send(ev->Forward(LocalID));
+    }
+
     void Bootstrap(const TActorContext &ctx) {
         LOG_DEBUG(ctx, NKikimrServices::TENANT_POOL, "TTenantPool::Bootstrap");
 
@@ -926,7 +926,7 @@ public:
             HFunc(TEvents::TEvSubscribe, Handle);
             HFunc(TEvents::TEvUnsubscribe, Handle);
             HFunc(NMon::TEvHttpInfo, Handle);
-            HFunc(TEvLocal::TEvLocalDrainNode, Handle); 
+            HFunc(TEvLocal::TEvLocalDrainNode, Handle);
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");

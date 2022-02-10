@@ -66,8 +66,8 @@ namespace NKikimr {
             void BSAdm(const NKikimrClient::TBSAdm& request, TResponseCallback callback);
             void BlobStorageConfig(const NKikimrClient::TBlobStorageConfigRequest& request, TResponseCallback callback);
 
-            void ResolveNode(const NKikimrClient::TResolveNodeRequest& request, TResponseCallback callback); 
- 
+            void ResolveNode(const NKikimrClient::TResolveNodeRequest& request, TResponseCallback callback);
+
             /////////////////////////////////////////////////////////////////////////////////////////////////
             // KV-TABLET INTERNAL INTERFACE
             /////////////////////////////////////////////////////////////////////////////////////////////////

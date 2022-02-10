@@ -19,8 +19,8 @@ RECURSE(
     security
     wilson
     workload
-    yaml_config 
+    yaml_config
     workload
-    yaml_config 
+    yaml_config
     yql
 )

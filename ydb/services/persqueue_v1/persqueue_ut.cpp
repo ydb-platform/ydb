@@ -25,7 +25,7 @@
 #include <google/protobuf/util/message_differencer.h>
 
 #include <util/string/join.h>
-#include <util/system/sanitizers.h> 
+#include <util/system/sanitizers.h>
 #include <util/generic/guid.h>
 
 #include <grpc++/client_context.h>
@@ -1431,8 +1431,8 @@ namespace {
 
 /*
     Y_UNIT_TEST(TestLockErrors) {
-        return;  // Test is ignored. FIX: KIKIMR-7881 
- 
+        return;  // Test is ignored. FIX: KIKIMR-7881
+
         NPersQueue::TTestServer server;
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
         server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
@@ -2061,9 +2061,9 @@ namespace {
     }
 
     Y_UNIT_TEST(TestReadWithQuoterWithoutResources) {
-        if (NSan::ASanIsOn()) { 
-            return; 
-        } 
+        if (NSan::ASanIsOn()) {
+            return;
+        }
         TRateLimiterTestSetup setup(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE, 1000, 1000, true);
 
         const TString topicPath = "acc/topic1";
@@ -2106,10 +2106,10 @@ namespace {
     }
 
     Y_UNIT_TEST(TestDeletionOfTopic) {
-        if (NSan::ASanIsOn()) { 
-            return; 
-        } 
- 
+        if (NSan::ASanIsOn()) {
+            return;
+        }
+
         NPersQueue::TTestServer server;
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
         server.WaitInit(SHORT_TOPIC_NAME);

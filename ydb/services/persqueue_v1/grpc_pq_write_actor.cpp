@@ -84,27 +84,27 @@ static const ui32 MAX_BYTES_INFLIGHT = 1 << 20; //1mb
 static const ui32 MURMUR_ARRAY_SEED = 0x9747b28c;
 static const TDuration SOURCEID_UPDATE_PERIOD = TDuration::Hours(1);
 
-static const TString SELECT_SOURCEID_QUERY1 = 
-    "--!syntax_v1\n" 
-    "DECLARE $Hash AS Uint32; " 
-    "DECLARE $Topic AS Utf8; " 
-    "DECLARE $SourceId AS Utf8; " 
-    "SELECT Partition, CreateTime FROM `"; 
+static const TString SELECT_SOURCEID_QUERY1 =
+    "--!syntax_v1\n"
+    "DECLARE $Hash AS Uint32; "
+    "DECLARE $Topic AS Utf8; "
+    "DECLARE $SourceId AS Utf8; "
+    "SELECT Partition, CreateTime FROM `";
 static const TString SELECT_SOURCEID_QUERY2 = "` "
-    "WHERE Hash == $Hash AND Topic == $Topic AND SourceId == $SourceId; "; 
- 
-static const TString UPDATE_SOURCEID_QUERY1 = 
-    "--!syntax_v1\n" 
-    "DECLARE $SourceId AS Utf8; " 
-    "DECLARE $Topic AS Utf8; " 
-    "DECLARE $Hash AS Uint32; " 
-    "DECLARE $Partition AS Uint32; " 
-    "DECLARE $CreateTime AS Uint64; " 
-    "DECLARE $AccessTime AS Uint64; " 
-    "UPSERT INTO `"; 
+    "WHERE Hash == $Hash AND Topic == $Topic AND SourceId == $SourceId; ";
+
+static const TString UPDATE_SOURCEID_QUERY1 =
+    "--!syntax_v1\n"
+    "DECLARE $SourceId AS Utf8; "
+    "DECLARE $Topic AS Utf8; "
+    "DECLARE $Hash AS Uint32; "
+    "DECLARE $Partition AS Uint32; "
+    "DECLARE $CreateTime AS Uint64; "
+    "DECLARE $AccessTime AS Uint64; "
+    "UPSERT INTO `";
 static const TString UPDATE_SOURCEID_QUERY2 = "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition) VALUES "
-    "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition); "; 
- 
+    "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition); ";
+
 //TODO: add here tracking of bytes in/out
 
 
@@ -156,7 +156,7 @@ void TWriteSessionActor::Bootstrap(const TActorContext& ctx) {
     Y_VERIFY(Request);
     SelectSourceIdQuery = SELECT_SOURCEID_QUERY1 + AppData(ctx)->PQConfig.GetSourceIdTablePath() + SELECT_SOURCEID_QUERY2;
     UpdateSourceIdQuery = UPDATE_SOURCEID_QUERY1 + AppData(ctx)->PQConfig.GetSourceIdTablePath() + UPDATE_SOURCEID_QUERY2;
- 
+
     Request->GetStreamCtx()->Attach(ctx.SelfID);
     if (!Request->GetStreamCtx()->Read()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "grpc read failed at start");
@@ -524,16 +524,16 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
 
     //read from DS
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-    ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE); 
-    ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML); 
-    ev->Record.MutableRequest()->SetKeepSession(false); 
-    ev->Record.MutableRequest()->SetQuery(SelectSourceIdQuery); 
+    ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+    ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+    ev->Record.MutableRequest()->SetKeepSession(false);
+    ev->Record.MutableRequest()->SetQuery(SelectSourceIdQuery);
     ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig));
-    // fill tx settings: set commit tx flag & begin new serializable tx. 
-    ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true); 
-    ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write(); 
-    // keep compiled query in cache. 
-    ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true); 
+    // fill tx settings: set commit tx flag & begin new serializable tx.
+    ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+    ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+    // keep compiled query in cache.
+    ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
     NClient::TParameters parameters;
     parameters["$Hash"] = Hash;
     parameters["$Topic"] = TopicConverter->GetClientsideName();
@@ -649,18 +649,18 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMet
 ) {
 
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
- 
-    ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE); 
-    ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML); 
-    ev->Record.MutableRequest()->SetQuery(UpdateSourceIdQuery); 
+
+    ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+    ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+    ev->Record.MutableRequest()->SetQuery(UpdateSourceIdQuery);
     ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig));
-    ev->Record.MutableRequest()->SetKeepSession(false); 
-    // fill tx settings: set commit tx flag & begin new serializable tx. 
-    ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true); 
-    ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write(); 
-    // keep compiled query in cache. 
-    ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true); 
- 
+    ev->Record.MutableRequest()->SetKeepSession(false);
+    // fill tx settings: set commit tx flag & begin new serializable tx.
+    ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+    ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+    // keep compiled query in cache.
+    ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
+
     NClient::TParameters parameters;
     parameters["$Hash"] = Hash;
     parameters["$Topic"] = TopicConverter->GetClientsideName();

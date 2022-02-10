@@ -646,16 +646,16 @@ private:
             }
 
             // IndexState and version, pathId are ignored for create table with index request
-            TIndexDescription indexDesc( 
-                TString(index.Name().Value()), 
-                indexColums, 
-                dataColums, 
-                indexType, 
-                TIndexDescription::EIndexState::Ready, 
-                0, 
-                0, 
-                0 
-            ); 
+            TIndexDescription indexDesc(
+                TString(index.Name().Value()),
+                indexColums,
+                dataColums,
+                indexType,
+                TIndexDescription::EIndexState::Ready,
+                0,
+                0,
+                0
+            );
 
             meta->Indexes.push_back(indexDesc);
         }

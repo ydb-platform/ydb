@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from ydb.tests.library.common.msgbus_types import MessageBusStatus 
-from ydb.tests.library.matchers.response_matchers import AbstractProtobufMatcher, FakeProtobuf 
+from ydb.tests.library.common.msgbus_types import MessageBusStatus
+from ydb.tests.library.matchers.response_matchers import AbstractProtobufMatcher, FakeProtobuf
 
 __author__ = 'asatarin@yandex-team.ru'
 

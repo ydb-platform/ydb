@@ -1,45 +1,45 @@
-{ 
-    "meta": { 
-        "version": "0.1", 
-        "type": "query" 
-    }, 
-    "tables": [ 
-        { 
-            "name": "/local/base_json_insert_from_table_sql_plan/InputJD", 
-            "reads": [ 
-                { 
-                    "type": "FullScan", 
-                    "scan_by": [ 
-                        "Key" 
-                    ], 
-                    "columns": [ 
-                        "Key", 
-                        "Value" 
-                    ] 
-                } 
-            ] 
-        }, 
-        { 
-            "name": "/local/base_json_insert_from_table_sql_plan/ResultTableJD", 
-            "reads": [ 
-                { 
-                    "type": "MultiLookup", 
-                    "lookup_by": [ 
-                        "Key (expr)" 
-                    ] 
-                } 
-            ], 
-            "writes": [ 
-                { 
-                    "type": "MultiUpsert", 
-                    "key": [ 
-                        "Key (expr)" 
-                    ], 
-                    "columns": [ 
-                        "Value" 
-                    ] 
-                } 
-            ] 
-        } 
-    ] 
-} 
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_json_insert_from_table_sql_plan/InputJD",
+            "reads": [
+                {
+                    "type": "FullScan",
+                    "scan_by": [
+                        "Key"
+                    ],
+                    "columns": [
+                        "Key",
+                        "Value"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "/local/base_json_insert_from_table_sql_plan/ResultTableJD",
+            "reads": [
+                {
+                    "type": "MultiLookup",
+                    "lookup_by": [
+                        "Key (expr)"
+                    ]
+                }
+            ],
+            "writes": [
+                {
+                    "type": "MultiUpsert",
+                    "key": [
+                        "Key (expr)"
+                    ],
+                    "columns": [
+                        "Value"
+                    ]
+                }
+            ]
+        }
+    ]
+}

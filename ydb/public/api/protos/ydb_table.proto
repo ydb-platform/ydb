@@ -29,13 +29,13 @@ message CreateSessionResponse {
 }
 
 message CreateSessionResult {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
 }
 
 // Delete session with given id string
 message DeleteSessionRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
     Ydb.Operations.OperationParams operation_params = 2;
 }
@@ -394,7 +394,7 @@ message ReadReplicasSettings {
 }
 
 message CreateTableRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
     // Full path
     string path = 2;
@@ -439,7 +439,7 @@ message CreateTableResponse {
 
 // Drop table with given path
 message DropTableRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
     // Full path
     string path = 2;
@@ -453,7 +453,7 @@ message DropTableResponse {
 
 // Alter table with given path
 message AlterTableRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
     // Full path
     string path = 2;
@@ -498,7 +498,7 @@ message AlterTableResponse {
 
 // Copy table with given path
 message CopyTableRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
     // Copy from path
     string source_path = 2;
@@ -523,7 +523,7 @@ message CopyTableItem {
 // Creates consistent copy of given tables.
 message CopyTablesRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    // Session identifier 
+    // Session identifier
     string session_id = 2;
     // Source and destination paths which describe copies
     repeated CopyTableItem tables = 3;
@@ -557,7 +557,7 @@ message RenameTablesResponse {
 
 // Describe table with given path
 message DescribeTableRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
     // Full path
     string path = 2;
@@ -658,7 +658,7 @@ message QueryStatsCollection {
 }
 
 message ExecuteDataQueryRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
     TransactionControl tx_control = 2;
     Query query = 3;
@@ -674,7 +674,7 @@ message ExecuteDataQueryResponse {
 }
 
 message ExecuteSchemeQueryRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
     // SQL text
     string yql_text = 2;
@@ -687,13 +687,13 @@ message ExecuteSchemeQueryResponse {
 
 // Holds transaction id
 message TransactionMeta {
-    // Transaction identifier 
+    // Transaction identifier
     string id = 1;
 }
 
 // Holds query id and type of parameters
 message QueryMeta {
-    // Query identifier 
+    // Query identifier
     string id = 1;
     // Type of parameters
     map<string, Type> parameters_types = 2;
@@ -703,9 +703,9 @@ message QueryMeta {
 message ExecuteQueryResult {
     // Result rets (for each table)
     repeated Ydb.ResultSet result_sets = 1;
-    // Transaction metadata 
+    // Transaction metadata
     TransactionMeta tx_meta = 2;
-    // Query metadata 
+    // Query metadata
     QueryMeta query_meta = 3;
     // Query execution statistics
     Ydb.TableStats.QueryStats query_stats = 4;
@@ -713,7 +713,7 @@ message ExecuteQueryResult {
 
 // Explain data query
 message ExplainDataQueryRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
     // SQL text to explain
     string yql_text = 2;
@@ -732,7 +732,7 @@ message ExplainQueryResult {
 
 // Prepare given program to execute
 message PrepareDataQueryRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
     // SQL text
     string yql_text = 2;
@@ -748,12 +748,12 @@ message PrepareQueryResult {
     // Query id, used to perform ExecuteDataQuery
     string query_id = 1;
     // Parameters type, used to fill in parameter values
-    map<string, Type> parameters_types = 2; 
+    map<string, Type> parameters_types = 2;
 }
 
 // Keep session alive
 message KeepAliveRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
     Ydb.Operations.OperationParams operation_params = 2;
 }
@@ -774,7 +774,7 @@ message KeepAliveResult {
 
 // Begin transaction on given session with given settings
 message BeginTransactionRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
     TransactionSettings tx_settings = 2;
     Ydb.Operations.OperationParams operation_params = 3;
@@ -791,9 +791,9 @@ message BeginTransactionResult {
 
 // Commit transaction with given session and tx id
 message CommitTransactionRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
-    // Transaction identifier 
+    // Transaction identifier
     string tx_id = 2;
     Ydb.Operations.OperationParams operation_params = 3;
     QueryStatsCollection.Mode collect_stats = 4;
@@ -809,9 +809,9 @@ message CommitTransactionResult {
 
 // Rollback transaction with given session and tx id
 message RollbackTransactionRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
-    // Transaction identifier 
+    // Transaction identifier
     string tx_id = 2;
     Ydb.Operations.OperationParams operation_params = 3;
 }
@@ -908,7 +908,7 @@ message KeyRange {
 
 // Request to read table (without SQL)
 message ReadTableRequest {
-    // Session identifier 
+    // Session identifier
     string session_id = 1;
     // Path to table to read
     string path = 2;

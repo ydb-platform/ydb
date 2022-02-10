@@ -15,7 +15,7 @@ SRCS(
     concurrent_rw_hash.h
     console.cpp
     console.h
-    counted_leaky_bucket.h 
+    counted_leaky_bucket.h
     defs.h
     failure_injection.cpp
     failure_injection.h

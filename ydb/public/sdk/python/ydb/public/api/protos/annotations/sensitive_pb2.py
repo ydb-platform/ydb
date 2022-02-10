@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=b'\n\016com.yandex.ydb\370\001\001',
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n1ydb/public/api/protos/annotations/sensitive.proto\x12\x03Ydb\x1a google/protobuf/descriptor.proto:2\n\tsensitive\x12\x1d.google.protobuf.FieldOptions\x18\xe7\xac\x05 \x01(\x08\x42\x13\n\x0e\x63om.yandex.ydb\xf8\x01\x01\x62\x06proto3' 
+  serialized_pb=b'\n1ydb/public/api/protos/annotations/sensitive.proto\x12\x03Ydb\x1a google/protobuf/descriptor.proto:2\n\tsensitive\x12\x1d.google.protobuf.FieldOptions\x18\xe7\xac\x05 \x01(\x08\x42\x13\n\x0e\x63om.yandex.ydb\xf8\x01\x01\x62\x06proto3'
   ,
   dependencies=[google_dot_protobuf_dot_descriptor__pb2.DESCRIPTOR,])
 

@@ -15,7 +15,7 @@
 #include <time.h>
 
 static TMutex g_InitLoggerMutex;
-static int g_LoggerInitialized = 0; 
+static int g_LoggerInitialized = 0;
 
 namespace {
 
@@ -165,8 +165,8 @@ void TYqlLog::SetMaxLogLimit(ui64 limit) {
 
 void InitLogger(const TString& logType, bool startAsDaemon) {
     with_lock(g_InitLoggerMutex) {
-        ++g_LoggerInitialized; 
-        if (g_LoggerInitialized > 1) { 
+        ++g_LoggerInitialized;
+        if (g_LoggerInitialized > 1) {
             return;
         }
 
@@ -195,8 +195,8 @@ void InitLogger(const TString& logType, bool startAsDaemon) {
 
 void InitLogger(TAutoPtr<TLogBackend> backend) {
     with_lock(g_InitLoggerMutex) {
-        ++g_LoggerInitialized; 
-        if (g_LoggerInitialized > 1) { 
+        ++g_LoggerInitialized;
+        if (g_LoggerInitialized > 1) {
             return;
         }
 
@@ -212,8 +212,8 @@ void InitLogger(IOutputStream* out) {
 
 void CleanupLogger() {
     with_lock(g_InitLoggerMutex) {
-        --g_LoggerInitialized; 
-        if (g_LoggerInitialized > 0) { 
+        --g_LoggerInitialized;
+        if (g_LoggerInitialized > 0) {
             return;
         }
 

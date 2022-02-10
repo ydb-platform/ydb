@@ -5,7 +5,7 @@ from hamcrest import has_property, all_of, has_length, has_items, anything
 from hamcrest.core.base_matcher import BaseMatcher
 from hamcrest.core.helpers.wrap_matcher import wrap_matcher
 
-from ydb.tests.library.common.msgbus_types import EMessageStatus, MessageBusStatus 
+from ydb.tests.library.common.msgbus_types import EMessageStatus, MessageBusStatus
 
 
 def all_tablets_are_created(tablets_to_create):

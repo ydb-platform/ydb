@@ -4,7 +4,7 @@ from hamcrest import equal_to, less_than_or_equal_to, contains_inanyorder, conta
     has_item
 from hamcrest.core.base_matcher import BaseMatcher
 
-from ydb.tests.library.matchers.collection import IsSublistOf 
+from ydb.tests.library.matchers.collection import IsSublistOf
 
 _author__ = 'komels@yandex-team.ru'
 

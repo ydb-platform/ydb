@@ -44,10 +44,10 @@ def string_with_length(length):
         while True:
             yield ''.join([random.choice(string.ascii_letters) for _ in range(length)])
     return closure
- 
- 
-def actor_id(): 
-    def closure(): 
-        while True: 
-            yield "(%d,%d,%d)" % (int_between(1, 100), int_between(1, 100), int_between(1, 100)) 
-    return closure 
+
+
+def actor_id():
+    def closure():
+        while True:
+            yield "(%d,%d,%d)" % (int_between(1, 100), int_between(1, 100), int_between(1, 100))
+    return closure

@@ -478,42 +478,42 @@ private:
     const Tests::TServerSettings Settings;
     const ui16 GRpcPort;
     NClient::TKikimr Kikimr;
-    THolder<NYdb::TDriver> Driver; 
+    THolder<NYdb::TDriver> Driver;
     ui64 TopicsVersion = 0;
     bool UseConfigTables = true;
 
-    void RunYqlSchemeQuery(TString query) { 
-        auto tableClient = NYdb::NTable::TTableClient(*Driver); 
-        auto result = tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) { 
-            return session.ExecuteSchemeQuery(query).GetValueSync(); 
-        }); 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
-    } 
- 
-    TMaybe<NYdb::TResultSet> RunYqlDataQueryWithParams(TString query, const NYdb::TParams& params) { 
-        auto tableClient = NYdb::NTable::TTableClient(*Driver); 
-        TMaybe<NYdb::TResultSet> rs; 
-        auto result = tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) { 
-            auto qr = session.ExecuteDataQuery( 
-                query, 
-                NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(), 
-                params).GetValueSync(); 
- 
-            if (qr.IsSuccess() && qr.GetResultSets().size() > 0) { 
-                rs = qr.GetResultSet(0); 
-            } 
-            return qr; 
-        }); 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
-        return rs; 
-    } 
- 
-    TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query) { 
-        NYdb::TParamsBuilder builder; 
-        return RunYqlDataQueryWithParams(query, builder.Build()); 
-    } 
- 
- 
+    void RunYqlSchemeQuery(TString query) {
+        auto tableClient = NYdb::NTable::TTableClient(*Driver);
+        auto result = tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
+            return session.ExecuteSchemeQuery(query).GetValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    TMaybe<NYdb::TResultSet> RunYqlDataQueryWithParams(TString query, const NYdb::TParams& params) {
+        auto tableClient = NYdb::NTable::TTableClient(*Driver);
+        TMaybe<NYdb::TResultSet> rs;
+        auto result = tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
+            auto qr = session.ExecuteDataQuery(
+                query,
+                NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
+                params).GetValueSync();
+
+            if (qr.IsSuccess() && qr.GetResultSets().size() > 0) {
+                rs = qr.GetResultSet(0);
+            }
+            return qr;
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        return rs;
+    }
+
+    TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query) {
+        NYdb::TParamsBuilder builder;
+        return RunYqlDataQueryWithParams(query, builder.Build());
+    }
+
+
 public:
     TFlatMsgBusPQClient(
             const Tests::TServerSettings& settings, ui16 grpc, TMaybe<TString> databaseName = Nothing()
@@ -522,19 +522,19 @@ public:
         , Settings(settings)
         , GRpcPort(grpc)
         , Kikimr(GetClientConfig())
-    { 
+    {
         auto driverConfig = NYdb::TDriverConfig()
                 .SetEndpoint(TStringBuilder() << "localhost:" << GRpcPort)
                 .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
         if (databaseName) {
             driverConfig.SetDatabase(*databaseName);
         }
-        Driver.Reset(MakeHolder<NYdb::TDriver>(driverConfig)); 
-    } 
+        Driver.Reset(MakeHolder<NYdb::TDriver>(driverConfig));
+    }
 
-    ~TFlatMsgBusPQClient() { 
-        Driver->Stop(true); 
-    } 
+    ~TFlatMsgBusPQClient() {
+        Driver->Stop(true);
+    }
 
     void SetNoConfigMode() {
         UseConfigTables = false;
@@ -582,25 +582,25 @@ public:
             "DECLARE $SourceId AS Utf8; "
             "DECLARE $AccessTime AS Uint64; "
             "UPSERT INTO [" + path + "] (Hash, SourceId, Topic, Partition, CreateTime, AccessTime) "
-            "VALUES($Hash, $SourceId, \"1\", 0, 0, $AccessTime); "; 
+            "VALUES($Hash, $SourceId, \"1\", 0, 0, $AccessTime); ";
 
-        NYdb::TParamsBuilder builder; 
-        auto params = builder 
-            .AddParam("$Hash").Uint32(hash).Build() 
-            .AddParam("$SourceId").Utf8(sourceId).Build() 
-            .AddParam("$AccessTime").Uint64(accessTime).Build() 
-            .Build(); 
- 
-        RunYqlDataQueryWithParams(query, params); 
+        NYdb::TParamsBuilder builder;
+        auto params = builder
+            .AddParam("$Hash").Uint32(hash).Build()
+            .AddParam("$SourceId").Utf8(sourceId).Build()
+            .AddParam("$AccessTime").Uint64(accessTime).Build()
+            .Build();
+
+        RunYqlDataQueryWithParams(query, params);
     }
 
     THashMap<TString, TInstant> ListSourceIds(const TString& path = "/Root/PQ/SourceIdMeta2") {
         auto result = RunYqlDataQuery("SELECT SourceId, AccessTime FROM [" + path + "];");
-        NYdb::TResultSetParser parser(*result); 
+        NYdb::TResultSetParser parser(*result);
         THashMap<TString, TInstant> sourceIds;
-        while(parser.TryNextRow()) { 
-            TString sourceId = *parser.ColumnParser("SourceId").GetOptionalUtf8(); 
-            TInstant accessTime = TInstant::MilliSeconds(*parser.ColumnParser("AccessTime").GetOptionalUint64()); 
+        while(parser.TryNextRow()) {
+            TString sourceId = *parser.ColumnParser("SourceId").GetOptionalUtf8();
+            TInstant accessTime = TInstant::MilliSeconds(*parser.ColumnParser("AccessTime").GetOptionalUint64());
             sourceIds[sourceId] = accessTime;
         }
         return sourceIds;
@@ -609,7 +609,7 @@ public:
     void InitDCs(THashMap<TString, TPQTestClusterInfo> clusters = DEFAULT_CLUSTERS_LIST, const TString& localCluster = TString()) {
         MkDir("/Root/PQ", "Config");
         MkDir("/Root/PQ/Config", "V2");
-        RunYqlSchemeQuery(R"___( 
+        RunYqlSchemeQuery(R"___(
             CREATE TABLE [/Root/PQ/Config/V2/Cluster] (
                 name Utf8,
                 balancer Utf8,
@@ -623,16 +623,16 @@ public:
                 dc Utf8,
                 PRIMARY KEY (path, dc)
             );
-        )___"); 
+        )___");
 
-        RunYqlSchemeQuery(R"___( 
+        RunYqlSchemeQuery(R"___(
             CREATE TABLE [/Root/PQ/Config/V2/Versions] (
                 name Utf8,
                 version Int64,
                 PRIMARY KEY (name)
             );
-        )___"); 
- 
+        )___");
+
         TStringBuilder upsertClusters;
         upsertClusters <<  "UPSERT INTO [/Root/PQ/Config/V2/Cluster] (name, balancer, local, enabled, weight) VALUES ";
         bool first = true;
@@ -647,18 +647,18 @@ public:
         upsertClusters << ";\n";
         TString clustersStr = clusters.empty() ? "" : TString(upsertClusters);
         Cerr << "=== Init DC: " << clustersStr << Endl;
-        RunYqlDataQuery(clustersStr + R"___( 
+        RunYqlDataQuery(clustersStr + R"___(
             UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version) VALUES ("Cluster", 1);
             UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version) VALUES ("Topics", 0);
-        )___"); 
+        )___");
     }
 
     void UpdateDcEnabled(const TString& name, bool enabled) {
         TStringBuilder query;
         query << "UPDATE [/Root/PQ/Config/V2/Cluster] SET enabled = " << (enabled ? "true" : "false")
-              << " where name = \"" << name << "\";"; 
+              << " where name = \"" << name << "\";";
         Cerr << "===Update clusters: " << query << Endl;
-        RunYqlDataQuery(query); 
+        RunYqlDataQuery(query);
     }
 
     TPQTestClusterInfo GetDcInfo(const TString& name) {
@@ -680,7 +680,7 @@ public:
         MkDir("/Root/PQ", "Config");
         MkDir("/Root/PQ/Config", "V2");
 
-        RunYqlSchemeQuery(R"___( 
+        RunYqlSchemeQuery(R"___(
             CREATE TABLE [/Root/PQ/Config/V2/Consumer] (
                 name Utf8,
                 tvmClientId Utf8,
@@ -691,9 +691,9 @@ public:
                 tvmClientId Utf8,
                 PRIMARY KEY (name)
             );
-        )___"); 
+        )___");
 
-        RunYqlDataQuery(R"___( 
+        RunYqlDataQuery(R"___(
             UPSERT INTO [/Root/PQ/Config/V2/Consumer] (name, tvmClientId) VALUES
                 ("user1", "1"),
                 ("user2", "1"),
@@ -702,7 +702,7 @@ public:
             UPSERT INTO [/Root/PQ/Config/V2/Producer] (name, tvmClientId) VALUES
                 ("user4", "2"),
                 ("topic1", "1");
-        )___"); 
+        )___");
     }
 
     void UpdateDC(const TString& name, bool local, bool enabled) {
@@ -714,7 +714,7 @@ public:
                     SELECT name, version + 1 FROM [/Root/PQ/Config/V2/Versions] WHERE name == "Cluster";
             )___", name.c_str(), (local ? "true" : "false"), (enabled ? "true" : "false"));
 
-        RunYqlDataQuery(query); 
+        RunYqlDataQuery(query);
     }
 
     void DisableDC() {
@@ -838,9 +838,9 @@ public:
 
     void CreateConsumer(const TString& oldName) {
         auto name = NPersQueue::ConvertOldConsumerName(oldName);
-        RunYqlSchemeQuery("CREATE TABLE [/Root/PQ/" + name + "] (" + "Topic Utf8, Partition Uint32, Offset Uint64,  PRIMARY KEY (Topic,Partition) );"); 
+        RunYqlSchemeQuery("CREATE TABLE [/Root/PQ/" + name + "] (" + "Topic Utf8, Partition Uint32, Offset Uint64,  PRIMARY KEY (Topic,Partition) );");
     }
- 
+
     void GrantConsumerAccess(const TString& oldName, const TString& subj) {
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::ReadAttributes, subj);

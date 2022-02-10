@@ -22,10 +22,10 @@ PEERDIR(
     ydb/core/erasure
 )
 
-SRCS( 
-    blobstorage_groupinfo_iter_ut.cpp 
-    blobstorage_groupinfo_ut.cpp 
-) 
+SRCS(
+    blobstorage_groupinfo_iter_ut.cpp
+    blobstorage_groupinfo_ut.cpp
+)
 
 IF (BUILD_TYPE == "RELEASE")
     SRCS(

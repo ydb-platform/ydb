@@ -325,7 +325,7 @@ Y_UNIT_TEST(TestCheckACL) {
 
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
 
-        tc.Runtime->SetScheduledLimit(600); 
+        tc.Runtime->SetScheduledLimit(600);
         tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100));
         BalancerPrepare("topic", {{1,{1, 2}}}, ssId, tc);
 
@@ -460,7 +460,7 @@ Y_UNIT_TEST(TestSwitchOffImportantFlag) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
-        tc.Runtime->SetScheduledLimit(600); 
+        tc.Runtime->SetScheduledLimit(600);
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc);
 
         {
@@ -1775,7 +1775,7 @@ Y_UNIT_TEST(TestReadSubscription) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
-        tc.Runtime->SetScheduledLimit(600); 
+        tc.Runtime->SetScheduledLimit(600);
         tc.Runtime->SetScheduledEventFilter(&tc.ImmediateLogFlushAndRequestTimeoutFilter);
 
         TVector<std::pair<ui64, TString>> data;

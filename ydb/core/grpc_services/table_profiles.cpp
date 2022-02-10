@@ -408,8 +408,8 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
             policy.SetMinPartitionsCount(1);
             if (policy.GetMinPartitionsCount() < partitioningPolicy.GetUniformPartitionsCount())
                 policy.SetMinPartitionsCount(partitioningPolicy.GetUniformPartitionsCount());
-            if (policy.GetMinPartitionsCount() < (ui32)tableDesc.GetSplitBoundary().size() + 1) 
-                policy.SetMinPartitionsCount(tableDesc.GetSplitBoundary().size() + 1); 
+            if (policy.GetMinPartitionsCount() < (ui32)tableDesc.GetSplitBoundary().size() + 1)
+                policy.SetMinPartitionsCount(tableDesc.GetSplitBoundary().size() + 1);
         }
     }
 

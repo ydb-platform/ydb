@@ -324,7 +324,7 @@ namespace NKikimr {
         IMPL_REQUEST(SchemeInitRoot, TSchemeInitRoot, TResponse)
         IMPL_REQUEST(BSAdm, TBSAdm, TResponse)
         IMPL_REQUEST(BlobStorageConfig, TBlobStorageConfigRequest, TResponse)
-        IMPL_REQUEST(ResolveNode, TResolveNodeRequest, TResponse) 
+        IMPL_REQUEST(ResolveNode, TResolveNodeRequest, TResponse)
         IMPL_REQUEST(HiveCreateTablet, THiveCreateTablet, TResponse)
         IMPL_REQUEST(LocalEnumerateTablets, TLocalEnumerateTablets, TResponse)
         IMPL_REQUEST(KeyValue, TKeyValueRequest, TResponse)

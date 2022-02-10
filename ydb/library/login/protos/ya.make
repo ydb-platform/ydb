@@ -5,7 +5,7 @@ OWNER(
     g:kikimr
 )
 
-EXCLUDE_TAGS(GO_PROTO) 
+EXCLUDE_TAGS(GO_PROTO)
 
 SRCS(
     login.proto

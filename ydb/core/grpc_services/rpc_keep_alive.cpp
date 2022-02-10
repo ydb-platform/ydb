@@ -53,7 +53,7 @@ private:
             ev->Record.SetTraceId(traceId.GetRef());
         }
 
-        ev->Record.MutableRequest()->SetTimeoutMs(GetOperationTimeout().MilliSeconds()); 
+        ev->Record.MutableRequest()->SetTimeoutMs(GetOperationTimeout().MilliSeconds());
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
 

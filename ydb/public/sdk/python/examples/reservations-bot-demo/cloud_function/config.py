@@ -2,11 +2,11 @@ import os
 
 
 class Config(object):
-    _ydb_endpoint = os.getenv("YDB_ENDPOINT") 
-    _ydb_database = os.getenv("YDB_DATABASE") 
-    _ydb_path = os.getenv("YDB_PATH", "") 
+    _ydb_endpoint = os.getenv("YDB_ENDPOINT")
+    _ydb_database = os.getenv("YDB_DATABASE")
+    _ydb_path = os.getenv("YDB_PATH", "")
 
-    _reservation_period_minutes = int(os.getenv("RESERVATION_PERIOD_MINUTES", "60")) 
+    _reservation_period_minutes = int(os.getenv("RESERVATION_PERIOD_MINUTES", "60"))
 
     @classmethod
     def ydb_endpoint(cls):

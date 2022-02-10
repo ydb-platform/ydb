@@ -131,16 +131,16 @@ private:
 
     struct TAresLibInit {
         TAresLibInit() {
-#ifdef _win_ 
+#ifdef _win_
             const auto res = ares_library_init(ARES_LIB_INIT_ALL);
             Y_VERIFY(res == 0);
-#endif 
+#endif
         }
 
         ~TAresLibInit() {
-#ifdef _win_ 
+#ifdef _win_
             ares_library_cleanup();
-#endif 
+#endif
         }
     };
 

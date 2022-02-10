@@ -1,7 +1,7 @@
 import logging
 import asyncio
 from typing import Any, Tuple, Callable, Iterable
-import collections 
+import collections
 import grpc
 
 from ydb import _apis, _utilities
@@ -17,7 +17,7 @@ from ydb.connection import (
     channel_factory,
     YDB_DATABASE_HEADER,
     YDB_TRACE_ID_HEADER,
-    YDB_REQUEST_TYPE_HEADER, 
+    YDB_REQUEST_TYPE_HEADER,
 )
 from ydb.driver import DriverConfig
 from ydb.settings import BaseRequestSettings
@@ -27,7 +27,7 @@ _stubs_list = (
     _apis.TableService.Stub,
     _apis.SchemeService.Stub,
     _apis.DiscoveryService.Stub,
-    _apis.CmsService.Stub, 
+    _apis.CmsService.Stub,
 )
 logger = logging.getLogger(__name__)
 
@@ -60,16 +60,16 @@ async def _construct_metadata(driver_config, settings):
 
 
 class _RpcState(RpcState):
-    __slots__ = ( 
-        "rpc", 
-        "request_id", 
-        "rendezvous", 
-        "result_future", 
-        "rpc_name", 
-        "endpoint", 
-        "metadata_kv", 
-        "_trailing_metadata", 
-    ) 
+    __slots__ = (
+        "rpc",
+        "request_id",
+        "rendezvous",
+        "result_future",
+        "rpc_name",
+        "endpoint",
+        "metadata_kv",
+        "_trailing_metadata",
+    )
 
     def __init__(self, stub_instance: Any, rpc_name: str, endpoint: str):
         super().__init__(stub_instance, rpc_name, endpoint)
@@ -77,34 +77,34 @@ class _RpcState(RpcState):
     async def __call__(self, *args, **kwargs):
         resp = self.rpc(*args, **kwargs)
         if hasattr(resp, "__await__"):  # Check to support async iterators from streams
-            response = await resp 
-            self._trailing_metadata = await resp.trailing_metadata() 
-            return response 
+            response = await resp
+            self._trailing_metadata = await resp.trailing_metadata()
+            return response
         return resp
 
-    def trailing_metadata(self): 
-        if self.metadata_kv is None: 
-            self.metadata_kv = collections.defaultdict(set) 
-            for key, value in self._trailing_metadata: 
-                self.metadata_kv[key].add(value) 
-        return self.metadata_kv 
- 
+    def trailing_metadata(self):
+        if self.metadata_kv is None:
+            self.metadata_kv = collections.defaultdict(set)
+            for key, value in self._trailing_metadata:
+                self.metadata_kv[key].add(value)
+        return self.metadata_kv
+
     def future(self, *args, **kwargs):
         raise NotImplementedError
 
 
 class Connection:
     __slots__ = (
-        "endpoint", 
-        "_channel", 
-        "_call_states", 
-        "_stub_instances", 
-        "_driver_config", 
-        "_cleanup_callbacks", 
-        "__weakref__", 
-        "lock", 
-        "calls", 
-        "closing", 
+        "endpoint",
+        "_channel",
+        "_call_states",
+        "_stub_instances",
+        "_driver_config",
+        "_cleanup_callbacks",
+        "__weakref__",
+        "lock",
+        "calls",
+        "closing",
     )
 
     def __init__(
@@ -133,12 +133,12 @@ class Connection:
             self._stub_instances[stub] = stub(self._channel)
 
     async def _prepare_call(
-        self, stub: Any, rpc_name: str, request: Any, settings: BaseRequestSettings 
+        self, stub: Any, rpc_name: str, request: Any, settings: BaseRequestSettings
     ) -> Tuple[_RpcState, float, Any]:
 
-        timeout, metadata = _get_request_timeout(settings), await _construct_metadata( 
-            self._driver_config, settings 
-        ) 
+        timeout, metadata = _get_request_timeout(settings), await _construct_metadata(
+            self._driver_config, settings
+        )
         _set_server_timeouts(request, settings, timeout)
         self._prepare_stub_instance(stub)
         rpc_state = _RpcState(self._stub_instances[stub], rpc_name, self.endpoint)
@@ -159,7 +159,7 @@ class Connection:
         wrap_result: Callable = None,
         settings: BaseRequestSettings = None,
         wrap_args: Iterable = (),
-        on_disconnected: Callable = None, 
+        on_disconnected: Callable = None,
     ) -> Any:
         """
         Async method to execute request
@@ -173,24 +173,24 @@ class Connection:
         :param wrap_args: And arguments to be passed into wrap_result callable
         :return: A result of computation
         """
-        rpc_state, timeout, metadata = await self._prepare_call( 
-            stub, rpc_name, request, settings 
-        ) 
+        rpc_state, timeout, metadata = await self._prepare_call(
+            stub, rpc_name, request, settings
+        )
         try:
-            feature = asyncio.ensure_future( 
-                rpc_state(request, timeout=timeout, metadata=metadata) 
-            ) 
+            feature = asyncio.ensure_future(
+                rpc_state(request, timeout=timeout, metadata=metadata)
+            )
 
             # Add feature to dict to wait until it finished when close called
             self.calls[rpc_state.request_id] = feature
 
             response = await feature
             _log_response(rpc_state, response)
-            return ( 
-                response 
-                if wrap_result is None 
-                else wrap_result(rpc_state, response, *wrap_args) 
-            ) 
+            return (
+                response
+                if wrap_result is None
+                else wrap_result(rpc_state, response, *wrap_args)
+            )
         except grpc.RpcError as rpc_error:
             if on_disconnected:
                 coro = on_disconnected()
@@ -211,13 +211,13 @@ class Connection:
         :param grace:
         :return: None
         """
-        if hasattr(self, "_channel") and hasattr(self._channel, "close"): 
+        if hasattr(self, "_channel") and hasattr(self._channel, "close"):
             await self._channel.close(grace)
 
     def add_cleanup_callback(self, callback):
         self._cleanup_callbacks.append(callback)
 
-    async def connection_ready(self, ready_timeout=10): 
+    async def connection_ready(self, ready_timeout=10):
         """
         Awaits until channel is ready
         :return: None

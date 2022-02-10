@@ -77,10 +77,10 @@ public:
     }
 
     ~TCheckQueue() {
-        { 
-            std::unique_lock<std::mutex> lock(Mutex); 
-            Done = true; 
-        } 
+        {
+            std::unique_lock<std::mutex> lock(Mutex);
+            Done = true;
+        }
         Cvar.notify_all();
         for (auto& thread : Threads) {
             thread.join();

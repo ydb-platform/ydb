@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import pytest
-from ydb.tests.library.serializability.checker import SerializabilityError, SerializabilityChecker 
-from ydb.tests.tools.ydb_serializable.lib import DatabaseChecker, DatabaseCheckerOptions 
+from ydb.tests.library.serializability.checker import SerializabilityError, SerializabilityChecker
+from ydb.tests.tools.ydb_serializable.lib import DatabaseChecker, DatabaseCheckerOptions
 
 
 def test_order_conflict():

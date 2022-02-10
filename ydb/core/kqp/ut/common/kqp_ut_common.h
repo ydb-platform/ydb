@@ -145,7 +145,7 @@ private:
     THolder<Tests::TServerSettings> ServerSettings;
     THolder<Tests::TServer> Server;
     THolder<Tests::TClient> Client;
-    TPortManager PortManager; 
+    TPortManager PortManager;
     TString Endpoint;
     NYdb::TDriverConfig DriverConfig;
     THolder<NYdb::TDriver> Driver;

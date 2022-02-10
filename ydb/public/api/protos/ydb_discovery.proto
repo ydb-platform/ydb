@@ -22,7 +22,7 @@ message EndpointInfo {
     bool ssl = 4;
     repeated string service = 5;
     string location = 6;
-    uint32 node_id = 7; 
+    uint32 node_id = 7;
 
     // Optional ipv4 and/or ipv6 addresses of the endpoint, which clients may
     // use instead of a dns name in the address field.

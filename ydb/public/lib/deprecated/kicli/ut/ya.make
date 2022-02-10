@@ -5,9 +5,9 @@ OWNER(
     g:kikimr
 )
 
-TIMEOUT(600) 
+TIMEOUT(600)
 
-SIZE(MEDIUM) 
+SIZE(MEDIUM)
 
 FORK_SUBTESTS()
 

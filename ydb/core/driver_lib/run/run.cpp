@@ -469,18 +469,18 @@ static TString ReadFile(const TString& fileName) {
     return f.ReadAll();
 }
 
-void TKikimrRunner::InitializeGracefulShutdown(const TKikimrRunConfig& runConfig) { 
-    Y_UNUSED(runConfig); 
-    GracefulShutdownSupported = true; 
-} 
- 
-void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) { 
-    auto& tableServiceConfig = runConfig.AppConfig.GetTableServiceConfig(); 
-    auto& featureFlags = runConfig.AppConfig.GetFeatureFlags(); 
-    KqpShutdownController.Reset(new NKqp::TKqpShutdownController(NKqp::MakeKqpProxyID(runConfig.NodeId), tableServiceConfig, featureFlags.GetEnableGracefulShutdown())); 
-    KqpShutdownController->Initialize(ActorSystem.Get()); 
-} 
- 
+void TKikimrRunner::InitializeGracefulShutdown(const TKikimrRunConfig& runConfig) {
+    Y_UNUSED(runConfig);
+    GracefulShutdownSupported = true;
+}
+
+void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
+    auto& tableServiceConfig = runConfig.AppConfig.GetTableServiceConfig();
+    auto& featureFlags = runConfig.AppConfig.GetFeatureFlags();
+    KqpShutdownController.Reset(new NKqp::TKqpShutdownController(NKqp::MakeKqpProxyID(runConfig.NodeId), tableServiceConfig, featureFlags.GetEnableGracefulShutdown()));
+    KqpShutdownController->Initialize(ActorSystem.Get());
+}
+
 void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
     const auto& appConfig = runConfig.AppConfig;
 
@@ -501,13 +501,13 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["monitoring"] = &hasMonitoring;
         bool hasDiscovery = services.empty();
         names["discovery"] = &hasDiscovery;
-        bool hasTableService = services.empty(); 
+        bool hasTableService = services.empty();
         names["table_service"] = &hasTableService;
         bool hasSchemeService = false;
         bool hasOperationService = false;
         bool hasYql = false;
         names["yql"] = &hasYql;
-        bool hasYqlInternal = services.empty(); 
+        bool hasYqlInternal = services.empty();
         names["yql_internal"] = &hasYqlInternal;
         bool hasPQ = services.empty();
         names["pq"] = &hasPQ;
@@ -625,10 +625,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(grpcService);
         }
 
-        if (hasTableService) { 
+        if (hasTableService) {
             server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, grpcRequestProxyId));
-        } 
- 
+        }
+
         if (hasExperimental) {
             server.AddService(new NGRpcService::TGRpcYdbExperimentalService(ActorSystem.Get(), Counters,
                 grpcRequestProxyId));
@@ -732,7 +732,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
     if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy()) {
         const auto& grpcConfig = appConfig.GetGRpcConfig();
 
-        EnabledGrpcService = true; 
+        EnabledGrpcService = true;
         NGrpc::TServerOptions opts;
         opts.SetHost(grpcConfig.GetHost());
         opts.SetPort(grpcConfig.GetPort());
@@ -1388,43 +1388,43 @@ void TKikimrRunner::KikimrStart() {
 void TKikimrRunner::KikimrStop(bool graceful) {
     Y_UNUSED(graceful);
 
-    if (EnabledGrpcService) { 
-        ActorSystem->Send(new IEventHandle(NGRpcService::CreateGrpcPublisherServiceActorId(), {}, new TEvents::TEvPoisonPill)); 
-    } 
- 
-    TIntrusivePtr<TDrainProgress> drainProgress(new TDrainProgress()); 
-    if (AppData->FeatureFlags.GetEnableDrainOnShutdown() && GracefulShutdownSupported && ActorSystem) { 
-        drainProgress->OnSend(); 
-        ActorSystem->Send(new IEventHandle(MakeTenantPoolRootID(), {}, new TEvLocal::TEvLocalDrainNode(drainProgress))); 
-    } 
- 
-    if (KqpShutdownController) { 
-        KqpShutdownController->Stop(); 
-    } 
- 
+    if (EnabledGrpcService) {
+        ActorSystem->Send(new IEventHandle(NGRpcService::CreateGrpcPublisherServiceActorId(), {}, new TEvents::TEvPoisonPill));
+    }
+
+    TIntrusivePtr<TDrainProgress> drainProgress(new TDrainProgress());
+    if (AppData->FeatureFlags.GetEnableDrainOnShutdown() && GracefulShutdownSupported && ActorSystem) {
+        drainProgress->OnSend();
+        ActorSystem->Send(new IEventHandle(MakeTenantPoolRootID(), {}, new TEvLocal::TEvLocalDrainNode(drainProgress)));
+    }
+
+    if (KqpShutdownController) {
+        KqpShutdownController->Stop();
+    }
+
     DisableActorCallstack();
 
-    if (AppData->FeatureFlags.GetEnableDrainOnShutdown() && GracefulShutdownSupported) { 
-        for (ui32 i = 0; i < 300; i++) { 
-            auto cnt = drainProgress->GetOnlineTabletsEstimate(); 
-            if (cnt > 0) { 
-                Cerr << "Waiting for drain to complete: " << cnt << " tablets are online on node." << Endl; 
-            } 
- 
-            if (drainProgress->CheckCompleted() || cnt == 0) { 
-                Cerr << "Drain completed." << Endl; 
-                break; 
-            } 
- 
-            Sleep(TDuration::MilliSeconds(100)); 
-        } 
- 
-        auto stillOnline = drainProgress->GetOnlineTabletsEstimate(); 
-        if (stillOnline) { 
-            Cerr << "Drain completed, but " << stillOnline << " tablet(s) are online." << Endl; 
-        } 
-    } 
- 
+    if (AppData->FeatureFlags.GetEnableDrainOnShutdown() && GracefulShutdownSupported) {
+        for (ui32 i = 0; i < 300; i++) {
+            auto cnt = drainProgress->GetOnlineTabletsEstimate();
+            if (cnt > 0) {
+                Cerr << "Waiting for drain to complete: " << cnt << " tablets are online on node." << Endl;
+            }
+
+            if (drainProgress->CheckCompleted() || cnt == 0) {
+                Cerr << "Drain completed." << Endl;
+                break;
+            }
+
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        auto stillOnline = drainProgress->GetOnlineTabletsEstimate();
+        if (stillOnline) {
+            Cerr << "Drain completed, but " << stillOnline << " tablet(s) are online." << Endl;
+        }
+    }
+
     if (ActorSystem) {
         ActorSystem->BroadcastToProxies([](const TActorId& proxyId) {
             return new IEventHandle(proxyId, {}, new TEvInterconnect::TEvTerminate);

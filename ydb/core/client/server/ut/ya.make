@@ -2,14 +2,14 @@ UNITTEST_FOR(ydb/core/client/server)
 
 OWNER(g:kikimr)
 
-FORK_SUBTESTS() 
- 
-SPLIT_FACTOR(20) 
+FORK_SUBTESTS()
 
-TIMEOUT(600) 
+SPLIT_FACTOR(20)
 
-SIZE(MEDIUM) 
- 
+TIMEOUT(600)
+
+SIZE(MEDIUM)
+
 PEERDIR(
     library/cpp/testing/gmock_in_unittest
     ydb/core/persqueue

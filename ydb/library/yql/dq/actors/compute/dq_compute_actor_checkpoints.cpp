@@ -5,7 +5,7 @@
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 
 #include <algorithm>
- 
+
 #define LOG_D(s) \
     LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "[" << GraphId << "] Task: " << Task.GetId() << ". " << s)
 #define LOG_I(s) \

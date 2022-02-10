@@ -7,12 +7,12 @@ OWNER(
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(20) 
+SPLIT_FACTOR(20)
 
-TIMEOUT(600) 
+TIMEOUT(600)
 
-SIZE(MEDIUM) 
- 
+SIZE(MEDIUM)
+
 PEERDIR(
     library/cpp/testing/gmock_in_unittest
     ydb/core/testlib

@@ -1,8 +1,8 @@
-#!/usr/bin/env python 
-# -*- coding: utf-8 -*- 
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 import pytest
 from hamcrest import assert_that, equal_to
- 
+
 from sqs_test_base import KikimrSqsTestBase, IS_FIFO_PARAMS
 
 
@@ -10,7 +10,7 @@ class TestQueueAttributesInCompatibilityMode(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(TestQueueAttributesInCompatibilityMode, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['enable_queue_attributes_validation'] = False 
+        config_generator.yaml_config['sqs_config']['enable_queue_attributes_validation'] = False
         return config_generator
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
@@ -72,7 +72,7 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
         for attr in attributes_to_set_and_check:
             try:
                 self._sqs_api.set_queue_attributes(queue_url, {attr: '2.5'})
-            except Exception as e: 
+            except Exception as e:
                 assert('InvalidAttributeValue' in str(e))
                 assert(attr in str(e))
             else:
@@ -80,7 +80,7 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
 
             try:
                 self._sqs_api.set_queue_attributes(queue_url, {attr: '2147483647'})
-            except Exception as e: 
+            except Exception as e:
                 assert('InvalidAttributeValue' in str(e))
                 assert(attr in str(e))
             else:
@@ -88,7 +88,7 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
 
         try:
             self._sqs_api.set_queue_attributes(queue_url, {'trololo': 'ololo'})
-        except Exception as e: 
+        except Exception as e:
             assert('InvalidAttributeName' in str(e))
         else:
             assert_that(False)  # expected InvalidAttributeName exception
@@ -98,7 +98,7 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
             self._sqs_api.set_queue_attributes(queue_url, {'FifoQueue': 'true'})  # ok, do nothing
             try:
                 self._sqs_api.set_queue_attributes(queue_url, {'FifoQueue': 'omg'})
-            except Exception as e: 
+            except Exception as e:
                 assert('InvalidAttributeValue' in str(e))
                 assert('FifoQueue' in str(e))
             else:
@@ -107,7 +107,7 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
             # special case: queue type mismatch
             try:
                 self._sqs_api.set_queue_attributes(queue_url, {'FifoQueue': 'false'})
-            except Exception as e: 
+            except Exception as e:
                 assert('InvalidAttributeValue' in str(e))
                 assert('Modifying queue type is not supported' in str(e))
             else:
@@ -115,7 +115,7 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
         else:
             try:
                 self._sqs_api.set_queue_attributes(queue_url, {'FifoQueue': 'false'})
-            except Exception as e: 
+            except Exception as e:
                 assert('InvalidAttributeName' in str(e))
             else:
                 assert_that(False)  # expected InvalidAttributeName exception
@@ -173,14 +173,14 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
         for attr in custom_attributes:
             try:
                 queue_url = self._sqs_api.create_queue('new_' + self.queue_name, is_fifo=is_fifo, attributes={attr: '2147483647'})
-            except Exception as e: 
+            except Exception as e:
                 assert(attr in str(e))
             else:
                 assert_that(False)  # expected some exception
 
             try:
                 queue_url = self._sqs_api.create_queue('new2_' + self.queue_name, is_fifo=is_fifo, attributes={attr: '2.5'})
-            except Exception as e: 
+            except Exception as e:
                 assert(attr in str(e))
             else:
                 assert_that(False)  # expected some exception

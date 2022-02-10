@@ -44,10 +44,10 @@ namespace NSQLTranslationV1 {
 
 using NALPDefault::SQLv1LexerTokens;
 
-#if defined(_tsan_enabled_) 
-    TMutex SanitizerSQLTranslationMutex; 
-#endif 
- 
+#if defined(_tsan_enabled_)
+    TMutex SanitizerSQLTranslationMutex;
+#endif
+
 using namespace NSQLv1Generated;
 
 static TPosition GetPos(const TToken& token) {
@@ -10044,9 +10044,9 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
 
 google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, TIssues& err, size_t maxErrors, bool ansiLexer, google::protobuf::Arena* arena) {
     YQL_ENSURE(arena);
-#if defined(_tsan_enabled_) 
-    TGuard<TMutex> grd(SanitizerSQLTranslationMutex); 
-#endif 
+#if defined(_tsan_enabled_)
+    TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
+#endif
     NSQLTranslation::TErrorCollectorOverIssues collector(err, maxErrors, "");
     if (ansiLexer) {
         NProtoAST::TProtoASTBuilder<NALPAnsi::SQLv1Parser, NALPAnsi::SQLv1Lexer> builder(query, queryName, arena);
@@ -10059,9 +10059,9 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
 
 google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, NProtoAST::IErrorCollector& err, bool ansiLexer, google::protobuf::Arena* arena) {
     YQL_ENSURE(arena);
-#if defined(_tsan_enabled_) 
-    TGuard<TMutex> grd(SanitizerSQLTranslationMutex); 
-#endif 
+#if defined(_tsan_enabled_)
+    TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
+#endif
     if (ansiLexer) {
         NProtoAST::TProtoASTBuilder<NALPAnsi::SQLv1Parser, NALPAnsi::SQLv1Lexer> builder(query, queryName, arena);
         return builder.BuildAST(err);

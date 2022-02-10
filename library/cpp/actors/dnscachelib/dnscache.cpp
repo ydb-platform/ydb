@@ -23,12 +23,12 @@ TDnsCache::TDnsCache(bool allowIpv4, bool allowIpv6, time_t lifetime, time_t neg
     , PtrCacheHits(0)
     , PtrCacheMisses(0)
 {
-#ifdef _win_ 
+#ifdef _win_
     if (ares_library_init(ARES_LIB_INIT_WIN32) != ARES_SUCCESS) {
         LWPROBE(AresInitFailed);
         ythrow yexception() << "ares_init() failed";
     }
-#endif 
+#endif
 
     ares_channel chan;
 
@@ -47,9 +47,9 @@ TDnsCache::~TDnsCache(void) {
     ares_destroy(chan);
     LWPROBE(Destroyed);
 
-#ifdef _win_ 
+#ifdef _win_
     ares_library_cleanup();
-#endif 
+#endif
 }
 
 TString TDnsCache::GetHostByAddr(const NAddr::IRemoteAddr& addr) {

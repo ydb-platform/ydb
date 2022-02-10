@@ -10,7 +10,7 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <util/generic/guid.h>
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -48,62 +48,62 @@ inline NActors::TActorId MakeKqpLocalFileSpillingServiceID(ui32 nodeId) {
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
-class TKqpShutdownController; 
- 
-class TKqpShutdownState : public TThrRefBase { 
-    friend class TKqpShutdownController; 
- 
-public: 
-    void Update(ui32 pendingSessions) { 
-        AtomicSet(PendingSessions_, pendingSessions); 
- 
-        if (!Initialized()) { 
-            AtomicSet(Initialized_, 1); 
-        } 
- 
-        if (!pendingSessions) { 
-            SetCompleted(); 
-        } 
-    } 
-private: 
-    bool ShutdownComplete() const { 
-        return AtomicGet(ShutdownComplete_) == 1; 
-    } 
- 
-    ui32 GetPendingSessions() const { 
-        return AtomicGet(PendingSessions_); 
-    } 
- 
-    bool Initialized() const { 
-        return AtomicGet(Initialized_) == 1; 
-    } 
- 
-    void SetCompleted() { 
-        AtomicSet(ShutdownComplete_, 1); 
-    } 
- 
-    TAtomic PendingSessions_ = 0; 
-    TAtomic Initialized_ = 0; 
-    TAtomic ShutdownComplete_ = 0; 
-}; 
- 
- 
-class TKqpShutdownController { 
-public: 
-    TKqpShutdownController(NActors::TActorId kqpProxyActorId, const NKikimrConfig::TTableServiceConfig& tableServiceConfig, bool gracefulEnabled); 
-    ~TKqpShutdownController() = default; 
- 
-    void Initialize(NActors::TActorSystem* actorSystem); 
-    void Stop(); 
- 
-private: 
-    NActors::TActorId KqpProxyActorId_; 
-    NActors::TActorSystem* ActorSystem_; 
-    bool EnableGraceful; 
-    NKikimrConfig::TTableServiceConfig TableServiceConfig; 
-    TIntrusivePtr<TKqpShutdownState> ShutdownState_; 
-}; 
- 
+class TKqpShutdownController;
+
+class TKqpShutdownState : public TThrRefBase {
+    friend class TKqpShutdownController;
+
+public:
+    void Update(ui32 pendingSessions) {
+        AtomicSet(PendingSessions_, pendingSessions);
+
+        if (!Initialized()) {
+            AtomicSet(Initialized_, 1);
+        }
+
+        if (!pendingSessions) {
+            SetCompleted();
+        }
+    }
+private:
+    bool ShutdownComplete() const {
+        return AtomicGet(ShutdownComplete_) == 1;
+    }
+
+    ui32 GetPendingSessions() const {
+        return AtomicGet(PendingSessions_);
+    }
+
+    bool Initialized() const {
+        return AtomicGet(Initialized_) == 1;
+    }
+
+    void SetCompleted() {
+        AtomicSet(ShutdownComplete_, 1);
+    }
+
+    TAtomic PendingSessions_ = 0;
+    TAtomic Initialized_ = 0;
+    TAtomic ShutdownComplete_ = 0;
+};
+
+
+class TKqpShutdownController {
+public:
+    TKqpShutdownController(NActors::TActorId kqpProxyActorId, const NKikimrConfig::TTableServiceConfig& tableServiceConfig, bool gracefulEnabled);
+    ~TKqpShutdownController() = default;
+
+    void Initialize(NActors::TActorSystem* actorSystem);
+    void Stop();
+
+private:
+    NActors::TActorId KqpProxyActorId_;
+    NActors::TActorSystem* ActorSystem_;
+    bool EnableGraceful;
+    NKikimrConfig::TTableServiceConfig TableServiceConfig;
+    TIntrusivePtr<TKqpShutdownState> ShutdownState_;
+};
+
 struct TKqpQuerySettings {
     bool DocumentApiRestricted = true;
 
@@ -217,18 +217,18 @@ struct TEvKqp {
     struct TEvPingSessionRequest : public TEventPB<TEvPingSessionRequest,
         NKikimrKqp::TEvPingSessionRequest, TKqpEvents::EvPingSessionRequest> {};
 
-    struct TEvInitiateSessionShutdown : public TEventLocal<TEvInitiateSessionShutdown, TKqpEvents::EvInitiateSessionShutdown> { 
-        ui32 SoftTimeoutMs; 
-        ui32 HardTimeoutMs; 
- 
-        TEvInitiateSessionShutdown(ui32 softTimeoutMs, ui32 hardTimeoutMs) 
-            : SoftTimeoutMs(softTimeoutMs) 
-            , HardTimeoutMs(hardTimeoutMs) 
-        {} 
-    }; 
- 
-    struct TEvContinueShutdown : public TEventLocal<TEvContinueShutdown, TKqpEvents::EvContinueShutdown> {}; 
- 
+    struct TEvInitiateSessionShutdown : public TEventLocal<TEvInitiateSessionShutdown, TKqpEvents::EvInitiateSessionShutdown> {
+        ui32 SoftTimeoutMs;
+        ui32 HardTimeoutMs;
+
+        TEvInitiateSessionShutdown(ui32 softTimeoutMs, ui32 hardTimeoutMs)
+            : SoftTimeoutMs(softTimeoutMs)
+            , HardTimeoutMs(hardTimeoutMs)
+        {}
+    };
+
+    struct TEvContinueShutdown : public TEventLocal<TEvContinueShutdown, TKqpEvents::EvContinueShutdown> {};
+
     struct TEvProcessResponse : public TEventPB<TEvProcessResponse, NKikimrKqp::TEvProcessResponse,
         TKqpEvents::EvProcessResponse>
     {
@@ -463,7 +463,7 @@ private:
     TString SessionId;
 };
 
- 
+
 static inline IOutputStream& operator<<(IOutputStream& stream, const TKqpRequestInfo& requestInfo) {
     if (!requestInfo.GetTraceId().empty()) {
         stream << "TraceId: \"" << requestInfo.GetTraceId() << "\", ";

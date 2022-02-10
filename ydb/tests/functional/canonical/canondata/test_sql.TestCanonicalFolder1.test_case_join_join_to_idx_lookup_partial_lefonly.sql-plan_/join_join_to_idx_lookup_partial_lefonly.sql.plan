@@ -1,41 +1,41 @@
-{ 
-    "meta": { 
-        "version": "0.1", 
-        "type": "query" 
-    }, 
-    "tables": [ 
-        { 
-            "name": "/local/base_join_join_to_idx_lookup_partial_lefonly_sql_plan/InputJoin1", 
-            "reads": [ 
-                { 
-                    "type": "FullScan", 
-                    "scan_by": [ 
-                        "Key" 
-                    ], 
-                    "columns": [ 
-                        "Fk21", 
-                        "Key", 
-                        "Value" 
-                    ] 
-                } 
-            ] 
-        }, 
-        { 
-            "name": "/local/base_join_join_to_idx_lookup_partial_lefonly_sql_plan/InputJoin2", 
-            "reads": [ 
-                { 
-                    "type": "MultiLookup", 
-                    "lookup_by": [ 
-                        "Key1 (expr)" 
-                    ], 
-                    "scan_by": [ 
-                        "Key2" 
-                    ], 
-                    "columns": [ 
-                        "Key1" 
-                    ] 
-                } 
-            ] 
-        } 
-    ] 
-} 
+{
+    "meta": {
+        "version": "0.1",
+        "type": "query"
+    },
+    "tables": [
+        {
+            "name": "/local/base_join_join_to_idx_lookup_partial_lefonly_sql_plan/InputJoin1",
+            "reads": [
+                {
+                    "type": "FullScan",
+                    "scan_by": [
+                        "Key"
+                    ],
+                    "columns": [
+                        "Fk21",
+                        "Key",
+                        "Value"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "/local/base_join_join_to_idx_lookup_partial_lefonly_sql_plan/InputJoin2",
+            "reads": [
+                {
+                    "type": "MultiLookup",
+                    "lookup_by": [
+                        "Key1 (expr)"
+                    ],
+                    "scan_by": [
+                        "Key2"
+                    ],
+                    "columns": [
+                        "Key1"
+                    ]
+                }
+            ]
+        }
+    ]
+}

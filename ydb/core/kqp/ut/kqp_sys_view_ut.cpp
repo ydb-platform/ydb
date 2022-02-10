@@ -350,7 +350,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto streamPart = it.ReadNext().GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SCHEME_ERROR);
-        driver.Stop(true); 
+        driver.Stop(true);
     }
 
     Y_UNIT_TEST(ReadSuccess) {
@@ -379,7 +379,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto streamPart = it.ReadNext().GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
-        driver.Stop(true); 
+        driver.Stop(true);
     }
 }
 

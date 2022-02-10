@@ -1,8 +1,8 @@
-#!/usr/bin/env python 
-# -*- coding: utf-8 -*- 
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 import pytest
 from hamcrest import assert_that, equal_to
- 
+
 from sqs_matchers import ReadResponseMatcher
 
 from sqs_test_base import KikimrSqsTestBase, POLLING_PARAMS, IS_FIFO_PARAMS
@@ -12,7 +12,7 @@ class TestSqsPolling(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(TestSqsPolling, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['check_all_shards_in_receive_message'] = False 
+        config_generator.yaml_config['sqs_config']['check_all_shards_in_receive_message'] = False
         return config_generator
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)

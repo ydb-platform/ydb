@@ -2,12 +2,12 @@
 import os
 import logging
 
-import ydb 
+import ydb
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory 
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator 
-from ydb.tests.library.harness.util import LogLevels 
-from ydb.tests.library.common.types import Erasure 
+from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.library.common.types import Erasure
 
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class TestOn3DC(object):
             cls.cluster.stop()
 
     def test_create_dirs(self):
-        return 
+        return
         driver_config = ydb.DriverConfig(
             "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
             database="/Root")

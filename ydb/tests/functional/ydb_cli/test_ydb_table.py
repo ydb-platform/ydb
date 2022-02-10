@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from ydb.tests.library.common import yatest_common 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory 
-import ydb 
+from ydb.tests.library.common import yatest_common
+from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+import ydb
 import os
 import logging
 
@@ -45,9 +45,9 @@ def create_table_with_data(session, path):
 class BaseTestTableService(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory() 
+        cls.cluster = kikimr_cluster_factory()
         cls.cluster.start()
-        cls.root_dir = "/Root" 
+        cls.root_dir = "/Root"
         driver_config = ydb.DriverConfig(
             database="/Root",
             endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
@@ -64,22 +64,22 @@ class BaseTestTableService(object):
         execution = yatest_common.execute(
             [
                 ydb_bin(),
-                "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port, 
+                "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
                 "--database", cls.root_dir
             ] +
             args
         )
 
         result = execution.std_out
-        logger.debug("std_out:\n" + result.decode('utf-8')) 
+        logger.debug("std_out:\n" + result.decode('utf-8'))
         return result
 
     @staticmethod
     def canonical_result(output_result):
         output_file_name = "result.output"
         with open(output_file_name, "w") as f:
-            f.write(output_result.decode('utf-8')) 
-        return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True) 
+            f.write(output_result.decode('utf-8'))
+        return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True)
 
 
 class TestExecuteQueryWithParams(BaseTestTableService):

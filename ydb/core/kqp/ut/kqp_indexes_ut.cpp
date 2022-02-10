@@ -33,9 +33,9 @@ TIntrusivePtr<NKqp::IKqpGateway> GetIcGateway(Tests::TServer& server) {
     auto counters = MakeIntrusive<TKqpRequestCounters>();
     counters->Counters = new TKqpCounters(server.GetRuntime()->GetAppData(0).Counters);
     counters->TxProxyMon = new NTxProxy::TTxProxyMon(server.GetRuntime()->GetAppData(0).Counters);
-    std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(server.GetRuntime()->GetAnyNodeActorSystem(), false); 
-    return NKqp::CreateKikimrIcGateway(TestCluster, "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(), 
-        server.GetRuntime()->GetNodeId(0), counters, MakeMiniKQLCompileServiceID()); 
+    std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(server.GetRuntime()->GetAnyNodeActorSystem(), false);
+    return NKqp::CreateKikimrIcGateway(TestCluster, "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
+        server.GetRuntime()->GetNodeId(0), counters, MakeMiniKQLCompileServiceID());
 }
 
 TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> gateway,
@@ -79,7 +79,7 @@ void CreateTableWithIndexWithState(
     metadata->Columns["value2"] = TKikimrColumnMetadata("value2", 0, "String", false);
     metadata->ColumnOrder = {"key", "value", "value2"};
     metadata->Indexes.push_back(
-        NYql::TIndexDescription( 
+        NYql::TIndexDescription(
             indexName,
             {"value"},
             TVector<TString>(),
@@ -88,7 +88,7 @@ void CreateTableWithIndexWithState(
             0,
             0,
             0
-        ) 
+        )
     );
     metadata->KeyColumnNames.push_back("key");
 

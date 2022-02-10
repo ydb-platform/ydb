@@ -6,25 +6,25 @@ import time
 import pytest
 from hamcrest import assert_that, raises, greater_than, contains_string, equal_to, instance_of
 
-from sqs_requests_client import SqsSendMessageParams 
+from sqs_requests_client import SqsSendMessageParams
 
 from sqs_test_base import KikimrSqsTestBase, IS_FIFO_PARAMS
 
-from ydb import issues as ydb_issues 
+from ydb import issues as ydb_issues
 
 
 class TestSqsQuotingWithKesus(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(TestSqsQuotingWithKesus, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['quoting_config'] = { 
-            'enable_quoting': True, 
-            'kesus_quoter_config': {'default_limits': {'std_send_message_rate': 1000}} 
-        } 
+        config_generator.yaml_config['sqs_config']['quoting_config'] = {
+            'enable_quoting': True,
+            'kesus_quoter_config': {'default_limits': {'std_send_message_rate': 1000}}
+        }
         return config_generator
 
     def test_creates_quoter(self):
-        quoter_description = self._driver.scheme_client.describe_path('{}/{}/.Quoter'.format(self.sqs_root, self._username)) 
+        quoter_description = self._driver.scheme_client.describe_path('{}/{}/.Quoter'.format(self.sqs_root, self._username))
         assert_that(quoter_description.is_coordination_node())
 
         # Check that user is properly deleted
@@ -37,11 +37,11 @@ class TestSqsQuotingWithKesus(KikimrSqsTestBase):
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
         self._sqs_api.delete_queue(created_queue_url)
 
-        quoter_description = self._driver.scheme_client.describe_path('{}/{}/.Quoter'.format(self.sqs_root, self._username)) 
+        quoter_description = self._driver.scheme_client.describe_path('{}/{}/.Quoter'.format(self.sqs_root, self._username))
         assert_that(quoter_description.is_coordination_node())
 
         def describe_queue_path():
-            self._driver.scheme_client.describe_path('{}/{}/{}'.format(self.sqs_root, self._username, self.queue_name)) 
+            self._driver.scheme_client.describe_path('{}/{}/{}'.format(self.sqs_root, self._username, self.queue_name))
 
         assert_that(
             describe_queue_path,
@@ -55,30 +55,30 @@ class TestSqsQuotingWithLocalRateLimiter(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(TestSqsQuotingWithLocalRateLimiter, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['quoting_config'] = { 
-            'enable_quoting': True, 
-            'quota_deadline_ms': 150, 
-            'local_rate_limiter_config': { 
-                'rates': { 
-                    'std_send_message_rate': 10, 
-                    'std_receive_message_rate': 10, 
-                    'std_delete_message_rate': 10, 
-                    'std_change_message_visibility_rate': 10, 
-                    'fifo_send_message_rate': 10, 
-                    'fifo_receive_message_rate': 10, 
-                    'fifo_delete_message_rate': 10, 
-                    'fifo_change_message_visibility_rate': 10, 
-                    'create_objects_rate': 2, 
-                    'delete_objects_rate': 2, 
-                    'other_requests_rate': 5, 
-                } 
-            } 
-        } 
+        config_generator.yaml_config['sqs_config']['quoting_config'] = {
+            'enable_quoting': True,
+            'quota_deadline_ms': 150,
+            'local_rate_limiter_config': {
+                'rates': {
+                    'std_send_message_rate': 10,
+                    'std_receive_message_rate': 10,
+                    'std_delete_message_rate': 10,
+                    'std_change_message_visibility_rate': 10,
+                    'fifo_send_message_rate': 10,
+                    'fifo_receive_message_rate': 10,
+                    'fifo_delete_message_rate': 10,
+                    'fifo_change_message_visibility_rate': 10,
+                    'create_objects_rate': 2,
+                    'delete_objects_rate': 2,
+                    'other_requests_rate': 5,
+                }
+            }
+        }
         return config_generator
 
     def test_does_not_create_kesus(self):
         def call_describe():
-            self._driver.scheme_client.describe_path('{}/{}/.Quoter'.format(self.sqs_root, self._username)) 
+            self._driver.scheme_client.describe_path('{}/{}/.Quoter'.format(self.sqs_root, self._username))
 
         assert_that(
             call_describe,

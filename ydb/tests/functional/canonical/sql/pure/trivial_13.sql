@@ -1,2 +1,2 @@
-select '' as two; 
- 
+select '' as two;
+

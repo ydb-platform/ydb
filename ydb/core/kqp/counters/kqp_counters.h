@@ -37,7 +37,7 @@ protected:
     void ReportQueryAction(NKikimrKqp::EQueryAction action);
     void ReportQueryType(NKikimrKqp::EQueryType type);
 
-    void ReportSessionShutdownRequest(); 
+    void ReportSessionShutdownRequest();
     void ReportCreateSession(ui64 requestSize);
     void ReportPingSession(ui64 requestSize);
     void ReportCloseSession(ui64 requestSize);
@@ -72,9 +72,9 @@ protected:
     void ReportWorkerClosedRequest();
     void ReportQueriesPerWorker(ui32 queryId);
 
-    void ReportProxyForwardedRequest(); 
-    void ReportSessionBalancerCV(ui32 value); 
- 
+    void ReportProxyForwardedRequest();
+    void ReportSessionBalancerCV(ui32 value);
+
     void ReportBeginTransaction(ui32 evictedTx, ui32 currentActiveTx, ui32 currentAbortedTx);
 
     void ReportTxCreated();
@@ -91,13 +91,13 @@ protected:
     void ReportCompileRequestTimeout();
     void ReportCompileDurations(TDuration duration, TDuration cpuTime);
     void ReportRecompileRequestGet();
-    NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const; 
+    NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
 
 protected:
     NMonitoring::TDynamicCounterPtr Counters;
     NMonitoring::TDynamicCounterPtr KqpGroup;
     NMonitoring::TDynamicCounterPtr YdbGroup;
-    NMonitoring::TDynamicCounterPtr QueryReplayGroup; 
+    NMonitoring::TDynamicCounterPtr QueryReplayGroup;
 
     // Requests
     THashMap<NKikimrKqp::EQueryAction, NMonitoring::TDynamicCounters::TCounterPtr> QueryActionRequests;
@@ -155,10 +155,10 @@ protected:
     NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedRequest;
     NMonitoring::TDynamicCounters::TCounterPtr ActiveWorkers;
     NMonitoring::TDynamicCounters::TCounterPtr YdbActiveWorkers;
-    NMonitoring::TDynamicCounters::TCounterPtr SessionBalancerCV; 
-    NMonitoring::TDynamicCounters::TCounterPtr SessionBalancerShutdowns; 
-    NMonitoring::TDynamicCounters::TCounterPtr ProxyForwardedRequests; 
- 
+    NMonitoring::TDynamicCounters::TCounterPtr SessionBalancerCV;
+    NMonitoring::TDynamicCounters::TCounterPtr SessionBalancerShutdowns;
+    NMonitoring::TDynamicCounters::TCounterPtr ProxyForwardedRequests;
+
     NMonitoring::THistogramPtr WorkerCleanupLatency;
 
     // Transactions
@@ -242,8 +242,8 @@ private:
 public:
     explicit TKqpCounters(const NMonitoring::TDynamicCounterPtr& counters, const TActorContext* ctx = nullptr);
 
-    void ReportProxyForwardedRequest(TKqpDbCountersPtr dbCounters); 
-    void ReportSessionBalancerCV(TKqpDbCountersPtr dbCounters, ui32 val); 
+    void ReportProxyForwardedRequest(TKqpDbCountersPtr dbCounters);
+    void ReportSessionBalancerCV(TKqpDbCountersPtr dbCounters, ui32 val);
     void ReportSessionShutdownRequest(TKqpDbCountersPtr dbCounters);
     void ReportCreateSession(TKqpDbCountersPtr dbCounters, ui64 requestSize);
     void ReportPingSession(TKqpDbCountersPtr dbCounters, ui64 requestSize);
@@ -301,7 +301,7 @@ public:
     void ReportRecompileRequestGet(TKqpDbCountersPtr dbCounters);
 
     const NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
-    NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const; 
+    NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
 
     NMonitoring::TDynamicCounters::TCounterPtr GetQueryTypeCounter(NKikimrKqp::EQueryType queryType);
 

@@ -1,21 +1,21 @@
-#!/usr/bin/env python 
-# -*- coding: utf-8 -*- 
-import logging 
-import time 
- 
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import logging
+import time
+
 import pytest
 from hamcrest import assert_that, equal_to, not_none, greater_than, less_than_or_equal_to, has_items, raises
- 
+
 from sqs_matchers import ReadResponseMatcher, extract_message_ids
- 
+
 from sqs_test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, VISIBILITY_CHANGE_METHOD_PARAMS
- 
- 
+
+
 class SqsFifoMicroBatchTest(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(SqsFifoMicroBatchTest, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['group_selection_batch_size'] = 2 
+        config_generator.yaml_config['sqs_config']['group_selection_batch_size'] = 2
         return config_generator
 
     def test_micro_batch_read(self):
@@ -48,7 +48,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(SqsFifoMessagingTest, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['group_selection_batch_size'] = 100 
+        config_generator.yaml_config['sqs_config']['group_selection_batch_size'] = 100
         return config_generator
 
     def test_only_single_read_infly_from_fifo(self):
@@ -139,7 +139,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         first_message_id = self._send_message_and_assert(
             queue_url, self._msg_body_template.format('0'), seq_no=1, group_id='group'
         )
-        time.sleep(5) 
+        time.sleep(5)
         self._send_message_and_assert(
             queue_url, self._msg_body_template.format('1'), seq_no=2, group_id='group'
         )
@@ -155,12 +155,12 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             queue_url, message_count=pack_size, msg_body_template=self._msg_body_template, is_fifo=True,
             group_id='1',
         )
-        time.sleep(5) 
+        time.sleep(5)
         second_pack_ids = self._send_messages(
             queue_url, message_count=pack_size, msg_body_template=self._msg_body_template, is_fifo=True,
             group_id='2'
         )
-        time.sleep(5) 
+        time.sleep(5)
         self._read_messages_and_assert(
             queue_url, messages_count=10, visibility_timeout=1000,
             matcher=ReadResponseMatcher().with_message_ids(
@@ -186,7 +186,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             self.queue_url, messages_count=5, matcher=ReadResponseMatcher().with_these_or_more_message_ids(second_pack_ids[:1]),
             visibility_timeout=10
         )
-        time.sleep(12) 
+        time.sleep(12)
         self._read_messages_and_assert(
             self.queue_url, messages_count=5, visibility_timeout=1000, matcher=ReadResponseMatcher().with_these_or_more_message_ids(
                 [self.message_ids[0], second_pack_ids[0]]
@@ -203,7 +203,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         assert_that(
             self._sqs_api.delete_message(self.queue_url, handle), not_none()
         )
-        time.sleep(1) 
+        time.sleep(1)
         self._read_messages_and_assert(
             self.queue_url, messages_count=5, visibility_timeout=1000, matcher=ReadResponseMatcher().with_message_ids(self.message_ids[1:2])
         )
@@ -250,7 +250,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
                 )
                 message_ids[0] = message_ids[0][1:]
                 break
-        time.sleep(5) 
+        time.sleep(5)
         matcher = ReadResponseMatcher().with_n_messages(10).with_message_ids(
             [i[0] for i in message_ids.values()]
         ).with_messages_data(
@@ -380,11 +380,11 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
     def test_receive_attempt_reloads_same_messages(self, after_crutch_batch):
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
 
-        groups_selection_batch_size = self.config_generator.yaml_config['sqs_config']['group_selection_batch_size'] 
+        groups_selection_batch_size = self.config_generator.yaml_config['sqs_config']['group_selection_batch_size']
         assert_that(groups_selection_batch_size, equal_to(100))
 
         groups_count = groups_selection_batch_size + 50 if after_crutch_batch else 15
-        for group_number in range(groups_count): 
+        for group_number in range(groups_count):
             self._send_messages(queue_url, 1, is_fifo=True, group_id='group_{}'.format(group_number))
 
         if after_crutch_batch:
@@ -399,7 +399,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
 
         def receive(attempt_id):
             read_result = self._sqs_api.receive_message(queue_url, max_number_of_messages=10, visibility_timeout=1000, receive_request_attempt_id=attempt_id)
-            message_set = set([res['MessageId'] for res in read_result]) 
+            message_set = set([res['MessageId'] for res in read_result])
             return read_result, message_set
 
         read_result_1, message_set_1 = receive(receive_attempt_id)
@@ -417,7 +417,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
     def test_visibility_change_disables_receive_attempt_id(self, delete_message):
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
         groups_count = 5
-        for group_number in range(groups_count): 
+        for group_number in range(groups_count):
             self._send_messages(queue_url, 1, is_fifo=True, group_id='group_{}'.format(group_number))
 
         receive_attempt_id = 'my_attempt'
@@ -434,15 +434,15 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             read_result_2 = []
         assert_that(len(read_result_1) + len(read_result_2), less_than_or_equal_to(groups_count))
         if read_result_2:
-            message_set_1 = set([res['MessageId'] for res in read_result_1]) 
-            message_set_2 = set([res['MessageId'] for res in read_result_2]) 
+            message_set_1 = set([res['MessageId'] for res in read_result_1])
+            message_set_2 = set([res['MessageId'] for res in read_result_2])
             assert_that(len(message_set_1 & message_set_2), equal_to(0))
 
     def test_crutch_groups_selection_algorithm_selects_second_group_batch(self):
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
-        groups_selection_batch_size = self.config_generator.yaml_config['sqs_config']['group_selection_batch_size'] 
+        groups_selection_batch_size = self.config_generator.yaml_config['sqs_config']['group_selection_batch_size']
         groups_count = groups_selection_batch_size + 50
-        for group_number in range(groups_count): 
+        for group_number in range(groups_count):
             self._send_messages(queue_url, 1, is_fifo=True, group_id='group_{}'.format(group_number))
 
         self._read_messages_and_assert(

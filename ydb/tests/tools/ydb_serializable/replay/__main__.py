@@ -1,6 +1,6 @@
 import json
 from argparse import ArgumentParser
-from ydb.tests.tools.ydb_serializable.lib import ( 
+from ydb.tests.tools.ydb_serializable.lib import (
     History,
     DummyLogger,
     SerializabilityChecker,
@@ -20,13 +20,13 @@ def main():
     checker = SerializabilityChecker(logger=logger, debug=args.debug, explain=True)
     history.apply_to(checker)
 
-    print( 
-        '%d nodes (%d committed, %d aborted)' % ( 
-            len(checker.nodes), 
-            len(checker.committed), 
-            len(checker.aborted) 
-        ) 
-    ) 
+    print(
+        '%d nodes (%d committed, %d aborted)' % (
+            len(checker.nodes),
+            len(checker.committed),
+            len(checker.aborted)
+        )
+    )
 
     checker.verify()
 

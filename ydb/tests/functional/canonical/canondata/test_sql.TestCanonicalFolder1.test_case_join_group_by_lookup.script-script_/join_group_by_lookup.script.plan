@@ -1,60 +1,60 @@
-{ 
-    "meta": { 
-        "version": "0.2", 
-        "type": "script" 
-    }, 
-    "queries": [ 
-        { 
-            "tables": [ 
-                { 
-                    "name": "/local/base_join_group_by_lookup_script_script/Temp", 
-                    "writes": [ 
-                        { 
-                            "columns": [ 
-                                "Value" 
-                            ], 
-                            "key": [ 
-                                "Group (expr)" 
-                            ], 
-                            "type": "MultiUpsert" 
-                        } 
-                    ] 
-                } 
-            ] 
-        }, 
-        { 
-            "tables": [ 
-                { 
-                    "name": "/local/base_join_group_by_lookup_script_script/Input1", 
-                    "reads": [ 
-                        { 
-                            "columns": [ 
-                                "Group" 
-                            ], 
-                            "scan_by": [ 
-                                "Group", 
-                                "Name" 
-                            ], 
-                            "type": "FullScan" 
-                        } 
-                    ] 
-                }, 
-                { 
-                    "name": "/local/base_join_group_by_lookup_script_script/Temp", 
-                    "reads": [ 
-                        { 
-                            "lookup_by": [ 
-                                "Group (expr)" 
-                            ], 
-                            "columns": [ 
-                                "Group", 
-                                "Value" 
-                            ], 
-                            "type": "MultiLookup" 
-                        } 
-                    ] 
-                } 
-            ] 
-        } 
-    ] 
-} 
+{
+    "meta": {
+        "version": "0.2",
+        "type": "script"
+    },
+    "queries": [
+        {
+            "tables": [
+                {
+                    "name": "/local/base_join_group_by_lookup_script_script/Temp",
+                    "writes": [
+                        {
+                            "columns": [
+                                "Value"
+                            ],
+                            "key": [
+                                "Group (expr)"
+                            ],
+                            "type": "MultiUpsert"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "tables": [
+                {
+                    "name": "/local/base_join_group_by_lookup_script_script/Input1",
+                    "reads": [
+                        {
+                            "columns": [
+                                "Group"
+                            ],
+                            "scan_by": [
+                                "Group",
+                                "Name"
+                            ],
+                            "type": "FullScan"
+                        }
+                    ]
+                },
+                {
+                    "name": "/local/base_join_group_by_lookup_script_script/Temp",
+                    "reads": [
+                        {
+                            "lookup_by": [
+                                "Group (expr)"
+                            ],
+                            "columns": [
+                                "Group",
+                                "Value"
+                            ],
+                            "type": "MultiLookup"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -1,25 +1,25 @@
-OWNER(g:kikimr) 
- 
-PY3TEST() 
+OWNER(g:kikimr)
+
+PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
-TEST_SRCS( 
-    tablet_scheme_tests.py 
-) 
- 
-TIMEOUT(600) 
-SIZE(MEDIUM) 
- 
-DEPENDS( 
+TEST_SRCS(
+    tablet_scheme_tests.py
+)
+
+TIMEOUT(600)
+SIZE(MEDIUM)
+
+DEPENDS(
     ydb/apps/ydbd
-) 
- 
-DATA( 
-    arcadia/ydb/tests/functional/scheme_tests/canondata 
-) 
- 
-PEERDIR( 
-    ydb/tests/library 
-) 
- 
-END() 
- 
+)
+
+DATA(
+    arcadia/ydb/tests/functional/scheme_tests/canondata
+)
+
+PEERDIR(
+    ydb/tests/library
+)
+
+END()
+

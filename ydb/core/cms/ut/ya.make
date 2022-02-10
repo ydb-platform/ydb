@@ -5,13 +5,13 @@ OWNER(
     g:kikimr
 )
 
-SPLIT_FACTOR(30) 
+SPLIT_FACTOR(30)
 
-FORK_SUBTESTS() 
+FORK_SUBTESTS()
 
-SIZE(MEDIUM) 
+SIZE(MEDIUM)
 
-TIMEOUT(600) 
+TIMEOUT(600)
 
 PEERDIR(
     library/cpp/getopt

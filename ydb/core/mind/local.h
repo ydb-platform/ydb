@@ -42,32 +42,32 @@ struct TRegistrationInfo {
     }
 };
 
- 
-struct TDrainProgress : public TThrRefBase { 
-    std::atomic_uint64_t Events = 0; 
-    std::atomic_uint64_t OnlineTabletsEstimate = 0; 
- 
-    bool CheckCompleted() { 
-        return Events.load() == 0; 
-    } 
- 
-    ui64 GetOnlineTabletsEstimate() { 
-        return OnlineTabletsEstimate.load(); 
-    } 
- 
-    void UpdateEstimate(i64 diff) { 
-        OnlineTabletsEstimate += diff; 
-    } 
- 
-    void OnSend() { 
-        ++Events; 
-    } 
- 
-    void OnReceive() { 
-        --Events; 
-    } 
-}; 
- 
+
+struct TDrainProgress : public TThrRefBase {
+    std::atomic_uint64_t Events = 0;
+    std::atomic_uint64_t OnlineTabletsEstimate = 0;
+
+    bool CheckCompleted() {
+        return Events.load() == 0;
+    }
+
+    ui64 GetOnlineTabletsEstimate() {
+        return OnlineTabletsEstimate.load();
+    }
+
+    void UpdateEstimate(i64 diff) {
+        OnlineTabletsEstimate += diff;
+    }
+
+    void OnSend() {
+        ++Events;
+    }
+
+    void OnReceive() {
+        --Events;
+    }
+};
+
 struct TEvLocal {
     enum EEv {
         EvRegisterNode = EventSpaceBegin(TKikimrEvents::ES_LOCAL),
@@ -90,8 +90,8 @@ struct TEvLocal {
         EvAlterTenant,
         EvTenantStatus,
 
-        EvLocalDrainNode, 
- 
+        EvLocalDrainNode,
+
         EvEnd
     };
 
@@ -339,14 +339,14 @@ struct TEvLocal {
             , DomainKey(domainKey)
         {}
     };
- 
-    struct TEvLocalDrainNode : public TEventLocal<TEvLocalDrainNode, EvLocalDrainNode> { 
-        TIntrusivePtr<TDrainProgress> DrainProgress; 
- 
-        TEvLocalDrainNode(TIntrusivePtr<TDrainProgress> drainProgress) 
-            : DrainProgress(drainProgress) 
-        {} 
-    }; 
+
+    struct TEvLocalDrainNode : public TEventLocal<TEvLocalDrainNode, EvLocalDrainNode> {
+        TIntrusivePtr<TDrainProgress> DrainProgress;
+
+        TEvLocalDrainNode(TIntrusivePtr<TDrainProgress> drainProgress)
+            : DrainProgress(drainProgress)
+        {}
+    };
 };
 
 struct TLocalConfig : public TThrRefBase {

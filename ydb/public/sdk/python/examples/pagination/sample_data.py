@@ -27,7 +27,7 @@ def get_schools_data():
         School("Котельнич", 2, "Октябрьская, 109"),
         School("Котельнич", 3, "Советская, 153"),
         School("Котельнич", 5, "Школьная, 2"),
-        School("Котельнич", 15, "Октябрьская, 91"), 
+        School("Котельнич", 15, "Октябрьская, 91"),
     ]
 
 
@@ -35,10 +35,10 @@ def create_table(session, path):
     session.create_table(
         os.path.join(path, "schools"),
         ydb.TableDescription()
-        .with_column(ydb.Column("city", ydb.OptionalType(ydb.PrimitiveType.Utf8))) 
-        .with_column(ydb.Column("number", ydb.OptionalType(ydb.PrimitiveType.Uint32))) 
-        .with_column(ydb.Column("address", ydb.OptionalType(ydb.PrimitiveType.Utf8))) 
-        .with_primary_keys("city", "number"), 
+        .with_column(ydb.Column("city", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+        .with_column(ydb.Column("number", ydb.OptionalType(ydb.PrimitiveType.Uint32)))
+        .with_column(ydb.Column("address", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+        .with_primary_keys("city", "number"),
     )
 
 
@@ -57,9 +57,9 @@ def fill_table(session, path):
         number,
         address
     FROM AS_TABLE($schoolsData);
-    """.format( 
-        path=path 
-    ) 
+    """.format(
+        path=path
+    )
     prepared_query = session.prepare(query)
     session.transaction(ydb.SerializableReadWrite()).execute(
         prepared_query,
@@ -70,7 +70,7 @@ def fill_table(session, path):
 
 def is_directory_exists(driver, path):
     try:
-        return driver.scheme_client.describe_path(path).is_directory() 
+        return driver.scheme_client.describe_path(path).is_directory()
     except ydb.SchemeError:
         return False
 

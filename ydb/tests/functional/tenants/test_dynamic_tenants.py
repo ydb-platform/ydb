@@ -11,7 +11,7 @@ from hamcrest import (
     raises,
 )
 
-import ydb 
+import ydb
 
 from common import DBWithDynamicSlot, DBForStaticSlots, Runtime
 
@@ -39,8 +39,8 @@ class TestCreateTenantWithCPU(DBWithDynamicSlot):
                 'hdd': 1
             }
         )
-        self.cluster.register_and_start_slots(database, count=1) 
-        self.cluster.wait_tenant_up(database) 
+        self.cluster.register_and_start_slots(database, count=1)
+        self.cluster.wait_tenant_up(database)
         self.cluster.remove_database(database)
 
 
@@ -59,8 +59,8 @@ class TestCreateTenantThenExecYQLEmptyDatabaseHeader(DBWithDynamicSlot):
                 'hdd': 1
             }
         )
-        self.cluster.register_and_start_slots(database, count=1) 
-        self.cluster.wait_tenant_up(database) 
+        self.cluster.register_and_start_slots(database, count=1)
+        self.cluster.wait_tenant_up(database)
 
         def list_endpoints(database):
             logger.debug("List endpoints of %s", database)
@@ -83,17 +83,17 @@ class TestCreateTenantThenExecYQLEmptyDatabaseHeader(DBWithDynamicSlot):
             with ydb.SessionPool(driver, size=1) as pool:
                 with pool.checkout() as session:
                     session.execute_scheme(
-                        "create table `{}` (key Int32, value String, primary key(key));".format( 
+                        "create table `{}` (key Int32, value String, primary key(key));".format(
                             table_path
                         )
                     )
 
                     session.transaction().execute(
-                        "upsert into `{}` (key) values (101);".format(table_path), 
+                        "upsert into `{}` (key) values (101);".format(table_path),
                         commit_tx=True
                     )
 
-                    session.transaction().execute("select key from `{}`;".format(table_path), commit_tx=True) 
+                    session.transaction().execute("select key from `{}`;".format(table_path), commit_tx=True)
 
 
 class TestCreateTenantThenExecYQL(DBWithDynamicSlot):
@@ -116,8 +116,8 @@ class TestCreateTenantThenExecYQL(DBWithDynamicSlot):
                 'hdd': 1
             }
         )
-        self.cluster.register_and_start_slots(database, count=1) 
-        self.cluster.wait_tenant_up(database) 
+        self.cluster.register_and_start_slots(database, count=1)
+        self.cluster.wait_tenant_up(database)
 
         d_configs = [driver_config, driver_config2]
         for d_config in d_configs:
@@ -126,17 +126,17 @@ class TestCreateTenantThenExecYQL(DBWithDynamicSlot):
                 with ydb.SessionPool(driver, size=1) as pool:
                     with pool.checkout() as session:
                         session.execute_scheme(
-                            "create table `{}` (key Int32, value String, primary key(key));".format( 
+                            "create table `{}` (key Int32, value String, primary key(key));".format(
                                 table_path
                             )
-                        ) 
+                        )
 
                         session.transaction().execute(
-                            "upsert into `{}` (key) values (101);".format(table_path), 
+                            "upsert into `{}` (key) values (101);".format(table_path),
                             commit_tx=True
                         )
 
-                        session.transaction().execute("select key from `{}`;".format(table_path), commit_tx=True) 
+                        session.transaction().execute("select key from `{}`;".format(table_path), commit_tx=True)
 
 
 class TestCreateAndDropTenants(DBWithDynamicSlot):
@@ -155,8 +155,8 @@ class TestCreateAndDropTenants(DBWithDynamicSlot):
                     'hdd': 1
                 }
             )
-            self.cluster.register_and_start_slots(database, count=1) 
-            self.cluster.wait_tenant_up(database) 
+            self.cluster.register_and_start_slots(database, count=1)
+            self.cluster.wait_tenant_up(database)
 
             with ydb.Driver(driver_config) as driver:
                 with ydb.SessionPool(driver) as pool:
@@ -319,9 +319,9 @@ class TestCheckAccess(DBWithDynamicSlot):
                 }
             )
 
-            self.cluster.register_and_start_slots(user['path'], count=1) 
-            self.cluster.wait_tenant_up(user['path']) 
- 
+            self.cluster.register_and_start_slots(user['path'], count=1)
+            self.cluster.wait_tenant_up(user['path'])
+
             driver_config = ydb.DriverConfig(
                 "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
                 user['path']
@@ -387,13 +387,13 @@ class TestCheckAccess(DBWithDynamicSlot):
             with ydb.SessionPool(driver, size=1) as pool:
                 with pool.checkout() as session:
                     session.execute_scheme(
-                        "create table `{}` (id Int64, primary key(id));".format( 
+                        "create table `{}` (id Int64, primary key(id));".format(
                             os.path.join(user_1['path'], 'q/w/table')
                         )
                     )
                     assert_that(
                         calling(session.execute_scheme).with_args(
-                            "create table `{}` (id Int64, primary key(id));".format( 
+                            "create table `{}` (id Int64, primary key(id));".format(
                                 os.path.join(user_2['path'], 'q/w/table')
                             )
                         ),

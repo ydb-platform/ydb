@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
-import functools 
+import functools
 import itertools
 import logging
 from abc import ABCMeta, abstractmethod
-from ydb.tests.library.nemesis.remote_execution import execute_command_with_output_on_hosts 
+from ydb.tests.library.nemesis.remote_execution import execute_command_with_output_on_hosts
 
 
 logger = logging.getLogger()
@@ -45,12 +45,12 @@ class AggregateSafetyWarden(SafetyWarden):
 
 def split_in_chunks(list_of_lines, chunk_size):
     """
-    >>> a = list(map(str, range(6))) 
+    >>> a = list(map(str, range(6)))
     >>> split_in_chunks(a, 3)
     ['0\\n1\\n2', '3\\n4\\n5']
     >>> split_in_chunks(a, 2)
     ['0\\n1', '2\\n3', '4\\n5']
-    >>> a = list(map(str, range(7))) 
+    >>> a = list(map(str, range(7)))
     >>> split_in_chunks(a, 3)
     ['0\\n1\\n2', '3\\n4\\n5', '6']
     >>> split_in_chunks([], 3)
@@ -86,7 +86,7 @@ def construct_list_of_grep_pattern_arguments(list_of_markers):
     >>> construct_list_of_grep_pattern_arguments(['a', 'b'])
     ['-e', "'a'", '-e', "'b'"]
     """
-    return list(functools.reduce( 
+    return list(functools.reduce(
         lambda x, y: x + y, [("-e", "'{}'".format(p)) for p in list_of_markers]
     ))
 
@@ -119,7 +119,7 @@ class AbstractRemoteCommandExecutionSafetyWarden(SafetyWarden):
 
 
 class GrepLogFileForMarkers(AbstractRemoteCommandExecutionSafetyWarden):
-    def __init__(self, targets, log_file_name, list_of_markers, lines_after=10, username=None, only_count=False): 
+    def __init__(self, targets, log_file_name, list_of_markers, lines_after=10, username=None, only_count=False):
         name = "GrepLogFileForMarkersSafetyWarden for markers = {markers} on targets = {targets}".format(
             markers=list_of_markers, targets=targets
         )
@@ -133,22 +133,22 @@ class GrepLogFileForMarkers(AbstractRemoteCommandExecutionSafetyWarden):
                 log_file_name,
             ]
         )
- 
-        remote_command.extend( 
-            [ 
-                '|', 
-                'cut', 
-                '-c', 
-                '1-260' 
-            ] 
-        ) 
- 
-        if only_count: 
-            remote_command.extend( 
-                [ 
-                    '|', 'wc', '-l' 
-                ] 
-            ) 
+
+        remote_command.extend(
+            [
+                '|',
+                'cut',
+                '-c',
+                '1-260'
+            ]
+        )
+
+        if only_count:
+            remote_command.extend(
+                [
+                    '|', 'wc', '-l'
+                ]
+            )
         super(GrepLogFileForMarkers, self).__init__(
             name, targets, remote_command=remote_command, username=username, split_line_size=lines_after
         )
@@ -157,7 +157,7 @@ class GrepLogFileForMarkers(AbstractRemoteCommandExecutionSafetyWarden):
 class GrepGzippedLogFilesForMarkersSafetyWarden(AbstractRemoteCommandExecutionSafetyWarden):
     def __init__(
             self, list_of_hosts, log_file_pattern, list_of_markers, lines_after=1, username=None,
-            modification_days=1, only_count=False, 
+            modification_days=1, only_count=False,
     ):
         name = "GrepGzippedLogFilesForMarkersSafetyWarden for markers = {markers} on targets = {targets}".format(
             markers=list_of_markers, targets=list_of_hosts
@@ -191,22 +191,22 @@ class GrepGzippedLogFilesForMarkersSafetyWarden(AbstractRemoteCommandExecutionSa
             construct_list_of_grep_pattern_arguments(list_of_markers)
         )
 
-        remote_command.extend( 
-            [ 
-                '|', 
-                'cut', 
-                '-c', 
-                '1-260' 
-            ] 
-        ) 
- 
-        if only_count: 
-            remote_command.extend( 
-                [ 
-                    '|', 'wc', '-l' 
-                ] 
-            ) 
- 
+        remote_command.extend(
+            [
+                '|',
+                'cut',
+                '-c',
+                '1-260'
+            ]
+        )
+
+        if only_count:
+            remote_command.extend(
+                [
+                    '|', 'wc', '-l'
+                ]
+            )
+
         super(GrepGzippedLogFilesForMarkersSafetyWarden, self).__init__(
             name, list_of_hosts, remote_command=remote_command, username=username, split_line_size=lines_after
         )

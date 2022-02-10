@@ -11,7 +11,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/system/sanitizers.h> 
+#include <util/system/sanitizers.h>
 #include <util/thread/factory.h>
 
 namespace NKikimr {
@@ -144,8 +144,8 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
     Y_UNIT_TEST(TestCrossConnect) {
         TInstant time = TInstant::Now();
-        constexpr ui64 iterations = NSan::PlainOrUnderSanitizer(200, 50); 
-        for (ui64 i = 0; i < iterations; ++i) { 
+        constexpr ui64 iterations = NSan::PlainOrUnderSanitizer(200, 50);
+        for (ui64 i = 0; i < iterations; ++i) {
             Cerr << "Starting iteration " << i << Endl;
             TTestBasicRuntime runtime(2);
             runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);

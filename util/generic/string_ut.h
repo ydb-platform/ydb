@@ -997,37 +997,37 @@ public:
         UNIT_ASSERT_EQUAL(str.StartsWith(emptyStr), true);
         UNIT_ASSERT_EQUAL(str.EndsWith(emptyStr), true);
     }
-
+ 
 #ifndef TSTRING_IS_STD_STRING
-    void TestCharRef() {
+    void TestCharRef() { 
         const char_type abc[] = {'a', 'b', 'c', 0};
         const char_type bbc[] = {'b', 'b', 'c', 0};
         const char_type cbc[] = {'c', 'b', 'c', 0};
-
+ 
         TStringType s0 = abc;
         TStringType s1 = s0;
-
-        UNIT_ASSERT(!s0.IsDetached());
-        UNIT_ASSERT(!s1.IsDetached());
-
-        /* Read access shouldn't detach. */
+ 
+        UNIT_ASSERT(!s0.IsDetached()); 
+        UNIT_ASSERT(!s1.IsDetached()); 
+ 
+        /* Read access shouldn't detach. */ 
         UNIT_ASSERT_VALUES_EQUAL(s0[0], (ui8)'a');
-        UNIT_ASSERT(!s0.IsDetached());
-        UNIT_ASSERT(!s1.IsDetached());
-
-        /* Writing should detach. */
+        UNIT_ASSERT(!s0.IsDetached()); 
+        UNIT_ASSERT(!s1.IsDetached()); 
+ 
+        /* Writing should detach. */ 
         s1[0] = (ui8)'b';
         TStringType s2 = s0;
         s0[0] = (ui8)'c';
-
-        UNIT_ASSERT_VALUES_EQUAL(s0, cbc);
-        UNIT_ASSERT_VALUES_EQUAL(s1, bbc);
-        UNIT_ASSERT_VALUES_EQUAL(s2, abc);
-        UNIT_ASSERT(s0.IsDetached());
-        UNIT_ASSERT(s1.IsDetached());
-        UNIT_ASSERT(s2.IsDetached());
-
-        /* Accessing null terminator is OK. Note that writing into it is UB. */
+ 
+        UNIT_ASSERT_VALUES_EQUAL(s0, cbc); 
+        UNIT_ASSERT_VALUES_EQUAL(s1, bbc); 
+        UNIT_ASSERT_VALUES_EQUAL(s2, abc); 
+        UNIT_ASSERT(s0.IsDetached()); 
+        UNIT_ASSERT(s1.IsDetached()); 
+        UNIT_ASSERT(s2.IsDetached()); 
+ 
+        /* Accessing null terminator is OK. Note that writing into it is UB. */ 
         UNIT_ASSERT_VALUES_EQUAL(s0[3], (ui8)'\0');
         UNIT_ASSERT_VALUES_EQUAL(s1[3], (ui8)'\0');
         UNIT_ASSERT_VALUES_EQUAL(s2[3], (ui8)'\0');
@@ -1044,7 +1044,7 @@ public:
             }
             UNIT_ASSERT_VALUES_EQUAL(s1, red_eared);
         }
-    }
+    } 
 #endif
 
     void TestBack() {

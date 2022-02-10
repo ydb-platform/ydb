@@ -14,12 +14,12 @@ namespace NProtobufJson {
         TJsonKeyBuilder(const FieldDescriptor& field, const TProto2JsonConfig& config, TString& tmpBuf)
             : NewKeyStr(tmpBuf)
         {
-            if (config.NameGenerator) {
-                NewKeyStr = config.NameGenerator(field);
-                NewKeyBuf = NewKeyStr;
-                return;
-            }
-
+            if (config.NameGenerator) { 
+                NewKeyStr = config.NameGenerator(field); 
+                NewKeyBuf = NewKeyStr; 
+                return; 
+            } 
+ 
             if (config.UseJsonName) {
                 Y_ASSERT(!field.json_name().empty());
                 NewKeyStr = field.json_name();
@@ -136,11 +136,11 @@ namespace NProtobufJson {
     void TProto2JsonPrinter::PrintEnumValue(const TStringBuf& key,
                                             const EnumValueDescriptor* value,
                                             IJsonOutput& json) {
-        if (Config.EnumValueGenerator) {
-            WriteWithMaybeEmptyKey<InMapContext>(json, key, Config.EnumValueGenerator(*value));
-            return;
-        }
-
+        if (Config.EnumValueGenerator) { 
+            WriteWithMaybeEmptyKey<InMapContext>(json, key, Config.EnumValueGenerator(*value)); 
+            return; 
+        } 
+ 
         switch (GetConfig().EnumMode) {
             case TProto2JsonConfig::EnumNumber: {
                 WriteWithMaybeEmptyKey<InMapContext>(json, key, value->number());
@@ -333,7 +333,7 @@ namespace NProtobufJson {
                 default:
                     ythrow yexception() << "Unknown protobuf field type: "
                                         << static_cast<int>(field.cpp_type()) << ".";
-            }
+            } 
 
             if (isMap) {
                 json.EndObject();
@@ -462,7 +462,7 @@ namespace NProtobufJson {
             Y_ASSERT(field);
             PrintField(proto, *field, json);
         }
-
+ 
         // Check extensions via ListFields
         std::vector<const FieldDescriptor*> fields;
         auto* ref = proto.GetReflection();

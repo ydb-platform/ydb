@@ -1,11 +1,11 @@
 #pragma once
 
-#include "json_output.h"
-
+#include "json_output.h" 
+ 
 #include <library/cpp/json/writer/json_value.h>
 
-#include <util/generic/stack.h>
-
+#include <util/generic/stack.h> 
+ 
 namespace NProtobufJson {
     class TJsonValueOutput: public IJsonOutput {
     public:
@@ -54,10 +54,10 @@ namespace NProtobufJson {
 
             EType Type;
             NJson::TJsonValue& Value;
-        };
+        }; 
 
         NJson::TJsonValue& Root;
         TStack<TContext, TVector<TContext>> Context;
-    };
+    }; 
 
 }

@@ -10,11 +10,11 @@ Y_UNIT_TEST_SUITE(EnvTest) {
         TString def = "Some default value for env var";
         // first of all, it should be clear
         UNIT_ASSERT_VALUES_EQUAL(GetEnv(key), TString());
-        UNIT_ASSERT_VALUES_EQUAL(GetEnv(key, def), def);
+        UNIT_ASSERT_VALUES_EQUAL(GetEnv(key, def), def); 
         SetEnv(key, value);
         // set and see what value we get here
         UNIT_ASSERT_VALUES_EQUAL(GetEnv(key), value);
-        UNIT_ASSERT_VALUES_EQUAL(GetEnv(key, def), value);
+        UNIT_ASSERT_VALUES_EQUAL(GetEnv(key, def), value); 
         // set empty value
         SetEnv(key, TString());
         UNIT_ASSERT_VALUES_EQUAL(GetEnv(key), TString());

@@ -1,15 +1,15 @@
 LIBRARY()
 
-OWNER(avitella)
+OWNER(avitella) 
 
 SRCS(
     json2proto.cpp
     json_output_create.cpp
     json_value_output.cpp
     json_writer_output.cpp
-    name_generator.cpp
-    proto2json.cpp
-    proto2json_printer.cpp
+    name_generator.cpp 
+    proto2json.cpp 
+    proto2json_printer.cpp 
     string_transform.cpp
     util.h
     util.cpp

@@ -124,6 +124,6 @@ namespace NMonitoring {
 
         TLabels CommonLabels_;
     };
-
+ 
     void WriteLabels(IMetricConsumer* consumer, const ILabels& labels);
 }

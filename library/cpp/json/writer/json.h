@@ -60,7 +60,7 @@ namespace NJsonWriter {
         TPairContext BeginObject();
         TAfterColonContext WriteKey(const TStringBuf& key, EHtmlEscapeMode hem);
         TAfterColonContext WriteKey(const TStringBuf& key);
-        TAfterColonContext UnsafeWriteKey(const TStringBuf& key);
+        TAfterColonContext UnsafeWriteKey(const TStringBuf& key); 
         bool KeyExpected() const {
             return Stack.back() == JE_OBJECT;
         }
@@ -227,9 +227,9 @@ namespace NJsonWriter {
         TAfterColonContext WriteKey(const TStringBuf& s) {
             return Buf.WriteKey(s);
         }
-        TAfterColonContext UnsafeWriteKey(const TStringBuf& s) {
-            return Buf.UnsafeWriteKey(s);
-        }
+        TAfterColonContext UnsafeWriteKey(const TStringBuf& s) { 
+            return Buf.UnsafeWriteKey(s); 
+        } 
         TAfterColonContext CompatWriteKeyWithoutQuotes(const TStringBuf& s) {
             return Buf.CompatWriteKeyWithoutQuotes(s);
         }

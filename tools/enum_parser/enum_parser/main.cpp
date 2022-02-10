@@ -34,7 +34,7 @@ void WriteHeader(const TString& headerName, IOutputStream& out, IOutputStream* h
     out << "#include <util/generic/string.h>\n";
     out << "#include <util/generic/vector.h>\n";
     out << "#include <util/generic/map.h>\n";
-    out << "#include <util/generic/serialized_enum.h>\n";
+    out << "#include <util/generic/serialized_enum.h>\n"; 
     out << "#include <util/string/cast.h>\n";
     out << "#include <util/stream/output.h>\n\n";
 
@@ -339,13 +339,13 @@ void GenerateEnum(
     out << "        return names.AllEnumNames();\n";
     out << "    }\n\n";
 
-    // template<> GetEnumNames<EnumType>
+    // template<> GetEnumNames<EnumType> 
     out << "    template<>\n";
     out << "    TMappedDictView<" << name << ", TString> GetEnumNamesImpl<" << name << ">() {\n";
     out << "        const " << nsName << "::TNameBufs& names = " << nsName << "::TNameBufs::Instance();\n";
     out << "        return names.EnumNames();\n";
     out << "    }\n\n";
-
+ 
     // template<> GetEnumAllCppNames, see IGNIETFERRO-534
     out << "    template<>\n";
     out << "    const TVector<TString>& GetEnumAllCppNamesImpl<" << name << ">() {\n";

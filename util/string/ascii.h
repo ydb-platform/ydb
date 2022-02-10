@@ -27,36 +27,36 @@ namespace NPrivate {
     extern const unsigned char ASCII_LOWER[256];
 
     template <class T>
-    struct TDereference {
-        using type = T;
+    struct TDereference { 
+        using type = T; 
     };
 
 #ifndef TSTRING_IS_STD_STRING
     template <class String>
-    struct TDereference<TBasicCharRef<String>> {
-        using type = typename String::value_type;
+    struct TDereference<TBasicCharRef<String>> { 
+        using type = typename String::value_type; 
     };
 #endif
 
     template <class T>
-    using TDereferenced = typename TDereference<T>::type;
-
+    using TDereferenced = typename TDereference<T>::type; 
+ 
     template <class T>
-    bool RangeOk(T c) noexcept {
-        static_assert(std::is_integral<T>::value, "Integral type character expected");
-
+    bool RangeOk(T c) noexcept { 
+        static_assert(std::is_integral<T>::value, "Integral type character expected"); 
+ 
         if (sizeof(T) == 1) {
-            return true;
+            return true; 
         }
-
-        return c >= static_cast<T>(0) && c <= static_cast<T>(127);
+ 
+        return c >= static_cast<T>(0) && c <= static_cast<T>(127); 
     }
-
+ 
 #ifndef TSTRING_IS_STD_STRING
     template <class String>
-    bool RangeOk(const TBasicCharRef<String>& c) {
-        return RangeOk(static_cast<typename String::value_type>(c));
-    }
+    bool RangeOk(const TBasicCharRef<String>& c) { 
+        return RangeOk(static_cast<typename String::value_type>(c)); 
+    } 
 #endif
 }
 

@@ -1,13 +1,13 @@
 #pragma once
 
 #include "string_transform.h"
-#include "name_generator.h"
+#include "name_generator.h" 
 
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
-#include <functional>
-
+#include <functional> 
+ 
 namespace NProtobufJson {
     struct TProto2JsonConfig {
         using TSelf = TProto2JsonConfig;
@@ -85,14 +85,14 @@ namespace NProtobufJson {
 
         /// Custom enum values generator.
         TEnumValueGenerator EnumValueGenerator = {};
-
+ 
         bool WriteNanAsString = false;
 
         TSelf& SetFormatOutput(bool format) {
             FormatOutput = format;
             return *this;
         }
-
+ 
         TSelf& SetMissingSingleKeyMode(MissingKeyMode mode) {
             MissingSingleKeyMode = mode;
             return *this;
@@ -149,7 +149,7 @@ namespace NProtobufJson {
             NameGenerator = callback;
             return *this;
         }
-
+ 
         TSelf& SetEnumValueGenerator(TEnumValueGenerator callback) {
             EnumValueGenerator = callback;
             return *this;
@@ -160,5 +160,5 @@ namespace NProtobufJson {
             return *this;
         }
     };
-
+ 
 }

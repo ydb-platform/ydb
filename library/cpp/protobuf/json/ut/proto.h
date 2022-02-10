@@ -55,8 +55,8 @@ namespace NProtobufJsonTest {
             Cerr << lhs.DebugString() << Endl;                                           \
             Cerr << rhs.DebugString() << Endl;                                           \
             UNIT_ASSERT_STRINGS_EQUAL(lhs.DebugString(), rhs.DebugString());             \
-            UNIT_ASSERT_STRINGS_EQUAL(lhs.SerializeAsString(), rhs.SerializeAsString()); \
+            UNIT_ASSERT_STRINGS_EQUAL(lhs.SerializeAsString(), rhs.SerializeAsString()); \ 
         }                                                                                \
-    } while (false);
+    } while (false); 
 
 }

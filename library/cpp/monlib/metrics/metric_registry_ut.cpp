@@ -157,15 +157,15 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
 
     Y_UNIT_TEST(DoubleCounter) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
-
+ 
         TCounter* c = registry.Counter({{"my", "counter"}});
         UNIT_ASSERT_VALUES_EQUAL(c->Get(), 0);
-        c->Add(10);
-
-        c = registry.Counter({{"my", "counter"}});
+        c->Add(10); 
+ 
+        c = registry.Counter({{"my", "counter"}}); 
         UNIT_ASSERT_VALUES_EQUAL(c->Get(), 10);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(Sample) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
 

@@ -135,20 +135,20 @@ Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
     }
 
     Y_UNIT_TEST(SetRemoteAddrSimple) {
-        static const TString TEST = "abacaba.search.yandex.net";
-
-        TServerRequestData rd;
-        rd.SetRemoteAddr(TEST);
-        UNIT_ASSERT_STRINGS_EQUAL(TEST, rd.RemoteAddr());
-    }
-
+        static const TString TEST = "abacaba.search.yandex.net"; 
+ 
+        TServerRequestData rd; 
+        rd.SetRemoteAddr(TEST); 
+        UNIT_ASSERT_STRINGS_EQUAL(TEST, rd.RemoteAddr()); 
+    } 
+ 
     Y_UNIT_TEST(SetRemoteAddrRandom) {
-        for (size_t size = 0; size < 2 * INET6_ADDRSTRLEN; ++size) {
-            const TString test = NUnitTest::RandomString(size, size);
-            TServerRequestData rd;
-            rd.SetRemoteAddr(test);
-            UNIT_ASSERT_STRINGS_EQUAL(test.substr(0, INET6_ADDRSTRLEN - 1), rd.RemoteAddr());
-        }
-    }
-
+        for (size_t size = 0; size < 2 * INET6_ADDRSTRLEN; ++size) { 
+            const TString test = NUnitTest::RandomString(size, size); 
+            TServerRequestData rd; 
+            rd.SetRemoteAddr(test); 
+            UNIT_ASSERT_STRINGS_EQUAL(test.substr(0, INET6_ADDRSTRLEN - 1), rd.RemoteAddr()); 
+        } 
+    } 
+ 
 } // TRequestServerDataTest

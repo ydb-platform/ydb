@@ -212,15 +212,15 @@ void Out<typename std::vector<bool>::reference>(IOutputStream& o, const std::vec
 #ifndef TSTRING_IS_STD_STRING
 template <>
 void Out<TBasicCharRef<TString>>(IOutputStream& o, const TBasicCharRef<TString>& c) {
-    o << static_cast<char>(c);
-}
-
-template <>
+    o << static_cast<char>(c); 
+} 
+ 
+template <> 
 void Out<TBasicCharRef<TUtf16String>>(IOutputStream& o, const TBasicCharRef<TUtf16String>& c) {
     o << static_cast<wchar16>(c);
-}
-
-template <>
+} 
+ 
+template <> 
 void Out<TBasicCharRef<TUtf32String>>(IOutputStream& o, const TBasicCharRef<TUtf32String>& c) {
     o << static_cast<wchar32>(c);
 }

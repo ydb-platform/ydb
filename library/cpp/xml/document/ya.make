@@ -5,7 +5,7 @@ OWNER(finder)
 SRCS(
     xml-document.cpp
     xml-textreader.cpp
-    xml-options.cpp
+    xml-options.cpp 
 )
 
 PEERDIR(

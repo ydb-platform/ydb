@@ -1,6 +1,6 @@
 #include "json.h"
 #include "proto.h"
-#include "proto2json.h"
+#include "proto2json.h" 
 
 #include <library/cpp/protobuf/json/ut/test.pb.h>
 
@@ -50,11 +50,11 @@ namespace {
     TString ConvertToString(double value) {
         return FloatToString(value);
     }
-
-    TString JsonValueToString(const NJson::TJsonValue& json) {
-        NJsonWriter::TBuf buf(NJsonWriter::HEM_UNSAFE);
-        return buf.WriteJsonValue(&json).Str();
-    }
+ 
+    TString JsonValueToString(const NJson::TJsonValue& json) { 
+        NJsonWriter::TBuf buf(NJsonWriter::HEM_UNSAFE); 
+        return buf.WriteJsonValue(&json).Str(); 
+    } 
 
     void TestComplexMapAsObject(std::function<void(TComplexMapType&)>&& init, const TString& json, const TJson2ProtoConfig& config = TJson2ProtoConfig().SetMapAsObject(true)) {
         TComplexMapType modelProto;
@@ -121,13 +121,13 @@ UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 Y_UNIT_TEST(TestNameGenerator) {
     TJson2ProtoConfig cfg;
     cfg.SetNameGenerator([](const NProtoBuf::FieldDescriptor&) { return "42"; });
-
+ 
     TNameGeneratorType proto;
     Json2Proto(TStringBuf(R"({"42":42})"), proto, cfg);
-
+ 
     TNameGeneratorType expected;
     expected.SetField(42);
-
+ 
     UNIT_ASSERT_PROTOS_EQUAL(expected, proto);
 }
 
@@ -139,11 +139,11 @@ Y_UNIT_TEST(TestFlatNoCheckRequired) {
         TFlatRequired modelProto;
         FillFlatProto(&modelProto);
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
-    }
-
+    } 
+ 
     TJson2ProtoConfig cfg;
     cfg.CheckRequiredFields = false;
-
+ 
     // Try to skip each field
 #define DEFINE_FIELD(name, value)                                     \
     {                                                                 \
@@ -154,9 +154,9 @@ Y_UNIT_TEST(TestFlatNoCheckRequired) {
         UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto, cfg));       \
     }
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD
+#undef DEFINE_FIELD 
 } // TestFlatNoCheckRequired
-
+ 
 Y_UNIT_TEST(TestFlatRepeated){
     {const NJson::TJsonValue& json = CreateRepeatedFlatJson();
 TFlatRepeated proto;
@@ -217,7 +217,7 @@ FillCompositeProto(&modelProto);
 modelProto.MutablePart()->SetDouble(42.5);
 UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 }
-
+ 
 // Try to skip each field
 #define DEFINE_FIELD(name, value)                                   \
     {                                                               \
@@ -237,9 +237,9 @@ UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);                \
     }
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD
+#undef DEFINE_FIELD 
 } // TestCompositeOptionalStringBuf
-
+ 
 Y_UNIT_TEST(TestCompositeRequired) {
     {
         const NJson::TJsonValue& json = CreateCompositeJson();

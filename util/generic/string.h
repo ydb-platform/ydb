@@ -104,20 +104,20 @@ private:
 };
 
 template <class TStringType>
-class TBasicCharRef {
-public:
+class TBasicCharRef { 
+public: 
     using TChar = typename TStringType::TChar;
-
+ 
     TBasicCharRef(TStringType& s, size_t pos)
         : S_(s)
         , Pos_(pos)
     {
     }
-
-    operator TChar() const {
-        return S_.at(Pos_);
-    }
-
+ 
+    operator TChar() const { 
+        return S_.at(Pos_); 
+    } 
+ 
     TChar* operator&() {
         return S_.begin() + Pos_;
     }
@@ -126,14 +126,14 @@ public:
         return S_.cbegin() + Pos_;
     }
 
-    TBasicCharRef& operator=(TChar c) {
+    TBasicCharRef& operator=(TChar c) { 
         Y_ASSERT(Pos_ < S_.size() || (Pos_ == S_.size() && !c));
-
+ 
         S_.Detach()[Pos_] = c;
-
-        return *this;
-    }
-
+ 
+        return *this; 
+    } 
+ 
     TBasicCharRef& operator=(const TBasicCharRef& other) {
         return this->operator=(static_cast<TChar>(other));
     }
@@ -149,12 +149,12 @@ public:
      */
     TBasicCharRef(const TBasicCharRef&) = default;
 
-private:
+private: 
     TStringType& S_;
-    size_t Pos_;
-};
+    size_t Pos_; 
+}; 
 #endif
-
+ 
 template <typename TCharType, typename TTraits>
 class TBasicString: public TStringBase<TBasicString<TCharType, TTraits>, TCharType, TTraits> {
 public:
@@ -252,7 +252,7 @@ public:
 
     inline const_reference operator[](size_t pos) const noexcept {
         Y_ASSERT(pos <= length());
-
+ 
         return this->data()[pos];
     }
 
@@ -264,8 +264,8 @@ public:
 #else
         return reference(*this, pos);
 #endif
-    }
-
+    } 
+ 
     using TBase::back;
 
     inline reference back() noexcept {
@@ -468,9 +468,9 @@ public:
     explicit TBasicString(const reference& c)
         : TBasicString(&c, 1)
     {
-    }
+    } 
 #endif
-
+ 
     TBasicString(size_t n, TCharType c)
 #ifdef TSTRING_IS_STD_STRING
         : Storage_(n, c)

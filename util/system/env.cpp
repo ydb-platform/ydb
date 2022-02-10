@@ -26,9 +26,9 @@ TString GetEnv(const TString& key, const TString& def) {
     size_t len = GetEnvironmentVariableA(key.data(), nullptr, 0);
 
     if (len == 0) {
-        if (GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
-            return def;
-        }
+        if (GetLastError() == ERROR_ENVVAR_NOT_FOUND) { 
+            return def; 
+        } 
         return TString{};
     }
 

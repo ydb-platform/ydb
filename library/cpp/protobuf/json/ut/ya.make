@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/protobuf/json)
 
-OWNER(avitella)
+OWNER(avitella) 
 
 SRCS(
     filter_ut.cpp

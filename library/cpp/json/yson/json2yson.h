@@ -7,7 +7,7 @@
 namespace NJson2Yson {
     class TJsonBuilderImpl: public NYson::TYsonConsumerBase {
     public:
-        TJsonBuilderImpl(NJson::TJsonCallbacks* parserCallbacks)
+        TJsonBuilderImpl(NJson::TJsonCallbacks* parserCallbacks) 
             : ParserCallbacks_(parserCallbacks)
         {
         }
@@ -66,15 +66,15 @@ namespace NJson2Yson {
         }
 
     private:
-        NJson::TJsonCallbacks* ParserCallbacks_;
+        NJson::TJsonCallbacks* ParserCallbacks_; 
     };
 
     template <typename TBase>
     class TSkipAttributesProxy: public TBase {
     public:
-        template <typename... TArgs>
-        TSkipAttributesProxy<TBase>(TArgs&&... args)
-            : TBase(std::forward<TArgs>(args)...)
+        template <typename... TArgs> 
+        TSkipAttributesProxy<TBase>(TArgs&&... args) 
+            : TBase(std::forward<TArgs>(args)...) 
         {
         }
 
@@ -156,7 +156,7 @@ namespace NJson2Yson {
 
         void OnEndAttributes() override {
             --AttributesDepth;
-            Y_ASSERT(AttributesDepth >= 0);
+            Y_ASSERT(AttributesDepth >= 0); 
         }
 
     private:
@@ -168,7 +168,7 @@ namespace NJson2Yson {
     void ConvertYson2Json(IInputStream* inputStream, IOutputStream* outputStream);
     void ConvertYson2Json(TStringBuf yson, IOutputStream* outputStream);
     TString ConvertYson2Json(TStringBuf yson);
-
+ 
     bool DeserializeYsonAsJsonValue(IInputStream* inputStream, NJson::TJsonValue* outputValue, bool throwOnError = false);
     bool DeserializeYsonAsJsonValue(TStringBuf str, NJson::TJsonValue* outputValue, bool throwOnError = false);
 

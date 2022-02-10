@@ -197,7 +197,7 @@ public:
 
 class TMediatorTimeCastProxyInitializer : public IKikimrServicesInitializer {
 public:
-    TMediatorTimeCastProxyInitializer(const TKikimrRunConfig& runConfig);
+    TMediatorTimeCastProxyInitializer(const TKikimrRunConfig& runConfig); 
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };

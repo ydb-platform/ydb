@@ -1,17 +1,17 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     cthulhu
     g:kikimr
 )
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/lwtrace
-)
-
-SRCS(
-    probes.cpp
-    probes.h
-)
-
-END()
+) 
+ 
+SRCS( 
+    probes.cpp 
+    probes.h 
+) 
+ 
+END() 

@@ -12,5 +12,5 @@ enum EJobKind {
 
 const char* JobKindName(EJobKind kind);
 
-}  // NSchLab
-}  // NKikimr
+}  // NSchLab 
+}  // NKikimr 

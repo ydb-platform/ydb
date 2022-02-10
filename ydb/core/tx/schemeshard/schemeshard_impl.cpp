@@ -3644,13 +3644,13 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     , EnableAsyncIndexes(0, 0, 1)
     , EnableSchemeTransactionsAtSchemeShard(0, 0, 1)
 {
-    TabletCountersPtr.Reset(new TProtobufTabletCounters<
+    TabletCountersPtr.Reset(new TProtobufTabletCounters< 
                             ESimpleCounters_descriptor,
                             ECumulativeCounters_descriptor,
                             EPercentileCounters_descriptor,
                             ETxTypes_descriptor
                             >());
-    TabletCounters = TabletCountersPtr.Get();
+    TabletCounters = TabletCountersPtr.Get(); 
 
     SelfPinger = new TSelfPinger(SelfTabletId(), TabletCounters);
 }
@@ -3777,7 +3777,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     SplitSettings.Register(appData->Icb);
 
-    Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
+    Executor()->RegisterExternalTabletCounters(TabletCountersPtr); 
     Execute(CreateTxInitSchema(), ctx);
 
     SubscribeConsoleConfigs(ctx);

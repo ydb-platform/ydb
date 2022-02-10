@@ -138,8 +138,8 @@ public:
 
 #define PARAM(NAME, V) \
             do { \
-                TABLER() { \
-                    TABLED() { str << "<b>" << #NAME << "</b>"; } \
+                TABLER() { \ 
+                    TABLED() { str << "<b>" << #NAME << "</b>"; } \ 
                     for (auto it = V.begin(); it != V.end(); ++it) { \
                         auto& series = it->second; \
                         series.Update(now); \
@@ -151,7 +151,7 @@ public:
                             values.push_back(item.second.NAME); \
                         } \
                         std::sort(values.begin(), values.end()); \
-                        TABLED() { \
+                        TABLED() { \ 
                             if (values) { \
                                 size_t index = perc * values.size(); \
                                 if (index >= values.size()) { \
@@ -161,104 +161,104 @@ public:
                             } else { \
                                 str << "none"; \
                             } \
-                        } \
+                        } \ 
                     } \
-                } \
+                } \ 
             } while (false)
         double perc = Percentile;
-        HTML(str) {
-            DIV_CLASS("panel panel-info") {
-                DIV_CLASS("panel-heading") {
+        HTML(str) { 
+            DIV_CLASS("panel panel-info") { 
+                DIV_CLASS("panel-heading") { 
                     str << "Time accounting setup";
-                }
-                DIV_CLASS("panel-body") {
-                    FORM_CLASS("form-horizontal") {
-                        DIV_CLASS("control-group") {
-                            DIV_CLASS("controls") {
-                                LABEL_CLASS("checkbox") {
+                } 
+                DIV_CLASS("panel-body") { 
+                    FORM_CLASS("form-horizontal") { 
+                        DIV_CLASS("control-group") { 
+                            DIV_CLASS("controls") { 
+                                LABEL_CLASS("checkbox") { 
                                     str << "<input type=\"checkbox\" name=\"enabled\"";
                                     if (Enabled) {
                                         str << " checked=\"checked\"";
                                     }
                                     str << ">Enabled</input>";
-                                }
-                            }
-                        }
-                        DIV_CLASS("control-group") {
-                            LABEL_CLASS_FOR("control-label", "inputAggrTime") { str << "Aggregation time"; }
-                            DIV_CLASS("controls") {
+                                } 
+                            } 
+                        } 
+                        DIV_CLASS("control-group") { 
+                            LABEL_CLASS_FOR("control-label", "inputAggrTime") { str << "Aggregation time"; } 
+                            DIV_CLASS("controls") { 
                                 str << "<input id=\"inputAggrTime\" name=\"aggrTime\" type=\"text\" value=\"" << AggrTime << "\"/>";
-                            }
-                        }
-                        DIV_CLASS("control-group") {
-                            LABEL_CLASS_FOR("control-label", "inputPercentile") { str << "Percentile"; }
-                            DIV_CLASS("controls") {
+                            } 
+                        } 
+                        DIV_CLASS("control-group") { 
+                            LABEL_CLASS_FOR("control-label", "inputPercentile") { str << "Percentile"; } 
+                            DIV_CLASS("controls") { 
                                 str << "<input id=\"inputPercentile\" name=\"percentile\" type=\"text\" value=\"" << Percentile << "\"/>";
-                            }
-                        }
-                        DIV_CLASS("control-group") {
-                            DIV_CLASS("controls") {
+                            } 
+                        } 
+                        DIV_CLASS("control-group") { 
+                            DIV_CLASS("controls") { 
                                 str << "<button type=\"submit\" name=\"submit_timestats\" class=\"btn btn-default\">Submit</button>";
-                            }
-                        }
-                    }
-                }
-            }
-            DIV_CLASS("panel panel-info") {
-                DIV_CLASS("panel-heading") {
+                            } 
+                        } 
+                    } 
+                } 
+            } 
+            DIV_CLASS("panel panel-info") { 
+                DIV_CLASS("panel-heading") { 
                     str << "Put stats percentile# " << perc;
-                }
-                DIV_CLASS("panel-body") {
-                    TABLE_CLASS ("table table-condensed") {
-                        TABLEHEAD() {
-                            TABLER() {
-                                TABLEH() { str << "size"; }
+                } 
+                DIV_CLASS("panel-body") { 
+                    TABLE_CLASS ("table table-condensed") { 
+                        TABLEHEAD() { 
+                            TABLER() { 
+                                TABLEH() { str << "size"; } 
                                 for (auto it = Puts.begin(); it != Puts.end(); ++it) {
-                                    TABLEH() {
+                                    TABLEH() { 
                                         str << it->first << "+";
-                                    }
+                                    } 
                                 }
-                            }
-                        }
-                        TABLEBODY() {
+                            } 
+                        } 
+                        TABLEBODY() { 
                             PARAM(InSenderQueue, Puts);
                             PARAM(Total, Puts);
                             PARAM(InQueue, Puts);
                             PARAM(Execution, Puts);
                             PARAM(RTT, Puts);
-                        }
-                    }
-                }
-            }
-            DIV_CLASS("panel panel-info") {
-                DIV_CLASS("panel-heading") {
+                        } 
+                    } 
+                } 
+            } 
+            DIV_CLASS("panel panel-info") { 
+                DIV_CLASS("panel-heading") { 
                     str << "HugePut stats percentile# " << perc;
-                }
-                DIV_CLASS("panel-body") {
-                    TABLE_CLASS ("table table-condensed") {
-                        TABLEHEAD() {
-                            TABLER() {
-                                TABLEH() { str << "size"; }
+                } 
+                DIV_CLASS("panel-body") { 
+                    TABLE_CLASS ("table table-condensed") { 
+                        TABLEHEAD() { 
+                            TABLER() { 
+                                TABLEH() { str << "size"; } 
                                 for (auto it = HugePuts.begin(); it != HugePuts.end(); ++it) {
-                                    TABLEH() {
+                                    TABLEH() { 
                                         str << it->first << "+";
-                                    }
+                                    } 
                                 }
-                            }
-                        }
-                        TABLEBODY() {
+                            } 
+                        } 
+                        TABLEBODY() { 
                             PARAM(InSenderQueue, HugePuts);
                             PARAM(Total, HugePuts);
                             PARAM(InQueue, HugePuts);
                             PARAM(Execution, HugePuts);
                             PARAM(RTT, HugePuts);
                             PARAM(HugeWriteTime, HugePuts);
-                        }
-                    }
-                }
-            }
-        }
-
+                        } 
+                    } 
+                } 
+            } 
+        } 
+ 
     }
 
     template<typename TCgiParameters>

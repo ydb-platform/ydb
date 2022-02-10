@@ -42,11 +42,11 @@ namespace NActors {
 
     class TEventOutputChannel : public TInterconnectLoggingBase {
     public:
-        TEventOutputChannel(TEventHolderPool& pool, ui16 id, ui32 peerNodeId, ui32 maxSerializedEventSize,
+        TEventOutputChannel(TEventHolderPool& pool, ui16 id, ui32 peerNodeId, ui32 maxSerializedEventSize, 
                 std::shared_ptr<IInterconnectMetrics> metrics, TSessionParams params)
-            : TInterconnectLoggingBase(Sprintf("OutputChannel %" PRIu16 " [node %" PRIu32 "]", id, peerNodeId))
+            : TInterconnectLoggingBase(Sprintf("OutputChannel %" PRIu16 " [node %" PRIu32 "]", id, peerNodeId)) 
             , Pool(pool)
-            , PeerNodeId(peerNodeId)
+            , PeerNodeId(peerNodeId) 
             , ChannelId(id)
             , Metrics(std::move(metrics))
             , Params(std::move(params))
@@ -56,11 +56,11 @@ namespace NActors {
         ~TEventOutputChannel() {
         }
 
-        std::pair<ui32, TEventHolder*> Push(IEventHandle& ev) {
+        std::pair<ui32, TEventHolder*> Push(IEventHandle& ev) { 
             TEventHolder& event = Pool.Allocate(Queue);
             const ui32 bytes = event.Fill(ev) + sizeof(TEventDescr);
             OutputQueueSize += bytes;
-            return std::make_pair(bytes, &event);
+            return std::make_pair(bytes, &event); 
         }
 
         void DropConfirmed(ui64 confirm);
@@ -86,7 +86,7 @@ namespace NActors {
         void NotifyUndelivered();
 
         TEventHolderPool& Pool;
-        const ui32 PeerNodeId;
+        const ui32 PeerNodeId; 
         const ui16 ChannelId;
         std::shared_ptr<IInterconnectMetrics> Metrics;
         const TSessionParams Params;

@@ -460,7 +460,7 @@ message CreateNodeRequest {
 
 message CreateNodeResponse {
     Ydb.Operations.Operation operation = 1;
-}
+} 
 
 message AlterNodeRequest {
     string path = 1;
@@ -470,7 +470,7 @@ message AlterNodeRequest {
 
 message AlterNodeResponse {
     Ydb.Operations.Operation operation = 1;
-}
+} 
 
 message DropNodeRequest {
     string path = 1;
@@ -479,7 +479,7 @@ message DropNodeRequest {
 
 message DropNodeResponse {
     Ydb.Operations.Operation operation = 1;
-}
+} 
 
 message DescribeNodeRequest {
     string path = 1;

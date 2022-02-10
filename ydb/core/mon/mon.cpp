@@ -399,9 +399,9 @@ namespace NActors {
         TBase::Register(new NMonitoring::TVersionMonPage);
         TBase::Register(new NMonitoring::TTablesorterCssMonPage);
         TBase::Register(new NMonitoring::TTablesorterJsMonPage);
-
-        NLwTraceMonPage::RegisterPages((TBase*)this);
-        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(ACTORLIB_PROVIDER));
+ 
+        NLwTraceMonPage::RegisterPages((TBase*)this); 
+        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(ACTORLIB_PROVIDER)); 
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(MONITORING_PROVIDER));
         TBase::Start();
     }

@@ -2,7 +2,7 @@
 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/util/datetime.h>
+#include <library/cpp/actors/util/datetime.h> 
 
 #include <util/generic/deque.h>
 #include <util/datetime/cputimer.h>
@@ -29,7 +29,7 @@ public:
         , Source(source)
         , Cookie(cookie)
         , Flags(flags)
-        , StartCounter(GetCycleCountFast())
+        , StartCounter(GetCycleCountFast()) 
     {}
 
     STATEFN(StateWait) {
@@ -41,7 +41,7 @@ public:
     }
 
     TDuration AccumulatedLatency() const {
-        const ui64 cc = GetCycleCountFast() - StartCounter;
+        const ui64 cc = GetCycleCountFast() - StartCounter; 
         return CyclesToDuration(cc);
     }
 

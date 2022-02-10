@@ -36,7 +36,7 @@ class TTestActorSystem {
             CurrentMonotonicPtr = currentMonotonic;
         }
 
-        void PrepareSchedules(NSchedulerQueue::TReader **readers, ui32 scheduleReadersCount) override {
+        void PrepareSchedules(NSchedulerQueue::TReader **readers, ui32 scheduleReadersCount) override { 
             Readers = {readers, readers + scheduleReadersCount};
         }
 

@@ -21,7 +21,7 @@ namespace NMonitoring {
         if (i == 0 || i >= imax)
             *buf = '\0';
         else
-            snprintf(buf, size, "%" PRId64 ".%" PRId64 "%c", major, minor, shorts[i]);
+            snprintf(buf, size, "%" PRId64 ".%" PRId64 "%c", major, minor, shorts[i]); 
 
         return buf;
     }
@@ -32,18 +32,18 @@ namespace NMonitoring {
             buf[0] = 0;
             return buf;
         }
-        PrettyNumShort(val, buf + 2, size - 3);
-        if (buf[2] == 0) {
-            *buf = '\0';
-        } else {
+        PrettyNumShort(val, buf + 2, size - 3); 
+        if (buf[2] == 0) { 
+            *buf = '\0'; 
+        } else { 
             size_t len = 2 + strnlen(buf + 2, size - 4);
             Y_ASSERT(len < size);
-            buf[0] = ' ';
-            buf[1] = '(';
-            buf[len] = ')';
-            buf[len + 1] = '\0';
-        }
-
-        return buf;
-    }
+            buf[0] = ' '; 
+            buf[1] = '('; 
+            buf[len] = ')'; 
+            buf[len + 1] = '\0'; 
+        } 
+ 
+        return buf; 
+    } 
 }

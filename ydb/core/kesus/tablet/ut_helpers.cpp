@@ -1,7 +1,7 @@
 #include "ut_helpers.h"
 
 #include <ydb/core/metering/metering.h>
-
+ 
 #include <library/cpp/actors/core/event_pb.h>
 
 #include <algorithm>
@@ -9,62 +9,62 @@
 namespace NKikimr {
 namespace NKesus {
 
-// Write metering events into memory only
-class TFakeMetering : public TActor<TFakeMetering> {
-    std::vector<TString> Jsons;
-
-public:
-    explicit TFakeMetering()
-        : TActor<TFakeMetering>(&TFakeMetering::StateWork)
-    {}
-
-private:
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
-            HFunc(NMetering::TEvMetering::TEvWriteMeteringJson, HandleWriteMeteringJson);
-        default:
-            HandleUnexpectedEvent(ev, ctx);
-            break;
-        }
-    }
-
-    void HandlePoisonPill(const TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        Die(ctx);
-    }
-
-    void HandleWriteMeteringJson(
-        const NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& ev,
-        const TActorContext& ctx)
-    {
-        Y_UNUSED(ctx);
-
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY,
-                    "tests -- TFakeMetering got TEvMetering::TEvWriteMeteringJson");
-
-        const auto* msg = ev->Get();
-
-        Jsons.push_back(msg->MeteringJson);
-    }
-
-    void HandleUnexpectedEvent(STFUNC_SIG)
-    {
-        Y_UNUSED(ctx);
-
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY,
-                    "TFakeMetering:"
-                        << " unhandled event type: " << ev->GetTypeRewrite()
-                        << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
-    }
-};
-
-NActors::TActorId CreateFakeMetering(NActors::TTestActorRuntime &runtime) {
-    NActors::TActorId actorId = runtime.Register(new TFakeMetering());
-    runtime.RegisterService(NMetering::MakeMeteringServiceID(), actorId);
-    return NMetering::MakeMeteringServiceID();
-}
-
+// Write metering events into memory only 
+class TFakeMetering : public TActor<TFakeMetering> { 
+    std::vector<TString> Jsons; 
+ 
+public: 
+    explicit TFakeMetering() 
+        : TActor<TFakeMetering>(&TFakeMetering::StateWork) 
+    {} 
+ 
+private: 
+    STFUNC(StateWork) { 
+        switch (ev->GetTypeRewrite()) { 
+            HFunc(TEvents::TEvPoisonPill, HandlePoisonPill); 
+            HFunc(NMetering::TEvMetering::TEvWriteMeteringJson, HandleWriteMeteringJson); 
+        default: 
+            HandleUnexpectedEvent(ev, ctx); 
+            break; 
+        } 
+    } 
+ 
+    void HandlePoisonPill(const TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) { 
+        Y_UNUSED(ev); 
+        Die(ctx); 
+    } 
+ 
+    void HandleWriteMeteringJson( 
+        const NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& ev, 
+        const TActorContext& ctx) 
+    { 
+        Y_UNUSED(ctx); 
+ 
+        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY, 
+                    "tests -- TFakeMetering got TEvMetering::TEvWriteMeteringJson"); 
+ 
+        const auto* msg = ev->Get(); 
+ 
+        Jsons.push_back(msg->MeteringJson); 
+    } 
+ 
+    void HandleUnexpectedEvent(STFUNC_SIG) 
+    { 
+        Y_UNUSED(ctx); 
+ 
+        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY, 
+                    "TFakeMetering:" 
+                        << " unhandled event type: " << ev->GetTypeRewrite() 
+                        << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?")); 
+    } 
+}; 
+ 
+NActors::TActorId CreateFakeMetering(NActors::TTestActorRuntime &runtime) { 
+    NActors::TActorId actorId = runtime.Register(new TFakeMetering()); 
+    runtime.RegisterService(NMetering::MakeMeteringServiceID(), actorId); 
+    return NMetering::MakeMeteringServiceID(); 
+} 
+ 
 TTestContext::TTestContext()
     : TabletType(TTabletTypes::KESUS)
     , TabletId(MakeTabletID(0, 0, 1))
@@ -86,8 +86,8 @@ void TTestContext::Setup(ui32 nodeCount, bool useRealThreads) {
         options.FinalEvents.emplace_back(TEvTablet::EvBoot);
         Runtime->DispatchEvents(options);
     }
-
-    CreateFakeMetering(*Runtime);
+ 
+    CreateFakeMetering(*Runtime); 
 }
 
 void TTestContext::Finalize() {
@@ -854,29 +854,29 @@ void TTestContext::UpdateConsumptionState(const TActorId& client, const TActorId
     UpdateConsumptionState(client, edge, {TResourceConsumingInfo(id, consume, amount, status)});
 }
 
-void TTestContext::AccountResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceAccountInfo>& info) {
-    const ui64 cookie = RandomNumber<ui64>();
-    auto req = MakeHolder<TEvKesus::TEvAccountResources>();
-    ActorIdToProto(client, req->Record.MutableActorID());
-    req->Record.MutableResourcesInfo()->Reserve(info.size());
-    for (const TResourceAccountInfo& res : info) {
-        auto* reqRes = req->Record.AddResourcesInfo();
-        reqRes->SetResourceId(res.Id);
-        reqRes->SetStartUs(res.Start.MicroSeconds());
-        reqRes->SetIntervalUs(res.Interval.MicroSeconds());
-        for (double value : res.Amount) {
-            reqRes->AddAmount(value);
-        }
-    }
-
-    SendFromEdge(edge, std::move(req), cookie);
-    ExpectEdgeEvent<TEvKesus::TEvAccountResourcesAck>(edge, cookie);
-}
-
-void TTestContext::AccountResources(const TActorId& client, const TActorId& edge, ui64 id, TInstant start, TDuration interval, std::vector<double>&& amount) {
-    AccountResources(client, edge, {TResourceAccountInfo(id, start, interval, std::move(amount))});
-}
-
+void TTestContext::AccountResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceAccountInfo>& info) { 
+    const ui64 cookie = RandomNumber<ui64>(); 
+    auto req = MakeHolder<TEvKesus::TEvAccountResources>(); 
+    ActorIdToProto(client, req->Record.MutableActorID()); 
+    req->Record.MutableResourcesInfo()->Reserve(info.size()); 
+    for (const TResourceAccountInfo& res : info) { 
+        auto* reqRes = req->Record.AddResourcesInfo(); 
+        reqRes->SetResourceId(res.Id); 
+        reqRes->SetStartUs(res.Start.MicroSeconds()); 
+        reqRes->SetIntervalUs(res.Interval.MicroSeconds()); 
+        for (double value : res.Amount) { 
+            reqRes->AddAmount(value); 
+        } 
+    } 
+ 
+    SendFromEdge(edge, std::move(req), cookie); 
+    ExpectEdgeEvent<TEvKesus::TEvAccountResourcesAck>(edge, cookie); 
+} 
+ 
+void TTestContext::AccountResources(const TActorId& client, const TActorId& edge, ui64 id, TInstant start, TDuration interval, std::vector<double>&& amount) { 
+    AccountResources(client, edge, {TResourceAccountInfo(id, start, interval, std::move(amount))}); 
+} 
+ 
 NKikimrKesus::TEvGetQuoterResourceCountersResult TTestContext::GetQuoterResourceCounters() {
     const ui64 cookie = RandomNumber<ui64>();
     const auto edge = Runtime->AllocateEdgeActor();

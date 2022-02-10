@@ -127,12 +127,12 @@ struct TEvWhiteboard{
             Record.SetTotalSize(totalSize);
             Record.SetState(static_cast<NKikimrBlobStorage::TPDiskState::E>(state));
         }
-
-        TEvPDiskStateUpdate(ui32 pDiskId, NKikimrWhiteboard::EFlag realtime, NKikimrWhiteboard::EFlag device) {
-            Record.SetPDiskId(pDiskId);
-            Record.SetRealtime(realtime);
-            Record.SetDevice(device);
-        }
+ 
+        TEvPDiskStateUpdate(ui32 pDiskId, NKikimrWhiteboard::EFlag realtime, NKikimrWhiteboard::EFlag device) { 
+            Record.SetPDiskId(pDiskId); 
+            Record.SetRealtime(realtime); 
+            Record.SetDevice(device); 
+        } 
     };
 
     struct TEvPDiskStateRequest : public TEventPB<TEvPDiskStateRequest, NKikimrWhiteboard::TEvPDiskStateRequest, EvPDiskStateRequest> {};

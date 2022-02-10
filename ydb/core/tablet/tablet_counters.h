@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
-#include <util/generic/singleton.h>
-#include <util/generic/vector.h>
+#include <util/generic/singleton.h> 
+#include <util/generic/vector.h> 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <google/protobuf/descriptor.pb.h>
@@ -236,7 +236,7 @@ private:
         }
     }
 
-public:
+public: 
     void Initialize(ui32 rangeCount, const TRangeDef* ranges, bool integral) {
         Y_VERIFY_DEBUG(!Ranges);
         Y_VERIFY_DEBUG(!Values);
@@ -258,7 +258,7 @@ public:
         }
     }
 
-private:
+private: 
     //
     ui32 FindSlot(ui64 what) const {
         return Max<ssize_t>(0, std::upper_bound(Ranges, Ranges + RangeCount, what) - Ranges - 1);

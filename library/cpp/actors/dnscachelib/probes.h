@@ -1,7 +1,7 @@
-#pragma once
-
+#pragma once 
+ 
 #include <library/cpp/lwtrace/all.h>
-
+ 
 #define DNSCACHELIB_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)           \
     PROBE(Created, GROUPS(), TYPES(), NAMES())                             \
     PROBE(Destroyed, GROUPS(), TYPES(), NAMES())                           \
@@ -30,6 +30,6 @@
           GROUPS(),                                                        \
           TYPES(TString),                                                  \
           NAMES("hostname"))                                               \
-    /**/
-
-LWTRACE_DECLARE_PROVIDER(DNSCACHELIB_PROVIDER)
+    /**/ 
+ 
+LWTRACE_DECLARE_PROVIDER(DNSCACHELIB_PROVIDER) 

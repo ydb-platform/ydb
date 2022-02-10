@@ -2,32 +2,32 @@
 
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
-
-namespace NKikimr {
-
+ 
+namespace NKikimr { 
+ 
 using NClient::TValue;
 using IEngineFlat = NMiniKQL::IEngineFlat;
-
+ 
 
 Y_UNIT_TEST_SUITE(TTxDataShardMiniKQL) {
-
+ 
 Y_UNIT_TEST(ReadConstant) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     auto programText = R"___((
         (return (AsList (SetResult 'res1 (Int32 '2016))))
     ))___";
-
+ 
     UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
 }
-
+ 
 //
-
+ 
 Y_UNIT_TEST(Write) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     auto programText = R"___((
         (let row '('('key (Uint32 '42))))
         (let myUpd '(
@@ -37,16 +37,16 @@ Y_UNIT_TEST(Write) {
         ))
         (return pgmReturn)
     ))___";
-
+ 
     UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
 }
-
+ 
 //
-
+ 
 Y_UNIT_TEST(ReadAfterWrite) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     {
         auto programText = R"___((
             (let row '('('key (Uint32 '42))))
@@ -57,10 +57,10 @@ Y_UNIT_TEST(ReadAfterWrite) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
     }
-
+ 
     {
         auto programText = R"___((
             (let row '('('key (Uint32 '42))))
@@ -70,7 +70,7 @@ Y_UNIT_TEST(ReadAfterWrite) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -78,9 +78,9 @@ Y_UNIT_TEST(ReadAfterWrite) {
         TValue row = value["myRes"];
         TString data = row["value"];
         UNIT_ASSERT_EQUAL(data, "Robert");
-    }
+    } 
 }
-
+ 
 Y_UNIT_TEST(ReadSpecialColumns) {
     TTester t(TTester::ESchema_SpecialKV);
     TFakeMiniKQLProxy proxy(t);
@@ -157,7 +157,7 @@ Y_UNIT_TEST(ReadSpecialColumns) {
 }
 
 //
-
+ 
 Y_UNIT_TEST(ReadNonExisting) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
@@ -184,7 +184,7 @@ Y_UNIT_TEST(ReadNonExisting) {
 Y_UNIT_TEST(WriteEraseRead) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     {
         auto programText = R"___((
             (let row '('('key (Uint32 '42))))
@@ -195,10 +195,10 @@ Y_UNIT_TEST(WriteEraseRead) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
     }
-
+ 
     {
         auto programText = R"___((
             (let row '('('key (Uint32 '42))))
@@ -207,10 +207,10 @@ Y_UNIT_TEST(WriteEraseRead) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
     }
-
+ 
     {
         auto programText = R"___((
             (let row '('('key (Uint32 '42))))
@@ -220,22 +220,22 @@ Y_UNIT_TEST(WriteEraseRead) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
         TValue value = TValue::Create(res.GetValue(), res.GetType());
         TValue row = value["myRes"];
         UNIT_ASSERT(!row.HaveValue());
-    }
+    } 
 }
-
+ 
 //
-
+ 
 Y_UNIT_TEST(SelectRange) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     {
         auto programText = R"___((
             (let row1 '('('key (Uint32 '345))))
@@ -254,10 +254,10 @@ Y_UNIT_TEST(SelectRange) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
     }
-
+ 
     { // Erase one row
         auto programText = R"___((
             (let row '('('key (Uint32 '346))))
@@ -280,7 +280,7 @@ Y_UNIT_TEST(SelectRange) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -296,7 +296,7 @@ Y_UNIT_TEST(SelectRange) {
         UNIT_ASSERT_EQUAL(TString(row1["value"]), "Robert");
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "Paulson");
     }
-
+ 
     {
         auto programText = R"___((
             (let range '('ExcFrom '('key (Uint32 '345) (Void))))
@@ -307,7 +307,7 @@ Y_UNIT_TEST(SelectRange) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -320,7 +320,7 @@ Y_UNIT_TEST(SelectRange) {
         UNIT_ASSERT_EQUAL(ui32(row2["key"]), 347);
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "Paulson");
     }
-
+ 
     {
         auto programText = R"___((
             (let range '('IncFrom '('key (Uint32 '345) (Void))))
@@ -331,7 +331,7 @@ Y_UNIT_TEST(SelectRange) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -347,7 +347,7 @@ Y_UNIT_TEST(SelectRange) {
         UNIT_ASSERT_EQUAL(TString(row1["value"]), "Robert");
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "Paulson");
     }
-
+ 
     {
         auto programText = R"___((
             (let range '('IncFrom 'IncTo '('key (Uint32 '345) (Uint32 '347))))
@@ -358,7 +358,7 @@ Y_UNIT_TEST(SelectRange) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -374,7 +374,7 @@ Y_UNIT_TEST(SelectRange) {
         UNIT_ASSERT_EQUAL(TString(row1["value"]), "Robert");
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "Paulson");
     }
-
+ 
     {
         auto programText = R"___((
             (let range '('ExcFrom 'IncTo '('key (Uint32 '345) (Uint32 '347))))
@@ -385,7 +385,7 @@ Y_UNIT_TEST(SelectRange) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -398,7 +398,7 @@ Y_UNIT_TEST(SelectRange) {
         UNIT_ASSERT_EQUAL(ui32(row2["key"]), 347);
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "Paulson");
     }
-
+ 
     {
         auto programText = R"___((
             (let range '('IncFrom 'ExcTo '('key (Uint32 '345) (Uint32 '347))))
@@ -409,7 +409,7 @@ Y_UNIT_TEST(SelectRange) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -422,7 +422,7 @@ Y_UNIT_TEST(SelectRange) {
         UNIT_ASSERT_EQUAL(ui32(row1["key"]), 345);
         UNIT_ASSERT_EQUAL(TString(row1["value"]), "Robert");
     }
-
+ 
     {
         auto programText = R"___((
             (let range '('ExcFrom 'ExcTo '('key (Uint32 '345) (Uint32 '347))))
@@ -433,7 +433,7 @@ Y_UNIT_TEST(SelectRange) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -442,15 +442,15 @@ Y_UNIT_TEST(SelectRange) {
         UNIT_ASSERT_EQUAL(bool(rs0["Truncated"]), false);
         TValue rsl = rs0["List"];
         UNIT_ASSERT_EQUAL(rsl.Size(), 0);
-    }
+    } 
 }
-
+ 
 //
-
+ 
 Y_UNIT_TEST(SelectRangeWithNotFullKey) {
     TTester t(TTester::ESchema_DoubleKV);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     {
         auto programText = R"___((
             (let row1 '('('key1 (Uint32 '345)) '('key2 (Utf8 'id123))))
@@ -473,10 +473,10 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
     }
-
+ 
     { // range end < range begin
         auto programText = R"___((
             (let $4 (Uint32 '"346"))
@@ -515,7 +515,7 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -533,7 +533,7 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
         UNIT_ASSERT_EQUAL(TString(row1["value"]), "Tables");
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "Paulson");
     }
-
+ 
     {
         auto programText = R"___((
             (let r1 '('key1 (Uint32 '345) (Uint32 '347)))
@@ -546,7 +546,7 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -564,7 +564,7 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
         UNIT_ASSERT_EQUAL(TString(row1["value"]), "Tables");
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "Paulson");
     }
-
+ 
     {
         auto programText = R"___((
             (let r1 '('key1 (Uint32 '345) (Uint32 '347)))
@@ -577,7 +577,7 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -595,7 +595,7 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
         UNIT_ASSERT_EQUAL(TString(row1["value"]), "Tables");
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "Paulson");
     }
-
+ 
     {
         auto programText = R"___((
             (let r1 '('key1 (Uint32 '345) (Uint32 '347)))
@@ -608,7 +608,7 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -656,15 +656,15 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
         UNIT_ASSERT_EQUAL(TString(row2["key2"]), "idXYZ");
         UNIT_ASSERT_EQUAL(TString(row1["value"]), "Tables");
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "Paulson");
-    }
+    } 
 }
-
+ 
 //
-
+ 
 Y_UNIT_TEST(WriteAndReadMultipleShards) {
     TTester t(TTester::ESchema_MultiShardKV);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     {
         auto programText = R"___((
             (let row1 '('('key (Uint32 '100))))
@@ -683,10 +683,10 @@ Y_UNIT_TEST(WriteAndReadMultipleShards) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
     }
-
+ 
     {
         auto programText = R"___((
             (let row1 '('('key (Uint32 '100))))
@@ -702,7 +702,7 @@ Y_UNIT_TEST(WriteAndReadMultipleShards) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -714,11 +714,11 @@ Y_UNIT_TEST(WriteAndReadMultipleShards) {
         UNIT_ASSERT_EQUAL(TString(row1["value"]), "ImInShard1");
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "ImInShard2");
         UNIT_ASSERT_EQUAL(TString(row3["value"]), "ImInShard3");
-    }
+    } 
 }
-
+ 
 //
-
+ 
 void GetTableStats(TTestActorRuntime &runtime, ui64 tabletId, ui64 tableId, NKikimrTableStats::TTableStats& stats) {
     TAutoPtr<TEvDataShard::TEvGetTableStats> ev(new TEvDataShard::TEvGetTableStats(tableId));
 
@@ -849,7 +849,7 @@ Y_UNIT_TEST(TableStatsHistograms) {
 }
 
 //
-
+ 
 void InitCrossShard(TFakeMiniKQLProxy& proxy) {
     auto programText = R"___((
         (let row1 '('('key (Uint32 '100))))
@@ -875,11 +875,11 @@ void InitCrossShard(TFakeMiniKQLProxy& proxy) {
 void CrossShard_1_Cycle_Impl(const TString& dispatchName, std::function<void (TTestActorRuntime&)> setup, bool& activeZone) {
     TTester t(TTester::ESchema_MultiShardKV, dispatchName, setup, activeZone);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     InitCrossShard(proxy);
 
     {
-        TTester::TActiveZone az(t);
+        TTester::TActiveZone az(t); 
         auto programText = R"___((
             (let row1 '('('key (Uint32 '100))))
             (let row2 '('('key (Uint32 '1100))))
@@ -898,10 +898,10 @@ void CrossShard_1_Cycle_Impl(const TString& dispatchName, std::function<void (TT
             ))
             (return pgmReturn)
         ))___";
-
+ 
         proxy.Execute(programText, false);
     }
-
+ 
     {
         auto programText = R"___((
             (let row1 '('('key (Uint32 '100))))
@@ -917,7 +917,7 @@ void CrossShard_1_Cycle_Impl(const TString& dispatchName, std::function<void (TT
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -929,9 +929,9 @@ void CrossShard_1_Cycle_Impl(const TString& dispatchName, std::function<void (TT
         UNIT_ASSERT_EQUAL(TString(row1["value"]), "ImInShard3");
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "ImInShard1");
         UNIT_ASSERT_EQUAL(TString(row3["value"]), "ImInShard2");
-    }
+    } 
 }
-
+ 
 Y_UNIT_TEST(CrossShard_1_Cycle) {
     TVector<ui64> tabletIds;
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
@@ -942,17 +942,17 @@ Y_UNIT_TEST(CrossShard_1_Cycle) {
         return initialEventsFilter.Prepare();
     }, &CrossShard_1_Cycle_Impl);
 }
-
+ 
 //
-
+ 
 void CrossShard_2_SwapAndCopy_Impl(const TString& dispatchName, std::function<void (TTestActorRuntime&)> setup, bool& activeZone) {
     TTester t(TTester::ESchema_MultiShardKV, dispatchName, setup, activeZone);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     InitCrossShard(proxy);
-
+ 
     {
-        TTester::TActiveZone az(t);
+        TTester::TActiveZone az(t); 
         auto programText = R"___((
             (let row1 '('('key (Uint32 '100))))
             (let row2 '('('key (Uint32 '1100))))
@@ -972,10 +972,10 @@ void CrossShard_2_SwapAndCopy_Impl(const TString& dispatchName, std::function<vo
             ))
             (return pgmReturn)
         ))___";
-
+ 
         proxy.Execute(programText, false);
     }
-
+ 
     {
         auto programText = R"___((
             (let row1 '('('key (Uint32 '100))))
@@ -993,7 +993,7 @@ void CrossShard_2_SwapAndCopy_Impl(const TString& dispatchName, std::function<vo
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
         TValue value = TValue::Create(res.GetValue(), res.GetType());
@@ -1006,9 +1006,9 @@ void CrossShard_2_SwapAndCopy_Impl(const TString& dispatchName, std::function<vo
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "ImInShard1");
         UNIT_ASSERT_EQUAL(TString(row3["value"]), "ImInShard3");
         UNIT_ASSERT_EQUAL(TString(row3new["value"]), "ImInShard3");
-    }
+    } 
 }
-
+ 
 Y_UNIT_TEST(CrossShard_2_SwapAndCopy) {
     TVector<ui64> tabletIds;
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
@@ -1019,17 +1019,17 @@ Y_UNIT_TEST(CrossShard_2_SwapAndCopy) {
         return initialEventsFilter.Prepare();
     }, &CrossShard_2_SwapAndCopy_Impl);
 }
-
+ 
 //
-
+ 
 void CrossShard_3_AllToOne_Impl(const TString& dispatchName, std::function<void (TTestActorRuntime&)> setup, bool& activeZone) {
     TTester t(TTester::ESchema_MultiShardKV, dispatchName, setup, activeZone);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     InitCrossShard(proxy);
-
+ 
     {
-        TTester::TActiveZone az(t);
+        TTester::TActiveZone az(t); 
         auto programText = R"___((
             (let row1 '('('key (Uint32 '100))))
             (let row2 '('('key (Uint32 '1100))))
@@ -1051,10 +1051,10 @@ void CrossShard_3_AllToOne_Impl(const TString& dispatchName, std::function<void 
             ))
             (return pgmReturn)
         ))___";
-
+ 
         proxy.Execute(programText, false);
     }
-
+ 
     {
         auto programText = R"___((
             (let row1 '('('key (Uint32 '100))))
@@ -1072,7 +1072,7 @@ void CrossShard_3_AllToOne_Impl(const TString& dispatchName, std::function<void 
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -1084,9 +1084,9 @@ void CrossShard_3_AllToOne_Impl(const TString& dispatchName, std::function<void 
         UNIT_ASSERT_EQUAL(TString(row31["value"]), "ImInShard1");
         UNIT_ASSERT_EQUAL(TString(row32["value"]), "ImInShard2");
         UNIT_ASSERT_EQUAL(TString(row33["value"]), "ImInShard3");
-    }
+    } 
 }
-
+ 
 Y_UNIT_TEST(CrossShard_3_AllToOne) {
     TVector<ui64> tabletIds;
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
@@ -1097,17 +1097,17 @@ Y_UNIT_TEST(CrossShard_3_AllToOne) {
         return initialEventsFilter.Prepare();
     }, &CrossShard_3_AllToOne_Impl);
 }
-
+ 
 //
-
+ 
 void CrossShard_4_OneToAll_Impl(const TString& dispatchName, std::function<void (TTestActorRuntime&)> setup, bool& activeZone) {
     TTester t(TTester::ESchema_MultiShardKV, dispatchName, setup, activeZone);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     InitCrossShard(proxy);
 
     {
-        TTester::TActiveZone az(t);
+        TTester::TActiveZone az(t); 
         auto programText = R"___((
             (let row1 '('('key (Uint32 '100))))
             (let row2 '('('key (Uint32 '1100))))
@@ -1129,10 +1129,10 @@ void CrossShard_4_OneToAll_Impl(const TString& dispatchName, std::function<void 
             ))
             (return pgmReturn)
         ))___";
-
+ 
         proxy.Execute(programText, false);
     }
-
+ 
     {
         auto programText = R"___((
             (let row13 '('('key (Uint32 '203))))
@@ -1148,7 +1148,7 @@ void CrossShard_4_OneToAll_Impl(const TString& dispatchName, std::function<void 
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -1160,9 +1160,9 @@ void CrossShard_4_OneToAll_Impl(const TString& dispatchName, std::function<void 
         UNIT_ASSERT_EQUAL(TString(row13["value"]), "ImInShard3");
         UNIT_ASSERT_EQUAL(TString(row23["value"]), "ImInShard3");
         UNIT_ASSERT_EQUAL(TString(row33["value"]), "ImInShard3");
-    }
+    } 
 }
-
+ 
 Y_UNIT_TEST(CrossShard_4_OneToAll) {
     TVector<ui64> tabletIds;
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
@@ -1173,17 +1173,17 @@ Y_UNIT_TEST(CrossShard_4_OneToAll) {
         return initialEventsFilter.Prepare();
     }, &CrossShard_4_OneToAll_Impl);
 }
-
+ 
 //
-
+ 
 void CrossShard_5_AllToAll_Impl(const TString& dispatchName, std::function<void (TTestActorRuntime&)> setup, bool& activeZone) {
     TTester t(TTester::ESchema_MultiShardKV, dispatchName, setup, activeZone);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     InitCrossShard(proxy);
-
+ 
     {
-        TTester::TActiveZone az(t);
+        TTester::TActiveZone az(t); 
         auto programText = R"___((
             (let row1 '('('key (Uint32 '100))))
             (let row2 '('('key (Uint32 '1100))))
@@ -1217,10 +1217,10 @@ void CrossShard_5_AllToAll_Impl(const TString& dispatchName, std::function<void 
             ))
             (return pgmReturn)
         ))___";
-
+ 
         proxy.Execute(programText, false);
     }
-
+ 
     {
         auto programText = R"___((
             (let row11 '('('key (Uint32 '201))))
@@ -1248,7 +1248,7 @@ void CrossShard_5_AllToAll_Impl(const TString& dispatchName, std::function<void 
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -1272,9 +1272,9 @@ void CrossShard_5_AllToAll_Impl(const TString& dispatchName, std::function<void 
         UNIT_ASSERT_EQUAL(TString(row31["value"]), "ImInShard1");
         UNIT_ASSERT_EQUAL(TString(row32["value"]), "ImInShard2");
         UNIT_ASSERT_EQUAL(TString(row33["value"]), "ImInShard3");
-    }
+    } 
 }
-
+ 
 Y_UNIT_TEST(CrossShard_5_AllToAll) {
     TVector<ui64> tabletIds;
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
@@ -1285,17 +1285,17 @@ Y_UNIT_TEST(CrossShard_5_AllToAll) {
         return initialEventsFilter.Prepare();
     }, &CrossShard_5_AllToAll_Impl);
 }
-
+ 
 //
-
+ 
 void CrossShard_6_Local_Impl(const TString& dispatchName, std::function<void (TTestActorRuntime&)> setup, bool& activeZone) {
     TTester t(TTester::ESchema_MultiShardKV, dispatchName, setup, activeZone);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     InitCrossShard(proxy);
-
+ 
     {
-        TTester::TActiveZone az(t);
+        TTester::TActiveZone az(t); 
         auto programText = R"___((
             (let row1 '('('key (Uint32 '100))))
             (let row2 '('('key (Uint32 '1100))))
@@ -1317,10 +1317,10 @@ void CrossShard_6_Local_Impl(const TString& dispatchName, std::function<void (TT
             ))
             (return pgmReturn)
         ))___";
-
+ 
         proxy.Execute(programText, false);
     }
-
+ 
     {
         auto programText = R"___((
             (let row11 '('('key (Uint32 '201))))
@@ -1336,7 +1336,7 @@ void CrossShard_6_Local_Impl(const TString& dispatchName, std::function<void (TT
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -1348,9 +1348,9 @@ void CrossShard_6_Local_Impl(const TString& dispatchName, std::function<void (TT
         UNIT_ASSERT_EQUAL(TString(row11["value"]), "ImInShard1");
         UNIT_ASSERT_EQUAL(TString(row22["value"]), "ImInShard2");
         UNIT_ASSERT_EQUAL(TString(row33["value"]), "ImInShard3");
-    }
+    } 
 }
-
+ 
 Y_UNIT_TEST(CrossShard_6_Local) {
     TVector<ui64> tabletIds;
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
@@ -1361,7 +1361,7 @@ Y_UNIT_TEST(CrossShard_6_Local) {
         return initialEventsFilter.Prepare();
     }, &CrossShard_6_Local_Impl);
 }
-
+ 
 Y_UNIT_TEST(WriteAndReadMany) {
     TTester t(TTester::ESchema_DoubleKV);
     TFakeMiniKQLProxy proxy(t);
@@ -1710,5 +1710,5 @@ Y_UNIT_TEST(MemoryUsageMultiShard) {
 }
 
 } // Y_UNIT_TEST_SUITE(TTxDataShardMiniKQL)
-
-} // namespace NKikimr
+ 
+} // namespace NKikimr 

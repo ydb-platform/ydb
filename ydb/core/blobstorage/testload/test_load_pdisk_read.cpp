@@ -463,7 +463,7 @@ public:
         TRequestInfo *request = &RequestInfo[requestIdx];
 
         if (now > MeasurementStartTime) {
-            Report->LatencyUs.Increment((now - request->StartTime).MicroSeconds());
+            Report->LatencyUs.Increment((now - request->StartTime).MicroSeconds()); 
             for(const auto& perc : DevicePercentiles) {
                 Report->DeviceLatency[perc.first] = Max(Report->DeviceLatency[perc.first], (ui64)*perc.second);
             }
@@ -554,7 +554,7 @@ public:
                     PARAM("Average speed since start, MB/s", Report->GetAverageSpeed() / 1e6);
                     PARAM("Speed standard deviation since start, MB/s", Report->GetSpeedDeviation() / 1e6);
                     for (double percentile : {0.5, 0.9, 0.95, 0.99, 0.999, 1.0}) {
-                        size_t value = Report->LatencyUs.GetPercentile(percentile);
+                        size_t value = Report->LatencyUs.GetPercentile(percentile); 
                         PARAM(Sprintf("percentile# %.3f since start, ms", percentile), value / 1000.0);
                     }
                     for(const auto& perc : DevicePercentiles) {

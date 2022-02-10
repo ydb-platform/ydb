@@ -129,7 +129,7 @@ namespace NSc {
         return v;
     }
 
-    void TValue::To(Message& msg, const TProtoOpts& opts) const {
+    void TValue::To(Message& msg, const TProtoOpts& opts) const { 
         msg.Clear();
 
         if (IsNull()) {
@@ -144,16 +144,16 @@ namespace NSc {
         for (int i = 0, count = descriptor->field_count(); i < count; ++i) {
             const FieldDescriptor* field = descriptor->field(i);
             if (field->is_map()) {
-                ToMapField(msg, field, opts);
+                ToMapField(msg, field, opts); 
             } else if (field->is_repeated()) {
-                ToRepeatedField(msg, field, opts);
+                ToRepeatedField(msg, field, opts); 
             } else {
-                ToField(msg, field, opts);
+                ToField(msg, field, opts); 
             }
         }
     }
 
-    void TValue::ValueToField(const TValue& value, Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
+    void TValue::ValueToField(const TValue& value, Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const { 
         const TString& name = field->name();
         if (value.IsNull()) {
             if (field->is_required() && !field->has_default_value()) {
@@ -190,10 +190,10 @@ namespace NSc {
                 reflection->SetString(&msg, field, value.ForceString());
                 break;
             case FieldDescriptor::CPPTYPE_ENUM:
-                value.ToEnumField(msg, field, opts);
+                value.ToEnumField(msg, field, opts); 
                 break;
             case FieldDescriptor::CPPTYPE_MESSAGE:
-                value.To(*reflection->MutableMessage(&msg, field), opts);
+                value.To(*reflection->MutableMessage(&msg, field), opts); 
                 break;
             default:
                 ythrow TSchemeException()
@@ -202,13 +202,13 @@ namespace NSc {
         }
     }
 
-    void TValue::ToField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
+    void TValue::ToField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const { 
         const TString& name = field->name();
         const TValue& value = Get(name);
-        ValueToField(value, msg, field, opts);
+        ValueToField(value, msg, field, opts); 
     }
 
-    void TValue::ToEnumField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
+    void TValue::ToEnumField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const { 
         const EnumDescriptor* enumField = field->enum_type();
 
         const EnumValueDescriptor* enumFieldValue = IsString()
@@ -216,11 +216,11 @@ namespace NSc {
                                                         : enumField->FindValueByNumber(ForceIntNumber());
 
         if (!enumFieldValue) {
-            if (opts.UnknownEnumValueIsDefault) {
-                enumFieldValue = field->default_value_enum();
-            } else {
-                ythrow TSchemeException() << "invalid value of enum field " << field->name();
-            }
+            if (opts.UnknownEnumValueIsDefault) { 
+                enumFieldValue = field->default_value_enum(); 
+            } else { 
+                ythrow TSchemeException() << "invalid value of enum field " << field->name(); 
+            } 
         }
 
         const Reflection* reflection = msg.GetReflection();
@@ -232,7 +232,7 @@ namespace NSc {
         }
     }
 
-    void TValue::ToRepeatedField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
+    void TValue::ToRepeatedField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const { 
         const TString& name = field->name();
 
         const TValue& fieldValue = Get(name);
@@ -241,11 +241,11 @@ namespace NSc {
         }
 
         if (!fieldValue.IsArray()) {
-            if (opts.SkipTypeMismatch) {
-                return; // leave repeated field empty
-            } else {
-                ythrow TSchemeException() << "invalid type of repeated field " << name << ": not an array";
-            }
+            if (opts.SkipTypeMismatch) { 
+                return; // leave repeated field empty 
+            } else { 
+                ythrow TSchemeException() << "invalid type of repeated field " << name << ": not an array"; 
+            } 
         }
 
         const Reflection* reflection = msg.GetReflection();
@@ -277,7 +277,7 @@ namespace NSc {
                     reflection->AddString(&msg, field, value.ForceString());
                     break;
                 case FieldDescriptor::CPPTYPE_ENUM:
-                    value.ToEnumField(msg, field, opts);
+                    value.ToEnumField(msg, field, opts); 
                     break;
                 case FieldDescriptor::CPPTYPE_MESSAGE:
                     value.To(*reflection->AddMessage(&msg, field));
@@ -290,7 +290,7 @@ namespace NSc {
         }
     }
 
-    void TValue::ToMapField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
+    void TValue::ToMapField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const { 
         const TString& name = field->name();
 
         const TValue& fieldValue = Get(name);
@@ -300,16 +300,16 @@ namespace NSc {
 
         if (fieldValue.IsArray()) {
             // read dict from key, value array
-            ToRepeatedField(msg, field, opts);
+            ToRepeatedField(msg, field, opts); 
             return;
         }
 
         if (!fieldValue.IsDict()) {
-            if (opts.SkipTypeMismatch) {
-                return; // leave map field empty
-            } else {
-                ythrow TSchemeException() << "invalid type of map field " << name << ": not dict or array";
-            }
+            if (opts.SkipTypeMismatch) { 
+                return; // leave map field empty 
+            } else { 
+                ythrow TSchemeException() << "invalid type of map field " << name << ": not dict or array"; 
+            } 
         }
 
         const Reflection* reflection = msg.GetReflection();
@@ -322,7 +322,7 @@ namespace NSc {
             auto valueField = entryDesc->FindFieldByNumber(2);
             auto entryReflection = entry->GetReflection();
             entryReflection->SetString(entry.Get(), keyField, TString(value.first));
-            ValueToField(value.second, *entry, valueField, opts);
+            ValueToField(value.second, *entry, valueField, opts); 
             mutableField.Add(*entry);
         }
     }

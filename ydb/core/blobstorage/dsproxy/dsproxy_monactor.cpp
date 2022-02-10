@@ -83,22 +83,22 @@ public:
         UPDATE_WILSON(Discover)
 
 #define COMPONENT(NAME)                                                          \
-        TABLER() {                                                                 \
-            TABLED() {                                                             \
+        TABLER() {                                                                 \ 
+            TABLED() {                                                             \ 
                 str << #NAME;                                                    \
-            }                                                                    \
-            TABLED() {                                                             \
+            }                                                                    \ 
+            TABLED() {                                                             \ 
                 TString value = ToString(Mon->NAME ## SamplePPM);                 \
                 str << "<input name=\"" #NAME "SamplingRate\" type=\"number\""   \
                     " value=\"" << value << "\" min=\"0\" max=\"1000000\"/>ppm"; \
-            }                                                                    \
-        }
+            }                                                                    \ 
+        } 
 
         TStringStream str;
 
-        HTML(str) {
-            DIV_CLASS("panel panel-info") {
-                DIV_CLASS("panel-heading") {
+        HTML(str) { 
+            DIV_CLASS("panel panel-info") { 
+                DIV_CLASS("panel-heading") { 
                     str << "Group content";
                 }
                 DIV_CLASS("panel-body") {
@@ -162,28 +162,28 @@ public:
             DIV_CLASS("panel panel-info") {
                 DIV_CLASS("panel-heading") {
                     str << "Blob query service";
-                }
-                DIV_CLASS("panel-body") {
-                    FORM_CLASS("form-horizontal") {
-                        DIV_CLASS("control-group") {
-                            LABEL_CLASS_FOR("control-label", "inputBlob") { str << "Blob ID"; }
-                            DIV_CLASS("controls") {
+                } 
+                DIV_CLASS("panel-body") { 
+                    FORM_CLASS("form-horizontal") { 
+                        DIV_CLASS("control-group") { 
+                            LABEL_CLASS_FOR("control-label", "inputBlob") { str << "Blob ID"; } 
+                            DIV_CLASS("controls") { 
                                 str << "<input id=\"inputBlob\" name=\"blob\" type=\"text\"/>";
-                            }
-                        }
+                            } 
+                        } 
                         str << "<input type=\"hidden\" name=\"groupId\" value=\"" << GroupId << "\">";
                         str << "<input type=\"hidden\" name=\"debugInfo\" value=\"" << 1 << "\">";
-                        DIV_CLASS("control-group") {
-                            DIV_CLASS("controls") {
+                        DIV_CLASS("control-group") { 
+                            DIV_CLASS("controls") { 
                                 str << "<button type=\"submit\" formaction=\"/get_blob\" class=\"btn btn-default\">Query</button>";
-                            }
-                        }
-                    }
-                }
-            }
+                            } 
+                        } 
+                    } 
+                } 
+            } 
 
-            DIV_CLASS("panel panel-info") {
-                DIV_CLASS("panel-heading") {
+            DIV_CLASS("panel panel-info") { 
+                DIV_CLASS("panel-heading") { 
                     str << "Blob range index query service";
                 }
                 DIV_CLASS("panel-body") {
@@ -219,42 +219,42 @@ public:
             DIV_CLASS("panel panel-info") {
                 DIV_CLASS("panel-heading") {
                     str << "Wilson tuning";
-                }
-                DIV_CLASS("panel-body") {
-                    FORM_CLASS("form-vertical") {
-                        DIV() {
+                } 
+                DIV_CLASS("panel-body") { 
+                    FORM_CLASS("form-vertical") { 
+                        DIV() { 
                             str << "All sampling rates are provided as integer in range [0, 1000000] measured in ppm "
                                 " where 0 means disabled sampling for this kind of request";
-                        }
-                        DIV() {
+                        } 
+                        DIV() { 
                             str << "<b>NOTE</b> do not forget to enable WILSON logger at DEBUG level with 100% sampling"
                                 " at all nodes of the cluster";
-                        }
-                        TABLE_CLASS ("table table-condensed") {
-                            TABLEHEAD() {
-                                TABLER() {
-                                    TABLEH() {
+                        } 
+                        TABLE_CLASS ("table table-condensed") { 
+                            TABLEHEAD() { 
+                                TABLER() { 
+                                    TABLEH() { 
                                         str << "Query type";
-                                    }
-                                    TABLEH() {
+                                    } 
+                                    TABLEH() { 
                                         str << "Sampling rate";
-                                    }
-                                }
-                            }
-                            TABLEBODY() {
+                                    } 
+                                } 
+                            } 
+                            TABLEBODY() { 
                                 COMPONENT(Put)
                                 COMPONENT(Get)
                                 COMPONENT(Discover)
-                            }
-                        }
-                        DIV_CLASS("control-group") {
-                            DIV_CLASS("controls") {
+                            } 
+                        } 
+                        DIV_CLASS("control-group") { 
+                            DIV_CLASS("controls") { 
                                 str << "<button type=\"submit\" class=\"btn btn-default\">Commit</button>";
-                            }
-                        }
-                    }
-                }
-            }
+                            } 
+                        } 
+                    } 
+                } 
+            } 
 
             DIV_CLASS("panel panel-info") {
                 DIV_CLASS("panel-heading") {
@@ -311,7 +311,7 @@ public:
                     }
                 }
             }
-        }
+        } 
 
         Mon->TimeStats.Render(str);
 

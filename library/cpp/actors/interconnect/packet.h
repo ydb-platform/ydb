@@ -8,7 +8,7 @@
 #include <library/cpp/actors/util/rope.h>
 #include <library/cpp/actors/prof/tag.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
-#include <library/cpp/lwtrace/shuttle.h>
+#include <library/cpp/lwtrace/shuttle.h> 
 #include <util/generic/string.h>
 #include <util/generic/list.h>
 
@@ -108,7 +108,7 @@ struct TEventHolder : TNonCopyable {
     ui64 Serial;
     ui32 EventSerializedSize;
     ui32 EventActuallySerialized;
-    mutable NLWTrace::TOrbit Orbit;
+    mutable NLWTrace::TOrbit Orbit; 
 
     ui32 Fill(IEventHandle& ev);
 
@@ -136,7 +136,7 @@ struct TEventHolder : TNonCopyable {
     void Clear() {
         Event.Reset();
         Buffer.Reset();
-        Orbit.Reset();
+        Orbit.Reset(); 
     }
 };
 
@@ -154,7 +154,7 @@ struct TTcpPacketOutTask : TNonCopyable {
     bool TriedWriting;
     char *FreeArea;
     char *End;
-    mutable NLWTrace::TOrbit Orbit;
+    mutable NLWTrace::TOrbit Orbit; 
 
 public:
     TTcpPacketOutTask(const TSessionParams& params)
@@ -189,7 +189,7 @@ public:
         TriedWriting = false;
         FreeArea = Params.UseModernFrame ? Packet.v2.Data : Packet.v1.Data;
         End = FreeArea + TTcpPacketBuf::PacketDataLen;
-        Orbit.Reset();
+        Orbit.Reset(); 
     }
 
     bool IsEmpty() const {

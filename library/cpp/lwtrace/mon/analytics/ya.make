@@ -1,15 +1,15 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(serxa g:kikimr)
-
+ 
 PEERDIR(
 )
 
-SRCS(
-    analytics.cpp
-)
-
-END()
-
-RECURSE(
-)
+SRCS( 
+    analytics.cpp 
+) 
+ 
+END() 
+ 
+RECURSE( 
+) 

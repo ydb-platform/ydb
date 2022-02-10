@@ -70,25 +70,25 @@ Y_UNIT_TEST_SUITE(QuoterWithKesusTest) {
         setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, TKesusQuoterTestSetup::DEFAULT_KESUS_RESOURCE, 40, TDuration::MilliSeconds(500), TEvQuota::TEvClearance::EResult::Deadline); // default rate is 10
     }
 
-    Y_UNIT_TEST(PrefetchCoefficient) {
-        TKesusQuoterTestSetup setup;
-        NKikimrKesus::THierarchicalDRRResourceConfig cfg;
-        double rate = 100.0;
-        double prefetch = 1000.0;
-        cfg.SetMaxUnitsPerSecond(rate);
-        cfg.SetPrefetchCoefficient(prefetch);
-        setup.CreateKesusResource(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root", cfg);
-
-        cfg.ClearMaxUnitsPerSecond();
-        cfg.ClearPrefetchCoefficient(); // should be inherited from root
-        setup.CreateKesusResource(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf", cfg);
-
-        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf"); // stabilization
-        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf", rate * prefetch * 0.9, TDuration::MilliSeconds(500));
-        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf", rate * prefetch * 0.2, TDuration::MilliSeconds(500));
-        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf", 1, TDuration::MilliSeconds(500), TEvQuota::TEvClearance::EResult::Deadline);
-    }
-
+    Y_UNIT_TEST(PrefetchCoefficient) { 
+        TKesusQuoterTestSetup setup; 
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg; 
+        double rate = 100.0; 
+        double prefetch = 1000.0; 
+        cfg.SetMaxUnitsPerSecond(rate); 
+        cfg.SetPrefetchCoefficient(prefetch); 
+        setup.CreateKesusResource(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root", cfg); 
+ 
+        cfg.ClearMaxUnitsPerSecond(); 
+        cfg.ClearPrefetchCoefficient(); // should be inherited from root 
+        setup.CreateKesusResource(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf", cfg); 
+ 
+        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf"); // stabilization 
+        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf", rate * prefetch * 0.9, TDuration::MilliSeconds(500)); 
+        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf", rate * prefetch * 0.2, TDuration::MilliSeconds(500)); 
+        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf", 1, TDuration::MilliSeconds(500), TEvQuota::TEvClearance::EResult::Deadline); 
+    } 
+ 
     Y_UNIT_TEST(GetsQuotaAfterPause) {
         TKesusQuoterTestSetup setup;
         setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, TKesusQuoterTestSetup::DEFAULT_KESUS_RESOURCE, 12);
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
                 UNIT_ASSERT(record.GetResourcesInfo(0).GetConsumeResource());
             }));
 
-        setup.SendProxyStats({TEvQuota::TProxyStat(43, 1, 0, {}, 3, 5.0, 0, 0)});
+        setup.SendProxyStats({TEvQuota::TProxyStat(43, 1, 0, {}, 3, 5.0, 0, 0)}); 
         setup.WaitEvent<NKesus::TEvKesus::TEvUpdateConsumptionState>();
 
         // Disconnected
@@ -370,7 +370,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         auto session = setup.ProxyRequest("res");
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
 
-        setup.SendProxyStats({TEvQuota::TProxyStat(42, 1, 0, {}, 1, 25.0, 0, 0)});
+        setup.SendProxyStats({TEvQuota::TProxyStat(42, 1, 0, {}, 1, 25.0, 0, 0)}); 
 
         auto& startSession =
             EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
                 UNIT_ASSERT(record.GetResourcesInfo(0).GetConsumeResource());
             }));
 
-        setup.SendProxyStats({TEvQuota::TProxyStat(42, 1, 0, {}, 3, 5.0, 0, 0)});
+        setup.SendProxyStats({TEvQuota::TProxyStat(42, 1, 0, {}, 3, 5.0, 0, 0)}); 
         setup.WaitEvent<NKesus::TEvKesus::TEvUpdateConsumptionState>();
 
         // Disconnected

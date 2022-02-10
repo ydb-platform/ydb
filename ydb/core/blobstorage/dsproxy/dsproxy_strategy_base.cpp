@@ -184,7 +184,7 @@ std::optional<EStrategyOutcome> TStrategyBase::ProcessPessimistic(const TBlobSto
 }
 
 void TStrategyBase::AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &groupDiskRequests, TLogoBlobID &fullId,
-        ui32 partIdx, TBlobState::TDisk &disk, TIntervalSet<i32> &intervalSet, const char *logMarker) {
+        ui32 partIdx, TBlobState::TDisk &disk, TIntervalSet<i32> &intervalSet, const char *logMarker) { 
     TLogoBlobID id(fullId, partIdx + 1);
     R_LOG_DEBUG_SX(logCtx, logMarker, "AddGet disk# " << disk.OrderNumber
             << " Id# " << id.ToString()
@@ -287,8 +287,8 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
 
     if (!isPartsAvailable) {
         // Prepare new put request set
-        TIntervalVec<i32> fullInterval(0, state.Id.BlobSize());
-        Y_VERIFY(fullInterval.IsSubsetOf(state.Whole.Here),
+        TIntervalVec<i32> fullInterval(0, state.Id.BlobSize()); 
+        Y_VERIFY(fullInterval.IsSubsetOf(state.Whole.Here), 
                 "Can't put unrestored blob! Unexpected blob state# %s", state.ToString().c_str());
 
         TString wholeBuffer = TString::Uninitialized(state.Id.BlobSize());

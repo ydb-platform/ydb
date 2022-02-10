@@ -98,15 +98,15 @@ namespace NKikimr {
         void RenderHtmlAndReply(const TActorContext &ctx, const TString &schedulerInfo) {
             TStringStream str;
             str << "\n";
-            HTML(str) {
-                DIV_CLASS("panel panel-warning") {
-                    DIV_CLASS("panel-heading") {str << "Syncer";}
-                    DIV_CLASS("panel-body") {
+            HTML(str) { 
+                DIV_CLASS("panel panel-warning") { 
+                    DIV_CLASS("panel-heading") {str << "Syncer";} 
+                    DIV_CLASS("panel-body") { 
                         str << LogAndPhase;
                         str << schedulerInfo;
-                    }
-                }
-            }
+                    } 
+                } 
+            } 
             str << "\n";
 
             ctx.Send(ReplyId, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::SyncerInfoId));
@@ -418,15 +418,15 @@ namespace NKikimr {
         }
 
         void LogAndPhaseToHtml(IOutputStream &str) const {
-            HTML(str) {
-                DIV_CLASS("row") {
+            HTML(str) { 
+                DIV_CLASS("row") { 
                     str << "Phase: ";
                     THtmlLightSignalRenderer(ToSignalLight(Phase), ToString(Phase)).Output(str);
-                }
-                COLLAPSED_BUTTON_CONTENT("syncerlogid", "Log") {
-                    PRE() {str << Sublog.Get();}
-                }
-            }
+                } 
+                COLLAPSED_BUTTON_CONTENT("syncerlogid", "Log") { 
+                    PRE() {str << Sublog.Get();} 
+                } 
+            } 
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {

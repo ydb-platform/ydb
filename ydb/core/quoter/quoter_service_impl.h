@@ -146,7 +146,7 @@ struct TResource {
     // stats block
     TEvQuota::EStatUpdatePolicy StatUpdatePolicy = TEvQuota::EStatUpdatePolicy::Never;
     double AmountConsumed = 0.0; // consumed from last stats notification
-    TTimeSeriesMap<double> History; // consumption history from last stats notification
+    TTimeSeriesMap<double> History; // consumption history from last stats notification 
     TInstant StartStarvationTime = TInstant::Zero();
 
     struct {
@@ -175,9 +175,9 @@ struct TResource {
     }
 
     void ApplyQuotaChannel(const TEvQuota::TUpdateTick &tick);
-    TDuration Charge(double amount, TInstant now); // Zero - fullfiled, Max - not in current tick, Duration - in current tick, but not right now due to pace limit
+    TDuration Charge(double amount, TInstant now); // Zero - fullfiled, Max - not in current tick, Duration - in current tick, but not right now due to pace limit 
     TDuration Charge(TRequest& request, TResourceLeaf& leaf, TInstant now);
-    void ChargeUsedAmount(double amount, TInstant now);
+    void ChargeUsedAmount(double amount, TInstant now); 
 
     void MarkStartedCharging(TRequest& request, TResourceLeaf& leaf, TInstant now);
     void StartStarvation(TInstant now);

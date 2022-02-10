@@ -5,7 +5,7 @@
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_drivemodel.h"
 #include "blobstorage_pdisk_internal_interface.h"
-#include "blobstorage_pdisk_mon.h"
+#include "blobstorage_pdisk_mon.h" 
 #include "blobstorage_pdisk_request_id.h"
 
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
@@ -29,7 +29,7 @@ enum class EOwnerGroupType {
 //
 class TRequestBase : public TThrRefBase {
 public:
-    // Identification
+    // Identification 
     const TActorId Sender;
     const TReqId ReqId;
     TOwner Owner;
@@ -37,37 +37,37 @@ public:
     ui8 PriorityClass;
     EOwnerGroupType OwnerGroupType;
 
-    // Classification
-    ui64 TotalCost = 0; // Total request cost in nanoseconds
+    // Classification 
+    ui64 TotalCost = 0; // Total request cost in nanoseconds 
     ui8 GateId = 0;
-    bool IsSensitive = false; // QoS: sensitive or best-effort
-    bool IsFast = false; // QoS: best-effort with improved latency
-
-    // Scheduling
-    NHPTimer::STime Deadline = 0; // Deadline from request input to rt-scheduler
-    ui64 Cost = 0; // Remaining cost in nanoseconds
+    bool IsSensitive = false; // QoS: sensitive or best-effort 
+    bool IsFast = false; // QoS: best-effort with improved latency 
+ 
+    // Scheduling 
+    NHPTimer::STime Deadline = 0; // Deadline from request input to rt-scheduler 
+    ui64 Cost = 0; // Remaining cost in nanoseconds 
     NSchLab::EJobKind JobKind = NSchLab::EJobKind::JobKindRequest;
-
-    // Monitoring
-    const NHPTimer::STime CreationTime;
-    NHPTimer::STime InputTime = 0; // Time of entrance to rt-scheduler
+ 
+    // Monitoring 
+    const NHPTimer::STime CreationTime; 
+    NHPTimer::STime InputTime = 0; // Time of entrance to rt-scheduler 
     NHPTimer::STime ScheduleTime = 0;
-
-    // Tracing
+ 
+    // Tracing 
     mutable NWilson::TTraceId TraceId;
-    mutable NLWTrace::TOrbit Orbit;
-public:
+    mutable NLWTrace::TOrbit Orbit; 
+public: 
     TRequestBase(const TActorId &sender, TReqId reqId, TOwner owner, TOwnerRound ownerRound, ui8 priorityClass,
             NWilson::TTraceId traceId = {})
         : Sender(sender)
-        , ReqId(reqId)
+        , ReqId(reqId) 
         , Owner(owner)
         , OwnerRound(ownerRound)
         , PriorityClass(priorityClass)
         , OwnerGroupType(EOwnerGroupType::Dynamic)
-        , CreationTime(HPNow())
+        , CreationTime(HPNow()) 
         , TraceId(std::move(traceId))
-    {}
+    {} 
 
     void SetOwnerGroupType(bool isStaticGroupOwner) {
         OwnerGroupType = (isStaticGroupOwner ? EOwnerGroupType::Static : EOwnerGroupType::Dynamic);
@@ -88,26 +88,26 @@ public:
         return HPMilliSecondsFloat(now - CreationTime);
     }
 
-    ui64 GetCost() const {
+    ui64 GetCost() const { 
         return Cost;
     }
 
-    ui64 GetCostCycles() const {
-        return HPCyclesNs(Cost);
-    }
-
-    // Takes slack (duration free to do non-sensitive requests)
-    // and reserve it or part of it for this request execution
-    // On return slack contains:
-    //  - slack duration left after reservation
-    //  - or TDuration::Zero() if all available slack was reserved
-    // Returns true if reservation has occured, false otherwise
-    virtual bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) {
-        // Default implementation appropriate for all sensitive requests
-        // Must be overriden for best-effort requests
-        Y_UNUSED(slackNs); Y_UNUSED(drive); Y_UNUSED(appendBlockSize); Y_UNUSED(adhesion);
-        return true;
-    }
+    ui64 GetCostCycles() const { 
+        return HPCyclesNs(Cost); 
+    } 
+ 
+    // Takes slack (duration free to do non-sensitive requests) 
+    // and reserve it or part of it for this request execution 
+    // On return slack contains: 
+    //  - slack duration left after reservation 
+    //  - or TDuration::Zero() if all available slack was reserved 
+    // Returns true if reservation has occured, false otherwise 
+    virtual bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) { 
+        // Default implementation appropriate for all sensitive requests 
+        // Must be overriden for best-effort requests 
+        Y_UNUSED(slackNs); Y_UNUSED(drive); Y_UNUSED(appendBlockSize); Y_UNUSED(adhesion); 
+        return true; 
+    } 
 
     static void AbortDelete(TRequestBase* request, TActorSystem* actorSystem);
 };
@@ -257,7 +257,7 @@ public:
     ui32 EstimatedChunkIdx;
     TString Data;
     ui64 LsnSegmentStart; // Additional data, for sanity checks only.
-    ui64 Lsn; // Log sequence number
+    ui64 Lsn; // Log sequence number 
     void *Cookie;
     TCallback LogCallback;
     NPDisk::TCommitRecord CommitRecord;
@@ -331,12 +331,12 @@ public:
     ui64 RemainingSize;
     TCompletionChunkRead *FinalCompletion = nullptr;
     TAtomicBase Index;
-    bool IsReplied = false;
+    bool IsReplied = false; 
 
     ui64 SlackSize;
     ui64 FirstSector = 0;
     ui64 LastSector = 0;
-
+ 
     // Request is placed in scheduler's queues as raw pointer. To avoid deletion
     // in such situation request will take owning to self when pushed to
     // scheduler and drop owning when poped from scheduler
@@ -351,7 +351,7 @@ public:
         , Size(ev.Size)
         , Cookie(ev.Cookie)
         , RemainingSize(ev.Size)
-        , SlackSize(Max<ui32>())
+        , SlackSize(Max<ui32>()) 
         , DoubleFreeCanary(ReferenceCanary)
     {
         Index = AtomicIncrement(LastIndex);
@@ -378,19 +378,19 @@ public:
     }
 
     bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) override {
-        Y_UNUSED(appendBlockSize); Y_UNUSED(adhesion);
-        // Calculate how many bytes can we read within given slack (with single seek)
+        Y_UNUSED(appendBlockSize); Y_UNUSED(adhesion); 
+        // Calculate how many bytes can we read within given slack (with single seek) 
         SlackSize = (ui32)drive.SizeForTimeNs(slackNs > drive.SeekTimeNs()? slackNs - drive.SeekTimeNs(): 0,
                 ChunkIdx, TDriveModel::OP_TYPE_READ);
         if (SlackSize > 0) { // TODO[serxa]: actually there is some lower bound,
                              //              because we are not reading less than some number of bytes
-            SlackSize = Min(SlackSize, RemainingSize);
+            SlackSize = Min(SlackSize, RemainingSize); 
             ui64 costNs = drive.SeekTimeNs() + drive.TimeForSizeNs((ui64)SlackSize, ChunkIdx, TDriveModel::OP_TYPE_READ);
-            slackNs -= costNs;
-            return true;
-        } else {
-            return false;
-        }
+            slackNs -= costNs; 
+            return true; 
+        } else { 
+            return false; 
+        } 
     }
 };
 
@@ -446,15 +446,15 @@ public:
     bool IsReplied = false;
 
     ui32 TotalSize;
-    ui32 CurrentPart = 0;
-    ui32 CurrentPartOffset = 0;
-    ui32 RemainingSize = 0;
+    ui32 CurrentPart = 0; 
+    ui32 CurrentPartOffset = 0; 
+    ui32 RemainingSize = 0; 
     ui32 UnenqueuedSize;
     TAtomicBase Index;
 
-    ui32 SlackSize;
+    ui32 SlackSize; 
     ui32 BytesWritten = 0;
-
+ 
     THolder<NPDisk::TCompletionAction> Completion;
 
     TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TTraceId traceId)
@@ -474,7 +474,7 @@ public:
         }
         TotalSize = RemainingSize;
         UnenqueuedSize = RemainingSize;
-        SlackSize = Max<ui32>();
+        SlackSize = Max<ui32>(); 
     }
 
     ERequestType GetType() const override {
@@ -485,17 +485,17 @@ public:
         Cost = drive.SeekTimeNs() + drive.TimeForSizeNs((ui64)UnenqueuedSize, ChunkIdx, TDriveModel::OP_TYPE_WRITE);
     }
 
-    bool IsFinalIteration() {
-        return UnenqueuedSize <= SlackSize;
+    bool IsFinalIteration() { 
+        return UnenqueuedSize <= SlackSize; 
     }
-
+ 
     bool IsTotallyEnqueued() {
         return UnenqueuedSize == 0;
     }
 
     bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) override {
-        // Calculate how many bytes can we write within given slack (with single seek)
-        // TODO[serxa]: use write speed? but there is no write speed in drive model!
+        // Calculate how many bytes can we write within given slack (with single seek) 
+        // TODO[serxa]: use write speed? but there is no write speed in drive model! 
         SlackSize = (ui32)drive.SizeForTimeNs(slackNs > drive.SeekTimeNs()? slackNs - drive.SeekTimeNs(): 0,
                 ChunkIdx, TDriveModel::OP_TYPE_WRITE);
         // actually there is some lower bound, because we are not writing less than appendBlockSize bytes
@@ -504,15 +504,15 @@ public:
                 SlackSize / appendBlockSize * appendBlockSize,
                 (UnenqueuedSize + appendBlockSize - 1) / appendBlockSize * appendBlockSize);
             ui64 costNs = (adhesion? 0: drive.SeekTimeNs()) + drive.TimeForSizeNs((ui64)SlackSize, ChunkIdx, TDriveModel::OP_TYPE_WRITE);
-            slackNs -= costNs;
-            return true;
-        } else {
-            return false;
-        }
-    }
+            slackNs -= costNs; 
+            return true; 
+        } else { 
+            return false; 
+        } 
+    } 
 };
 
-//
+// 
 // TChunkWritePiece
 //
 class TChunkWritePiece : public TRequestBase {
@@ -539,41 +539,41 @@ public:
 };
 
 //
-// TChunkTrim
-//
-class TChunkTrim : public TRequestBase {
-public:
-    ui32 ChunkIdx;
-    ui32 Offset;
-    ui64 Size;
+// TChunkTrim 
+// 
+class TChunkTrim : public TRequestBase { 
+public: 
+    ui32 ChunkIdx; 
+    ui32 Offset; 
+    ui64 Size; 
 
     TChunkTrim(ui32 chunkIdx, ui32 offset, ui64 size, TAtomicBase reqIdx)
         : TRequestBase(TActorId(), TReqId(TReqId::ChunkTrim, reqIdx), OwnerUnallocated, TOwnerRound(0), NPriInternal::Trim)
-        , ChunkIdx(chunkIdx)
-        , Offset(offset)
-        , Size(size)
-    {}
-
+        , ChunkIdx(chunkIdx) 
+        , Offset(offset) 
+        , Size(size) 
+    {} 
+ 
     ERequestType GetType() const override {
-        return ERequestType::RequestChunkTrim;
-    }
-
-    void EstimateCost(const TDriveModel &drive) override {
-        Cost = drive.TrimTimeForSizeNs(Size);
-    }
-
+        return ERequestType::RequestChunkTrim; 
+    } 
+ 
+    void EstimateCost(const TDriveModel &drive) override { 
+        Cost = drive.TrimTimeForSizeNs(Size); 
+    } 
+ 
     bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) override {
-        Y_UNUSED(drive); Y_UNUSED(appendBlockSize); Y_UNUSED(adhesion);
-        if (slackNs > Cost) {
-            slackNs -= Cost;
-            return true;
-        } else {
-            return true;
-        }
-    }
-};
-
-
+        Y_UNUSED(drive); Y_UNUSED(appendBlockSize); Y_UNUSED(adhesion); 
+        if (slackNs > Cost) { 
+            slackNs -= Cost; 
+            return true; 
+        } else { 
+            return true; 
+        } 
+    } 
+}; 
+ 
+ 
 //
 // THarakiri
 //

@@ -1,9 +1,9 @@
-Blocks {
-   ProbeDesc {
-       Group: "LWTRACE_EXAMPLE_PROVIDER"
-    }
-    Action {
-        PrintToStderrAction { }
-    }
-}
-
+Blocks { 
+   ProbeDesc { 
+       Group: "LWTRACE_EXAMPLE_PROVIDER" 
+    } 
+    Action { 
+        PrintToStderrAction { } 
+    } 
+} 
+ 

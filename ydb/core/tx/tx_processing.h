@@ -117,7 +117,7 @@ struct TEvTxProcessing {
             Record.SetTabletDest(tabletDest);
             Record.SetTabletProducer(tabletProducer);
             Record.SetReadSet(readSet);
-            Record.SetSeqno(seqno);
+            Record.SetSeqno(seqno); 
         }
 
         TString ToString() const {
@@ -128,18 +128,18 @@ struct TEvTxProcessing {
             str << " TabletDest# " << Record.GetTabletDest();
             str << " SetTabletProducer# " << Record.GetTabletProducer();
             str << " ReadSet.Size()# " << Record.GetReadSet().size();
-            str << " Seqno# " << Record.GetSeqno();
+            str << " Seqno# " << Record.GetSeqno(); 
             // BalanceTrackList
             str << "}";
             return str.Str();
         }
     };
 
-    struct TEvReadSetAck : public TThrRefBase, public TEventPB<TEvReadSetAck, NKikimrTx::TEvReadSetAck, EvReadSetAck> {
+    struct TEvReadSetAck : public TThrRefBase, public TEventPB<TEvReadSetAck, NKikimrTx::TEvReadSetAck, EvReadSetAck> { 
         TEvReadSetAck()
         {}
 
-        TEvReadSetAck(ui64 step, ui64 orderId, ui64 tabletSource, ui64 tabletDest, ui64 tabletConsumer, ui32 flags, ui64 seqno = 0)
+        TEvReadSetAck(ui64 step, ui64 orderId, ui64 tabletSource, ui64 tabletDest, ui64 tabletConsumer, ui32 flags, ui64 seqno = 0) 
         {
             Record.SetStep(step);
             Record.SetTxId(orderId);
@@ -147,7 +147,7 @@ struct TEvTxProcessing {
             Record.SetTabletDest(tabletDest);
             Record.SetTabletConsumer(tabletConsumer);
             Record.SetFlags(flags);
-            Record.SetSeqno(seqno);
+            Record.SetSeqno(seqno); 
         }
 
         TEvReadSetAck(const TEvReadSet& evReadSet, ui64 tabletConsumer)
@@ -169,7 +169,7 @@ struct TEvTxProcessing {
             str << " TabletDest# " << Record.GetTabletDest();
             str << " SetTabletConsumer# " << Record.GetTabletConsumer();
             str << " Flags# " << Record.GetFlags();
-            str << " Seqno# " << Record.GetSeqno();
+            str << " Seqno# " << Record.GetSeqno(); 
             str << "}";
             return str.Str();
         }

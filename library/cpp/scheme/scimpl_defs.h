@@ -117,14 +117,14 @@ namespace NSc {
         }
     };
 
-    struct TProtoOpts {
-        // Serialization throws on unknown enum value if not set, else use default value
-        bool UnknownEnumValueIsDefault = false;
-
-        // Serialization throws on type mismatch if not set, else leaves protobuf empty
-        bool SkipTypeMismatch = false;
-    };
-
+    struct TProtoOpts { 
+        // Serialization throws on unknown enum value if not set, else use default value 
+        bool UnknownEnumValueIsDefault = false; 
+ 
+        // Serialization throws on type mismatch if not set, else leaves protobuf empty 
+        bool SkipTypeMismatch = false; 
+    }; 
+ 
     namespace NImpl {
         class TKeySortContext;
         class TSelfLoopContext;

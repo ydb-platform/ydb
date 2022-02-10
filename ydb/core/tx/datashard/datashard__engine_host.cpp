@@ -12,17 +12,17 @@
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
-
+ 
 #include <library/cpp/actors/core/log.h>
 
 #include <util/generic/cast.h>
 
-namespace NKikimr {
+namespace NKikimr { 
 namespace NDataShard {
-
-using namespace NMiniKQL;
-using namespace NTabletFlatExecutor;
-
+ 
+using namespace NMiniKQL; 
+using namespace NTabletFlatExecutor; 
+ 
 namespace {
 
 NUdf::TUnboxedValue CreateRow(const TVector<TCell>& inRow,
@@ -279,19 +279,19 @@ TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self) {
 
 ///
 class TDataShardEngineHost : public TEngineHost {
-public:
+public: 
     TDataShardEngineHost(TDataShard* self, NTable::TDatabase& db, TEngineHostCounters& counters, ui64& lockTxId, TInstant now)
         : TEngineHost(db, counters,
             TEngineHostSettings(self->TabletID(),
                 (self->State == TShardState::Readonly || self->State == TShardState::Frozen),
                 self->ByKeyFilterDisabled(),
                 self->GetKeyAccessSampler()))
-        , Self(self)
+        , Self(self) 
         , DB(db)
         , LockTxId(lockTxId)
         , Now(now)
     {}
-
+ 
     void SetWriteVersion(TRowVersion writeVersion) {
         WriteVersion = writeVersion;
     }
@@ -361,7 +361,7 @@ public:
     NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
         TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
         const THolderFactory& holderFactory) override
-    {
+    { 
         if (TSysTables::IsSystemTable(tableId)) {
             return DataShardSysTable(tableId).SelectRow(row, columnIds, returnType, readTarget, holderFactory);
         }
@@ -370,13 +370,13 @@ public:
 
         Self->SetTableAccessTime(tableId, Now);
         return TEngineHost::SelectRow(tableId, row, columnIds, returnType, readTarget, holderFactory);
-    }
-
+    } 
+ 
     NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
         TStructLiteral* columnIds,  TListLiteral* skipNullKeys, TStructType* returnType,
         const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
         std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) override
-    {
+    { 
         Y_VERIFY(!TSysTables::IsSystemTable(tableId), "SelectRange no system table is not supported");
 
         Self->SysLocksTable().SetLock(tableId, range, LockTxId);
@@ -384,8 +384,8 @@ public:
         Self->SetTableAccessTime(tableId, Now);
         return TEngineHost::SelectRange(tableId, range, columnIds, skipNullKeys, returnType, readTarget,
             itemsLimit, bytesLimit, reverse, forbidNullArgs, holderFactory);
-    }
-
+    } 
+ 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).UpdateRow(row, commands);
@@ -436,8 +436,8 @@ public:
         } else {
             TEngineHost::UpdateRow(tableId, row, commands);
         }
-    }
-
+    } 
+ 
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);
@@ -447,10 +447,10 @@ public:
         Self->SysLocksTable().BreakLock(tableId, row);
 
         Self->SetTableUpdateTime(tableId, Now);
-        TEngineHost::EraseRow(tableId, row);
-    }
-
-    // Returns whether row belong this shard.
+        TEngineHost::EraseRow(tableId, row); 
+    } 
+ 
+    // Returns whether row belong this shard. 
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override {
         if (TSysTables::IsSystemTable(tableId))
             return DataShardSysTable(tableId).IsMyKey(row);
@@ -464,17 +464,17 @@ public:
         // Check row against range
         const TUserTable& info = *iter->second;
         return (ComparePointAndRange(row, info.GetTableRange(), info.KeyColumnTypes, info.KeyColumnTypes) == 0);
-    }
-
-    bool IsPathErased(const TTableId& tableId) const override {
+    } 
+ 
+    bool IsPathErased(const TTableId& tableId) const override { 
         if (TSysTables::IsSystemTable(tableId))
             return false;
         return TDataShardEngineHost::LocalTableId(tableId) == 0;
-    }
-
-    ui64 LocalTableId(const TTableId &tableId) const override {
+    } 
+ 
+    ui64 LocalTableId(const TTableId &tableId) const override { 
         return Self->GetLocalTableId(tableId);
-    }
+    } 
 
     ui64 GetTableSchemaVersion(const TTableId& tableId) const override {
         if (TSysTables::IsSystemTable(tableId))
@@ -491,7 +491,7 @@ public:
         }
     }
 
-private:
+private: 
     const TDataShardSysTable& DataShardSysTable(const TTableId& tableId) const {
         return static_cast<const TDataShardSysTables *>(Self->GetDataShardSysTables())->Get(tableId);
     }
@@ -504,8 +504,8 @@ private:
     TRowVersion WriteVersion = TRowVersion::Max();
     TRowVersion ReadVersion = TRowVersion::Min();
     mutable THashMap<TTableId, THolder<IChangeCollector>> ChangeCollectors;
-};
-
+}; 
+ 
 //
 
 TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActorContext& ctx,

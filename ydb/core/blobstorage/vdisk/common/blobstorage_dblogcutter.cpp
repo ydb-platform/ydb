@@ -150,10 +150,10 @@ namespace NKikimr {
 
             TStringStream str;
             str << "\n";
-            HTML(str) {
-                DIV_CLASS("panel panel-default") {
-                    DIV_CLASS("panel-heading") {str << "LogCutter";}
-                    DIV_CLASS("panel-body") {
+            HTML(str) { 
+                DIV_CLASS("panel panel-default") { 
+                    DIV_CLASS("panel-heading") {str << "LogCutter";} 
+                    DIV_CLASS("panel-body") { 
                         str << "Hull: [LsnToKeep=" << HullLsnToKeep
                             << ", LastUpdate=" << ToStringLocalTimeUpToSeconds(HullLastTime) << "]<br>";
                         str << "SyncLog: [LsnToKeep=" << SyncLogLsnToKeep
@@ -172,9 +172,9 @@ namespace NKikimr {
 
                         str << "FirstDuration: " << FirstDuration << "<br>";
                         str << "RegularDuration: " << RegularDuration << "<br>";
-                    }
-                }
-            }
+                    } 
+                } 
+            } 
             str << "\n";
 
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::LogCutterId));

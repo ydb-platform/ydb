@@ -42,9 +42,9 @@ namespace NKikimr {
             {}
 
             void operator() (IOutputStream &str, TSyncNeighbors::TConstIterator it) {
-                HTML(str) {
-                    SMALL() {
-                        STRONG() {
+                HTML(str) { 
+                    SMALL() { 
+                        STRONG() { 
                             // output VDiskID
                             auto vd = GInfo.GetVDiskId(it->VDiskIdShort);
                             str << "VDiskId: " << vd.ToStringWOGeneration() << "<br>";
@@ -58,16 +58,16 @@ namespace NKikimr {
                             } else {
                                 str << "Node: " << info->Host << ":" << info->Port << "<br>";
                             }
-                        }
-                    }
+                        } 
+                    } 
 
                     if (it->Myself) {
-                        PARA_CLASS("text-info") {str << "Self";}
+                        PARA_CLASS("text-info") {str << "Self";} 
                     } else {
                         const NSyncer::TPeer &peer = it->Get();
                         peer.OutputHtml(str);
                     }
-                }
+                } 
             }
         };
 

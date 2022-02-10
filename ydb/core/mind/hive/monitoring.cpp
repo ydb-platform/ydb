@@ -92,86 +92,86 @@ public:
     }
 
     void RenderHTMLPage(IOutputStream &out) {
-        HTML(out) {
-             UL_CLASS("nav nav-tabs") {
-                 LI_CLASS("active") {
+        HTML(out) { 
+             UL_CLASS("nav nav-tabs") { 
+                 LI_CLASS("active") { 
                      out << "<a href=\"#known-tablets\" data-toggle=\"tab\">Tablets</a>";
-                 }
-                 LI() {
+                 } 
+                 LI() { 
                      out << "<a href=\"#per-node-stats\" data-toggle=\"tab\">Nodes</a>";
-                 }
-             }
-             DIV_CLASS("tab-content") {
-                 DIV_CLASS_ID("tab-pane fade in active", "known-tablets") {
-                     TABLE_SORTABLE_CLASS("table") {
-                         TABLEHEAD() {
-                              TABLER() {
-                                  TABLEH() {out << "Tablet";}
-                                  TABLEH() {out << "ID";}
-                                  TABLEH() {out << "KnownGeneration";}
+                 } 
+             } 
+             DIV_CLASS("tab-content") { 
+                 DIV_CLASS_ID("tab-pane fade in active", "known-tablets") { 
+                     TABLE_SORTABLE_CLASS("table") { 
+                         TABLEHEAD() { 
+                              TABLER() { 
+                                  TABLEH() {out << "Tablet";} 
+                                  TABLEH() {out << "ID";} 
+                                  TABLEH() {out << "KnownGeneration";} 
                                   TABLEH() {out << "LeaderNode";}
-                                  TABLEH() {out << "State";}
-                                  TABLEH_CLASS("sorter-false") {}
-                              }
-                          }
-                          TABLEBODY() {
+                                  TABLEH() {out << "State";} 
+                                  TABLEH_CLASS("sorter-false") {} 
+                              } 
+                          } 
+                          TABLEBODY() { 
                              ui64 index = 0;
                              for (const auto &tabletPair : TabletInfo) {
                                  const ui64 tabletId = tabletPair.first;
                                  const auto &x = tabletPair.second;
-                                 TABLER() {
+                                 TABLER() { 
                                       out << "<td data-text='" << index << "'>" << "<a href=\"../tablets?TabletID="
                                                   << tabletId << "\">"
                                                   << TTabletTypes::TypeToStr((TTabletTypes::EType)x.TabletType)
                                                   << "</a></td>";
-                                      TABLED() {out << tabletId;}
-                                      TABLED() {out << x.KnownGeneration;}
+                                      TABLED() {out << tabletId;} 
+                                      TABLED() {out << x.KnownGeneration;} 
                                       TABLED_CLASS(x.LeaderNode ? "" : "warning")
                                              {out << x.LeaderNode;}
-                                      TABLED() {out << ETabletStateName(x.TabletState);}
-                                      TABLED() {out << " <a href=\"../tablets?SsId="
+                                      TABLED() {out << ETabletStateName(x.TabletState);} 
+                                      TABLED() {out << " <a href=\"../tablets?SsId=" 
                                                   << tabletId << "\">"
                                                   << "<span class=\"glyphicon glyphicon-tasks\""
                                                   << " title=\"State Storage\"/>"
-                                                  << "</a>";}
-                                 }
+                                                  << "</a>";} 
+                                 } 
                                  ++index;
                              }
-                         }
-                     }
-                 }
-                 DIV_CLASS_ID("tab-pane fade", "per-node-stats") {
-                     TABLE_SORTABLE_CLASS("table") {
-                          TABLEHEAD() {
-                              TABLER() {
-                                  TABLEH() {out << "NodeId";}
-                                  TABLEH() {out << "Count";}
-                              }
-                          }
-                          TABLEBODY() {
+                         } 
+                     } 
+                 } 
+                 DIV_CLASS_ID("tab-pane fade", "per-node-stats") { 
+                     TABLE_SORTABLE_CLASS("table") { 
+                          TABLEHEAD() { 
+                              TABLER() { 
+                                  TABLEH() {out << "NodeId";} 
+                                  TABLEH() {out << "Count";} 
+                              } 
+                          } 
+                          TABLEBODY() { 
                               for (const auto &nodePair : NodeInfo) {
                                   const ui32 nodeId = nodePair.first;
                                   const auto &x = nodePair.second;
                                   if (nodeId != 0 || x.Local) {
-                                      TABLER() {
+                                      TABLER() { 
                                           if (nodeId == 0) {
                                              TABLED_CLASS("danger") {out << "w/o leader node"; }
                                           } else {
-                                             TABLED() {out << nodeId; }
+                                             TABLED() {out << nodeId; } 
                                           }
                                           if (x.Local) {
-                                             TABLED() {out << x.TabletsOn;}
+                                             TABLED() {out << x.TabletsOn;} 
                                           } else {
-                                             TABLED_CLASS("danger") {out << "down";}
+                                             TABLED_CLASS("danger") {out << "down";} 
                                           }
-                                      }
+                                      } 
                                   }
                               }
-                         }
-                     }
-                 }
-             }
-        }
+                         } 
+                     } 
+                 } 
+             } 
+        } 
     }
 };
 

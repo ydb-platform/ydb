@@ -1,17 +1,17 @@
-#pragma once
-
+#pragma once 
+ 
 #include "change_collector_iface.h"
 
-#include <util/generic/cast.h>
+#include <util/generic/cast.h> 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
-
-namespace NKikimr {
+ 
+namespace NKikimr { 
 namespace NMiniKQL {
-
+ 
 struct TEngineHostCounters {
     ui64 NSelectRow = 0;
     ui64 NSelectRange = 0;
@@ -90,15 +90,15 @@ struct TEngineHostSettings {
 };
 
 class TEngineHost : public IEngineFlatHost {
-public:
+public: 
     using TScheme = NTable::TScheme;
 
     explicit TEngineHost(NTable::TDatabase& db, TEngineHostCounters& counters,
         const TEngineHostSettings& settings = TEngineHostSettings());
-    ui64 GetShardId() const override;
+    ui64 GetShardId() const override; 
     const TScheme::TTableInfo* GetTableInfo(const TTableId& tableId) const override;
-    bool IsReadonly() const override;
-    bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override;
+    bool IsReadonly() const override; 
+    bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override; 
     ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const override;
     ui64 CalculateResultSize(const TKeyDesc& key) const override;
     void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) override;
@@ -115,10 +115,10 @@ public:
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
         const TArrayRef<const TUpdateCommand>& commands) override;
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override;
-    bool IsPathErased(const TTableId& tableId) const override;
+    bool IsPathErased(const TTableId& tableId) const override; 
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override;
     ui64 GetTableSchemaVersion(const TTableId&) const override;
-
+ 
     void SetPeriodicCallback(TPeriodicCallback&& callback) override;
     void ExecPeriodicCallback() { if (PeriodicCallback) { PeriodicCallback();} }
 
@@ -129,20 +129,20 @@ public:
 
     virtual IChangeCollector* GetChangeCollector(const TTableId& tableId) const = 0;
 
-protected:
-    virtual ui64 LocalTableId(const TTableId& tableId) const;
+protected: 
+    virtual ui64 LocalTableId(const TTableId& tableId) const; 
     void ConvertKeys(const TScheme::TTableInfo* tableInfo, const TArrayRef<const TCell>& row,
         TSmallVec<TRawTypeValue>& key) const;
     void DoCalculateReadSize(const TKeyDesc& key, NTable::TSizeEnv& env) const;
 
-protected:
+protected: 
     NTable::TDatabase& Db;
-    const TScheme& Scheme;
+    const TScheme& Scheme; 
     const TEngineHostSettings Settings;
     TEngineHostCounters& Counters;
     TPeriodicCallback PeriodicCallback;
-};
-
+}; 
+ 
 class TUnversionedEngineHost : public TEngineHost {
 public:
     using TEngineHost::TEngineHost;
@@ -173,4 +173,4 @@ NUdf::TUnboxedValue CreateSelectRangeLazyRowsList(NTable::TDatabase& db, const N
 void ConvertTableKeys(const NTable::TScheme& scheme, const NTable::TScheme::TTableInfo* tableInfo,
     const TArrayRef<const TCell>& row, TSmallVec<TRawTypeValue>& key, ui64* keyDataBytes);
 
-}}
+}} 

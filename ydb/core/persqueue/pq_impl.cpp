@@ -451,44 +451,44 @@ private:
         ui32 mx = 0;
         for (auto& r: Results) mx = Max<ui32>(mx, r.second.size());
 
-        HTML(str) {
-            H2() {str << "PersQueue Tablet";}
-            H3() {str << "Topic: " << TopicName;}
+        HTML(str) { 
+            H2() {str << "PersQueue Tablet";} 
+            H3() {str << "Topic: " << TopicName;} 
             H4() {str << "inflight: " << Inflight;}
-            UL_CLASS("nav nav-tabs") {
-                LI_CLASS("active") {
+            UL_CLASS("nav nav-tabs") { 
+                LI_CLASS("active") { 
                     str << "<a href=\"#main\" data-toggle=\"tab\">main</a>";
-                }
-                LI() {
+                } 
+                LI() { 
                     str << "<a href=\"#cache\" data-toggle=\"tab\">cache</a>";
-                }
+                } 
                 for (auto& r: Results) {
-                    LI() {
+                    LI() { 
                         str << "<a href=\"#partition_" << r.first << "\" data-toggle=\"tab\">" << r.first << "</a>";
-                    }
+                    } 
                 }
-            }
-            DIV_CLASS("tab-content") {
-                DIV_CLASS_ID("tab-pane fade in active", "main") {
-                    TABLE() {
+            } 
+            DIV_CLASS("tab-content") { 
+                DIV_CLASS_ID("tab-pane fade in active", "main") { 
+                    TABLE() { 
                         for (ui32 i = 0; i < mx; ++i) {
-                            TABLER() {
+                            TABLER() { 
                                 for (auto& r : Results) {
-                                    TABLED() {
+                                    TABLED() { 
                                         if (r.second.size() > i)
                                             str << r.second[i];
-                                    }
+                                    } 
                                 }
-                            }
+                            } 
                         }
-                    }
-                }
+                    } 
+                } 
                 for (auto& s: Str) {
                     str << s;
                 }
-            }
-            H3() {str << "<a href=\"app?TabletID=" << TabletID << "&kv=1\">KV-tablet internals</a>";}
-        }
+            } 
+            H3() {str << "<a href=\"app?TabletID=" << TabletID << "&kv=1\">KV-tablet internals</a>";} 
+        } 
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Answer TEvRemoteHttpInfoRes: to " << Sender << " self " << ctx.SelfID);
         ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         Die(ctx);

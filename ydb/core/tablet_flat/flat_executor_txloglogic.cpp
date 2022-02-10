@@ -42,7 +42,7 @@ void TLogicRedo::Describe(IOutputStream &out) const noexcept
 
 void TLogicRedo::InstallCounters(TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters) {
     Counters = counters;
-    AppTxCounters = appTxCounters;
+    AppTxCounters = appTxCounters; 
 }
 
 NRedo::TStats TLogicRedo::LogStats() const noexcept
@@ -72,7 +72,7 @@ bool TLogicRedo::TerminateTransaction(TAutoPtr<TSeat> seat, const TActorContext 
 
 void CompleteRoTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx, TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters ) {
     const TTxType txType = seat->Self->GetTxType();
-
+ 
     const ui64 latencyus = ui64(1000000. * seat->LatencyTimer.Passed());
     counters->Percentile()[TExecutorCounters::TX_PERCENTILE_LATENCY_RO].IncrementFor(latencyus);
 

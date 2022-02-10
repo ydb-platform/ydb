@@ -214,9 +214,9 @@ namespace NKikimr {
         {}
 
         void TDiskRecLogSnapshot::OutputHtml(IOutputStream &str) const {
-            HTML(str) {
-                DIV_CLASS("well well-sm") {
-                    STRONG() {str << "TDiskRecLog<br>";}
+            HTML(str) { 
+                DIV_CLASS("well well-sm") { 
+                    STRONG() {str << "TDiskRecLog<br>";} 
                     if (Empty()) {
                         str << "Log is empty<br>";
                     } else {
@@ -225,9 +225,9 @@ namespace NKikimr {
                     }
                     str << "ChunksUsed: " << ManyIdxChunks.size() << "<br>";
                     // print out Index
-                    PARA() {
+                    PARA() { 
                         if (!ManyIdxChunks.empty()) {
-                            str << "Index {Lsn, ChunkIdx, OffsetInPages, PagesNum}:";
+                            str << "Index {Lsn, ChunkIdx, OffsetInPages, PagesNum}:"; 
                             unsigned counter = 0;
                             for (const auto &i: ManyIdxChunks) {
                                 if (++counter > 10) {
@@ -238,9 +238,9 @@ namespace NKikimr {
                                 i->OutputHtml(str);
                             }
                         }
-                    }
-                }
-            }
+                    } 
+                } 
+            } 
         }
 
         TString TDiskRecLogSnapshot::BoundariesToString() const {

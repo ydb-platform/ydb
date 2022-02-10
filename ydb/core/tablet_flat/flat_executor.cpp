@@ -1741,7 +1741,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     if (pad->Seat->Retries == 1) {
         Counters->Cumulative()[TExecutorCounters::TX_RETRIED].Increment(1);
         Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(touchedPages);
-    }
+    } 
 
     Counters->Cumulative()[TExecutorCounters::TX_BYTES_READ].Increment(loadBytes);
     Counters->Cumulative()[TExecutorCounters::TX_CACHE_MISSES].Increment(loadPages);
@@ -1768,8 +1768,8 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
             PrivatePageCache->Touch(blockId, pageCollectionInfo);
     }
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_TOUCHED_BLOCKS].IncrementFor(touchedBlocks);
-    if (AppTxCounters && txType != UnknownTxType)
-        AppTxCounters->TxCumulative(txType, COUNTER_TT_TOUCHED_BLOCKS).Increment(touchedBlocks);
+    if (AppTxCounters && txType != UnknownTxType) 
+        AppTxCounters->TxCumulative(txType, COUNTER_TT_TOUCHED_BLOCKS).Increment(touchedBlocks); 
 
     if (seat->Retries == 1) {
         Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(touchedBlocks);
@@ -2275,10 +2275,10 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_EXECUTE_CPUTIME].IncrementFor(execTimeuS);
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BOOKKEEPING_CPUTIME].IncrementFor(bookkeepingTimeuS);
     Counters->Cumulative()[TExecutorCounters::CONSUMED_CPU].Increment(execTimeuS + bookkeepingTimeuS);
-    if (AppTxCounters && txType != UnknownTxType) {
-        AppTxCounters->TxCumulative(txType, COUNTER_TT_EXECUTE_CPUTIME).Increment(execTimeuS);
-        AppTxCounters->TxCumulative(txType, COUNTER_TT_BOOKKEEPING_CPUTIME).Increment(bookkeepingTimeuS);
-    }
+    if (AppTxCounters && txType != UnknownTxType) { 
+        AppTxCounters->TxCumulative(txType, COUNTER_TT_EXECUTE_CPUTIME).Increment(execTimeuS); 
+        AppTxCounters->TxCumulative(txType, COUNTER_TT_BOOKKEEPING_CPUTIME).Increment(bookkeepingTimeuS); 
+    } 
 
     if (ResourceMetrics) {
         ResourceMetrics->CPU.Increment(bookkeepingTimeuS + execTimeuS, Time->Now());
@@ -3632,28 +3632,28 @@ void TExecutor::RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
     TStringStream str;
 
     if (Database) {
-        HTML(str) {
+        HTML(str) { 
             str << "<style>";
             str << "table.metrics { margin-bottom: 20px; }";
             str << "table.metrics td { text-align: right; padding-right: 10px; }";
             str << "table.metrics td:nth-child(3) { text-align: left; }";
             str << "</style>";
             if (Counters) {
-                H3() {str << "Executor counters";}
+                H3() {str << "Executor counters";} 
                 Counters->OutputHtml(str);
             }
 
             if (AppCounters) {
-                H3() {str << "App counters";}
+                H3() {str << "App counters";} 
                 AppCounters->OutputHtml(str);
             }
 
             if (ResourceMetrics) {
                 str << NMetrics::AsHTML(*ResourceMetrics);
             }
-        }
+        } 
     } else {
-        HTML(str) {str << "loading...";} // todo: populate from bootlogic
+        HTML(str) {str << "loading...";} // todo: populate from bootlogic 
     }
 
     Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
@@ -3690,7 +3690,7 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
         } else {
             message = "ERROR: cannot parse table id";
         }
-        HTML(str) {
+        HTML(str) { 
             DIV_CLASS("row") {
                 DIV_CLASS("col-md-12") {str << message; }
             }
@@ -3722,24 +3722,24 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
                 DIV_CLASS("row") { str << "Booted tablet without dbase"; }
             }
 
-            H3() {str << "Scheme:";}
+            H3() {str << "Scheme:";} 
             TVector<ui32> tables;
             for (const auto &xtable : scheme->Tables)
                 tables.push_back(xtable.first);
             Sort(tables);
             for (auto itable : tables) {
                 const auto &tinfo = scheme->Tables.find(itable)->second;
-                H4() {str << "<a href='db?TabletID=" << Owner->TabletID() << "&TableID=" << tinfo.Id << "'>Table: \"" << tinfo.Name << "\" id: " << tinfo.Id << "</a>";}
-                TABLE_SORTABLE_CLASS("table") {
-                    TABLEHEAD() {
-                        TABLER() {
-                            TABLEH() {str << "Name";}
-                            TABLEH() {str << "Id";}
-                            TABLEH() {str << "Type";}
-                            TABLEH() {str << "Key order";}
-                         }
-                    }
-                    TABLEBODY() {
+                H4() {str << "<a href='db?TabletID=" << Owner->TabletID() << "&TableID=" << tinfo.Id << "'>Table: \"" << tinfo.Name << "\" id: " << tinfo.Id << "</a>";} 
+                TABLE_SORTABLE_CLASS("table") { 
+                    TABLEHEAD() { 
+                        TABLER() { 
+                            TABLEH() {str << "Name";} 
+                            TABLEH() {str << "Id";} 
+                            TABLEH() {str << "Type";} 
+                            TABLEH() {str << "Key order";} 
+                         } 
+                    } 
+                    TABLEBODY() { 
                         TVector<ui32> columns;
                         for (const auto &xcol : tinfo.Columns)
                             columns.push_back(xcol.first);
@@ -3747,18 +3747,18 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
                         for (auto icol : columns) {
                             const auto &col = tinfo.Columns.find(icol)->second;
                             const bool isKey = (tinfo.KeyColumns.end() != std::find(tinfo.KeyColumns.begin(), tinfo.KeyColumns.end(), col.Id));
-                            TABLER() {
-                                TABLED() {str << col.Name;}
-                                TABLED() {str << col.Id;}
-                                TABLED() {str << tr.GetTypeName(col.PType);}
-                                TABLED() {str << (isKey ? ToString(col.KeyOrder) : "");}
-                            }
+                            TABLER() { 
+                                TABLED() {str << col.Name;} 
+                                TABLED() {str << col.Id;} 
+                                TABLED() {str << tr.GetTypeName(col.PType);} 
+                                TABLED() {str << (isKey ? ToString(col.KeyOrder) : "");} 
+                            } 
                         }
-                    }
-                }
+                    } 
+                } 
             }
 
-            H3() {str << "Storage:";}
+            H3() {str << "Storage:";} 
             DIV_CLASS("row") {str << "Bytes pinned in cache: " << PrivatePageCache->GetStats().PinnedSetSize << Endl; }
             DIV_CLASS("row") {str << "Bytes pinned to load: " << PrivatePageCache->GetStats().PinnedLoadSize << Endl; }
 
@@ -3770,8 +3770,8 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
                 CompactionLogic->OutputHtml(str, *scheme, cgi);
 
             H3() {str << "Page collection cache:";}
-            DIV_CLASS("row") {str << "fresh bytes: " << CounterCacheFresh->Val(); }
-            DIV_CLASS("row") {str << "staging bytes: " << CounterCacheStaging->Val(); }
+            DIV_CLASS("row") {str << "fresh bytes: " << CounterCacheFresh->Val(); } 
+            DIV_CLASS("row") {str << "staging bytes: " << CounterCacheStaging->Val(); } 
             DIV_CLASS("row") {str << "memTable bytes: " << CounterCacheMemTable->Val(); }
             DIV_CLASS("row") {str << "Total collections: " << PrivatePageCache->GetStats().TotalCollections; }
             DIV_CLASS("row") {str << "Total bytes in shared cache: " << PrivatePageCache->GetStats().TotalSharedBody; }
@@ -3781,26 +3781,26 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
             DIV_CLASS("row") {str << "Total bytes marked as sticky: " << PrivatePageCache->GetStats().TotalSticky; }
 
             if (GcLogic) {
-                H3() {str << "Gc logic:";}
+                H3() {str << "Gc logic:";} 
                 auto gcInfo = GcLogic->IntrospectStateSize();
-                DIV_CLASS("row") {str << "uncommited entries: " << gcInfo.UncommitedEntries;}
-                DIV_CLASS("row") {str << "uncommited blob ids: " << gcInfo.UncommitedBlobIds; }
-                DIV_CLASS("row") {str << "uncommited entries bytes: " << gcInfo.UncommitedEntriesBytes;}
-                DIV_CLASS("row") {str << "commited entries: " << gcInfo.CommitedEntries;}
-                DIV_CLASS("row") {str << "commited blob ids known: " << gcInfo.CommitedBlobIdsKnown;}
-                DIV_CLASS("row") {str << "commited blob ids left: " << gcInfo.CommitedBlobIdsLeft;}
-                DIV_CLASS("row") {str << "commited entries bytes: " << gcInfo.CommitedEntriesBytes; }
-                DIV_CLASS("row") {str << "active collect barriers: " << gcInfo.BarriersSetSize; }
+                DIV_CLASS("row") {str << "uncommited entries: " << gcInfo.UncommitedEntries;} 
+                DIV_CLASS("row") {str << "uncommited blob ids: " << gcInfo.UncommitedBlobIds; } 
+                DIV_CLASS("row") {str << "uncommited entries bytes: " << gcInfo.UncommitedEntriesBytes;} 
+                DIV_CLASS("row") {str << "commited entries: " << gcInfo.CommitedEntries;} 
+                DIV_CLASS("row") {str << "commited blob ids known: " << gcInfo.CommitedBlobIdsKnown;} 
+                DIV_CLASS("row") {str << "commited blob ids left: " << gcInfo.CommitedBlobIdsLeft;} 
+                DIV_CLASS("row") {str << "commited entries bytes: " << gcInfo.CommitedEntriesBytes; } 
+                DIV_CLASS("row") {str << "active collect barriers: " << gcInfo.BarriersSetSize; } 
             }
 
             if (BorrowLogic) {
-                H3() {str << "Borrow logic:";}
+                H3() {str << "Borrow logic:";} 
                 BorrowLogic->OutputHtml(str);
             }
-        }
+        } 
 
     } else {
-        HTML(str) {str << "loading...";} // todo: populate from bootlogic
+        HTML(str) {str << "loading...";} // todo: populate from bootlogic 
     }
 
     Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
@@ -3815,7 +3815,7 @@ void TExecutor::RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> app
     AppCounters = appCounters;
     AppCountersBaseline = MakeHolder<TTabletCountersBase>();
     AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
-
+ 
     if (LogicRedo) {
         AppTxCounters = dynamic_cast<TTabletCountersWithTxTypes*>(AppCounters.Get());
         LogicRedo->InstallCounters(Counters.Get(), AppTxCounters);

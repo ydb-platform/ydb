@@ -28,7 +28,7 @@ namespace NKikimr {
             switch (diskPart.Situation) {
                 case TBlobState::ESituation::Unknown: {
                     // get the request -- all the needed parts except already got and already requested
-                    TIntervalSet<i32> request(state.Whole.Needed);
+                    TIntervalSet<i32> request(state.Whole.Needed); 
                     request.Subtract(state.Whole.Here);
                     // remove parts that were already requested, but not yet answered
                     request.Subtract(diskPart.Requested);
@@ -73,10 +73,10 @@ namespace NKikimr {
                 // check if we can obtain some _new_ data from the part
                 if (!part.Here.IsSubsetOf(state.Whole.Here)) {
                     // scan through all the intervals
-                    for (const auto& range : part.Here) {
+                    for (const auto& range : part.Here) { 
                         ui64 begin = range.first;
                         const ui64 end = range.second;
-                        TIntervalVec<i32> interval(begin, end);
+                        TIntervalVec<i32> interval(begin, end); 
                         // check if this interval contains some data which is not in state.Whole.Here
                         if (!interval.IsSubsetOf(state.Whole.Here)) {
                             char buffer[4096];

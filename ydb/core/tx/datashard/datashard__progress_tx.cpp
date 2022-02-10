@@ -1,28 +1,28 @@
 #include "datashard_txs.h"
 #include "datashard_failpoints.h"
-
-namespace NKikimr {
+ 
+namespace NKikimr { 
 namespace NDataShard {
-
+ 
 TDataShard::TTxProgressTransaction::TTxProgressTransaction(TDataShard *self, TOperation::TPtr op)
-    : TBase(self)
+    : TBase(self) 
     , ActiveOp(std::move(op))
 {}
-
+ 
 bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProgressTransaction::Execute at " << Self->TabletID());
 
-    try {
+    try { 
         if (!Self->IsStateActive()) {
             Self->IncCounter(COUNTER_TX_PROGRESS_SHARD_INACTIVE);
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Progress tx at non-ready tablet " << Self->TabletID() << " state " << Self->State);
             Y_VERIFY(!ActiveOp, "Unexpected ActiveOp at inactive shard %" PRIu64, Self->TabletID());
             Self->PlanQueue.Reset(ctx);
-            return true;
-        }
-
+            return true; 
+        } 
+ 
         NIceDb::TNiceDb db(txc.DB);
 
         if (!ActiveOp) {
@@ -38,7 +38,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
             if (needFutureCleanup) {
                 Self->PlanCleanup(ctx);
             }
-
+ 
             // Allow another concurrent progress tx
             Self->PlanQueue.Reset(ctx);
             Self->Pipeline.ActivateWaitingTxOps(ctx);
@@ -56,8 +56,8 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
                        << ActiveOp->GetKind() << " " << *ActiveOp << " (unit "
                        << ActiveOp->GetCurrentUnit() << ") at " << Self->TabletID());
             ActiveOp->IncrementInProgress();
-        }
-
+        } 
+ 
         Y_VERIFY(ActiveOp && ActiveOp->IsInProgress());
         auto status = Self->Pipeline.RunExecutionPlan(ActiveOp, CompleteList, txc, ctx);
 
@@ -101,11 +101,11 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
 
         // Commit all side effects
         return true;
-    } catch (...) {
+    } catch (...) { 
         Y_FAIL("there must be no leaked exceptions");
-    }
-}
-
+    } 
+} 
+ 
 void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProgressTransaction::Complete at " << Self->TabletID());
@@ -133,6 +133,6 @@ void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
 
     Self->CheckSplitCanStart(ctx);
     Self->CheckMvccStateChangeCanStart(ctx);
-}
-
-}}
+} 
+ 
+}} 

@@ -276,29 +276,29 @@ namespace NKikimr {
                     }                       \
                 }
 
-#define PARAM(NAME)                    \
-                TABLER() {               \
-                    TABLED() {           \
-                        str << #NAME;  \
-                    }                  \
-                    TABLED() {           \
-                        str << NAME;   \
-                    }                  \
-                }
+#define PARAM(NAME)                    \ 
+                TABLER() {               \ 
+                    TABLED() {           \ 
+                        str << #NAME;  \ 
+                    }                  \ 
+                    TABLED() {           \ 
+                        str << NAME;   \ 
+                    }                  \ 
+                } 
 
-                HTML(str) {
-                    TABLE() {
-                        TABLEHEAD() {
-                            TABLER() {
-                                TABLEH() {
+                HTML(str) { 
+                    TABLE() { 
+                        TABLEHEAD() { 
+                            TABLER() { 
+                                TABLEH() { 
                                     str << "Parameter";
-                                }
-                                TABLEH() {
+                                } 
+                                TABLEH() { 
                                     str << "Value";
-                                }
-                            }
-                        }
-                        TABLEBODY() {
+                                } 
+                            } 
+                        } 
+                        TABLEBODY() { 
                             NAMED_PARAM("Elapsed time / Duration", (TAppData::TimeProvider->Now() - StartTime).Seconds()
                                     << "s / " << DurationSeconds << "s");
                             PARAM(TabletId)
@@ -320,9 +320,9 @@ namespace NKikimr {
                             TString avgSpeed = Sprintf("%.3lf %s", (double) BytesWritten / (1 << 20) /
                                     (TAppData::TimeProvider->Now() - StartTime).Seconds(), "MB/s");
                             NAMED_PARAM("Average speed", avgSpeed);
-                        }
-                    }
-                }
+                        } 
+                    } 
+                } 
                 ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
             }
 

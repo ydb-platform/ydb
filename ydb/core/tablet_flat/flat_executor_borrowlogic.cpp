@@ -526,9 +526,9 @@ void TExecutorBorrowLogic::RestoreBorrowedInfo(const TLogoBlobID &blobId, const 
 }
 
 void TExecutorBorrowLogic::OutputHtml(IOutputStream &out) {
-    HTML(out) {
-        H4() {out << "Borrowed parts";}
-        PRE() {
+    HTML(out) { 
+        H4() {out << "Borrowed parts";} 
+        PRE() { 
             for (const auto &xpair : BorrowedInfo) {
                 if (xpair.second.BorrowInfo.FullBorrow) {
                     out << xpair.first << ":";
@@ -537,10 +537,10 @@ void TExecutorBorrowLogic::OutputHtml(IOutputStream &out) {
                     out << Endl;
                 }
             }
-        }
+        } 
 
-        H4() {out << "Loaned parts";}
-        PRE() {
+        H4() {out << "Loaned parts";} 
+        PRE() { 
             for (const auto &xpair : BorrowedInfo) {
                 if (xpair.second.LoanInfo.Lender)
                     out << xpair.first << ": " << xpair.second.LoanInfo.Lender;
@@ -548,8 +548,8 @@ void TExecutorBorrowLogic::OutputHtml(IOutputStream &out) {
                     out << " - collected";
                 out << Endl;
             }
-        }
-    }
+        } 
+    } 
 }
 
 TString TExecutorBorrowLogic::DebugCheckBorrowConsistency(THashSet<TLogoBlobID> &knownBundles) {

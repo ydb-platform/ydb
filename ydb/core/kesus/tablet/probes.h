@@ -37,37 +37,37 @@ struct TActorIdParam {
           TYPES(TString, TString, TInstant, double, ui32),              \
           NAMES("quoter", "resource", "timestampSec", "giveAmount", "childWeight")) \
                                                                         \
-    PROBE(ResourceBillSend, GROUPS("QuoterResource", "RateAccounting"), \
-          TYPES(TString, TString, TString, ui64, TInstant, TInstant, TString, TString, TString, TString, TString, TString), \
-          NAMES("quoter", "resource", "category", "quantity", "billStartSec", "billEndSec", "version", "schema", "cloudId", "folderId", "resourceId", "sourceId")) \
-    PROBE(ResourceBillAdd, GROUPS("QuoterResource", "RateAccounting"), \
-          TYPES(TString, TString, TString, TInstant, TInstant, TDuration, double, double), \
-          NAMES("quoter", "resource", "category", "accumulatedSec", "accountSec", "accDeltaMs", "quantity", "value")) \
-    PROBE(ResourceAccountConfigure, GROUPS("QuoterResource", "RateAccounting"), \
-          TYPES(TString, TString, double, double, double, TInstant, double, double, double, TInstant), \
-          NAMES("quoter", "resource", "provisionedRate", "provisionedBurst", "provisionedAvail", "provisionedLastSec", "onDemandRate", "onDemandBurst", "onDemandAvail", "onDemandLastSec")) \
-    PROBE(ResourceAccount, GROUPS("QuoterResource", "RateAccounting"), \
-          TYPES(TString, TString, TInstant, double, double, double, double, double, double, double, double, double, double), \
-          NAMES("quoter", "resource", "accountSec", "provisionedAndOnDemand", "provisioned", "onDemand", "overshoot", "provisionedRate", "provisionedBurst", "provisionedAvail", "onDemandRate", "onDemandBurst", "onDemandAvail")) \
-    PROBE(ResourceReportDedup, GROUPS("QuoterResource", "RateAccounting", "RateAccountingReport"), \
-          TYPES(TString, TString, ui64, ui64, TInstant), \
-          NAMES("quoter", "resource", "skip", "size", "reportSec")) \
-    PROBE(ResourceReportDedupFull, GROUPS("QuoterResource", "RateAccounting", "RateAccountingReport"), \
-          TYPES(TString, TString, ui64, ui64, TInstant), \
-          NAMES("quoter", "resource", "skip", "size", "reportSec")) \
-    PROBE(ResourceReportAdd, GROUPS("QuoterResource", "RateAccounting", "RateAccountingReport"), \
-          TYPES(TString, TString, ui64, ui64, TInstant, TInstant), \
-          NAMES("quoter", "resource", "added", "size", "reportSec", "accountedSec")) \
-    PROBE(ResourceAccountingTooEarly, GROUPS("QuoterResource", "RateAccounting"), \
-          TYPES(TString, TString, TInstant, TInstant, TDuration), \
-          NAMES("quoter", "resource", "accountTillSec", "accountedSec", "accountPeriodMs")) \
-    PROBE(ResourceAccountingNoData, GROUPS("QuoterResource", "RateAccounting"), \
-          TYPES(TString, TString, TInstant, TInstant, TDuration), \
-          NAMES("quoter", "resource", "historyEndSec", "accountedSec", "maxBillingPeriodMs")) \
-    PROBE(ResourceAccountingSend, GROUPS("QuoterResource", "RateAccounting"), \
-          TYPES(TString, TString, TInstant, TInstant), \
-          NAMES("quoter", "resource", "accountTillSec", "accountedSec")) \
-                                                                        \
+    PROBE(ResourceBillSend, GROUPS("QuoterResource", "RateAccounting"), \ 
+          TYPES(TString, TString, TString, ui64, TInstant, TInstant, TString, TString, TString, TString, TString, TString), \ 
+          NAMES("quoter", "resource", "category", "quantity", "billStartSec", "billEndSec", "version", "schema", "cloudId", "folderId", "resourceId", "sourceId")) \ 
+    PROBE(ResourceBillAdd, GROUPS("QuoterResource", "RateAccounting"), \ 
+          TYPES(TString, TString, TString, TInstant, TInstant, TDuration, double, double), \ 
+          NAMES("quoter", "resource", "category", "accumulatedSec", "accountSec", "accDeltaMs", "quantity", "value")) \ 
+    PROBE(ResourceAccountConfigure, GROUPS("QuoterResource", "RateAccounting"), \ 
+          TYPES(TString, TString, double, double, double, TInstant, double, double, double, TInstant), \ 
+          NAMES("quoter", "resource", "provisionedRate", "provisionedBurst", "provisionedAvail", "provisionedLastSec", "onDemandRate", "onDemandBurst", "onDemandAvail", "onDemandLastSec")) \ 
+    PROBE(ResourceAccount, GROUPS("QuoterResource", "RateAccounting"), \ 
+          TYPES(TString, TString, TInstant, double, double, double, double, double, double, double, double, double, double), \ 
+          NAMES("quoter", "resource", "accountSec", "provisionedAndOnDemand", "provisioned", "onDemand", "overshoot", "provisionedRate", "provisionedBurst", "provisionedAvail", "onDemandRate", "onDemandBurst", "onDemandAvail")) \ 
+    PROBE(ResourceReportDedup, GROUPS("QuoterResource", "RateAccounting", "RateAccountingReport"), \ 
+          TYPES(TString, TString, ui64, ui64, TInstant), \ 
+          NAMES("quoter", "resource", "skip", "size", "reportSec")) \ 
+    PROBE(ResourceReportDedupFull, GROUPS("QuoterResource", "RateAccounting", "RateAccountingReport"), \ 
+          TYPES(TString, TString, ui64, ui64, TInstant), \ 
+          NAMES("quoter", "resource", "skip", "size", "reportSec")) \ 
+    PROBE(ResourceReportAdd, GROUPS("QuoterResource", "RateAccounting", "RateAccountingReport"), \ 
+          TYPES(TString, TString, ui64, ui64, TInstant, TInstant), \ 
+          NAMES("quoter", "resource", "added", "size", "reportSec", "accountedSec")) \ 
+    PROBE(ResourceAccountingTooEarly, GROUPS("QuoterResource", "RateAccounting"), \ 
+          TYPES(TString, TString, TInstant, TInstant, TDuration), \ 
+          NAMES("quoter", "resource", "accountTillSec", "accountedSec", "accountPeriodMs")) \ 
+    PROBE(ResourceAccountingNoData, GROUPS("QuoterResource", "RateAccounting"), \ 
+          TYPES(TString, TString, TInstant, TInstant, TDuration), \ 
+          NAMES("quoter", "resource", "historyEndSec", "accountedSec", "maxBillingPeriodMs")) \ 
+    PROBE(ResourceAccountingSend, GROUPS("QuoterResource", "RateAccounting"), \ 
+          TYPES(TString, TString, TInstant, TInstant), \ 
+          NAMES("quoter", "resource", "accountTillSec", "accountedSec")) \ 
+                                                                        \ 
     PROBE(SessionProcess, GROUPS("QuoterSession"),                      \
           TYPES(TString, TString, TActorIdParam, TInstant, bool),       \
           NAMES("quoter", "resource", "session", "timestampSec", "active")) \

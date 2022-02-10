@@ -387,7 +387,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
                 ResponseQT.Update();
                 ReadResponseQT.Update();
                 if (WritesInFlightTimestamps) {
-                    const auto& maxLatency = CyclesToDuration(GetCycleCountFast() - WritesInFlightTimestamps.front().second);
+                    const auto& maxLatency = CyclesToDuration(GetCycleCountFast() - WritesInFlightTimestamps.front().second); 
                     *MaxInFlightLatency = maxLatency.MicroSeconds();
                 }
             }
@@ -419,7 +419,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
             }
             HTML(str) {
                 TDuration EarliestTimestamp = TDuration::Zero();
-                const ui64 nowCycles = GetCycleCountFast();
+                const ui64 nowCycles = GetCycleCountFast(); 
                 for (const auto& [writeId, issued] : WritesInFlightTimestamps) {
                     EarliestTimestamp = Max(EarliestTimestamp, CyclesToDuration(nowCycles - issued));
                 }
@@ -562,7 +562,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
                 auto it = SentTimestamp.find(writeQueryId);
                 const auto sendCycles = it->second;
                 Y_VERIFY(it != SentTimestamp.end());
-                const TDuration response = CyclesToDuration(GetCycleCountFast() - sendCycles);
+                const TDuration response = CyclesToDuration(GetCycleCountFast() - sendCycles); 
                 SentTimestamp.erase(it);
 
                 // It's very likely that "writeQueryId" will be found at the start
@@ -581,7 +581,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
                 }
             };
             SendToBSProxy(ctx, GroupId, ev.release(), QueryDispatcher.ObtainCookie(std::move(writeCallback)));
-            const auto nowCycles = GetCycleCountFast();
+            const auto nowCycles = GetCycleCountFast(); 
             WritesInFlightTimestamps.emplace_back(writeQueryId, nowCycles);
             SentTimestamp.emplace(writeQueryId, nowCycles);
             IssuedWriteTimestamp.push_back(TAppData::TimeProvider->Now());
@@ -714,7 +714,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
 
                 auto it = ReadSentTimestamp.find(readQueryId);
                 Y_VERIFY(it != ReadSentTimestamp.end());
-                const TDuration response = CyclesToDuration(GetCycleCountFast() - it->second);
+                const TDuration response = CyclesToDuration(GetCycleCountFast() - it->second); 
                 ReadSentTimestamp.erase(it);
 
                 ReadResponseQT.Increment(response.MicroSeconds());
@@ -722,7 +722,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
             };
 
             SendToBSProxy(ctx, GroupId, ev.release(), QueryDispatcher.ObtainCookie(std::move(readCallback)));
-            ReadSentTimestamp.emplace(readQueryId, GetCycleCountFast());
+            ReadSentTimestamp.emplace(readQueryId, GetCycleCountFast()); 
 
             ++ReadsInFlight;
             ReadBytesInFlight += size;
@@ -925,29 +925,29 @@ public:
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
         TStringStream str;
-        HTML(str) {
+        HTML(str) { 
             TABLE_CLASS("table table-condensed") {
-                TABLEHEAD() {
-                    TABLER() {
+                TABLEHEAD() { 
+                    TABLER() { 
                         TABLEH() {
                             str << "Parameter";
                         }
                         TABLEH() {
                             str << "Value";
                         }
-                    }
-                }
-                TABLEBODY() {
+                    } 
+                } 
+                TABLEBODY() { 
                     for (auto& writer : TabletWriters) {
                         str << "<tr><td colspan=\"2\">" << "<b>Tablet</b>" << "</td></tr>";
                         writer.DumpState(str);
                     }
-                }
-            }
+                } 
+            } 
             COLLAPSED_BUTTON_CONTENT(Sprintf("configProtobuf%" PRIu64, Tag), "Config") {
                 str << "<pre>" << ConfingString << "</pre>";
             }
-        }
+        } 
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
     }
 

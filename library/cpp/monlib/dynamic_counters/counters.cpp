@@ -184,11 +184,11 @@ void TDynamicCounters::RegisterSubgroup(const TString& name, const TString& valu
 }
 
 void TDynamicCounters::OutputHtml(IOutputStream& os) const {
-    HTML(os) {
-        PRE() {
+    HTML(os) { 
+        PRE() { 
             OutputPlainText(os);
-        }
-    }
+        } 
+    } 
 }
 
 void TDynamicCounters::EnumerateSubgroups(const std::function<void(const TString& name, const TString& value)>& output) const {

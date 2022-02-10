@@ -186,7 +186,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         CountEvent(*ev->Get());
 
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
-        ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
+        ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs); 
         const NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
         Y_VERIFY(record.HasStatus());
 
@@ -211,10 +211,10 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
 
         LWPROBE(DSProxyVDiskRequestDuration, TEvBlobStorage::EvVGet, totalSize, tabletId, vdisk.GroupID, channel,
                 Info->GetFailDomainOrderNumber(shortId),
-                GetStartTime(record.GetTimestamps()),
-                GetTotalTimeMs(record.GetTimestamps()),
-                GetVDiskTimeMs(record.GetTimestamps()),
-                GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()),
+                GetStartTime(record.GetTimestamps()), 
+                GetTotalTimeMs(record.GetTimestamps()), 
+                GetVDiskTimeMs(record.GetTimestamps()), 
+                GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()), 
                 NKikimrBlobStorage::EGetHandleClass_Name(GetImpl.GetHandleClass()),
                 NKikimrProto::EReplyStatus_Name(record.GetStatus()));
         Y_VERIFY(record.HasCookie());
@@ -354,7 +354,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVPutResultReceived, MergedNode = std::move(ev->TraceId));
 
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
-        ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
+        ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs); 
         const auto &record = ev->Get()->Record;
         const TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         TVDiskIdShort shortId(vDiskId);
@@ -368,10 +368,10 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         ui64 sumBlobSize = SumBlobSize(ev);
         LWPROBE(DSProxyVDiskRequestDuration, TEvBlobStorage::EvVPut, sumBlobSize, blob.TabletID(),
                 Info->GroupID, blob.Channel(), Info->GetFailDomainOrderNumber(shortId),
-                GetStartTime(record.GetTimestamps()),
-                GetTotalTimeMs(record.GetTimestamps()),
-                GetVDiskTimeMs(record.GetTimestamps()),
-                GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()),
+                GetStartTime(record.GetTimestamps()), 
+                GetTotalTimeMs(record.GetTimestamps()), 
+                GetVDiskTimeMs(record.GetTimestamps()), 
+                GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()), 
                 NKikimrBlobStorage::EPutHandleClass_Name(GetImpl.GetPutHandleClass()),
                 NKikimrProto::EReplyStatus_Name(status));
 
@@ -471,7 +471,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         RootCauseTrack.RenderTrack(Orbit);
         LWTRACK(DSProxyGetReply, Orbit);
         evResult->Orbit = std::move(Orbit);
-        LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvGet, requestSize, duration.SecondsFloat() * 1000.0, tabletId,
+        LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvGet, requestSize, duration.SecondsFloat() * 1000.0, tabletId, 
                 evResult->GroupId, channel, NKikimrBlobStorage::EGetHandleClass_Name(GetImpl.GetHandleClass()),
                 success);
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));

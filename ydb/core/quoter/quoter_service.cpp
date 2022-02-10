@@ -254,7 +254,7 @@ void TResource::ChargeUsedAmount(double amount, TInstant now) {
     FreeBalance -= amount;
     Balance -= amount;
     AmountConsumed += amount;
-    History.Add(now, amount);
+    History.Add(now, amount); 
     Counters.Consumed->Add(static_cast<i64>(amount));
     if (Balance >= 0.0) {
         StopStarvation(now);
@@ -291,7 +291,7 @@ TDuration TResource::Charge(double amount, TInstant now) {
             LastAllocated = Max(now - QuoterServiceConfig.ScheduleTickSize * 2, timeToFullfill);
             Balance -= amount;
             AmountConsumed += amount;
-            History.Add(now, amount);
+            History.Add(now, amount); 
 
             if (FreeBalance > Balance)
                 FreeBalance = Balance;
@@ -306,7 +306,7 @@ TDuration TResource::Charge(double amount, TInstant now) {
             FreeBalance -= amount;
             Balance -= amount;
             AmountConsumed += amount;
-            History.Add(now, amount);
+            History.Add(now, amount); 
 
             Counters.Consumed->Add(static_cast<i64>(amount));
             StopStarvation(now);
@@ -518,7 +518,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitSystemLeaf(const TEvQuota::T
 
             quores.LastAllocated = TInstant::Zero();
             quores.AmountConsumed = 0.0;
-            // NOTE: do not change `History`: we dont need it for static rate
+            // NOTE: do not change `History`: we dont need it for static rate 
 
             quores.FreeBalance = 0.0;
             quores.TickRate = static_cast<double>(rate);
@@ -1171,9 +1171,9 @@ void TQuoterService::FillStats(TResource &quores) {
     auto &dq = StatsToPublish[quores.QuoterId];
     const double expectedRate = -1.0;
     const double cap = -1.0;
-    dq.emplace_back(quores.ResourceId, 0, quores.AmountConsumed, quores.History, quores.QueueSize, quores.QueueWeight, expectedRate, cap);
+    dq.emplace_back(quores.ResourceId, 0, quores.AmountConsumed, quores.History, quores.QueueSize, quores.QueueWeight, expectedRate, cap); 
     quores.AmountConsumed = 0.0;
-    quores.History.Clear();
+    quores.History.Clear(); 
 }
 
 void TQuoterService::FeedResource(TResource &quores) {

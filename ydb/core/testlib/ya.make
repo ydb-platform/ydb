@@ -13,7 +13,7 @@ SRCS(
     fake_coordinator.cpp
     fake_coordinator.h
     fake_scheme_shard.h
-    minikql_compile.h
+    minikql_compile.h 
     mock_pq_metacache.h
     tablet_flat_dummy.cpp
     tablet_helpers.cpp

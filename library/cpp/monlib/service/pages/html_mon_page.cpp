@@ -8,10 +8,10 @@ void THtmlMonPage::Output(NMonitoring::IMonHttpRequest& request) {
     IOutputStream& out = request.Output();
 
     out << HTTPOKHTML;
-    HTML(out) {
+    HTML(out) { 
         out << "<!DOCTYPE html>\n";
-        HTML_TAG() {
-            HEAD() {
+        HTML_TAG() { 
+            HEAD() { 
                 if (!!Title) {
                     out << "<title>" << Title << "</title>\n";
                 }
@@ -32,19 +32,19 @@ void THtmlMonPage::Output(NMonitoring::IMonHttpRequest& request) {
                 out << ".narrow-line80 {line-height: 80%}\n";
                 out << ".narrow-line90 {line-height: 90%}\n";
                 out << "</style>\n";
-            }
-            BODY() {
+            } 
+            BODY() { 
                 OutputNavBar(out);
 
-                DIV_CLASS("container") {
+                DIV_CLASS("container") { 
                     if (!!Title) {
                         out << "<h2>" << Title << "</h2>";
                     }
                     OutputContent(request);
-                }
-            }
-        }
-    }
+                } 
+            } 
+        } 
+    } 
 }
 
 void THtmlMonPage::NotFound(NMonitoring::IMonHttpRequest& request) const {

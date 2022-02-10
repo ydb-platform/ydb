@@ -205,8 +205,8 @@ static void CopyProps(const Ydb::RateLimiter::Resource& src, NKikimrKesus::TStre
     auto& props = *dst.MutableHierarhicalDRRResourceConfig();
     props.SetMaxUnitsPerSecond(srcProps.max_units_per_second());
     props.SetMaxBurstSizeCoefficient(srcProps.max_burst_size_coefficient());
-    props.SetPrefetchCoefficient(srcProps.prefetch_coefficient());
-    props.SetPrefetchWatermark(srcProps.prefetch_watermark());
+    props.SetPrefetchCoefficient(srcProps.prefetch_coefficient()); 
+    props.SetPrefetchWatermark(srcProps.prefetch_watermark()); 
 }
 
 static void CopyProps(const NKikimrKesus::TStreamingQuoterResource& src, Ydb::RateLimiter::Resource& dst) {
@@ -215,8 +215,8 @@ static void CopyProps(const NKikimrKesus::TStreamingQuoterResource& src, Ydb::Ra
     auto& props = *dst.mutable_hierarchical_drr();
     props.set_max_units_per_second(srcProps.GetMaxUnitsPerSecond());
     props.set_max_burst_size_coefficient(srcProps.GetMaxBurstSizeCoefficient());
-    props.set_prefetch_coefficient(srcProps.GetPrefetchCoefficient());
-    props.set_prefetch_watermark(srcProps.GetPrefetchWatermark());
+    props.set_prefetch_coefficient(srcProps.GetPrefetchCoefficient()); 
+    props.set_prefetch_watermark(srcProps.GetPrefetchWatermark()); 
 }
 
 class TCreateRateLimiterResourceRPC : public TRateLimiterControlRequest<TEvCreateRateLimiterResource> {

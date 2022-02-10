@@ -41,25 +41,25 @@ namespace NKikimr {
     }
 
     void TEvReplFinished::TInfo::OutputHtml(IOutputStream &str) const {
-#define PARAM(NAME, VALUE) TABLER() { \
-            TABLED() { str << #NAME; } \
-            TABLED() { str << VALUE; } \
-        }
+#define PARAM(NAME, VALUE) TABLER() { \ 
+            TABLED() { str << #NAME; } \ 
+            TABLED() { str << VALUE; } \ 
+        } 
 
 #define PARAM_V(NAME) PARAM(NAME, NAME)
 
-#define GROUP(NAME) TABLER() TABLED_ATTRS({{"colspan", "2"}}) COLLAPSED_BUTTON_CONTENT(CreateGuidAsString(), NAME) TABLE()
+#define GROUP(NAME) TABLER() TABLED_ATTRS({{"colspan", "2"}}) COLLAPSED_BUTTON_CONTENT(CreateGuidAsString(), NAME) TABLE() 
 
-        HTML(str) {
-            SMALL() {
-                TABLE() {
-                    TABLER() {
-                        TABLEH() { str << "Parameter"; }
-                        TABLEH() { str << "Value"; }
-                    }
-                    STRONG() {
+        HTML(str) { 
+            SMALL() { 
+                TABLE() { 
+                    TABLER() { 
+                        TABLEH() { str << "Parameter"; } 
+                        TABLEH() { str << "Value"; } 
+                    } 
+                    STRONG() { 
                         PARAM(Summary, DataRecoverySuccess << "/" << RecoveryScheduled << "/" << (ReplicaOk + RecoveryScheduled));
-                    }
+                    } 
                     PARAM(Start, ToStringLocalTimeUpToSeconds(Start));
                     PARAM(End, ToStringLocalTimeUpToSeconds(End));
                     PARAM(Duration, End - Start);
@@ -67,19 +67,19 @@ namespace NKikimr {
                     PARAM_V(Eof);
                     PARAM_V(DonorVDiskId);
                     PARAM_V(DropDonor);
-                    GROUP("Plan Generation Stats") {
+                    GROUP("Plan Generation Stats") { 
                         PARAM_V(ReplicaOk);
                         PARAM_V(RecoveryScheduled);
                         PARAM_V(IgnoredDueToGC);
-                    }
-                    GROUP("Plan Execution Stats") {
+                    } 
+                    GROUP("Plan Execution Stats") { 
                         PARAM_V(DataRecoverySuccess);
                         PARAM_V(DataRecoveryFailure);
                         PARAM_V(DataRecoveryNoParts);
                         PARAM_V(DataRecoverySkip);
                         PARAM_V(DataRecoveryPhantomCheck);
-                    }
-                    GROUP("Detailed Stats") {
+                    } 
+                    GROUP("Detailed Stats") { 
                         PARAM_V(BytesRecovered);
                         PARAM_V(LogoBlobsRecovered);
                         PARAM_V(HugeLogoBlobsRecovered);
@@ -91,8 +91,8 @@ namespace NKikimr {
                         PARAM_V(PartsExact);
                         PARAM_V(PartsRestored);
                         PARAM_V(PartsMissing);
-                    }
-                    GROUP("Durations") {
+                    } 
+                    GROUP("Durations") { 
                         PARAM_V(PreparePlanDuration);
                         PARAM_V(TokenWaitDuration);
                         PARAM_V(ProxyWaitDuration);
@@ -101,8 +101,8 @@ namespace NKikimr {
                         PARAM_V(CommitDuration);
                         PARAM_V(OtherDuration);
                         PARAM_V(PhantomDuration);
-                    }
-                    GROUP("VDisk Stats") {
+                    } 
+                    GROUP("VDisk Stats") { 
                         PARAM_V(ProxyStat->VDiskReqs);
                         PARAM_V(ProxyStat->VDiskRespOK);
                         PARAM_V(ProxyStat->VDiskRespRACE);
@@ -114,10 +114,10 @@ namespace NKikimr {
                         PARAM_V(ProxyStat->LogoBlobNotOK);
                         PARAM_V(ProxyStat->LogoBlobDataSize);
                         PARAM_V(ProxyStat->OverflowedMsgs);
-                    }
-                }
-            }
-        }
+                    } 
+                } 
+            } 
+        } 
 #undef GROUP
 #undef PARAM_V
 #undef PARAM
@@ -413,13 +413,13 @@ namespace NKikimr {
 
         template<typename Iter>
         void OutputRow(IOutputStream &str, Iter &it, Iter &e) {
-            HTML(str) {
-                TABLER() {
+            HTML(str) { 
+                TABLER() { 
                     for (unsigned i = 0; i < 3 && it != e; i++, ++it) {
-                        TABLED() { (*it)->OutputHtml(str); }
+                        TABLED() { (*it)->OutputHtml(str); } 
                     }
-                }
-            }
+                } 
+            } 
         }
 
         template<typename Iter>
@@ -427,18 +427,18 @@ namespace NKikimr {
             if (it != e) {
                 OutputRow(str, it, e);
                 if (it != e) {
-                    HTML(str) {
-                        TABLER() {
+                    HTML(str) { 
+                        TABLER() { 
                             str << "<td colspan=3>";
                             TString id = CreateGuidAsString();
-                            COLLAPSED_BUTTON_CONTENT(id, "More") {
-                                TABLE() {
+                            COLLAPSED_BUTTON_CONTENT(id, "More") { 
+                                TABLE() { 
                                     OutputQuantums(str, it, e);
-                                }
-                            }
+                                } 
+                            } 
                             str << "</td>";
-                        }
-                    }
+                        } 
+                    } 
                 }
             }
         }
@@ -449,10 +449,10 @@ namespace NKikimr {
             TStringStream str;
             unsigned historySize = HistorySize;
             str << "\n";
-            HTML(str) {
-                DIV_CLASS("panel panel-success") {
-                    DIV_CLASS("panel-heading") {str << "Repl";}
-                    DIV_CLASS("panel-body") {
+            HTML(str) { 
+                DIV_CLASS("panel panel-success") { 
+                    DIV_CLASS("panel-heading") {str << "Repl";} 
+                    DIV_CLASS("panel-body") { 
                         auto makeConnectedDonorDisks = [&]() -> TString {
                             TStringBuilder s;
                             s << "[";
@@ -472,19 +472,19 @@ namespace NKikimr {
                             << "NumConnectedPeerDisks: " << ConnectedPeerDisks.size() << "<br>"
                             << "ConnectedDonorDisks: " << makeConnectedDonorDisks() << "<br>";
 
-                        TABLE_CLASS ("table table-condensed") {
-                            CAPTION() STRONG() {str << "Last " << historySize << " replication quantums"; }
-                            TABLEBODY() {
+                        TABLE_CLASS ("table table-condensed") { 
+                            CAPTION() STRONG() {str << "Last " << historySize << " replication quantums"; } 
+                            TABLEBODY() { 
                                 TVector<TEvReplFinished::TInfoPtr> quantums;
                                 for (auto it = History.Begin(); it != History.End(); ++it) {
                                     quantums.push_back(*it);
                                 }
                                 OutputQuantums(str, quantums.rbegin(), quantums.rend());
-                            }
-                        }
-                    }
-                }
-            }
+                            } 
+                        } 
+                    } 
+                } 
+            } 
             str << "\n";
 
             Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::ReplId));

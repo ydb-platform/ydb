@@ -297,8 +297,8 @@ ui64 TDatabase::EstimateRowSize(ui32 tableId) const {
 const TDbStats& TDatabase::Counters() const noexcept
 {
     return DatabaseImpl->Stats;
-}
-
+} 
+ 
 TDatabase::TChg TDatabase::Head(ui32 table) const noexcept
 {
     if (table == Max<ui32>()) {

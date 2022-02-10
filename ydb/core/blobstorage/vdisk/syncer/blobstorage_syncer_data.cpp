@@ -67,15 +67,15 @@ namespace NKikimr {
         }
 
         void TPeerSyncState::OutputHtml(IOutputStream &str) const {
-            HTML(str) {
+            HTML(str) { 
                 ESyncStatus state = LastSyncStatus;
                 if (NSyncer::TPeerSyncState::Good(state)) {
-                    PARA_CLASS("text-success") {str << state;}
+                    PARA_CLASS("text-success") {str << state;} 
                 } else {
-                    PARA_CLASS("text-warning") {str << state;}
+                    PARA_CLASS("text-warning") {str << state;} 
                 }
-                SMALL() {
-                    SMALL() {
+                SMALL() { 
+                    SMALL() { 
                         str << "SchTime: " << ToStringLocalTimeUpToSeconds(SchTime);
                         str << "<br>";
                         str << "LastTry: " << ToStringLocalTimeUpToSeconds(LastTry);
@@ -84,9 +84,9 @@ namespace NKikimr {
                         str << "<br>";
                         str << "[Guid, SyncedLsn]: " << SyncState.ToString();
                         str << "<br>";
-                    }
-                }
-            }
+                    } 
+                } 
+            } 
         }
 
 
@@ -108,15 +108,15 @@ namespace NKikimr {
         }
 
         void TPeerGuidInfo::OutputHtml(IOutputStream &str) const {
-            HTML(str) {
-                SMALL() {
-                    SMALL() {
+            HTML(str) { 
+                SMALL() { 
+                    SMALL() { 
                         str << "Guid: " << Info.GetGuid();
                         str << "<br>";
                         str << "State: " << Info.GetState();
-                    }
-                }
-            }
+                    } 
+                } 
+            } 
         }
 
 

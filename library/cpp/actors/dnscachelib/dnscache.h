@@ -65,7 +65,7 @@ private:
         time_t ResolvedV6 = 0;
         time_t NotFoundV6 = 0;
         TAtomic InProgressV6 = 0;
-
+ 
         TString AddrsV4ToString() const;
         TString AddrsV6ToString() const;
 

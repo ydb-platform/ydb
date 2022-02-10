@@ -42,7 +42,7 @@ namespace NActors {
         ~TBasicSchedulerThread();
 
         void Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) override;
-        void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) override;
+        void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) override; 
 
         void PrepareStart() override;
         void Start() override;
@@ -61,7 +61,7 @@ namespace NActors {
             *currentMonotonic = GetMonotonicMicroSeconds();
         }
 
-        void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) override {
+        void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) override { 
             Y_UNUSED(readers);
             Y_UNUSED(scheduleReadersCount);
         }

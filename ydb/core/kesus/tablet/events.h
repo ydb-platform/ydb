@@ -87,8 +87,8 @@ struct TEvKesus {
         EvAggregatedResourceConsumptionStatistics,
         EvGetQuoterResourceCounters,
         EvGetQuoterResourceCountersResult,
-        EvAccountResources,
-        EvAccountResourcesAck,
+        EvAccountResources, 
+        EvAccountResourcesAck, 
 
         EvEnd
     };
@@ -530,16 +530,16 @@ struct TEvKesus {
         using TBaseEvent = TEventPBWithArena<TEvGetQuoterResourceCountersResult, NKikimrKesus::TEvGetQuoterResourceCountersResult, EvGetQuoterResourceCountersResult>;
         using TBaseEvent::TBaseEvent;
     };
-
-    struct TEvAccountResources : public TEventPBWithArena<TEvAccountResources, NKikimrKesus::TEvAccountResources, EvAccountResources> {
-        using TBaseEvent = TEventPBWithArena<TEvAccountResources, NKikimrKesus::TEvAccountResources, EvAccountResources>;
-        using TBaseEvent::TBaseEvent;
-    };
-
-    struct TEvAccountResourcesAck : public TEventPBWithArena<TEvAccountResourcesAck, NKikimrKesus::TEvAccountResourcesAck, EvAccountResourcesAck> {
-        using TBaseEvent = TEventPBWithArena<TEvAccountResourcesAck, NKikimrKesus::TEvAccountResourcesAck, EvAccountResourcesAck>;
-        using TBaseEvent::TBaseEvent;
-    };
+ 
+    struct TEvAccountResources : public TEventPBWithArena<TEvAccountResources, NKikimrKesus::TEvAccountResources, EvAccountResources> { 
+        using TBaseEvent = TEventPBWithArena<TEvAccountResources, NKikimrKesus::TEvAccountResources, EvAccountResources>; 
+        using TBaseEvent::TBaseEvent; 
+    }; 
+ 
+    struct TEvAccountResourcesAck : public TEventPBWithArena<TEvAccountResourcesAck, NKikimrKesus::TEvAccountResourcesAck, EvAccountResourcesAck> { 
+        using TBaseEvent = TEventPBWithArena<TEvAccountResourcesAck, NKikimrKesus::TEvAccountResourcesAck, EvAccountResourcesAck>; 
+        using TBaseEvent::TBaseEvent; 
+    }; 
 };
 
 }

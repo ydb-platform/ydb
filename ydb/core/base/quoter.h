@@ -3,7 +3,7 @@
 #include "events.h"
 #include <library/cpp/actors/core/event_local.h>
 #include <util/generic/deque.h>
-#include <util/generic/vector.h>
+#include <util/generic/vector.h> 
 #include <ydb/core/util/time_series_vec.h>
 
 namespace NKikimr {
@@ -49,7 +49,7 @@ struct TEvQuota {
             , ResourceId(resourceId)
             , Amount(amount)
             , IsUsedAmount(isUsedAmount)
-        {}
+        {} 
 
         TResourceLeaf(const TString &quoter, const TString &resource, ui64 amount, bool isUsedAmount = false)
             : QuoterId(0)
@@ -58,7 +58,7 @@ struct TEvQuota {
             , Resource(resource)
             , Amount(amount)
             , IsUsedAmount(isUsedAmount)
-        {}
+        {} 
     };
 
     enum class EResourceOperator {
@@ -146,17 +146,17 @@ struct TEvQuota {
         const ui64 Tick;
 
         const double Consumed;
-        const TTimeSeriesMap<double> History;
+        const TTimeSeriesMap<double> History; 
         const ui64 QueueSize;
         const double QueueWeight;
         const double ExpectedRate;
         const double Cap;
 
-        TProxyStat(ui64 id, ui64 tick, double consumed, const TTimeSeriesMap<double>& history, ui64 queueSize, double queueWeight, double rate, double cap)
+        TProxyStat(ui64 id, ui64 tick, double consumed, const TTimeSeriesMap<double>& history, ui64 queueSize, double queueWeight, double rate, double cap) 
             : ResourceId(id)
             , Tick(tick)
             , Consumed(consumed)
-            , History(history)
+            , History(history) 
             , QueueSize(queueSize)
             , QueueWeight(queueWeight)
             , ExpectedRate(rate)
@@ -170,7 +170,7 @@ struct TEvQuota {
         const TDeque<TProxyStat> Stats;
 
         TEvProxyStats(TDeque<TProxyStat> &&stats)
-            : Stats(std::move(stats))
+            : Stats(std::move(stats)) 
         {}
     };
 

@@ -62,14 +62,14 @@ void TTabletListRenderer::RenderHeader(TStringStream& str,
 {
     Y_UNUSED(tabletsToRender);
     IOutputStream &__stream(str);
-    H3() {
+    H3() { 
         str << listName;
         if (filterInfo.FilterNodeId != 0) {
             str << " of Node " << filterInfo.FilterNodeId;
             if (!filterInfo.FilterNodeHost.empty())
                 str << " (" << filterInfo.FilterNodeHost << ")";
         }
-    }
+    } 
 }
 
 void TTabletListRenderer::RenderTableHeader(TStringStream& str,
@@ -80,22 +80,22 @@ void TTabletListRenderer::RenderTableHeader(TStringStream& str,
     Y_UNUSED(listName);
     Y_UNUSED(tabletsToRender);
     IOutputStream &__stream(str);
-    TABLEHEAD() {
-        TABLER() {
+    TABLEHEAD() { 
+        TABLER() { 
             if (filterInfo.FilterNodeId == 0) {
-                TABLEH() {str << "<span data-toggle='tooltip' title='NodeId'>#</span>";}
-                TABLEH() {str << "NodeName";}
+                TABLEH() {str << "<span data-toggle='tooltip' title='NodeId'>#</span>";} 
+                TABLEH() {str << "NodeName";} 
             }
-            TABLEH() {str << "TabletType";}
-            TABLEH() {str << "TabletID";}
-            TABLEH_CLASS("sorter-text") {str << "CreateTime";}
-            TABLEH_CLASS("sorter-text") {str << "ChangeTime";}
-            TABLEH() {str << "Core state";}
-            TABLEH() {str << "User state";}
-            TABLEH() {str << "Gen";}
-            TABLEH_CLASS("sorter-false") {str << "Kill";}
-        }
-    }
+            TABLEH() {str << "TabletType";} 
+            TABLEH() {str << "TabletID";} 
+            TABLEH_CLASS("sorter-text") {str << "CreateTime";} 
+            TABLEH_CLASS("sorter-text") {str << "ChangeTime";} 
+            TABLEH() {str << "Core state";} 
+            TABLEH() {str << "User state";} 
+            TABLEH() {str << "Gen";} 
+            TABLEH_CLASS("sorter-false") {str << "Kill";} 
+        } 
+    } 
 }
 
 TString TTabletListRenderer::MakeTabletMonURL(const TTabletListElement& elem,
@@ -124,7 +124,7 @@ void TTabletListRenderer::RenderTableBody(TStringStream& str,
 {
     Y_UNUSED(listName);
     IOutputStream &__stream(str);
-    TABLEBODY() {
+    TABLEBODY() { 
     for (const auto& elem : tabletsToRender) {
         const auto& ti = *elem.TabletStateInfo;
         const auto& nodeInfo = *elem.NodeInfo;
@@ -133,33 +133,33 @@ void TTabletListRenderer::RenderTableBody(TStringStream& str,
         TString tabletTypeStr = TTabletTypes::TypeToStr(tabletType);
         TString nodeName = ToString(nodeInfo.NodeId);
 
-        TABLER() {
+        TABLER() { 
             if (filterInfo.FilterNodeId == 0) {
                 TString nodeName = nodeInfo.Host.empty() ? nodeInfo.Address : nodeInfo.Host;
                 TString tooltip = nodeInfo.Address;
-                TABLED() {str << ToString(nodeInfo.NodeId);}
-                TABLED() {str << "<span data-html='true' data-toggle='tooltip' title='" + tooltip + "'>" << nodeName << "</span>";}
+                TABLED() {str << ToString(nodeInfo.NodeId);} 
+                TABLED() {str << "<span data-html='true' data-toggle='tooltip' title='" + tooltip + "'>" << nodeName << "</span>";} 
             }
-            TABLED() {str << tabletTypeStr;}
+            TABLED() {str << tabletTypeStr;} 
             str << "<td data-text='" << index << "'>"
                 << "<a href=\"" << MakeTabletMonURL(elem, filterInfo) << "\">" << ti.tabletid() << "</a>"
                 << "</td>";
-            TABLED() {str << TInstant::MilliSeconds(ti.GetCreateTime()).ToStringUpToSeconds();}
-            TABLED() {str << TInstant::MilliSeconds(ti.GetChangeTime()).ToStringUpToSeconds();}
-            TABLED() {str << GetStateName((ETabletState)ti.GetState());}
-            TABLED() {str << GetUserStateName(elem);}
-            TABLED() {str << ti.generation();}
-            TABLED() {
+            TABLED() {str << TInstant::MilliSeconds(ti.GetCreateTime()).ToStringUpToSeconds();} 
+            TABLED() {str << TInstant::MilliSeconds(ti.GetChangeTime()).ToStringUpToSeconds();} 
+            TABLED() {str << GetStateName((ETabletState)ti.GetState());} 
+            TABLED() {str << GetUserStateName(elem);} 
+            TABLED() {str << ti.generation();} 
+            TABLED() { 
                 str << "<a href=\"nodetabmon?action=kill_tablet&tablet_id=" << ti.tabletid() << "&node_id=" << nodeInfo.NodeId;
                 if (filterInfo.FilterNodeId != 0)
                     str << "&filter_node_id=" << filterInfo.FilterNodeId;
                 str << "\">"
                     << "<span class=\"glyphicon glyphicon-remove\" title=\"Kill Tablet\"/>"
                     << "</span></a>";
-            }
-        }
+            } 
+        } 
     }
-    }
+    } 
 }
 
 TString TTabletListRenderer::GetStateName(ETabletState state) {
@@ -184,10 +184,10 @@ void TTabletListRenderer::RenderTabletList(TStringStream& str,
     IOutputStream &__stream(str);
     RenderHeader(str, listName, tabletsToRender, filterInfo);
 
-    TABLE_SORTABLE_CLASS("table") {
+    TABLE_SORTABLE_CLASS("table") { 
         RenderTableHeader(str, listName, tabletsToRender, filterInfo);
         RenderTableBody(str, listName, tabletsToRender, filterInfo);
-    }
+    } 
 }
 
 } // namespace NNodeTabletMonitor

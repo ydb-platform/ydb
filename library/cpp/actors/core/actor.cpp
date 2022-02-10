@@ -1,7 +1,7 @@
 #include "actor.h"
 #include "executor_thread.h"
 #include "mailbox.h"
-#include <library/cpp/actors/util/datetime.h>
+#include <library/cpp/actors/util/datetime.h> 
 
 namespace NActors {
     Y_POD_THREAD(TActivationContext*)
@@ -88,7 +88,7 @@ namespace NActors {
     }
 
     i64 TActivationContext::GetCurrentEventTicks() {
-        return GetCycleCountFast() - TlsActivationContext->EventStart;
+        return GetCycleCountFast() - TlsActivationContext->EventStart; 
     }
 
     double TActivationContext::GetCurrentEventTicksAsSeconds() {

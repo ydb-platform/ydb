@@ -25,20 +25,20 @@ namespace NActors {
         const TString PoolName;
 
     public:
-        TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName = "", TAffinity* affinity = nullptr,
+        TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName = "", TAffinity* affinity = nullptr, 
                         ui32 maxActivityType = 1);
-        explicit TIOExecutorPool(const TIOExecutorPoolConfig& cfg);
+        explicit TIOExecutorPool(const TIOExecutorPoolConfig& cfg); 
         ~TIOExecutorPool();
 
-        ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override;
+        ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override; 
 
-        void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
-        void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
-        void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
+        void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override; 
+        void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override; 
+        void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override; 
 
         void ScheduleActivationEx(ui32 activation, ui64 revolvingWriteCounter) override;
 
-        void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
+        void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override; 
         void Start() override;
         void PrepareStop() override;
         void Shutdown() override;

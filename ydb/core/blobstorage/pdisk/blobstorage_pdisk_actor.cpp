@@ -10,7 +10,7 @@
 #include "blobstorage_pdisk_thread.h"
 #include "blobstorage_pdisk_tools.h"
 #include "blobstorage_pdisk_util_countedqueueoneone.h"
-#include "blobstorage_pdisk_util_cputimer.h"
+#include "blobstorage_pdisk_util_cputimer.h" 
 #include "blobstorage_pdisk_writer.h"
 
 #include <ydb/core/base/appdata.h>
@@ -83,73 +83,73 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
 
     THolder<IEventHandle> ControledStartResult;
 
-    class TWhiteboardFlag {
-    private:
-        class TSource {
-        private:
-            const TLightBase& Light;
-            const ui64 ReportPeriodMs = 15000;
-            const ui64 GreenRatio = 5;
-            const ui64 YellowRatio = 25;
-            const ui64 OrangeRatio = 75;
-
-            ui64 LastCount = 0;
-            ui64 LastRedMs = 0;
-            ui64 LastGreenMs = 0;
+    class TWhiteboardFlag { 
+    private: 
+        class TSource { 
+        private: 
+            const TLightBase& Light; 
+            const ui64 ReportPeriodMs = 15000; 
+            const ui64 GreenRatio = 5; 
+            const ui64 YellowRatio = 25; 
+            const ui64 OrangeRatio = 75; 
+ 
+            ui64 LastCount = 0; 
+            ui64 LastRedMs = 0; 
+            ui64 LastGreenMs = 0; 
             ui64 LastRedMsPs = 0;
-            NKikimrWhiteboard::EFlag CurrentFlag = NKikimrWhiteboard::Green;
-        public:
-            explicit TSource(const TLightBase& light)
-                : Light(light)
-            {}
-
+            NKikimrWhiteboard::EFlag CurrentFlag = NKikimrWhiteboard::Green; 
+        public: 
+            explicit TSource(const TLightBase& light) 
+                : Light(light) 
+            {} 
+ 
             ui64 GetRedMsPs() {
                 return LastRedMsPs;
             }
 
-            NKikimrWhiteboard::EFlag GetFlag() {
-                ui64 count = Light.GetCount();
-                ui64 redMs = Light.GetRedMs();
-                ui64 greenMs = Light.GetGreenMs();
-
-                // Init on first pass
-                if (LastRedMs == 0 && LastGreenMs == 0) {
-                    SaveLast(count, redMs, greenMs);
-                }
-
-                // Recalculate new flag value if needed
-                if (greenMs + redMs > LastGreenMs + LastRedMs + ReportPeriodMs) {
-                    ui64 ratio = (redMs - LastRedMs) * 100 / (redMs - LastRedMs + greenMs - LastGreenMs);
+            NKikimrWhiteboard::EFlag GetFlag() { 
+                ui64 count = Light.GetCount(); 
+                ui64 redMs = Light.GetRedMs(); 
+                ui64 greenMs = Light.GetGreenMs(); 
+ 
+                // Init on first pass 
+                if (LastRedMs == 0 && LastGreenMs == 0) { 
+                    SaveLast(count, redMs, greenMs); 
+                } 
+ 
+                // Recalculate new flag value if needed 
+                if (greenMs + redMs > LastGreenMs + LastRedMs + ReportPeriodMs) { 
+                    ui64 ratio = (redMs - LastRedMs) * 100 / (redMs - LastRedMs + greenMs - LastGreenMs); 
                     LastRedMsPs = (1000ull * (redMs - LastRedMs)) / (redMs - LastRedMs + greenMs - LastGreenMs);
-                    if (ratio < GreenRatio) {
-                        CurrentFlag = NKikimrWhiteboard::Green;
-                    } else if (ratio < YellowRatio) {
-                        CurrentFlag = NKikimrWhiteboard::Yellow;
-                    } else if (ratio < OrangeRatio) {
-                        CurrentFlag = NKikimrWhiteboard::Orange;
-                    } else {
-                        CurrentFlag = NKikimrWhiteboard::Red;
-                    }
-                    SaveLast(count, redMs, greenMs);
-                }
-
-                return CurrentFlag;
-            }
-        private:
-            void SaveLast(ui64 count, ui64 redMs, ui64 greenMs) {
-                LastCount = count;
-                LastRedMs = redMs;
-                LastGreenMs = greenMs;
-            }
-        };
-    private:
+                    if (ratio < GreenRatio) { 
+                        CurrentFlag = NKikimrWhiteboard::Green; 
+                    } else if (ratio < YellowRatio) { 
+                        CurrentFlag = NKikimrWhiteboard::Yellow; 
+                    } else if (ratio < OrangeRatio) { 
+                        CurrentFlag = NKikimrWhiteboard::Orange; 
+                    } else { 
+                        CurrentFlag = NKikimrWhiteboard::Red; 
+                    } 
+                    SaveLast(count, redMs, greenMs); 
+                } 
+ 
+                return CurrentFlag; 
+            } 
+        private: 
+            void SaveLast(ui64 count, ui64 redMs, ui64 greenMs) { 
+                LastCount = count; 
+                LastRedMs = redMs; 
+                LastGreenMs = greenMs; 
+            } 
+        }; 
+    private: 
         TVector<TSource> Sources;
         NKikimrWhiteboard::EFlag LastFlag = NKikimrWhiteboard::Grey;
-    public:
-        void AddSource(const TLightBase& light) {
-            Sources.emplace_back(light);
-        }
-
+    public: 
+        void AddSource(const TLightBase& light) { 
+            Sources.emplace_back(light); 
+        } 
+ 
         void RemoveSources() {
             Sources.clear();
         }
@@ -162,35 +162,35 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
             return redMsPs;
         }
 
-        void Update(bool& resendRequired) {
-            NKikimrWhiteboard::EFlag flag = NKikimrWhiteboard::Green;
-            for (TSource& source : Sources) {
-                flag = Max(flag, source.GetFlag());
-            }
-            if (LastFlag != flag) {
-                LastFlag = flag;
-                resendRequired = true;
-            }
-        }
-
-        NKikimrWhiteboard::EFlag Get() const {
-            return LastFlag;
-        }
-
+        void Update(bool& resendRequired) { 
+            NKikimrWhiteboard::EFlag flag = NKikimrWhiteboard::Green; 
+            for (TSource& source : Sources) { 
+                flag = Max(flag, source.GetFlag()); 
+            } 
+            if (LastFlag != flag) { 
+                LastFlag = flag; 
+                resendRequired = true; 
+            } 
+        } 
+ 
+        NKikimrWhiteboard::EFlag Get() const { 
+            return LastFlag; 
+        } 
+ 
         void Render(IOutputStream& os) const {
-            switch (LastFlag) {
+            switch (LastFlag) { 
             case NKikimrWhiteboard::Grey:
-                break;
+                break; 
             default:
                 THtmlLightSignalRenderer(LastFlag, NKikimrWhiteboard::EFlag_Name(LastFlag)).Output(os);
-                break;
-            }
-        }
-    };
-
-    TWhiteboardFlag RealtimeFlag;
-    TWhiteboardFlag DeviceFlag;
-
+                break; 
+            } 
+        } 
+    }; 
+ 
+    TWhiteboardFlag RealtimeFlag; 
+    TWhiteboardFlag DeviceFlag; 
+ 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PDISK_ACTOR;
@@ -236,8 +236,8 @@ public:
 
         RealtimeFlag.RemoveSources();
         DeviceFlag.RemoveSources();
-        DeviceFlag.AddSource(PDisk->Mon.L6);
-
+        DeviceFlag.AddSource(PDisk->Mon.L6); 
+ 
         bool isOk = PDisk->Initialize(TlsActivationContext->ActorSystem(), SelfId());
 
         if (!isOk) {
@@ -788,14 +788,14 @@ public:
 
     void HandleWakeup() {
         Schedule(TDuration::MilliSeconds(Cfg->StatisticsUpdateIntervalMs), new TEvents::TEvWakeup());
-
-        TCpuTimer timer;
+ 
+        TCpuTimer timer; 
         PDisk->Mon.UpdatePercentileTrackers();
         PDisk->Mon.UpdateLights();
         const bool halt = PDisk->Mon.UpdateDeviceHaltCounters();
         PDisk->Mon.UpdateStats();
-        ui64 updatePercentileTrackersCycles = timer.Elapsed();
-
+        ui64 updatePercentileTrackersCycles = timer.Elapsed(); 
+ 
         if (halt) {
             Send(SelfId(), new TEvDeviceError("device halt too long"));
         }
@@ -815,12 +815,12 @@ public:
         } else {
             PDisk->WhiteboardReport(*request); // Send TEvWhiteboardReportResult inside
         }
+ 
 
-
-        LWPROBE(PDiskHandleWakeup, PDisk->PDiskId,
-                HPMilliSecondsFloat(updatePercentileTrackersCycles),
-                HPMilliSecondsFloat(whiteboardReportCycles),
-                HPMilliSecondsFloat(updateSchedulerCycles));
+        LWPROBE(PDiskHandleWakeup, PDisk->PDiskId, 
+                HPMilliSecondsFloat(updatePercentileTrackersCycles), 
+                HPMilliSecondsFloat(whiteboardReportCycles), 
+                HPMilliSecondsFloat(updateSchedulerCycles)); 
     }
 
     void Handle(NPDisk::TEvWhiteboardReportResult::TPtr &ev) {
@@ -835,15 +835,15 @@ public:
         if (result->DiskMetrics) {
             Send(NodeWardenServiceId, result->DiskMetrics.Release());
         }
-        bool sendFlags = false;
-        RealtimeFlag.Update(sendFlags);
-        DeviceFlag.Update(sendFlags);
+        bool sendFlags = false; 
+        RealtimeFlag.Update(sendFlags); 
+        DeviceFlag.Update(sendFlags); 
         AtomicSet(PDisk->NonRealTimeMs, RealtimeFlag.GetRedMsPs());
         AtomicSet(PDisk->SlowDeviceMs, DeviceFlag.GetRedMsPs());
-        if (sendFlags) {
+        if (sendFlags) { 
             Send(NodeWhiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(
-                PDisk->PDiskId, RealtimeFlag.Get(), DeviceFlag.Get()));
-        }
+                PDisk->PDiskId, RealtimeFlag.Get(), DeviceFlag.Get())); 
+        } 
     }
 
     void Handle(NPDisk::TEvDeviceError::TPtr &ev) {

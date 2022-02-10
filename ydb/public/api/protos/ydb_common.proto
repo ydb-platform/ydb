@@ -11,7 +11,7 @@ message FeatureFlag {
         ENABLED = 1;
         DISABLED = 2;
     }
-}
+} 
 
 message CostInfo {
     // Total amount of request units (RU), consumed by the operation.

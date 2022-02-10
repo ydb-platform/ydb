@@ -54,59 +54,59 @@ public:
     void RenderResponse(const TActorContext &ctx) {
         Sort(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end());
         TStringStream str;
-        HTML(str) {
-            H3() {
+        HTML(str) { 
+            H3() { 
                 str << "Nodes";
-            }
-            TABLE_SORTABLE_CLASS("table") {
-                TABLEHEAD() {
-                    TABLER() {
-                      TABLEH() {str << "NodeId";}
-                      TABLEH() {str << "Host";}
-                      TABLEH() {str << "Address";}
-                      TABLEH() {str << "Port";}
-                    }
-                }
-                TABLEBODY() {
+            } 
+            TABLE_SORTABLE_CLASS("table") { 
+                TABLEHEAD() { 
+                    TABLER() { 
+                      TABLEH() {str << "NodeId";} 
+                      TABLEH() {str << "Host";} 
+                      TABLEH() {str << "Address";} 
+                      TABLEH() {str << "Port";} 
+                    } 
+                } 
+                TABLEBODY() { 
                 for (const auto& ni : NodesInfo->Nodes) {
                     const TEvInterconnect::TNodeInfo &nodeInfo = ni;
-                    TABLER() {
-                        TABLED() {str << "<a href=\"nodetabmon?action=browse_tablets&node_id=" << nodeInfo.NodeId << "\">"
-                                << nodeInfo.NodeId << "</a>";}
-                        TABLED() {str << "<a href=\"nodetabmon?action=browse_tablets&node_id=" << nodeInfo.NodeId << "\">"
-                                << nodeInfo.Host << "</a>";}
-                        TABLED() {str << nodeInfo.Address;}
-                        TABLED() {str << nodeInfo.Port;}
-                    }
+                    TABLER() { 
+                        TABLED() {str << "<a href=\"nodetabmon?action=browse_tablets&node_id=" << nodeInfo.NodeId << "\">" 
+                                << nodeInfo.NodeId << "</a>";} 
+                        TABLED() {str << "<a href=\"nodetabmon?action=browse_tablets&node_id=" << nodeInfo.NodeId << "\">" 
+                                << nodeInfo.Host << "</a>";} 
+                        TABLED() {str << nodeInfo.Address;} 
+                        TABLED() {str << nodeInfo.Port;} 
+                    } 
                 }
-                }
-            }
-            HTML_TAG() {str << "<a href=\"nodetabmon?action=browse_tablets\">All tablets of the cluster</a>";}
-            H3() {
+                } 
+            } 
+            HTML_TAG() {str << "<a href=\"nodetabmon?action=browse_tablets\">All tablets of the cluster</a>";} 
+            H3() { 
                 str << "State Storages";
-            }
-            TABLE_SORTABLE_CLASS("table") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "StateStorageId";}
-                        TABLEH() {str << "Domain";}
-                    }
-                }
-                TABLEBODY() {
+            } 
+            TABLE_SORTABLE_CLASS("table") { 
+                TABLEHEAD() { 
+                    TABLER() { 
+                        TABLEH() {str << "StateStorageId";} 
+                        TABLEH() {str << "Domain";} 
+                    } 
+                } 
+                TABLEBODY() { 
 
                     for (const auto& ni : AppData(ctx)->DomainsInfo->Domains) {
                         const TDomainsInfo::TDomain &domain = *ni.second;
                         for (const auto ssId : domain.StateStorageGroups) {
-                            TABLER() {
-                                TABLED() {str << "<a href=\"nodetabmon?action=browse_ss&ss_id=" << ssId << "\">"
-                                        << ssId << "</a>";}
-                                TABLED() {str << domain.Name;}
+                            TABLER() { 
+                                TABLED() {str << "<a href=\"nodetabmon?action=browse_ss&ss_id=" << ssId << "\">" 
+                                        << ssId << "</a>";} 
+                                TABLED() {str << domain.Name;} 
                             }
-                        }
+                        } 
                     }
-                }
-            }
-        }
+                } 
+            } 
+        } 
         ctx.Send(Sender, new NMon::TEvHttpInfoRes(str.Str()));
         Die(ctx);
     }
@@ -254,7 +254,7 @@ public:
             }
         }
         TStringStream str;
-        HTML(str) {
+        HTML(str) { 
             Renderer->RenderPageHeader(str);
             for(ui32 cls = 0; cls < StateClassifier->GetMaxTabletStateClass(); cls++) {
                 auto filter = StateClassifier->GetTabletStateClassFilter(cls);
@@ -264,7 +264,7 @@ public:
                 Renderer->RenderTabletList(str, listName, tablets, {FilterNodeId, filterNodeHost});
             }
             Renderer->RenderPageFooter(str);
-        }
+        } 
         ctx.Send(Sender, new NMon::TEvHttpInfoRes(str.Str()));
         Die(ctx);
     }
@@ -338,53 +338,53 @@ public:
             }
         }
         TStringStream str;
-        HTML(str) {
-            H3() {
+        HTML(str) { 
+            H3() { 
                 str << "Tablets of StateStorage " << StateStorageId;
-            }
-            TABLE_CLASS("table table-bordered") {
-                TABLEHEAD() {
-                         HTML_TAG() {str << "<tr style='background-color:#eee'>";
-                         TABLEH() {str << "<span data-toggle='tooltip' title='Tablet Identifier'>TabletID</span>";}
-                         TABLEH() {str << "<span data-toggle='tooltip' title='Node from which SS Replica has responded'>Replica Node ID / Hostname</span>";}
-                         TABLEH() {str << "<span data-toggle='tooltip' title='Tablet Generation'>Gen</span>";}
-                         TABLEH() {str << "<span data-toggle='tooltip' title='Amount of time tablet has been locked in SS (seconds)'>Locked For</span>";}
-                         TABLEH() {str << "<span data-toggle='tooltip' title='Node where tablet has been started'>Tablet Node ID / Hostname</span>";}
-                         TABLEH() {str << "<span data-toggle='tooltip' title='Is user part (actor) of the tablet started?'>Active</span>";}
+            } 
+            TABLE_CLASS("table table-bordered") { 
+                TABLEHEAD() { 
+                         HTML_TAG() {str << "<tr style='background-color:#eee'>"; 
+                         TABLEH() {str << "<span data-toggle='tooltip' title='Tablet Identifier'>TabletID</span>";} 
+                         TABLEH() {str << "<span data-toggle='tooltip' title='Node from which SS Replica has responded'>Replica Node ID / Hostname</span>";} 
+                         TABLEH() {str << "<span data-toggle='tooltip' title='Tablet Generation'>Gen</span>";} 
+                         TABLEH() {str << "<span data-toggle='tooltip' title='Amount of time tablet has been locked in SS (seconds)'>Locked For</span>";} 
+                         TABLEH() {str << "<span data-toggle='tooltip' title='Node where tablet has been started'>Tablet Node ID / Hostname</span>";} 
+                         TABLEH() {str << "<span data-toggle='tooltip' title='Is user part (actor) of the tablet started?'>Active</span>";} 
                          str << "</tr>";
-                    }
-                }
-                TABLEBODY() {
+                    } 
+                } 
+                TABLEBODY() { 
                          for (auto iit = indexByTabletId.begin(); iit != indexByTabletId.end(); ++iit) {
                              for (auto iptr = iit->second.begin(); iptr != iit->second.end(); ++iptr) {
                                  const NKikimrStateStorage::TEvInfo &ei = *iptr->second;
                                  ui32 replicaNodeId = iptr->first;
-                                 TABLER() {
+                                 TABLER() { 
                                      if (iptr == iit->second.begin()) {
-                                         HTML_TAG() {str << "<td rowspan='" << iit->second.size() << "'>"
-                                                   << "<a href='tablets?TabletID=" << ei.GetTabletID() << "'>" << ei.GetTabletID() << "</a></td>";}
+                                         HTML_TAG() {str << "<td rowspan='" << iit->second.size() << "'>" 
+                                                   << "<a href='tablets?TabletID=" << ei.GetTabletID() << "'>" << ei.GetTabletID() << "</a></td>";} 
                                      }
-                                     TABLED() {
+                                     TABLED() { 
                                          str << replicaNodeId;
                                          auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), replicaNodeId);
                                          if (eq_it.first != NodesInfo->Nodes.end() && eq_it.first->Host) str << " / " << eq_it.first->Host;
-                                     }
-                                     TABLED() {str << ei.GetCurrentGeneration();}
-                                     TABLED() {if (ei.HasLockedFor()) str << TDuration::MicroSeconds(ei.GetLockedFor()).Seconds();}
-                                     TABLED() {
+                                     } 
+                                     TABLED() {str << ei.GetCurrentGeneration();} 
+                                     TABLED() {if (ei.HasLockedFor()) str << TDuration::MicroSeconds(ei.GetLockedFor()).Seconds();} 
+                                     TABLED() { 
                                          ui32 nodeId = ActorIdFromProto(ei.GetCurrentLeader()).NodeId();
                                          str << nodeId;
                                          auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), nodeId);
                                          if (eq_it.first != NodesInfo->Nodes.end() && eq_it.first->Host) str << " / " << eq_it.first->Host;
-                                     }
+                                     } 
                                      TABLED() {if (ActorIdFromProto(ei.GetCurrentLeaderTablet())) str << "<span class='glyphicon glyphicon-ok' title='User Actor present'/>";}
-                                 }
+                                 } 
                              }
                          }
-                }
-            }
-            HTML_TAG() {str << "<script>$(document).ready(function(){$('[data-toggle=\"tooltip\"]').tooltip();}</script>";}
-        }
+                } 
+            } 
+            HTML_TAG() {str << "<script>$(document).ready(function(){$('[data-toggle=\"tooltip\"]').tooltip();}</script>";} 
+        } 
         ctx.Send(Sender, new NMon::TEvHttpInfoRes(str.Str()));
         Die(ctx);
     }

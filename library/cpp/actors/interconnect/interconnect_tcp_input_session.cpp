@@ -1,7 +1,7 @@
 #include "interconnect_tcp_session.h"
 #include "interconnect_tcp_proxy.h"
 #include <library/cpp/actors/core/probes.h>
-#include <library/cpp/actors/util/datetime.h>
+#include <library/cpp/actors/util/datetime.h> 
 
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
@@ -195,7 +195,7 @@ namespace NActors {
             ConfirmedByInput = HeaderConfirm;
             if (AtomicGet(Context->ControlPacketId) <= HeaderConfirm && !NewPingProtocol) {
                 ui64 sendTime = AtomicGet(Context->ControlPacketSendTimer);
-                TDuration duration = CyclesToDuration(GetCycleCountFast() - sendTime);
+                TDuration duration = CyclesToDuration(GetCycleCountFast() - sendTime); 
                 const auto durationUs = duration.MicroSeconds();
                 Metrics->UpdateLegacyPingTimeHist(durationUs);
                 PingQ.push_back(duration);
@@ -217,7 +217,7 @@ namespace NActors {
             Send(SessionId, new TEvProcessPingRequest(HeaderSerial & ~TTcpPacketBuf::PingRequestMask));
         } else if (HeaderSerial & TTcpPacketBuf::PingResponseMask) {
             const ui64 sent = HeaderSerial & ~TTcpPacketBuf::PingResponseMask;
-            const ui64 received = GetCycleCountFast();
+            const ui64 received = GetCycleCountFast(); 
             HandlePingResponse(CyclesToDuration(received - sent));
         } else if (HeaderSerial & TTcpPacketBuf::ClockMask) {
             HandleClock(TInstant::MicroSeconds(HeaderSerial & ~TTcpPacketBuf::ClockMask));

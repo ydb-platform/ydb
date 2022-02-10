@@ -54,7 +54,7 @@ namespace NActors {
         };
 
         volatile ui32 ExecutionState;
-        ui32 Reserved : 4; // never changes, always zero
+        ui32 Reserved : 4; // never changes, always zero 
         ui32 Type : 4; // never changes
         ui32 ActorPack : 2;
         ui32 Knobs : 22;

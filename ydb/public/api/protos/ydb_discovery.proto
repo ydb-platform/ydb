@@ -12,7 +12,7 @@ message ListEndpointsRequest {
     repeated string service = 2;
 
 // todo: feature flags
-}
+} 
 
 message EndpointInfo {
     // This is an address (usually fqdn) and port of this node's grpc endpoint
@@ -34,16 +34,16 @@ message EndpointInfo {
     // endpoint is using certificate chain valid for a balancer hostname, and
     // not this specific node hostname.
     string ssl_target_name_override = 10;
-}
+} 
 
 message ListEndpointsResult {
     repeated EndpointInfo endpoints = 1;
     string self_location = 2;
-}
+} 
 
 message ListEndpointsResponse {
     Ydb.Operations.Operation operation = 1;
-}
+} 
 
 message WhoAmIRequest {
     // Include user groups in response

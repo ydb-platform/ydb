@@ -312,37 +312,37 @@ namespace NPQ {
         void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx)
         {
             TStringStream out;
-            HTML(out)
+            HTML(out) 
             {
-                DIV_CLASS_ID("tab-pane fade", "cache") {
-                    TABLE_SORTABLE_CLASS("table") {
-                        TABLEHEAD() {
-                            TABLER() {
-                                TABLEH() {out << "Partition";}
-                                TABLEH() {out << "Offset";}
-                                TABLEH() {out << "Count";}
-                                TABLEH() {out << "Size";}
-                                TABLEH() {out << "Time";}
-                            }
-                        }
-                        TABLEBODY() {
+                DIV_CLASS_ID("tab-pane fade", "cache") { 
+                    TABLE_SORTABLE_CLASS("table") { 
+                        TABLEHEAD() { 
+                            TABLER() { 
+                                TABLEH() {out << "Partition";} 
+                                TABLEH() {out << "Offset";} 
+                                TABLEH() {out << "Count";} 
+                                TABLEH() {out << "Size";} 
+                                TABLEH() {out << "Time";} 
+                            } 
+                        } 
+                        TABLEBODY() { 
                             for (const auto& c: Cache.CachedMap()) {
                                 const TCacheValue::TPtr data = c.second.GetBlob();
                                 if (!data)
                                     continue;
-                                TABLER() {
-                                    TABLED() {out << int(c.first.Partition);}
-                                    TABLED() {out << c.first.Offset;}
-                                    TABLED() {out << c.first.Count;}
-                                    TABLED() {out << data->GetValue().size();}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(data->GetAccessTime());}
-                                }
+                                TABLER() { 
+                                    TABLED() {out << int(c.first.Partition);} 
+                                    TABLED() {out << c.first.Offset;} 
+                                    TABLED() {out << c.first.Count;} 
+                                    TABLED() {out << data->GetValue().size();} 
+                                    TABLED() {out << ToStringLocalTimeUpToSeconds(data->GetAccessTime());} 
+                                } 
                             }
 
-                        }
-                    }
-                }
-            }
+                        } 
+                    } 
+                } 
+            } 
             ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(Max<ui32>(), TVector<TString>(), out.Str()));
         }
 

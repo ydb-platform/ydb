@@ -107,15 +107,15 @@ void TDynamicCountersPage::HandleAbsentSubgroup(IMonHttpRequest& request) {
 
 void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
     IOutputStream& out = request.Output();
-    HTML(out) {
-        DIV() {
+    HTML(out) { 
+        DIV() { 
             out << "<a href='" << request.GetPath() << "/json'>Counters as JSON</a>";
             out << " for <a href='https://wiki.yandex-team.ru/solomon/'>Solomon</a>";
-        }
+        } 
 
         H5() {
             out << "Counters subgroups";
-        }
+        } 
         UL() {
             currentCounters->EnumerateSubgroups([&](const TString& name, const TString& value) {
                 LI() {
@@ -129,7 +129,7 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
         H4() {
             out << "Counters as text";
         }
-    }
+    } 
 }
 
 void TDynamicCountersPage::OutputText(IOutputStream& out, IMonHttpRequest&) {

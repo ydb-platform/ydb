@@ -373,23 +373,23 @@ namespace NKikimr {
                 //    are different from zero
                 TStringStream str;
                 str << "\n";
-                HTML(str) {
-                    DIV_CLASS("panel panel-default") {
-                        DIV_CLASS("panel-heading") {
-                            SMALL() {
-                                STRONG() {str << "INT: ";}
-                                str << Name;
-                            }
-                        }
-                        DIV_CLASS("panel-body") {
+                HTML(str) { 
+                    DIV_CLASS("panel panel-default") { 
+                        DIV_CLASS("panel-heading") { 
+                            SMALL() { 
+                                STRONG() {str << "INT: ";} 
+                                str << Name; 
+                            } 
+                        } 
+                        DIV_CLASS("panel-body") { 
                             OutputRecord("InFlightCount", str, InFlightCount, GetLight(EInFlightCount));
                             OutputRecord("InFlightCost", str, InFlightCost, GetLight(EInFlightCost));
                             OutputRecord("InFlightBytes", str, InFlightBytes, GetLight(EInFlightBytes));
                             OutputRecord("DelayedCount", str, DelayedCount, GetLight(EDelayedCount));
                             OutputRecord("DelayedBytes", str, DelayedBytes, GetLight(EDelayedBytes));
-                        }
-                    }
-                }
+                        } 
+                    } 
+                } 
                 str << "\n";
                 return str.Str();
             }
@@ -538,21 +538,21 @@ namespace NKikimr {
             TString GenerateHtmlState() const {
                 TStringStream str;
                 str << "\n";
-                HTML(str) {
-                    DIV_CLASS("panel panel-default") {
-                        DIV_CLASS("panel-heading") {
-                            SMALL() {
-                                STRONG() {str << "EXT: ";}
-                                str << Name;
-                            }
-                        }
-                        DIV_CLASS("panel-body") {
+                HTML(str) { 
+                    DIV_CLASS("panel panel-default") { 
+                        DIV_CLASS("panel-heading") { 
+                            SMALL() { 
+                                STRONG() {str << "EXT: ";} 
+                                str << Name; 
+                            } 
+                        } 
+                        DIV_CLASS("panel-body") { 
                             str << "Deadline: " << SkeletonFrontDeadline->Val() << "<br>";
                             str << "Overflow: " << SkeletonFrontOverflow->Val() << "<br>";
                             str << "IncorrectMsgId: " << SkeletonFrontIncorrectMsgId->Val() << "<br>";
-                        }
-                    }
-                }
+                        } 
+                    } 
+                } 
                 str << "\n";
 
 
@@ -804,48 +804,48 @@ namespace NKikimr {
             std::pair<ui32, ui32> actorQueues = ctx.CountMailboxEvents(threshold);
 
             TStringStream str;
-            HTML(str) {
+            HTML(str) { 
                 DIV_CLASS("panel panel-default") {
-                    DIV_CLASS("panel-heading") {
+                    DIV_CLASS("panel-heading") { 
                         str << "SkeletonFront Actor";
-                    }
-                    DIV_CLASS("panel-body") {
-                        TABLE_CLASS ("table table-condensed") {
-                            TABLEHEAD() {
-                                TABLER() {
-                                    TABLEH() {str << "Queues";}
-                                    TABLEH() {str << "Size";}
-                                }
-                            }
-                            TABLEBODY() {
-                                TABLER() {
-                                    TABLED() {str << "ActorQueue";}
-                                    TABLED() {
+                    } 
+                    DIV_CLASS("panel-body") { 
+                        TABLE_CLASS ("table table-condensed") { 
+                            TABLEHEAD() { 
+                                TABLER() { 
+                                    TABLEH() {str << "Queues";} 
+                                    TABLEH() {str << "Size";} 
+                                } 
+                            } 
+                            TABLEBODY() { 
+                                TABLER() { 
+                                    TABLED() {str << "ActorQueue";} 
+                                    TABLED() { 
                                         if (actorQueues.first >= threshold)
                                             str << "More than " << threshold;
                                         else
                                             str << actorQueues.first;
-                                    }
-                                }
-                                TABLER() {
-                                    TABLED() {str << "MailboxQueue";}
-                                    TABLED() {
+                                    } 
+                                } 
+                                TABLER() { 
+                                    TABLED() {str << "MailboxQueue";} 
+                                    TABLED() { 
                                         if (actorQueues.second >= threshold)
                                             str << "More than " << threshold;
                                         else
                                             str << actorQueues.second;
-                                    }
-                                }
-                                TABLER() {
-                                    TABLED() {str << "ElapsedTicksAsSeconds";}
-                                    TABLED() {str << GetElapsedTicksAsSeconds();}
-                                }
-                                TABLER() {
-                                    TABLED() {str << "HandledEvents";}
-                                    TABLED() {str << GetHandledEvents();}
-                                }
-                            }
-                        }
+                                    } 
+                                } 
+                                TABLER() { 
+                                    TABLED() {str << "ElapsedTicksAsSeconds";} 
+                                    TABLED() {str << GetElapsedTicksAsSeconds();} 
+                                } 
+                                TABLER() { 
+                                    TABLED() {str << "HandledEvents";} 
+                                    TABLED() {str << GetHandledEvents();} 
+                                } 
+                            } 
+                        } 
                     }
                 }
             }
@@ -861,7 +861,7 @@ namespace NKikimr {
                         str << "SkeletonFront";
                     }
                     DIV_CLASS("panel-body") {
-                        DIV_CLASS("row") {
+                        DIV_CLASS("row") { 
                             // global VDisk state and SkeletonFront State
                             DIV_CLASS("col-md-6") {str << GenerateHtmlStateForGlobalVDiskState(); }
                             DIV_CLASS("col-md-6") {str << GenerateHtmlStateForSkeletonFrontActor(ctx); }
@@ -875,21 +875,21 @@ namespace NKikimr {
                             DIV_CLASS("col-md-2") {str << IntQueueFastGets->GenerateHtmlState();}
                             DIV_CLASS("col-md-2") {str << IntQueueDiscover->GenerateHtmlState();}
                             DIV_CLASS("col-md-2") {str << IntQueueLowGets->GenerateHtmlState();}
-                        }
-                        DIV_CLASS("row") {
+                        } 
+                        DIV_CLASS("row") { 
                             // ext queues
-                            DIV_CLASS("col-md-2") {str << ExtQueueTabletLogPuts.GenerateHtmlState();}
-                            DIV_CLASS("col-md-2") {str << ExtQueueAsyncBlobPuts.GenerateHtmlState();}
-                            DIV_CLASS("col-md-2") {str << ExtQueueUserDataPuts.GenerateHtmlState();}
-                            DIV_CLASS("col-md-2") {str << ExtQueueAsyncGets.GenerateHtmlState();}
-                            DIV_CLASS("col-md-2") {str << ExtQueueFastGets.GenerateHtmlState();}
-                            DIV_CLASS("col-md-2") {str << ExtQueueDiscoverGets.GenerateHtmlState();}
+                            DIV_CLASS("col-md-2") {str << ExtQueueTabletLogPuts.GenerateHtmlState();} 
+                            DIV_CLASS("col-md-2") {str << ExtQueueAsyncBlobPuts.GenerateHtmlState();} 
+                            DIV_CLASS("col-md-2") {str << ExtQueueUserDataPuts.GenerateHtmlState();} 
+                            DIV_CLASS("col-md-2") {str << ExtQueueAsyncGets.GenerateHtmlState();} 
+                            DIV_CLASS("col-md-2") {str << ExtQueueFastGets.GenerateHtmlState();} 
+                            DIV_CLASS("col-md-2") {str << ExtQueueDiscoverGets.GenerateHtmlState();} 
                             DIV_CLASS("col-md-2") {str << ExtQueueLowGets.GenerateHtmlState();}
                             // uses column wrapping (sum is greater than 12)
-                        }
-                    }
-                }
-            }
+                        } 
+                    } 
+                } 
+            } 
 
             return str.Str();
         }
@@ -1268,19 +1268,19 @@ namespace NKikimr {
         // Set receiving time
         ////////////////////////////////////////////////////////////////////////////
         template <typename TPtr>
-        void SetReceivedTime(TPtr& ev) {
-            using TRecord = decltype(ev->Get()->Record);
+        void SetReceivedTime(TPtr& ev) { 
+            using TRecord = decltype(ev->Get()->Record); 
             if constexpr (std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVMovedPatch>
                        || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVPatchStart>
                        || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVPatchDiff>
                        || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVPatchXorDiff>
                        || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVPut>
-                       || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVMultiPut>
-                       || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVGet>)
-            {
-                const double usPerCycle = 1000000.0 / NHPTimer::GetCyclesPerSecond();
-                ev->Get()->Record.MutableTimestamps()->SetReceivedByVDiskUs(GetCycleCountFast() * usPerCycle);
-            }
+                       || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVMultiPut> 
+                       || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVGet>) 
+            { 
+                const double usPerCycle = 1000000.0 / NHPTimer::GetCyclesPerSecond(); 
+                ev->Get()->Record.MutableTimestamps()->SetReceivedByVDiskUs(GetCycleCountFast() * usPerCycle); 
+            } 
         }
 
         ////////////////////////////////////////////////////////////////////////////
@@ -1400,7 +1400,7 @@ namespace NKikimr {
             // update GroupInfo-related fields
             GInfo = info;
             const auto& prevVDiskId = std::exchange(SelfVDiskId, vdiskId);
-
+ 
             // forward message to Skeleton
             ctx.Send(SkeletonId, new TEvVGenerationChange(vdiskId, info));
 

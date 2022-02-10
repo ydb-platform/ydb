@@ -737,11 +737,11 @@ ui64 TCompactionLogic::GetBackingSize(ui64 ownerTabletId) const {
 }
 
 void TCompactionLogic::OutputHtml(IOutputStream &out, const NTable::TScheme &scheme, const TCgiParameters& cgi) {
-    HTML(out) {
+    HTML(out) { 
         for (const auto &xtable : State->Tables) {
-            H4() {out << scheme.GetTableInfo(xtable.first)->Name;}
+            H4() {out << scheme.GetTableInfo(xtable.first)->Name;} 
 
-            DIV_CLASS("row") { out
+            DIV_CLASS("row") { out 
                 << "InMem Size: " << xtable.second.InMem.EstimatedSize
                 << ", Changes: " << xtable.second.InMem.Steps
                 << ", Compaction state: " << xtable.second.InMem.State
@@ -760,11 +760,11 @@ void TCompactionLogic::OutputHtml(IOutputStream &out, const NTable::TScheme &sch
                         << " (priority " << xtable.second.InMem.CompactionTask.Priority
                         << ") submitted " << xtable.second.InMem.CompactionTask.SubmissionTimestamp.ToStringLocal();
                 }
-            }
+            } 
 
             xtable.second.Strategy->OutputHtml(out);
         }
-    }
+    } 
 }
 
 }}

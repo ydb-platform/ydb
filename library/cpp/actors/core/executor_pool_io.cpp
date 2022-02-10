@@ -1,59 +1,59 @@
 #include "executor_pool_io.h"
 #include "mailbox.h"
 #include <library/cpp/actors/util/affinity.h>
-#include <library/cpp/actors/util/datetime.h>
+#include <library/cpp/actors/util/datetime.h> 
 
 namespace NActors {
-    TIOExecutorPool::TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName, TAffinity* affinity, ui32 maxActivityType)
-        : TExecutorPoolBase(poolId, threads, affinity, maxActivityType)
+    TIOExecutorPool::TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName, TAffinity* affinity, ui32 maxActivityType) 
+        : TExecutorPoolBase(poolId, threads, affinity, maxActivityType) 
         , Threads(new TThreadCtx[threads])
         , PoolName(poolName)
-    {}
+    {} 
 
-    TIOExecutorPool::TIOExecutorPool(const TIOExecutorPoolConfig& cfg)
-        : TIOExecutorPool(
-            cfg.PoolId,
-            cfg.Threads,
-            cfg.PoolName,
-            new TAffinity(cfg.Affinity),
-            cfg.MaxActivityType
-        )
-    {}
-
+    TIOExecutorPool::TIOExecutorPool(const TIOExecutorPoolConfig& cfg) 
+        : TIOExecutorPool( 
+            cfg.PoolId, 
+            cfg.Threads, 
+            cfg.PoolName, 
+            new TAffinity(cfg.Affinity), 
+            cfg.MaxActivityType 
+        ) 
+    {} 
+ 
     TIOExecutorPool::~TIOExecutorPool() {
         Threads.Destroy();
         while (ThreadQueue.Pop(0))
             ;
     }
 
-    ui32 TIOExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) {
-        ui32 workerId = wctx.WorkerId;
-        Y_VERIFY_DEBUG(workerId < PoolThreads);
+    ui32 TIOExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) { 
+        ui32 workerId = wctx.WorkerId; 
+        Y_VERIFY_DEBUG(workerId < PoolThreads); 
 
         NHPTimer::STime elapsed = 0;
         NHPTimer::STime parked = 0;
-        NHPTimer::STime hpstart = GetCycleCountFast();
+        NHPTimer::STime hpstart = GetCycleCountFast(); 
         NHPTimer::STime hpnow;
 
         const TAtomic x = AtomicDecrement(Semaphore);
         if (x < 0) {
-            TThreadCtx& threadCtx = Threads[workerId];
-            ThreadQueue.Push(workerId + 1, revolvingCounter);
-            hpnow = GetCycleCountFast();
+            TThreadCtx& threadCtx = Threads[workerId]; 
+            ThreadQueue.Push(workerId + 1, revolvingCounter); 
+            hpnow = GetCycleCountFast(); 
             elapsed += hpnow - hpstart;
             if (threadCtx.Pad.Park())
                 return 0;
-            hpstart = GetCycleCountFast();
+            hpstart = GetCycleCountFast(); 
             parked += hpstart - hpnow;
         }
 
         while (!RelaxedLoad(&StopFlag)) {
             if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
-                hpnow = GetCycleCountFast();
+                hpnow = GetCycleCountFast(); 
                 elapsed += hpnow - hpstart;
-                wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, elapsed);
+                wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, elapsed); 
                 if (parked > 0) {
-                    wctx.AddParkedCycles(parked);
+                    wctx.AddParkedCycles(parked); 
                 }
                 return activation;
             }
@@ -63,12 +63,12 @@ namespace NActors {
         return 0;
     }
 
-    void TIOExecutorPool::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Schedule(deadline - ActorSystem->Timestamp(), ev, cookie, workerId);
+    void TIOExecutorPool::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) { 
+        Schedule(deadline - ActorSystem->Timestamp(), ev, cookie, workerId); 
     }
 
-    void TIOExecutorPool::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Y_UNUSED(workerId);
+    void TIOExecutorPool::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) { 
+        Y_UNUSED(workerId); 
 
         const auto current = ActorSystem->Monotonic();
         if (deadline < current)
@@ -78,8 +78,8 @@ namespace NActors {
         ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie);
     }
 
-    void TIOExecutorPool::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Y_UNUSED(workerId);
+    void TIOExecutorPool::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) { 
+        Y_UNUSED(workerId); 
         const auto deadline = ActorSystem->Monotonic() + delta;
 
         TTicketLock::TGuard guard(&ScheduleLock);
@@ -101,7 +101,7 @@ namespace NActors {
         }
     }
 
-    void TIOExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) {
+    void TIOExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) { 
         TAffinityGuard affinityGuard(Affinity());
 
         ActorSystem = actorSystem;
@@ -109,7 +109,7 @@ namespace NActors {
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
 
         for (ui32 i = 0; i != PoolThreads; ++i) {
-            Threads[i].Thread.Reset(new TExecutorThread(i, 0, actorSystem, this, MailboxTable.Get(), PoolName));
+            Threads[i].Thread.Reset(new TExecutorThread(i, 0, actorSystem, this, MailboxTable.Get(), PoolName)); 
         }
 
         *scheduleReaders = &ScheduleQueue->Reader;

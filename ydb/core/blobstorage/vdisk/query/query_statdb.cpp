@@ -46,7 +46,7 @@ namespace NKikimr {
 
             void Finish(IOutputStream &str, bool pretty) {
 
-                HTML(str) {
+                HTML(str) { 
                     if (pretty) {
                         TABLED_ATTRS({{"data-text", Sprintf("%" PRIu64, Num)}, {"align", "right"}}) { SMALL() {
                             FormatHumanReadable(str, Num, 1000, 2, ItemSuffix);
@@ -58,9 +58,9 @@ namespace NKikimr {
                         TABLED() {SMALL() {str << Num;}}
                         TABLED() {SMALL() {str << DataSize;}}
                     }
-                    TABLED() {SMALL() {str << MinId.ToString();}}
-                    TABLED() {SMALL() {str << MaxId.ToString();}}
-                }
+                    TABLED() {SMALL() {str << MinId.ToString();}} 
+                    TABLED() {SMALL() {str << MaxId.ToString();}} 
+                } 
             }
         };
 
@@ -82,7 +82,7 @@ namespace NKikimr {
 
             void Finish(IOutputStream &str, ui64 tabletID, bool pretty) {
                 auto tabletIDOutputer = [tabletID] (IOutputStream &str) {
-                    HTML(str) {
+                    HTML(str) { 
                         TABLED() {
                             SMALL() {
                                 // tabletId and hyperlink to per tablet stat
@@ -90,7 +90,7 @@ namespace NKikimr {
                                     << "\">" << tabletID << "</a>";
                             }
                         }
-                    }
+                    } 
                 };
                 Finish(str, tabletIDOutputer, pretty);
             }
@@ -107,17 +107,17 @@ namespace NKikimr {
                         std::function<void (IOutputStream &)> t,
                         bool pretty)
             {
-                HTML(str) {
+                HTML(str) { 
                     for (auto &c : Channels) {
                         if (!c.Empty()) {
-                            TABLER() {
+                            TABLER() { 
                                 t(str);
-                                TABLED() {SMALL() {str << (&c - &Channels.front());}}
+                                TABLED() {SMALL() {str << (&c - &Channels.front());}} 
                                 c.Finish(str, pretty);
-                            }
+                            } 
                         }
                     }
-                }
+                } 
             }
         };
 
@@ -171,53 +171,53 @@ namespace NKikimr {
             }
 
             void Finish(IOutputStream &str, bool pretty) {
-                HTML(str) {
-                    DIV_CLASS("panel panel-info") {
-                        DIV_CLASS("panel-heading") {
+                HTML(str) { 
+                    DIV_CLASS("panel panel-info") { 
+                        DIV_CLASS("panel-heading") { 
                             str << "Per (Tablet, Channel) LogoBlobs DB Statistics "
                                 << "(raw data w/o garbage collection)";
-                        }
-                        DIV_CLASS("panel-body") {
+                        } 
+                        DIV_CLASS("panel-body") { 
                             TABLE_SORTABLE_CLASS ("table table-condensed") {
-                                TABLEHEAD() {
-                                    TABLER() {
-                                        TABLEH() {str << "TabletID";}
-                                        TABLEH() {str << "Channel";}
-                                        TABLEH() {str << "Blobs";}
-                                        TABLEH() {str << "DataSize";}
-                                        TABLEH() {str << "MinId";}
-                                        TABLEH() {str << "MaxId";}
-                                    }
-                                }
-                                TABLEBODY() {
+                                TABLEHEAD() { 
+                                    TABLER() { 
+                                        TABLEH() {str << "TabletID";} 
+                                        TABLEH() {str << "Channel";} 
+                                        TABLEH() {str << "Blobs";} 
+                                        TABLEH() {str << "DataSize";} 
+                                        TABLEH() {str << "MinId";} 
+                                        TABLEH() {str << "MaxId";} 
+                                    } 
+                                } 
+                                TABLEBODY() { 
                                     for (const auto &x : Hash)
                                         x.second->Finish(str, pretty);
-                                }
-                            }
-                        }
-                    }
-                    DIV_CLASS("panel panel-info") {
-                        DIV_CLASS("panel-heading") {
+                                } 
+                            } 
+                        } 
+                    } 
+                    DIV_CLASS("panel panel-info") { 
+                        DIV_CLASS("panel-heading") { 
                             str << "Per Channel (all tablets) LogoBlobs DB Statistics";
-                        }
-                        DIV_CLASS("panel-body") {
+                        } 
+                        DIV_CLASS("panel-body") { 
                             TABLE_SORTABLE_CLASS ("table table-condensed") {
-                                TABLEHEAD() {
-                                    TABLER() {
-                                        TABLEH() {str << "Channel";}
-                                        TABLEH() {str << "Blobs";}
-                                        TABLEH() {str << "DataSize";}
-                                        TABLEH() {str << "MinId";}
-                                        TABLEH() {str << "MaxId";}
-                                    }
-                                }
-                                TABLEBODY() {
+                                TABLEHEAD() { 
+                                    TABLER() { 
+                                        TABLEH() {str << "Channel";} 
+                                        TABLEH() {str << "Blobs";} 
+                                        TABLEH() {str << "DataSize";} 
+                                        TABLEH() {str << "MinId";} 
+                                        TABLEH() {str << "MaxId";} 
+                                    } 
+                                } 
+                                TABLEBODY() { 
                                     AllChannels.Finish(str, pretty);
-                                }
-                            }
-                        }
-                    }
-                }
+                                } 
+                            } 
+                        } 
+                    } 
+                } 
             }
         };
     }

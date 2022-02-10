@@ -45,7 +45,7 @@ struct TDelayedQueue {
 
 class TTxProxy : public TActorBootstrapped<TTxProxy> {
     TTxProxyServices Services;
-
+ 
     THolder<NTabletPipe::IClientCache> PipeClientCache;
     TTxAllocatorClient TxAllocatorClient;
 

@@ -1,22 +1,22 @@
-#pragma once
-
+#pragma once 
+ 
 #include "datashard.h"
-
+ 
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
-
+ 
 #include <util/generic/ptr.h>
 #include <util/generic/hash.h>
 
-namespace NKikimr {
+namespace NKikimr { 
 
 namespace NTabletFlatExecutor {
 class TTransactionContext;
 }
 
 namespace NDataShard {
-
+ 
 //
 struct TUserTable : public TThrRefBase {
     using TPtr = TIntrusivePtr<TUserTable>;
@@ -357,7 +357,7 @@ struct TUserTable : public TThrRefBase {
     TMap<TPathId, TTableIndex> Indexes;
     TMap<TPathId, TCdcStream> CdcStreams;
     ui32 AsyncIndexCount = 0;
-
+ 
     // Tablet thread access only, updated in-place
     mutable TStats Stats;
     mutable bool StatsUpdateInProgress = false;
@@ -368,7 +368,7 @@ struct TUserTable : public TThrRefBase {
     ui32 SpecialColUpdateNo = Max<ui32>();
 
     TUserTable() { }
-
+ 
     TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid); // for create
     TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr); // for alter
 
@@ -419,6 +419,6 @@ private:
     void CheckSpecialColumns();
     void AlterSchema();
     void ParseProto(const NKikimrSchemeOp::TTableDescription& descr);
-};
-
-}}
+}; 
+ 
+}} 

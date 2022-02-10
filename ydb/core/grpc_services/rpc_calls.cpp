@@ -6,26 +6,26 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-template <>
+template <> 
 void FillYdbStatus(Ydb::PersQueue::V1::StreamingWriteServerMessage& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status) {
     resp.set_status(status);
     NYql::IssuesToMessage(issues, resp.mutable_issues());
 }
 
-template <>
+template <> 
 void FillYdbStatus(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status) {
     resp.set_status(status);
     NYql::IssuesToMessage(issues, resp.mutable_issues());
 }
 
-template <>
+template <> 
 void FillYdbStatus(Draft::Dummy::PingResponse& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status) {
     Y_UNUSED(resp);
     Y_UNUSED(issues);
     Y_UNUSED(status);
 }
 
-template <>
+template <> 
 void FillYdbStatus(Ydb::Coordination::SessionResponse& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status) {
     auto* failure = resp.mutable_failure();
     failure->set_status(status);

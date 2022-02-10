@@ -116,11 +116,11 @@ namespace NActors {
 
         void TryUpdateTime(NHPTimer::STime* lastTimeUpdate) {
             NHPTimer::STime hpnow;
-            GetTimeFast(&hpnow);
+            GetTimeFast(&hpnow); 
             const ui64 elapsedCycles = hpnow > *lastTimeUpdate ? hpnow - *lastTimeUpdate : 0;
             if (elapsedCycles > Cfg.ResolutionMicroseconds * (NHPTimer::GetCyclesPerSecond() / IntrasecondThreshold)) {
                 UpdateTime();
-                GetTimeFast(lastTimeUpdate);
+                GetTimeFast(lastTimeUpdate); 
             }
         }
 

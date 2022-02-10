@@ -1,12 +1,12 @@
 #pragma once
 
 #include <library/cpp/lwtrace/all.h>
-#include <util/generic/vector.h>
+#include <util/generic/vector.h> 
 
-#define LWACTORID(x) (x).RawX1(), (x).RawX2(), (x).NodeId(), (x).PoolID()
-#define LWTYPE_ACTORID ui64, ui64, ui32, ui32
-#define LWNAME_ACTORID(n) n "Raw1", n "Raw2", n "NodeId", n "PoolId"
-
+#define LWACTORID(x) (x).RawX1(), (x).RawX2(), (x).NodeId(), (x).PoolID() 
+#define LWTYPE_ACTORID ui64, ui64, ui32, ui32 
+#define LWNAME_ACTORID(n) n "Raw1", n "Raw2", n "NodeId", n "PoolId" 
+ 
 #define ACTORLIB_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)                                                                         \
     PROBE(SlowEvent, GROUPS("ActorLibSlow"),                                                                                          \
           TYPES(ui32, double, TString, TString, TString),                                                                             \
@@ -23,27 +23,27 @@
     PROBE(SlowRegisterAdd, GROUPS("ActorLibSlow"),                                                                                    \
           TYPES(ui32, double),                                                                                                        \
           NAMES("poolId", "registerAddMs"))                                                                                           \
-    PROBE(MailboxPushedOutBySoftPreemption, GROUPS("ActorLibMailbox", "ActorLibMailboxPushedOut"),                                    \
-          TYPES(ui32, TString, ui32, TDuration, ui64, TString, TString),                                                              \
-          NAMES("poolId", "pool", "eventsProcessed", "procTimeMs", "workerId", "actorId", "actorType"))                               \
-    PROBE(MailboxPushedOutByTime, GROUPS("ActorLibMailbox", "ActorLibMailboxPushedOut"),                                              \
-          TYPES(ui32, TString, ui32, TDuration, ui64, TString, TString),                                                              \
-          NAMES("poolId", "pool", "eventsProcessed", "procTimeMs", "workerId", "actorId", "actorType"))                               \
-    PROBE(MailboxPushedOutByEventCount, GROUPS("ActorLibMailbox", "ActorLibMailboxPushedOut"),                                        \
-          TYPES(ui32, TString, ui32, TDuration, ui64, TString, TString),                                                              \
-          NAMES("poolId", "pool", "eventsProcessed", "procTimeMs", "workerId", "actorId", "actorType"))                               \
-    PROBE(MailboxEmpty, GROUPS("ActorLibMailbox"),                                                                                    \
-          TYPES(ui32, TString, ui32, TDuration, ui64, TString, TString),                                                              \
-          NAMES("poolId", "pool", "eventsProcessed", "procTimeMs", "workerId", "actorId", "actorType"))                               \
-    PROBE(ActivationBegin, GROUPS(),                                                                                                  \
-          TYPES(ui32, ui32, ui32, double),                                                                                            \
-          NAMES("cpu", "poolId", "workerId", "expireMs"))                                                                             \
-    PROBE(ActivationEnd, GROUPS(),                                                                                                    \
-          TYPES(ui32, ui32, ui32),                                                                                                    \
-          NAMES("cpu", "poolId", "workerId"))                                                                                         \
+    PROBE(MailboxPushedOutBySoftPreemption, GROUPS("ActorLibMailbox", "ActorLibMailboxPushedOut"),                                    \ 
+          TYPES(ui32, TString, ui32, TDuration, ui64, TString, TString),                                                              \ 
+          NAMES("poolId", "pool", "eventsProcessed", "procTimeMs", "workerId", "actorId", "actorType"))                               \ 
+    PROBE(MailboxPushedOutByTime, GROUPS("ActorLibMailbox", "ActorLibMailboxPushedOut"),                                              \ 
+          TYPES(ui32, TString, ui32, TDuration, ui64, TString, TString),                                                              \ 
+          NAMES("poolId", "pool", "eventsProcessed", "procTimeMs", "workerId", "actorId", "actorType"))                               \ 
+    PROBE(MailboxPushedOutByEventCount, GROUPS("ActorLibMailbox", "ActorLibMailboxPushedOut"),                                        \ 
+          TYPES(ui32, TString, ui32, TDuration, ui64, TString, TString),                                                              \ 
+          NAMES("poolId", "pool", "eventsProcessed", "procTimeMs", "workerId", "actorId", "actorType"))                               \ 
+    PROBE(MailboxEmpty, GROUPS("ActorLibMailbox"),                                                                                    \ 
+          TYPES(ui32, TString, ui32, TDuration, ui64, TString, TString),                                                              \ 
+          NAMES("poolId", "pool", "eventsProcessed", "procTimeMs", "workerId", "actorId", "actorType"))                               \ 
+    PROBE(ActivationBegin, GROUPS(),                                                                                                  \ 
+          TYPES(ui32, ui32, ui32, double),                                                                                            \ 
+          NAMES("cpu", "poolId", "workerId", "expireMs"))                                                                             \ 
+    PROBE(ActivationEnd, GROUPS(),                                                                                                    \ 
+          TYPES(ui32, ui32, ui32),                                                                                                    \ 
+          NAMES("cpu", "poolId", "workerId"))                                                                                         \ 
     PROBE(ExecutorThreadStats, GROUPS("ActorLibStats"),                                                                               \
-          TYPES(ui32, TString, ui64, ui64, ui64, double, double),                                                                     \
-          NAMES("poolId", "pool", "workerId", "execCount", "readyActivationCount", "execMs", "nonExecMs"))                            \
+          TYPES(ui32, TString, ui64, ui64, ui64, double, double),                                                                     \ 
+          NAMES("poolId", "pool", "workerId", "execCount", "readyActivationCount", "execMs", "nonExecMs"))                            \ 
     PROBE(SlowICReadLoopAdjustSize, GROUPS("ActorLibSlowIC"),                                                                         \
           TYPES(double),                                                                                                              \
           NAMES("icReadLoopAdjustSizeMs"))                                                                                            \
@@ -75,102 +75,102 @@
           TYPES(ui64, ui64, ui32, ui32, ui64, ui64),                                                                                  \
           NAMES("timeUs", "timerfd_expirations", "eventsGottenFromQueues", "eventsSent",                                              \
                 "eventsInSendQueue", "eventSchedulingErrorUs"))                                                                       \
-    PROBE(ForwardEvent, GROUPS("Orbit", "InterconnectSessionTCP"),                                                                    \
-          TYPES(ui32, ui32, ui32, LWTYPE_ACTORID, LWTYPE_ACTORID, ui64, ui32),                                                        \
-          NAMES("peerId", "type", "flags", LWNAME_ACTORID("r"), LWNAME_ACTORID("s"),                                                  \
-                "cookie", "eventSerializedSize"))                                                                                     \
-    PROBE(EnqueueEvent, GROUPS("InterconnectSessionTCP"),                                                                             \
-          TYPES(ui32, ui64, TDuration, ui16, ui64, ui64),                                                                             \
-          NAMES("peerId", "numEventsInReadyChannels", "enqueueBlockedTotalMs", "channelId", "queueSizeInEvents", "queueSizeInBytes")) \
-    PROBE(SerializeToPacketBegin, GROUPS("InterconnectSessionTCP"),                                                                   \
-          TYPES(ui32, ui16, ui64),                                                                                                    \
-          NAMES("peerId", "channelId", "outputQueueSize"))                                                                            \
-    PROBE(SerializeToPacketEnd, GROUPS("InterconnectSessionTCP"),                                                                     \
-          TYPES(ui32, ui16, ui64, ui64),                                                                                              \
-          NAMES("peerId", "channelId", "outputQueueSize", "offsetInPacket"))                                                          \
-    PROBE(FillSendingBuffer, GROUPS("InterconnectSessionTCP"),                                                                        \
-          TYPES(ui32, ui32, ui64, TDuration),                                                                                         \
-          NAMES("peerId", "taskBytesGenerated", "numEventsInReadyChannelsBehind", "fillBlockedTotalMs"))                              \
-    PROBE(PacketGenerated, GROUPS("InterconnectSessionTCP"),                                                                          \
-          TYPES(ui32, ui64, ui64, ui64, ui64),                                                                                        \
-          NAMES("peerId", "bytesUnwritten", "inflightBytes", "packetsGenerated", "packetSize"))                                       \
-    PROBE(PacketWrittenToSocket, GROUPS("InterconnectSessionTCP"),                                                                    \
-          TYPES(ui32, ui64, bool, ui64, ui64, TDuration, int),                                                                        \
-          NAMES("peerId", "packetsWrittenToSocket", "triedWriting", "packetDataSize", "bytesUnwritten", "writeBlockedTotalMs", "fd")) \
-    PROBE(GenerateTraffic, GROUPS("InterconnectSessionTCP"),                                                                          \
-          TYPES(ui32, double, ui64, ui32, ui64),                                                                                      \
-          NAMES("peerId", "generateTrafficMs", "dataBytesSent", "generatedPackets", "generatedBytes"))                                \
-    PROBE(WriteToSocket, GROUPS("InterconnectSessionTCP"),                                                                            \
-          TYPES(ui32, ui64, ui64, ui64, ui64, TDuration, int),                                                                        \
-          NAMES("peerId", "bytesWritten", "packetsWritten", "packetsWrittenToSocket", "bytesUnwritten", "writeBlockedTotalMs", "fd")) \
-    PROBE(UpdateFromInputSession, GROUPS("InterconnectSessionTCP"),                                                                   \
-          TYPES(ui32, double),                                                                                                        \
-          NAMES("peerId", "pingMs"))                                                                                                  \
-    PROBE(UnblockByDropConfirmed, GROUPS("InterconnectSessionTCP"),                                                                   \
-          TYPES(ui32, double),                                                                                                        \
-          NAMES("peerId", "updateDeliveryMs"))                                                                                        \
-    PROBE(DropConfirmed, GROUPS("InterconnectSessionTCP"),                                                                            \
-          TYPES(ui32, ui64, ui64),                                                                                                    \
-          NAMES("peerId", "droppedBytes", "inflightBytes"))                                                                           \
-    PROBE(StartRam, GROUPS("InterconnectSessionTCP"),                                                                                 \
-          TYPES(ui32),                                                                                                                \
-          NAMES("peerId"))                                                                                                            \
-    PROBE(FinishRam, GROUPS("InterconnectSessionTCP"),                                                                                \
-          TYPES(ui32, double),                                                                                                        \
-          NAMES("peerId", "ramMs"))                                                                                                   \
-    PROBE(SkipGenerateTraffic, GROUPS("InterconnectSessionTCP"),                                                                      \
-          TYPES(ui32, double),                                                                                                        \
-          NAMES("peerId", "elapsedSinceRamMs"))                                                                                       \
-    PROBE(StartBatching, GROUPS("InterconnectSessionTCP"),                                                                            \
-          TYPES(ui32, double),                                                                                                        \
-          NAMES("peerId", "batchPeriodMs"))                                                                                           \
-    PROBE(FinishBatching, GROUPS("InterconnectSessionTCP"),                                                                           \
-          TYPES(ui32, double),                                                                                                        \
-          NAMES("peerId", "finishBatchDeliveryMs"))                                                                                   \
-    PROBE(BlockedWrite, GROUPS("InterconnectSessionTCP"),                                                                             \
-          TYPES(ui32, double, ui64),                                                                                                  \
-          NAMES("peerId", "sendQueueSize", "writtenBytes"))                                                                           \
-    PROBE(ReadyWrite, GROUPS("InterconnectSessionTCP"),                                                                               \
-          TYPES(ui32, double, double),                                                                                                \
-          NAMES("peerId", "readyWriteDeliveryMs", "blockMs"))                                                                         \
-    PROBE(EpollStartWaitIn, GROUPS("EpollThread"),                                                                                    \
-          TYPES(),                                                                                                                    \
-          NAMES())                                                                                                                    \
-    PROBE(EpollFinishWaitIn, GROUPS("EpollThread"),                                                                                   \
-          TYPES(i32),                                                                                                                 \
-          NAMES("eventsCount"))                                                                                                       \
-    PROBE(EpollWaitOut, GROUPS("EpollThread"),                                                                                        \
-          TYPES(i32),                                                                                                                 \
-          NAMES("eventsCount"))                                                                                                       \
-    PROBE(EpollSendReadyRead, GROUPS("EpollThread"),                                                                                  \
-          TYPES(bool, bool, int),                                                                                                     \
-          NAMES("hangup", "event", "fd"))                                                                                             \
-    PROBE(EpollSendReadyWrite, GROUPS("EpollThread"),                                                                                 \
-          TYPES(bool, bool, int),                                                                                                     \
-          NAMES("hangup", "event", "fd"))                                                                                             \
-    PROBE(HardPreemption, GROUPS("UnitedWorker"),                                                                                     \
-          TYPES(ui32, ui32, ui32, ui32),                                                                                              \
-          NAMES("cpu", "prevPoolId", "prevWorkerId", "nextWorkerId"))                                                                 \
-    PROBE(SetPreemptionTimer, GROUPS("UnitedWorker", "PreemptionTimer"),                                                              \
-          TYPES(ui32, ui32, int, double, double),                                                                                     \
-          NAMES("cpu", "workerId", "fd", "nowMs", "preemptMs"))                                                                       \
-    PROBE(ResetPreemptionTimer, GROUPS("UnitedWorker", "PreemptionTimer"),                                                            \
-          TYPES(ui32, ui32, int, double, double),                                                                                     \
-          NAMES("cpu", "workerId", "fd", "nowMs", "preemptMs"))                                                                       \
-    PROBE(SlowWorkerActionRace, GROUPS("UnitedWorker"),                                                                               \
-          TYPES(ui32, ui32, ui64),                                                                                                    \
-          NAMES("cpu", "poolId", "slowPoolsMask"))                                                                                    \
-    PROBE(PoolStats, GROUPS("PoolCpuBalancer"),                                                                                       \
-          TYPES(ui32, TString, ui64, ui8, ui8, double, double, double, ui64, ui64, ui64),                                             \
-          NAMES("poolId", "pool", "currentCpus", "loadClass", "priority", "scaleFactor", "cpuIdle", "cpuLoad", "importance", "addImportance", "subImportance")) \
-    PROBE(MoveCpu, GROUPS("PoolCpuBalancer"),                                                                                         \
-          TYPES(ui32, ui64, TString, TString, ui32),                                                                                  \
-          NAMES("fromPoolId", "toPoolId", "fromPool", "toPool", "cpu"))                                                               \
+    PROBE(ForwardEvent, GROUPS("Orbit", "InterconnectSessionTCP"),                                                                    \ 
+          TYPES(ui32, ui32, ui32, LWTYPE_ACTORID, LWTYPE_ACTORID, ui64, ui32),                                                        \ 
+          NAMES("peerId", "type", "flags", LWNAME_ACTORID("r"), LWNAME_ACTORID("s"),                                                  \ 
+                "cookie", "eventSerializedSize"))                                                                                     \ 
+    PROBE(EnqueueEvent, GROUPS("InterconnectSessionTCP"),                                                                             \ 
+          TYPES(ui32, ui64, TDuration, ui16, ui64, ui64),                                                                             \ 
+          NAMES("peerId", "numEventsInReadyChannels", "enqueueBlockedTotalMs", "channelId", "queueSizeInEvents", "queueSizeInBytes")) \ 
+    PROBE(SerializeToPacketBegin, GROUPS("InterconnectSessionTCP"),                                                                   \ 
+          TYPES(ui32, ui16, ui64),                                                                                                    \ 
+          NAMES("peerId", "channelId", "outputQueueSize"))                                                                            \ 
+    PROBE(SerializeToPacketEnd, GROUPS("InterconnectSessionTCP"),                                                                     \ 
+          TYPES(ui32, ui16, ui64, ui64),                                                                                              \ 
+          NAMES("peerId", "channelId", "outputQueueSize", "offsetInPacket"))                                                          \ 
+    PROBE(FillSendingBuffer, GROUPS("InterconnectSessionTCP"),                                                                        \ 
+          TYPES(ui32, ui32, ui64, TDuration),                                                                                         \ 
+          NAMES("peerId", "taskBytesGenerated", "numEventsInReadyChannelsBehind", "fillBlockedTotalMs"))                              \ 
+    PROBE(PacketGenerated, GROUPS("InterconnectSessionTCP"),                                                                          \ 
+          TYPES(ui32, ui64, ui64, ui64, ui64),                                                                                        \ 
+          NAMES("peerId", "bytesUnwritten", "inflightBytes", "packetsGenerated", "packetSize"))                                       \ 
+    PROBE(PacketWrittenToSocket, GROUPS("InterconnectSessionTCP"),                                                                    \ 
+          TYPES(ui32, ui64, bool, ui64, ui64, TDuration, int),                                                                        \ 
+          NAMES("peerId", "packetsWrittenToSocket", "triedWriting", "packetDataSize", "bytesUnwritten", "writeBlockedTotalMs", "fd")) \ 
+    PROBE(GenerateTraffic, GROUPS("InterconnectSessionTCP"),                                                                          \ 
+          TYPES(ui32, double, ui64, ui32, ui64),                                                                                      \ 
+          NAMES("peerId", "generateTrafficMs", "dataBytesSent", "generatedPackets", "generatedBytes"))                                \ 
+    PROBE(WriteToSocket, GROUPS("InterconnectSessionTCP"),                                                                            \ 
+          TYPES(ui32, ui64, ui64, ui64, ui64, TDuration, int),                                                                        \ 
+          NAMES("peerId", "bytesWritten", "packetsWritten", "packetsWrittenToSocket", "bytesUnwritten", "writeBlockedTotalMs", "fd")) \ 
+    PROBE(UpdateFromInputSession, GROUPS("InterconnectSessionTCP"),                                                                   \ 
+          TYPES(ui32, double),                                                                                                        \ 
+          NAMES("peerId", "pingMs"))                                                                                                  \ 
+    PROBE(UnblockByDropConfirmed, GROUPS("InterconnectSessionTCP"),                                                                   \ 
+          TYPES(ui32, double),                                                                                                        \ 
+          NAMES("peerId", "updateDeliveryMs"))                                                                                        \ 
+    PROBE(DropConfirmed, GROUPS("InterconnectSessionTCP"),                                                                            \ 
+          TYPES(ui32, ui64, ui64),                                                                                                    \ 
+          NAMES("peerId", "droppedBytes", "inflightBytes"))                                                                           \ 
+    PROBE(StartRam, GROUPS("InterconnectSessionTCP"),                                                                                 \ 
+          TYPES(ui32),                                                                                                                \ 
+          NAMES("peerId"))                                                                                                            \ 
+    PROBE(FinishRam, GROUPS("InterconnectSessionTCP"),                                                                                \ 
+          TYPES(ui32, double),                                                                                                        \ 
+          NAMES("peerId", "ramMs"))                                                                                                   \ 
+    PROBE(SkipGenerateTraffic, GROUPS("InterconnectSessionTCP"),                                                                      \ 
+          TYPES(ui32, double),                                                                                                        \ 
+          NAMES("peerId", "elapsedSinceRamMs"))                                                                                       \ 
+    PROBE(StartBatching, GROUPS("InterconnectSessionTCP"),                                                                            \ 
+          TYPES(ui32, double),                                                                                                        \ 
+          NAMES("peerId", "batchPeriodMs"))                                                                                           \ 
+    PROBE(FinishBatching, GROUPS("InterconnectSessionTCP"),                                                                           \ 
+          TYPES(ui32, double),                                                                                                        \ 
+          NAMES("peerId", "finishBatchDeliveryMs"))                                                                                   \ 
+    PROBE(BlockedWrite, GROUPS("InterconnectSessionTCP"),                                                                             \ 
+          TYPES(ui32, double, ui64),                                                                                                  \ 
+          NAMES("peerId", "sendQueueSize", "writtenBytes"))                                                                           \ 
+    PROBE(ReadyWrite, GROUPS("InterconnectSessionTCP"),                                                                               \ 
+          TYPES(ui32, double, double),                                                                                                \ 
+          NAMES("peerId", "readyWriteDeliveryMs", "blockMs"))                                                                         \ 
+    PROBE(EpollStartWaitIn, GROUPS("EpollThread"),                                                                                    \ 
+          TYPES(),                                                                                                                    \ 
+          NAMES())                                                                                                                    \ 
+    PROBE(EpollFinishWaitIn, GROUPS("EpollThread"),                                                                                   \ 
+          TYPES(i32),                                                                                                                 \ 
+          NAMES("eventsCount"))                                                                                                       \ 
+    PROBE(EpollWaitOut, GROUPS("EpollThread"),                                                                                        \ 
+          TYPES(i32),                                                                                                                 \ 
+          NAMES("eventsCount"))                                                                                                       \ 
+    PROBE(EpollSendReadyRead, GROUPS("EpollThread"),                                                                                  \ 
+          TYPES(bool, bool, int),                                                                                                     \ 
+          NAMES("hangup", "event", "fd"))                                                                                             \ 
+    PROBE(EpollSendReadyWrite, GROUPS("EpollThread"),                                                                                 \ 
+          TYPES(bool, bool, int),                                                                                                     \ 
+          NAMES("hangup", "event", "fd"))                                                                                             \ 
+    PROBE(HardPreemption, GROUPS("UnitedWorker"),                                                                                     \ 
+          TYPES(ui32, ui32, ui32, ui32),                                                                                              \ 
+          NAMES("cpu", "prevPoolId", "prevWorkerId", "nextWorkerId"))                                                                 \ 
+    PROBE(SetPreemptionTimer, GROUPS("UnitedWorker", "PreemptionTimer"),                                                              \ 
+          TYPES(ui32, ui32, int, double, double),                                                                                     \ 
+          NAMES("cpu", "workerId", "fd", "nowMs", "preemptMs"))                                                                       \ 
+    PROBE(ResetPreemptionTimer, GROUPS("UnitedWorker", "PreemptionTimer"),                                                            \ 
+          TYPES(ui32, ui32, int, double, double),                                                                                     \ 
+          NAMES("cpu", "workerId", "fd", "nowMs", "preemptMs"))                                                                       \ 
+    PROBE(SlowWorkerActionRace, GROUPS("UnitedWorker"),                                                                               \ 
+          TYPES(ui32, ui32, ui64),                                                                                                    \ 
+          NAMES("cpu", "poolId", "slowPoolsMask"))                                                                                    \ 
+    PROBE(PoolStats, GROUPS("PoolCpuBalancer"),                                                                                       \ 
+          TYPES(ui32, TString, ui64, ui8, ui8, double, double, double, ui64, ui64, ui64),                                             \ 
+          NAMES("poolId", "pool", "currentCpus", "loadClass", "priority", "scaleFactor", "cpuIdle", "cpuLoad", "importance", "addImportance", "subImportance")) \ 
+    PROBE(MoveCpu, GROUPS("PoolCpuBalancer"),                                                                                         \ 
+          TYPES(ui32, ui64, TString, TString, ui32),                                                                                  \ 
+          NAMES("fromPoolId", "toPoolId", "fromPool", "toPool", "cpu"))                                                               \ 
     /**/
 
 LWTRACE_DECLARE_PROVIDER(ACTORLIB_PROVIDER)
-
-namespace NActors {
-    struct TActorSystemSetup;
-    TVector<NLWTrace::TDashboard> LWTraceDashboards(TActorSystemSetup* setup);
-}
+ 
+namespace NActors { 
+    struct TActorSystemSetup; 
+    TVector<NLWTrace::TDashboard> LWTraceDashboards(TActorSystemSetup* setup); 
+} 

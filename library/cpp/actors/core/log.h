@@ -255,7 +255,7 @@ namespace NActors {
         void RenderComponentPriorities(IOutputStream& str);
         void LogIgnoredCount(TInstant now);
         void WriteMessageStat(const NLog::TEvLog& ev);
-        static const char* FormatLocalTimestamp(TInstant time, char* buf);
+        static const char* FormatLocalTimestamp(TInstant time, char* buf); 
     };
 
     ////////////////////////////////////////////////////////////////////////////////

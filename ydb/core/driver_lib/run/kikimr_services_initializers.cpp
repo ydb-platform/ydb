@@ -149,12 +149,12 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/executor_pool_basic.h>
 #include <library/cpp/actors/core/executor_pool_io.h>
-#include <library/cpp/actors/core/executor_pool_united.h>
+#include <library/cpp/actors/core/executor_pool_united.h> 
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/log_settings.h>
 #include <library/cpp/actors/core/mon.h>
 #include <library/cpp/actors/core/mon_stats.h>
-#include <library/cpp/actors/core/probes.h>
+#include <library/cpp/actors/core/probes.h> 
 #include <library/cpp/actors/core/process_stats.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/actors/core/io_dispatcher.h>
@@ -169,7 +169,7 @@
 #include <library/cpp/actors/interconnect/load.h>
 #include <library/cpp/actors/interconnect/poller_actor.h>
 #include <library/cpp/actors/interconnect/poller_tcp.h>
-#include <library/cpp/actors/util/affinity.h>
+#include <library/cpp/actors/util/affinity.h> 
 
 #include <library/cpp/logger/global/global.h>
 #include <library/cpp/logger/log.h>
@@ -178,8 +178,8 @@
 
 #include <library/cpp/svnversion/svnversion.h>
 
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
-
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h> 
+ 
 #include <util/digest/city.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/size_literals.h>
@@ -200,148 +200,148 @@ IKikimrServicesInitializer::IKikimrServicesInitializer(const TKikimrRunConfig& r
 
 // TBasicServicesInitializer
 
-template <class TConfig>
-static TCpuMask ParseAffinity(const TConfig& cfg) {
-    TCpuMask result;
-    if (cfg.GetCpuList()) {
-        result = TCpuMask(cfg.GetCpuList());
-    } else if (cfg.GetX().size() > 0) {
-        result = TCpuMask(cfg.GetX().begin(), cfg.GetX().size());
-    } else { // use all processors
-        TAffinity available;
-        available.Current();
-        result = available;
-    }
-    if (cfg.GetExcludeCpuList()) {
-        result = result - TCpuMask(cfg.GetExcludeCpuList());
-    }
-    return result;
-}
-
-void AddExecutorPool(
-    TCpuManagerConfig& cpuManager,
-    const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig,
-    const NKikimrConfig::TActorSystemConfig& systemConfig,
-    ui32 poolId,
-    ui32 maxActivityType,
-    ui32& unitedThreads)
+template <class TConfig> 
+static TCpuMask ParseAffinity(const TConfig& cfg) { 
+    TCpuMask result; 
+    if (cfg.GetCpuList()) { 
+        result = TCpuMask(cfg.GetCpuList()); 
+    } else if (cfg.GetX().size() > 0) { 
+        result = TCpuMask(cfg.GetX().begin(), cfg.GetX().size()); 
+    } else { // use all processors 
+        TAffinity available; 
+        available.Current(); 
+        result = available; 
+    } 
+    if (cfg.GetExcludeCpuList()) { 
+        result = result - TCpuMask(cfg.GetExcludeCpuList()); 
+    } 
+    return result; 
+} 
+ 
+void AddExecutorPool( 
+    TCpuManagerConfig& cpuManager, 
+    const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig, 
+    const NKikimrConfig::TActorSystemConfig& systemConfig, 
+    ui32 poolId, 
+    ui32 maxActivityType, 
+    ui32& unitedThreads) 
 {
     switch (poolConfig.GetType()) {
     case NKikimrConfig::TActorSystemConfig::TExecutor::BASIC: {
-        TBasicExecutorPoolConfig basic;
-        basic.PoolId = poolId;
-        basic.PoolName = poolConfig.GetName();
-        basic.Threads = poolConfig.GetThreads();
-        basic.SpinThreshold = poolConfig.GetSpinThreshold();
-        basic.Affinity = ParseAffinity(poolConfig.GetAffinity());
-        basic.RealtimePriority = poolConfig.GetRealtimePriority();
-        basic.MaxActivityType = maxActivityType;
+        TBasicExecutorPoolConfig basic; 
+        basic.PoolId = poolId; 
+        basic.PoolName = poolConfig.GetName(); 
+        basic.Threads = poolConfig.GetThreads(); 
+        basic.SpinThreshold = poolConfig.GetSpinThreshold(); 
+        basic.Affinity = ParseAffinity(poolConfig.GetAffinity()); 
+        basic.RealtimePriority = poolConfig.GetRealtimePriority(); 
+        basic.MaxActivityType = maxActivityType; 
         if (poolConfig.HasTimePerMailboxMicroSecs()) {
-            basic.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs());
+            basic.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs()); 
         } else if (systemConfig.HasTimePerMailboxMicroSecs()) {
-            basic.TimePerMailbox = TDuration::MicroSeconds(systemConfig.GetTimePerMailboxMicroSecs());
+            basic.TimePerMailbox = TDuration::MicroSeconds(systemConfig.GetTimePerMailboxMicroSecs()); 
         }
         if (poolConfig.HasEventsPerMailbox()) {
-            basic.EventsPerMailbox = poolConfig.GetEventsPerMailbox();
+            basic.EventsPerMailbox = poolConfig.GetEventsPerMailbox(); 
         } else if (systemConfig.HasEventsPerMailbox()) {
-            basic.EventsPerMailbox = systemConfig.GetEventsPerMailbox();
+            basic.EventsPerMailbox = systemConfig.GetEventsPerMailbox(); 
         }
-        Y_VERIFY(basic.EventsPerMailbox != 0);
-        cpuManager.Basic.emplace_back(std::move(basic));
-        break;
+        Y_VERIFY(basic.EventsPerMailbox != 0); 
+        cpuManager.Basic.emplace_back(std::move(basic)); 
+        break; 
     }
-    case NKikimrConfig::TActorSystemConfig::TExecutor::IO: {
-        TIOExecutorPoolConfig io;
-        io.PoolId = poolId;
-        io.PoolName = poolConfig.GetName();
-        io.Threads = poolConfig.GetThreads();
-        io.Affinity = ParseAffinity(poolConfig.GetAffinity());
-        io.MaxActivityType = maxActivityType;
-        cpuManager.IO.emplace_back(std::move(io));
-        break;
-    }
-    case NKikimrConfig::TActorSystemConfig::TExecutor::UNITED: {
-        TUnitedExecutorPoolConfig united;
-        united.PoolId = poolId;
-        united.PoolName = poolConfig.GetName();
-        united.Concurrency = poolConfig.GetConcurrency();
-        united.Weight = (NActors::TPoolWeight)poolConfig.GetWeight();
-        united.Allowed = ParseAffinity(poolConfig.GetAffinity());
-        united.MaxActivityType = maxActivityType;
-        if (poolConfig.HasTimePerMailboxMicroSecs()) {
-            united.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs());
-        } else if (systemConfig.HasTimePerMailboxMicroSecs()) {
-            united.TimePerMailbox = TDuration::MicroSeconds(systemConfig.GetTimePerMailboxMicroSecs());
-        }
-        if (poolConfig.HasEventsPerMailbox()) {
-            united.EventsPerMailbox = poolConfig.GetEventsPerMailbox();
-        } else if (systemConfig.HasEventsPerMailbox()) {
-            united.EventsPerMailbox = systemConfig.GetEventsPerMailbox();
-        }
-        Y_VERIFY(united.EventsPerMailbox != 0);
-        united.Balancing.Cpus = poolConfig.GetThreads();
-        united.Balancing.MinCpus = poolConfig.GetMinThreads();
-        united.Balancing.MaxCpus = poolConfig.GetMaxThreads();
-        united.Balancing.Priority = poolConfig.GetBalancingPriority();
-        united.Balancing.ToleratedLatencyUs = poolConfig.GetToleratedLatencyUs();
-        unitedThreads += united.Balancing.Cpus;
-        cpuManager.United.emplace_back(std::move(united));
-        break;
-    }
+    case NKikimrConfig::TActorSystemConfig::TExecutor::IO: { 
+        TIOExecutorPoolConfig io; 
+        io.PoolId = poolId; 
+        io.PoolName = poolConfig.GetName(); 
+        io.Threads = poolConfig.GetThreads(); 
+        io.Affinity = ParseAffinity(poolConfig.GetAffinity()); 
+        io.MaxActivityType = maxActivityType; 
+        cpuManager.IO.emplace_back(std::move(io)); 
+        break; 
+    } 
+    case NKikimrConfig::TActorSystemConfig::TExecutor::UNITED: { 
+        TUnitedExecutorPoolConfig united; 
+        united.PoolId = poolId; 
+        united.PoolName = poolConfig.GetName(); 
+        united.Concurrency = poolConfig.GetConcurrency(); 
+        united.Weight = (NActors::TPoolWeight)poolConfig.GetWeight(); 
+        united.Allowed = ParseAffinity(poolConfig.GetAffinity()); 
+        united.MaxActivityType = maxActivityType; 
+        if (poolConfig.HasTimePerMailboxMicroSecs()) { 
+            united.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs()); 
+        } else if (systemConfig.HasTimePerMailboxMicroSecs()) { 
+            united.TimePerMailbox = TDuration::MicroSeconds(systemConfig.GetTimePerMailboxMicroSecs()); 
+        } 
+        if (poolConfig.HasEventsPerMailbox()) { 
+            united.EventsPerMailbox = poolConfig.GetEventsPerMailbox(); 
+        } else if (systemConfig.HasEventsPerMailbox()) { 
+            united.EventsPerMailbox = systemConfig.GetEventsPerMailbox(); 
+        } 
+        Y_VERIFY(united.EventsPerMailbox != 0); 
+        united.Balancing.Cpus = poolConfig.GetThreads(); 
+        united.Balancing.MinCpus = poolConfig.GetMinThreads(); 
+        united.Balancing.MaxCpus = poolConfig.GetMaxThreads(); 
+        united.Balancing.Priority = poolConfig.GetBalancingPriority(); 
+        united.Balancing.ToleratedLatencyUs = poolConfig.GetToleratedLatencyUs(); 
+        unitedThreads += united.Balancing.Cpus; 
+        cpuManager.United.emplace_back(std::move(united)); 
+        break; 
+    } 
     default:
         Y_FAIL();
     }
 }
 
-static TUnitedWorkersConfig CreateUnitedWorkersConfig(const NKikimrConfig::TActorSystemConfig::TUnitedWorkers& config, ui32 unitedThreads) {
-    TUnitedWorkersConfig result;
-    result.CpuCount = unitedThreads;
-    if (config.HasCpuCount()) {
-        result.CpuCount = config.GetCpuCount();
-    }
-    if (config.HasSpinThresholdUs()) {
-        result.SpinThresholdUs = config.GetSpinThresholdUs();
-    }
-    if (config.HasPoolLimitUs()) {
-        result.PoolLimitUs = config.GetPoolLimitUs();
-    }
-    if (config.HasEventLimitUs()) {
-        result.EventLimitUs = config.GetEventLimitUs();
-    }
-    if (config.HasLimitPrecisionUs()) {
-        result.LimitPrecisionUs = config.GetLimitPrecisionUs();
-    }
-    if (config.HasFastWorkerPriority()) {
-        result.FastWorkerPriority = config.GetFastWorkerPriority();
-    }
-    if (config.HasIdleWorkerPriority()) {
-        result.IdleWorkerPriority = config.GetIdleWorkerPriority();
-    }
-    if (config.HasAffinity()) {
-        result.Allowed = ParseAffinity(config.GetAffinity());
-    }
-    if (config.HasNoRealtime()) {
-        result.NoRealtime = config.GetNoRealtime();
-    }
-    if (config.HasNoAffinity()) {
-        result.NoAffinity = config.GetNoAffinity();
-    }
-    if (config.HasBalancerPeriodUs()) {
-        result.Balancer.PeriodUs = config.GetBalancerPeriodUs();
-    }
-    return result;
-}
-
-static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSystemConfig& config, ui32 maxActivityType) {
-    TCpuManagerConfig cpuManager;
-    ui32 unitedThreads = 0;
-    for (int poolId = 0; poolId < config.GetExecutor().size(); poolId++) {
-        AddExecutorPool(cpuManager, config.GetExecutor(poolId), config, poolId, maxActivityType, unitedThreads);
-    }
-    cpuManager.UnitedWorkers = CreateUnitedWorkersConfig(config.GetUnitedWorkers(), unitedThreads);
-    return cpuManager;
-}
-
+static TUnitedWorkersConfig CreateUnitedWorkersConfig(const NKikimrConfig::TActorSystemConfig::TUnitedWorkers& config, ui32 unitedThreads) { 
+    TUnitedWorkersConfig result; 
+    result.CpuCount = unitedThreads; 
+    if (config.HasCpuCount()) { 
+        result.CpuCount = config.GetCpuCount(); 
+    } 
+    if (config.HasSpinThresholdUs()) { 
+        result.SpinThresholdUs = config.GetSpinThresholdUs(); 
+    } 
+    if (config.HasPoolLimitUs()) { 
+        result.PoolLimitUs = config.GetPoolLimitUs(); 
+    } 
+    if (config.HasEventLimitUs()) { 
+        result.EventLimitUs = config.GetEventLimitUs(); 
+    } 
+    if (config.HasLimitPrecisionUs()) { 
+        result.LimitPrecisionUs = config.GetLimitPrecisionUs(); 
+    } 
+    if (config.HasFastWorkerPriority()) { 
+        result.FastWorkerPriority = config.GetFastWorkerPriority(); 
+    } 
+    if (config.HasIdleWorkerPriority()) { 
+        result.IdleWorkerPriority = config.GetIdleWorkerPriority(); 
+    } 
+    if (config.HasAffinity()) { 
+        result.Allowed = ParseAffinity(config.GetAffinity()); 
+    } 
+    if (config.HasNoRealtime()) { 
+        result.NoRealtime = config.GetNoRealtime(); 
+    } 
+    if (config.HasNoAffinity()) { 
+        result.NoAffinity = config.GetNoAffinity(); 
+    } 
+    if (config.HasBalancerPeriodUs()) { 
+        result.Balancer.PeriodUs = config.GetBalancerPeriodUs(); 
+    } 
+    return result; 
+} 
+ 
+static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSystemConfig& config, ui32 maxActivityType) { 
+    TCpuManagerConfig cpuManager; 
+    ui32 unitedThreads = 0; 
+    for (int poolId = 0; poolId < config.GetExecutor().size(); poolId++) { 
+        AddExecutorPool(cpuManager, config.GetExecutor(poolId), config, poolId, maxActivityType, unitedThreads); 
+    } 
+    cpuManager.UnitedWorkers = CreateUnitedWorkersConfig(config.GetUnitedWorkers(), unitedThreads); 
+    return cpuManager; 
+} 
+ 
 static TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSystemConfig::TScheduler &config) {
     const ui64 resolution = config.HasResolution() ? config.GetResolution() : 1024;
     Y_VERIFY_DEBUG((resolution & (resolution - 1)) == 0);  // resolution must be power of 2
@@ -517,24 +517,24 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
     setup->NodeId = NodeId;
     setup->MaxActivityType = GetActivityTypeCount();
-    setup->CpuManager = CreateCpuManagerConfig(systemConfig, setup->MaxActivityType);
-    for (ui32 poolId = 0; poolId != setup->GetExecutorsCount(); ++poolId) {
+    setup->CpuManager = CreateCpuManagerConfig(systemConfig, setup->MaxActivityType); 
+    for (ui32 poolId = 0; poolId != setup->GetExecutorsCount(); ++poolId) { 
         const auto &execConfig = systemConfig.GetExecutor(poolId);
-        if (execConfig.HasInjectMadSquirrels()) {
-            for (ui32 i = execConfig.GetInjectMadSquirrels(); i > 0; --i) {
+        if (execConfig.HasInjectMadSquirrels()) { 
+            for (ui32 i = execConfig.GetInjectMadSquirrels(); i > 0; --i) { 
                 setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(TActorId(), TActorSetupCmd(CreateMadSquirrel(), TMailboxType::HTSwap, poolId)));
-            }
-        }
+            } 
+        } 
     }
-
+ 
     auto schedulerConfig = CreateSchedulerConfig(systemConfig.GetScheduler());
     schedulerConfig.MonCounters = GetServiceCounters(counters, "utils");
     setup->Scheduler.Reset(CreateSchedulerThread(schedulerConfig));
     setup->LocalServices.emplace_back(MakeIoDispatcherActorId(), TActorSetupCmd(CreateIoDispatcherActor(
         schedulerConfig.MonCounters->GetSubgroup("subsystem", "io_dispatcher")), TMailboxType::HTSwap, systemPoolId));
 
-    NLwTraceMonPage::DashboardRegistry().Register(NActors::LWTraceDashboards(setup));
-
+    NLwTraceMonPage::DashboardRegistry().Register(NActors::LWTraceDashboards(setup)); 
+ 
     if (Config.HasNameserviceConfig()) {
         const auto& nsConfig = Config.GetNameserviceConfig();
         const TActorId resolverId = NDnsResolver::MakeDnsResolverActorId();
@@ -1374,13 +1374,13 @@ void TTabletsInitializer::InitializeServices(
     }
 }
 
-// TMediatorTimeCastProxyInitializer
+// TMediatorTimeCastProxyInitializer 
 
-TMediatorTimeCastProxyInitializer::TMediatorTimeCastProxyInitializer(const TKikimrRunConfig& runConfig)
+TMediatorTimeCastProxyInitializer::TMediatorTimeCastProxyInitializer(const TKikimrRunConfig& runConfig) 
     : IKikimrServicesInitializer(runConfig) {
 }
 
-void TMediatorTimeCastProxyInitializer::InitializeServices(
+void TMediatorTimeCastProxyInitializer::InitializeServices( 
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
@@ -1684,8 +1684,8 @@ void TSelfPingInitializer::InitializeServices(
 
     const auto counters = GetServiceCounters(appData->Counters, "utils");
 
-    for (size_t poolId = 0; poolId < setup->GetExecutorsCount(); ++poolId) {
-        const auto& poolName = setup->GetPoolName(poolId);
+    for (size_t poolId = 0; poolId < setup->GetExecutorsCount(); ++poolId) { 
+        const auto& poolName = setup->GetPoolName(poolId); 
         auto poolGroup = counters->GetSubgroup("execpool", poolName);
         auto counter = poolGroup->GetCounter("SelfPingMaxUs", false);
         auto cpuTimeCounter = poolGroup->GetCounter("CpuMatBenchNs", false);
@@ -2172,10 +2172,10 @@ TSysViewServiceInitializer::TSysViewServiceInitializer(const TKikimrRunConfig& r
 
 void TSysViewServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     NSysView::TExtCountersConfig config;
-    for (ui32 i = 0; i < setup->GetExecutorsCount(); ++i) {
+    for (ui32 i = 0; i < setup->GetExecutorsCount(); ++i) { 
         config.Pools.push_back(NSysView::TExtCountersConfig::TPool{
-            setup->GetPoolName(i),
-            setup->GetThreads(i)});
+            setup->GetPoolName(i), 
+            setup->GetThreads(i)}); 
     }
 
     // external counters only for dynamic nodes

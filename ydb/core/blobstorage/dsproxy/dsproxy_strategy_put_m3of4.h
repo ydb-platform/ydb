@@ -45,8 +45,8 @@ protected:
                 return state.Parts[i].Data.GetMonolith();
             }
         }
-        const TIntervalVec<i32> interval(0, state.Id.BlobSize());
-        Y_VERIFY(interval.IsSubsetOf(state.Whole.Here), "missing blob data State# %s", state.ToString().data());
+        const TIntervalVec<i32> interval(0, state.Id.BlobSize()); 
+        Y_VERIFY(interval.IsSubsetOf(state.Whole.Here), "missing blob data State# %s", state.ToString().data()); 
         TString wholeBuffer = TString::Uninitialized(state.Id.BlobSize());
         state.Whole.Data.Read(0, const_cast<char*>(wholeBuffer.data()), state.Id.BlobSize());
         TDataPartSet partSet;

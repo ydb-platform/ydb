@@ -26,9 +26,9 @@
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <util/string/escape.h>
 
-// Uncomment the following macro to enable consistency check before every transactions in TTxRequest
-//#define KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
-
+// Uncomment the following macro to enable consistency check before every transactions in TTxRequest 
+//#define KIKIMR_KEYVALUE_CONSISTENCY_CHECKS 
+ 
 namespace NKikimr {
 namespace NKeyValue {
 
@@ -76,29 +76,29 @@ protected:
                     return true;
                 }
                 Self.State.UpdateResourceMetrics(ctx);
-            }
+            } 
             Self.State.InitExecute(Self.TabletID(), KeyValueActorId, txc.Generation, db, ctx, Self.Info());
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet
                     << " TTxInit flat Execute returns true");
-            return true;
-        }
+            return true; 
+        } 
 
         static bool LoadStateFromDB(TKeyValueState& state, NTable::TDatabase& db) {
             state.Clear();
-            // Just walk through the DB and read all the keys and values
+            // Just walk through the DB and read all the keys and values 
             const std::array<ui32, 2> tags {{ KEY_TAG, VALUE_TAG }};
             auto mode = NTable::ELookup::GreaterOrEqualThan;
             auto iter = db.Iterate(TABLE_ID, {}, tags, mode);
 
             if (!db.Precharge(TABLE_ID, {}, {}, tags, 0, -1, -1))
-                return false;
+                return false; 
 
             while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
                 const auto &row = iter->Row();
-
+ 
                 TString key(row.Get(0).AsBuf());
                 TString value(row.Get(1).AsBuf());
-
+ 
                 state.Load(key, value);
                 if (state.GetIsDamaged()) {
                     return true;
@@ -130,7 +130,7 @@ protected:
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxRequest Execute");
             if (!CheckConsistency(txc)) {
-                return false;
+                return false; 
             }
             if (Self->State.GetIsDamaged()) {
                 return true;
@@ -147,22 +147,22 @@ protected:
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID() << " TTxRequest Complete");
             Self->State.RequestComplete(Intermediate, ctx, Self->Info());
         }
-
-        bool CheckConsistency(NTabletFlatExecutor::TTransactionContext &txc) {
-#ifdef KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
-            TKeyValueState state;
+ 
+        bool CheckConsistency(NTabletFlatExecutor::TTransactionContext &txc) { 
+#ifdef KIKIMR_KEYVALUE_CONSISTENCY_CHECKS 
+            TKeyValueState state; 
             if (!TTxInit::LoadStateFromDB(state, txc.DB)) {
-                return false;
-            }
+                return false; 
+            } 
             Y_VERIFY(!state.IsDamaged());
-            state.VerifyEqualIndex(Self->State);
-            txc.DB.NoMoreReadsForTx();
-            return true;
-#else
+            state.VerifyEqualIndex(Self->State); 
+            txc.DB.NoMoreReadsForTx(); 
+            return true; 
+#else 
             Y_UNUSED(txc);
-            return true;
-#endif
-        }
+            return true; 
+#endif 
+        } 
     };
 
     struct TTxMonitoring : public NTabletFlatExecutor::ITransaction {

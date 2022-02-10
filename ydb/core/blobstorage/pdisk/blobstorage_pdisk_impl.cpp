@@ -2982,7 +2982,7 @@ void TPDisk::Update() {
     ui64 realDuration = HPNanoSeconds(nowCycles - ForsetiRealTimeCycles);
     ui64 virtualDuration = ForsetiTimeNs - ForsetiPrevTimeNs;
     ui64 timeCorrection = 0;
-
+ 
     if (virtualDuration < realDuration) {
         // Correct virtual time to catch up with real time.
         timeCorrection = realDuration - virtualDuration;
@@ -2991,7 +2991,7 @@ void TPDisk::Update() {
         // Apply correction.
         ForsetiTimeNs += timeCorrection;
     }
-
+ 
     // Millibatch size in terms of virtual time
     ui64 maxDuration = DriveModel.TimeForSizeNs(milliBatchSize, TDriveModel::OP_TYPE_AVG);
     ui64 virtualDeadline = ForsetiTimeNs + maxDuration;

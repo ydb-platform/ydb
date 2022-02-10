@@ -98,7 +98,7 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         auto last = Self->ServerlessStorageLastBillTime;
 
         if (now < last) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxServerlessStorageBilling: unable do anything from the past"
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxServerlessStorageBilling: unable do anything from the past" 
                         << ", schemeshardId: " << Self->SelfTabletId()
                         << ", domainId: " << Self->ParentDomainId
                         << ", now: " << now

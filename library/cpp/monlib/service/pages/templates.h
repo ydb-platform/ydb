@@ -1,11 +1,11 @@
 #pragma once
 
 #include <util/stream/output.h>
-#include <util/system/defaults.h>
+#include <util/system/defaults.h> 
 
-#define WITH_SCOPED(var, value) WITH_SCOPED_I(var, value, Y_GENERATE_UNIQUE_ID(WITH_SCOPED_LABEL_))
+#define WITH_SCOPED(var, value) WITH_SCOPED_I(var, value, Y_GENERATE_UNIQUE_ID(WITH_SCOPED_LABEL_)) 
 
-#define WITH_SCOPED_I(var, value, label) \
+#define WITH_SCOPED_I(var, value, label) \ 
     if (auto var = (value)) {              \
         Y_UNUSED(var);                   \
         goto label;                      \
@@ -27,12 +27,12 @@
 #define HTML_TAG() TAG(THtml)
 #define DIV() TAG(TDiv)
 #define DIV_CLASS(cls) TAG_CLASS(TDiv, cls)
-#define DIV_CLASS_ID(cls, id) TAG_CLASS_ID(TDiv, cls, id)
+#define DIV_CLASS_ID(cls, id) TAG_CLASS_ID(TDiv, cls, id) 
 #define PRE() TAG(TPre)
 #define TABLE() TAG(TTable)
 #define TABLE_CLASS(cls) TAG_CLASS(TTable, cls)
 #define TABLE_SORTABLE() TABLE_CLASS("table-sortable")
-#define TABLE_SORTABLE_CLASS(cls) TABLE_CLASS(cls " table-sortable")
+#define TABLE_SORTABLE_CLASS(cls) TABLE_CLASS(cls " table-sortable") 
 #define TABLEHEAD() TAG(TTableHead)
 #define TABLEHEAD_CLASS(cls) TAG_CLASS(TTableHead, cls)
 #define TABLEBODY() TAG(TTableBody)
@@ -48,9 +48,9 @@
 #define FORM_CLASS(cls) TAG_CLASS(TFormC, cls)
 #define LABEL() TAG(TLabelC)
 #define LABEL_CLASS(cls) TAG_CLASS(TLabelC, cls)
-#define LABEL_CLASS_FOR(cls, for0) TAG_CLASS_FOR(TLabelC, cls, for0)
+#define LABEL_CLASS_FOR(cls, for0) TAG_CLASS_FOR(TLabelC, cls, for0) 
 #define SPAN_CLASS(cls) TAG_CLASS(TSpanC, cls)
-#define SPAN_CLASS_STYLE(cls, style) TAG_CLASS_STYLE(TSpanC, cls, style)
+#define SPAN_CLASS_STYLE(cls, style) TAG_CLASS_STYLE(TSpanC, cls, style) 
 
 #define PARA() TAG(TPara)
 #define PARA_CLASS(cls) TAG_CLASS(TPara, cls)
@@ -87,12 +87,12 @@
 
 #define CAPTION() TAG(TCaption)
 #define CAPTION_CLASS(cls) CAPTION_CLASS(TCaption, cls)
-
+ 
 #define HTML_OUTPUT_PARAM(str, param) str << #param << ": " << param << "<br/>"
 #define HTML_OUTPUT_TIME_PARAM(str, param) str << #param << ": " << ToStringLocalTimeUpToSeconds(param) << "<br/>"
 
-#define COLLAPSED_BUTTON_CONTENT(targetId, buttonText) \
-    WITH_SCOPED(tmp, NMonitoring::TCollapsedButton(__stream, targetId, buttonText))
+#define COLLAPSED_BUTTON_CONTENT(targetId, buttonText) \ 
+    WITH_SCOPED(tmp, NMonitoring::TCollapsedButton(__stream, targetId, buttonText)) 
 
 #define HREF(path) \
     WITH_SCOPED(tmp, NMonitoring::THref(__stream, path))
@@ -156,10 +156,10 @@ namespace NMonitoring {
             }
         }
 
-        explicit inline operator bool() const noexcept {
-            return true; // just to work with WITH_SCOPED
-        }
-
+        explicit inline operator bool() const noexcept { 
+            return true; // just to work with WITH_SCOPED 
+        } 
+ 
         IOutputStream& Str;
     };
 
@@ -180,30 +180,30 @@ namespace NMonitoring {
             }
         }
 
-        explicit inline operator bool() const noexcept {
-            return true; // just to work with WITH_SCOPED
-        }
-
+        explicit inline operator bool() const noexcept { 
+            return true; // just to work with WITH_SCOPED 
+        } 
+ 
         IOutputStream& Str;
     };
 
-    struct TOutputStreamRef {
+    struct TOutputStreamRef { 
         TOutputStreamRef(IOutputStream& str)
-            : Str(str)
+            : Str(str) 
         {
         }
-
+ 
         inline operator IOutputStream&() noexcept {
-            return Str;
-        }
-
-        explicit inline operator bool() const noexcept {
-            return true; // just to work with WITH_SCOPED
-        }
-
+            return Str; 
+        } 
+ 
+        explicit inline operator bool() const noexcept { 
+            return true; // just to work with WITH_SCOPED 
+        } 
+ 
         IOutputStream& Str;
-    };
-
+    }; 
+ 
     extern const char HtmlTag[5];
     extern const char HeadTag[5];
     extern const char BodyTag[5];

@@ -377,59 +377,59 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
             Sleep(TDuration::MilliSeconds(1));
         }
     }
-
-    Y_UNIT_TEST(CheckStats) {
-        const size_t size = 4;
-        const size_t msgCount = 1e4;
-        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50);
-
-        auto setup = GetActorSystemSetup(executorPool);
-        TActorSystem actorSystem(setup);
-        actorSystem.Start();
-
-        auto begin = TInstant::Now();
-
-        auto actor = new TTestSenderActor();
-        auto actorId = actorSystem.Register(actor);
-        actor->Start(actor->SelfId(), msgCount);
-        actorSystem.Send(actorId, new TEvMsg());
-
-        while (actor->GetCounter()) {
-            auto now = TInstant::Now();
-            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Counter is " << actor->GetCounter());
-
-            Sleep(TDuration::MilliSeconds(1));
-        }
-
-        TVector<TExecutorThreadStats> stats;
-        TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats);
-        // Sum all per-thread counters into the 0th element
-        for (ui32 idx = 1; idx < stats.size(); ++idx) {
-            stats[0].Aggregate(stats[idx]);
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].SentEvents, msgCount - 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].ReceivedEvents, msgCount);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].PreemptedEvents, 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].NonDeliveredEvents, 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].EmptyMailboxActivation, 0);
-        //UNIT_ASSERT_VALUES_EQUAL(stats[0].CpuNs, 0); // depends on total duration of test, so undefined
-        UNIT_ASSERT(stats[0].ElapsedTicks > 0);
-        UNIT_ASSERT(stats[0].ParkedTicks > 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].BlockedTicks, 0);
-        UNIT_ASSERT(stats[0].ActivationTimeHistogram.TotalSamples >= msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].EventDeliveryTimeHistogram.TotalSamples, msgCount);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].EventProcessingCountHistogram.TotalSamples, msgCount);
-        UNIT_ASSERT(stats[0].EventProcessingTimeHistogram.TotalSamples > 0);
-        UNIT_ASSERT(stats[0].ElapsedTicksByActivity[0] > 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].ReceivedEventsByActivity[0], msgCount);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].ActorsAliveByActivity[0], 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].ScheduledEventsByActivity[0], 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolActorRegistrations, 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolDestroyedActors, 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolAllocatedMailboxes, 4095); // one line
-        UNIT_ASSERT(stats[0].MailboxPushedOutByTime + stats[0].MailboxPushedOutByEventCount >= msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].MailboxPushedOutBySoftPreemption, 0);
-    }
+ 
+    Y_UNIT_TEST(CheckStats) { 
+        const size_t size = 4; 
+        const size_t msgCount = 1e4; 
+        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50); 
+ 
+        auto setup = GetActorSystemSetup(executorPool); 
+        TActorSystem actorSystem(setup); 
+        actorSystem.Start(); 
+ 
+        auto begin = TInstant::Now(); 
+ 
+        auto actor = new TTestSenderActor(); 
+        auto actorId = actorSystem.Register(actor); 
+        actor->Start(actor->SelfId(), msgCount); 
+        actorSystem.Send(actorId, new TEvMsg()); 
+ 
+        while (actor->GetCounter()) { 
+            auto now = TInstant::Now(); 
+            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Counter is " << actor->GetCounter()); 
+ 
+            Sleep(TDuration::MilliSeconds(1)); 
+        } 
+ 
+        TVector<TExecutorThreadStats> stats; 
+        TExecutorPoolStats poolStats; 
+        actorSystem.GetPoolStats(0, poolStats, stats); 
+        // Sum all per-thread counters into the 0th element 
+        for (ui32 idx = 1; idx < stats.size(); ++idx) { 
+            stats[0].Aggregate(stats[idx]); 
+        } 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].SentEvents, msgCount - 1); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].ReceivedEvents, msgCount); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].PreemptedEvents, 0); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].NonDeliveredEvents, 0); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].EmptyMailboxActivation, 0); 
+        //UNIT_ASSERT_VALUES_EQUAL(stats[0].CpuNs, 0); // depends on total duration of test, so undefined 
+        UNIT_ASSERT(stats[0].ElapsedTicks > 0); 
+        UNIT_ASSERT(stats[0].ParkedTicks > 0); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].BlockedTicks, 0); 
+        UNIT_ASSERT(stats[0].ActivationTimeHistogram.TotalSamples >= msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].EventDeliveryTimeHistogram.TotalSamples, msgCount); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].EventProcessingCountHistogram.TotalSamples, msgCount); 
+        UNIT_ASSERT(stats[0].EventProcessingTimeHistogram.TotalSamples > 0); 
+        UNIT_ASSERT(stats[0].ElapsedTicksByActivity[0] > 0); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].ReceivedEventsByActivity[0], msgCount); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].ActorsAliveByActivity[0], 1); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].ScheduledEventsByActivity[0], 0); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolActorRegistrations, 1); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolDestroyedActors, 0); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolAllocatedMailboxes, 4095); // one line 
+        UNIT_ASSERT(stats[0].MailboxPushedOutByTime + stats[0].MailboxPushedOutByEventCount >= msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX); 
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].MailboxPushedOutBySoftPreemption, 0); 
+    } 
 }

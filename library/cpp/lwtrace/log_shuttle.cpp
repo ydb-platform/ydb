@@ -1,32 +1,32 @@
-#include "log_shuttle.h"
+#include "log_shuttle.h" 
 #include "probes.h"
-
-namespace NLWTrace {
+ 
+namespace NLWTrace { 
     LWTRACE_USING(LWTRACE_INTERNAL_PROVIDER);
 
 #ifdef LWTRACE_DISABLE
 
     template <class TDepot>
-    bool TLogShuttle<TDepot>::DoFork(TShuttlePtr& child) {
-        Y_UNUSED(child);
+    bool TLogShuttle<TDepot>::DoFork(TShuttlePtr& child) { 
+        Y_UNUSED(child); 
         return false;
     }
 
     template <class TDepot>
-    bool TLogShuttle<TDepot>::DoJoin(const TShuttlePtr& child) {
-        Y_UNUSED(child);
+    bool TLogShuttle<TDepot>::DoJoin(const TShuttlePtr& child) { 
+        Y_UNUSED(child); 
         return false;
     }
 
 #else
 
     template <class TDepot>
-    bool TLogShuttle<TDepot>::DoFork(TShuttlePtr& child) {
-        if (child = Executor->RentShuttle()) {
-            child->SetParentSpanId(GetSpanId());
-            Executor->Cast(child)->SetIgnore(true);
+    bool TLogShuttle<TDepot>::DoFork(TShuttlePtr& child) { 
+        if (child = Executor->RentShuttle()) { 
+            child->SetParentSpanId(GetSpanId()); 
+            Executor->Cast(child)->SetIgnore(true); 
             TParams params;
-            params.Param[0].CopyConstruct<ui64>(child->GetSpanId());
+            params.Param[0].CopyConstruct<ui64>(child->GetSpanId()); 
             bool result = DoAddProbe(&LWTRACE_GET_NAME(Fork).Probe, params, 0);
             TUserSignature<ui64>::DestroyParams(params);
             return result;
@@ -64,4 +64,4 @@ namespace NLWTrace {
 
     template class TLogShuttle<TDurationDepot>;
     template class TLogShuttle<TCyclicDepot>;
-}
+} 

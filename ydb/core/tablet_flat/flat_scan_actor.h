@@ -411,7 +411,7 @@ namespace NOps {
                 : LastSeen(seen)
                 , LastSkipped(skipped)
             {
-                GetTimeFast(&StartTime);
+                GetTimeFast(&StartTime); 
                 EndTime = StartTime;
             }
 
@@ -425,7 +425,7 @@ namespace NOps {
             }
 
             void UpdateCycles() {
-                GetTimeFast(&EndTime);
+                GetTimeFast(&EndTime); 
             }
 
             NHPTimer::STime ElapsedCycles() const {

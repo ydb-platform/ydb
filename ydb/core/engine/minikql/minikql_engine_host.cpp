@@ -1,5 +1,5 @@
-#include "minikql_engine_host.h"
-
+#include "minikql_engine_host.h" 
+ 
 #include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/core/tablet_flat/flat_table_stats.h>
@@ -9,9 +9,9 @@
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
-namespace NKikimr {
+namespace NKikimr { 
 namespace NMiniKQL {
-
+ 
 using TScheme = NTable::TScheme;
 
 void ConvertTableKeys(const TScheme& scheme, const TScheme::TTableInfo* tableInfo,
@@ -36,89 +36,89 @@ void ConvertTableKeys(const TScheme& scheme, const TScheme::TTableInfo* tableInf
 }
 
 TEngineHost::TEngineHost(NTable::TDatabase& db, TEngineHostCounters& counters, const TEngineHostSettings& settings)
-    : Db(db)
+    : Db(db) 
     , Scheme(db.GetScheme())
     , Settings(settings)
     , Counters(counters)
-{}
-
-ui64 TEngineHost::GetShardId() const {
+{} 
+ 
+ui64 TEngineHost::GetShardId() const { 
     return Settings.ShardId;
-}
-
+} 
+ 
 const TScheme::TTableInfo* TEngineHost::GetTableInfo(const TTableId& tableId) const {
     return Scheme.GetTableInfo(LocalTableId(tableId));
 }
 
-bool TEngineHost::IsReadonly() const {
+bool TEngineHost::IsReadonly() const { 
     return Settings.IsReadonly;
-}
-
-
-bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const {
+} 
+ 
+ 
+bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const { 
     Y_UNUSED(maxSnapshotTime);
 
-    auto* tableInfo = Scheme.GetTableInfo(LocalTableId(key.TableId));
-
-#define EH_VALIDATE(cond, err_status) \
-    do { \
-        if (!(cond)) { \
-            key.Status = TKeyDesc::EStatus::err_status; \
-            return false; \
-        } \
-    } while(false) \
-    /**/
-
-    EH_VALIDATE(tableInfo, NotExists); // Table does not exist
-    EH_VALIDATE(key.KeyColumnTypes.size() <= tableInfo->KeyColumns.size(), TypeCheckFailed);
-
-    // Specified keys types should be valid for any operation
-    for (size_t keyIdx = 0; keyIdx < key.KeyColumnTypes.size(); keyIdx++) {
-        ui32 keyCol = tableInfo->KeyColumns[keyIdx];
-        NScheme::TTypeId vtype = Scheme.GetColumnInfo(tableInfo, keyCol)->PType;
-        EH_VALIDATE(key.KeyColumnTypes[keyIdx] == vtype, TypeCheckFailed);
-    }
-
-    if (key.RowOperation == TKeyDesc::ERowOperation::Read) {
+    auto* tableInfo = Scheme.GetTableInfo(LocalTableId(key.TableId)); 
+ 
+#define EH_VALIDATE(cond, err_status) \ 
+    do { \ 
+        if (!(cond)) { \ 
+            key.Status = TKeyDesc::EStatus::err_status; \ 
+            return false; \ 
+        } \ 
+    } while(false) \ 
+    /**/ 
+ 
+    EH_VALIDATE(tableInfo, NotExists); // Table does not exist 
+    EH_VALIDATE(key.KeyColumnTypes.size() <= tableInfo->KeyColumns.size(), TypeCheckFailed); 
+ 
+    // Specified keys types should be valid for any operation 
+    for (size_t keyIdx = 0; keyIdx < key.KeyColumnTypes.size(); keyIdx++) { 
+        ui32 keyCol = tableInfo->KeyColumns[keyIdx]; 
+        NScheme::TTypeId vtype = Scheme.GetColumnInfo(tableInfo, keyCol)->PType; 
+        EH_VALIDATE(key.KeyColumnTypes[keyIdx] == vtype, TypeCheckFailed); 
+    } 
+ 
+    if (key.RowOperation == TKeyDesc::ERowOperation::Read) { 
         if (key.Range.Point) {
             EH_VALIDATE(key.KeyColumnTypes.size() == tableInfo->KeyColumns.size(), TypeCheckFailed);
         } else {
             EH_VALIDATE(key.KeyColumnTypes.size() <= tableInfo->KeyColumns.size(), TypeCheckFailed);
         }
-
-        for (size_t i = 0; i < key.Columns.size(); i++) {
-            const TKeyDesc::TColumnOp& cop = key.Columns[i];
+ 
+        for (size_t i = 0; i < key.Columns.size(); i++) { 
+            const TKeyDesc::TColumnOp& cop = key.Columns[i]; 
             if (IsSystemColumn(cop.Column)) {
                 continue;
             }
-            auto* cinfo = Scheme.GetColumnInfo(tableInfo, cop.Column);
-            EH_VALIDATE(cinfo, TypeCheckFailed); // Unknown column
-            NScheme::TTypeId vtype = cinfo->PType;
-            EH_VALIDATE(cop.ExpectedType == vtype, TypeCheckFailed);
-            EH_VALIDATE(cop.Operation == TKeyDesc::EColumnOperation::Read, OperationNotSupported);
-        }
-    } else if (key.RowOperation == TKeyDesc::ERowOperation::Update) {
-        EH_VALIDATE(key.KeyColumnTypes.size() == tableInfo->KeyColumns.size(), TypeCheckFailed); // Key must be full for updates
-        for (size_t i = 0; i < key.Columns.size(); i++) {
-            const TKeyDesc::TColumnOp& cop = key.Columns[i];
-            auto* cinfo = Scheme.GetColumnInfo(tableInfo, cop.Column);
-            EH_VALIDATE(cinfo, TypeCheckFailed); // Unknown column
-            NScheme::TTypeId vtype = cinfo->PType;
+            auto* cinfo = Scheme.GetColumnInfo(tableInfo, cop.Column); 
+            EH_VALIDATE(cinfo, TypeCheckFailed); // Unknown column 
+            NScheme::TTypeId vtype = cinfo->PType; 
+            EH_VALIDATE(cop.ExpectedType == vtype, TypeCheckFailed); 
+            EH_VALIDATE(cop.Operation == TKeyDesc::EColumnOperation::Read, OperationNotSupported); 
+        } 
+    } else if (key.RowOperation == TKeyDesc::ERowOperation::Update) { 
+        EH_VALIDATE(key.KeyColumnTypes.size() == tableInfo->KeyColumns.size(), TypeCheckFailed); // Key must be full for updates 
+        for (size_t i = 0; i < key.Columns.size(); i++) { 
+            const TKeyDesc::TColumnOp& cop = key.Columns[i]; 
+            auto* cinfo = Scheme.GetColumnInfo(tableInfo, cop.Column); 
+            EH_VALIDATE(cinfo, TypeCheckFailed); // Unknown column 
+            NScheme::TTypeId vtype = cinfo->PType; 
             EH_VALIDATE(!cop.ExpectedType || cop.ExpectedType == vtype, TypeCheckFailed);
-            EH_VALIDATE(cop.Operation == TKeyDesc::EColumnOperation::Set, OperationNotSupported); // TODO[serxa]: support inplace operations in IsValidKey
-        }
-    } else if (key.RowOperation == TKeyDesc::ERowOperation::Erase) {
-        EH_VALIDATE(key.KeyColumnTypes.size() == tableInfo->KeyColumns.size(), TypeCheckFailed);
-    } else {
-        EH_VALIDATE(false, OperationNotSupported);
-    }
-
-#undef EH_VALIDATE
-
-    key.Status = TKeyDesc::EStatus::Ok;
-    return true;
-}
-
+            EH_VALIDATE(cop.Operation == TKeyDesc::EColumnOperation::Set, OperationNotSupported); // TODO[serxa]: support inplace operations in IsValidKey 
+        } 
+    } else if (key.RowOperation == TKeyDesc::ERowOperation::Erase) { 
+        EH_VALIDATE(key.KeyColumnTypes.size() == tableInfo->KeyColumns.size(), TypeCheckFailed); 
+    } else { 
+        EH_VALIDATE(false, OperationNotSupported); 
+    } 
+ 
+#undef EH_VALIDATE 
+ 
+    key.Status = TKeyDesc::EStatus::Ok; 
+    return true; 
+} 
+ 
 ui64 TEngineHost::CalculateReadSize(const TVector<const TKeyDesc*>& keys) const {
     NTable::TSizeEnv env;
 
@@ -127,8 +127,8 @@ ui64 TEngineHost::CalculateReadSize(const TVector<const TKeyDesc*>& keys) const 
     }
 
     return env.GetSize();
-}
-
+} 
+ 
 void TEngineHost::DoCalculateReadSize(const TKeyDesc& key, NTable::TSizeEnv& env) const {
     if (TSysTables::IsSystemTable(key.TableId))
         return;
@@ -262,26 +262,26 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
 NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
     TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
     const THolderFactory& holderFactory)
-{
-    // It is assumed that returnType has form:
-    //  optinal<struct<optional<data>,
-    //                 ...
-    //                 optional<data>>>
+{ 
+    // It is assumed that returnType has form: 
+    //  optinal<struct<optional<data>, 
+    //                 ... 
+    //                 optional<data>>> 
     // And that struct type has column tags stored inside it's member names as numbers
 
     Y_UNUSED(returnType);
     Y_UNUSED(readTarget);
-
-    ui64 localTid = LocalTableId(tableId);
+ 
+    ui64 localTid = LocalTableId(tableId); 
     Y_VERIFY(localTid, "table not exist");
-    const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
+    const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid); 
     TSmallVec<TRawTypeValue> key;
-    ConvertKeys(tableInfo, row, key);
-
+    ConvertKeys(tableInfo, row, key); 
+ 
     TSmallVec<NTable::TTag> tags;
     TSmallVec<NTable::TTag> systemColumnTags;
     AnalyzeRowType(columnIds, tags, systemColumnTags);
-
+ 
     TSmallVec<NScheme::TTypeId> cellTypes;
     cellTypes.reserve(tags.size());
     for (size_t i = 0; i < tags.size(); ++i)
@@ -290,8 +290,8 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     NTable::TRowState dbRow;
 
     if (key.size() != Db.GetScheme().GetTableInfo(localTid)->KeyColumns.size())
-        throw TSchemeErrorTabletException();
-
+        throw TSchemeErrorTabletException(); 
+ 
     Counters.NSelectRow++;
     Settings.KeyAccessSampler->AddSample(tableId, row);
 
@@ -787,28 +787,28 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
     TStructLiteral* columnIds, TListLiteral* skipNullKeys, TStructType* returnType, const TReadTarget& readTarget,
     ui64 itemsLimit, ui64 bytesLimit, bool reverse, std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs,
     const THolderFactory& holderFactory)
-{
-    // It is assumed that returnType has form:
-    //  struct<
-    //          list< // named 'List'
-    //                struct<optional<data>,
-    //                       ...
-    //                       optional<data>>
-    //              >
-    //        , data // named 'Truncated' (boolean showing that itemsLimit or bytesLimit striked)
-    //        >
-    // And that struct type has column tags stored inside it's member names (ugly hack)
+{ 
+    // It is assumed that returnType has form: 
+    //  struct< 
+    //          list< // named 'List' 
+    //                struct<optional<data>, 
+    //                       ... 
+    //                       optional<data>> 
+    //              > 
+    //        , data // named 'Truncated' (boolean showing that itemsLimit or bytesLimit striked) 
+    //        > 
+    // And that struct type has column tags stored inside it's member names (ugly hack) 
 
     Y_UNUSED(readTarget);
-
+ 
     // TODO[serxa]: support for Point in SelectRange()
     Y_VERIFY(!range.Point, "point request in TEngineHost::SelectRange");
-
-    ui64 localTid = LocalTableId(tableId);
+ 
+    ui64 localTid = LocalTableId(tableId); 
     Y_VERIFY(localTid, "table not exist");
-
-    // Analyze resultType
-    TStructType* outerStructType = AS_TYPE(TStructType, returnType);
+ 
+    // Analyze resultType 
+    TStructType* outerStructType = AS_TYPE(TStructType, returnType); 
     Y_VERIFY_DEBUG(outerStructType->GetMembersCount() == 2,
         "Unexpected type structure of returnType in TEngineHost::SelectRange()");
     Y_VERIFY_DEBUG(outerStructType->GetMemberName(0) == "List",
@@ -819,7 +819,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
     TSmallVec<NTable::TTag> tags;
     TSmallVec<NTable::TTag> systemColumnTags;
     AnalyzeRowType(columnIds, tags, systemColumnTags);
-
+ 
     TSmallVec<bool> skipNullKeysFlags = CreateBoolVec(skipNullKeys);
     TSmallVec<bool> forbidNullArgsFrom = CreateBoolVec(forbidNullArgs.first);
     TSmallVec<bool> forbidNullArgsTo = CreateBoolVec(forbidNullArgs.second);
@@ -847,28 +847,28 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
     return NUdf::TUnboxedValuePod(new TSelectRangeResult(Db, Scheme, holderFactory, tableId, localTid, tags,
         skipNullKeysFlags, range, itemsLimit, bytesLimit, reverse, *this, systemColumnTags, GetShardId(),
         Settings.KeyAccessSampler));
-}
-
-// Updates the single row. Column in commands must be unique.
+} 
+ 
+// Updates the single row. Column in commands must be unique. 
 void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) {
-    ui64 localTid = LocalTableId(tableId);
+    ui64 localTid = LocalTableId(tableId); 
     Y_VERIFY(localTid, "table not exist");
-    const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
+    const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid); 
     TSmallVec<TRawTypeValue> key;
     ui64 keyBytes = 0;
     ConvertTableKeys(Scheme, tableInfo, row, key, &keyBytes);
-
+ 
     ui64 valueBytes = 0;
     TSmallVec<NTable::TUpdateOp> ops;
-    for (size_t i = 0; i < commands.size(); i++) {
-        const TUpdateCommand& upd = commands[i];
+    for (size_t i = 0; i < commands.size(); i++) { 
+        const TUpdateCommand& upd = commands[i]; 
         Y_VERIFY(upd.Operation == TKeyDesc::EColumnOperation::Set); // TODO[serxa]: support inplace update in update row
-        NScheme::TTypeId vtype = Scheme.GetColumnInfo(tableInfo, upd.Column)->PType;
+        NScheme::TTypeId vtype = Scheme.GetColumnInfo(tableInfo, upd.Column)->PType; 
         ops.emplace_back(upd.Column, NTable::ECellOp::Set,
             upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtype));
         valueBytes += upd.Value.IsNull() ? 1 : upd.Value.Size();
-    }
-
+    } 
+ 
     if (auto collector = GetChangeCollector(tableId)) {
         collector->SetWriteVersion(GetWriteVersion(tableId));
         if (collector->NeedToReadKeys()) {
@@ -886,13 +886,13 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
     Settings.KeyAccessSampler->AddSample(tableId, row);
     Counters.NUpdateRow++;
     Counters.UpdateRowBytes += keyBytes + valueBytes;
-}
-
-// Erases the single row.
+} 
+ 
+// Erases the single row. 
 void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) {
-    ui64 localTid = LocalTableId(tableId);
+    ui64 localTid = LocalTableId(tableId); 
     Y_VERIFY(localTid, "table not exist");
-    const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
+    const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid); 
     TSmallVec<TRawTypeValue> key;
     ui64 keyBytes = 0;
     ConvertTableKeys(Scheme, tableInfo, row, key, &keyBytes);
@@ -914,40 +914,40 @@ void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>
     Settings.KeyAccessSampler->AddSample(tableId, row);
     Counters.NEraseRow++;
     Counters.EraseRowBytes += keyBytes + 8;
-}
-
-// Check that table is erased
-bool TEngineHost::IsPathErased(const TTableId& tableId) const {
-    ui64 localTid = LocalTableId(tableId);
-    return (localTid? !Scheme.GetTableInfo(localTid): true);
-}
-
-// Returns whether row belong this shard.
+} 
+ 
+// Check that table is erased 
+bool TEngineHost::IsPathErased(const TTableId& tableId) const { 
+    ui64 localTid = LocalTableId(tableId); 
+    return (localTid? !Scheme.GetTableInfo(localTid): true); 
+} 
+ 
+// Returns whether row belong this shard. 
 bool TEngineHost::IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const {
     Y_UNUSED(tableId); Y_UNUSED(row);
-    return true;
-}
-
+    return true; 
+} 
+ 
 ui64 TEngineHost::GetTableSchemaVersion(const TTableId&) const {
     return 0;
 }
 
-ui64 TEngineHost::LocalTableId(const TTableId& tableId) const {
+ui64 TEngineHost::LocalTableId(const TTableId& tableId) const { 
     return tableId.PathId.LocalPathId;
-}
-
+} 
+ 
 void TEngineHost::ConvertKeys(const TScheme::TTableInfo* tableInfo, const TArrayRef<const TCell>& row,
     TSmallVec<TRawTypeValue>& key) const
-{
+{ 
     ConvertTableKeys(Scheme, tableInfo, row, key, nullptr);
-}
-
+} 
+ 
 void TEngineHost::SetPeriodicCallback(TPeriodicCallback&& callback) {
     PeriodicCallback = std::move(callback);
 }
 
 void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TSmallVec<NTable::TTag>& systemColumnTags) {
-    // Find out tags that should be read in Select*() functions
+    // Find out tags that should be read in Select*() functions 
     tags.reserve(columnIds->GetValuesCount());
     for (ui32 i = 0; i < columnIds->GetValuesCount(); i++) {
         NTable::TTag columnId = AS_VALUE(TDataLiteral, columnIds->GetValue(i))->AsValue().Get<ui32>();
@@ -956,9 +956,9 @@ void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TS
         } else {
             tags.push_back(columnId);
         }
-    }
-}
-
+    } 
+} 
+ 
 NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeId type) {
     if (cell.IsNull()) {
         return NUdf::TUnboxedValue();
@@ -1033,4 +1033,4 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeId type) {
     }
 }
 
-}}
+}} 

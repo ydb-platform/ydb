@@ -407,7 +407,7 @@ private:
     // Quoter runtime
     void Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev);
     void Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev);
-    void Handle(TEvKesus::TEvAccountResources::TPtr& ev);
+    void Handle(TEvKesus::TEvAccountResources::TPtr& ev); 
     void Handle(TEvKesus::TEvResourcesAllocatedAck::TPtr& ev);
     void Handle(TEvKesus::TEvGetQuoterResourceCounters::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);

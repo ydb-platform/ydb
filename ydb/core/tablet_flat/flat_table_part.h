@@ -101,9 +101,9 @@ namespace NTable {
                 "Part has %" PRISZT " indexes, but %" PRISZT " historic indexes",
                 Groups, HistoricIndexes.size());
         }
-
+ 
         virtual ~TPart() = default;
-
+ 
         void Describe(IOutputStream &out) const noexcept
         {
             out
@@ -124,7 +124,7 @@ namespace NTable {
         virtual ui64 DataSize() const = 0;
         virtual ui64 BackingSize() const = 0;
         virtual ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
-
+ 
         const NPage::TIndex& GetGroupIndex(NPage::TGroupId groupId) const noexcept {
             if (!groupId.Historic) {
                 if (groupId.Index == 0) {

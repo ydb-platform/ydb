@@ -342,38 +342,38 @@ namespace NKikimr {
             template <class TPrinter>
             void OutputHtml(IOutputStream &str, TPrinter &printer, const TString &name, const TString &divClass) const {
                 str << "\n";
-                HTML(str) {
-                    DIV_CLASS (divClass) {
-                        DIV_CLASS("panel-heading") {str << name;}
-                        DIV_CLASS("panel-body") {
-                            DIV_CLASS("row") {
+                HTML(str) { 
+                    DIV_CLASS (divClass) { 
+                        DIV_CLASS("panel-heading") {str << name;} 
+                        DIV_CLASS("panel-body") { 
+                            DIV_CLASS("row") { 
                                 OutputHtmlTable<TPrinter>(str, printer);
-                            }
-                        }
-                    }
-                }
+                            } 
+                        } 
+                    } 
+                } 
                 str << "\n";
             }
 
             template <class TPrinter>
             void OutputHtmlTable(IOutputStream &str, TPrinter &printer) const {
                 TVector<TConstIterator> its;
-                HTML(str) {
-                    TABLE_CLASS ("table table-condensed") {
-                        TABLEHEAD() {
-                            TABLER() {
+                HTML(str) { 
+                    TABLE_CLASS ("table table-condensed") { 
+                        TABLEHEAD() { 
+                            TABLER() { 
                                 const auto& domains = GetFailDomains();
                                 for (auto it = domains.begin(); it != domains.end(); ++it) {
-                                    TABLEH() {str << "Domain";}
+                                    TABLEH() {str << "Domain";} 
 
                                     const auto& vdisks = *it;
                                     its.emplace_back(vdisks.begin());
                                 }
-                            }
-                        }
+                            } 
+                        } 
                         OutputHtmlTableBody<TPrinter>(str, printer, its);
-                    }
-                }
+                    } 
+                } 
             }
 
         public:
@@ -418,26 +418,26 @@ namespace NKikimr {
 
             template <class TPrinter>
             void OutputHtmlTableBody(IOutputStream &str, TPrinter &printer, TVector<TConstIterator> &its) const {
-                HTML(str) {
-                    TABLEBODY() {
+                HTML(str) { 
+                    TABLEBODY() { 
                         for (ui32 row = 0; row < DisksInDomain; ++row) {
-                            TABLER() {
+                            TABLER() { 
                                 // column iterator -- one entry for each domain in "its"
                                 typename TVector<TConstIterator>::iterator colIt = its.begin();
 
                                 for (const auto& vdisks : GetFailDomains()) {
-                                    TABLED() {
+                                    TABLED() { 
                                         TConstIterator& x = *colIt++;
                                         printer(str, x++);
                                         if (row + 1 == DisksInDomain) {
                                             Y_VERIFY(x == vdisks.end());
                                         }
-                                    }
+                                    } 
                                 }
-                            }
+                            } 
                         }
-                    }
-                }
+                    } 
+                } 
             }
         };
         ////////////////////////////////////////////////////////////////////////////

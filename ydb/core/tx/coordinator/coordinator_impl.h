@@ -407,8 +407,8 @@ private:
     TVolatileState VolatileState;
     TConfig Config;
     TCoordinatorMonCounters MonCounters;
-    TTabletCountersBase* TabletCounters;
-    TAutoPtr<TTabletCountersBase> TabletCountersPtr;
+    TTabletCountersBase* TabletCounters; 
+    TAutoPtr<TTabletCountersBase> TabletCountersPtr; 
 
     typedef THashMap<TTabletId, TMediator> TMediatorsIndex;
     TMediatorsIndex Mediators;

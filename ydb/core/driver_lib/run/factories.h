@@ -16,15 +16,15 @@
 
 #include <ydb/library/yql/providers/pq/cm_client/interface/client.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-
+#include <library/cpp/actors/core/actorsystem.h> 
+ 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
-#include <functional>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-
+#include <functional> 
+#include <unordered_map> 
+#include <unordered_set> 
+#include <vector> 
+ 
 namespace NKikimr {
 
 // A way to parameterize YDB binary, we do it via a set of factories
@@ -47,8 +47,8 @@ struct TModuleFactories {
 
     std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig)> YqAuditServiceFactory;
     NKikimr::TYdbCredentialsProviderFactory YdbCredentialProviderFactory;
-    // Factory for grpc services
-    TGrpcServiceFactory GrpcServiceFactory;
+    // Factory for grpc services 
+    TGrpcServiceFactory GrpcServiceFactory; 
 
     std::shared_ptr<NPQ::IPersQueueMirrorReaderFactory> PersQueueMirrorReaderFactory;
     /// Factory for pdisk's aio engines

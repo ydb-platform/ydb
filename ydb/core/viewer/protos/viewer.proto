@@ -182,10 +182,10 @@ message TMetaRtmrOperationInfo {
             string Options = 1;
             // Force pause between operation executions on one key; seconds
             uint32 PostponeTimeout = 2;
-            // Pacing period for postponed keys (maximum error added to PostponeTimeout); seconds
-            uint32 PostponePacePeriod = 13;
-            // Force pause before first operation execution on one key; seconds
-            uint32 BatchTimeout = 11;
+            // Pacing period for postponed keys (maximum error added to PostponeTimeout); seconds 
+            uint32 PostponePacePeriod = 13; 
+            // Force pause before first operation execution on one key; seconds 
+            uint32 BatchTimeout = 11; 
             // Max age of data being read for operation execution; seconds
             uint32 MaxTimeBack = 3;
             // Operation instance recreation period; seconds
@@ -202,8 +202,8 @@ message TMetaRtmrOperationInfo {
             string WorkingDirectory = 9;
             // Dynamic library name
             string LibraryName = 10;
-            // Tolerance to failures during operation execution
-            uint32 SuspendThreshold = 12;
+            // Tolerance to failures during operation execution 
+            uint32 SuspendThreshold = 12; 
     };
 
     message TStats {

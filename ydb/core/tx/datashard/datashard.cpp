@@ -7,17 +7,17 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
-
+ 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 
-namespace NKikimr {
-
+namespace NKikimr { 
+ 
 IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info) {
     return new NDataShard::TDataShard(tablet, info);
-}
-
+} 
+ 
 namespace NDataShard {
-
+ 
 using namespace NSchemeShard;
 using namespace NTabletFlatExecutor;
 
@@ -1330,15 +1330,15 @@ void TDataShard::Handle(TEvents::TEvGone::TPtr &ev) {
 }
 
 void TDataShard::Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvents::TEvPoisonPill");
+    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvents::TEvPoisonPill"); 
     Y_UNUSED(ev);
     BecomeBroken(ctx);
-}
-
+} 
+ 
 void TDataShard::Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorContext &ctx) {
-    Execute(new TTxGetShardState(this, ev), ctx);
-}
-
+    Execute(new TTxGetShardState(this, ev), ctx); 
+} 
+ 
 void TDataShard::Handle(TEvDataShard::TEvSchemaChangedResult::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Handle TEvSchemaChangedResult " << ev->Get()->Record.GetTxId()
@@ -1513,35 +1513,35 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
         return;
     }
 
-    switch (ev->Get()->GetTxKind()) {
-    case NKikimrTxDataShard::TX_KIND_DATA:
+    switch (ev->Get()->GetTxKind()) { 
+    case NKikimrTxDataShard::TX_KIND_DATA: 
     case NKikimrTxDataShard::TX_KIND_SCAN:
     case NKikimrTxDataShard::TX_KIND_SNAPSHOT:
     case NKikimrTxDataShard::TX_KIND_DISTRIBUTED_ERASE:
     case NKikimrTxDataShard::TX_KIND_COMMIT_WRITES:
         ProposeTransaction(std::move(ev), ctx);
-        return;
-    case NKikimrTxDataShard::TX_KIND_SCHEME:
+        return; 
+    case NKikimrTxDataShard::TX_KIND_SCHEME: 
         ProposeTransaction(std::move(ev), ctx);
-        return;
+        return; 
     default:
         break;
-    }
-
+    } 
+ 
     THolder<TEvDataShard::TEvProposeTransactionResult> result
         = THolder(new TEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(),
                                                         TabletID(),
                                                         ev->Get()->GetTxId(),
                                                         NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
-    result->AddError(NKikimrTxDataShard::TError::BAD_TX_KIND, "Unknown kind of transaction");
-    ctx.Send(ev->Get()->GetSource(), result.Release());
+    result->AddError(NKikimrTxDataShard::TError::BAD_TX_KIND, "Unknown kind of transaction"); 
+    ctx.Send(ev->Get()->GetSource(), result.Release()); 
     IncCounter(COUNTER_PREPARE_ERROR);
     IncCounter(COUNTER_PREPARE_COMPLETE);
-
-    // TODO[serxa]: wake up! dont sleep! maybe...
-    //Executor()->WakeUp(ctx);
-}
-
+ 
+    // TODO[serxa]: wake up! dont sleep! maybe... 
+    //Executor()->WakeUp(ctx); 
+} 
+ 
 void TDataShard::Handle(TEvDataShard::TEvProposeTransactionAttach::TPtr &ev, const TActorContext &ctx) {
     const auto &record = ev->Get()->Record;
     const ui64 txId = record.GetTxId();
@@ -1631,21 +1631,21 @@ void TDataShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorCont
         return;
     }
 
-    Execute(new TTxPlanStep(this, ev), ctx);
-}
-
+    Execute(new TTxPlanStep(this, ev), ctx); 
+} 
+ 
 void TDataShard::Handle(TEvTxProcessing::TEvReadSet::TPtr &ev, const TActorContext &ctx) {
-    ui64 sender = ev->Get()->Record.GetTabletSource();
-    ui64 dest = ev->Get()->Record.GetTabletDest();
-    ui64 producer = ev->Get()->Record.GetTabletProducer();
+    ui64 sender = ev->Get()->Record.GetTabletSource(); 
+    ui64 dest = ev->Get()->Record.GetTabletDest(); 
+    ui64 producer = ev->Get()->Record.GetTabletProducer(); 
     ui64 txId = ev->Get()->Record.GetTxId();
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Receive RS at %" PRIu64 " source %" PRIu64 " dest %" PRIu64 " producer %" PRIu64 " txId %" PRIu64,
               TabletID(), sender, dest, producer, txId);
     IncCounter(COUNTER_READSET_RECEIVED_COUNT);
     IncCounter(COUNTER_READSET_RECEIVED_SIZE, ev->Get()->Record.GetReadSet().size());
-    Execute(new TTxReadSet(this, ev), ctx);
-}
-
+    Execute(new TTxReadSet(this, ev), ctx); 
+} 
+ 
 void TDataShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr &ev, const TActorContext &ctx) {
     OutReadSets.SaveAck(ctx, ev->Release());
 
@@ -1657,14 +1657,14 @@ void TDataShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr &ev, const TActorCo
     }
 
     CheckStateChange(ctx);
-}
-
+} 
+ 
 void TDataShard::Handle(TEvPrivate::TEvProgressTransaction::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
     IncCounter(COUNTER_TX_PROGRESS_EV);
     ExecuteProgressTx(ctx);
-}
-
+} 
+ 
 void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
     IncCounter(COUNTER_PROPOSE_QUEUE_EV);
@@ -1697,10 +1697,10 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
 }
 
 void TDataShard::Handle(TEvPrivate::TEvProgressResendReadSet::TPtr &ev, const TActorContext &ctx) {
-    ResendReadSetQueue.Reset(ctx);
-    Execute(new TTxProgressResendRS(this, ev->Get()->Seqno), ctx);
-}
-
+    ResendReadSetQueue.Reset(ctx); 
+    Execute(new TTxProgressResendRS(this, ev->Get()->Seqno), ctx); 
+} 
+ 
 void TDataShard::Handle(TEvPrivate::TEvRegisterScanActor::TPtr &ev, const TActorContext &ctx) {
     ui64 txId = ev->Get()->TxId;
     auto op = Pipeline.FindOp(txId);
@@ -1752,7 +1752,7 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
         }
         return;
     }
-
+ 
     if (ev->Get()->Status != NKikimrProto::OK) {
         if (ev->Get()->ClientId == StateReportPipe) {
             StateReportPipe = TActorId();
@@ -1803,18 +1803,18 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
         }
     }
 
-    if (!PipeClientCache->OnConnect(ev)) {
+    if (!PipeClientCache->OnConnect(ev)) { 
         if (ev->Get()->Dead) {
             AckRSToDeletedTablet(ev->Get()->TabletId, ctx);
         } else {
             LOG_NOTICE(ctx, NKikimrServices::TX_DATASHARD, "Failed to connect to tablet %" PRIu64 " from tablet %" PRIu64, ev->Get()->TabletId, TabletID());
             RestartPipeRS(ev->Get()->TabletId, ctx);
         }
-    } else {
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Connected to tablet %" PRIu64 " from tablet %" PRIu64, ev->Get()->TabletId, TabletID());
-    }
-}
-
+    } else { 
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Connected to tablet %" PRIu64 " from tablet %" PRIu64, ev->Get()->TabletId, TabletID()); 
+    } 
+} 
+ 
 void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
     if (ev->Get()->ClientId == SchemeShardPipe) {
         if (!TransQueue.HasNotAckedSchemaTx()) {
@@ -1853,20 +1853,20 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActo
         ChangeSenderActivator.DoSend(ev->Get()->TabletId, ctx);
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Client pipe to tablet %" PRIu64 " from %" PRIu64 " is reset", ev->Get()->TabletId, TabletID());
-    PipeClientCache->OnDisconnect(ev);
-    RestartPipeRS(ev->Get()->TabletId, ctx);
-}
-
+    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Client pipe to tablet %" PRIu64 " from %" PRIu64 " is reset", ev->Get()->TabletId, TabletID()); 
+    PipeClientCache->OnDisconnect(ev); 
+    RestartPipeRS(ev->Get()->TabletId, ctx); 
+} 
+ 
 void TDataShard::RestartPipeRS(ui64 tabletId, const TActorContext& ctx) {
-    for (auto seqno : ResendReadSetPipeTracker.FindTx(tabletId)) {
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Pipe reset to tablet %" PRIu64 " caused resend of readset %" PRIu64
-            " at tablet %" PRIu64, tabletId, seqno, TabletID());
-
-        ResendReadSetQueue.Progress(seqno, ctx);
-    }
-}
-
+    for (auto seqno : ResendReadSetPipeTracker.FindTx(tabletId)) { 
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Pipe reset to tablet %" PRIu64 " caused resend of readset %" PRIu64 
+            " at tablet %" PRIu64, tabletId, seqno, TabletID()); 
+ 
+        ResendReadSetQueue.Progress(seqno, ctx); 
+    } 
+} 
+ 
 void TDataShard::AckRSToDeletedTablet(ui64 tabletId, const TActorContext& ctx) {
     for (auto seqno : ResendReadSetPipeTracker.FindTx(tabletId)) {
         LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Pipe reset to dead tablet %" PRIu64 " caused ack of readset %" PRIu64
@@ -1888,23 +1888,23 @@ void TDataShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActo
     Y_UNUSED(ev); Y_UNUSED(ctx);
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Server connected at tablet %s %" PRIu64 ,
               Executor()->GetStats().IsFollower ? "follower" : "leader", ev->Get()->TabletId);
-}
-
+} 
+ 
 void TDataShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev); Y_UNUSED(ctx);
-}
-
+} 
+ 
 void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Got TEvMediatorTimecast::TEvRegisterTabletResult at " << TabletID()
                 << " time " << ev->Get()->Entry->Get(TabletID()));
     Y_VERIFY(ev->Get()->TabletId == TabletID());
-    MediatorTimeCastEntry = ev->Get()->Entry;
+    MediatorTimeCastEntry = ev->Get()->Entry; 
     Y_VERIFY(MediatorTimeCastEntry);
 
     Pipeline.ActivateWaitingTxOps(ctx);
-}
-
+} 
+ 
 void TDataShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     Y_VERIFY(msg->TabletId == TabletID());
@@ -2012,8 +2012,8 @@ void TDataShard::UpdateLagCounters(const TActorContext &ctx) {
 void TDataShard::FillSplitTrajectory(ui64 origin, NKikimrTx::TBalanceTrackList& tracks) {
     Y_UNUSED(origin);
     Y_UNUSED(tracks);
-}
-
+} 
+ 
 THolder<TEvTxProcessing::TEvReadSet>
 TDataShard::PrepareReadSet(ui64 step, ui64 txId, ui64 source, ui64 target,
                                   const TString& body, ui64 seqno)
@@ -2032,13 +2032,13 @@ void TDataShard::SendReadSet(const TActorContext& ctx, ui64 step,
                 "Send RS at " << TabletID() << " from " << source << " to " << target << " txId " << txId);
 
     auto ev = PrepareReadSet(step, txId, source, target, body, seqno);
-
+ 
     IncCounter(COUNTER_READSET_SENT_COUNT);
     IncCounter(COUNTER_READSET_SENT_SIZE, body.size());
 
     PipeClientCache->Send(ctx, target, ev.Release());
-}
-
+} 
+ 
 void TDataShard::SendReadSets(const TActorContext& ctx,
                                      TVector<THolder<TEvTxProcessing::TEvReadSet>> &&readsets)
 {

@@ -146,25 +146,25 @@ namespace NKikimr {
 
         void Finish(const TActorContext &ctx) {
             TStringStream str;
-            HTML(str) {
-                DIV_CLASS("row") {
+            HTML(str) { 
+                DIV_CLASS("row") { 
                     DIV_CLASS("col-md-6") {Db->VCtx->VDiskCounters->OutputHtml(str);}
-                    DIV_CLASS("col-md-6") {Output(SkeletonState, str, "Skeleton State");}
-                    DIV_CLASS("col-md-6") {Output(LogCutterInfo, str, "Log Cutter");}
-                    DIV_CLASS("col-md-6") {Output(HugeKeeperInfo, str, "Huge Blob Keeper");}
-                    DIV_CLASS("col-md-6") {Output(DskSpaceTrackerInfo, str, "Disk Space Tracker");}
-                    DIV_CLASS("col-md-6") {Output(LocalRecovInfo, str, "Local Recovery Info");}
+                    DIV_CLASS("col-md-6") {Output(SkeletonState, str, "Skeleton State");} 
+                    DIV_CLASS("col-md-6") {Output(LogCutterInfo, str, "Log Cutter");} 
+                    DIV_CLASS("col-md-6") {Output(HugeKeeperInfo, str, "Huge Blob Keeper");} 
+                    DIV_CLASS("col-md-6") {Output(DskSpaceTrackerInfo, str, "Disk Space Tracker");} 
+                    DIV_CLASS("col-md-6") {Output(LocalRecovInfo, str, "Local Recovery Info");} 
                     DIV_CLASS("col-md-6") {Output(DelayedHugeBlobDeleterInfo, str, "Delayed Huge Blob Deleter Info");}
                     DIV_CLASS("col-md-6") {Output(ScrubInfo, str, "Scrub Info");}
                     // uses column wrapping (sum is greater than 12)
-                }
+                } 
                 Output(HullInfo, str, "Hull");
                 Output(SyncLogInfo, str, "Sync Log");
                 Output(SyncerInfo, str, "Syncer");
                 Output(ReplInfo, str, "Repl");
                 Output(AnubisRunnerInfo, str, "Anubis");
                 Output(HandoffInfo, str, "Handoff");
-            }
+            } 
 
             ctx.Send(NotifyId, new TEvents::TEvActorDied);
             ctx.Send(Ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
@@ -250,45 +250,45 @@ namespace NKikimr {
         TString BuildForm(const TString &dbnameParam, const TString &itemName, const TString &placeholder, bool index) {
             TStringStream str;
 
-            HTML(str) {
-                FORM_CLASS("form-horizontal") {
+            HTML(str) { 
+                FORM_CLASS("form-horizontal") { 
                     // hidden forms to pass current cgi params
                     str << "<input type=\"hidden\" name=\"type\" value=\"query\">";
                     str << "<input type=\"hidden\" name=\"dbname\" value=\"" << dbnameParam << "\">";
 
-                    DIV_CLASS("control-group") {
-                        LABEL_CLASS_FOR("control-label", "inputFrom") {str << "From (" << itemName << ")";}
-                        DIV_CLASS("controls") {
+                    DIV_CLASS("control-group") { 
+                        LABEL_CLASS_FOR("control-label", "inputFrom") {str << "From (" << itemName << ")";} 
+                        DIV_CLASS("controls") { 
                             str << "<input type=\"text\" id=\"inputFrom\" "
                             "placeholder=\"" << placeholder << "\" name=\"from\">";
-                        }
-                    }
+                        } 
+                    } 
 
-                    DIV_CLASS("control-group") {
-                        LABEL_CLASS_FOR("control-label", "inputTo") {str << "To (" << itemName << ")";}
-                        DIV_CLASS("controls") {
+                    DIV_CLASS("control-group") { 
+                        LABEL_CLASS_FOR("control-label", "inputTo") {str << "To (" << itemName << ")";} 
+                        DIV_CLASS("controls") { 
                             str << "<input type=\"text\" id=\"inputTo\" "
                             "placeholder=\"" << placeholder << "\" name=\"to\">";
-                        }
-                    }
+                        } 
+                    } 
 
-                    DIV_CLASS("control-group") {
-                        DIV_CLASS("controls") {
+                    DIV_CLASS("control-group") { 
+                        DIV_CLASS("controls") { 
                             if (index) {
-                                LABEL_CLASS("checkbox") {
+                                LABEL_CLASS("checkbox") { 
                                     str << "<input type=\"checkbox\" name=\"IndexOnly\" checked>Index Only</input>";
-                                }
+                                } 
                             }
-                            LABEL_CLASS("checkbox") {
+                            LABEL_CLASS("checkbox") { 
                                 str << "<input type=\"checkbox\" name=\"Internals\" checked>Show Internals</input>";
-                            }
+                            } 
                             str << "<button type=\"submit\" name=\"submit\" class=\"btn btn-default\">Submit</button>";
                             str << "<strong>or</strong>";
                             str << "<button type=\"submit\" name=\"all\" class=\"btn btn-default\">Browse DB</button>";
-                        }
-                    }
-                }
-            }
+                        } 
+                    } 
+                } 
+            } 
 
             return str.Str();
         }
@@ -402,8 +402,8 @@ namespace NKikimr {
         }
 
         void OutputOneQueryResult(IOutputStream &str, const NKikimrBlobStorage::TQueryResult &q) {
-            HTML(str) {
-                DIV_CLASS("well well-small") {
+            HTML(str) { 
+                DIV_CLASS("well well-small") { 
                     const TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
                     const TIngress ingress(q.GetIngress());
                     str << "Status: " << NKikimrProto::EReplyStatus_Name(q.GetStatus()) << "<br>";
@@ -415,8 +415,8 @@ namespace NKikimr {
                         str << "FullDataSize: " << q.GetFullDataSize() << "<br>";
                         str << "Data: " << q.GetBuffer() << "<br>";
                     }
-                }
-            }
+                } 
+            } 
         }
 
         void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
@@ -425,9 +425,9 @@ namespace NKikimr {
             ui32 size = rec.ResultSize();
             TStringStream str;
 
-            HTML(str) {
-                DIV_CLASS("row") {
-                    STRONG() {
+            HTML(str) { 
+                DIV_CLASS("row") { 
+                    STRONG() { 
                         str << "From: " << From.ToString() << "<br>";
                         if (IsRangeQuery)
                             str << "To: " << To.ToString() << "<br>";
@@ -436,15 +436,15 @@ namespace NKikimr {
                         str << "Status: " << NKikimrProto::EReplyStatus_Name(rec.GetStatus()) << "<br>";
                         str << "VDisk: " << vdisk.ToString() << "<br>";
                         str << "Result size: " << size << "<br>";
-                    }
-                }
-                DIV_CLASS("row") {
+                    } 
+                } 
+                DIV_CLASS("row") { 
                     for (ui32 i = 0; i < size; i++) {
                         const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);
                         OutputOneQueryResult(str, q);
                     }
-                }
-            }
+                } 
+            } 
 
             Finish(ctx, new NMon::TEvHttpInfoRes(str.Str()));
         }
@@ -593,8 +593,8 @@ namespace NKikimr {
         void OutputOneResult(IOutputStream &str, const NKikimrBlobStorage::TBarrierKey &k,
                              const NKikimrBlobStorage::TBarrierVal &v) {
             TIngressCachePtr ingressCache = TIngressCache::Create(Top, SelfVDiskId);
-            HTML(str) {
-                DIV_CLASS("well well-small") {
+            HTML(str) { 
+                DIV_CLASS("well well-small") { 
                     str << "TabletId: " << k.GetTabletId() << "<br>";
                     str << "Channel: " << k.GetChannel() << "<br>";
                     str << "RecordGeneration: " << k.GetRecordGeneration() << "<br>";
@@ -605,8 +605,8 @@ namespace NKikimr {
                         const TBarrierIngress ingress(TBarrierIngress::CreateFromRaw(v.GetIngress()));
                         str << "Ingress: " << ingress.ToString(ingressCache.Get()) << "<br>";
                     }
-                }
-            }
+                } 
+            } 
         }
 
         void Handle(TEvBlobStorage::TEvVGetBarrierResult::TPtr &ev, const TActorContext &ctx) {
@@ -621,20 +621,20 @@ namespace NKikimr {
             const ui32 size = rec.KeysSize();;
             TStringStream str;
 
-            HTML(str) {
-                DIV_CLASS("row") {
-                    STRONG() {
+            HTML(str) { 
+                DIV_CLASS("row") { 
+                    STRONG() { 
                         str << "Status: " << NKikimrProto::EReplyStatus_Name(rec.GetStatus()) << "<br>";
                         str << "VDisk: " << vdisk.ToString() << "<br>";
                         str << "Result size: " << size << "<br>";
-                    }
-                }
-                DIV_CLASS("row") {
+                    } 
+                } 
+                DIV_CLASS("row") { 
                     for (ui32 i = 0; i < size; i++) {
                         OutputOneResult(str, rec.GetKeys(i), rec.GetValues(i));
                     }
-                }
-            }
+                } 
+            } 
 
             Finish(ctx, new NMon::TEvHttpInfoRes(str.Str()));
         }
@@ -928,10 +928,10 @@ namespace NKikimr {
 
         void Finish(const TActorContext &ctx) {
             TStringStream str;
-            HTML(str) {
+            HTML(str) { 
                 Output(SkeletonFrontAnswer, str, "SkeletonFront");
                 Output(SkeletonAnswer, str, "Skeleton");
-            }
+            } 
 
             ctx.Send(NotifyId, new TEvents::TEvActorDied);
             ctx.Send(Ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

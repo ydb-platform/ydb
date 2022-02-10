@@ -6,18 +6,18 @@
 #include "flat_stat_part.h"
 #include "flat_stat_table.h"
 #include "flat_page_other.h"
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/stream/null.h>
 #include <util/random/mersenne.h>
 
-namespace NKikimr {
+namespace NKikimr { 
 namespace NTable {
 namespace NTest {
-
+ 
 Y_UNIT_TEST_SUITE(TLegacy) {
-
+ 
     /* This is legacy place for UT, do not put here more tests */
 
     static TIntrusiveConstPtr<NPage::TFrames> CookFrames()
@@ -312,10 +312,10 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         }
     }
 
-}
-
+} 
+ 
 } // namespace NTest
 } // namspace NTable
-} // namespace NKikimr
-
-
+} // namespace NKikimr 
+ 
+ 

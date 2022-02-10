@@ -61,9 +61,9 @@ namespace NKikimr {
         }
 
         void TMemRecLogSnapshot::OutputHtml(IOutputStream &str) const {
-            HTML(str) {
-                DIV_CLASS("well well-sm") {
-                    STRONG() {str << "TMemRecLog<br>";}
+            HTML(str) { 
+                DIV_CLASS("well well-sm") { 
+                    STRONG() {str << "TMemRecLog<br>";} 
                     if (Empty()) {
                         str << "Log is empty<br>";
                     } else {
@@ -73,7 +73,7 @@ namespace NKikimr {
                     str << "RecsNum: " << RecsNum << "<br>";
                     str << "PagesNum: " << Size() << "<br>";
 
-                    PARA() {
+                    PARA() { 
                         TMemRecLogSnapshot::TIterator it(this);
                         it.SeekToFirst();
                         if (it.Valid()) {
@@ -87,9 +87,9 @@ namespace NKikimr {
                             if (it.Valid())
                                 str << " <was cut>";
                         }
-                    }
-                }
-            }
+                    } 
+                } 
+            } 
         }
 
         TString TMemRecLogSnapshot::BoundariesToString() const {

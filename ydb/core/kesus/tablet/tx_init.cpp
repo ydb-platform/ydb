@@ -217,7 +217,7 @@ struct TKesusTablet::TTxInit : public TTxBase {
         }
 
         {
-            Self->QuoterResources.SetupBilling(ctx.SelfID, MakeMeteringSink());
+            Self->QuoterResources.SetupBilling(ctx.SelfID, MakeMeteringSink()); 
             auto quoterResourcesRowset = db.Table<Schema::QuoterResources>().Range().Select();
             if (!quoterResourcesRowset.IsReady())
                 return false;

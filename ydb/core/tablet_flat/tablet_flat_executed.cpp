@@ -161,7 +161,7 @@ void TTabletExecutedFlat::Detach(const TActorContext &ctx) {
 bool TTabletExecutedFlat::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {
     if (ev) {
         TStringStream str;
-        HTML(str) {str << "nothing to see here...";}
+        HTML(str) {str << "nothing to see here...";} 
         ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
     }
     return false;
@@ -188,48 +188,48 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
     } else {
         const TDuration uptime = TAppData::TimeProvider->Now() - StartTime0;
         TStringStream str;
-        HTML(str) {
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "NodeID: " << ctx.SelfID.NodeId(); }
-            }
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "Uptime: " << uptime.ToString(); }
-            }
-            DIV_CLASS("row") {
+        HTML(str) { 
+            DIV_CLASS("row") { 
+                DIV_CLASS("col-md-12") {str << "NodeID: " << ctx.SelfID.NodeId(); } 
+            } 
+            DIV_CLASS("row") { 
+                DIV_CLASS("col-md-12") {str << "Uptime: " << uptime.ToString(); } 
+            } 
+            DIV_CLASS("row") { 
                 DIV_CLASS("col-md-12") {str << "Tablet type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)TabletType()); }
-            }
-            DIV_CLASS("row") {
+            } 
+            DIV_CLASS("row") { 
                 DIV_CLASS("col-md-12") {str << "Tablet id: " << TabletID() << (Executor()->GetStats().IsFollower ? " Follower" : " Leader"); }
-            }
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "Tablet generation: " << Executor()->Generation();}
-            }
+            } 
+            DIV_CLASS("row") { 
+                DIV_CLASS("col-md-12") {str << "Tablet generation: " << Executor()->Generation();} 
+            } 
             DIV_CLASS("row") {
                 DIV_CLASS("col-md-12") { str << "Tenant id: " << Info()->TenantPathId; }
             }
 
             if (OnRenderAppHtmlPage(nullptr, ctx)) {
-                DIV_CLASS("row") {
-                    DIV_CLASS("col-md-12") {str << "<a href=\"tablets/app?" << queryString << "\">App</a>";}
-                }
+                DIV_CLASS("row") { 
+                    DIV_CLASS("col-md-12") {str << "<a href=\"tablets/app?" << queryString << "\">App</a>";} 
+                } 
             }
 
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets/counters?" << queryString << "\">Counters</a>"; }
-            }
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets/executorInternals?" << queryString << "\">Executor DB internals</a>";}
-            }
-            DIV_CLASS("row") {
+            DIV_CLASS("row") { 
+                DIV_CLASS("col-md-12") {str << "<a href=\"tablets/counters?" << queryString << "\">Counters</a>"; } 
+            } 
+            DIV_CLASS("row") { 
+                DIV_CLASS("col-md-12") {str << "<a href=\"tablets/executorInternals?" << queryString << "\">Executor DB internals</a>";} 
+            } 
+            DIV_CLASS("row") { 
                 DIV_CLASS("col-md-12") {str << "<a href=\"tablets?FollowerID=" << TabletID() << "\">Connect to follower</a>";}
-            }
-            DIV_CLASS("row") {
+            } 
+            DIV_CLASS("row") { 
                 DIV_CLASS("col-md-12") {str << "<a href=\"tablets?SsId=" << TabletID() << "\">State Storage</a>";}
-            }
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets?KillTabletID=" << TabletID() << "\">Kill</a>";}
-            }
-        }
+            } 
+            DIV_CLASS("row") { 
+                DIV_CLASS("col-md-12") {str << "<a href=\"tablets?KillTabletID=" << TabletID() << "\">Kill</a>";} 
+            } 
+        } 
 
         ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         return;

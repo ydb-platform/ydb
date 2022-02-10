@@ -49,52 +49,52 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
     void Reply(const TString &response, const TActorContext &ctx) {
         TStringStream str;
 
-        HTML(str) {
-            H3() { str << "State Storage";}
-            DIV_CLASS("container") {
-                DIV_CLASS("row") {str << "TabletID: " << TabletID;}
-                DIV_CLASS("row") {str << "Response: " << response;}
+        HTML(str) { 
+            H3() { str << "State Storage";} 
+            DIV_CLASS("container") { 
+                DIV_CLASS("row") {str << "TabletID: " << TabletID;} 
+                DIV_CLASS("row") {str << "Response: " << response;} 
 
-                if (ProxyReplyTime.GetValue() != Max<ui64>()) {
-                    DIV_CLASS("row") {str << "Proxy reply time: " << ProxyReplyTime.ToString(); }
-                }
+                if (ProxyReplyTime.GetValue() != Max<ui64>()) { 
+                    DIV_CLASS("row") {str << "Proxy reply time: " << ProxyReplyTime.ToString(); } 
+                } 
 
                 DIV_CLASS("CfgHash") {str << "Config hash: " << SelfConfigContentHash; }
-                DIV_CLASS("row") {str << "&nbsp;";}
-            }
+                DIV_CLASS("row") {str << "&nbsp;";} 
+            } 
 
 
-            TABLE_SORTABLE_CLASS("table") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() { str << "NodeId";}
+            TABLE_SORTABLE_CLASS("table") { 
+                TABLEHEAD() { 
+                    TABLER() { 
+                        TABLEH() { str << "NodeId";} 
                         TABLEH() { str << "Leader";}
                         TABLEH() { str << "Followers"; }
-                        TABLEH() { str << "Locked";}
-                        TABLEH() { str << "Generation";}
-                        TABLEH() { str << "Reply time";}
+                        TABLEH() { str << "Locked";} 
+                        TABLEH() { str << "Generation";} 
+                        TABLEH() { str << "Reply time";} 
                         TABLEH() { str << "CfgHash";}
-                    }
-                }
-                TABLEBODY() {
-                    for (auto &replica : ReplicasInfo) {
-                        TABLER() {
-                            TABLED() {str << replica.ActorID.NodeId();}
-                            if (replica.ReplyTime.GetValue() == Max<ui64>()) { // general timeout
+                    } 
+                } 
+                TABLEBODY() { 
+                    for (auto &replica : ReplicasInfo) { 
+                        TABLER() { 
+                            TABLED() {str << replica.ActorID.NodeId();} 
+                            if (replica.ReplyTime.GetValue() == Max<ui64>()) { // general timeout 
                                 TABLED() { str << "timeout";}
                                 TABLED() { str << "-"; }
                                 TABLED() { str << "-"; }
                                 TABLED() { str << "-"; }
                                 TABLED() { str << "-"; }
                                 TABLED() { str << "-"; }
-                            } else if (replica.CurrentGeneration == Max<ui32>()) {
+                            } else if (replica.CurrentGeneration == Max<ui32>()) { 
                                 TABLED() { str << "not available";}
                                 TABLED() { str << "-"; }
                                 TABLED() { str << "-"; }
                                 TABLED() { str << "-"; }
                                 TABLED() { str << "-"; }
                                 TABLED() { str << replica.ConfigContentHash; }
-                            } else {
+                            } else { 
                                 TABLED() {str << replica.CurrentLeader;}
                                 TABLED() {
                                     if (replica.Followers)
@@ -107,12 +107,12 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
                                 TABLED() { str << replica.CurrentGeneration; }
                                 TABLED() { str << (replica.ReplyTime - ReplicasRequestMoment); }
                                 TABLED() { str << replica.ConfigContentHash; }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+                            } 
+                        } 
+                    } 
+                } 
+            } 
+        } 
 
         ctx.Send(Sender, new NMon::TEvHttpInfoRes(str.Str()));
         return Die(ctx);

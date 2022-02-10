@@ -1,7 +1,7 @@
 #include "memlog.h"
 
-#include <library/cpp/actors/util/datetime.h>
-
+#include <library/cpp/actors/util/datetime.h> 
+ 
 #include <util/system/info.h>
 #include <util/system/atomic.h>
 #include <util/system/align.h>
@@ -270,7 +270,7 @@ bool MemLogWrite(const char* begin, size_t msgSize, bool addLF) noexcept {
     Y_VERIFY(AlignDown(&prolog, TMemoryLog::MemcpyAlignment) == &prolog);
 
     int snprintfResult = snprintf(prolog, prologSize + 1,
-                                  "TS %020" PRIu64 " TI %020" PRIu64 " ", GetCycleCountFast(), threadId);
+                                  "TS %020" PRIu64 " TI %020" PRIu64 " ", GetCycleCountFast(), threadId); 
 
     if (snprintfResult < 0) {
         return false;
@@ -341,7 +341,7 @@ bool MemLogVPrintF(const char* format, va_list params) noexcept {
     int prologSize = snprintf(buf,
                               TMemoryLog::MAX_MESSAGE_SIZE - 2,
                               "TS %020" PRIu64 " TI %020" PRIu64 " ",
-                              GetCycleCountFast(),
+                              GetCycleCountFast(), 
                               threadId);
 
     if (Y_UNLIKELY(prologSize < 0)) {

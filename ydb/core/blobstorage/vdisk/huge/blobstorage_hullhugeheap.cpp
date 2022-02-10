@@ -376,22 +376,22 @@ namespace NKikimr {
         }
 
         void TChainDelegator::RenderHtml(IOutputStream &str) const {
-            HTML(str) {
-                TABLER() {
-                    TABLED() {str << SlotSize << " / " << SlotsInChunk;}
-                    TABLED() {ChainPtr->RenderHtml(str);}
-                }
-            }
+            HTML(str) { 
+                TABLER() { 
+                    TABLED() {str << SlotSize << " / " << SlotsInChunk;} 
+                    TABLED() {ChainPtr->RenderHtml(str);} 
+                } 
+            } 
         }
 
         void TChainDelegator::RenderHtmlForUsage(IOutputStream &str) const {
-            HTML(str) {
-                TABLER() {
-                    TABLED() {str << SlotSize;}
-                    TABLED() {str << SlotsInChunk;}
-                    TABLED() {str << ChainPtr->GetAllocatedSlots();}
-                }
-            }
+            HTML(str) { 
+                TABLER() { 
+                    TABLED() {str << SlotSize;} 
+                    TABLED() {str << SlotsInChunk;} 
+                    TABLED() {str << ChainPtr->GetAllocatedSlots();} 
+                } 
+            } 
         }
 
 
@@ -560,38 +560,38 @@ namespace NKikimr {
         }
 
         void TAllChains::RenderHtml(IOutputStream &str) const {
-            HTML(str) {
-                TABLE_CLASS ("table table-condensed") {
-                    TABLEHEAD() {
-                        TABLER() {
-                            TABLEH() {str << "Chain";}
+            HTML(str) { 
+                TABLE_CLASS ("table table-condensed") { 
+                    TABLEHEAD() { 
+                        TABLER() { 
+                            TABLEH() {str << "Chain";} 
                             TABLEH() {str << "Reserved: [ChunkIdx, FreeSlotsInChunk]";}
-                        }
-                    }
-                    TABLEBODY() {
+                        } 
+                    } 
+                    TABLEBODY() { 
                         for (const auto & x : ChainDelegators)
                             x.RenderHtml(str);
-                    }
-                }
-            }
+                    } 
+                } 
+            } 
         }
 
         void TAllChains::RenderHtmlForUsage(IOutputStream &str) const {
-            HTML(str) {
-                TABLE_CLASS ("table table-condensed") {
-                    TABLEHEAD() {
-                        TABLER() {
-                            TABLEH() {str << "Slot Size";}
-                            TABLEH() {str << "Slots in Chunk";}
-                            TABLEH() {str << "Allocated";}
-                        }
-                    }
-                    TABLEBODY() {
+            HTML(str) { 
+                TABLE_CLASS ("table table-condensed") { 
+                    TABLEHEAD() { 
+                        TABLER() { 
+                            TABLEH() {str << "Slot Size";} 
+                            TABLEH() {str << "Slots in Chunk";} 
+                            TABLEH() {str << "Allocated";} 
+                        } 
+                    } 
+                    TABLEBODY() { 
                         for (const auto & x : ChainDelegators)
                             x.RenderHtmlForUsage(str);
-                    }
-                }
-            }
+                    } 
+                } 
+            } 
         }
 
         TVector<NPrivate::TChainLayoutBuilder::TSeg> TAllChains::GetLayout() const {
@@ -854,12 +854,12 @@ namespace NKikimr {
         //////////////////////////////////////////////////////////////////////////////////////////
         void THeap::RenderHtml(IOutputStream &str) const {
             str << "\n";
-            HTML(str) {
-                COLLAPSED_BUTTON_CONTENT("hugeheapusageid", "Heap Usage") {
+            HTML(str) { 
+                COLLAPSED_BUTTON_CONTENT("hugeheapusageid", "Heap Usage") { 
                     Chains.RenderHtmlForUsage(str);
-                }
+                } 
                 str << "<br/>";
-                COLLAPSED_BUTTON_CONTENT("hugeheapstateid", "Heap State") {
+                COLLAPSED_BUTTON_CONTENT("hugeheapstateid", "Heap State") { 
                     str << "FreeChunks: ";
                     if (FreeChunks.empty()) {
                         str << "empty";
@@ -870,8 +870,8 @@ namespace NKikimr {
                     }
                     str << "<br>";
                     Chains.RenderHtml(str);
-                }
-            }
+                } 
+            } 
             str << "\n";
         }
 

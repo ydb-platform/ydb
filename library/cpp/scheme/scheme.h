@@ -387,7 +387,7 @@ namespace NSc {
 
         static TValue From(const ::google::protobuf::Message&, bool mapAsDict = false);
 
-        void To(::google::protobuf::Message&, const TProtoOpts& opts = {}) const;
+        void To(::google::protobuf::Message&, const TProtoOpts& opts = {}) const; 
 
     public:
         inline explicit TValue(TPoolPtr&);
@@ -421,11 +421,11 @@ namespace NSc {
         static TValue FromField(const ::google::protobuf::Message&, const ::google::protobuf::FieldDescriptor*);
         static TValue FromRepeatedField(const ::google::protobuf::Message&, const ::google::protobuf::FieldDescriptor*, int index);
 
-        void ValueToField(const TValue& value, ::google::protobuf::Message&, const ::google::protobuf::FieldDescriptor*, const TProtoOpts& opts) const;
-        void ToField(::google::protobuf::Message&, const ::google::protobuf::FieldDescriptor*, const TProtoOpts& opts) const;
-        void ToEnumField(::google::protobuf::Message&, const ::google::protobuf::FieldDescriptor*, const TProtoOpts& opts) const;
-        void ToRepeatedField(::google::protobuf::Message&, const ::google::protobuf::FieldDescriptor*, const TProtoOpts& opts) const;
-        void ToMapField(::google::protobuf::Message&, const ::google::protobuf::FieldDescriptor*, const TProtoOpts& opts) const;
+        void ValueToField(const TValue& value, ::google::protobuf::Message&, const ::google::protobuf::FieldDescriptor*, const TProtoOpts& opts) const; 
+        void ToField(::google::protobuf::Message&, const ::google::protobuf::FieldDescriptor*, const TProtoOpts& opts) const; 
+        void ToEnumField(::google::protobuf::Message&, const ::google::protobuf::FieldDescriptor*, const TProtoOpts& opts) const; 
+        void ToRepeatedField(::google::protobuf::Message&, const ::google::protobuf::FieldDescriptor*, const TProtoOpts& opts) const; 
+        void ToMapField(::google::protobuf::Message&, const ::google::protobuf::FieldDescriptor*, const TProtoOpts& opts) const; 
     };
 
 

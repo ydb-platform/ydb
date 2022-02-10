@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "datashard.h"
 #include "datashard_impl.h"
@@ -9,17 +9,17 @@
 #include <ydb/core/testlib/minikql_compile.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
 
-namespace NKikimr {
-
+namespace NKikimr { 
+ 
 class TBalanceCoverageBuilder;
 class TEngineHolder;
 class TFakeMiniKQLProxy;
 class TFakeProxyTx;
-
+ 
 constexpr ui64 FAKE_SCHEMESHARD_TABLET_ID = 4200;
 constexpr ui64 FAKE_TX_ALLOCATOR_TABLET_ID = 4201;
 
@@ -30,7 +30,7 @@ public:
     friend class TFakeMiniKQLProxy;
     friend class TFakeProxyTx;
     friend class TFakeScanTx;
-
+ 
     using TKeyResolver = std::function<void(TKeyDesc&)>;
 
     enum ESchema {
@@ -107,20 +107,20 @@ private:
     ui64 LastStep;
     TMockDbSchemeResolver DbSchemeResolver;
     TString DispatchName = "NONE";
-    bool AllowIncompleteResult = false;
-    bool* ActiveZone = nullptr;
-    TDuration Timeout = TDuration::Minutes(10);
-
+    bool AllowIncompleteResult = false; 
+    bool* ActiveZone = nullptr; 
+    TDuration Timeout = TDuration::Minutes(10); 
+ 
     TKeyResolver GetKeyResolver() const;
     void CreateSchema(ESchema schema, const TOptions& opts);
     void CreateDataShard(TFakeMiniKQLProxy& proxy, ui64 tabletId, const TString& schemeText, bool withRegister = false);
     void RegisterTableInResolver(const TString& schemeText);
-
+ 
     static void EmptyShardKeyResolver(TKeyDesc& key);
     static void SingleShardKeyResolver(TKeyDesc& key); // uses TTestTxConfig::TxTablet0
     static void ThreeShardPointKeyResolver(TKeyDesc& key); // uses TTestTxConfig::TxTablet0,1,2
-};
-
+}; 
+ 
 ///
 struct TExpectedReadSet {
     struct TWaitFor {
@@ -250,8 +250,8 @@ private:
 };
 
 ///
-class TFakeMiniKQLProxy {
-public:
+class TFakeMiniKQLProxy { 
+public: 
     using IEngineFlat = NMiniKQL::IEngineFlat;
     //using TEvProgressTransaction = NDataShard::TDataShard::TEvPrivate::TEvProgressTransaction;
 
@@ -261,7 +261,7 @@ public:
         , LastStep_(tester.LastStep)
         , RebootOnDelay(false)
     {}
-
+ 
     // Propose + Plan (if needed) in own step
     IEngineFlat::EStatus ExecSchemeCreateTable(const TString& schemaText, const TVector<ui64>& shards);
     IEngineFlat::EStatus Execute(const TString& programText, NKikimrMiniKQL::TResult& out,
@@ -286,7 +286,7 @@ public:
     void EnqueueScan(const TString& programText, std::function<bool(TFakeProxyTx&)> check = DoNothing,
                  ui32 flags = NDataShard::TTxFlags::ForceOnline);
     void ExecQueue();
-
+ 
     static bool DoNothing(TFakeProxyTx&) {
         return true;
     }
@@ -302,8 +302,8 @@ public:
         DelayedData.emplace_back(shardTx);
     }
 
-private:
-    TTester& Tester;
+private: 
+    TTester& Tester; 
     ui64& LastTxId_;
     ui64& LastStep_;
     TVector<TFakeProxyTx::TPtr> TxQueue;
@@ -319,15 +319,15 @@ private:
         const std::function<NKikimrTxDataShard::TFlatSchemeTransaction(ui64)>& txBodyForShard);
     ui64 Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& txs, bool waitForResult = true);
     void ResolveShards(const TSet<ui64>& shards);
-};
-
+}; 
+ 
 ///
 class TDatashardInitialEventsFilter {
-public:
+public: 
     TDatashardInitialEventsFilter(const TVector<ui64>& tabletIds);
-    TTestActorRuntime::TEventFilter Prepare();
+    TTestActorRuntime::TEventFilter Prepare(); 
     bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
-
+ 
     TDatashardInitialEventsFilter(const TDatashardInitialEventsFilter&) = delete;
     TDatashardInitialEventsFilter(TDatashardInitialEventsFilter&&) = default;
 
@@ -341,11 +341,11 @@ public:
 
     const TVector<ui64> Tablets() const { return TabletIds; }
 
-private:
+private: 
     const TVector<ui64> TabletIds;
     TVector<ui64> RemainTablets;
-};
-
+}; 
+ 
 ///
 class TKeyExtractor : public TEngineHolder {
 public:
@@ -625,4 +625,4 @@ struct IsTxResultComplete {
 
 void WaitTabletBecomesOffline(Tests::TServer::TPtr server, ui64 tabletId);
 
-}
+} 

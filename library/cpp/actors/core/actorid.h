@@ -180,7 +180,7 @@ namespace NActors {
     };
 
     static_assert(sizeof(TActorId) == 16, "expect sizeof(TActorId) == 16");
-    static_assert(MaxPools < TActorId::MaxPoolID); // current implementation of united pool has limit MaxPools on pool id
+    static_assert(MaxPools < TActorId::MaxPoolID); // current implementation of united pool has limit MaxPools on pool id 
 }
 
 template <>

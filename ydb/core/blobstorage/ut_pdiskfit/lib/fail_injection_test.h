@@ -71,7 +71,7 @@ public:
     {}
 
 private:
-    bool DoExecute(NLWTrace::TOrbit&, const NLWTrace::TParams& params) override {
+    bool DoExecute(NLWTrace::TOrbit&, const NLWTrace::TParams& params) override { 
         Injector->Inject(params.Param[0].Get<ui64>());
         return true;
     }
@@ -118,7 +118,7 @@ struct TPDiskFailureInjectionTest {
 
     TAutoEvent StopEvent;
 
-    NLWTrace::TManager TraceManager;
+    NLWTrace::TManager TraceManager; 
 
     TMaybe<TDuration> TestDuration;
 
@@ -154,7 +154,7 @@ struct TPDiskFailureInjectionTest {
         auto& custom = *action.MutableCustomAction();
         custom.SetName(name);
 
-        auto factory = [=](NLWTrace::TProbe *probe, const NLWTrace::TCustomAction& /*action*/, NLWTrace::TSession* /*session*/) {
+        auto factory = [=](NLWTrace::TProbe *probe, const NLWTrace::TCustomAction& /*action*/, NLWTrace::TSession* /*session*/) { 
             return new TFailInjectionActionExecutor(probe, injector);
         };
 

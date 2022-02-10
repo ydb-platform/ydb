@@ -6,7 +6,7 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/helpers/mon_histogram_helper.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
-#include <library/cpp/actors/util/datetime.h>
+#include <library/cpp/actors/util/datetime.h> 
 #include <library/cpp/actors/util/rope.h>
 #include <library/cpp/actors/util/funnel_queue.h>
 #include <library/cpp/actors/util/recentwnd.h>
@@ -38,12 +38,12 @@ namespace NActors {
     public:
         TSlowPathChecker(TTraceCallback&& callback)
             : Callback(std::move(callback))
-            , Start(GetCycleCountFast())
+            , Start(GetCycleCountFast()) 
         {
         }
 
         ~TSlowPathChecker() {
-            const NHPTimer::STime end = GetCycleCountFast();
+            const NHPTimer::STime end = GetCycleCountFast(); 
             const NHPTimer::STime elapsed = end - Start;
             if (elapsed > 1000000) {
                 Callback(NHPTimer::GetSeconds(elapsed) * 1000);
@@ -63,7 +63,7 @@ namespace NActors {
     class TTimeLimit {
     public:
         TTimeLimit(ui64 limitInCycles)
-            : UpperLimit(limitInCycles == 0 ? 0 : GetCycleCountFast() + limitInCycles)
+            : UpperLimit(limitInCycles == 0 ? 0 : GetCycleCountFast() + limitInCycles) 
         {
         }
 
@@ -73,7 +73,7 @@ namespace NActors {
         }
 
         bool CheckExceeded() {
-            return UpperLimit != 0 && GetCycleCountFast() > UpperLimit;
+            return UpperLimit != 0 && GetCycleCountFast() > UpperLimit; 
         }
 
         const ui64 UpperLimit;
@@ -125,7 +125,7 @@ namespace NActors {
         std::unordered_map<ui16, TRope> ChannelMap;
 
         TReceiveContext() {
-            GetTimeFast(&StartTime);
+            GetTimeFast(&StartTime); 
         }
 
         // returns false if sessions needs to be terminated and packet not to be processed
@@ -378,7 +378,7 @@ namespace NActors {
         void SetNewConnection(TEvHandshakeDone::TPtr& ev);
 
         TEvRam* RamInQueue = nullptr;
-        ui64 RamStartedCycles = 0;
+        ui64 RamStartedCycles = 0; 
         void HandleRam(TEvRam::TPtr& ev);
         void GenerateTraffic();
 
@@ -389,7 +389,7 @@ namespace NActors {
         void Handle(TEvPollerRegisterResult::TPtr ev);
         void WriteData();
 
-        ui64 MakePacket(bool data, TMaybe<ui64> pingMask = {});
+        ui64 MakePacket(bool data, TMaybe<ui64> pingMask = {}); 
         void FillSendingBuffer(TTcpPacketOutTask& packet, ui64 serial);
         bool DropConfirmed(ui64 confirm);
         void ShutdownSocket(TDisconnectReason reason);
@@ -452,21 +452,21 @@ namespace NActors {
         TSendQueue SendQueue;
         TSendQueue SendQueueCache;
         TSendQueue::iterator SendQueuePos;
-        ui64 WriteBlockedCycles = 0; // start of current block period
-        TDuration WriteBlockedTotal; // total incremental duration that session has been blocked
+        ui64 WriteBlockedCycles = 0; // start of current block period 
+        TDuration WriteBlockedTotal; // total incremental duration that session has been blocked 
         ui64 BytesUnwritten = 0;
 
         void TrimSendQueueCache();
 
-        TDuration GetWriteBlockedTotal() const {
+        TDuration GetWriteBlockedTotal() const { 
             if (ReceiveContext->WriteBlockedByFullSendBuffer) {
-                double blockedUs = NHPTimer::GetSeconds(GetCycleCountFast() - WriteBlockedCycles) * 1000000.0;
-                return WriteBlockedTotal + TDuration::MicroSeconds(blockedUs); // append current blocking period if any
-            } else {
-                return WriteBlockedTotal;
-            }
-        }
-
+                double blockedUs = NHPTimer::GetSeconds(GetCycleCountFast() - WriteBlockedCycles) * 1000000.0; 
+                return WriteBlockedTotal + TDuration::MicroSeconds(blockedUs); // append current blocking period if any 
+            } else { 
+                return WriteBlockedTotal; 
+            } 
+        } 
+ 
         ui64 OutputCounter;
         ui64 LastSentSerial = 0;
 

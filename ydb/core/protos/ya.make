@@ -38,22 +38,22 @@ SRCS(
     console_tenant.proto
     counters_tx_allocator.proto
     counters_bs_controller.proto
-    counters_coordinator.proto
+    counters_coordinator.proto 
     counters_columnshard.proto
-    counters_datashard.proto
-    counters_hive.proto
+    counters_datashard.proto 
+    counters_hive.proto 
     counters_kesus.proto
-    counters_keyvalue.proto
+    counters_keyvalue.proto 
     counters_olapshard.proto
     counters_pq.proto
     counters_replication.proto
-    counters_schemeshard.proto
+    counters_schemeshard.proto 
     counters_sequenceshard.proto
     counters_sysview_processor.proto
     counters_testshard.proto
-    counters_tx_proxy.proto
+    counters_tx_proxy.proto 
     counters_mediator.proto
-    counters.proto
+    counters.proto 
     database_basic_sausage_metainfo.proto
     drivemodel.proto
     export.proto

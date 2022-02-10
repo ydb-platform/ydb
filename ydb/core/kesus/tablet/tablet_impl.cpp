@@ -296,7 +296,7 @@ STFUNC(TKesusTablet::StateWork) {
         hFunc(TEvKesus::TEvDeleteQuoterResource, Handle);
         hFunc(TEvKesus::TEvSubscribeOnResources, Handle);
         hFunc(TEvKesus::TEvUpdateConsumptionState, Handle);
-        hFunc(TEvKesus::TEvAccountResources, Handle);
+        hFunc(TEvKesus::TEvAccountResources, Handle); 
         hFunc(TEvKesus::TEvResourcesAllocatedAck, Handle);
         hFunc(TEvKesus::TEvGetQuoterResourceCounters, Handle);
         hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);

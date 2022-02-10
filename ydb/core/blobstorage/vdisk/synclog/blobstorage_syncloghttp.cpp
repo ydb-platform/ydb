@@ -63,29 +63,29 @@ namespace NKikimr {
             void Finish(const TActorContext &ctx) {
                 TStringStream str;
                 str << "\n";
-                HTML(str) {
-                    DIV_CLASS("panel panel-info") {
-                        DIV_CLASS("panel-heading") {
+                HTML(str) { 
+                    DIV_CLASS("panel panel-info") { 
+                        DIV_CLASS("panel-heading") { 
                             str << "SyncLog (LogStartLsn=" << SnapPtr->LogStartLsn << "; "
                                 << "EntryPointDbgInfo="
                                 << SnapPtr->LastEntryPointDbgInfo.ToString() << ")";
-                        }
-                        DIV_CLASS("panel-body") {
-                            DIV_CLASS("row") {
-                                DIV_CLASS("col-md-6") {SnapPtr->MemSnapPtr->OutputHtml(str);}
-                                DIV_CLASS("col-md-6") {SnapPtr->DiskSnapPtr->OutputHtml(str);}
-                            }
-                            DIV_CLASS("row") {
-                                DIV_CLASS("col-md-12") {
+                        } 
+                        DIV_CLASS("panel-body") { 
+                            DIV_CLASS("row") { 
+                                DIV_CLASS("col-md-6") {SnapPtr->MemSnapPtr->OutputHtml(str);} 
+                                DIV_CLASS("col-md-6") {SnapPtr->DiskSnapPtr->OutputHtml(str);} 
+                            } 
+                            DIV_CLASS("row") { 
+                                DIV_CLASS("col-md-12") { 
                                     NeighborsPtr->OutputHtml(str, *GInfo, NodesInfoMsg);
-                                }
-                            }
+                                } 
+                            } 
                             COLLAPSED_BUTTON_CONTENT("synclog_logcontent", "Log") {
                                 PRE() {str << SublogContent;}
                             }
-                        }
-                    }
-                }
+                        } 
+                    } 
+                } 
                 str << "\n";
 
                 ctx.Send(Ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::SyncLogId));

@@ -1,7 +1,7 @@
 #include "defs.h"
 #include "actorsystem.h"
 #include "callstack.h"
-#include "cpu_manager.h"
+#include "cpu_manager.h" 
 #include "mailbox.h"
 #include "events.h"
 #include "interconnect.h"
@@ -9,10 +9,10 @@
 #include "scheduler_queue.h"
 #include "scheduler_actor.h"
 #include "log.h"
-#include "probes.h"
+#include "probes.h" 
 #include "ask.h"
 #include <library/cpp/actors/util/affinity.h>
-#include <library/cpp/actors/util/datetime.h>
+#include <library/cpp/actors/util/datetime.h> 
 #include <util/generic/hash.h>
 #include <util/system/rwlock.h>
 #include <util/random/random.h>
@@ -38,8 +38,8 @@ namespace NActors {
     TActorSystem::TActorSystem(THolder<TActorSystemSetup>& setup, void* appData,
                                TIntrusivePtr<NLog::TSettings> loggerSettings)
         : NodeId(setup->NodeId)
-        , CpuManager(new TCpuManager(setup))
-        , ExecutorPoolCount(CpuManager->GetExecutorsCount())
+        , CpuManager(new TCpuManager(setup)) 
+        , ExecutorPoolCount(CpuManager->GetExecutorsCount()) 
         , Scheduler(setup->Scheduler)
         , InterconnectCount((ui32)setup->Interconnect.ProxyActors.size())
         , CurrentTimestamp(0)
@@ -105,10 +105,10 @@ namespace NActors {
         Y_VERIFY_DEBUG(recipient == ev->GetRecipientRewrite());
         const ui32 recpPool = recipient.PoolID();
         if (recipient && recpPool < ExecutorPoolCount) {
-            if (CpuManager->GetExecutorPool(recpPool)->Send(ev)) {
+            if (CpuManager->GetExecutorPool(recpPool)->Send(ev)) { 
                 return true;
-            }
-        }
+            } 
+        } 
 
         Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown));
         return false;
@@ -142,7 +142,7 @@ namespace NActors {
                                     const TActorId& parentId) {
         Y_VERIFY(executorPool < ExecutorPoolCount, "executorPool# %" PRIu32 ", ExecutorPoolCount# %" PRIu32,
                  (ui32)executorPool, (ui32)ExecutorPoolCount);
-        return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
+        return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId); 
     }
 
     NThreading::TFuture<THolder<IEventBase>> TActorSystem::AskGeneric(TMaybe<ui32> expectedEventType,
@@ -199,20 +199,20 @@ namespace NActors {
         return ServiceMap->RegisterLocalService(serviceId, actorId);
     }
 
-    void TActorSystem::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
-        CpuManager->GetPoolStats(poolId, poolStats, statsCopy);
-    }
-
+    void TActorSystem::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const { 
+        CpuManager->GetPoolStats(poolId, poolStats, statsCopy); 
+    } 
+ 
     void TActorSystem::Start() {
         Y_VERIFY(StartExecuted == false);
         StartExecuted = true;
 
-        ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
+        ScheduleQueue.Reset(new NSchedulerQueue::TQueueType()); 
         TVector<NSchedulerQueue::TReader*> scheduleReaders;
         scheduleReaders.push_back(&ScheduleQueue->Reader);
-        CpuManager->PrepareStart(scheduleReaders, this);
+        CpuManager->PrepareStart(scheduleReaders, this); 
         Scheduler->Prepare(this, &CurrentTimestamp, &CurrentMonotonic);
-        Scheduler->PrepareSchedules(&scheduleReaders.front(), (ui32)scheduleReaders.size());
+        Scheduler->PrepareSchedules(&scheduleReaders.front(), (ui32)scheduleReaders.size()); 
 
         // setup interconnect proxies
         {
@@ -243,7 +243,7 @@ namespace NActors {
         SystemSetup.Destroy();
 
         Scheduler->PrepareStart();
-        CpuManager->Start();
+        CpuManager->Start(); 
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
         Scheduler->Start();
     }
@@ -259,9 +259,9 @@ namespace NActors {
         }
 
         Scheduler->PrepareStop();
-        CpuManager->PrepareStop();
+        CpuManager->PrepareStop(); 
         Scheduler->Stop();
-        CpuManager->Shutdown();
+        CpuManager->Shutdown(); 
     }
 
     void TActorSystem::Cleanup() {
@@ -269,7 +269,7 @@ namespace NActors {
         if (CleanupExecuted || !StartExecuted)
             return;
         CleanupExecuted = true;
-        CpuManager->Cleanup();
+        CpuManager->Cleanup(); 
         Scheduler.Destroy();
     }
 

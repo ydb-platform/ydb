@@ -64,53 +64,53 @@ TTabletCountersBase::operator = (const TTabletCountersBase& rp) {
 }
 
 void TTabletSimpleCounterBase::OutputHtml(IOutputStream &os, const char* name) const {
-    HTML(os) {PRE() {os << name << ": " << Value;}}
+    HTML(os) {PRE() {os << name << ": " << Value;}} 
 }
 
 void TTabletPercentileCounter::OutputHtml(IOutputStream &os, const char* name) const {
-    HTML(os) {
-        DIV_CLASS("row") {
-            DIV_CLASS("col-md-12") {H4() {os << name;}}
-        }
+    HTML(os) { 
+        DIV_CLASS("row") { 
+            DIV_CLASS("col-md-12") {H4() {os << name;}} 
+        } 
 
-        DIV_CLASS("row") {
+        DIV_CLASS("row") { 
             for (ui32 i = 0; i < RangeCount; ++i) {
-                DIV_CLASS("col-md-3") {
-                    PRE() {
+                DIV_CLASS("col-md-3") { 
+                    PRE() { 
                         os << Ranges[i].RangeName << ": " << Values[i];
-                    }
-                }
+                    } 
+                } 
             }
-        }
-    }
+        } 
+    } 
 }
 
 void TTabletCountersBase::OutputHtml(IOutputStream &os) const {
-    HTML(os) {
-        DIV_CLASS("row") {
-            DIV_CLASS("col-md-12") {OutputHtml(os, "Simple", SimpleCountersMetaInfo, "col-md-3", SimpleCounters);}
-            DIV_CLASS("col-md-12") {OutputHtml(os, "Cumulative", CumulativeCountersMetaInfo, "col-md-3", CumulativeCounters);}
-            DIV_CLASS("col-md-12") {OutputHtml(os, "Percentile", PercentileCountersMetaInfo, "col-md-12", PercentileCounters);}
+    HTML(os) { 
+        DIV_CLASS("row") { 
+            DIV_CLASS("col-md-12") {OutputHtml(os, "Simple", SimpleCountersMetaInfo, "col-md-3", SimpleCounters);} 
+            DIV_CLASS("col-md-12") {OutputHtml(os, "Cumulative", CumulativeCountersMetaInfo, "col-md-3", CumulativeCounters);} 
+            DIV_CLASS("col-md-12") {OutputHtml(os, "Percentile", PercentileCountersMetaInfo, "col-md-12", PercentileCounters);} 
 
-        }
-    }
+        } 
+    } 
 }
 
 ////////////////////////////////////////////
 template<typename T>
 void TTabletCountersBase::OutputHtml(IOutputStream &os, const char* sectionName, const char* const* counterNames, const char* counterClass, const TCountersArray<T>& counters) const {
-    HTML(os) {
-        DIV_CLASS("row") {
-            DIV_CLASS("col-md-12") {H3() {os << sectionName; }}
-        }
-        DIV_CLASS("row") {
+    HTML(os) { 
+        DIV_CLASS("row") { 
+            DIV_CLASS("col-md-12") {H3() {os << sectionName; }} 
+        } 
+        DIV_CLASS("row") { 
             for (ui32 i = 0, e = counters.Size(); i < e; ++i) {
                 if (counterNames[i]) {
                     DIV_CLASS(counterClass) {counters[i].OutputHtml(os, counterNames[i]);}
                 }
             }
-        }
-    }
+        } 
+    } 
 }
 
 void TTabletCountersBase::OutputProto(NKikimrTabletBase::TTabletCountersBase& op) const {
@@ -179,20 +179,20 @@ TTabletLabeledCountersBase::operator = (const TTabletLabeledCountersBase& rp) {
 }
 
 void TTabletLabeledCountersBase::OutputHtml(IOutputStream &os) const {
-    HTML(os) {
-        DIV_CLASS("row") {
-            DIV_CLASS("col-md-12") {H3() {os << Group; }}
+    HTML(os) { 
+        DIV_CLASS("row") { 
+            DIV_CLASS("col-md-12") {H3() {os << Group; }} 
 
-        }
-        DIV_CLASS("row") {
+        } 
+        DIV_CLASS("row") { 
             for (ui32 i = 0, e = Counters.Size(); i < e; ++i) {
                 if (MetaInfo[i]) {
                     DIV_CLASS("col-md-3") {Counters[i].OutputHtml(os, MetaInfo[i]);}
                     DIV_CLASS("col-md-3") {Ids[i].OutputHtml(os, "id");}
                 }
             }
-        }
-    }
+        } 
+    } 
 }
 
 void TTabletLabeledCountersBase::AggregateWith(const TTabletLabeledCountersBase& rp) {

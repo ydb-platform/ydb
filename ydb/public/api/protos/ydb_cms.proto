@@ -133,12 +133,12 @@ message GetDatabaseStatusRequest {
     string path = 1;
     // Operation parameters
     Ydb.Operations.OperationParams operation_params = 2;
-}
+} 
 
 message GetDatabaseStatusResponse {
     // operation.result holds GetDatabaseStatusResult
     Ydb.Operations.Operation operation = 1;
-}
+} 
 
 message GetDatabaseStatusResult {
     enum State {
@@ -171,7 +171,7 @@ message GetDatabaseStatusResult {
     SchemaOperationQuotas schema_operation_quotas = 9;
     // Current quotas for the database
     DatabaseQuotas database_quotas = 10;
-}
+} 
 
 // Change resources allocated for database.
 message AlterDatabaseRequest {

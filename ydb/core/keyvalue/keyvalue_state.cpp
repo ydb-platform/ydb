@@ -3182,76 +3182,76 @@ bool TKeyValueState::ConvertRange(const NKikimrClient::TKeyValueRequest::TKeyRan
 }
 
 TString TKeyValueState::Dump() const {
-    TStringStream ss;
-    ss << "=== INDEX ===\n";
-    for (auto& x : Index) {
+    TStringStream ss; 
+    ss << "=== INDEX ===\n"; 
+    for (auto& x : Index) { 
         const TString& k = x.first;
-        const TIndexRecord& v = x.second;
-        ss << k << "=== ctime:" << v.CreationUnixTime;
-        for (const TIndexRecord::TChainItem& y : v.Chain) {
-            ss << " -> " << y.LogoBlobId << ":" << y.Offset;
-        }
-        ss << "\n";
-    }
-    ss << "=== END ===\n";
-    return ss.Str();
-}
-
-void TKeyValueState::VerifyEqualIndex(const TKeyValueState& state) const {
-    auto i2 = state.Index.cbegin(), e2 = state.Index.cend();
-    int i = 0;
-    for (auto i1 = Index.cbegin(), e1 = Index.cend(); i1 != e1; ++i, ++i1, ++i2) {
+        const TIndexRecord& v = x.second; 
+        ss << k << "=== ctime:" << v.CreationUnixTime; 
+        for (const TIndexRecord::TChainItem& y : v.Chain) { 
+            ss << " -> " << y.LogoBlobId << ":" << y.Offset; 
+        } 
+        ss << "\n"; 
+    } 
+    ss << "=== END ===\n"; 
+    return ss.Str(); 
+} 
+ 
+void TKeyValueState::VerifyEqualIndex(const TKeyValueState& state) const { 
+    auto i2 = state.Index.cbegin(), e2 = state.Index.cend(); 
+    int i = 0; 
+    for (auto i1 = Index.cbegin(), e1 = Index.cend(); i1 != e1; ++i, ++i1, ++i2) { 
         Y_VERIFY(i2 != e2, "index length differs. Dump:\n%s\n%s\n", Dump().data(), state.Dump().data());
         const TString& k1 = i1->first;
         const TString& k2 = i2->first;
         Y_VERIFY(k1 == k2, "index key #%d differs. Dump:\n%s\n%s\n", i, Dump().data(), state.Dump().data());
-        const TIndexRecord& v1 = i1->second;
-        const TIndexRecord& v2 = i2->second;
+        const TIndexRecord& v1 = i1->second; 
+        const TIndexRecord& v2 = i2->second; 
         Y_VERIFY(v1 == v2, "index value #%d differs. Dump:\n%s\n%s\n", i, Dump().data(), state.Dump().data());
-    }
+    } 
     Y_VERIFY(i2 == e2, "index length differs. Dump:\n%s\n%s\n", Dump().data(), state.Dump().data());
-}
-
+} 
+ 
 void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
-    HTML(out) {
-        H2() {out << "KeyValue Tablet";}
-        UL_CLASS("nav nav-tabs") {
-            LI_CLASS("active") {
+    HTML(out) { 
+        H2() {out << "KeyValue Tablet";} 
+        UL_CLASS("nav nav-tabs") { 
+            LI_CLASS("active") { 
                 out << "<a href=\"#database\" data-toggle=\"tab\">Database</a>";
-            }
-            LI() {
+            } 
+            LI() { 
                 out << "<a href=\"#refcounts\" data-toggle=\"tab\">RefCounts</a>";
-            }
-            LI() {
+            } 
+            LI() { 
                 out << "<a href=\"#trash\" data-toggle=\"tab\">Trash</a>";
-            }
+            } 
             LI() {
                 out << "<a href=\"#channelstat\" data-toggle=\"tab\">Channel Stat</a>";
             }
-        }
-        DIV_CLASS("tab-content") {
-            DIV_CLASS_ID("tab-pane fade in active", "database") {
-                TABLE_SORTABLE_CLASS("table") {
-                    TABLEHEAD() {
-                        TABLER() {
-                            TABLEH() {out << "Idx";}
-                            TABLEH() {out << "Key";}
-                            TABLEH() {out << "Value Size";}
-                            TABLEH() {out << "Creation UnixTime";}
-                            TABLEH() {out << "Storage Channel";}
-                            TABLEH() {out << "LogoBlobIds";}
-                        }
-                    }
-                    TABLEBODY() {
+        } 
+        DIV_CLASS("tab-content") { 
+            DIV_CLASS_ID("tab-pane fade in active", "database") { 
+                TABLE_SORTABLE_CLASS("table") { 
+                    TABLEHEAD() { 
+                        TABLER() { 
+                            TABLEH() {out << "Idx";} 
+                            TABLEH() {out << "Key";} 
+                            TABLEH() {out << "Value Size";} 
+                            TABLEH() {out << "Creation UnixTime";} 
+                            TABLEH() {out << "Storage Channel";} 
+                            TABLEH() {out << "LogoBlobIds";} 
+                        } 
+                    } 
+                    TABLEBODY() { 
                         ui64 idx = 1;
                         for (auto it = Index.begin(); it != Index.end(); ++it) {
-                            TABLER() {
-                                TABLED() {out << idx;}
+                            TABLER() { 
+                                TABLED() {out << idx;} 
                                 ++idx;
                                 TABLED() {out << EscapeC(it->first);}
-                                TABLED() {out << it->second.GetFullValueSize();}
-                                TABLED() {out << it->second.CreationUnixTime;}
-                                TABLED() {
+                                TABLED() {out << it->second.GetFullValueSize();} 
+                                TABLED() {out << it->second.CreationUnixTime;} 
+                                TABLED() { 
                                     NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel =
                                         NKikimrClient::TKeyValueRequest::MAIN;
                                     if (it->second.Chain.size()) {
@@ -3266,9 +3266,9 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
                                     }
                                     out << NKikimrClient::TKeyValueRequest::EStorageChannel_Name(
                                         storageChannel);
-                                }
+                                } 
 
-                                TABLED() {
+                                TABLED() { 
                                     for (ui32 i = 0; i < it->second.Chain.size(); ++i) {
                                         if (i > 0) {
                                             out << "<br/>";
@@ -3279,54 +3279,54 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
                                             out << it->second.Chain[i].LogoBlobId.ToString();
                                         }
                                     }
-                                }
-                            }
+                                } 
+                            } 
                         }
-                    }
-                }
-            }
-            DIV_CLASS_ID("tab-pane fade", "refcounts") {
-                TABLE_SORTABLE_CLASS("table") {
-                    TABLEHEAD() {
-                        TABLER() {
-                            TABLEH() {out << "Idx";}
-                            TABLEH() {out << "LogoBlobId";}
-                            TABLEH() {out << "RefCount";}
-                        }
-                    }
-                    TABLEBODY() {
+                    } 
+                } 
+            } 
+            DIV_CLASS_ID("tab-pane fade", "refcounts") { 
+                TABLE_SORTABLE_CLASS("table") { 
+                    TABLEHEAD() { 
+                        TABLER() { 
+                            TABLEH() {out << "Idx";} 
+                            TABLEH() {out << "LogoBlobId";} 
+                            TABLEH() {out << "RefCount";} 
+                        } 
+                    } 
+                    TABLEBODY() { 
                         ui32 idx = 1;
                         for (const auto& kv : RefCounts) {
-                            TABLER() {
-                                TABLED() {out << idx;}
-                                TABLED() {out << kv.first.ToString();}
-                                TABLED() {out << kv.second;}
-                            }
+                            TABLER() { 
+                                TABLED() {out << idx;} 
+                                TABLED() {out << kv.first.ToString();} 
+                                TABLED() {out << kv.second;} 
+                            } 
                             ++idx;
                         }
-                    }
-                }
-            }
-            DIV_CLASS_ID("tab-pane fade", "trash") {
-                TABLE_SORTABLE_CLASS("table") {
-                    TABLEHEAD() {
-                        TABLER() {
-                            TABLEH() {out << "Idx";}
-                            TABLEH() {out << "LogoBlobId";}
-                        }
-                    }
-                    TABLEBODY() {
+                    } 
+                } 
+            } 
+            DIV_CLASS_ID("tab-pane fade", "trash") { 
+                TABLE_SORTABLE_CLASS("table") { 
+                    TABLEHEAD() { 
+                        TABLER() { 
+                            TABLEH() {out << "Idx";} 
+                            TABLEH() {out << "LogoBlobId";} 
+                        } 
+                    } 
+                    TABLEBODY() { 
                         ui64 idx = 1;
                         for (auto it = Trash.begin(); it != Trash.end(); ++it) {
-                            TABLER() {
-                                TABLED() {out << idx;}
+                            TABLER() { 
+                                TABLED() {out << idx;} 
                                 ++idx;
-                                TABLED() {out << *it;}
-                            }
+                                TABLED() {out << *it;} 
+                            } 
                         }
-                    }
-                }
-            }
+                    } 
+                } 
+            } 
             DIV_CLASS_ID("tab-pane fade", "channelstat") {
                 TABLE_SORTABLE_CLASS("table") {
                     TABLEHEAD() {
@@ -3362,10 +3362,10 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
                 }
             }
 
-        }
-    }
+        } 
+    } 
 }
-
+ 
 void TKeyValueState::MonChannelStat(NJson::TJsonValue& out) const {
     for (size_t i = 0; i < ChannelDataUsage.size(); ++i) {
         if (UsedChannels[i]) {

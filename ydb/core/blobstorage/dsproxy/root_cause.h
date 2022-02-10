@@ -62,7 +62,7 @@ struct TRootCause {
 
     ui64 RegisterCause() {
         if (IsOn && Items.size() < InvalidCauseIdx - 1) {
-            Items.emplace_back(CurrentCauseIdx, GetCycleCountFast(), false);
+            Items.emplace_back(CurrentCauseIdx, GetCycleCountFast(), false); 
             return Items.size() - 1;
         } else {
             return InvalidCauseIdx;
@@ -71,7 +71,7 @@ struct TRootCause {
 
     ui64 RegisterAccelerate() {
         if (IsOn && Items.size() < InvalidCauseIdx - 1) {
-            Items.emplace_back(CurrentCauseIdx, GetCycleCountFast(), true);
+            Items.emplace_back(CurrentCauseIdx, GetCycleCountFast(), true); 
             return Items.size() - 1;
         } else {
             return InvalidCauseIdx;
@@ -86,7 +86,7 @@ struct TRootCause {
         if (causeIdx < Items.size()) {
             CurrentCauseIdx = causeIdx;
             TRootCauseItem &item = Items[CurrentCauseIdx];
-            item.VDiskReplyCycles = GetCycleCountFast();
+            item.VDiskReplyCycles = GetCycleCountFast(); 
             if (transferDuration + vDiskDuration > 0) {
                 ui64 transferCycles = item.StartCycles + ui64((transferDuration / (transferDuration + vDiskDuration))
                         * (item.VDiskReplyCycles - item.StartCycles));

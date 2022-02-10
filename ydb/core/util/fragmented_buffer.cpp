@@ -7,7 +7,7 @@ namespace NKikimr {
 TFragmentedBuffer::TFragmentedBuffer() {
 }
 
-void TFragmentedBuffer::Insert(i32 begin, const char* source, i32 bytesToCopy) {
+void TFragmentedBuffer::Insert(i32 begin, const char* source, i32 bytesToCopy) { 
     Y_VERIFY(bytesToCopy);
     BufferForOffset[begin].AssignNoAlias(source, bytesToCopy);
 }
@@ -28,7 +28,7 @@ void TFragmentedBuffer::SetMonolith(TString &data) {
     BufferForOffset.emplace(0, data);
 }
 
-void TFragmentedBuffer::Write(i32 begin, const char* buffer, i32 size) {
+void TFragmentedBuffer::Write(i32 begin, const char* buffer, i32 size) { 
     Y_VERIFY(size);
     if (BufferForOffset.empty()) {
         Insert(begin, buffer, size);
@@ -38,7 +38,7 @@ void TFragmentedBuffer::Write(i32 begin, const char* buffer, i32 size) {
     if (it != BufferForOffset.begin()) {
         it--;
     }
-    if (it != BufferForOffset.end() && it->first < begin && it->first + i32(it->second.size()) <= begin) {
+    if (it != BufferForOffset.end() && it->first < begin && it->first + i32(it->second.size()) <= begin) { 
         // b....e
         //         X....Y
         // skip
@@ -46,24 +46,24 @@ void TFragmentedBuffer::Write(i32 begin, const char* buffer, i32 size) {
     }
 
     const char* source = buffer;
-    i32 bytesToCopy = size;
-    i32 offset = begin;
+    i32 bytesToCopy = size; 
+    i32 offset = begin; 
     while (bytesToCopy) {
         if (it == BufferForOffset.end()) {
             Insert(offset, source, bytesToCopy);
             break;
         } else if (it->first > offset) {
-            i32 bytesToNext = it->first - offset;
-            i32 bytesToInsert = Min(bytesToCopy, bytesToNext);
+            i32 bytesToNext = it->first - offset; 
+            i32 bytesToInsert = Min(bytesToCopy, bytesToNext); 
             Insert(offset, source, bytesToInsert);
             source += bytesToInsert;
             offset += bytesToInsert;
             bytesToCopy -= bytesToInsert;
         } else if (it->first <= offset) {
             Y_VERIFY(it->second.size());
-            Y_VERIFY(it->first + i32(it->second.size()) > offset);
-            i32 bytesToNext = it->first + it->second.size() - offset;
-            i32 bytesToInsert = Min(bytesToCopy, bytesToNext);
+            Y_VERIFY(it->first + i32(it->second.size()) > offset); 
+            i32 bytesToNext = it->first + it->second.size() - offset; 
+            i32 bytesToInsert = Min(bytesToCopy, bytesToNext); 
             char *destination = const_cast<char*>(it->second.data()) + offset - it->first;
             memcpy(destination, source, bytesToInsert);
             source += bytesToInsert;
@@ -75,28 +75,28 @@ void TFragmentedBuffer::Write(i32 begin, const char* buffer, i32 size) {
 
 }
 
-void TFragmentedBuffer::Read(i32 begin, char* buffer, i32 size) const {
+void TFragmentedBuffer::Read(i32 begin, char* buffer, i32 size) const { 
     Y_VERIFY(size);
     Y_VERIFY(!BufferForOffset.empty());
     auto it = BufferForOffset.upper_bound(begin);
     if (it != BufferForOffset.begin()) {
         it--;
     }
-    if (it != BufferForOffset.end() && it->first < begin && it->first + i32(it->second.size()) <= begin) {
+    if (it != BufferForOffset.end() && it->first < begin && it->first + i32(it->second.size()) <= begin) { 
         Y_VERIFY(false);
         // b....e
         //         X....Y
     }
 
     char* destination = buffer;
-    i32 bytesToCopy = size;
-    i32 offset = begin;
+    i32 bytesToCopy = size; 
+    i32 offset = begin; 
     while (bytesToCopy) {
-        Y_VERIFY(it != BufferForOffset.end(), "offset# %" PRIi32 " Print# %s", (i32)offset, Print().c_str());
-        Y_VERIFY(it->first <= offset, "offset# %" PRIi32 " Print# %s", (i32)offset, Print().c_str());
-        Y_VERIFY(it->first + i32(it->second.size()) > offset);
-        i32 bytesToNext = it->first + it->second.size() - offset;
-        i32 bytesToInsert = Min(bytesToCopy, bytesToNext);
+        Y_VERIFY(it != BufferForOffset.end(), "offset# %" PRIi32 " Print# %s", (i32)offset, Print().c_str()); 
+        Y_VERIFY(it->first <= offset, "offset# %" PRIi32 " Print# %s", (i32)offset, Print().c_str()); 
+        Y_VERIFY(it->first + i32(it->second.size()) > offset); 
+        i32 bytesToNext = it->first + it->second.size() - offset; 
+        i32 bytesToInsert = Min(bytesToCopy, bytesToNext); 
         const char *source = it->second.data() + offset - it->first;
         memcpy(destination, source, bytesToInsert);
         destination += bytesToInsert;
@@ -119,23 +119,23 @@ TString TFragmentedBuffer::Print() const {
     return str.Str();
 }
 
-std::pair<const char*, i32> TFragmentedBuffer::Get(i32 begin) const {
+std::pair<const char*, i32> TFragmentedBuffer::Get(i32 begin) const { 
     auto it = BufferForOffset.upper_bound(begin);
     Y_VERIFY(it != BufferForOffset.begin());
     --it;
-    const i32 offset = begin - it->first;
+    const i32 offset = begin - it->first; 
     Y_VERIFY(offset >= 0 && (size_t)offset < it->second.size());
     return std::make_pair(it->second.data() + offset, it->second.size() - offset);
 }
 
-void TFragmentedBuffer::CopyFrom(const TFragmentedBuffer& from, const TIntervalSet<i32>& range) {
+void TFragmentedBuffer::CopyFrom(const TFragmentedBuffer& from, const TIntervalSet<i32>& range) { 
     Y_VERIFY(range);
-    for (auto it = range.begin(); it != range.end(); ++it) {
-        auto [begin, end] = *it;
-        i32 offset = begin;
+    for (auto it = range.begin(); it != range.end(); ++it) { 
+        auto [begin, end] = *it; 
+        i32 offset = begin; 
         while (offset < end) {
             const auto& [data, maxLen] = from.Get(offset);
-            i32 len = Min(maxLen, end - offset);
+            i32 len = Min(maxLen, end - offset); 
             Write(offset, data, len);
             offset += len;
         }

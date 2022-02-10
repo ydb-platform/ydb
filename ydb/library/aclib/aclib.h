@@ -142,10 +142,10 @@ public:
     void ApplyDiff(const NACLibProto::TDiffACL& diffACL);
     void ClearAccess();
     TInstant GetExpireTime() const;
-    TString ToString() const; // simple text format
-    void FromString(const TString& string); // simple text format
-    bool operator == (const TSecurityObject& rhs) const;
-    bool operator != (const TSecurityObject& rhs) const;
+    TString ToString() const; // simple text format 
+    void FromString(const TString& string); // simple text format 
+    bool operator == (const TSecurityObject& rhs) const; 
+    bool operator != (const TSecurityObject& rhs) const; 
 
 protected:
     bool IsContainer;

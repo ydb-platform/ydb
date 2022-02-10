@@ -712,9 +712,9 @@ public:
         return res;
     }
 
-public: // For testing
+public: // For testing 
     TString Dump() const;
-    void VerifyEqualIndex(const TKeyValueState& state) const;
+    void VerifyEqualIndex(const TKeyValueState& state) const; 
 };
 
 } // NKeyValue

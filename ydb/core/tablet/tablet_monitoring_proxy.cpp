@@ -238,59 +238,59 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
 
     const NKikimr::TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get();
     auto& domains = domainsInfo->Domains;
-    HTML(str) {
-        for (auto di: domains) {
-            ui32 domainId = di.first;
-            H3() {
-                str << "Domain \"" << di.second->Name << "\" (id: " << domainId << ")";
-            }
-            TABLE_SORTABLE_CLASS("table") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "Tablet";}
-                        TABLEH() {str << "ID";}
-                        TABLEH_CLASS("sorter-false") {}
-                        TABLEH_CLASS("sorter-false") {}
-                    }
+    HTML(str) { 
+        for (auto di: domains) { 
+            ui32 domainId = di.first; 
+            H3() { 
+                str << "Domain \"" << di.second->Name << "\" (id: " << domainId << ")"; 
+            } 
+            TABLE_SORTABLE_CLASS("table") { 
+                TABLEHEAD() { 
+                    TABLER() { 
+                        TABLEH() {str << "Tablet";} 
+                        TABLEH() {str << "ID";} 
+                        TABLEH_CLASS("sorter-false") {} 
+                        TABLEH_CLASS("sorter-false") {} 
+                    } 
                 }
-                TABLEBODY() {
-                    if (const ui64 schemeRootTabletId = di.second->SchemeRoot) {
-                        TABLER() {
+                TABLEBODY() { 
+                    if (const ui64 schemeRootTabletId = di.second->SchemeRoot) { 
+                        TABLER() { 
                             TABLED() {str << "<a href=\"tablets?TabletID=" << schemeRootTabletId << "\">SCHEMESHARD</a>";}
-                            TABLED() {str << schemeRootTabletId;}
-                            TABLED() {str << " <a href=\"tablets?SsId="
-                                        << schemeRootTabletId << "\">"
-                                        << "<span class=\"glyphicon glyphicon-tasks\""
-                                        << " title=\"State Storage\"/>"
-                                        << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << schemeRootTabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
-                        }
-                    }
-                    for (auto hi : di.second->HiveUids) {
-                        ui64 tabletId = domainsInfo->GetHive(hi);
-                        TABLER() {
-                            TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">HIVE</a>";}
-                            TABLED() {str << tabletId;}
-                            TABLED() {str << " <a href=\"tablets?SsId="
-                                        << tabletId << "\">"
-                                        << "<span class=\"glyphicon glyphicon-tasks\""
-                                        << " title=\"State Storage\" />"
-                                        << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
-                        }
-                    }
-                    for (auto si : di.second->StateStorageGroups) {
-                        ui64 tabletId = NKikimr::MakeBSControllerID(si);
-                        TABLER() {
-                            TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">BS_CONTROLLER</a>";}
-                            TABLED() {str << tabletId;}
-                            TABLED() {str << " <a href=\"tablets?SsId="
-                                        << tabletId << "\">"
-                                        << "<span class=\"glyphicon glyphicon-tasks\""
-                                        << " title=\"State Storage\" />"
-                                        << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
-                        }
+                            TABLED() {str << schemeRootTabletId;} 
+                            TABLED() {str << " <a href=\"tablets?SsId=" 
+                                        << schemeRootTabletId << "\">" 
+                                        << "<span class=\"glyphicon glyphicon-tasks\"" 
+                                        << " title=\"State Storage\"/>" 
+                                        << "</a>";} 
+                            TABLED() {str << "<a href='tablets?KillTabletID=" << schemeRootTabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";} 
+                        } 
+                    } 
+                    for (auto hi : di.second->HiveUids) { 
+                        ui64 tabletId = domainsInfo->GetHive(hi); 
+                        TABLER() { 
+                            TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">HIVE</a>";} 
+                            TABLED() {str << tabletId;} 
+                            TABLED() {str << " <a href=\"tablets?SsId=" 
+                                        << tabletId << "\">" 
+                                        << "<span class=\"glyphicon glyphicon-tasks\"" 
+                                        << " title=\"State Storage\" />" 
+                                        << "</a>";} 
+                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";} 
+                        } 
+                    } 
+                    for (auto si : di.second->StateStorageGroups) { 
+                        ui64 tabletId = NKikimr::MakeBSControllerID(si); 
+                        TABLER() { 
+                            TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">BS_CONTROLLER</a>";} 
+                            TABLED() {str << tabletId;} 
+                            TABLED() {str << " <a href=\"tablets?SsId=" 
+                                        << tabletId << "\">" 
+                                        << "<span class=\"glyphicon glyphicon-tasks\"" 
+                                        << " title=\"State Storage\" />" 
+                                        << "</a>";} 
+                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";} 
+                        } 
                         tabletId = NKikimr::MakeCmsID(si);
                         TABLER() {
                             TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">CMS</a>";}
@@ -335,52 +335,52 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                                         << "</a>";}
                             TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
                         }
-                    }
+                    } 
                     for (auto tabletId : di.second->Coordinators) {
-                        TABLER() {
-                            TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">TX_COORDINATOR</a>";}
-                            TABLED() {str << tabletId;}
-                            TABLED() {str << " <a href=\"tablets?SsId="
-                                        << tabletId << "\">"
-                                        << "<span class=\"glyphicon glyphicon-tasks\""
-                                        << " title=\"State Storage\" />"
-                                        << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
-                        }
-                    }
+                        TABLER() { 
+                            TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">TX_COORDINATOR</a>";} 
+                            TABLED() {str << tabletId;} 
+                            TABLED() {str << " <a href=\"tablets?SsId=" 
+                                        << tabletId << "\">" 
+                                        << "<span class=\"glyphicon glyphicon-tasks\"" 
+                                        << " title=\"State Storage\" />" 
+                                        << "</a>";} 
+                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";} 
+                        } 
+                    } 
                     for (auto tabletId : di.second->Mediators) {
-                        TABLER() {
-                            TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">TX_MEDIATOR</a>";}
-                            TABLED() {str << tabletId;}
-                            TABLED() {str << " <a href=\"tablets?SsId="
-                                        << tabletId << "\">"
-                                        << "<span class=\"glyphicon glyphicon-tasks\""
-                                        << " title=\"State Storage\" />"
-                                        << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
-                        }
-                    }
+                        TABLER() { 
+                            TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">TX_MEDIATOR</a>";} 
+                            TABLED() {str << tabletId;} 
+                            TABLED() {str << " <a href=\"tablets?SsId=" 
+                                        << tabletId << "\">" 
+                                        << "<span class=\"glyphicon glyphicon-tasks\"" 
+                                        << " title=\"State Storage\" />" 
+                                        << "</a>";} 
+                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";} 
+                        } 
+                    } 
                     for (auto tabletId : di.second->TxAllocators) {
-                        TABLER() {
+                        TABLER() { 
                             TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">TX_ALLOCATOR</a>";}
-                            TABLED() {str << tabletId;}
-                            TABLED() {str << " <a href=\"tablets?SsId="
-                                        << tabletId << "\">"
-                                        << "<span class=\"glyphicon glyphicon-tasks\""
-                                        << " title=\"State Storage\" />"
-                                        << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
-                        }
-                    }
-                }
-            }
-        }
-        str << "<form method=\"GET\" id=\"tblMonPrxFrm\" name=\"tblMonPrxFrm\">" << Endl;
-        str << "<h2>Lookup</h2>" << Endl;
-        str << "TabletID: <input type=\"text\" id=\"TabletID\" name=\"TabletID\"/>" << Endl;
-        str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"Watch\"/>" << Endl;
-        str << "</form>" << Endl;
-    }
+                            TABLED() {str << tabletId;} 
+                            TABLED() {str << " <a href=\"tablets?SsId=" 
+                                        << tabletId << "\">" 
+                                        << "<span class=\"glyphicon glyphicon-tasks\"" 
+                                        << " title=\"State Storage\" />" 
+                                        << "</a>";} 
+                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";} 
+                        } 
+                    } 
+                } 
+            } 
+        } 
+        str << "<form method=\"GET\" id=\"tblMonPrxFrm\" name=\"tblMonPrxFrm\">" << Endl; 
+        str << "<h2>Lookup</h2>" << Endl; 
+        str << "TabletID: <input type=\"text\" id=\"TabletID\" name=\"TabletID\"/>" << Endl; 
+        str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"Watch\"/>" << Endl; 
+        str << "</form>" << Endl; 
+    } 
     ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
 }
 

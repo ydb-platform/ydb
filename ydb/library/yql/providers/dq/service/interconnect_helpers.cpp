@@ -26,7 +26,7 @@
 #include <util/system/env.h>
 
 namespace NYql::NDqs {
-    using namespace NActors;
+    using namespace NActors; 
     using namespace NActors::NDnsResolver;
     using namespace NGrpc;
 
@@ -204,7 +204,7 @@ namespace NYql::NDqs {
             if (nodeId != id) {
                 IActor* actor = new TInterconnectProxyTCP(id, icCommon);
                 setup->Interconnect.ProxyActors[id] = TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0);
-            }
+            } 
         }
 
         // start listener
@@ -226,9 +226,9 @@ namespace NYql::NDqs {
 
         YQL_LOG(DEBUG) << "Actor initialization complete";
 
-#ifdef _unix_
+#ifdef _unix_ 
         signal(SIGPIPE, SIG_IGN);
-#endif
+#endif 
 
         return std::make_tuple(std::move(setup), logSettings);
     }

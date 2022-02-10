@@ -12,38 +12,38 @@
 #include <library/cpp/actors/core/events.h>
 
 namespace NYql::NDqs {
-    using TDqExecuterEvents = NDq::TBaseDqExecuterEvents<NActors::TEvents::EEventSpace::ES_USERSPACE>;
+    using TDqExecuterEvents = NDq::TBaseDqExecuterEvents<NActors::TEvents::EEventSpace::ES_USERSPACE>; 
 
     struct TEvDqTask : NActors::TEventPB<TEvDqTask, NDqProto::TDqTaskRequest, TDqExecuterEvents::ES_DQ_TASK> {
-        TEvDqTask() = default;
-        explicit TEvDqTask(NDqProto::TDqTask task);
-    };
+        TEvDqTask() = default; 
+        explicit TEvDqTask(NDqProto::TDqTask task); 
+    }; 
 
     struct TEvDqFailure : NActors::TEventPB<TEvDqFailure, NDqProto::TDqFailure, TDqExecuterEvents::ES_DQ_FAILURE> {
         TEvDqFailure() = default;
         explicit TEvDqFailure(const TIssue& issue, bool retriable = false, bool needFallback = false);
     };
 
-    struct TEvQueryResponse
-        : NActors::TEventPB<TEvQueryResponse, NDqProto::TQueryResponse, TDqExecuterEvents::ES_RESULT_SET> {
-        TEvQueryResponse() = default;
-        explicit TEvQueryResponse(NDqProto::TQueryResponse&& queryResult);
-    };
+    struct TEvQueryResponse 
+        : NActors::TEventPB<TEvQueryResponse, NDqProto::TQueryResponse, TDqExecuterEvents::ES_RESULT_SET> { 
+        TEvQueryResponse() = default; 
+        explicit TEvQueryResponse(NDqProto::TQueryResponse&& queryResult); 
+    }; 
 
     struct TEvGraphRequest : NActors::TEventPB<TEvGraphRequest, NDqProto::TGraphRequest, TDqExecuterEvents::ES_GRAPH> {
         TEvGraphRequest() = default;
         TEvGraphRequest(const Yql::DqsProto::ExecuteGraphRequest& request, NActors::TActorId controlId, NActors::TActorId resultId, NActors::TActorId checkPointCoordinatorId = {});
     };
 
-    struct TEvReadyState : NActors::TEventPB<TEvReadyState, NDqProto::TReadyState, TDqExecuterEvents::ES_READY_TO_PULL> {
-        TEvReadyState() = default;
+    struct TEvReadyState : NActors::TEventPB<TEvReadyState, NDqProto::TReadyState, TDqExecuterEvents::ES_READY_TO_PULL> { 
+        TEvReadyState() = default; 
         TEvReadyState(NActors::TActorId sourceId, TString type);
         explicit TEvReadyState(NDqProto::TReadyState&& proto);
-    };
+    }; 
 
-    struct TEvPullResult : NActors::TEventBase<TEvPullResult, TDqExecuterEvents::ES_PULL_RESULT> {
-        DEFINE_SIMPLE_NONLOCAL_EVENT(TEvPullResult, "");
-    };
+    struct TEvPullResult : NActors::TEventBase<TEvPullResult, TDqExecuterEvents::ES_PULL_RESULT> { 
+        DEFINE_SIMPLE_NONLOCAL_EVENT(TEvPullResult, ""); 
+    }; 
 
     struct TEvGraphExecutionEvent
             : NActors::TEventPB<TEvGraphExecutionEvent, NYql::NDqProto::TGraphExecutionEvent, TDqExecuterEvents::ES_GRAPH_EXECUTION_EVENT> {
@@ -51,19 +51,19 @@ namespace NYql::NDqs {
         explicit TEvGraphExecutionEvent(NDqProto::TGraphExecutionEvent& evt);
     };
 
-    using TDqDataEvents = NDq::TBaseDqDataEvents<NActors::TEvents::EEventSpace::ES_USERSPACE>;
+    using TDqDataEvents = NDq::TBaseDqDataEvents<NActors::TEvents::EEventSpace::ES_USERSPACE>; 
 
-    struct TEvPullDataRequest
-        : NActors::TEventPB<TEvPullDataRequest, NYql::NDqProto::TPullRequest, TDqDataEvents::ES_PULL_REQUEST> {
-        TEvPullDataRequest() = default;
-        explicit TEvPullDataRequest(ui32 rowThreshold);
-    };
+    struct TEvPullDataRequest 
+        : NActors::TEventPB<TEvPullDataRequest, NYql::NDqProto::TPullRequest, TDqDataEvents::ES_PULL_REQUEST> { 
+        TEvPullDataRequest() = default; 
+        explicit TEvPullDataRequest(ui32 rowThreshold); 
+    }; 
 
-    struct TEvPullDataResponse
-        : NActors::TEventPB<TEvPullDataResponse, NYql::NDqProto::TPullResponse, TDqDataEvents::ES_PULL_RESPONSE> {
-        TEvPullDataResponse() = default;
-        explicit TEvPullDataResponse(NDqProto::TPullResponse& data);
-    };
+    struct TEvPullDataResponse 
+        : NActors::TEventPB<TEvPullDataResponse, NYql::NDqProto::TPullResponse, TDqDataEvents::ES_PULL_RESPONSE> { 
+        TEvPullDataResponse() = default; 
+        explicit TEvPullDataResponse(NDqProto::TPullResponse& data); 
+    }; 
 
     struct TEvPingRequest
         : NActors::TEventPB<TEvPingRequest, NYql::NDqProto::TPingRequest, TDqDataEvents::ES_PING_REQUEST> {
@@ -91,4 +91,4 @@ namespace NYql::NDqs {
     struct TEvGraphFinished : NActors::TEventBase<TEvGraphFinished, TDqExecuterEvents::ES_GRAPH_FINISHED> {
         DEFINE_SIMPLE_NONLOCAL_EVENT(TEvGraphFinished, "");
     };
-}
+} 

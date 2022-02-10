@@ -8,4 +8,4 @@ namespace NYql::NNodes {
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.decl.inl.h>
 
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.defs.inl.h>
-}
+} 

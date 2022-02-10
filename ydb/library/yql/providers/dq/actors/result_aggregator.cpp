@@ -514,7 +514,7 @@ private:
             YQL_ENSURE(ysonNode.GetType() == NYT::TNode::EType::List);
             for (const auto& row : ysonNode.AsList()) {
                 Output << NYT::NodeToYsonString(row) << "\n";
-            }
+            } 
         }
 
         Promise.SetValue();

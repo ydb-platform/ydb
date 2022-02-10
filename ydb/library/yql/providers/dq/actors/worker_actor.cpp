@@ -84,14 +84,14 @@ public:
         , TaskRunnerActorFactory(taskRunnerActorFactory)
         , RuntimeData(runtimeData)
         , TraceId(traceId)
-    {
+    { 
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG) << "TDqWorker created ";
 
         if (RuntimeData) {
             RuntimeData->OnWorkerStart(TraceId);
         }
-    }
+    } 
 
     ~TDqWorker()
     {
@@ -105,9 +105,9 @@ public:
 
     void DoPassAway() override {
         YQL_LOG_CTX_SCOPE(TraceId);
-        for (const auto& inputs : InputMap) {
-            Send(inputs.first, new NActors::TEvents::TEvPoison());
-        }
+        for (const auto& inputs : InputMap) { 
+            Send(inputs.first, new NActors::TEvents::TEvPoison()); 
+        } 
 
         YQL_LOG(DEBUG) << "TDqWorker passed away ";
         if (Actor) {
@@ -140,7 +140,7 @@ private:
         HFunc(TEvError, OnErrorFromPipe);
         HFunc(TEvContinueRun, OnContinueRun);
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup);
-    })
+    }) 
 
     TString ParseStatus(const TString& input, bool* retriableFlag, bool* fallbackFlag) {
         TString result;
@@ -424,7 +424,7 @@ private:
 
         Send(TaskRunnerActor, new TEvPop(outChannel.ChannelId));
     }
-
+ 
     void OnChannelPopFinished(TEvChannelPopFinished::TPtr& ev, const NActors::TActorContext& ctx) {
         try {
             auto outputActorId = OutChannelId2ActorId[ev->Get()->ChannelId];
@@ -522,16 +522,16 @@ private:
     }
 
     NActors::TActorId ResolveEndpoint(const TEndpoint& ep) {
-        switch (ep.GetEndpointTypeCase()) {
-            case TEndpoint::kActorId:
+        switch (ep.GetEndpointTypeCase()) { 
+            case TEndpoint::kActorId: 
                 return NActors::ActorIdFromProto(ep.GetActorId());
             case TEndpoint::kUri:
                 Y_ENSURE(false, "kUri is not supported");
-            case TEndpoint::kTabletId:
-                Y_ENSURE(false, "Tablets not supported by dqs");
-            case TEndpoint::ENDPOINTTYPE_NOT_SET: {
-                Y_ENSURE(false, "Endpoint must be set");
-            } break;
+            case TEndpoint::kTabletId: 
+                Y_ENSURE(false, "Tablets not supported by dqs"); 
+            case TEndpoint::ENDPOINTTYPE_NOT_SET: { 
+                Y_ENSURE(false, "Endpoint must be set"); 
+            } break; 
         }
     }
 
@@ -604,10 +604,10 @@ private:
 
         Stat.AddCounters2(ev->Get()->Sensors);
 
-        switch (res) {
+        switch (res) { 
             case ERunStatus::Finished: {
                 TaskFinished = true;
-                break;
+                break; 
             }
             case ERunStatus::PendingInput: {
                 auto now = TInstant::Now();
@@ -629,7 +629,7 @@ private:
                             Stat.AddCounter("ReadTimeout", static_cast<ui64>(1));
                             OnError("PullTimeout " + TimeoutInfo(channel.ActorID, now, channel.RequestTime), false, true);
                         }
-                    }
+                    } 
                 }
 
                 for (auto& [inputIndex, source] : SourcesMap) {
@@ -654,7 +654,7 @@ private:
 
                     Actor->SourcePush(0, index, std::move(batch), space, finished);
                 }
-                break;
+                break; 
             }
             case ERunStatus::PendingOutput: {
                 for (auto& [index, sink] : SinksMap) {
@@ -663,9 +663,9 @@ private:
                         Send(TaskRunnerActor, new TEvSinkPop(index, sinkActorFreeSpaceBeforeSend));
                     }
                 }
-                break;
+                break; 
             }
-        }
+        } 
     }
 
     TString TimeoutInfo(TActorId actorID, TInstant now, TInstant startTime) {

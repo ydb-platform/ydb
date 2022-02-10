@@ -17,31 +17,31 @@ namespace NYql::NDqs {
 
 using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::ES_USERSPACE>;
 
-    struct TEvAllocateWorkersRequest : NActors::TEventPB<TEvAllocateWorkersRequest, NYql::NDqProto::TAllocateWorkersRequest,
-                                                         TDqResManEvents::ES_ALLOCATE_WORKERS_REQUEST> {
-        TEvAllocateWorkersRequest() = default;
+    struct TEvAllocateWorkersRequest : NActors::TEventPB<TEvAllocateWorkersRequest, NYql::NDqProto::TAllocateWorkersRequest, 
+                                                         TDqResManEvents::ES_ALLOCATE_WORKERS_REQUEST> { 
+        TEvAllocateWorkersRequest() = default; 
 
         explicit TEvAllocateWorkersRequest(
             ui32 count,
             const TString& user,
             const TMaybe<ui64>& globalResourceId = TMaybe<ui64>());
-    };
+    }; 
 
-    struct TEvAllocateWorkersResponse
-        : NActors::TEventPB<TEvAllocateWorkersResponse, NYql::NDqProto::TAllocateWorkersResponse,
-                            TDqResManEvents::ES_ALLOCATE_WORKERS_RESPONSE> {
-        TEvAllocateWorkersResponse();
+    struct TEvAllocateWorkersResponse 
+        : NActors::TEventPB<TEvAllocateWorkersResponse, NYql::NDqProto::TAllocateWorkersResponse, 
+                            TDqResManEvents::ES_ALLOCATE_WORKERS_RESPONSE> { 
+        TEvAllocateWorkersResponse(); 
         explicit TEvAllocateWorkersResponse(const TString& error, NYql::NDqProto::EErrorCode code = NYql::NDqProto::EUNKNOWN);
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<NActors::TActorId>& ids);
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<TWorkerInfo::TPtr>& workerInfos);
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<ui32>& nodes);
-    };
+    }; 
 
-    struct TEvFreeWorkersNotify : NActors::TEventPB<TEvFreeWorkersNotify, NYql::NDqProto::TFreeWorkersNotify,
-                                                    TDqResManEvents::ES_FREE_WORKERS_NOTIFICATION> {
-        TEvFreeWorkersNotify() = default;
+    struct TEvFreeWorkersNotify : NActors::TEventPB<TEvFreeWorkersNotify, NYql::NDqProto::TFreeWorkersNotify, 
+                                                    TDqResManEvents::ES_FREE_WORKERS_NOTIFICATION> { 
+        TEvFreeWorkersNotify() = default; 
         explicit TEvFreeWorkersNotify(ui64 id);
-    };
+    }; 
 
     struct TEvRegisterNode
         : NActors::TEventPB<TEvRegisterNode, NYql::NDqProto::TEvRegisterNode, TDqResManEvents::ES_REGISTER_NODE> {
@@ -153,8 +153,8 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
     };
 
     inline NActors::TActorId MakeWorkerManagerActorID(ui32 nodeId) {
-        char x[12] = {'r', 'e', 's', 'm', 'a', 'n'};
-        memcpy(x + 7, &nodeId, sizeof(ui32));
+        char x[12] = {'r', 'e', 's', 'm', 'a', 'n'}; 
+        memcpy(x + 7, &nodeId, sizeof(ui32)); 
         return NActors::TActorId(nodeId, TStringBuf(x, 12));
-    }
+    } 
 }

@@ -2,9 +2,9 @@ LIBRARY()
 
 OWNER(serxa g:kikimr)
 
-PEERDIR( 
-) 
- 
+PEERDIR(
+)
+
 SRCS(
     analytics.cpp
 )

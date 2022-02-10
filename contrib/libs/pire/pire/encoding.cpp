@@ -118,17 +118,17 @@ namespace {
 namespace Encodings {
 
 	const Encoding& Utf8()
-	{ 
-		static const Pire::Utf8 utf8; 
+	{
+		static const Pire::Utf8 utf8;
 		return utf8;
-	} 
+	}
 
 	const Encoding& Latin1()
-	{ 
+	{
 		static const Pire::Latin1 latin1;
 		return latin1;
-	} 
- 
+	}
+
 }
 
 }

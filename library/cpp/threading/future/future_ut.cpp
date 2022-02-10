@@ -5,7 +5,7 @@
 #include <list>
 #include <type_traits>
 
-namespace NThreading { 
+namespace NThreading {
 
 namespace {
 
@@ -420,7 +420,7 @@ namespace {
 
             auto promise = NewPromise<TRec>();
             promise.SetValue(TRec(1));
- 
+
             auto future = MakeFuture(TRec(1));
             const auto& rec = future.GetValue();
             Y_UNUSED(rec);
@@ -637,4 +637,4 @@ namespace {
         }
     }
 
-} 
+}

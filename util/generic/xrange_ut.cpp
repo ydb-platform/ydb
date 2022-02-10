@@ -1,5 +1,5 @@
-#include "xrange.h" 
- 
+#include "xrange.h"
+
 #include "algorithm.h"
 #include "maybe.h"
 #include "vector.h"
@@ -112,50 +112,50 @@ Y_UNIT_TEST_SUITE(XRange) {
             UNIT_ASSERT(arr == data);
         }
     }
- 
-    template <class XRangeContainer> 
-    void TestEmptyRanges(const XRangeContainer& c) { 
-        for (const auto& emptyRange : c) { 
-            UNIT_ASSERT_VALUES_EQUAL(emptyRange.size(), 0); 
- 
-            for (auto i : emptyRange) { 
+
+    template <class XRangeContainer>
+    void TestEmptyRanges(const XRangeContainer& c) {
+        for (const auto& emptyRange : c) {
+            UNIT_ASSERT_VALUES_EQUAL(emptyRange.size(), 0);
+
+            for (auto i : emptyRange) {
                 Y_UNUSED(i);
-                UNIT_ASSERT(false); 
-            } 
- 
-            using TValueType = decltype(*emptyRange.begin()); 
+                UNIT_ASSERT(false);
+            }
+
+            using TValueType = decltype(*emptyRange.begin());
             const TVector<TValueType> asVector = emptyRange;
-            UNIT_ASSERT(asVector.empty()); 
-        } 
-    } 
- 
+            UNIT_ASSERT(asVector.empty());
+        }
+    }
+
     Y_UNIT_TEST(EmptySimpleRange) {
-        using TSimpleRange = decltype(xrange(1)); 
- 
-        const TSimpleRange emptySimpleRanges[] = { 
-            xrange(-1), 
-            xrange(-10), 
-            xrange(0, -5), 
-            xrange(10, 10), 
-            xrange(10, 9), 
-        }; 
- 
-        TestEmptyRanges(emptySimpleRanges); 
-    } 
- 
+        using TSimpleRange = decltype(xrange(1));
+
+        const TSimpleRange emptySimpleRanges[] = {
+            xrange(-1),
+            xrange(-10),
+            xrange(0, -5),
+            xrange(10, 10),
+            xrange(10, 9),
+        };
+
+        TestEmptyRanges(emptySimpleRanges);
+    }
+
     Y_UNIT_TEST(EmptySteppedRange) {
-        using TSteppedRange = decltype(xrange(1, 10, 1)); 
- 
-        const TSteppedRange emptySteppedRanges[] = { 
-            xrange(5, 5, 1), 
-            xrange(5, 0, 5), 
-            xrange(0, -1, 5), 
+        using TSteppedRange = decltype(xrange(1, 10, 1));
+
+        const TSteppedRange emptySteppedRanges[] = {
+            xrange(5, 5, 1),
+            xrange(5, 0, 5),
+            xrange(0, -1, 5),
             xrange(0, 1, -1),
-            xrange(0, -10, 10), 
-        }; 
- 
-        TestEmptyRanges(emptySteppedRanges); 
-    } 
+            xrange(0, -10, 10),
+        };
+
+        TestEmptyRanges(emptySteppedRanges);
+    }
 
     template <class TRange>
     static void TestIteratorDifferenceImpl(TRange range, int a, int b, TMaybe<int> step) {

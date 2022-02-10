@@ -262,13 +262,13 @@ public:
         : T_(that.Release())
     {
     }
- 
+
     template <class U, class = TGuardConversion<T, U>>
     inline THolder(THolder<U, D>&& that) noexcept
         : T_(that.Release())
     {
     }
- 
+
     THolder(const THolder&) = delete;
     THolder& operator=(const THolder&) = delete;
 
@@ -320,13 +320,13 @@ public:
         this->Reset(that.Release());
         return *this;
     }
- 
+
     template <class U>
     THolder& operator=(THolder<U, D>&& that) noexcept {
         this->Reset(that.Release());
         return *this;
     }
- 
+
 #ifdef __cpp_impl_three_way_comparison
     template <class Other>
     inline bool operator==(const Other& p) const noexcept {
@@ -347,8 +347,8 @@ private:
 template <typename T, typename... Args>
 [[nodiscard]] THolder<T> MakeHolder(Args&&... args) {
     return THolder<T>(new T(std::forward<Args>(args)...));
-} 
- 
+}
+
 /*
  * usage:
  * class T: public TRefCounted<T>
@@ -950,18 +950,18 @@ using TSimpleSharedPtr = TSharedPtr<T, TSimpleCounter, D>;
 template <typename T, typename C, typename... Args>
 [[nodiscard]] TSharedPtr<T, C> MakeShared(Args&&... args) {
     return new T{std::forward<Args>(args)...};
-} 
- 
+}
+
 template <typename T, typename... Args>
 [[nodiscard]] inline TAtomicSharedPtr<T> MakeAtomicShared(Args&&... args) {
     return MakeShared<T, TAtomicCounter>(std::forward<Args>(args)...);
-} 
- 
+}
+
 template <typename T, typename... Args>
 [[nodiscard]] inline TSimpleSharedPtr<T> MakeSimpleShared(Args&&... args) {
     return MakeShared<T, TSimpleCounter>(std::forward<Args>(args)...);
-} 
- 
+}
+
 class TCopyClone {
 public:
     template <class T>

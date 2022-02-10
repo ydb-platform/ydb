@@ -4,7 +4,7 @@
 #error "you should never include wait-inl.h directly"
 #endif // INCLUDE_FUTURE_INL_H
 
-namespace NThreading { 
+namespace NThreading {
     namespace NImpl {
         template <typename TContainer>
         TVector<TFuture<void>> ToVoidFutures(const TContainer& futures) {

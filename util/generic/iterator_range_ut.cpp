@@ -1,15 +1,15 @@
 #include "iterator_range.h"
- 
+
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/generic/algorithm.h> 
+#include <util/generic/algorithm.h>
 #include <util/generic/vector.h>
- 
+
 Y_UNIT_TEST_SUITE(IteratorRange) {
     Y_UNIT_TEST(DefaultConstructor) {
         TIteratorRange<int*> range;
         UNIT_ASSERT(range.empty());
     }
- 
+
     Y_UNIT_TEST(DefaultConstructorSentinel) {
         TIteratorRange<int*, void*> range;
         UNIT_ASSERT(range.empty());
@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(IteratorRange) {
             Y_UNUSED(i);
         }
     }
- 
+
     Y_UNIT_TEST(RangeBasedForLoopSentinel) {
         // compileability test
         for (int i : TIteratorRange<int*, void*>()) {
@@ -35,8 +35,8 @@ Y_UNIT_TEST_SUITE(IteratorRange) {
         UNIT_ASSERT_VALUES_EQUAL(range.size(), Y_ARRAY_SIZE(values));
         UNIT_ASSERT(Equal(range.begin(), range.end(), values));
         UNIT_ASSERT(!range.empty());
-    } 
- 
+    }
+
     Y_UNIT_TEST(WorksSentinel) {
         struct TRangeSentinel {
         };
@@ -95,4 +95,4 @@ Y_UNIT_TEST_SUITE(IteratorRange) {
         // we should be able to use TIteratorRange as a container parameter for standard algorithms
         UNIT_ASSERT(AllOf(range, [](int x) { return x > 0; }));
     }
-} 
+}

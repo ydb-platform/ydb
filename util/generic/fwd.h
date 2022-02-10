@@ -26,8 +26,8 @@ template <class T = void>
 struct TLess;
 
 template <class T = void>
-struct TGreater; 
- 
+struct TGreater;
+
 template <class T = void>
 struct TEqualTo;
 

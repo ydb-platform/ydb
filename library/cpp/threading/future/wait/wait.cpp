@@ -3,7 +3,7 @@
 #include "wait_group.h"
 #include "wait_policy.h"
 
-namespace NThreading { 
+namespace NThreading {
     namespace {
         template <class WaitPolicy>
         TFuture<void> WaitGeneric(const TFuture<void>& f1) {

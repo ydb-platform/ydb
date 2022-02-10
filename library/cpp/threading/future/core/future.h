@@ -11,7 +11,7 @@
 #include <util/system/event.h>
 #include <util/system/spinlock.h>
 
-namespace NThreading { 
+namespace NThreading {
     ////////////////////////////////////////////////////////////////////////////////
 
     struct TFutureException: public yexception {};

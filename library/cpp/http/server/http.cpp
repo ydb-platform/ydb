@@ -771,7 +771,7 @@ THttpServer* TClientRequest::HttpServ() const noexcept {
 const TSocket& TClientRequest::Socket() const noexcept {
     return Conn_->Socket_;
 }
- 
+
 NAddr::IRemoteAddrRef TClientRequest::GetListenerSockAddrRef() const noexcept {
     return Conn_->ListenerSockAddrRef_;
 }
@@ -780,21 +780,21 @@ TInstant TClientRequest::AcceptMoment() const noexcept {
     return Conn_->AcceptMoment;
 }
 
-/* 
- * TRequestReplier 
- */ 
-TRequestReplier::TRequestReplier() { 
-} 
- 
-TRequestReplier::~TRequestReplier() { 
-} 
- 
-bool TRequestReplier::Reply(void* threadSpecificResource) { 
-    const TReplyParams params = { 
+/*
+ * TRequestReplier
+ */
+TRequestReplier::TRequestReplier() {
+}
+
+TRequestReplier::~TRequestReplier() {
+}
+
+bool TRequestReplier::Reply(void* threadSpecificResource) {
+    const TReplyParams params = {
         threadSpecificResource, Input(), Output()};
 
-    return DoReply(params); 
-} 
+    return DoReply(params);
+}
 
 bool TryToBindAddresses(const THttpServerOptions& options, const std::function<void(TSocket)>* callbackOnBoundAddress) {
     THttpServerOptions::TBindAddresses addrs;

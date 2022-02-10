@@ -650,27 +650,27 @@ namespace NPrivate {
     }
 }
 
-template <typename... Args> 
+template <typename... Args>
 struct TSerializer<std::variant<Args...>> {
     using TVar = std::variant<Args...>;
- 
-    static_assert(sizeof...(Args) < 256, "We use ui8 to store tag"); 
- 
-    static void Save(IOutputStream* os, const TVar& v) { 
+
+    static_assert(sizeof...(Args) < 256, "We use ui8 to store tag");
+
+    static void Save(IOutputStream* os, const TVar& v) {
         ::Save<ui8>(os, v.index());
         std::visit([os](const auto& data) {
-            ::Save(os, data); 
+            ::Save(os, data);
         }, v);
-    } 
- 
-    static void Load(IInputStream* is, TVar& v) { 
+    }
+
+    static void Load(IInputStream* is, TVar& v) {
         ui8 index;
         ::Load(is, index);
         if (Y_UNLIKELY(index >= sizeof...(Args))) {
             ::NPrivate::ThrowUnexpectedVariantTagException(index);
         }
         LoadImpl(is, v, index, std::index_sequence_for<Args...>{});
-    } 
+    }
 
 private:
     template <size_t... Is>
@@ -679,8 +679,8 @@ private:
         constexpr TLoader loaders[] = {::NPrivate::LoadVariantAlternative<TVar, Args, Is>...};
         loaders[index](is, v);
     }
-}; 
- 
+};
+
 #endif
 
 template <class T>

@@ -611,91 +611,91 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT_EQUAL(p2.first, TString("data"));
         UNIT_ASSERT_EQUAL(p2.second, TString("test"));
     }
- 
+
     Y_UNIT_TEST(TestMaxElementBy) {
-        const int array[] = {1, 2, 5, 3, 4, 5}; 
-        UNIT_ASSERT_VALUES_EQUAL(*MaxElementBy(array, [](int x) { 
-            return x * x; 
+        const int array[] = {1, 2, 5, 3, 4, 5};
+        UNIT_ASSERT_VALUES_EQUAL(*MaxElementBy(array, [](int x) {
+            return x * x;
         }), 5);
- 
+
         const TVector<int> vec(array, array + Y_ARRAY_SIZE(array));
-        UNIT_ASSERT_VALUES_EQUAL(*MaxElementBy(vec, [](int x) { 
-            return -1.0 * x; 
+        UNIT_ASSERT_VALUES_EQUAL(*MaxElementBy(vec, [](int x) {
+            return -1.0 * x;
         }), 1);
- 
+
         int arrayMutable[] = {1, 2, 5, 3, 4, 5};
         auto maxPtr = MaxElementBy(arrayMutable, [](int x) { return x; });
         *maxPtr += 100;
         UNIT_ASSERT_VALUES_EQUAL(*maxPtr, 105);
 
-        auto identity = [](char x) { 
-            return x; 
-        }; 
-        auto singleElementSequence = {'z'}; 
-        UNIT_ASSERT_VALUES_EQUAL(*MaxElementBy(singleElementSequence, identity), 'z'); 
- 
+        auto identity = [](char x) {
+            return x;
+        };
+        auto singleElementSequence = {'z'};
+        UNIT_ASSERT_VALUES_EQUAL(*MaxElementBy(singleElementSequence, identity), 'z');
+
         const TString strings[] = {"one", "two", "three", "four"};
         UNIT_ASSERT_STRINGS_EQUAL(*MaxElementBy(strings, [](TString s) { return s.size(); }), "three");
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestMinElementBy) {
-        const int array[] = {2, 3, 4, 1, 5}; 
-        UNIT_ASSERT_VALUES_EQUAL(*MinElementBy(array, [](int x) -> char { 
-            return 'a' + x; 
+        const int array[] = {2, 3, 4, 1, 5};
+        UNIT_ASSERT_VALUES_EQUAL(*MinElementBy(array, [](int x) -> char {
+            return 'a' + x;
         }), 1);
- 
+
         const TVector<int> vec(std::begin(array), std::end(array));
-        UNIT_ASSERT_VALUES_EQUAL(*MinElementBy(vec, [](int x) { 
-            return -x; 
+        UNIT_ASSERT_VALUES_EQUAL(*MinElementBy(vec, [](int x) {
+            return -x;
         }), 5);
- 
+
         int arrayMutable[] = {1, 2, 5, 3, 4, 5};
         auto minPtr = MinElementBy(arrayMutable, [](int x) { return x; });
         *minPtr += 100;
         UNIT_ASSERT_VALUES_EQUAL(*minPtr, 101);
 
-        auto identity = [](char x) { 
-            return x; 
-        }; 
-        auto singleElementSequence = {'z'}; 
-        UNIT_ASSERT_VALUES_EQUAL(*MinElementBy(singleElementSequence, identity), 'z'); 
- 
+        auto identity = [](char x) {
+            return x;
+        };
+        auto singleElementSequence = {'z'};
+        UNIT_ASSERT_VALUES_EQUAL(*MinElementBy(singleElementSequence, identity), 'z');
+
         const TVector<TStringBuf> strings = {"one", "two", "three", "four"};
-        auto stringLength = [](TStringBuf s) { 
-            return s.size(); 
-        }; 
-        UNIT_ASSERT_STRINGS_EQUAL(*MinElementBy(strings, stringLength), "one"); 
-        UNIT_ASSERT_STRINGS_EQUAL(*MinElementBy(strings.rbegin(), strings.rend(), stringLength), "two"); 
-    } 
- 
+        auto stringLength = [](TStringBuf s) {
+            return s.size();
+        };
+        UNIT_ASSERT_STRINGS_EQUAL(*MinElementBy(strings, stringLength), "one");
+        UNIT_ASSERT_STRINGS_EQUAL(*MinElementBy(strings.rbegin(), strings.rend(), stringLength), "two");
+    }
+
     Y_UNIT_TEST(MaxElementByReturnsEndForEmptyRange) {
         const TVector<int> empty;
-        UNIT_ASSERT_EQUAL(MaxElementBy(empty, [](int) { return 0; }), empty.end()); 
-    } 
- 
+        UNIT_ASSERT_EQUAL(MaxElementBy(empty, [](int) { return 0; }), empty.end());
+    }
+
     Y_UNIT_TEST(MaxElementByDoesntCallFunctorForEmptyRange) {
         const TVector<int> empty;
-        auto functor = [](int) { 
-            UNIT_ASSERT(false); 
-            return 0; 
-        }; 
-        MaxElementBy(empty, functor); 
-    } 
- 
+        auto functor = [](int) {
+            UNIT_ASSERT(false);
+            return 0;
+        };
+        MaxElementBy(empty, functor);
+    }
+
     Y_UNIT_TEST(MinElementByReturnsEndForEmptyRange) {
         const TVector<int> empty;
-        UNIT_ASSERT_EQUAL(MinElementBy(empty, [](int) { return 0; }), empty.end()); 
-    } 
- 
+        UNIT_ASSERT_EQUAL(MinElementBy(empty, [](int) { return 0; }), empty.end());
+    }
+
     Y_UNIT_TEST(MinElementByDoesntCallFunctorForEmptyRange) {
         const TVector<int> empty;
-        auto functor = [](int) { 
-            UNIT_ASSERT(false); 
-            return 0; 
-        }; 
-        MinElementBy(empty, functor); 
-    } 
- 
+        auto functor = [](int) {
+            UNIT_ASSERT(false);
+            return 0;
+        };
+        MinElementBy(empty, functor);
+    }
+
     Y_UNIT_TEST(TestApplyToMany) {
         int res = 0;
         ApplyToMany([&res](auto v) { res += v; }, 1, 2, 3, 4, 5);
@@ -757,45 +757,45 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
     }
 
     Y_UNIT_TEST(FindIfForContainer) {
-        using std::begin; 
-        using std::end; 
- 
-        int array[] = {1, 2, 3, 4, 5}; 
-        UNIT_ASSERT_EQUAL(FindIf(array, [](int x) { return x == 1; }), begin(array)); 
-        UNIT_ASSERT_EQUAL(FindIf(array, [](int x) { return x > 5; }), end(array)); 
- 
+        using std::begin;
+        using std::end;
+
+        int array[] = {1, 2, 3, 4, 5};
+        UNIT_ASSERT_EQUAL(FindIf(array, [](int x) { return x == 1; }), begin(array));
+        UNIT_ASSERT_EQUAL(FindIf(array, [](int x) { return x > 5; }), end(array));
+
         TVector<int> vector = {1, 2, 3, 4, 5};
-        UNIT_ASSERT_EQUAL(FindIf(vector, [](int x) { return x == 1; }), begin(vector)); 
-        UNIT_ASSERT_EQUAL(FindIf(vector, [](int x) { return x > 5; }), end(vector)); 
- 
-        // Compilability test. Check if the returned iterator is non const 
-        auto iter = FindIf(vector, [](int x) { return x == 1; }); 
-        *iter = 5; 
- 
-        // Compilability test. Check if the returned iterator is const. Should not compile 
+        UNIT_ASSERT_EQUAL(FindIf(vector, [](int x) { return x == 1; }), begin(vector));
+        UNIT_ASSERT_EQUAL(FindIf(vector, [](int x) { return x > 5; }), end(vector));
+
+        // Compilability test. Check if the returned iterator is non const
+        auto iter = FindIf(vector, [](int x) { return x == 1; });
+        *iter = 5;
+
+        // Compilability test. Check if the returned iterator is const. Should not compile
         const TVector<int> constVector = {1, 2, 3, 4, 5};
-        auto constIter = FindIf(constVector, [](int x) { return x == 1; }); 
-        Y_UNUSED(constIter); 
-        // *constIter = 5; 
-    } 
- 
-    struct TRange { 
-    }; 
- 
-    const TRange* begin(const TRange& r) { 
-        return &r; 
-    } 
- 
-    const TRange* end(const TRange& r) { 
-        return &r + 1; 
-    } 
- 
+        auto constIter = FindIf(constVector, [](int x) { return x == 1; });
+        Y_UNUSED(constIter);
+        // *constIter = 5;
+    }
+
+    struct TRange {
+    };
+
+    const TRange* begin(const TRange& r) {
+        return &r;
+    }
+
+    const TRange* end(const TRange& r) {
+        return &r + 1;
+    }
+
     Y_UNIT_TEST(FindIfForUserType) {
-        // Compileability test. Should work for user types with begin/end overloads 
-        TRange range; 
-        auto i = FindIf(range, [](auto) { return false; }); 
-        Y_UNUSED(i); 
-    } 
+        // Compileability test. Should work for user types with begin/end overloads
+        TRange range;
+        auto i = FindIf(range, [](auto) { return false; });
+        Y_UNUSED(i);
+    }
 
     Y_UNIT_TEST(TestLowerBoundBy) {
         using TIntPairs = TVector<std::pair<i32, i32>>;
@@ -847,4 +847,4 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         std::vector<int> v = {1, 2, 777};
         UNIT_ASSERT_VALUES_EQUAL(TString("begin;1;2;777"), Accumulate(v, TString("begin"), [](auto&& a, auto& b) { return a + ";" + ToString(b); }));
     }
-}; 
+};

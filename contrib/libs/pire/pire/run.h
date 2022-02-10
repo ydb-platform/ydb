@@ -139,7 +139,7 @@ namespace Impl {
 
 		if (PIRE_UNLIKELY(size == 0))
 			return Continue;
- 
+
 		size_t chunk = Impl::ToLittleEndian(*p) >> 8*pos;
 		const char* ptr = (const char*) p + pos + size + 1;
 

@@ -13,7 +13,7 @@ SRCS(
     http.cpp
     http_ex.cpp
     options.cpp
-    response.cpp 
+    response.cpp
 )
 
 PEERDIR(

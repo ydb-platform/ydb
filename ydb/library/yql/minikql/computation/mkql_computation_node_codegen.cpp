@@ -807,17 +807,17 @@ TExternalCodegeneratorRootNode::TExternalCodegeneratorRootNode(TComputationMutab
     : TExternalCodegeneratorNode(mutables, kind)
 {}
 
-NUdf::TUnboxedValue TExternalCodegeneratorRootNode::GetValue(TComputationContext& compCtx) const {
+NUdf::TUnboxedValue TExternalCodegeneratorRootNode::GetValue(TComputationContext& compCtx) const { 
     if (compCtx.ExecuteLLVM && GetFunction)
-        return GetFunction(&compCtx);
-    return TExternalComputationNode::GetValue(compCtx);
+        return GetFunction(&compCtx); 
+    return TExternalComputationNode::GetValue(compCtx); 
 }
 
-void TExternalCodegeneratorRootNode::SetValue(TComputationContext& compCtx, NUdf::TUnboxedValue&& newValue) const {
+void TExternalCodegeneratorRootNode::SetValue(TComputationContext& compCtx, NUdf::TUnboxedValue&& newValue) const { 
     if (compCtx.ExecuteLLVM && SetFunction)
-        return SetFunction(&compCtx, newValue.Release());
+        return SetFunction(&compCtx, newValue.Release()); 
 
-    TExternalComputationNode::SetValue(compCtx, std::move(newValue));
+    TExternalComputationNode::SetValue(compCtx, std::move(newValue)); 
 }
 
 TString TExternalCodegeneratorRootNode::MakeName(const TString& method) const {
@@ -829,7 +829,7 @@ TString TExternalCodegeneratorRootNode::MakeName(const TString& method) const {
 void TExternalCodegeneratorRootNode::FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) {
     if (GetValueFunc)
         GetFunction = reinterpret_cast<TGetPtr>(codegen->GetPointerToFunction(GetValueFunc));
-
+ 
     if (SetValueFunc)
         SetFunction = reinterpret_cast<TSetPtr>(codegen->GetPointerToFunction(SetValueFunc));
 }
@@ -1666,8 +1666,8 @@ Value* GetNodeValue(IComputationNode* node, const TCodegenContext& ctx, BasicBlo
 
     const auto retPtr = new AllocaInst(Type::getInt128Ty(context), 0U, "return_ptr", &ctx.Func->getEntryBlock().back());
     const auto funType = ctx.Codegen->GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ?
-        FunctionType::get(Type::getVoidTy(context), {retPtr->getType(), nodeThis->getType(), ctx.Ctx->getType()}, false):
-        FunctionType::get(Type::getVoidTy(context), {nodeThis->getType(), retPtr->getType(), ctx.Ctx->getType()}, false);
+        FunctionType::get(Type::getVoidTy(context), {retPtr->getType(), nodeThis->getType(), ctx.Ctx->getType()}, false): 
+        FunctionType::get(Type::getVoidTy(context), {nodeThis->getType(), retPtr->getType(), ctx.Ctx->getType()}, false); 
     const auto ptrTableType = PointerType::getUnqual(PointerType::getUnqual(PointerType::getUnqual(funType)));
     const auto nodeVTable = CastInst::Create(Instruction::IntToPtr, ptr, ptrTableType, "node_vtable", block);
 
@@ -1676,9 +1676,9 @@ Value* GetNodeValue(IComputationNode* node, const TCodegenContext& ctx, BasicBlo
     const auto func = new LoadInst(elem, "func", false, block);
 
     if (ctx.Codegen->GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows) {
-        CallInst::Create(func, {retPtr, nodeThis, ctx.Ctx}, "", block);
+        CallInst::Create(func, {retPtr, nodeThis, ctx.Ctx}, "", block); 
     } else {
-        CallInst::Create(func, {nodeThis, retPtr, ctx.Ctx}, "", block);
+        CallInst::Create(func, {nodeThis, retPtr, ctx.Ctx}, "", block); 
     }
 
     ValueRelease(node->GetRepresentation(), retPtr, ctx, block);
@@ -1700,8 +1700,8 @@ void GetNodeValue(Value* value, IComputationNode* node, const TCodegenContext& c
     const auto nodeThis = CastInst::Create(Instruction::IntToPtr, ptr, ptrType, "node_this", block);
 
     const auto funType = ctx.Codegen->GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ?
-        FunctionType::get(Type::getVoidTy(context), {value->getType(), nodeThis->getType(), ctx.Ctx->getType()}, false):
-        FunctionType::get(Type::getVoidTy(context), {nodeThis->getType(), value->getType(), ctx.Ctx->getType()}, false);
+        FunctionType::get(Type::getVoidTy(context), {value->getType(), nodeThis->getType(), ctx.Ctx->getType()}, false): 
+        FunctionType::get(Type::getVoidTy(context), {nodeThis->getType(), value->getType(), ctx.Ctx->getType()}, false); 
     const auto ptrTableType = PointerType::getUnqual(PointerType::getUnqual(PointerType::getUnqual(funType)));
     const auto nodeVTable = CastInst::Create(Instruction::IntToPtr, ptr, ptrTableType, "node_vtable", block);
 
@@ -1710,9 +1710,9 @@ void GetNodeValue(Value* value, IComputationNode* node, const TCodegenContext& c
     const auto func = new LoadInst(elem, "func", false, block);
 
     if (ctx.Codegen->GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows) {
-        CallInst::Create(func, {value, nodeThis, ctx.Ctx}, "", block);
+        CallInst::Create(func, {value, nodeThis, ctx.Ctx}, "", block); 
     } else {
-        CallInst::Create(func, {nodeThis, value, ctx.Ctx}, "", block);
+        CallInst::Create(func, {nodeThis, value, ctx.Ctx}, "", block); 
     }
 }
 

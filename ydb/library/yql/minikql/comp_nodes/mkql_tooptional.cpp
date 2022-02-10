@@ -15,7 +15,7 @@ public:
         : TBaseComputation(mutables, kind), List(list)
     {}
 
-    NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
+    NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const { 
         const auto& value = List->GetValue(ctx);
         if (const auto ptr = value.GetElements()) {
             if (value.GetListLength() > 0ULL) {

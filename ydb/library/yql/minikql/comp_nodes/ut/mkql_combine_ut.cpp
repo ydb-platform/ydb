@@ -27,9 +27,9 @@ public:
     public:
         using TBase = TComputationValue<TStreamValue>;
 
-        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const TTestStreamWrapper* parent)
+        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const TTestStreamWrapper* parent) 
             : TBase(memInfo)
-            , CompCtx(compCtx)
+            , CompCtx(compCtx) 
             , Parent(parent)
         {
         }
@@ -64,19 +64,19 @@ public:
         }
 
     private:
-        TComputationContext& CompCtx;
+        TComputationContext& CompCtx; 
         const TTestStreamWrapper* const Parent;
         ui64 Index = 0;
     };
 
-    TTestStreamWrapper(TComputationMutables& mutables, ui64 peakStep)
-        : TBaseComputation(mutables)
-        , PeakStep(peakStep)
+    TTestStreamWrapper(TComputationMutables& mutables, ui64 peakStep) 
+        : TBaseComputation(mutables) 
+        , PeakStep(peakStep) 
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, this);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, this); 
     }
 
 private:
@@ -88,7 +88,7 @@ private:
 };
 
 template <bool WithYields>
-IComputationNode* WrapTestStream(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapTestStream(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args");
     const ui64 peakStep = AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().Get<ui64>();
     return new TTestStreamWrapper<WithYields>(ctx.Mutables, peakStep);
@@ -130,10 +130,10 @@ struct TSetup_ {
 
     TAutoPtr<IComputationGraph> BuildGraph(TRuntimeNode pgm, EGraphPerProcess graphPerProcess = EGraphPerProcess::Multi, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) {
         Explorer.Walk(pgm.GetNode(), *Env);
-        TComputationPatternOpts opts(Alloc.Ref(), *Env, GetTestFactory(), FunctionRegistry.Get(),
+        TComputationPatternOpts opts(Alloc.Ref(), *Env, GetTestFactory(), FunctionRegistry.Get(), 
             NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, UseLLVM ? "" : "OFF", graphPerProcess);
         Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
-        return Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
+        return Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider)); 
     }
 
     TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
@@ -145,7 +145,7 @@ struct TSetup_ {
     THolder<TProgramBuilder> PgmBuilder;
 
     TExploringNodeVisitor Explorer;
-    IComputationPattern::TPtr Pattern;
+    IComputationPattern::TPtr Pattern; 
 };
 
 template <bool LLVM, bool WithYields = false>

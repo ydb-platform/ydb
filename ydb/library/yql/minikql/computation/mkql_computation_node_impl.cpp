@@ -1,7 +1,7 @@
 #include "mkql_computation_node_impl.h"
 
 #include "ydb/library/yql/minikql/mkql_string_util.h"
-
+ 
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -38,12 +38,12 @@ TUnboxedImmutableComputationNode::~TUnboxedImmutableComputationNode() {
     MKQL_MEM_RETURN(MemInfo, this, sizeof(*this));
 }
 
-NUdf::TUnboxedValue TUnboxedImmutableComputationNode::GetValue(TComputationContext& compCtx) const {
-    Y_UNUSED(compCtx);
-    if (RepresentationKind == EValueRepresentation::String) {
-        /// TODO: YQL-4461
-        return MakeString(UnboxedValue.AsStringRef());
-    }
+NUdf::TUnboxedValue TUnboxedImmutableComputationNode::GetValue(TComputationContext& compCtx) const { 
+    Y_UNUSED(compCtx); 
+    if (RepresentationKind == EValueRepresentation::String) { 
+        /// TODO: YQL-4461 
+        return MakeString(UnboxedValue.AsStringRef()); 
+    } 
     return UnboxedValue;
 }
 
@@ -96,7 +96,7 @@ IComputationNode* TStatefulComputationNode<IComputationNodeInterface, Serializab
     Dependencies.emplace_back(node);
     return this;
 }
-
+ 
 template <class IComputationNodeInterface, bool SerializableState>
 EValueRepresentation TStatefulComputationNode<IComputationNodeInterface, SerializableState>::GetRepresentation() const {
     return RepresentationKind;
@@ -116,7 +116,7 @@ template class TStatefulComputationNode<IComputationExternalNode, true>;
 void TExternalComputationNode::CollectDependentIndexes(const IComputationNode*, TIndexesMap& map) const {
     map.emplace(ValueIndex, RepresentationKind);
 }
-
+ 
 TExternalComputationNode::TExternalComputationNode(TComputationMutables& mutables, EValueRepresentation kind)
     : TStatefulComputationNode(mutables, kind)
 {}

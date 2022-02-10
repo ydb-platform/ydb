@@ -15,10 +15,10 @@ ids {
   severity: S_INFO
 }
 ids {
-  code: WARNING
-  severity: S_WARNING
-}
-ids {
+  code: WARNING 
+  severity: S_WARNING 
+} 
+ids { 
   code: CORE
   severity: S_INFO
 }
@@ -293,17 +293,17 @@ ids {
   severity: S_ERROR
 }
 ids {
-  code: YQL_PRAGMA_WARNING_MSG
-  severity: S_WARNING
-}
-ids {
-  code: YQL_CONST_SUBREQUEST_IN_LIST
-  severity: S_WARNING
-}
-ids {
-  code: YQL_AGGREGATE_BY_WIN_FUNC_WITHOUT_ORDER_BY
-  severity: S_WARNING
-}
+  code: YQL_PRAGMA_WARNING_MSG 
+  severity: S_WARNING 
+} 
+ids { 
+  code: YQL_CONST_SUBREQUEST_IN_LIST 
+  severity: S_WARNING 
+} 
+ids { 
+  code: YQL_AGGREGATE_BY_WIN_FUNC_WITHOUT_ORDER_BY 
+  severity: S_WARNING 
+} 
 ids {
   code: YQL_DEPRECATED_INFERSCHEME
   severity: S_WARNING
@@ -312,10 +312,10 @@ ids {
   code: YQL_ORDER_BY_WITHOUT_LIMIT_IN_SUBQUERY
   severity: S_WARNING
 }
-ids {
-  code: YQL_DEPRECATED_DOUBLE_QUOTE_IN_BRACKETS
-  severity: S_WARNING
-}
+ids { 
+  code: YQL_DEPRECATED_DOUBLE_QUOTE_IN_BRACKETS 
+  severity: S_WARNING 
+} 
 ids {
   code: YQL_DEPRECATED_JSON_UDF
   severity: S_WARNING

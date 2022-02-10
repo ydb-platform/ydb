@@ -13,10 +13,10 @@ class TCallableWrapper : public TCustomValueCodegeneratorNode<TCallableWrapper> 
 private:
     class TValue : public TComputationValue<TValue> {
     public:
-        TValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, IComputationNode* resultNode,
+        TValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, IComputationNode* resultNode, 
             const TComputationExternalNodePtrVector& argNodes)
             : TComputationValue(memInfo)
-            , CompCtx(compCtx)
+            , CompCtx(compCtx) 
             , ResultNode(resultNode)
             , ArgNodes(argNodes)
         {}
@@ -25,13 +25,13 @@ private:
         NUdf::TUnboxedValue Run(const NUdf::IValueBuilder*, const NUdf::TUnboxedValuePod* args) const override
         {
             for (const auto node : ArgNodes) {
-                node->SetValue(CompCtx, NUdf::TUnboxedValuePod(*args++));
+                node->SetValue(CompCtx, NUdf::TUnboxedValuePod(*args++)); 
             }
 
-            return ResultNode->GetValue(CompCtx);
+            return ResultNode->GetValue(CompCtx); 
         }
 
-        TComputationContext& CompCtx;
+        TComputationContext& CompCtx; 
         IComputationNode *const ResultNode;
         const TComputationExternalNodePtrVector ArgNodes;
     };
@@ -58,8 +58,8 @@ private:
     };
 public:
     TCallableWrapper(TComputationMutables& mutables, IComputationNode* resultNode, TComputationExternalNodePtrVector&& argNodes)
-        : TBaseComputation(mutables)
-        , ResultNode(resultNode)
+        : TBaseComputation(mutables) 
+        , ResultNode(resultNode) 
         , ArgNodes(std::move(argNodes))
     {
     }
@@ -69,7 +69,7 @@ public:
         if (ctx.ExecuteLLVM && Run)
             return ctx.HolderFactory.Create<TCodegenValue>(Run, &ctx);
 #endif
-        return ctx.HolderFactory.Create<TValue>(ctx, ResultNode, ArgNodes);
+        return ctx.HolderFactory.Create<TValue>(ctx, ResultNode, ArgNodes); 
     }
 
 private:
@@ -174,7 +174,7 @@ IComputationNode* WrapCallable(TCallable& callable, const TComputationNodeFactor
 
         argNodes[i] = LocateExternalNode(ctx.NodeLocator, callable, i);
     }
-    return new TCallableWrapper(ctx.Mutables, resultNode, std::move(argNodes));
+    return new TCallableWrapper(ctx.Mutables, resultNode, std::move(argNodes)); 
 }
 
 }

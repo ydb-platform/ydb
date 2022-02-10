@@ -49,8 +49,8 @@ NUdf::TUnboxedValuePod TSqueezeState::Save(TComputationContext& ctx) const {
     TString out;
     WriteByte(out, static_cast<ui8>(Stage));
     if (ESqueezeState::Work == Stage) {
-        InSave->SetValue(ctx, State->GetValue(ctx));
-        WriteUnboxedValue(out, GetPacker(), OutSave->GetValue(ctx));
+        InSave->SetValue(ctx, State->GetValue(ctx)); 
+        WriteUnboxedValue(out, GetPacker(), OutSave->GetValue(ctx)); 
     }
     return MakeString(out);
 }
@@ -59,8 +59,8 @@ void TSqueezeState::Load(TComputationContext& ctx, const NUdf::TStringRef& state
     TStringBuf in(state.Data(), state.Size());
     Stage = static_cast<ESqueezeState>(ReadByte(in));
     if (ESqueezeState::Work == Stage) {
-        InLoad->SetValue(ctx, ReadUnboxedValue(in, GetPacker(), ctx));
-        State->SetValue(ctx, OutLoad->GetValue(ctx));
+        InLoad->SetValue(ctx, ReadUnboxedValue(in, GetPacker(), ctx)); 
+        State->SetValue(ctx, OutLoad->GetValue(ctx)); 
     }
 }
 

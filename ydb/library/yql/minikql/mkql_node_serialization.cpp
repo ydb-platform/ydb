@@ -75,23 +75,23 @@ namespace {
             return Names;
         }
 
-        TVector<TInternName>& GetNameOrder() {
-            return NameOrder;
-        }
-
-
+        TVector<TInternName>& GetNameOrder() { 
+            return NameOrder; 
+        } 
+ 
+ 
     private:
         void AddName(const TInternName& name) {
-            auto iter = Names.emplace(name, 0);
-            if (iter.second) {
-                NameOrder.emplace_back(name);
-            }
-            ++iter.first->second;
+            auto iter = Names.emplace(name, 0); 
+            if (iter.second) { 
+                NameOrder.emplace_back(name); 
+            } 
+            ++iter.first->second; 
         }
 
     private:
         THashMap<TInternName, ui32> Names;
-        TVector<TInternName> NameOrder;
+        TVector<TInternName> NameOrder; 
     };
 
     class TWriter {
@@ -842,10 +842,10 @@ namespace {
             TWriter& Owner;
         };
 
-        TWriter(THashMap<TInternName, ui32>& names, TVector<TInternName>& nameOrder)
+        TWriter(THashMap<TInternName, ui32>& names, TVector<TInternName>& nameOrder) 
         {
             Names.swap(names);
-            NameOrder.swap(nameOrder);
+            NameOrder.swap(nameOrder); 
         }
 
         void Write(TRuntimeNode node) {
@@ -894,11 +894,11 @@ namespace {
 
             WriteVar32(Names.size());
             ui32 nameIndex = 0;
-            for (const auto& orderedName: NameOrder) {
-                auto it = Names.find(orderedName);
-                if (it == Names.end()) {
-                    continue;
-                }
+            for (const auto& orderedName: NameOrder) { 
+                auto it = Names.find(orderedName); 
+                if (it == Names.end()) { 
+                    continue; 
+                } 
                 const auto& name = it->first;
                 WriteVar32(name.Str().size());
                 WriteMany(name.Str().data(), name.Str().size());
@@ -960,7 +960,7 @@ namespace {
         TString Out;
         ui32 ReferenceCount = 0;
         THashMap<TInternName, ui32> Names;
-        TVector<TInternName> NameOrder;
+        TVector<TInternName> NameOrder; 
         TVector<std::pair<TNode*, bool>> Stack;
     };
 
@@ -2054,8 +2054,8 @@ TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node,
     }
 
     auto& names = preparer.GetNames();
-    auto& nameOrder = preparer.GetNameOrder();
-    TWriter writer(names, nameOrder);
+    auto& nameOrder = preparer.GetNameOrder(); 
+    TWriter writer(names, nameOrder); 
     writer.Write(node);
     for (auto node : explorer.GetNodes()) {
         node->SetCookie(0);

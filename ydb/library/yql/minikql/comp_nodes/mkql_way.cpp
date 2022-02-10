@@ -18,18 +18,18 @@ class TWayWrapper: public TMutableCodegeneratorNode<TWayWrapper<IsOptional>> {
 public:
     TWayWrapper(TComputationMutables& mutables, IComputationNode* varNode, EValueRepresentation kind, TComputationNodePtrVector&& literals)
         : TBaseComputation(mutables, kind)
-        , VarNode(varNode)
+        , VarNode(varNode) 
         , Literals(std::move(literals))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& var = VarNode->GetValue(ctx);
+        const auto& var = VarNode->GetValue(ctx); 
         if (IsOptional && !var) {
             return NUdf::TUnboxedValuePod();
         }
 
         const ui32 index = var.GetVariantIndex();
-        return Literals[index]->GetValue(ctx).Release();
+        return Literals[index]->GetValue(ctx).Release(); 
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

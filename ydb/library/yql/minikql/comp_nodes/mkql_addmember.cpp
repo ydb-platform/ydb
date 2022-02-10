@@ -11,18 +11,18 @@ namespace {
 class TAddMemberWrapper : public TMutableCodegeneratorFallbackNode<TAddMemberWrapper> {
     typedef TMutableCodegeneratorFallbackNode<TAddMemberWrapper> TBaseComputation;
 public:
-    TAddMemberWrapper(TComputationMutables& mutables, IComputationNode* structObj, IComputationNode* member, ui32 index,
+    TAddMemberWrapper(TComputationMutables& mutables, IComputationNode* structObj, IComputationNode* member, ui32 index, 
         std::vector<EValueRepresentation>&& representations)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , StructObj(structObj)
+        , StructObj(structObj) 
         , Member(member)
         , Index(index)
         , Representations(std::move(representations))
-        , Cache(mutables)
+        , Cache(mutables) 
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& baseStruct = StructObj->GetValue(ctx);
+        const auto& baseStruct = StructObj->GetValue(ctx); 
 
         NUdf::TUnboxedValue* itemsPtr = nullptr;
         const auto result = Cache.NewArray(ctx, Representations.size() + 1U, itemsPtr);
@@ -31,7 +31,7 @@ public:
                 *itemsPtr++ = ptr[i];
             }
 
-            *itemsPtr++ = Member->GetValue(ctx);
+            *itemsPtr++ = Member->GetValue(ctx); 
 
             for (ui32 i = Index; i < Representations.size(); ++i) {
                 *itemsPtr++ = ptr[i];
@@ -41,7 +41,7 @@ public:
                 *itemsPtr++ = baseStruct.GetElement(i);
             }
 
-            *itemsPtr++ = Member->GetValue(ctx);
+            *itemsPtr++ = Member->GetValue(ctx); 
 
             for (ui32 i = Index; i < Representations.size(); ++i) {
                 *itemsPtr++ = baseStruct.GetElement(i);

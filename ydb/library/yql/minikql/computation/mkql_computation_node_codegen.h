@@ -814,11 +814,11 @@ class TCodegeneratorRootNode: public TDerived, public ICodegeneratorRootNode
 {
 using TBase = TDerived;
 public:
-    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final {
+    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final { 
         if (compCtx.ExecuteLLVM && GetFunction)
-            return GetFunction(&compCtx);
+            return GetFunction(&compCtx); 
 
-        return TBase::GetValue(compCtx);
+        return TBase::GetValue(compCtx); 
     }
 
 protected:
@@ -947,9 +947,9 @@ public:
     TExternalCodegeneratorRootNode(TComputationMutables& mutables, EValueRepresentation kind);
 
 private:
-    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final;
+    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final; 
 
-    void SetValue(TComputationContext& compCtx, NUdf::TUnboxedValue&& newValue) const final;
+    void SetValue(TComputationContext& compCtx, NUdf::TUnboxedValue&& newValue) const final; 
 
     TString MakeName(const TString& method) const;
 

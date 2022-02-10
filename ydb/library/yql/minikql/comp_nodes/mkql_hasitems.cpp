@@ -12,12 +12,12 @@ template <bool IsDict, bool IsOptional>
 class THasItemsWrapper : public TMutableCodegeneratorNode<THasItemsWrapper<IsDict, IsOptional>> {
     typedef TMutableCodegeneratorNode<THasItemsWrapper<IsDict, IsOptional>> TBaseComputation;
 public:
-    THasItemsWrapper(TComputationMutables& mutables, IComputationNode* collection)
+    THasItemsWrapper(TComputationMutables& mutables, IComputationNode* collection) 
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Collection(collection)
+        , Collection(collection) 
     {}
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const { 
         const auto& collection = Collection->GetValue(compCtx);
         if (IsOptional && !collection) {
             return NUdf::TUnboxedValuePod();
@@ -77,7 +77,7 @@ IComputationNode* WrapHasItems(TCallable& callable, const TComputationNodeFactor
             return new THasItemsWrapper<true, true>(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
         else
             return new THasItemsWrapper<true, false>(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
-    } else {
+    } else { 
         if (isOptional)
             return new THasItemsWrapper<false, true>(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
         else

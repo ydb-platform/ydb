@@ -21,10 +21,10 @@ template <bool KeyTuple>
 class TJoinDictWrapper : public TMutableCodegeneratorPtrNode<TJoinDictWrapper<KeyTuple>> {
     typedef TMutableCodegeneratorPtrNode<TJoinDictWrapper<KeyTuple>> TBaseComputation;
 public:
-    TJoinDictWrapper(TComputationMutables& mutables, IComputationNode* dict1, IComputationNode* dict2,
+    TJoinDictWrapper(TComputationMutables& mutables, IComputationNode* dict1, IComputationNode* dict2, 
         bool isMulti1, bool isMulti2, EJoinKind joinKind, std::vector<ui32>&& indexes = std::vector<ui32>())
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , Dict1(dict1)
+        , Dict1(dict1) 
         , Dict2(dict2)
         , IsMulti1(isMulti1)
         , IsMulti2(isMulti2)

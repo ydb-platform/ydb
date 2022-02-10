@@ -251,7 +251,7 @@ namespace {
         TSourcePosition Pos_;
 
         TUnboxedValue BuildEmptyStruct(const IValueBuilder* valueBuilder) const {
-            TUnboxedValue* items = nullptr;
+            TUnboxedValue* items = nullptr; 
             return valueBuilder->NewArray(RegexpGroups.Names.size(), items);
         }
     };

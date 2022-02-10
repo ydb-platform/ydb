@@ -1565,10 +1565,10 @@ private:
         auto root = astRes.Root;
         astRes.Root = nullptr; // don't cleanup library nodes
         if (!root) {
-            errors = astRes.Issues;
+            errors = astRes.Issues; 
             return false;
         }
-        Expr->Context.IssueManager.AddIssues(std::move(astRes.Issues));
+        Expr->Context.IssueManager.AddIssues(std::move(astRes.Issues)); 
         if (!CompileExpr(*root, Expr->Root, Expr->Context, nullptr)) {
             errors = Expr->Context.IssueManager.GetIssues();
             return false;

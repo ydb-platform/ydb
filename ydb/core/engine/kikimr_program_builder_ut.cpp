@@ -46,11 +46,11 @@ namespace NMiniKQL {
 
         TAutoPtr<IComputationGraph> BuildGraph(TRuntimeNode pgm) {
             Explorer.Walk(pgm.GetNode(), *Env);
-            TComputationPatternOpts opts(Alloc.Ref(), *Env, GetLazyListFactory(),
-                FunctionRegistry.Get(), NUdf::EValidateMode::None,
+            TComputationPatternOpts opts(Alloc.Ref(), *Env, GetLazyListFactory(), 
+                FunctionRegistry.Get(), NUdf::EValidateMode::None, 
                 NUdf::EValidatePolicy::Exception, "OFF", EGraphPerProcess::Multi);
-            Pattern = MakeComputationPattern(Explorer, pgm, {}, opts);
-            return Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
+            Pattern = MakeComputationPattern(Explorer, pgm, {}, opts); 
+            return Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider)); 
         }
 
         TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
@@ -62,7 +62,7 @@ namespace NMiniKQL {
         THolder<TKikimrProgramBuilder> PgmBuilder;
 
         TExploringNodeVisitor Explorer;
-        IComputationPattern::TPtr Pattern;
+        IComputationPattern::TPtr Pattern; 
     };
 
 Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {

@@ -80,12 +80,12 @@ PEERDIR(
     ydb/library/yql/providers/common/proto
 )
 
-GENERATE_ENUM_SERIALIZATION(yql_data_provider.h)
+GENERATE_ENUM_SERIALIZATION(yql_data_provider.h) 
 
 GENERATE_ENUM_SERIALIZATION(yql_user_data.h)
 
 GENERATE_ENUM_SERIALIZATION(yql_atom_enums.h)
-
+ 
 YQL_LAST_ABI_VERSION()
 
 END()

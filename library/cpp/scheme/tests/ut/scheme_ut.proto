@@ -36,10 +36,10 @@ message TMessage {
     repeated bytes Bytess = 32;
     repeated EEnum Enums = 33;
     repeated TMessage2 Messages = 34;
-
-    map<string, double> MapDoubles = 35;
-    map<string, int32> MapInt32s = 36;
-    map<string, string> MapString = 37;
+ 
+    map<string, double> MapDoubles = 35; 
+    map<string, int32> MapInt32s = 36; 
+    map<string, string> MapString = 37; 
 }
 
 enum EEnum {

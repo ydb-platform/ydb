@@ -44,7 +44,7 @@ public:
 private:
     void InitNode(TComputationContext&) const override {}
 
-    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final;
+    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final; 
 
     const IComputationNode* GetSource() const final;
 
@@ -88,15 +88,15 @@ protected:
 
     EValueRepresentation GetRepresentation() const override;
 
-    NUdf::TUnboxedValue& ValueRef(TComputationContext& compCtx) const {
-        return compCtx.MutableValues[ValueIndex];
+    NUdf::TUnboxedValue& ValueRef(TComputationContext& compCtx) const { 
+        return compCtx.MutableValues[ValueIndex]; 
     }
-
+ 
     ui32 GetIndex() const final;
 
     TConstComputationNodePtrVector Dependencies;
 
-    const ui32 ValueIndex;
+    const ui32 ValueIndex; 
     const EValueRepresentation RepresentationKind;
 private:
     ui32 GetDependencesCount() const final;
@@ -106,13 +106,13 @@ class TExternalComputationNode: public TStatefulComputationNode<IComputationExte
 {
 public:
     TExternalComputationNode(TComputationMutables& mutables, EValueRepresentation kind = EValueRepresentation::Any);
-
+ 
 protected:
 
-    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override;
+    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override; 
 
     NUdf::TUnboxedValue& RefValue(TComputationContext& compCtx) const override;
-    void SetValue(TComputationContext& compCtx, NUdf::TUnboxedValue&& value) const override;
+    void SetValue(TComputationContext& compCtx, NUdf::TUnboxedValue&& value) const override; 
 
     TString DebugString() const final;
 private:
@@ -177,10 +177,10 @@ private:
     }
 
     const IComputationNode* GetSource() const final { return this; }
-protected:
+protected: 
     TStatefulSourceComputationNode(TComputationMutables& mutables, EValueRepresentation kind = EValueRepresentation::Any)
         : TStatefulComputationNode(mutables, kind)
-    {}
+    {} 
 
     void DependsOn(IComputationNode* node) const {
         if (node) {
@@ -703,29 +703,29 @@ private:
         THROW yexception() << "Can't get index from decorator node.";
     }
 
-    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final {
+    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final { 
         return static_cast<const TDerived*>(this)->DoCalculate(compCtx, Node->GetValue(compCtx));
-    }
-
-protected:
+    } 
+ 
+protected: 
     TDecoratorComputationNode(IComputationNode* node, EValueRepresentation kind)
         : Node(node), Kind(kind)
     {}
 
-    TDecoratorComputationNode(IComputationNode* node)
+    TDecoratorComputationNode(IComputationNode* node) 
         : Node(node), Kind(node->GetRepresentation())
-    {}
+    {} 
 
-
-    TString DebugString() const override {
-        return TypeName<TDerived>() += "(" + Node->DebugString() + ")";
-    }
-
+ 
+    TString DebugString() const override { 
+        return TypeName<TDerived>() += "(" + Node->DebugString() + ")"; 
+    } 
+ 
     IComputationNode *const Node;
     const EValueRepresentation Kind;
-};
-
-template <typename TDerived>
+}; 
+ 
+template <typename TDerived> 
 class TBinaryComputationNode: public TRefCountedComputationNode<IComputationNode>
 {
 private:

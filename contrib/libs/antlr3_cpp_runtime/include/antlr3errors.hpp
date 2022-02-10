@@ -1,5 +1,5 @@
-#ifndef	_ANTLR3ERRORS_HPP
-#define	_ANTLR3ERRORS_HPP
+#ifndef	_ANTLR3ERRORS_HPP 
+#define	_ANTLR3ERRORS_HPP 
 
 // [The "BSD licence"]
 // Copyright (c) 2005-2009 Gokulakannan Somasundaram, ElectronDB
@@ -29,15 +29,15 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define	ANTLR_SUCCESS	0
-#define	ANTLR_FAIL	1
+#define	ANTLR_SUCCESS	0 
+#define	ANTLR_FAIL	1 
 
 /** Indicates end of character stream and is an invalid Unicode code point. */
-#define ANTLR_CHARSTREAM_EOF	0xFFFFFFFF
+#define ANTLR_CHARSTREAM_EOF	0xFFFFFFFF 
 
 /** Indicates  memoizing on a rule failed.
  */
-#define	MEMO_RULE_FAILED	0xFFFFFFFE
-#define	MEMO_RULE_UNKNOWN	0xFFFFFFFF
+#define	MEMO_RULE_FAILED	0xFFFFFFFE 
+#define	MEMO_RULE_UNKNOWN	0xFFFFFFFF 
 
-#endif	/* _ANTLR3ERRORS_H */
+#endif	/* _ANTLR3ERRORS_H */ 

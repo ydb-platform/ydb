@@ -90,8 +90,8 @@ namespace NSQLTranslationV1 {
 
         IOutputStream& Error(NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
         IOutputStream& Error(NYql::TPosition pos, NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
-        IOutputStream& Warning(NYql::TPosition pos, NYql::TIssueCode code);
-        IOutputStream& Info(NYql::TPosition pos);
+        IOutputStream& Warning(NYql::TPosition pos, NYql::TIssueCode code); 
+        IOutputStream& Info(NYql::TPosition pos); 
 
         void SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action);
 
@@ -147,17 +147,17 @@ namespace NSQLTranslationV1 {
         TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
 
         TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
-
-        void BodyPart() {
-            IntoHeading = false;
-        }
-
-        bool IsParseHeading() const {
-            return IntoHeading;
-        }
-
+ 
+        void BodyPart() { 
+            IntoHeading = false; 
+        } 
+ 
+        bool IsParseHeading() const { 
+            return IntoHeading; 
+        } 
+ 
         void DeclareVariable(const TString& varName, const TNodePtr& typeNode);
-
+ 
         bool AddExport(TPosition symbolPos, const TString& symbolName);
         TString AddImport(const TVector<TString>& modulePath);
         TString AddSimpleUdf(const TString& udf);
@@ -183,16 +183,16 @@ namespace NSQLTranslationV1 {
         }
 
     private:
-        IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos);
+        IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos); 
 
     private:
         NYql::TPosition Position;
-        THolder<TStringOutput> IssueMsgHolder;
+        THolder<TStringOutput> IssueMsgHolder; 
         NSQLTranslation::TClusterMapping ClusterMapping;
         TString PathPrefix;
         THashMap<TString, TString> ProviderPathPrefixes;
         THashMap<TString, TString> ClusterPathPrefixes;
-        bool IntoHeading = true;
+        bool IntoHeading = true; 
 
         friend class TColumnRefScope;
 
@@ -218,11 +218,11 @@ namespace NSQLTranslationV1 {
         THashMap<TString, ui32> GenIndexes;
         using TWinSpecsRef = std::reference_wrapper<TWinSpecs>;
         TDeque<TWinSpecsRef> WinSpecsScopes;
-        bool PragmaRefSelect = false;
-        bool PragmaSampleSelect = false;
-        bool PragmaAllowDotInAlias = false;
+        bool PragmaRefSelect = false; 
+        bool PragmaSampleSelect = false; 
+        bool PragmaAllowDotInAlias = false; 
         bool PragmaInferSchema = false;
-        bool PragmaAutoCommit = false;
+        bool PragmaAutoCommit = false; 
         bool SimpleColumns = true;
         bool CoalesceJoinKeysOnQualifiedAll = false;
         bool PragmaDirectRead = false;
@@ -250,8 +250,8 @@ namespace NSQLTranslationV1 {
         bool WarnOnAnsiAliasShadowing = true;
         ui32 ResultRowsLimit = 0;
         ui64 ResultSizeLimit = 0;
-        ui32 PragmaGroupByLimit = 1 << 5;
-        ui32 PragmaGroupByCubeLimit = 5;
+        ui32 PragmaGroupByLimit = 1 << 5; 
+        ui32 PragmaGroupByCubeLimit = 5; 
         // if FlexibleTypes=true, emit TypeOrMember callable and resolve Type/Column uncertainty on type annotation stage, otherwise always emit Type
         bool FlexibleTypes = false;
         THashMap<TString, TMaybe<TString>> Libraries; // alias -> optional file
@@ -311,11 +311,11 @@ namespace NSQLTranslationV1 {
 
         template <typename TToken>
         TString Identifier(const TToken& token) {
-            return IdContent(Ctx, Token(token));
+            return IdContent(Ctx, Token(token)); 
         }
 
         TString Identifier(const TString& str) const {
-            return IdContent(Ctx, str);
+            return IdContent(Ctx, str); 
         }
 
         TNodePtr GetNamedNode(const TString& name);
@@ -334,7 +334,7 @@ namespace NSQLTranslationV1 {
 
         template <typename TNode>
         TString AltDescription(const TNode& node) const {
-            return AltDescription(node, node.Alt_case(), TNode::descriptor());
+            return AltDescription(node, node.Alt_case(), TNode::descriptor()); 
         }
 
     protected:

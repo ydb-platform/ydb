@@ -5,14 +5,14 @@
 #include "mkql_node_printer.h"
 
 #include <util/stream/str.h>
-#include <util/string/join.h>
+#include <util/string/join.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {
 
-#define MKQL_SWITCH_ENUM_TYPE_TO_STR(name, val) \
+#define MKQL_SWITCH_ENUM_TYPE_TO_STR(name, val) \ 
     case val: return TStringBuf(#name);
-
+ 
 using namespace NDetail;
 
 TTypeEnvironment::TTypeEnvironment(TScopedAlloc& alloc)
@@ -179,8 +179,8 @@ bool TNode::IsMergeable() const {
 }
 
 TStringBuf TType::KindAsStr(EKind kind) {
-    switch (static_cast<int>(kind)) {
-        MKQL_TYPE_KINDS(MKQL_SWITCH_ENUM_TYPE_TO_STR)
+    switch (static_cast<int>(kind)) { 
+        MKQL_TYPE_KINDS(MKQL_SWITCH_ENUM_TYPE_TO_STR) 
     }
 
     return TStringBuf("unknown");
@@ -722,7 +722,7 @@ bool TStructLiteral::Equals(const TStructLiteral& nodeToCompare) const {
 TListType::TListType(TType* itemType, const TTypeEnvironment& env, bool validate)
     : TType(EKind::List, env.GetTypeOfType())
     , Data(itemType)
-    , IndexDictKey(env.GetUi64())
+    , IndexDictKey(env.GetUi64()) 
 {
     Y_UNUSED(validate);
 }

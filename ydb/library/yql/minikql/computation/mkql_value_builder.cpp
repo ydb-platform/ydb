@@ -1,5 +1,5 @@
 #include "mkql_value_builder.h"
-#include "mkql_validate.h"
+#include "mkql_validate.h" 
 
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
@@ -42,7 +42,7 @@ void TDefaultValueBuilder::Terminate(const char* message) const {
 
         Rethrow_ = true;
         ythrow yexception() << fullMessage;
-    }
+    } 
 
     Cerr << fullMessage;
     abort();

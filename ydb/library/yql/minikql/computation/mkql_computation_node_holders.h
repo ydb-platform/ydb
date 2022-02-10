@@ -568,7 +568,7 @@ public:
 
 private:
     TMemoryUsageInfo& MemInfo;
-    TComputationMutables& Mutables;
+    TComputationMutables& Mutables; 
 };
 
 void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded);
@@ -600,25 +600,25 @@ private:
     ui8 CacheIndex = 0U;
 };
 
-template<class TObject>
-class TMutableObjectOverBoxedValue {
-public:
-    TMutableObjectOverBoxedValue(TComputationMutables& mutables)
-        : ObjectIndex(mutables.CurValueIndex++)
-    {}
-
-    template <typename... Args>
-    TObject& RefMutableObject(TComputationContext& ctx, Args&&... args) const {
-        auto& unboxed = ctx.MutableValues[ObjectIndex];
-        if (!unboxed.HasValue()) {
-            unboxed = ctx.HolderFactory.Create<TObject>(std::forward<Args>(args)...);
-        }
-        auto boxed = unboxed.AsBoxed();
-        return *static_cast<TObject*>(boxed.Get());
-    }
-private:
-    const ui32 ObjectIndex;
-};
-
+template<class TObject> 
+class TMutableObjectOverBoxedValue { 
+public: 
+    TMutableObjectOverBoxedValue(TComputationMutables& mutables) 
+        : ObjectIndex(mutables.CurValueIndex++) 
+    {} 
+ 
+    template <typename... Args> 
+    TObject& RefMutableObject(TComputationContext& ctx, Args&&... args) const { 
+        auto& unboxed = ctx.MutableValues[ObjectIndex]; 
+        if (!unboxed.HasValue()) { 
+            unboxed = ctx.HolderFactory.Create<TObject>(std::forward<Args>(args)...); 
+        } 
+        auto boxed = unboxed.AsBoxed(); 
+        return *static_cast<TObject*>(boxed.Get()); 
+    } 
+private: 
+    const ui32 ObjectIndex; 
+}; 
+ 
 } // namespace NMiniKQL
 } // namespace NKikimr

@@ -11,7 +11,7 @@
 namespace NSQLTranslation {
     struct TTranslationSettings;
 }
-
+ 
 namespace NSQLTranslationV1 {
 
     NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules = nullptr);

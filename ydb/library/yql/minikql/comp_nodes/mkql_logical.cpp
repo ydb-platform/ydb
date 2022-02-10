@@ -13,13 +13,13 @@ template <bool IsLeftOptional, bool IsRightOptional>
 class TAndWrapper : public TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> {
     typedef TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
 public:
-    TAndWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
+    TAndWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right) 
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
     {
         Y_UNUSED(mutables);
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
         const auto& left = this->Left->GetValue(ctx);
         if (!IsLeftOptional || left) {
             if (!left.template Get<bool>()) {
@@ -85,13 +85,13 @@ template <bool IsLeftOptional, bool IsRightOptional>
 class TOrWrapper : public TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> {
     typedef TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
 public:
-    TOrWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
+    TOrWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right) 
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
     {
         Y_UNUSED(mutables);
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
         const auto& left = this->Left->GetValue(ctx);
         if (!IsLeftOptional || left) {
             if (left.template Get<bool>()) {
@@ -157,13 +157,13 @@ template <bool IsLeftOptional, bool IsRightOptional>
 class TXorWrapper : public TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> {
     typedef TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
 public:
-    TXorWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
+    TXorWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right) 
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
     {
         Y_UNUSED(mutables);
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
         const auto& left = this->Left->GetValue(ctx);
         if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
@@ -270,7 +270,7 @@ public:
 };
 
 template <template <bool, bool> class TWrapper>
-IComputationNode* WrapLogicalFunction(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapLogicalFunction(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
     const auto nodeLocator = ctx.NodeLocator;
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
 
@@ -284,16 +284,16 @@ IComputationNode* WrapLogicalFunction(TCallable& callable, const TComputationNod
     const auto right = LocateNode(nodeLocator, callable, 1);
     if (isLeftOptional) {
         if (isRightOptional) {
-            return new TWrapper<true, true>(ctx.Mutables, left, right);
+            return new TWrapper<true, true>(ctx.Mutables, left, right); 
         } else {
-            return new TWrapper<true, false>(ctx.Mutables, left, right);
+            return new TWrapper<true, false>(ctx.Mutables, left, right); 
         }
     }
     else {
         if (isRightOptional) {
-            return new TWrapper<false, true>(ctx.Mutables, left, right);
+            return new TWrapper<false, true>(ctx.Mutables, left, right); 
         } else {
-            return new TWrapper<false, false>(ctx.Mutables, left, right);
+            return new TWrapper<false, false>(ctx.Mutables, left, right); 
         }
     }
 }
@@ -301,15 +301,15 @@ IComputationNode* WrapLogicalFunction(TCallable& callable, const TComputationNod
 }
 
 IComputationNode* WrapAnd(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapLogicalFunction<TAndWrapper>(callable, ctx);
+    return WrapLogicalFunction<TAndWrapper>(callable, ctx); 
 }
 
 IComputationNode* WrapOr(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapLogicalFunction<TOrWrapper>(callable, ctx);
+    return WrapLogicalFunction<TOrWrapper>(callable, ctx); 
 }
 
 IComputationNode* WrapXor(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapLogicalFunction<TXorWrapper>(callable, ctx);
+    return WrapLogicalFunction<TXorWrapper>(callable, ctx); 
 }
 
 IComputationNode* WrapNot(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

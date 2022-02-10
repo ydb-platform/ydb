@@ -15,16 +15,16 @@ namespace {
 
 std::vector<NUdf::EDataSlot> PrepareKeyTypesByScheme(const std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>& keySchemeTypes) {
     MKQL_ENSURE(!keySchemeTypes.empty(), "No key types provided");
-    std::vector<NUdf::EDataSlot> keyTypes;
-    keyTypes.reserve(keySchemeTypes.size());
+    std::vector<NUdf::EDataSlot> keyTypes; 
+    keyTypes.reserve(keySchemeTypes.size()); 
     for (const auto& schemeType: keySchemeTypes) {
         keyTypes.emplace_back(std::get<0>(schemeType));
         const auto& info = NUdf::GetDataTypeInfo(keyTypes.back());
-        MKQL_ENSURE(info.Features & NUdf::CanCompare, "Cannot compare key type: " << info.Name);
-    }
-    return keyTypes;
-}
-
+        MKQL_ENSURE(info.Features & NUdf::CanCompare, "Cannot compare key type: " << info.Name); 
+    } 
+    return keyTypes; 
+} 
+ 
 class TEncoders : public TComputationValue<TEncoders> {
     typedef TComputationValue<TEncoders> TBase;
 public:

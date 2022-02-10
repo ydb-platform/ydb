@@ -138,7 +138,7 @@ public:
         if (ctx.ExecuteLLVM && Fetch)
             return ctx.HolderFactory.Create<TStreamCodegenValueStateless>(Fetch, &ctx, Stream->GetValue(ctx));
 #endif
-        return ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx));
+        return ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx)); 
     }
 
 private:

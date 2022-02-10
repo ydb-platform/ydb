@@ -657,7 +657,7 @@ TExprNode::TPtr ParseAndAnnotate(
         TTypeAnnotationContext& typeAnnotationContext)
 {
     TAstParseResult astRes = ParseAst(str);
-    exprCtx.IssueManager.AddIssues(astRes.Issues);
+    exprCtx.IssueManager.AddIssues(astRes.Issues); 
     if (!astRes.IsOk()) {
         return nullptr;
     }

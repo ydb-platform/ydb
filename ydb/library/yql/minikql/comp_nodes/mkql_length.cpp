@@ -13,12 +13,12 @@ template <bool IsDict, bool IsOptional>
 class TLengthWrapper : public TMutableCodegeneratorNode<TLengthWrapper<IsDict, IsOptional>> {
     typedef TMutableCodegeneratorNode<TLengthWrapper<IsDict, IsOptional>> TBaseComputation;
 public:
-    TLengthWrapper(TComputationMutables& mutables, IComputationNode* collection)
+    TLengthWrapper(TComputationMutables& mutables, IComputationNode* collection) 
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Collection(collection)
+        , Collection(collection) 
     {}
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const { 
         const auto& collection = Collection->GetValue(compCtx);
         if (IsOptional && !collection) {
             return NUdf::TUnboxedValuePod();

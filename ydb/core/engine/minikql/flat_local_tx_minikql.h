@@ -89,10 +89,10 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     bool ParseProgram(TStringBuf program, NYql::TIssues &errors, NYql::TExprContainer &expr) {
         NYql::TAstParseResult astResult = NYql::ParseAst(program);
         if (!astResult.Root) {
-            errors = astResult.Issues;
+            errors = astResult.Issues; 
             return false;
         }
-        expr.Context.IssueManager.AddIssues(astResult.Issues);
+        expr.Context.IssueManager.AddIssues(astResult.Issues); 
 
         if (!NYql::CompileExpr(*astResult.Root, expr.Root, expr.Context, nullptr)) {
             errors = expr.Context.IssueManager.GetIssues();

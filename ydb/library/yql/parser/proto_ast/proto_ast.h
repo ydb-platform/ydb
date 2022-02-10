@@ -71,7 +71,7 @@ namespace NProtoAST {
     public:
         TProtoASTBuilder(TStringBuf data, const TString& queryName = "query", google::protobuf::Arena* arena = nullptr)
             : QueryName(queryName)
-            , InputStream((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName.begin())  // Why the hell antlr needs non-const ptr??
+            , InputStream((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName.begin())  // Why the hell antlr needs non-const ptr?? 
             , Lexer(&InputStream, static_cast<google::protobuf::Arena*>(nullptr))
             , TokenStream(ANTLR_SIZE_HINT, Lexer.get_tokSource())
             , Parser(&TokenStream, arena)

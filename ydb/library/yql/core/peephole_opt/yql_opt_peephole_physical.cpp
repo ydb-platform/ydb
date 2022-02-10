@@ -440,12 +440,12 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
         .Seal().Build();
 }
 
-TExprNode::TPtr PeepHoleConvertGroupBySingleKey(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr PeepHoleConvertGroupBySingleKey(const TExprNode::TPtr& node, TExprContext& ctx) { 
     const auto keySelectorLambda = node->Child(1);
     if (keySelectorLambda->Tail().GetDependencyScope()->second == keySelectorLambda) {
-        return node;
-    }
-
+        return node; 
+    } 
+ 
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " single key";
     const auto handlerLambda = node->Child(2);
     const auto& keyArg = handlerLambda->Head().Head();
@@ -550,8 +550,8 @@ TExprNode::TPtr PeepHoleExpandExtractItems(const TExprNode::TPtr& node, TExprCon
             .Add(1, std::move(lambda))
         .Seal()
         .Build();
-}
-
+} 
+ 
 TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
 
@@ -561,7 +561,7 @@ TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprCon
         .Callable("List")
             .Callable(0, "ListType")
                 .Add(0, ExpandType(callable.Pos(), *itemTypeAnnotation, ctx))
-            .Seal()
+            .Seal() 
             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                 ui32 pos = 0;
                 for (auto child : callable.Keys().Ptr()->Children()) {
@@ -569,8 +569,8 @@ TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprCon
                 }
                 return parent;
             })
-        .Seal()
-        .Build();
+        .Seal() 
+        .Build(); 
 
     return Build<TCoToDict>(ctx, callable.Pos())
         .List(list)

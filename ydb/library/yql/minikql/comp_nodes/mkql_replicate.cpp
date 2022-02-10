@@ -10,7 +10,7 @@ namespace NMiniKQL {
 namespace {
 
 class TReplicateWrapper : public TMutableComputationNode<TReplicateWrapper> {
-    typedef TMutableComputationNode<TReplicateWrapper> TBaseComputation;
+    typedef TMutableComputationNode<TReplicateWrapper> TBaseComputation; 
 public:
     class TValue : public TCustomListValue {
     public:
@@ -190,15 +190,15 @@ public:
 
     TReplicateWrapper(TComputationMutables& mutables, IComputationNode* item, IComputationNode* count,
         NUdf::TSourcePosition pos)
-        : TBaseComputation(mutables)
-        , Item(item)
+        : TBaseComputation(mutables) 
+        , Item(item) 
         , Count(count)
         , Pos(pos)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto count = Count->GetValue(ctx).Get<ui64>();
+        const auto count = Count->GetValue(ctx).Get<ui64>(); 
         const ui64 MAX_VALUE = 1ull << 32;
         if (count >= MAX_VALUE) {
             TStringBuilder res;
@@ -210,7 +210,7 @@ public:
             return ctx.HolderFactory.GetEmptyContainer();
         }
 
-        return ctx.HolderFactory.Create<TValue>(ctx, Item->GetValue(ctx), count);
+        return ctx.HolderFactory.Create<TValue>(ctx, Item->GetValue(ctx), count); 
     }
 
 private:

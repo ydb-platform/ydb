@@ -148,7 +148,7 @@ private:
 
     bool GetExpr(const TString& astStr, TExprNode::TPtr& expr, TExprContext& ctx) {
         auto astRes = ParseAst(astStr);
-        ctx.IssueManager.AddIssues(astRes.Issues);
+        ctx.IssueManager.AddIssues(astRes.Issues); 
         if (!astRes.IsOk()) {
             return false;
         }

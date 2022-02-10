@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         TAstParseResult res = ParseAst(TEST_PROGRAM);
         UNIT_ASSERT(res.IsOk());
         UNIT_ASSERT(res.Root->IsList());
-        UNIT_ASSERT(res.Issues.Empty());
+        UNIT_ASSERT(res.Issues.Empty()); 
     }
 
     Y_UNIT_TEST(ParseAstTestPerf) {
@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
             TAstParseResult res = ParseAst(TEST_PROGRAM);
             UNIT_ASSERT(res.IsOk());
             UNIT_ASSERT(res.Root->IsList());
-            UNIT_ASSERT(res.Issues.Empty());
+            UNIT_ASSERT(res.Issues.Empty()); 
         }
         auto t2 = TInstant::Now();
         Cout << t2 - t1 << Endl;
@@ -184,8 +184,8 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         TAstParseResult ast = ParseAst(program);
         UNIT_ASSERT(false == ast.IsOk());
         UNIT_ASSERT(false == !!ast.Root);
-        UNIT_ASSERT(false == ast.Issues.Empty());
-        UNIT_ASSERT_STRINGS_EQUAL(ast.Issues.begin()->Message, expectedError);
+        UNIT_ASSERT(false == ast.Issues.Empty()); 
+        UNIT_ASSERT_STRINGS_EQUAL(ast.Issues.begin()->Message, expectedError); 
     }
 
     Y_UNIT_TEST(BadArbitraryAtom) {

@@ -711,21 +711,21 @@ namespace {
         {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Resource"), pool);
             auto restype = refAtoms ?
-                TAstNode::NewLiteralAtom(TPosition(), annotation.Cast<TResourceExprType>()->GetTag(), pool, TNodeFlags::ArbitraryContent) :
-                TAstNode::NewAtom(TPosition(), annotation.Cast<TResourceExprType>()->GetTag(), pool, TNodeFlags::ArbitraryContent);
+                TAstNode::NewLiteralAtom(TPosition(), annotation.Cast<TResourceExprType>()->GetTag(), pool, TNodeFlags::ArbitraryContent) : 
+                TAstNode::NewAtom(TPosition(), annotation.Cast<TResourceExprType>()->GetTag(), pool, TNodeFlags::ArbitraryContent); 
             return TAstNode::NewList(TPosition(), pool, self, restype);
         }
 
-        case ETypeAnnotationKind::Tagged:
-        {
+        case ETypeAnnotationKind::Tagged: 
+        { 
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Tagged"), pool);
-            auto type = ConvertTypeAnnotationToAst(*annotation.Cast<TTaggedExprType>()->GetBaseType(), pool, refAtoms);
-            auto restype = refAtoms ?
-                TAstNode::NewLiteralAtom(TPosition(), annotation.Cast<TTaggedExprType>()->GetTag(), pool, TNodeFlags::ArbitraryContent) :
-                TAstNode::NewAtom(TPosition(), annotation.Cast<TTaggedExprType>()->GetTag(), pool, TNodeFlags::ArbitraryContent);
-            return TAstNode::NewList(TPosition(), pool, self, type, restype);
-        }
-
+            auto type = ConvertTypeAnnotationToAst(*annotation.Cast<TTaggedExprType>()->GetBaseType(), pool, refAtoms); 
+            auto restype = refAtoms ? 
+                TAstNode::NewLiteralAtom(TPosition(), annotation.Cast<TTaggedExprType>()->GetTag(), pool, TNodeFlags::ArbitraryContent) : 
+                TAstNode::NewAtom(TPosition(), annotation.Cast<TTaggedExprType>()->GetTag(), pool, TNodeFlags::ArbitraryContent); 
+            return TAstNode::NewList(TPosition(), pool, self, type, restype); 
+        } 
+ 
         case ETypeAnnotationKind::Error:
         {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Error"), pool);
@@ -938,20 +938,20 @@ namespace {
         }
 
         const auto& aliasValue = alias->GetChild(1)->GetContent();
-        const auto& moduleName = name->GetContent();
-        TStringBuilder baseMsg;
-        baseMsg << "Module  '" << name->GetContent() << "'";
+        const auto& moduleName = name->GetContent(); 
+        TStringBuilder baseMsg; 
+        baseMsg << "Module  '" << name->GetContent() << "'"; 
 
-        const auto& import = ctx.FindImport(moduleName);
+        const auto& import = ctx.FindImport(moduleName); 
         if (import.empty()) {
-            ctx.AddError(*name, baseMsg << " does not exist");
+            ctx.AddError(*name, baseMsg << " does not exist"); 
             return nullptr;
         }
 
         if (ctx.ModuleResolver) {
             auto exportsPtr = ctx.ModuleResolver->GetModule(import);
             if (!exportsPtr) {
-                ctx.AddError(*name, baseMsg << "'" << import << "' does not exist");
+                ctx.AddError(*name, baseMsg << "'" << import << "' does not exist"); 
                 return nullptr;
             }
 
@@ -959,7 +959,7 @@ namespace {
 
             const auto ex = exports.find(aliasValue);
             if (exports.cend() == ex) {
-                ctx.AddError(*alias, baseMsg << " export '" << aliasValue << "' does not exist");
+                ctx.AddError(*alias, baseMsg << " export '" << aliasValue << "' does not exist"); 
                 return nullptr;
             }
 
@@ -2632,7 +2632,7 @@ TNodeException::TNodeException(const TPositionHandle& pos)
 }
 
 bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprContext& ctx) {
-    if (name.empty()) {
+    if (name.empty()) { 
         ctx.AddError(TIssue(position,
             TStringBuilder() << "Empty " << descr << " name is not allowed"));
         return false;
@@ -2684,10 +2684,10 @@ bool TDataExprParamsType::Validate(TPositionHandle position, TExprContext& ctx) 
     return Validate(ctx.GetPosition(position), ctx);
 }
 
-bool TItemExprType::Validate(TPosition position, TExprContext& ctx) const {
+bool TItemExprType::Validate(TPosition position, TExprContext& ctx) const { 
     return ValidateName(position, Name, "member", ctx);
-}
-
+} 
+ 
 bool TItemExprType::Validate(TPositionHandle position, TExprContext& ctx) const {
     return Validate(ctx.GetPosition(position), ctx);
 }

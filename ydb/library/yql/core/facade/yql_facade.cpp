@@ -127,10 +127,10 @@ TProgramFactory::TProgramFactory(
     AddCredentialsTable(std::make_shared<TCredentialTable>());
 }
 
-void TProgramFactory::UnrepeatableRandom() {
-    UseUnrepeatableRandom = true;
-}
-
+void TProgramFactory::UnrepeatableRandom() { 
+    UseUnrepeatableRandom = true; 
+} 
+ 
 void TProgramFactory::EnableRangeComputeFor() {
     EnableRangeComputeFor_ = true;
 }
@@ -185,7 +185,7 @@ TProgramPtr TProgramFactory::Create(
         const TString& sourceCode,
         const TString& sessionId)
 {
-    auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom ?
+    auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom ? 
         CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
     auto timeProvider = UseRepeatableRandomAndTimeProviders_ ?
         CreateDeterministicTimeProvider(10000000) : CreateDefaultTimeProvider();
@@ -279,8 +279,8 @@ void TProgram::ConfigureYsonResultFormat(NYson::EYsonFormat format) {
 void TProgram::SetValidateOptions(NUdf::EValidateMode validateMode) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
     ValidateMode_ = validateMode;
-}
-
+} 
+ 
 void TProgram::SetDisableNativeUdfSupport(bool disable) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
     DisableNativeUdfSupport_ = disable;
@@ -345,27 +345,27 @@ bool TProgram::ExtractQueryParametersMetadata() {
 }
 
 bool TProgram::FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRules* warningRules) {
-    if (!astRes.Issues.Empty()) {
-        if (!ExprCtx_) {
-            ExprCtx_.Reset(new TExprContext(NextUniqueId_));
-        }
-        auto& iManager = ExprCtx_->IssueManager;
+    if (!astRes.Issues.Empty()) { 
+        if (!ExprCtx_) { 
+            ExprCtx_.Reset(new TExprContext(NextUniqueId_)); 
+        } 
+        auto& iManager = ExprCtx_->IssueManager; 
         if (warningRules) {
             for (auto warningRule: *warningRules) {
                 iManager.AddWarningRule(warningRule);
-            }
-        }
-        iManager.AddScope([this]() {
-            TIssuePtr issueHolder = new TIssue();
-            issueHolder->Message = TStringBuilder() << "Parse " << SourceSyntax_;
-            issueHolder->Severity = TSeverityIds::S_INFO;
-            return issueHolder;
-        });
-        for (auto issue: astRes.Issues) {
-            iManager.RaiseWarning(issue);
-        }
-        iManager.LeaveScope();
-    }
+            } 
+        } 
+        iManager.AddScope([this]() { 
+            TIssuePtr issueHolder = new TIssue(); 
+            issueHolder->Message = TStringBuilder() << "Parse " << SourceSyntax_; 
+            issueHolder->Severity = TSeverityIds::S_INFO; 
+            return issueHolder; 
+        }); 
+        for (auto issue: astRes.Issues) { 
+            iManager.RaiseWarning(issue); 
+        } 
+        iManager.LeaveScope(); 
+    } 
     if (!astRes.IsOk()) {
         return false;
     }
@@ -392,7 +392,7 @@ bool TProgram::ParseYql() {
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Yql;
     SyntaxVersion_ = 1;
-    return FillParseResult(ParseAst(SourceCode_));
+    return FillParseResult(ParseAst(SourceCode_)); 
 }
 
 bool TProgram::ParseSql() {
@@ -421,9 +421,9 @@ bool TProgram::Compile(const TString& username) {
     YQL_PROFILE_FUNC(TRACE);
 
     Y_ENSURE(AstRoot_, "Program not parsed yet");
-    if (!ExprCtx_) {
-        ExprCtx_.Reset(new TExprContext(NextUniqueId_));
-    }
+    if (!ExprCtx_) { 
+        ExprCtx_.Reset(new TExprContext(NextUniqueId_)); 
+    } 
 
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_)) {
         return false;
@@ -552,7 +552,7 @@ TProgram::TStatus TProgram::Validate(const TString& username, IOutputStream* exp
 
 TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutputStream* exprOut, bool withTypes) {
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
-        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
     }
     TypeCtx_->IsReadOnly = true;
 
@@ -617,7 +617,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
         bool withTypes)
 {
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
-        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
     }
     TypeCtx_->IsReadOnly = true;
 
@@ -758,7 +758,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
         bool withTypes)
 {
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
-        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
     }
     TypeCtx_->IsReadOnly = false;
 

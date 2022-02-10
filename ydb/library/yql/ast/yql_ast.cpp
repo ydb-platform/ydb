@@ -136,8 +136,8 @@ namespace {
             }
 
             TAstParseResult result;
-            if (!Issues_.Empty()) {
-                result.Issues = std::move(Issues_);
+            if (!Issues_.Empty()) { 
+                result.Issues = std::move(Issues_); 
             } else {
                 result.Root = root;
                 result.Pool = Ctx_.InnerPool();
@@ -416,7 +416,7 @@ namespace {
 
     private:
         TAstParserContext Ctx_;
-        TIssues Issues_;
+        TIssues Issues_; 
     };
 
     ///////////////////////////////////////////////////////////////////////////

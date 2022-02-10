@@ -1,6 +1,6 @@
 #pragma once
 
-#include <array>
+#include <array> 
 #include <util/generic/strbuf.h>
 
 namespace NYql {
@@ -23,5 +23,5 @@ constexpr std::array<const TStringBuf, 11> Providers = {
      StatProviderName, SolomonProviderName, DqProviderName, ClickHouseProviderName, YdbProviderName,
      PqProviderName}
 };
-
+ 
 } // namespace NYql

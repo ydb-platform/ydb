@@ -34,8 +34,8 @@ namespace NSQLTranslationV0 {
 
         IOutputStream& Error();
         IOutputStream& Error(NYql::TPosition pos);
-        IOutputStream& Warning(NYql::TPosition pos, NYql::TIssueCode code);
-        IOutputStream& Info(NYql::TPosition pos);
+        IOutputStream& Warning(NYql::TPosition pos, NYql::TIssueCode code); 
+        IOutputStream& Info(NYql::TPosition pos); 
 
         template <typename TToken>
         const TString& Token(const TToken& token) {
@@ -89,40 +89,40 @@ namespace NSQLTranslationV0 {
         TNodePtr GetPrefixedPath(const TString& cluster, const TDeferredAtom& path);
 
         TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
-
-        TString HasBlockShortcut(const TNodePtr& baseNode);
-        TString RegisterBlockShortcut(const TNodePtr& baseNode, const TNodePtr& node, const TString& baseName);
-        TNodePtr GetBlockShortcut(const TString& alias) const;
-        TNodePtr GroundBlockShortcuts(NYql::TPosition pos, TNodePtr groundList = {});
-        TNodePtr GroundBlockShortcutsForExpr(const TNodePtr& expr);
-
-        void PushBlockShortcuts();
-        void PopBlockShortcuts();
-
-        void BodyPart() {
-            IntoHeading = false;
-        }
-
-        bool IsParseHeading() const {
-            return IntoHeading;
-        }
-
-        bool DeclareVariable(const TString& varName, const TNodePtr& typeNode);
-
+ 
+        TString HasBlockShortcut(const TNodePtr& baseNode); 
+        TString RegisterBlockShortcut(const TNodePtr& baseNode, const TNodePtr& node, const TString& baseName); 
+        TNodePtr GetBlockShortcut(const TString& alias) const; 
+        TNodePtr GroundBlockShortcuts(NYql::TPosition pos, TNodePtr groundList = {}); 
+        TNodePtr GroundBlockShortcutsForExpr(const TNodePtr& expr); 
+ 
+        void PushBlockShortcuts(); 
+        void PopBlockShortcuts(); 
+ 
+        void BodyPart() { 
+            IntoHeading = false; 
+        } 
+ 
+        bool IsParseHeading() const { 
+            return IntoHeading; 
+        } 
+ 
+        bool DeclareVariable(const TString& varName, const TNodePtr& typeNode); 
+ 
         bool AddExports(const TVector<TString>& symbols);
         TString AddImport(const TVector<TString>& modulePath);
         TString AddSimpleUdf(const TString& udf);
     private:
-        IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos);
+        IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos); 
 
     private:
         NYql::TPosition Position;
-        THolder<TStringOutput> IssueMsgHolder;
+        THolder<TStringOutput> IssueMsgHolder; 
         NSQLTranslation::TClusterMapping ClusterMapping;
         TString PathPrefix;
         THashMap<TString, TString> ProviderPathPrefixes;
         THashMap<TString, TString> ClusterPathPrefixes;
-        bool IntoHeading = true;
+        bool IntoHeading = true; 
 
     public:
         THashMap<TString, TNodePtr> Variables;
@@ -138,12 +138,12 @@ namespace NSQLTranslationV0 {
         TString CurrCluster;
         bool HasPendingErrors;
         THashMap<TString, ui32> GenIndexes;
-        bool PragmaRefSelect = false;
-        bool PragmaSampleSelect = false;
-        bool PragmaAllowDotInAlias = false;
+        bool PragmaRefSelect = false; 
+        bool PragmaSampleSelect = false; 
+        bool PragmaAllowDotInAlias = false; 
         bool PragmaInferSchema = false;
-        bool PragmaAutoCommit = false;
-        bool SimpleColumns = false;
+        bool PragmaAutoCommit = false; 
+        bool SimpleColumns = false; 
         bool PragmaDirectRead = false;
         bool PragmaYsonAutoConvert = false;
         bool PragmaYsonStrict = false;
@@ -152,20 +152,20 @@ namespace NSQLTranslationV0 {
         bool EnableSystemColumns = true;
         ui32 ResultRowsLimit = 0;
         ui64 ResultSizeLimit = 0;
-        ui32 PragmaGroupByLimit = 1 << 5;
-        ui32 PragmaGroupByCubeLimit = 5;
+        ui32 PragmaGroupByLimit = 1 << 5; 
+        ui32 PragmaGroupByCubeLimit = 5; 
         THashSet<TString> Libraries;
         NYql::TWarningPolicy WarningPolicy;
         TVector<TString> AllResults;
         TSet<TString> UsedClusters;
-
-        struct ShortcutStore {
+ 
+        struct ShortcutStore { 
             THashMap<INode*, TString> BaseMap;
             TVector<std::pair<TString, TNodePtr>> Goal;
-        };
+        }; 
         THashMap<ui32, ShortcutStore> Shortcuts;
-        ui32 ShortcutCurrentLevel = 0;
-
+        ui32 ShortcutCurrentLevel = 0; 
+ 
     };
 
     class TTranslation {
@@ -186,11 +186,11 @@ namespace NSQLTranslationV0 {
 
         template <typename TToken>
         TString Identifier(const TToken& token) {
-            return IdContent(Ctx, Token(token));
+            return IdContent(Ctx, Token(token)); 
         }
 
         TString Identifier(const TString& str) const {
-            return IdContent(Ctx, str);
+            return IdContent(Ctx, str); 
         }
 
         TNodePtr GetNamedNode(const TString& name);
@@ -204,7 +204,7 @@ namespace NSQLTranslationV0 {
 
         template <typename TNode>
         TString AltDescription(const TNode& node) const {
-            return AltDescription(node, node.Alt_case(), TNode::descriptor());
+            return AltDescription(node, node.Alt_case(), TNode::descriptor()); 
         }
 
     protected:

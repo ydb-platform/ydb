@@ -13,18 +13,18 @@ using TBaseComputation = TMutableCodegeneratorNode<TVisitAllWrapper>;
 public:
     TVisitAllWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode, TComputationExternalNodePtrVector&& args, TComputationNodePtrVector&& newNodes)
         : TBaseComputation(mutables, kind)
-        , VarNode(varNode)
+        , VarNode(varNode) 
         , Args(std::move(args))
         , NewNodes(std::move(newNodes))
     {}
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& var = VarNode->GetValue(ctx);
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
+        const auto& var = VarNode->GetValue(ctx); 
         const auto currentIndex = var.GetVariantIndex();
         if (currentIndex >= Args.size())
             return NUdf::TUnboxedValuePod();
-        Args[currentIndex]->SetValue(ctx, var.GetVariantItem());
-        return NewNodes[currentIndex]->GetValue(ctx).Release();
+        Args[currentIndex]->SetValue(ctx, var.GetVariantItem()); 
+        return NewNodes[currentIndex]->GetValue(ctx).Release(); 
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {

@@ -241,7 +241,7 @@ public:
             }
 
             State.Stage = ESqueezeState::Finished;
-            result = State.State->GetValue(Ctx);
+            result = State.State->GetValue(Ctx); 
             return NUdf::EFetchStatus::Ok;
         }
 
@@ -263,8 +263,8 @@ public:
         IComputationExternalNode* inLoad = nullptr,
         IComputationNode* outLoad = nullptr,
         TType* stateType = nullptr)
-        : TBaseComputation(mutables)
-        , Stream(stream)
+        : TBaseComputation(mutables) 
+        , Stream(stream) 
         , State(item, state, outSwitch, initState, updateState, inSave, outSave, inLoad, outLoad, stateType)
     {
         this->Stateless = false;
@@ -273,9 +273,9 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && Fetch)
-            return ctx.HolderFactory.Create<TSqueezeCodegenValue>(State, Fetch, ctx, Stream->GetValue(ctx));
+            return ctx.HolderFactory.Create<TSqueezeCodegenValue>(State, Fetch, ctx, Stream->GetValue(ctx)); 
 #endif
-        return ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx), State, ctx);
+        return ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx), State, ctx); 
     }
 
 private:

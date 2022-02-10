@@ -629,13 +629,13 @@ public:
 
                 NUdf::TUnboxedValue value;
                 {
-                    TComputationPatternOpts opts(Alloc.Ref(), Env,
+                    TComputationPatternOpts opts(Alloc.Ref(), Env, 
                         GetFlatProxyExecutionFactory(execData),
-                        Settings.FunctionRegistry,
-                        NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
+                        Settings.FunctionRegistry, 
+                        NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, 
                         Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
-                    Pattern = MakeComputationPattern(ProxyProgramExplorer, ProxyProgram, {}, opts);
-                    ResultGraph = Pattern->Clone(opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider));
+                    Pattern = MakeComputationPattern(ProxyProgramExplorer, ProxyProgram, {}, opts); 
+                    ResultGraph = Pattern->Clone(opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider)); 
 
                     const TBindTerminator bind(ResultGraph->GetTerminator());
 
@@ -1019,13 +1019,13 @@ public:
             TShardExecData execData(Settings, Strings, StepTxId);
             TExploringNodeVisitor explorer;
             explorer.Walk(runPgm.GetNode(), Env);
-            TComputationPatternOpts opts(Alloc.Ref(), Env,
+            TComputationPatternOpts opts(Alloc.Ref(), Env, 
                 GetFlatShardExecutionFactory(execData, true),
-                Settings.FunctionRegistry,
+                Settings.FunctionRegistry, 
                 NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
                 Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
-            auto pattern = MakeComputationPattern(explorer, runPgm, {}, opts);
-            auto graph = pattern->Clone(opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider));
+            auto pattern = MakeComputationPattern(explorer, runPgm, {}, opts); 
+            auto graph = pattern->Clone(opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider)); 
 
             const TBindTerminator bind(graph->GetTerminator());
 
@@ -1348,14 +1348,14 @@ public:
                             << expectedSizeIt->second << ", got: " << nodesCount << ", origin: " << pgm.first);
                     }
 
-                    TComputationPatternOpts opts(Alloc.Ref(), Env,
+                    TComputationPatternOpts opts(Alloc.Ref(), Env, 
                         GetFlatShardExecutionFactory(execData, false),
-                        Settings.FunctionRegistry,
-                        NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
+                        Settings.FunctionRegistry, 
+                        NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, 
                         Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
-                    auto pattern = MakeComputationPattern(runExplorer, runPgm, {}, opts);
-                    auto compOpts = opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider);
-                    THolder<IComputationGraph> runGraph = pattern->Clone(compOpts);
+                    auto pattern = MakeComputationPattern(runExplorer, runPgm, {}, opts); 
+                    auto compOpts = opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider); 
+                    THolder<IComputationGraph> runGraph = pattern->Clone(compOpts); 
 
                     const TBindTerminator bind(runGraph->GetTerminator());
 
@@ -2123,8 +2123,8 @@ private:
     THashMap<ui64, TStructLiteral*> ReadPerOrigin;
     bool IsExecuted;
     TMap<ui64, TString> ExecutionReplies;
-    IComputationPattern::TPtr Pattern;
-    THolder<IComputationGraph> ResultGraph;
+    IComputationPattern::TPtr Pattern; 
+    THolder<IComputationGraph> ResultGraph; 
     THashMap<TString, NUdf::TUnboxedValue> ResultValues;
     bool ReadOnlyOriginPrograms;
     bool IsCancelled;

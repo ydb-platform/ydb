@@ -142,12 +142,12 @@ bool IsPassthroughLambda(const TCoLambda& lambda, TMaybe<THashSet<TStringBuf>>* 
 
         for (auto child : maybeStruct.Cast()) {
             auto tuple = child.Cast<TCoNameValueTuple>();
-            auto value = tuple.Value();
+            auto value = tuple.Value(); 
             if (analyzeJustMember && value.Maybe<TCoJust>()) {
-                value = value.Cast<TCoJust>().Input();
-            }
+                value = value.Cast<TCoJust>().Input(); 
+            } 
 
-            if (!value.Maybe<TCoMember>()) {
+            if (!value.Maybe<TCoMember>()) { 
                 if (!passthroughFields) {
                     return false;
                 }
@@ -155,7 +155,7 @@ bool IsPassthroughLambda(const TCoLambda& lambda, TMaybe<THashSet<TStringBuf>>* 
                 continue;
             }
 
-            auto member = value.Cast<TCoMember>();
+            auto member = value.Cast<TCoMember>(); 
             if (member.Struct().Raw() != arg.Raw() || member.Name().Value() != tuple.Name().Value()) {
                 if (!passthroughFields) {
                     return false;

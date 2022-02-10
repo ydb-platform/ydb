@@ -123,7 +123,7 @@ protected:
         public:
             TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, IComputationExternalNode* item, IComputationNode* predicate)
                 : TComputationValue<TIterator>(memInfo)
-                , CompCtx(compCtx)
+                , CompCtx(compCtx) 
                 , Iter(std::move(iter))
                 , Item(item)
                 , Predicate(predicate)
@@ -137,7 +137,7 @@ protected:
 
                 if constexpr (SkipOrTake) {
                     while (Iter.Next(Item->RefValue(CompCtx))) {
-                        if (!Predicate->GetValue(CompCtx).template Get<bool>()) {
+                        if (!Predicate->GetValue(CompCtx).template Get<bool>()) { 
                             FilterWorkFinished = true;
                             if constexpr (Inclusive) {
                                 return Iter.Next(value);
@@ -149,8 +149,8 @@ protected:
                     }
                 } else {
                     if (Iter.Next(Item->RefValue(CompCtx))) {
-                        if (Predicate->GetValue(CompCtx).template Get<bool>()) {
-                            value = Item->GetValue(CompCtx);
+                        if (Predicate->GetValue(CompCtx).template Get<bool>()) { 
+                            value = Item->GetValue(CompCtx); 
                             return true;
                         } else {
                             FilterWorkFinished = true;
@@ -165,7 +165,7 @@ protected:
                 return false;
             }
 
-            TComputationContext& CompCtx;
+            TComputationContext& CompCtx; 
             const NUdf::TUnboxedValue Iter;
             IComputationExternalNode* const Item;
             IComputationNode* const Predicate;
@@ -174,7 +174,7 @@ protected:
 
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const NUdf::TUnboxedValue& list, IComputationExternalNode* item, IComputationNode* predicate)
             : TCustomListValue(memInfo)
-            , CompCtx(compCtx)
+            , CompCtx(compCtx) 
             , List(list)
             , Item(item)
             , Predicate(predicate)
@@ -185,7 +185,7 @@ protected:
             return CompCtx.HolderFactory.Create<TIterator>(CompCtx, List.GetListIterator(), Item, Predicate);
         }
 
-        TComputationContext& CompCtx;
+        TComputationContext& CompCtx; 
         const NUdf::TUnboxedValue List;
         IComputationExternalNode* const Item;
         IComputationNode* const Predicate;
@@ -197,7 +197,7 @@ protected:
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const NUdf::TUnboxedValue& stream, IComputationExternalNode* item, IComputationNode* predicate)
             : TBase(memInfo)
-            , CompCtx(compCtx)
+            , CompCtx(compCtx) 
             , Stream(stream)
             , Item(item)
             , Predicate(predicate)
@@ -225,7 +225,7 @@ protected:
                         return status;
                     }
 
-                    if (!Predicate->GetValue(CompCtx).template Get<bool>()) {
+                    if (!Predicate->GetValue(CompCtx).template Get<bool>()) { 
                         FilterWorkFinished = true;
                         if constexpr (Inclusive) {
                             return Stream.Fetch(result);
@@ -241,8 +241,8 @@ protected:
                         return status;
 
                     case NUdf::EFetchStatus::Ok:
-                        if (Predicate->GetValue(CompCtx).template Get<bool>()) {
-                            result = Item->GetValue(CompCtx);
+                        if (Predicate->GetValue(CompCtx).template Get<bool>()) { 
+                            result = Item->GetValue(CompCtx); 
                             return NUdf::EFetchStatus::Ok;
                         }
                     case NUdf::EFetchStatus::Finish:
@@ -259,7 +259,7 @@ protected:
             }
         }
 
-        TComputationContext& CompCtx;
+        TComputationContext& CompCtx; 
         const NUdf::TUnboxedValue Stream;
         IComputationExternalNode* const Item;
         IComputationNode* const Predicate;

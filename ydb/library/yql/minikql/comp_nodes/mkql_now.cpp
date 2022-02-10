@@ -8,16 +8,16 @@ namespace NMiniKQL {
 namespace {
 
 class TNowWrapper : public TMutableComputationNode<TNowWrapper> {
-    typedef TMutableComputationNode<TNowWrapper> TBaseComputation;
+    typedef TMutableComputationNode<TNowWrapper> TBaseComputation; 
 public:
-    TNowWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes)
-        : TBaseComputation(mutables)
-        , DependentNodes(dependentNodes)
+    TNowWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes) 
+        : TBaseComputation(mutables) 
+        , DependentNodes(dependentNodes) 
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return NUdf::TUnboxedValuePod(ctx.TimeProvider.Now().MicroSeconds());
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
+        return NUdf::TUnboxedValuePod(ctx.TimeProvider.Now().MicroSeconds()); 
     }
 
 private:
@@ -36,7 +36,7 @@ IComputationNode* WrapNow(TCallable& callable, const TComputationNodeFactoryCont
         dependentNodes[i] = LocateNode(ctx.NodeLocator, callable, i);
     }
 
-    return new TNowWrapper(ctx.Mutables, std::move(dependentNodes));
+    return new TNowWrapper(ctx.Mutables, std::move(dependentNodes)); 
 }
 
 }

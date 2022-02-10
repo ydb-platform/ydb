@@ -72,8 +72,8 @@ SRCS(
     mkql_frombytes.h
     mkql_fromstring.cpp
     mkql_fromstring.h
-    mkql_fromyson.cpp
-    mkql_fromyson.h
+    mkql_fromyson.cpp 
+    mkql_fromyson.h 
     mkql_group.cpp
     mkql_group.h
     mkql_guess.cpp
@@ -126,8 +126,8 @@ SRCS(
     mkql_pickle.h
     mkql_prepend.cpp
     mkql_prepend.h
-    mkql_queue.cpp
-    mkql_queue.h
+    mkql_queue.cpp 
+    mkql_queue.h 
     mkql_random.cpp
     mkql_random.h
     mkql_range.cpp
@@ -142,8 +142,8 @@ SRCS(
     mkql_reverse.h
     mkql_round.cpp
     mkql_round.h
-    mkql_safe_circular_buffer.cpp
-    mkql_safe_circular_buffer.h
+    mkql_safe_circular_buffer.cpp 
+    mkql_safe_circular_buffer.h 
     mkql_saveload.h
     mkql_seq.cpp
     mkql_seq.h
@@ -189,8 +189,8 @@ SRCS(
     mkql_visitall.h
     mkql_way.cpp
     mkql_way.h
-    mkql_weakmember.cpp
-    mkql_weakmember.h
+    mkql_weakmember.cpp 
+    mkql_weakmember.h 
     mkql_while.cpp
     mkql_while.h
     mkql_wide_chain_map.cpp

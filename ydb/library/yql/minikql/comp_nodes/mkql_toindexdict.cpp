@@ -11,9 +11,9 @@ namespace {
 class TToIndexDictWrapper : public TMutableCodegeneratorNode<TToIndexDictWrapper> {
     typedef TMutableCodegeneratorNode<TToIndexDictWrapper> TBaseComputation;
 public:
-    TToIndexDictWrapper(TComputationMutables& mutables, IComputationNode* list)
+    TToIndexDictWrapper(TComputationMutables& mutables, IComputationNode* list) 
         : TBaseComputation(mutables, list->GetRepresentation())
-        , List(list)
+        , List(list) 
     {
     }
 
@@ -65,7 +65,7 @@ private:
 
 IComputationNode* WrapToIndexDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args");
-    return new TToIndexDictWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
+    return new TToIndexDictWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0)); 
 }
 
 }

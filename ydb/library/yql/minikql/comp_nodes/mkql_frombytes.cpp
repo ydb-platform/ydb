@@ -19,17 +19,17 @@ using NYql::SwapBytes;
 
 template <bool IsOptional>
 class TFromBytesWrapper : public TMutableComputationNode<TFromBytesWrapper<IsOptional>> {
-    typedef TMutableComputationNode<TFromBytesWrapper<IsOptional>> TBaseComputation;
+    typedef TMutableComputationNode<TFromBytesWrapper<IsOptional>> TBaseComputation; 
 public:
-    TFromBytesWrapper(TComputationMutables& mutables, IComputationNode* data, NUdf::TDataTypeId schemeType)
-        : TBaseComputation(mutables)
-        , Data(data)
+    TFromBytesWrapper(TComputationMutables& mutables, IComputationNode* data, NUdf::TDataTypeId schemeType) 
+        : TBaseComputation(mutables) 
+        , Data(data) 
         , SchemeType(NUdf::GetDataSlot(schemeType))
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto data = Data->GetValue(ctx);
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
+        auto data = Data->GetValue(ctx); 
         if (IsOptional && !data) {
             return NUdf::TUnboxedValuePod();
         }
@@ -137,9 +137,9 @@ IComputationNode* WrapFromBytes(TCallable& callable, const TComputationNodeFacto
 
     const auto data = LocateNode(ctx.NodeLocator, callable, 0);
     if (isOptional) {
-        return new TFromBytesWrapper<true>(ctx.Mutables, data, static_cast<NUdf::TDataTypeId>(schemeType));
+        return new TFromBytesWrapper<true>(ctx.Mutables, data, static_cast<NUdf::TDataTypeId>(schemeType)); 
     } else {
-        return new TFromBytesWrapper<false>(ctx.Mutables, data, static_cast<NUdf::TDataTypeId>(schemeType));
+        return new TFromBytesWrapper<false>(ctx.Mutables, data, static_cast<NUdf::TDataTypeId>(schemeType)); 
     }
 }
 

@@ -23,8 +23,8 @@ SRCS(
     mkql_computation_node_pack.h
     mkql_custom_list.cpp
     mkql_custom_list.h
-    mkql_validate.cpp
-    mkql_validate.h
+    mkql_validate.cpp 
+    mkql_validate.h 
     mkql_value_builder.cpp
     mkql_value_builder.h
     presort.h

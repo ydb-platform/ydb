@@ -514,7 +514,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
 
         TAstParseResult astRes = ParseAst(yql, &pool);
         if (!astRes.IsOk()) {
-            astRes.Issues.PrintWithProgramTo(Cerr, "-memory-", yql);
+            astRes.Issues.PrintWithProgramTo(Cerr, "-memory-", yql); 
             UNIT_FAIL("Can't parse yql");
         }
 
@@ -661,9 +661,9 @@ Y_UNIT_TEST_SUITE(TTypeString)
     }
 
     Y_UNIT_TEST(FormatTagged) {
-        TestFormat("((Tagged (Data String) aaa))", "Tagged<String,'aaa'>");
-        TestFormat("((Tagged (Data String) \"a b\"))", "Tagged<String,'a b'>");
-        TestFormat("((Tagged (Data String) \"a\\t\\n\\x01b\"))", "Tagged<String,'a\\t\\n\\x01b'>");
+        TestFormat("((Tagged (Data String) aaa))", "Tagged<String,'aaa'>"); 
+        TestFormat("((Tagged (Data String) \"a b\"))", "Tagged<String,'a b'>"); 
+        TestFormat("((Tagged (Data String) \"a\\t\\n\\x01b\"))", "Tagged<String,'a\\t\\n\\x01b'>"); 
     }
 
 }

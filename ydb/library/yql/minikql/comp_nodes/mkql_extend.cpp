@@ -87,9 +87,9 @@ template <bool IsStream>
 class TExtendWrapper : public TMutableCodegeneratorNode<TExtendWrapper<IsStream>> {
     typedef TMutableCodegeneratorNode<TExtendWrapper<IsStream>> TBaseComputation;
 public:
-    TExtendWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& lists)
+    TExtendWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& lists) 
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , Lists(std::move(lists))
+        , Lists(std::move(lists)) 
     {
     }
 

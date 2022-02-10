@@ -223,7 +223,7 @@ namespace {
                                 return res;
                             }
                             if (!EnsureAtom(*node->Child(i), ctx)) {
-                                return {};
+                                return {}; 
                             }
                             args.push_back(node->Child(i)->Content());
                         }
@@ -989,7 +989,7 @@ namespace {
         }
 
     private:
-        TTypeAnnotationContext& Types;
+        TTypeAnnotationContext& Types; 
         TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
         TAutoPtr<IGraphTransformer> ConfigurationTransformer;
         TAutoPtr<IGraphTransformer> CallableExecutionTransformer;

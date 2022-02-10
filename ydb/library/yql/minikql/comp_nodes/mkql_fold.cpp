@@ -13,7 +13,7 @@ public:
     TFoldWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list, IComputationExternalNode* item, IComputationExternalNode* state,
         IComputationNode* newState, IComputationNode* initialState)
         : TBaseComputation(mutables, kind)
-        , List(list)
+        , List(list) 
         , Item(item)
         , State(state)
         , NewState(newState)
@@ -21,17 +21,17 @@ public:
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        State->SetValue(compCtx, InitialState->GetValue(compCtx));
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const { 
+        State->SetValue(compCtx, InitialState->GetValue(compCtx)); 
 
-        TThresher<false>::DoForEachItem(List->GetValue(compCtx),
-            [this, &compCtx] (NUdf::TUnboxedValue&& item) {
-                Item->SetValue(compCtx, std::move(item));
-                State->SetValue(compCtx, NewState->GetValue(compCtx));
+        TThresher<false>::DoForEachItem(List->GetValue(compCtx), 
+            [this, &compCtx] (NUdf::TUnboxedValue&& item) { 
+                Item->SetValue(compCtx, std::move(item)); 
+                State->SetValue(compCtx, NewState->GetValue(compCtx)); 
             }
         );
 
-        return State->GetValue(compCtx).Release();
+        return State->GetValue(compCtx).Release(); 
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

@@ -22,12 +22,12 @@ public:
                     TMemoryUsageInfo* memInfo,
                     NUdf::TUnboxedValue&& inner,
                     ui64 start, ui64 step,
-                    TComputationContext& ctx, const TSelf* self)
+                    TComputationContext& ctx, const TSelf* self) 
                 : TComputationValue(memInfo)
                 , Inner(std::move(inner))
                 , Step(step)
                 , Counter(start - step)
-                , Ctx(ctx)
+                , Ctx(ctx) 
                 , Self(self)
             {
             }
@@ -59,7 +59,7 @@ public:
             const NUdf::TUnboxedValue Inner;
             const ui64 Step;
             ui64 Counter;
-            TComputationContext& Ctx;
+            TComputationContext& Ctx; 
             const TSelf* const Self;
         };
 
@@ -67,14 +67,14 @@ public:
                 TMemoryUsageInfo* memInfo,
                 const NUdf::TUnboxedValue& list,
                 ui64 start, ui64 step,
-                TComputationContext& ctx,
+                TComputationContext& ctx, 
                 const TSelf* self
             )
             : TCustomListValue(memInfo)
             , List(list)
             , Start(start)
             , Step(step)
-            , Ctx(ctx)
+            , Ctx(ctx) 
             , Self(self)
         {}
 
@@ -102,16 +102,16 @@ public:
         const NUdf::TUnboxedValue List;
         const ui64 Start;
         const ui64 Step;
-        TComputationContext& Ctx;
+        TComputationContext& Ctx; 
         const TSelf* const Self;
     };
 
-    TEnumerateWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* start, IComputationNode* step)
+    TEnumerateWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* start, IComputationNode* step) 
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , List(list)
+        , List(list) 
         , Start(start)
         , Step(step)
-        , ResPair(mutables)
+        , ResPair(mutables) 
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
@@ -174,7 +174,7 @@ IComputationNode* WrapEnumerate(TCallable& callable, const TComputationNodeFacto
     MKQL_ENSURE(AS_TYPE(TDataType, callable.GetInput(1))->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
     MKQL_ENSURE(AS_TYPE(TDataType, callable.GetInput(2))->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
 
-    return new TEnumerateWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0),
+    return new TEnumerateWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), 
         LocateNode(ctx.NodeLocator, callable, 1), LocateNode(ctx.NodeLocator, callable, 2));
 }
 

@@ -1450,7 +1450,7 @@ private:
             TypesCtx->DeprecatedSQL = true;
         }
 
-        ctx.IssueManager.AddIssues(astRes.Issues);
+        ctx.IssueManager.AddIssues(astRes.Issues); 
         if (!astRes.IsOk()) {
             return nullptr;
         }

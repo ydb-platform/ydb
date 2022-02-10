@@ -1754,15 +1754,15 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
 
 NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRef buf) {
     const bool isBinYson = !buf.Empty() && *buf.Data() <= NYson::NDetail::Uint64Marker;
-    if (!isBinYson) {
-        auto textBuf = buf;
-        switch (type) {
+    if (!isBinYson) { 
+        auto textBuf = buf; 
+        switch (type) { 
         case NUdf::EDataSlot::Bool:
-            if (buf.Empty()) {
+            if (buf.Empty()) { 
                 return NUdf::TUnboxedValuePod();
-            }
-            textBuf = buf.Substring(1, buf.Size() - 1);
-            break;
+            } 
+            textBuf = buf.Substring(1, buf.Size() - 1); 
+            break; 
         case NUdf::EDataSlot::Float:
         case NUdf::EDataSlot::Double:
             if (buf.Empty()) {
@@ -1781,25 +1781,25 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
         case NUdf::EDataSlot::Date:
         case NUdf::EDataSlot::Datetime:
         case NUdf::EDataSlot::Timestamp:
-            if (buf.Empty()) {
+            if (buf.Empty()) { 
                 return NUdf::TUnboxedValuePod();
-            }
-            /// YSON for unsigned may be with or without suffix 'u'
-            if (buf.Data()[buf.Size() - 1] == 'u') {
-                textBuf = buf.Substring(0, buf.Size() - 1);
-            }
-            break;
+            } 
+            /// YSON for unsigned may be with or without suffix 'u' 
+            if (buf.Data()[buf.Size() - 1] == 'u') { 
+                textBuf = buf.Substring(0, buf.Size() - 1); 
+            } 
+            break; 
         case NUdf::EDataSlot::String: {
-            if (buf.Empty()) {
+            if (buf.Empty()) { 
                 return NUdf::TUnboxedValuePod::Zero();
-            }
+            } 
 
-            const char ysonQuote = '"';
+            const char ysonQuote = '"'; 
             if (*buf.Data() == NYson::NDetail::EntitySymbol) {
                 return NUdf::TUnboxedValuePod();
             } else if (*buf.Data() != ysonQuote) {
                 return MakeString(buf);
-            }
+            } 
 
             if (const auto count = std::count(buf.Data(), buf.Data() + buf.Size(), '\\')) {
                 if (const auto size = buf.Size() - count) {
@@ -1811,8 +1811,8 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
                 }
             } else {
                 return MakeString(buf);
-            }
-        }
+            } 
+        } 
         case NUdf::EDataSlot::TzDate:
         case NUdf::EDataSlot::TzDatetime:
         case NUdf::EDataSlot::TzTimestamp:
@@ -1825,23 +1825,23 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
         }
 
         return ValueFromString(type, textBuf);
-    }
+    } 
 
-    const ui8 ytBinType = *buf.Data();
-    auto binPayload = buf.Substring(1, buf.Size() - 1);
-    switch (type) {
+    const ui8 ytBinType = *buf.Data(); 
+    auto binPayload = buf.Substring(1, buf.Size() - 1); 
+    switch (type) { 
     case NUdf::EDataSlot::Bool: {
         if (ytBinType == NYson::NDetail::FalseMarker) {
             return NUdf::TUnboxedValuePod(false);
         }
-
+ 
         if (ytBinType == NYson::NDetail::TrueMarker) {
             return NUdf::TUnboxedValuePod(true);
         }
 
         return NUdf::TUnboxedValuePod();
-    }
-
+    } 
+ 
     case NUdf::EDataSlot::Uint8:
     case NUdf::EDataSlot::Uint16:
     case NUdf::EDataSlot::Uint32:
@@ -1851,18 +1851,18 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
     case NUdf::EDataSlot::Timestamp: {
         if (ytBinType != NYson::NDetail::Uint64Marker) {
             return NUdf::TUnboxedValuePod();
-        }
-
-        TMemoryInput stringRefStream(binPayload.Data(), binPayload.Size());
-        ui64 value;
+        } 
+ 
+        TMemoryInput stringRefStream(binPayload.Data(), binPayload.Size()); 
+        ui64 value; 
         const size_t read = NYson::ReadVarUInt64(&stringRefStream, &value);
-        if (read != binPayload.Size()) {
+        if (read != binPayload.Size()) { 
             return NUdf::TUnboxedValuePod();
-        }
-
+        } 
+ 
         return NUdf::TUnboxedValuePod(value);
-    }
-
+    } 
+ 
     case NUdf::EDataSlot::Int8:
     case NUdf::EDataSlot::Int16:
     case NUdf::EDataSlot::Int32:
@@ -1871,22 +1871,22 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
         if (ytBinType != NYson::NDetail::Int64Marker) {
             return NUdf::TUnboxedValuePod();
         }
-
-        TMemoryInput stringRefStream(binPayload.Data(), binPayload.Size());
-        i64 value;
+ 
+        TMemoryInput stringRefStream(binPayload.Data(), binPayload.Size()); 
+        i64 value; 
         const size_t read = NYson::ReadVarInt64(&stringRefStream, &value);
-        if (read != binPayload.Size()) {
+        if (read != binPayload.Size()) { 
             return NUdf::TUnboxedValuePod();
-        }
-
+        } 
+ 
         return NUdf::TUnboxedValuePod(value);
-    }
-
+    } 
+ 
     case NUdf::EDataSlot::Float: {
         if (ytBinType != NYson::NDetail::DoubleMarker || binPayload.Size() != 8) {
             return NUdf::TUnboxedValuePod();
         }
-
+ 
         const float x = *reinterpret_cast<const double*>(binPayload.Data());
         return NUdf::TUnboxedValuePod(x);
     }
@@ -1898,28 +1898,28 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
 
         const double x = *reinterpret_cast<const double*>(binPayload.Data());
         return NUdf::TUnboxedValuePod(x);
-    }
-
+    } 
+ 
     case NUdf::EDataSlot::String:
     case NUdf::EDataSlot::Utf8:
     case NUdf::EDataSlot::Json: {
         if (ytBinType != NYson::NDetail::StringMarker) {
             return NUdf::TUnboxedValuePod();
         }
-
-        TMemoryInput stringRefStream(binPayload.Data(), binPayload.Size());
-        i32 value;
+ 
+        TMemoryInput stringRefStream(binPayload.Data(), binPayload.Size()); 
+        i32 value; 
         const size_t read = NYson::ReadVarInt32(&stringRefStream, &value);
-        binPayload = binPayload.Substring(read, binPayload.Size() - read);
+        binPayload = binPayload.Substring(read, binPayload.Size() - read); 
         const size_t strLen = value;
-        if (strLen != binPayload.Size()) {
+        if (strLen != binPayload.Size()) { 
             return NUdf::TUnboxedValuePod();
-        }
-
+        } 
+ 
         return MakeString(NUdf::TStringRef(binPayload.Data(), strLen));
-    }
-
-    case NUdf::EDataSlot::Yson:
+    } 
+ 
+    case NUdf::EDataSlot::Yson: 
         return MakeString(buf);
 
     case NUdf::EDataSlot::TzDate:
@@ -1930,11 +1930,11 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
     case NUdf::EDataSlot::DyNumber:
     case NUdf::EDataSlot::JsonDocument:
         Y_FAIL("TODO");
-    }
-
-    MKQL_ENSURE(false, "SimpleValueFromYson: Incorrect typeid: " << type);
-}
-
+    } 
+ 
+    MKQL_ENSURE(false, "SimpleValueFromYson: Incorrect typeid: " << type); 
+} 
+ 
 ui16 InitTimezones() {
     return ui16(Singleton<TTimezones>()->Zones.size());
 }

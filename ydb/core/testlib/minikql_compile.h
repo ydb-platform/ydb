@@ -78,7 +78,7 @@ namespace NYql {
 
 inline TExprContainer::TPtr ParseText(const TString& programText) {
     TAstParseResult astRes = ParseAst(programText);
-    astRes.Issues.PrintTo(Cerr);
+    astRes.Issues.PrintTo(Cerr); 
     UNIT_ASSERT(astRes.IsOk());
 
     TExprContainer::TPtr expr(new TExprContainer());

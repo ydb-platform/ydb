@@ -16,23 +16,23 @@ Y_UNIT_TEST_SUITE(TSchemeProtoTest) {
 
     Y_UNIT_TEST(TestFromProtobufWithDict) {
         DoTestProtobuf(true, true);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestToProtobufWithDict) {
         DoTestProtobuf(false, true);
-    }
-
-    template <class T>
-    void AddMapPair(NSc::TValue& v, TStringBuf key, T value, bool mapAsDict) {
-        if (mapAsDict) {
-            v[key] = value;
-        } else {
+    } 
+ 
+    template <class T> 
+    void AddMapPair(NSc::TValue& v, TStringBuf key, T value, bool mapAsDict) { 
+        if (mapAsDict) { 
+            v[key] = value; 
+        } else { 
             auto& newElement = v.Push();
-            newElement["key"] = key;
-            newElement["value"] = value;
-        }
-    }
-
+            newElement["key"] = key; 
+            newElement["value"] = value; 
+        } 
+    } 
+ 
     void DoTestProtobuf(bool fromProto, bool mapAsDict) {
         NSc::TMessage m;
         NSc::TValue v;
@@ -53,36 +53,36 @@ Y_UNIT_TEST_SUITE(TSchemeProtoTest) {
         m.SetBytes("Bytes"), v["Bytes"] = "Bytes";
         m.SetEnum(NSc::VALUE1), v["Enum"] = "VALUE1";
 
-        auto& mapDoublesP = *m.mutable_mapdoubles();
-        auto& mapDoublesV = v["MapDoubles"];
-        mapDoublesP["pi"] = 3.14;
-        AddMapPair(mapDoublesV, "pi", 3.14, mapAsDict);
-        if (fromProto && mapAsDict) {
-            // can not add two entries in dict, as it represent over array with unstable order
-            mapDoublesP["back_e"] = 1 / 2.7;
-            AddMapPair(mapDoublesV, "back_e", 1 / 2.7, mapAsDict);
-        }
-
-        auto& mapInt32sP = *m.mutable_mapint32s();
-        auto& mapInt32sV = v["MapInt32s"];
-        mapInt32sP["pi"] = -7;
-        AddMapPair(mapInt32sV, "pi", -7, mapAsDict);
-        if (fromProto && mapAsDict) {
-            // can not add two entries in dict, as it represent over array with unstable order
-            mapInt32sP["back_e"] = 42;
-            AddMapPair(mapInt32sV, "back_e", 42, mapAsDict);
-        }
-
-        auto& mapStringP = *m.mutable_mapstring();
-        auto& mapStringV = v["MapString"];
-        mapStringP["intro"] = "body";
-        AddMapPair(mapStringV, "intro", "body", mapAsDict);
-        if (fromProto && mapAsDict) {
-            // can not add two entries in dict, as it represent over array with unstable order
-            mapStringP["deep"] = "blue";
-            AddMapPair(mapStringV, "deep", "blue", mapAsDict);
-        }
-
+        auto& mapDoublesP = *m.mutable_mapdoubles(); 
+        auto& mapDoublesV = v["MapDoubles"]; 
+        mapDoublesP["pi"] = 3.14; 
+        AddMapPair(mapDoublesV, "pi", 3.14, mapAsDict); 
+        if (fromProto && mapAsDict) { 
+            // can not add two entries in dict, as it represent over array with unstable order 
+            mapDoublesP["back_e"] = 1 / 2.7; 
+            AddMapPair(mapDoublesV, "back_e", 1 / 2.7, mapAsDict); 
+        } 
+ 
+        auto& mapInt32sP = *m.mutable_mapint32s(); 
+        auto& mapInt32sV = v["MapInt32s"]; 
+        mapInt32sP["pi"] = -7; 
+        AddMapPair(mapInt32sV, "pi", -7, mapAsDict); 
+        if (fromProto && mapAsDict) { 
+            // can not add two entries in dict, as it represent over array with unstable order 
+            mapInt32sP["back_e"] = 42; 
+            AddMapPair(mapInt32sV, "back_e", 42, mapAsDict); 
+        } 
+ 
+        auto& mapStringP = *m.mutable_mapstring(); 
+        auto& mapStringV = v["MapString"]; 
+        mapStringP["intro"] = "body"; 
+        AddMapPair(mapStringV, "intro", "body", mapAsDict); 
+        if (fromProto && mapAsDict) { 
+            // can not add two entries in dict, as it represent over array with unstable order 
+            mapStringP["deep"] = "blue"; 
+            AddMapPair(mapStringV, "deep", "blue", mapAsDict); 
+        } 
+ 
         m.AddDoubles((double)1 / 3), v["Doubles"][0] = (double)1 / 3;
         m.AddDoubles((double)1 / 4), v["Doubles"][1] = (double)1 / 4;
 
@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(TSchemeProtoTest) {
         *(m.AddMessages()) = m2, v["Messages"][1] = v2;
 
         if (fromProto) {
-            UNIT_ASSERT(NSc::TValue::Equal(v, NSc::TValue::From(m, mapAsDict)));
+            UNIT_ASSERT(NSc::TValue::Equal(v, NSc::TValue::From(m, mapAsDict))); 
         } else {
             NSc::TMessage proto;
             v.To(proto);

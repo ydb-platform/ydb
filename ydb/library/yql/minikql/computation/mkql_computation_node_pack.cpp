@@ -998,14 +998,14 @@ TValuePacker::MakePackFunction() {
 }
 
 TValuePackerBoxed::TValuePackerBoxed(TMemoryUsageInfo* memInfo, bool stable, const TType* type, bool tryUseCodegen)
-    : TBase(memInfo)
+    : TBase(memInfo) 
     , TValuePacker(stable, type, tryUseCodegen)
-{}
-
-TValuePackerBoxed::TValuePackerBoxed(TMemoryUsageInfo* memInfo, const TValuePacker& other)
-    : TBase(memInfo)
-    , TValuePacker(other)
-{}
-
+{} 
+ 
+TValuePackerBoxed::TValuePackerBoxed(TMemoryUsageInfo* memInfo, const TValuePacker& other) 
+    : TBase(memInfo) 
+    , TValuePacker(other) 
+{} 
+ 
 } // NMiniKQL
 } // NKikimr

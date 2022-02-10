@@ -12,13 +12,13 @@ class TLookupWrapper : public TMutableCodegeneratorPtrNode<TLookupWrapper> {
 public:
     TLookupWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* dict, IComputationNode* key)
         : TBaseComputation(mutables, kind)
-        , Dict(dict)
+        , Dict(dict) 
         , Key(key)
     {
     }
 
-    NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        return Dict->GetValue(ctx).Lookup(Key->GetValue(ctx));
+    NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const { 
+        return Dict->GetValue(ctx).Lookup(Key->GetValue(ctx)); 
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

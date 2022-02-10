@@ -12,16 +12,16 @@ template<bool IsVoid>
 class TAppendWrapper : public TMutableCodegeneratorNode<TAppendWrapper<IsVoid>> {
     typedef TMutableCodegeneratorNode<TAppendWrapper<IsVoid>> TBaseComputation;
 public:
-    TAppendWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
+    TAppendWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right) 
         : TBaseComputation(mutables, left->GetRepresentation())
-        , Left(left)
+        , Left(left) 
         , Right(right)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto left = Left->GetValue(ctx);
-        auto right = Right->GetValue(ctx);
+        auto right = Right->GetValue(ctx); 
 
         if (IsVoid && !right.IsBoxed())
             return left.Release();
@@ -117,9 +117,9 @@ IComputationNode* WrapAppend(TCallable& callable, const TComputationNodeFactoryC
     const auto left = LocateNode(ctx.NodeLocator, callable, 0);
     const auto right = LocateNode(ctx.NodeLocator, callable, 1);
     if (rightType->IsVoid())
-        return new TAppendWrapper<true>(ctx.Mutables, left, right);
+        return new TAppendWrapper<true>(ctx.Mutables, left, right); 
     else
-        return new TAppendWrapper<false>(ctx.Mutables, left, right);
+        return new TAppendWrapper<false>(ctx.Mutables, left, right); 
 }
 
 }

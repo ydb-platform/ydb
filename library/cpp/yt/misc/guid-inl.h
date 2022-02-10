@@ -26,10 +26,10 @@ Y_FORCE_INLINE bool TGuid::IsEmpty() const
 }
 
 Y_FORCE_INLINE TGuid::operator bool() const
-{
-    return !IsEmpty();
-}
-
+{ 
+    return !IsEmpty(); 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 Y_FORCE_INLINE bool operator == (TGuid lhs, TGuid rhs)

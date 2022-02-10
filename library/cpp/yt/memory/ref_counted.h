@@ -183,8 +183,8 @@ using TRefCountedPtr = TIntrusivePtr<TRefCounted>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
+} // namespace NYT 
 
-#define REF_COUNTED_INL_H_
-#include "ref_counted-inl.h"
-#undef REF_COUNTED_INL_H_
+#define REF_COUNTED_INL_H_ 
+#include "ref_counted-inl.h" 
+#undef REF_COUNTED_INL_H_ 

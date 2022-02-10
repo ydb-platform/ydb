@@ -273,8 +273,8 @@ template <class T>
 constexpr TArrayRef<T> MakeArrayRef(T* data, size_t size) {
     return TArrayRef<T>(data, size);
 }
- 
-template <class T> 
+
+template <class T>
 constexpr TArrayRef<T> MakeArrayRef(T* begin, T* end) {
-    return TArrayRef<T>(begin, end); 
-} 
+    return TArrayRef<T>(begin, end);
+}

@@ -258,7 +258,7 @@ namespace NUri {
 
             bool pathop = true;
 
-            TTempBufOutput out(p0.length() + p1.length() + 4); 
+            TTempBufOutput out(p0.length() + p1.length() + 4);
             out << p0;
             if ('/' != p0.back())
                 out << "/../";

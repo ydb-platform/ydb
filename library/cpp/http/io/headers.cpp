@@ -67,11 +67,11 @@ const THttpInputHeader* THttpHeaders::FindHeader(const TStringBuf header) const 
     for (const auto& hdr : Headers_) {
         if (AsciiCompareIgnoreCase(hdr.Name(), header) == 0) {
             return &hdr;
-        } 
-    } 
+        }
+    }
     return nullptr;
-} 
- 
+}
+
 void THttpHeaders::RemoveHeader(const TStringBuf header) {
     for (auto h = Headers_.begin(); h != Headers_.end(); ++h) {
         if (AsciiCompareIgnoreCase(h->Name(), header) == 0) {

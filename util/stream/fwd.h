@@ -38,7 +38,7 @@ class TStringStream;
 
 class TTeeOutput;
 
-class TTempBufOutput; 
+class TTempBufOutput;
 
 struct TEol;
 

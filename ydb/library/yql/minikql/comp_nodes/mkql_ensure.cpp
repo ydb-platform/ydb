@@ -64,7 +64,7 @@ private:
         TStringBuilder res;
         res << thisPtr->Pos << " Condition violated";
         if (messageStr.Size() > 0) {
-            res << ":\n\n" << TStringBuf(messageStr) << "\n\n"; 
+            res << ":\n\n" << TStringBuf(messageStr) << "\n\n";
         }
 
         UdfTerminate(res.data());

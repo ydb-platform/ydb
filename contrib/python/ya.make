@@ -561,7 +561,7 @@ RECURSE(
     jsonschema
     jsonstreams
     juggler_sdk
-    juggler_sdk/cli 
+    juggler_sdk/cli
     junitparser
     jupyter_client
     jupyter_core

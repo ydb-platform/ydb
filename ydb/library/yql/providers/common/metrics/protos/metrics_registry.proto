@@ -27,5 +27,5 @@ message TCounterGroup {
 message TMetricsRegistrySnapshot {
     optional TCounterGroup RootGroup = 1;
     optional bool DontIncrement = 2;
-    optional bool MergeToRoot = 3; 
+    optional bool MergeToRoot = 3;
 }

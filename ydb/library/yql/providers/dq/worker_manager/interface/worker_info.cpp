@@ -236,12 +236,12 @@ namespace NYql::NDqs {
         }
     }
 
-    bool TWorkerInfo::AddToDownloadList(const TString& key, const TFileResource& value) { 
+    bool TWorkerInfo::AddToDownloadList(const TString& key, const TFileResource& value) {
         if (!Resources.contains(key) && DownloadList.insert({key, value}).second) {
             *CurrentDownloadsSum += 1;
-            return true; 
+            return true;
         }
-        return false; 
+        return false;
     }
 
     const THashMap<TString, TWorkerInfo::TFileResource>& TWorkerInfo::GetDownloadList() {

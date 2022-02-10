@@ -29,7 +29,7 @@
 #include <util/stream/file.h>
 #include <util/stream/pipe.h>
 
-#ifdef _unix_ 
+#ifdef _unix_
 #include <sys/resource.h>
 #endif
 
@@ -680,15 +680,15 @@ public:
         }
     }
 
-    void DontCollectDumps() { 
-#ifdef _unix_ 
-        rlimit limit = {0, 0}; 
-        if (setrlimit(RLIMIT_CORE, &limit) != 0) { 
-            Cerr << "Failed to set rlimit " << Endl; 
-        } 
-#endif 
-    } 
- 
+    void DontCollectDumps() {
+#ifdef _unix_
+        rlimit limit = {0, 0};
+        if (setrlimit(RLIMIT_CORE, &limit) != 0) {
+            Cerr << "Failed to set rlimit " << Endl;
+        }
+#endif
+    }
+
     template<typename T>
     void Prepare(const NDqProto::TDqTask& task, const T& taskMeta, TPipedOutput& output) {
         NYql::NDqProto::TPrepareResponse result;

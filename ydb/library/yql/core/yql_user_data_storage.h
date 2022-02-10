@@ -38,15 +38,15 @@ public:
 
     bool ContainsUserDataFolder(const TStringBuf& name) const;
     TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TStringBuf& name, ui32 maxFileCount = ~0u) const;
-    static TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TUserDataTable& userData, const TStringBuf& name, ui32 maxFileCount = ~0u); 
- 
+    static TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TUserDataTable& userData, const TStringBuf& name, ui32 maxFileCount = ~0u);
+
     void FillUserDataTokens();
     void TryFillUserDataToken(TUserDataBlock& block) const;
     std::map<TString, const TUserDataBlock*> GetDirectoryContent(const TStringBuf& path, ui32 maxFileCount = ~0u) const;
     static TString MakeFullName(const TStringBuf& name);
     static TString MakeFolderName(const TStringBuf& name);
     static TUserDataKey ComposeUserDataKey(const TStringBuf& name);
-    static TString MakeRelativeName(const TStringBuf& name); 
+    static TString MakeRelativeName(const TStringBuf& name);
     TVector<TString> GetLibraries() const;
 
     // working with frozen files

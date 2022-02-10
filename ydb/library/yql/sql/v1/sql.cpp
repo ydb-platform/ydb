@@ -9618,30 +9618,30 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 success = true;
                 return {};
             } else if (normalizedPragma == "strict") {
-                if (values.size() == 0U) { 
-                    Ctx.PragmaYsonStrict = true; 
-                    success = true; 
+                if (values.size() == 0U) {
+                    Ctx.PragmaYsonStrict = true;
+                    success = true;
                 } else if (values.size() == 1U && values.front().GetLiteral() && TryFromString(*values.front().GetLiteral(), Ctx.PragmaYsonStrict)) {
-                    success = true; 
-                } else { 
-                    Error() << "Expected 'true', 'false' or no parameter for: " << pragma; 
-                    Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
-                } 
+                    success = true;
+                } else {
+                    Error() << "Expected 'true', 'false' or no parameter for: " << pragma;
+                    Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                }
                 return {};
             } else if (normalizedPragma == "disablestrict") {
-                if (values.size() == 0U) { 
-                    Ctx.PragmaYsonStrict = false; 
-                    success = true; 
-                    return {}; 
-                } 
-                bool pragmaYsonDisableStrict; 
+                if (values.size() == 0U) {
+                    Ctx.PragmaYsonStrict = false;
+                    success = true;
+                    return {};
+                }
+                bool pragmaYsonDisableStrict;
                 if (values.size() == 1U && values.front().GetLiteral() && TryFromString(*values.front().GetLiteral(), pragmaYsonDisableStrict)) {
-                    Ctx.PragmaYsonStrict = !pragmaYsonDisableStrict; 
-                    success = true; 
-                } else { 
-                    Error() << "Expected 'true', 'false' or no parameter for: " << pragma; 
-                    Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
-                } 
+                    Ctx.PragmaYsonStrict = !pragmaYsonDisableStrict;
+                    success = true;
+                } else {
+                    Error() << "Expected 'true', 'false' or no parameter for: " << pragma;
+                    Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                }
                 return {};
             } else {
                 Error() << "Unknown pragma: '" << pragma << "'";

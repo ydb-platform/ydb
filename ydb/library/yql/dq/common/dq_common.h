@@ -23,8 +23,8 @@ struct TBaseDqResManEvents {
 
         ES_CLUSTER_STATUS,
         ES_CLUSTER_STATUS_RESPONSE,
-        ES_IS_READY, 
-        ES_IS_READY_RESPONSE, 
+        ES_IS_READY,
+        ES_IS_READY_RESPONSE,
         ES_JOB_STOP,
         ES_JOB_STOP_RESPONSE,
 

@@ -100,11 +100,11 @@ namespace NYql::NDqs {
         Record.SetIsForwarded(false);
     }
 
-    TEvIsReady::TEvIsReady(const Yql::DqsProto::IsReadyRequest &request) { 
-        *Record.MutableRequest() = request; 
-        Record.SetIsForwarded(false); 
-    } 
- 
+    TEvIsReady::TEvIsReady(const Yql::DqsProto::IsReadyRequest &request) {
+        *Record.MutableRequest() = request;
+        Record.SetIsForwarded(false);
+    }
+
     TEvConfigureFailureInjectorRequest::TEvConfigureFailureInjectorRequest(const Yql::DqsProto::ConfigureFailureInjectorRequest& request) {
         *Record.MutableRequest() = request;
     }

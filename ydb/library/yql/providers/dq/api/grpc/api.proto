@@ -18,7 +18,7 @@ service DqService {
     rpc JobStop (JobStopRequest) returns (JobStopResponse);
     rpc GetMaster (GetMasterRequest) returns (GetMasterResponse);
     rpc ConfigureFailureInjector (ConfigureFailureInjectorRequest) returns (ConfigureFailureInjectorResponse);
-    rpc IsReady (IsReadyRequest) returns (IsReadyResponse); 
+    rpc IsReady (IsReadyRequest) returns (IsReadyResponse);
     rpc Routes (RoutesRequest) returns (RoutesResponse);
     rpc Benchmark (BenchmarkRequest) returns (BenchmarkResponse);
 }

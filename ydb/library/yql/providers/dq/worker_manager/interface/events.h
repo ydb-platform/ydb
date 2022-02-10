@@ -102,19 +102,19 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
         TEvQueryStatusResponse() = default;
     };
 
-    struct TEvIsReady 
-            : NActors::TEventPB<TEvIsReady, NYql::NDqProto::TEvIsReady, TDqResManEvents::ES_IS_READY> { 
- 
-        TEvIsReady() = default; 
-        TEvIsReady(const Yql::DqsProto::IsReadyRequest& request); 
-    }; 
- 
-    struct TEvIsReadyResponse 
-            : NActors::TEventPB<TEvIsReadyResponse, NYql::NDqProto::TEvIsReadyResponse, TDqResManEvents::ES_IS_READY_RESPONSE> { 
- 
-        TEvIsReadyResponse() = default; 
-    }; 
- 
+    struct TEvIsReady
+            : NActors::TEventPB<TEvIsReady, NYql::NDqProto::TEvIsReady, TDqResManEvents::ES_IS_READY> {
+
+        TEvIsReady() = default;
+        TEvIsReady(const Yql::DqsProto::IsReadyRequest& request);
+    };
+
+    struct TEvIsReadyResponse
+            : NActors::TEventPB<TEvIsReadyResponse, NYql::NDqProto::TEvIsReadyResponse, TDqResManEvents::ES_IS_READY_RESPONSE> {
+
+        TEvIsReadyResponse() = default;
+    };
+
     struct TEvRoutesRequest
             : NActors::TEventPB<TEvRoutesRequest, NYql::NDqProto::TEvRoutesRequest, TDqResManEvents::ES_ROUTES> {
 

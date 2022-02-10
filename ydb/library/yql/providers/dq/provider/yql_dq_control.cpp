@@ -1,4 +1,4 @@
-#include "yql_dq_control.h" 
+#include "yql_dq_control.h"
 
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 #include <ydb/library/yql/providers/dq/config/config.pb.h>
@@ -9,134 +9,134 @@
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
 
-#include <library/cpp/svnversion/svnversion.h> 
- 
+#include <library/cpp/svnversion/svnversion.h>
+
 #include <util/memory/blob.h>
 #include <util/string/builder.h>
 #include <util/system/file.h>
 
 namespace NYql {
- 
-using TFileResource = Yql::DqsProto::TFile; 
- 
+
+using TFileResource = Yql::DqsProto::TFile;
+
 const TString DqStrippedSuffied = ".s";
 
-class TDqControl : public IDqControl { 
- 
+class TDqControl : public IDqControl {
+
 public:
-    TDqControl(const NGrpc::TGRpcClientConfig &grpcConf, int threads, const TVector<TFileResource> &files) 
-        : GrpcClient(threads) 
-        , Service(GrpcClient.CreateGRpcServiceConnection<Yql::DqsProto::DqService>(grpcConf)) 
-        , Files(files) 
+    TDqControl(const NGrpc::TGRpcClientConfig &grpcConf, int threads, const TVector<TFileResource> &files)
+        : GrpcClient(threads)
+        , Service(GrpcClient.CreateGRpcServiceConnection<Yql::DqsProto::DqService>(grpcConf))
+        , Files(files)
     { }
 
-    // after call, forking process in not allowed 
-    bool IsReady(const TMap<TString, TString>& additinalFiles) override { 
-        Yql::DqsProto::IsReadyRequest request; 
-        for (const auto& file : Files) { 
-            *request.AddFiles() = file; 
+    // after call, forking process in not allowed
+    bool IsReady(const TMap<TString, TString>& additinalFiles) override {
+        Yql::DqsProto::IsReadyRequest request;
+        for (const auto& file : Files) {
+            *request.AddFiles() = file;
         }
 
         for (const auto& [path, objectId] : additinalFiles){
-            TFileResource r; 
-            r.SetLocalPath(path); 
+            TFileResource r;
+            r.SetLocalPath(path);
             r.SetObjectType(Yql::DqsProto::TFile::EUDF_FILE);
             r.SetObjectId(objectId);
             r.SetSize(TFile(path, OpenExisting | RdOnly).GetLength());
-            *request.AddFiles() = r; 
-        } 
- 
-        auto promise = NThreading::NewPromise<bool>(); 
-        auto callback = [promise](NGrpc::TGrpcStatus&& status, Yql::DqsProto::IsReadyResponse&& resp) mutable { 
-            Y_UNUSED(resp); 
+            *request.AddFiles() = r;
+        }
 
-            promise.SetValue(status.Ok() && resp.GetIsReady()); 
+        auto promise = NThreading::NewPromise<bool>();
+        auto callback = [promise](NGrpc::TGrpcStatus&& status, Yql::DqsProto::IsReadyResponse&& resp) mutable {
+            Y_UNUSED(resp);
+
+            promise.SetValue(status.Ok() && resp.GetIsReady());
         };
 
         NGrpc::TCallMeta meta;
         meta.Timeout = TDuration::Seconds(1);
-        Service->DoRequest<Yql::DqsProto::IsReadyRequest, Yql::DqsProto::IsReadyResponse>( 
+        Service->DoRequest<Yql::DqsProto::IsReadyRequest, Yql::DqsProto::IsReadyResponse>(
             request, callback, &Yql::DqsProto::DqService::Stub::AsyncIsReady, meta);
- 
-        try { 
-            return promise.GetFuture().GetValueSync(); 
-        } catch (...) { 
-            YQL_LOG(INFO) << "DqControl IsReady Exception " << CurrentExceptionMessage(); 
-            return false; 
-        } 
+
+        try {
+            return promise.GetFuture().GetValueSync();
+        } catch (...) {
+            YQL_LOG(INFO) << "DqControl IsReady Exception " << CurrentExceptionMessage();
+            return false;
+        }
     }
 
 private:
-    NGrpc::TGRpcClientLow GrpcClient; 
-    std::unique_ptr<NGrpc::TServiceConnection<Yql::DqsProto::DqService>> Service; 
-    const TVector<TFileResource> &Files; 
-}; 
- 
- 
-class TDqControlFactory : public IDqControlFactory { 
- 
-public: 
-    TDqControlFactory( 
-            const TString &host, 
-            int port, 
-            int threads, 
-            const TMap<TString, TString>& udfs, 
-            const TString& vanillaLitePath, 
+    NGrpc::TGRpcClientLow GrpcClient;
+    std::unique_ptr<NGrpc::TServiceConnection<Yql::DqsProto::DqService>> Service;
+    const TVector<TFileResource> &Files;
+};
+
+
+class TDqControlFactory : public IDqControlFactory {
+
+public:
+    TDqControlFactory(
+            const TString &host,
+            int port,
+            int threads,
+            const TMap<TString, TString>& udfs,
+            const TString& vanillaLitePath,
             const TString& vanillaLiteMd5,
             const THashSet<TString> &filter,
             bool enableStrip,
             const TFileStoragePtr& fileStorage
-        ) 
-        : Threads(threads) 
-        , GrpcConf(TStringBuilder() << host << ":" << port) 
-        , IndexedUdfFilter(filter) 
+        )
+        : Threads(threads)
+        , GrpcConf(TStringBuilder() << host << ":" << port)
+        , IndexedUdfFilter(filter)
         , EnableStrip(enableStrip)
         , FileStorage(fileStorage)
-    { 
-        if (!vanillaLitePath.empty()) { 
+    {
+        if (!vanillaLitePath.empty()) {
             TString path = vanillaLitePath;
             TString objectId = GetProgramCommitId();
 
             TString newPath, newObjectId;
             std::tie(newPath, newObjectId) = GetPathAndObjectId(path, objectId, vanillaLiteMd5);
 
-            TFileResource vanillaLite; 
+            TFileResource vanillaLite;
             vanillaLite.SetLocalPath(newPath);
-            vanillaLite.SetName(vanillaLitePath.substr(vanillaLitePath.rfind('/') + 1)); 
+            vanillaLite.SetName(vanillaLitePath.substr(vanillaLitePath.rfind('/') + 1));
             vanillaLite.SetObjectType(Yql::DqsProto::TFile::EEXE_FILE);
             vanillaLite.SetObjectId(newObjectId);
             vanillaLite.SetSize(TFile(newPath, OpenExisting | RdOnly).GetLength());
-            Files.push_back(vanillaLite); 
-        } 
- 
+            Files.push_back(vanillaLite);
+        }
+
         for (const auto& [path, objectId] : udfs){
             YQL_LOG(DEBUG) << "DQ control, adding file: " << path << " with objectId " << objectId;
             TString newPath, newObjectId;
             std::tie(newPath, newObjectId) = GetPathAndObjectId(path, objectId, objectId);
 
             YQL_LOG(DEBUG) << "DQ control, rewrite path/objectId: " << newPath << ", " << newObjectId;
-            TFileResource r; 
+            TFileResource r;
             r.SetLocalPath(newPath);
             r.SetObjectType(Yql::DqsProto::TFile::EUDF_FILE);
             r.SetObjectId(newObjectId);
             r.SetSize(TFile(newPath, OpenExisting | RdOnly).GetLength());
-            Files.push_back(r); 
-        } 
-    } 
- 
-    IDqControlPtr GetControl() override { 
-        return new TDqControl(GrpcConf, Threads, Files); 
-    } 
- 
-    const THashSet<TString>& GetIndexedUdfFilter() override { 
-        return IndexedUdfFilter; 
-    } 
- 
+            Files.push_back(r);
+        }
+    }
+
+    IDqControlPtr GetControl() override {
+        return new TDqControl(GrpcConf, Threads, Files);
+    }
+
+    const THashSet<TString>& GetIndexedUdfFilter() override {
+        return IndexedUdfFilter;
+    }
+
     bool StripEnabled() const override {
         return EnableStrip;
     }
 
-private: 
+private:
     std::tuple<TString, TString> GetPathAndObjectId(const TString& path, const TString& objectId, const TString& md5 = {}) {
         if (!EnableStrip) {
             return std::make_tuple(path, objectId);
@@ -150,17 +150,17 @@ private:
         return std::make_tuple(fileLink->GetPath(), objectId + DqStrippedSuffied);
     }
 
-    int Threads; 
-    TVector<TFileResource> Files; 
+    int Threads;
+    TVector<TFileResource> Files;
     NGrpc::TGRpcClientConfig GrpcConf;
-    THashSet<TString> IndexedUdfFilter; 
+    THashSet<TString> IndexedUdfFilter;
     THashMap<TString, TFileLinkPtr> FileLinks;
     bool EnableStrip;
     const TFileStoragePtr FileStorage;
 };
 
 IDqControlFactoryPtr CreateDqControlFactory(const NProto::TDqConfig& config, const TMap<TString, TString>& udfs, const TFileStoragePtr& fileStorage) {
-    THashSet<TString> indexedUdfFilter(config.GetControl().GetIndexedUdfsToWarmup().begin(), config.GetControl().GetIndexedUdfsToWarmup().end()); 
+    THashSet<TString> indexedUdfFilter(config.GetControl().GetIndexedUdfsToWarmup().begin(), config.GetControl().GetIndexedUdfsToWarmup().end());
     return new TDqControlFactory(
         "localhost",
         config.GetPort(),

@@ -9,7 +9,7 @@ namespace NSensorComponent {
     static const TString kWorkerServer = "worker_server";
     static const TString kDataServer = "data_server";
     static const TString kInspectorClient = "inspector_client";
-    static const TString kDq = "dq"; 
+    static const TString kDq = "dq";
 } // namspace NSensorComponent
 
 

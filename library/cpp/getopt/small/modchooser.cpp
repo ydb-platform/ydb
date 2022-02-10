@@ -64,7 +64,7 @@ TModChooser::TMode::TMode(const TString& name, TMainClass* main, const TString& 
     : Name(name)
     , Main(main)
     , Description(descr)
-    , Hidden(hidden) 
+    , Hidden(hidden)
     , NoCompletion(noCompletion)
 {
 }
@@ -74,7 +74,7 @@ TModChooser::TModChooser()
     , VersionHandler(nullptr)
     , ShowSeparated(true)
     , SvnRevisionOptionDisabled(false)
-    , PrintShortCommandInUsage(false) 
+    , PrintShortCommandInUsage(false)
 {
 }
 
@@ -115,10 +115,10 @@ void TModChooser::AddGroupModeDescription(const TString& description, bool hidde
     UnsortedModes.push_back(MakeHolder<TMode>(TString(), nullptr, description.data(), hidden, noCompletion));
 }
 
-void TModChooser::SetDefaultMode(const TString& mode) { 
-    DefaultMode = mode; 
-} 
- 
+void TModChooser::SetDefaultMode(const TString& mode) {
+    DefaultMode = mode;
+}
+
 void TModChooser::AddAlias(const TString& alias, const TString& mode) {
     if (!Modes.FindPtr(mode)) {
         ythrow yexception() << "TMode '" << mode << "' not found in TModChooser.";
@@ -148,10 +148,10 @@ void TModChooser::SetSeparationString(const TString& str) {
     SeparationString = str;
 }
 
-void TModChooser::SetPrintShortCommandInUsage(bool printShortCommandInUsage = false) { 
-    PrintShortCommandInUsage = printShortCommandInUsage; 
-} 
- 
+void TModChooser::SetPrintShortCommandInUsage(bool printShortCommandInUsage = false) {
+    PrintShortCommandInUsage = printShortCommandInUsage;
+}
+
 void TModChooser::DisableSvnRevisionOption() {
     SvnRevisionOptionDisabled = true;
 }
@@ -166,18 +166,18 @@ void TModChooser::AddCompletions(TString progName, const TString& name, bool hid
 int TModChooser::Run(const int argc, const char** argv) const {
     Y_ENSURE(argc, "Can't run TModChooser with empty list of arguments.");
 
-    bool shiftArgs = true; 
-    TString modeName; 
+    bool shiftArgs = true;
+    TString modeName;
     if (argc == 1) {
-        if (DefaultMode.empty()) { 
-            PrintHelp(argv[0]); 
-            return 0; 
-        } else { 
-            modeName = DefaultMode; 
-            shiftArgs = false; 
-        } 
-    } else { 
-        modeName = argv[1]; 
+        if (DefaultMode.empty()) {
+            PrintHelp(argv[0]);
+            return 0;
+        } else {
+            modeName = DefaultMode;
+            shiftArgs = false;
+        }
+    } else {
+        modeName = argv[1];
     }
 
     if (modeName == "-h" || modeName == "--help" || modeName == "-?") {
@@ -192,39 +192,39 @@ int TModChooser::Run(const int argc, const char** argv) const {
         NLastGetopt::PrintVersionAndExit(nullptr);
     }
 
-    auto modeIter = Modes.find(modeName); 
-    if (modeIter == Modes.end() && !DefaultMode.empty()) { 
-        modeIter = Modes.find(DefaultMode); 
-        shiftArgs = false; 
-    } 
- 
+    auto modeIter = Modes.find(modeName);
+    if (modeIter == Modes.end() && !DefaultMode.empty()) {
+        modeIter = Modes.find(DefaultMode);
+        shiftArgs = false;
+    }
+
     if (modeIter == Modes.end()) {
         Cerr << "Unknown mode " << modeName.Quote() << "." << Endl;
         PrintHelp(argv[0]);
         return 1;
     }
 
-    if (shiftArgs) { 
+    if (shiftArgs) {
         TString firstArg;
         TVector<const char*> nargv(Reserve(argc));
 
-        if (PrintShortCommandInUsage) { 
+        if (PrintShortCommandInUsage) {
             firstArg = modeIter->second->Name;
-        } else { 
+        } else {
             firstArg = argv[0] + TString(" ") + modeIter->second->Name;
-        } 
+        }
 
         nargv.push_back(firstArg.data());
 
         for (int i = 2; i < argc; ++i) {
-            nargv.push_back(argv[i]); 
-        } 
+            nargv.push_back(argv[i]);
+        }
         // According to the standard, "argv[argc] shall be a null pointer" (5.1.2.2.1).
         // http://www.open-std.org/JTC1/SC22/WG14/www/docs/n1336
         nargv.push_back(nullptr);
 
         return (*modeIter->second->Main)(nargv.size() - 1, nargv.data());
-    } else { 
+    } else {
         return (*modeIter->second->Main)(argc, argv);
     }
 }
@@ -291,22 +291,22 @@ void TModChooser::PrintHelp(const TString& progName) const {
 
     if (ShowSeparated) {
         for (const auto& unsortedMode : UnsortedModes)
-            if (!unsortedMode->Hidden) { 
-                if (unsortedMode->Name.size()) { 
-                    Cerr << "  " << unsortedMode->FormatFullName(maxModeLen + 4) << unsortedMode->Description << Endl; 
-                } else { 
-                    Cerr << SeparationString << Endl; 
-                    Cerr << unsortedMode->Description << Endl; 
-                } 
+            if (!unsortedMode->Hidden) {
+                if (unsortedMode->Name.size()) {
+                    Cerr << "  " << unsortedMode->FormatFullName(maxModeLen + 4) << unsortedMode->Description << Endl;
+                } else {
+                    Cerr << SeparationString << Endl;
+                    Cerr << unsortedMode->Description << Endl;
+                }
             }
     } else {
         for (const auto& mode : Modes) {
             if (mode.first != mode.second->Name)
                 continue;  // this is an alias
- 
-            if (!mode.second->Hidden) { 
-                Cerr << "  " << mode.second->FormatFullName(maxModeLen + 4) << mode.second->Description << Endl; 
-            } 
+
+            if (!mode.second->Hidden) {
+                Cerr << "  " << mode.second->FormatFullName(maxModeLen + 4) << mode.second->Description << Endl;
+            }
         }
     }
 

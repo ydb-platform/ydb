@@ -54,12 +54,12 @@ public:
     void AddMode(const TString& mode, TMainClass* func, const TString& description, bool hidden = false, bool noCompletion = false);
     void AddMode(const TString& mode, TMainClassV* func, const TString& description, bool hidden = false, bool noCompletion = false);
 
-    //! Hidden groups won't be displayed in 'help' block 
+    //! Hidden groups won't be displayed in 'help' block
     void AddGroupModeDescription(const TString& description, bool hidden = false, bool noCompletion = false);
 
-    //! Set default mode (if not specified explicitly) 
-    void SetDefaultMode(const TString& mode); 
- 
+    //! Set default mode (if not specified explicitly)
+    void SetDefaultMode(const TString& mode);
+
     void AddAlias(const TString& alias, const TString& mode);
 
     //! Set main program description.
@@ -77,9 +77,9 @@ public:
     //! Set separation string
     void SetSeparationString(const TString& str);
 
-    //! Set short command representation in Usage block 
-    void SetPrintShortCommandInUsage(bool printShortCommandInUsage); 
- 
+    //! Set short command representation in Usage block
+    void SetPrintShortCommandInUsage(bool printShortCommandInUsage);
+
     void DisableSvnRevisionOption();
 
     void AddCompletions(TString progName, const TString& name = "completion", bool hidden = false, bool noCompletion = false);
@@ -106,7 +106,7 @@ public:
         TString Name;
         TMainClass* Main;
         TString Description;
-        bool Hidden; 
+        bool Hidden;
         bool NoCompletion;
         TVector<TString> Aliases;
 
@@ -147,8 +147,8 @@ private:
     //! Modes
     TMap<TString, TMode*> Modes;
 
-    TString DefaultMode; 
- 
+    TString DefaultMode;
+
     //! Handler for '--version' parameter
     TVersionHandlerPtr VersionHandler;
 
@@ -158,9 +158,9 @@ private:
     //! When set to true, disables --svnrevision option, useful for opensource (git hosted) projects
     bool SvnRevisionOptionDisabled;
 
-    //! When true - will print only 'mode name' in 'Usage' block 
-    bool PrintShortCommandInUsage; 
- 
+    //! When true - will print only 'mode name' in 'Usage' block
+    bool PrintShortCommandInUsage;
+
     //! Text string used when displaying each separator
     TString SeparationString;
 

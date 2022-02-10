@@ -83,7 +83,7 @@ public:
 
     void SetPath(const TString& path);
     const char* GetCurPage() const;
-    bool Parse(const char* req); 
+    bool Parse(const char* req);
     void AddHeader(const TString& name, const TString& value);
 
 private:

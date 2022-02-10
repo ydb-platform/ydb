@@ -61,7 +61,7 @@ namespace NBalloc {
         } else if (signature == DISABLED_SIGNATURE) {
             return false;
         }
-        NMalloc::AbortFromCorruptedAllocator(); 
+        NMalloc::AbortFromCorruptedAllocator();
         Y_UNREACHABLE();
     }
 

@@ -3,7 +3,7 @@
 
 #include <utility>
 
-TLogElement::TLogElement(const TLog* parent) 
+TLogElement::TLogElement(const TLog* parent)
     : Parent_(parent)
     , Priority_(Parent_->DefaultPriority())
 {

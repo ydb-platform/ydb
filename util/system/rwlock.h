@@ -1,25 +1,25 @@
 #pragma once
- 
+
 #include "guard.h"
 #include "defaults.h"
- 
+
 #include <util/generic/ptr.h>
 
 class TRWMutex {
 public:
     TRWMutex();
     ~TRWMutex();
- 
+
     void AcquireRead() noexcept;
     bool TryAcquireRead() noexcept;
     void ReleaseRead() noexcept;
- 
+
     void AcquireWrite() noexcept;
     bool TryAcquireWrite() noexcept;
     void ReleaseWrite() noexcept;
 
     void Release() noexcept;
- 
+
 private:
     class TImpl;
     THolder<TImpl> Impl_;
@@ -34,8 +34,8 @@ struct TReadGuardOps {
     static inline void Release(T* t) noexcept {
         t->ReleaseRead();
     }
-}; 
- 
+};
+
 template <class T>
 struct TTryReadGuardOps: public TReadGuardOps<T> {
     static inline bool TryAcquire(T* t) noexcept {
@@ -52,8 +52,8 @@ struct TWriteGuardOps {
     static inline void Release(T* t) noexcept {
         t->ReleaseWrite();
     }
-}; 
- 
+};
+
 template <class T>
 struct TTryWriteGuardOps: public TWriteGuardOps<T> {
     static inline bool TryAcquire(T* t) noexcept {

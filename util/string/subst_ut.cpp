@@ -3,7 +3,7 @@
 #include <string>
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 Y_UNIT_TEST_SUITE(TStringSubst) {
     static const size_t MIN_FROM_CTX = 4;
     static const TVector<TString> ALL_FROM{TString("F"), TString("FF")};

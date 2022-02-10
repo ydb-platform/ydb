@@ -39,7 +39,7 @@ public:
     TString operator()() const {
         return Print();
     }
- 
+
     void Scan(const TStringBuf cgiParStr, bool form = true);
     void ScanAdd(const TStringBuf cgiParStr);
     void ScanAddUnescaped(const TStringBuf cgiParStr);

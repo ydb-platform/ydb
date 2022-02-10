@@ -23,17 +23,17 @@ struct IdTR {
     Y_FORCE_INLINE static ui8 T(ui8 a) {
         return a;
     }
-}; 
- 
+};
+
 // CCITT CRC-32
-template <class TR> 
+template <class TR>
 inline ui32 crc32(const char* buf, size_t buflen, ui32 crcinit = CRC32INIT) {
     ui32 crc = crcinit ^ 0xFFFFFFFF;
     const char* end = buf + buflen;
     extern const ui32* crctab32;
 
     while (buf < end) {
-        crc = (crc >> 8) ^ crctab32[(crc ^ TR::T((ui8)*buf)) & 0xFF]; 
+        crc = (crc >> 8) ^ crctab32[(crc ^ TR::T((ui8)*buf)) & 0xFF];
         ++buf;
     }
 
@@ -41,9 +41,9 @@ inline ui32 crc32(const char* buf, size_t buflen, ui32 crcinit = CRC32INIT) {
 }
 
 inline ui32 crc32(const char* buf, size_t buflen, ui32 crcinit = CRC32INIT) {
-    return crc32<IdTR>(buf, buflen, crcinit); 
-} 
- 
+    return crc32<IdTR>(buf, buflen, crcinit);
+}
+
 inline ui32 crc32(const void* buf, size_t buflen, ui32 crcinit = CRC32INIT) {
     return crc32((const char*)buf, buflen, crcinit);
 }

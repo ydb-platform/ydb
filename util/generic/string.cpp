@@ -21,8 +21,8 @@ std::istream& operator>>(std::istream& is, TString& s) {
 template <>
 bool TBasicString<char, std::char_traits<char>>::to_lower(size_t pos, size_t n) {
     return Transform([](size_t, char c) { return AsciiToLower(c); }, pos, n);
-} 
- 
+}
+
 template <>
 bool TBasicString<char, std::char_traits<char>>::to_upper(size_t pos, size_t n) {
     return Transform([](size_t, char c) { return AsciiToUpper(c); }, pos, n);

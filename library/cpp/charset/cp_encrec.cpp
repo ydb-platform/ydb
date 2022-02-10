@@ -3,7 +3,7 @@
 #include <util/stream/output.h>
 
 void Encoder::Tr(const wchar32* in, char* out, size_t len) const {
-    while (len--) 
+    while (len--)
         *out++ = Tr(*in++);
 }
 

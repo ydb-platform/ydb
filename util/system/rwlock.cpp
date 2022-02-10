@@ -1,7 +1,7 @@
-#include "rwlock.h" 
+#include "rwlock.h"
 #include "mutex.h"
 #include "condvar.h"
- 
+
 #include <util/generic/yexception.h>
 
 #if defined(_unix_)
@@ -39,7 +39,7 @@ TRWMutex::TImpl::TImpl()
     , BlockedWriters_(0)
 {
 }
- 
+
 TRWMutex::TImpl::~TImpl() {
     Y_VERIFY(State_ == 0, "failure, State_ != 0");
     Y_VERIFY(BlockedWriters_ == 0, "failure, BlockedWriters_ != 0");
@@ -52,11 +52,11 @@ void TRWMutex::TImpl::AcquireRead() noexcept {
         }
 
         ++State_;
-    } 
+    }
 
     ReadCond_.Signal();
 }
- 
+
 bool TRWMutex::TImpl::TryAcquireRead() noexcept {
     with_lock (Lock_) {
         if (BlockedWriters_ || State_ < 0) {
@@ -128,18 +128,18 @@ void TRWMutex::TImpl::Release() noexcept {
         } else if (BlockedWriters_) {
             Lock_.Release();
             WriteCond_.Signal();
-        } 
+        }
     } else {
         State_ = 0;
 
         if (BlockedWriters_) {
             Lock_.Release();
             WriteCond_.Signal();
-        } else { 
+        } else {
             Lock_.Release();
             ReadCond_.Signal();
-        } 
-    } 
+        }
+    }
 }
 
 #else /* POSIX threads */
@@ -212,7 +212,7 @@ void TRWMutex::TImpl::Release() noexcept {
     Y_VERIFY(result == 0, "rwlock unlock failed (%s)", LastSystemErrorText(result));
 }
 
-#endif 
+#endif
 
 TRWMutex::TRWMutex()
     : Impl_(new TImpl())

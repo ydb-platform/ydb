@@ -1,7 +1,7 @@
 #include "printf.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 Y_UNIT_TEST_SUITE(TStringPrintf) {
     Y_UNIT_TEST(TestSprintf) {
         TString s;

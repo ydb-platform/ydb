@@ -1,10 +1,10 @@
 #pragma once
- 
+
 #include "socket.h"
 
 #include <util/generic/ptr.h>
 #include <util/datetime/base.h>
- 
+
 class TSocketPoller {
 public:
     TSocketPoller();
@@ -55,4 +55,4 @@ public:
 private:
     class TImpl;
     THolder<TImpl> Impl_;
-}; 
+};

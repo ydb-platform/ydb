@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "mutex.h"
 
 #include <util/generic/ptr.h>
@@ -12,10 +12,10 @@ class TCondVar {
 public:
     TCondVar();
     ~TCondVar();
- 
+
     void BroadCast() noexcept;
     void Signal() noexcept;
- 
+
     /*
      * returns false if failed by timeout
      */

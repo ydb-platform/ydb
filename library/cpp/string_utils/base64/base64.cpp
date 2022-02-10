@@ -164,15 +164,15 @@ static size_t Base64DecodePlain(void* dst, const char* b, const char* e) {
         n += 3;
     }
 
-    if (n > 0) { 
+    if (n > 0) {
         if (b[-1] == ',' || b[-1] == '=') {
-            n--; 
+            n--;
 
             if (b[-2] == ',' || b[-2] == '=') {
-                n--; 
+                n--;
             }
-        } 
-    } 
+        }
+    }
 
     return n;
 }

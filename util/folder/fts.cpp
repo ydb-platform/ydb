@@ -29,8 +29,8 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- * 
- * $OpenBSD: fts.c,v 1.22 1999/10/03 19:22:22 millert Exp $ 
+ *
+ * $OpenBSD: fts.c,v 1.22 1999/10/03 19:22:22 millert Exp $
  */
 
 #include <util/memory/tempbuf.h>
@@ -271,7 +271,7 @@ FTS* yfts_open(char* const* argv, int options, int (*compar)(const FTSENT**, con
 
     /* Shush, GCC. */
     tmp = nullptr;
- 
+
     /* Logical walks turn on NOCHDIR; symbolic links are too hard. */
     if (ISSET(FTS_LOGICAL)) {
         SET(FTS_NOCHDIR);
@@ -450,8 +450,8 @@ int yfts_close(FTS* sp)
 }
 
 /*
- * Special case of "/" at the end of the path so that slashes aren't 
- * appended which would cause paths to be written as "....//foo". 
+ * Special case of "/" at the end of the path so that slashes aren't
+ * appended which would cause paths to be written as "....//foo".
  */
 #define NAPPEND(p)                                 \
     (p->fts_path[p->fts_pathlen - 1] == LOCSLASH_C \
@@ -803,14 +803,14 @@ fts_build(FTS* sp, int type)
      * Open the directory for reading.  If this fails, we're done.
      * If being called from yfts_read, set the fts_info field.
      */
-#ifdef FTS_WHITEOUT 
+#ifdef FTS_WHITEOUT
     if (ISSET(FTS_WHITEOUT))
         oflag = DTF_NODUP | DTF_REWIND;
     else
         oflag = DTF_HIDEW | DTF_NODUP | DTF_REWIND;
-#else 
+#else
     #define __opendir2(path, flag) opendir(path)
-#endif 
+#endif
     if ((dirp = __opendir2(cur->fts_accpath, oflag)) == nullptr) {
         if (type == BREAD) {
             cur->fts_info = FTS_DNR;
@@ -976,11 +976,11 @@ fts_build(FTS* sp, int type)
         p->fts_parent = sp->fts_cur;
         p->fts_pathlen = u_short(len + strlen(dp->d_name));
 
-#ifdef FTS_WHITEOUT 
+#ifdef FTS_WHITEOUT
         if (dp->d_type == DT_WHT)
             p->fts_flags |= FTS_ISW;
-#endif 
- 
+#endif
+
 #ifdef _DIRENT_HAVE_D_TYPE
         if (dp->d_type == DT_DIR) {
             p->fts_type = FTS_D;
@@ -1105,7 +1105,7 @@ fts_stat(FTS* sp, FTSENT* p, int follow)
     /* If user needs stat info, stat buffer already allocated. */
     sbp = ISSET(FTS_NOSTAT) ? &sb : p->fts_statp;
 
-#ifdef FTS_WHITEOUT 
+#ifdef FTS_WHITEOUT
     /* check for whiteout */
     if (p->fts_flags & FTS_ISW) {
         if (sbp != &sb) {
@@ -1114,8 +1114,8 @@ fts_stat(FTS* sp, FTSENT* p, int follow)
         }
         return (FTS_W);
     }
-#endif 
- 
+#endif
+
     /*
      * If doing a logical walk, or application requested FTS_FOLLOW, do
      * a stat(2).  If that fails, check for a non-existent symlink.  If
@@ -1199,7 +1199,7 @@ fts_sort(FTS* sp, FTSENT* head, int nitems)
      */
     if (nitems > sp->fts_nitems) {
         struct _ftsent** a;
- 
+
         sp->fts_nitems = nitems + 40;
         if ((a = (struct _ftsent**)realloc(sp->fts_array,
                                            sp->fts_nitems * sizeof(FTSENT*))) == nullptr) {
@@ -1289,9 +1289,9 @@ fts_palloc(FTS* sp, size_t more)
     return (sp->fts_path == nullptr);
 }
 
-static void 
+static void
 ADJUST(FTSENT* p, void* addr)
-{ 
+{
     if ((p)->fts_accpath >= (p)->fts_path &&
         (p)->fts_accpath < (p)->fts_path + (p)->fts_pathlen) {
         if (p->fts_accpath != p->fts_path) {
@@ -1305,8 +1305,8 @@ ADJUST(FTSENT* p, void* addr)
             (char*)addr + ((p)->fts_accpath - (p)->fts_path);
     }
     (p)->fts_path = (char*)addr;
-} 
- 
+}
+
 /*
  * When the path is realloc'd, have to fix all of the pointers in structures
  * already returned.
@@ -1347,20 +1347,20 @@ fts_maxarglen(char* const* argv)
     }
     return (max + 1);
 }
- 
-/* 
- * Change to dir specified by fd or p->fts_accpath without getting 
- * tricked by someone changing the world out from underneath us. 
- * Assumes p->fts_dev and p->fts_ino are filled in. 
- */ 
+
+/*
+ * Change to dir specified by fd or p->fts_accpath without getting
+ * tricked by someone changing the world out from underneath us.
+ * Assumes p->fts_dev and p->fts_ino are filled in.
+ */
 
 #ifndef _win_
-static int 
+static int
 fts_safe_changedir(FTS* sp, FTSENT* p, int fd, const char* path)
-{ 
+{
     int ret, oerrno, newfd;
     stat_struct sb;
- 
+
     newfd = fd;
     if (ISSET(FTS_NOCHDIR)) {
         return (0);
@@ -1378,14 +1378,14 @@ fts_safe_changedir(FTS* sp, FTSENT* p, int fd, const char* path)
         goto bail;
     }
     ret = fchdir(newfd);
-bail: 
+bail:
     oerrno = errno;
     if (fd < 0) {
         (void)close(newfd);
     }
     errno = oerrno;
     return (ret);
-} 
+}
 #else
 static int
 fts_safe_changedir(FTS* sp, FTSENT* p, int /*fd*/, const char* path)

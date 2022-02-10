@@ -6,8 +6,8 @@
     #include <alloca.h>
 #endif
 
-#include <cerrno> 
-#include <cstring> 
+#include <cerrno>
+#include <cstring>
 
 #ifdef _win_
     #include "winint.h"

@@ -64,16 +64,16 @@ int inet_aton(const char* cp, struct in_addr* inp) {
     #if (_WIN32_WINNT < 0x0600)
 const char* inet_ntop(int af, const void* src, char* dst, socklen_t size) {
     if (af != AF_INET) {
-        errno = EINVAL; 
-        return 0; 
-    } 
-    const ui8* ia = (ui8*)src; 
-    if (snprintf(dst, size, "%u.%u.%u.%u", ia[0], ia[1], ia[2], ia[3]) >= (int)size) { 
-        errno = ENOSPC; 
-        return 0; 
-    } 
-    return dst; 
-} 
+        errno = EINVAL;
+        return 0;
+    }
+    const ui8* ia = (ui8*)src;
+    if (snprintf(dst, size, "%u.%u.%u.%u", ia[0], ia[1], ia[2], ia[3]) >= (int)size) {
+        errno = ENOSPC;
+        return 0;
+    }
+    return dst;
+}
 
 struct evpair {
     int event;
@@ -242,13 +242,13 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept {
 
 bool GetRemoteAddr(SOCKET Socket, char* str, socklen_t size) {
     if (!size) {
-        return false; 
+        return false;
     }
 
     TOpaqueAddr addr;
 
     if (getpeername(Socket, addr.MutableAddr(), addr.LenPtr()) != 0) {
-        return false; 
+        return false;
     }
 
     try {
@@ -263,8 +263,8 @@ bool GetRemoteAddr(SOCKET Socket, char* str, socklen_t size) {
     }
 
     return false;
-} 
- 
+}
+
 void SetSocketTimeout(SOCKET s, long timeout) {
     SetSocketTimeout(s, timeout, 0);
 }

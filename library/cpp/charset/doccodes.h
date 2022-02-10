@@ -1,5 +1,5 @@
 #pragma once
- 
+
 enum ECharset {
     CODES_UNSUPPORTED = -2, // valid but unsupported encoding
     CODES_UNKNOWN = -1,     // invalid or unspecified encoding
@@ -126,4 +126,4 @@ enum ECharset {
     CODES_SHIFT_JIS,
 
     CODES_MAX
-}; 
+};

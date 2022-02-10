@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <cstddef>
 #include <cstring>
 #include <stlfwd>
@@ -370,7 +370,7 @@ public:
 
         return *this;
     }
- 
+
     // ~~~ Constructor ~~~ : FAMILY0(,TBasicString)
     TBasicString() noexcept
 #ifndef TSTRING_IS_STD_STRING
@@ -433,7 +433,7 @@ public:
 #endif
     {
     }
- 
+
     TBasicString(const TCharType* pc)
         : TBasicString(pc, TBase::StrLen(pc))
     {
@@ -893,7 +893,7 @@ public:
         s1 += s2;
         return std::move(s1);
     }
- 
+
     friend TBasicString operator+(TBasicString&& s1, TCharType s2) Y_WARN_UNUSED_RESULT {
         s1 += s2;
         return std::move(s1);
@@ -975,7 +975,7 @@ public:
 
         return *this;
     }
- 
+
     TBasicString& prepend(const TBasicStringBuf<TCharType, TTraits> s, size_t spos = 0, size_t sn = TBase::npos) {
         return insert(0, s, spos, sn);
     }
@@ -1193,7 +1193,7 @@ public:
 
 std::ostream& operator<<(std::ostream&, const TString&);
 std::istream& operator>>(std::istream&, TString&);
- 
+
 template <typename TCharType, typename TTraits>
 TBasicString<TCharType> to_lower(const TBasicString<TCharType, TTraits>& s) {
     TBasicString<TCharType> ret(s);

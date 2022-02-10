@@ -23,11 +23,11 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Container for <code>TagSet</code> elements.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Tagging">AWS API 
-   * Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Tagging">AWS API
+   * Reference</a></p>
+   */
   class AWS_S3_API Tagging
   {
   public:
@@ -38,44 +38,44 @@ namespace Model
     void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
-    /** 
+    /**
      * <p>A collection for a set of tags</p>
-     */ 
+     */
     inline const Aws::Vector<Tag>& GetTagSet() const{ return m_tagSet; }
 
-    /** 
+    /**
      * <p>A collection for a set of tags</p>
-     */ 
-    inline bool TagSetHasBeenSet() const { return m_tagSetHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool TagSetHasBeenSet() const { return m_tagSetHasBeenSet; }
+
+    /**
      * <p>A collection for a set of tags</p>
-     */ 
+     */
     inline void SetTagSet(const Aws::Vector<Tag>& value) { m_tagSetHasBeenSet = true; m_tagSet = value; }
 
-    /** 
+    /**
      * <p>A collection for a set of tags</p>
-     */ 
+     */
     inline void SetTagSet(Aws::Vector<Tag>&& value) { m_tagSetHasBeenSet = true; m_tagSet = std::move(value); }
 
-    /** 
+    /**
      * <p>A collection for a set of tags</p>
-     */ 
+     */
     inline Tagging& WithTagSet(const Aws::Vector<Tag>& value) { SetTagSet(value); return *this;}
 
-    /** 
+    /**
      * <p>A collection for a set of tags</p>
-     */ 
+     */
     inline Tagging& WithTagSet(Aws::Vector<Tag>&& value) { SetTagSet(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>A collection for a set of tags</p>
-     */ 
+     */
     inline Tagging& AddTagSet(const Tag& value) { m_tagSetHasBeenSet = true; m_tagSet.push_back(value); return *this; }
 
-    /** 
+    /**
      * <p>A collection for a set of tags</p>
-     */ 
+     */
     inline Tagging& AddTagSet(Tag&& value) { m_tagSetHasBeenSet = true; m_tagSet.push_back(std::move(value)); return *this; }
 
   private:

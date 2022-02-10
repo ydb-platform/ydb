@@ -45,7 +45,7 @@ namespace Model
     inline bool ShouldComputeContentMd5() const override { return true; }
 
 
-    /** 
+    /**
      * <p>The bucket name containing the objects to delete. </p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -65,10 +65,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
-    /** 
+    /**
      * <p>The bucket name containing the objects to delete. </p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -88,10 +88,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
+
+    /**
      * <p>The bucket name containing the objects to delete. </p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -111,10 +111,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
-    /** 
+    /**
      * <p>The bucket name containing the objects to delete. </p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -134,10 +134,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
-    /** 
+    /**
      * <p>The bucket name containing the objects to delete. </p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -157,10 +157,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
-    /** 
+    /**
      * <p>The bucket name containing the objects to delete. </p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -180,10 +180,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline DeleteObjectsRequest& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
-    /** 
+    /**
      * <p>The bucket name containing the objects to delete. </p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -203,10 +203,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline DeleteObjectsRequest& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>The bucket name containing the objects to delete. </p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -226,38 +226,38 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline DeleteObjectsRequest& WithBucket(const char* value) { SetBucket(value); return *this;}
 
 
-    /** 
+    /**
      * <p>Container for the request.</p>
-     */ 
+     */
     inline const Delete& GetDelete() const{ return m_delete; }
 
-    /** 
+    /**
      * <p>Container for the request.</p>
-     */ 
-    inline bool DeleteHasBeenSet() const { return m_deleteHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool DeleteHasBeenSet() const { return m_deleteHasBeenSet; }
+
+    /**
      * <p>Container for the request.</p>
-     */ 
+     */
     inline void SetDelete(const Delete& value) { m_deleteHasBeenSet = true; m_delete = value; }
 
-    /** 
+    /**
      * <p>Container for the request.</p>
-     */ 
+     */
     inline void SetDelete(Delete&& value) { m_deleteHasBeenSet = true; m_delete = std::move(value); }
 
-    /** 
+    /**
      * <p>Container for the request.</p>
-     */ 
+     */
     inline DeleteObjectsRequest& WithDelete(const Delete& value) { SetDelete(value); return *this;}
 
-    /** 
+    /**
      * <p>Container for the request.</p>
-     */ 
+     */
     inline DeleteObjectsRequest& WithDelete(Delete&& value) { SetDelete(std::move(value)); return *this;}
 
 
@@ -275,14 +275,14 @@ namespace Model
      * permanently delete a versioned object if versioning is configured with MFA
      * delete enabled.</p>
      */
-    inline bool MFAHasBeenSet() const { return m_mFAHasBeenSet; } 
- 
-    /** 
-     * <p>The concatenation of the authentication device's serial number, a space, and 
+    inline bool MFAHasBeenSet() const { return m_mFAHasBeenSet; }
+
+    /**
+     * <p>The concatenation of the authentication device's serial number, a space, and
      * the value that is displayed on your authentication device. Required to
      * permanently delete a versioned object if versioning is configured with MFA
      * delete enabled.</p>
-     */ 
+     */
     inline void SetMFA(const Aws::String& value) { m_mFAHasBeenSet = true; m_mFA = value; }
 
     /**
@@ -330,9 +330,9 @@ namespace Model
     inline const RequestPayer& GetRequestPayer() const{ return m_requestPayer; }
 
     
-    inline bool RequestPayerHasBeenSet() const { return m_requestPayerHasBeenSet; } 
- 
-     
+    inline bool RequestPayerHasBeenSet() const { return m_requestPayerHasBeenSet; }
+
+    
     inline void SetRequestPayer(const RequestPayer& value) { m_requestPayerHasBeenSet = true; m_requestPayer = value; }
 
     
@@ -345,35 +345,35 @@ namespace Model
     inline DeleteObjectsRequest& WithRequestPayer(RequestPayer&& value) { SetRequestPayer(std::move(value)); return *this;}
 
 
-    /** 
-     * <p>Specifies whether you want to delete this object even if it has a 
-     * Governance-type Object Lock in place. You must have sufficient permissions to 
-     * perform this operation.</p> 
-     */ 
-    inline bool GetBypassGovernanceRetention() const{ return m_bypassGovernanceRetention; } 
- 
-    /** 
-     * <p>Specifies whether you want to delete this object even if it has a 
-     * Governance-type Object Lock in place. You must have sufficient permissions to 
-     * perform this operation.</p> 
-     */ 
-    inline bool BypassGovernanceRetentionHasBeenSet() const { return m_bypassGovernanceRetentionHasBeenSet; } 
- 
-    /** 
-     * <p>Specifies whether you want to delete this object even if it has a 
-     * Governance-type Object Lock in place. You must have sufficient permissions to 
-     * perform this operation.</p> 
-     */ 
-    inline void SetBypassGovernanceRetention(bool value) { m_bypassGovernanceRetentionHasBeenSet = true; m_bypassGovernanceRetention = value; } 
- 
-    /** 
-     * <p>Specifies whether you want to delete this object even if it has a 
-     * Governance-type Object Lock in place. You must have sufficient permissions to 
-     * perform this operation.</p> 
-     */ 
-    inline DeleteObjectsRequest& WithBypassGovernanceRetention(bool value) { SetBypassGovernanceRetention(value); return *this;} 
- 
- 
+    /**
+     * <p>Specifies whether you want to delete this object even if it has a
+     * Governance-type Object Lock in place. You must have sufficient permissions to
+     * perform this operation.</p>
+     */
+    inline bool GetBypassGovernanceRetention() const{ return m_bypassGovernanceRetention; }
+
+    /**
+     * <p>Specifies whether you want to delete this object even if it has a
+     * Governance-type Object Lock in place. You must have sufficient permissions to
+     * perform this operation.</p>
+     */
+    inline bool BypassGovernanceRetentionHasBeenSet() const { return m_bypassGovernanceRetentionHasBeenSet; }
+
+    /**
+     * <p>Specifies whether you want to delete this object even if it has a
+     * Governance-type Object Lock in place. You must have sufficient permissions to
+     * perform this operation.</p>
+     */
+    inline void SetBypassGovernanceRetention(bool value) { m_bypassGovernanceRetentionHasBeenSet = true; m_bypassGovernanceRetention = value; }
+
+    /**
+     * <p>Specifies whether you want to delete this object even if it has a
+     * Governance-type Object Lock in place. You must have sufficient permissions to
+     * perform this operation.</p>
+     */
+    inline DeleteObjectsRequest& WithBypassGovernanceRetention(bool value) { SetBypassGovernanceRetention(value); return *this;}
+
+
     /**
      * <p>The account id of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
@@ -435,9 +435,9 @@ namespace Model
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
- 
-     
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
+
+    
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     
@@ -484,9 +484,9 @@ namespace Model
     RequestPayer m_requestPayer;
     bool m_requestPayerHasBeenSet;
 
-    bool m_bypassGovernanceRetention; 
-    bool m_bypassGovernanceRetentionHasBeenSet; 
- 
+    bool m_bypassGovernanceRetention;
+    bool m_bypassGovernanceRetentionHasBeenSet;
+
     Aws::String m_expectedBucketOwner;
     bool m_expectedBucketOwnerHasBeenSet;
 

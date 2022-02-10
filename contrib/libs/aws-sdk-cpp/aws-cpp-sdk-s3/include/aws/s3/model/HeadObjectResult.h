@@ -13,8 +13,8 @@
 #include <aws/s3/model/StorageClass.h>
 #include <aws/s3/model/RequestCharged.h>
 #include <aws/s3/model/ReplicationStatus.h>
-#include <aws/s3/model/ObjectLockMode.h> 
-#include <aws/s3/model/ObjectLockLegalHoldStatus.h> 
+#include <aws/s3/model/ObjectLockMode.h>
+#include <aws/s3/model/ObjectLockLegalHoldStatus.h>
 #include <utility>
 
 namespace Aws
@@ -60,39 +60,39 @@ namespace Model
     inline HeadObjectResult& WithDeleteMarker(bool value) { SetDeleteMarker(value); return *this;}
 
 
-    /** 
+    /**
      * <p>Indicates that a range of bytes was specified.</p>
-     */ 
+     */
     inline const Aws::String& GetAcceptRanges() const{ return m_acceptRanges; }
 
-    /** 
+    /**
      * <p>Indicates that a range of bytes was specified.</p>
-     */ 
+     */
     inline void SetAcceptRanges(const Aws::String& value) { m_acceptRanges = value; }
 
-    /** 
+    /**
      * <p>Indicates that a range of bytes was specified.</p>
-     */ 
+     */
     inline void SetAcceptRanges(Aws::String&& value) { m_acceptRanges = std::move(value); }
 
-    /** 
+    /**
      * <p>Indicates that a range of bytes was specified.</p>
-     */ 
+     */
     inline void SetAcceptRanges(const char* value) { m_acceptRanges.assign(value); }
 
-    /** 
+    /**
      * <p>Indicates that a range of bytes was specified.</p>
-     */ 
+     */
     inline HeadObjectResult& WithAcceptRanges(const Aws::String& value) { SetAcceptRanges(value); return *this;}
 
-    /** 
+    /**
      * <p>Indicates that a range of bytes was specified.</p>
-     */ 
+     */
     inline HeadObjectResult& WithAcceptRanges(Aws::String&& value) { SetAcceptRanges(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>Indicates that a range of bytes was specified.</p>
-     */ 
+     */
     inline HeadObjectResult& WithAcceptRanges(const char* value) { SetAcceptRanges(value); return *this;}
 
 
@@ -970,10 +970,10 @@ namespace Model
     inline HeadObjectResult& WithSSEKMSKeyId(const char* value) { SetSSEKMSKeyId(value); return *this;}
 
 
-    /** 
+    /**
      * <p>Indicates whether the object uses an S3 Bucket Key for server-side encryption
      * with AWS KMS (SSE-KMS).</p>
-     */ 
+     */
     inline bool GetBucketKeyEnabled() const{ return m_bucketKeyEnabled; }
 
     /**
@@ -998,40 +998,40 @@ namespace Model
      */
     inline const StorageClass& GetStorageClass() const{ return m_storageClass; }
 
-    /** 
+    /**
      * <p>Provides storage class information of the object. Amazon S3 returns this
      * header for all objects except for S3 Standard storage class objects.</p> <p>For
      * more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html">Storage
      * Classes</a>.</p>
-     */ 
+     */
     inline void SetStorageClass(const StorageClass& value) { m_storageClass = value; }
 
-    /** 
+    /**
      * <p>Provides storage class information of the object. Amazon S3 returns this
      * header for all objects except for S3 Standard storage class objects.</p> <p>For
      * more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html">Storage
      * Classes</a>.</p>
-     */ 
+     */
     inline void SetStorageClass(StorageClass&& value) { m_storageClass = std::move(value); }
 
-    /** 
+    /**
      * <p>Provides storage class information of the object. Amazon S3 returns this
      * header for all objects except for S3 Standard storage class objects.</p> <p>For
      * more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html">Storage
      * Classes</a>.</p>
-     */ 
+     */
     inline HeadObjectResult& WithStorageClass(const StorageClass& value) { SetStorageClass(value); return *this;}
 
-    /** 
+    /**
      * <p>Provides storage class information of the object. Amazon S3 returns this
      * header for all objects except for S3 Standard storage class objects.</p> <p>For
      * more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html">Storage
      * Classes</a>.</p>
-     */ 
+     */
     inline HeadObjectResult& WithStorageClass(StorageClass&& value) { SetStorageClass(std::move(value)); return *this;}
 
 
@@ -1051,7 +1051,7 @@ namespace Model
     inline HeadObjectResult& WithRequestCharged(RequestCharged&& value) { SetRequestCharged(std::move(value)); return *this;}
 
 
-    /** 
+    /**
      * <p>Amazon S3 can return this header if your request involves a bucket that is
      * either a source or a destination in a replication rule.</p> <p>In replication,
      * you have a source bucket on which you configure replication and destination
@@ -1080,10 +1080,10 @@ namespace Model
      * one or more destinations fails replication the header will return FAILED. </p>
      * </li> </ul> <p>For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Replication</a>.</p>
-     */ 
+     */
     inline const ReplicationStatus& GetReplicationStatus() const{ return m_replicationStatus; }
 
-    /** 
+    /**
      * <p>Amazon S3 can return this header if your request involves a bucket that is
      * either a source or a destination in a replication rule.</p> <p>In replication,
      * you have a source bucket on which you configure replication and destination
@@ -1112,10 +1112,10 @@ namespace Model
      * one or more destinations fails replication the header will return FAILED. </p>
      * </li> </ul> <p>For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Replication</a>.</p>
-     */ 
+     */
     inline void SetReplicationStatus(const ReplicationStatus& value) { m_replicationStatus = value; }
 
-    /** 
+    /**
      * <p>Amazon S3 can return this header if your request involves a bucket that is
      * either a source or a destination in a replication rule.</p> <p>In replication,
      * you have a source bucket on which you configure replication and destination
@@ -1144,10 +1144,10 @@ namespace Model
      * one or more destinations fails replication the header will return FAILED. </p>
      * </li> </ul> <p>For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Replication</a>.</p>
-     */ 
+     */
     inline void SetReplicationStatus(ReplicationStatus&& value) { m_replicationStatus = std::move(value); }
 
-    /** 
+    /**
      * <p>Amazon S3 can return this header if your request involves a bucket that is
      * either a source or a destination in a replication rule.</p> <p>In replication,
      * you have a source bucket on which you configure replication and destination
@@ -1176,10 +1176,10 @@ namespace Model
      * one or more destinations fails replication the header will return FAILED. </p>
      * </li> </ul> <p>For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Replication</a>.</p>
-     */ 
+     */
     inline HeadObjectResult& WithReplicationStatus(const ReplicationStatus& value) { SetReplicationStatus(value); return *this;}
 
-    /** 
+    /**
      * <p>Amazon S3 can return this header if your request involves a bucket that is
      * either a source or a destination in a replication rule.</p> <p>In replication,
      * you have a source bucket on which you configure replication and destination
@@ -1208,7 +1208,7 @@ namespace Model
      * one or more destinations fails replication the header will return FAILED. </p>
      * </li> </ul> <p>For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Replication</a>.</p>
-     */ 
+     */
     inline HeadObjectResult& WithReplicationStatus(ReplicationStatus&& value) { SetReplicationStatus(std::move(value)); return *this;}
 
 
@@ -1227,90 +1227,90 @@ namespace Model
      */
     inline HeadObjectResult& WithPartsCount(int value) { SetPartsCount(value); return *this;}
 
- 
-    /** 
+
+    /**
      * <p>The Object Lock mode, if any, that's in effect for this object. This header
      * is only returned if the requester has the <code>s3:GetObjectRetention</code>
      * permission. For more information about S3 Object Lock, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>. </p>
-     */ 
-    inline const ObjectLockMode& GetObjectLockMode() const{ return m_objectLockMode; } 
- 
-    /** 
+     */
+    inline const ObjectLockMode& GetObjectLockMode() const{ return m_objectLockMode; }
+
+    /**
      * <p>The Object Lock mode, if any, that's in effect for this object. This header
      * is only returned if the requester has the <code>s3:GetObjectRetention</code>
      * permission. For more information about S3 Object Lock, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>. </p>
-     */ 
-    inline void SetObjectLockMode(const ObjectLockMode& value) { m_objectLockMode = value; } 
- 
-    /** 
+     */
+    inline void SetObjectLockMode(const ObjectLockMode& value) { m_objectLockMode = value; }
+
+    /**
      * <p>The Object Lock mode, if any, that's in effect for this object. This header
      * is only returned if the requester has the <code>s3:GetObjectRetention</code>
      * permission. For more information about S3 Object Lock, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>. </p>
-     */ 
-    inline void SetObjectLockMode(ObjectLockMode&& value) { m_objectLockMode = std::move(value); } 
- 
-    /** 
+     */
+    inline void SetObjectLockMode(ObjectLockMode&& value) { m_objectLockMode = std::move(value); }
+
+    /**
      * <p>The Object Lock mode, if any, that's in effect for this object. This header
      * is only returned if the requester has the <code>s3:GetObjectRetention</code>
      * permission. For more information about S3 Object Lock, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>. </p>
-     */ 
-    inline HeadObjectResult& WithObjectLockMode(const ObjectLockMode& value) { SetObjectLockMode(value); return *this;} 
- 
-    /** 
+     */
+    inline HeadObjectResult& WithObjectLockMode(const ObjectLockMode& value) { SetObjectLockMode(value); return *this;}
+
+    /**
      * <p>The Object Lock mode, if any, that's in effect for this object. This header
      * is only returned if the requester has the <code>s3:GetObjectRetention</code>
      * permission. For more information about S3 Object Lock, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>. </p>
-     */ 
-    inline HeadObjectResult& WithObjectLockMode(ObjectLockMode&& value) { SetObjectLockMode(std::move(value)); return *this;} 
- 
- 
-    /** 
+     */
+    inline HeadObjectResult& WithObjectLockMode(ObjectLockMode&& value) { SetObjectLockMode(std::move(value)); return *this;}
+
+
+    /**
      * <p>The date and time when the Object Lock retention period expires. This header
      * is only returned if the requester has the <code>s3:GetObjectRetention</code>
      * permission.</p>
-     */ 
-    inline const Aws::Utils::DateTime& GetObjectLockRetainUntilDate() const{ return m_objectLockRetainUntilDate; } 
- 
-    /** 
+     */
+    inline const Aws::Utils::DateTime& GetObjectLockRetainUntilDate() const{ return m_objectLockRetainUntilDate; }
+
+    /**
      * <p>The date and time when the Object Lock retention period expires. This header
      * is only returned if the requester has the <code>s3:GetObjectRetention</code>
      * permission.</p>
-     */ 
-    inline void SetObjectLockRetainUntilDate(const Aws::Utils::DateTime& value) { m_objectLockRetainUntilDate = value; } 
- 
-    /** 
+     */
+    inline void SetObjectLockRetainUntilDate(const Aws::Utils::DateTime& value) { m_objectLockRetainUntilDate = value; }
+
+    /**
      * <p>The date and time when the Object Lock retention period expires. This header
      * is only returned if the requester has the <code>s3:GetObjectRetention</code>
      * permission.</p>
-     */ 
-    inline void SetObjectLockRetainUntilDate(Aws::Utils::DateTime&& value) { m_objectLockRetainUntilDate = std::move(value); } 
- 
-    /** 
+     */
+    inline void SetObjectLockRetainUntilDate(Aws::Utils::DateTime&& value) { m_objectLockRetainUntilDate = std::move(value); }
+
+    /**
      * <p>The date and time when the Object Lock retention period expires. This header
      * is only returned if the requester has the <code>s3:GetObjectRetention</code>
      * permission.</p>
-     */ 
-    inline HeadObjectResult& WithObjectLockRetainUntilDate(const Aws::Utils::DateTime& value) { SetObjectLockRetainUntilDate(value); return *this;} 
- 
-    /** 
+     */
+    inline HeadObjectResult& WithObjectLockRetainUntilDate(const Aws::Utils::DateTime& value) { SetObjectLockRetainUntilDate(value); return *this;}
+
+    /**
      * <p>The date and time when the Object Lock retention period expires. This header
      * is only returned if the requester has the <code>s3:GetObjectRetention</code>
      * permission.</p>
-     */ 
-    inline HeadObjectResult& WithObjectLockRetainUntilDate(Aws::Utils::DateTime&& value) { SetObjectLockRetainUntilDate(std::move(value)); return *this;} 
- 
- 
-    /** 
+     */
+    inline HeadObjectResult& WithObjectLockRetainUntilDate(Aws::Utils::DateTime&& value) { SetObjectLockRetainUntilDate(std::move(value)); return *this;}
+
+
+    /**
      * <p>Specifies whether a legal hold is in effect for this object. This header is
      * only returned if the requester has the <code>s3:GetObjectLegalHold</code>
      * permission. This header is not returned if the specified version of this object
@@ -1318,10 +1318,10 @@ namespace Model
      * see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>.</p>
-     */ 
-    inline const ObjectLockLegalHoldStatus& GetObjectLockLegalHoldStatus() const{ return m_objectLockLegalHoldStatus; } 
- 
-    /** 
+     */
+    inline const ObjectLockLegalHoldStatus& GetObjectLockLegalHoldStatus() const{ return m_objectLockLegalHoldStatus; }
+
+    /**
      * <p>Specifies whether a legal hold is in effect for this object. This header is
      * only returned if the requester has the <code>s3:GetObjectLegalHold</code>
      * permission. This header is not returned if the specified version of this object
@@ -1329,10 +1329,10 @@ namespace Model
      * see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>.</p>
-     */ 
-    inline void SetObjectLockLegalHoldStatus(const ObjectLockLegalHoldStatus& value) { m_objectLockLegalHoldStatus = value; } 
- 
-    /** 
+     */
+    inline void SetObjectLockLegalHoldStatus(const ObjectLockLegalHoldStatus& value) { m_objectLockLegalHoldStatus = value; }
+
+    /**
      * <p>Specifies whether a legal hold is in effect for this object. This header is
      * only returned if the requester has the <code>s3:GetObjectLegalHold</code>
      * permission. This header is not returned if the specified version of this object
@@ -1340,10 +1340,10 @@ namespace Model
      * see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>.</p>
-     */ 
-    inline void SetObjectLockLegalHoldStatus(ObjectLockLegalHoldStatus&& value) { m_objectLockLegalHoldStatus = std::move(value); } 
- 
-    /** 
+     */
+    inline void SetObjectLockLegalHoldStatus(ObjectLockLegalHoldStatus&& value) { m_objectLockLegalHoldStatus = std::move(value); }
+
+    /**
      * <p>Specifies whether a legal hold is in effect for this object. This header is
      * only returned if the requester has the <code>s3:GetObjectLegalHold</code>
      * permission. This header is not returned if the specified version of this object
@@ -1351,10 +1351,10 @@ namespace Model
      * see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>.</p>
-     */ 
-    inline HeadObjectResult& WithObjectLockLegalHoldStatus(const ObjectLockLegalHoldStatus& value) { SetObjectLockLegalHoldStatus(value); return *this;} 
- 
-    /** 
+     */
+    inline HeadObjectResult& WithObjectLockLegalHoldStatus(const ObjectLockLegalHoldStatus& value) { SetObjectLockLegalHoldStatus(value); return *this;}
+
+    /**
      * <p>Specifies whether a legal hold is in effect for this object. This header is
      * only returned if the requester has the <code>s3:GetObjectLegalHold</code>
      * permission. This header is not returned if the specified version of this object
@@ -1362,9 +1362,9 @@ namespace Model
      * see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>.</p>
-     */ 
-    inline HeadObjectResult& WithObjectLockLegalHoldStatus(ObjectLockLegalHoldStatus&& value) { SetObjectLockLegalHoldStatus(std::move(value)); return *this;} 
- 
+     */
+    inline HeadObjectResult& WithObjectLockLegalHoldStatus(ObjectLockLegalHoldStatus&& value) { SetObjectLockLegalHoldStatus(std::move(value)); return *this;}
+
   private:
 
     bool m_deleteMarker;
@@ -1420,12 +1420,12 @@ namespace Model
     ReplicationStatus m_replicationStatus;
 
     int m_partsCount;
- 
-    ObjectLockMode m_objectLockMode; 
- 
-    Aws::Utils::DateTime m_objectLockRetainUntilDate; 
- 
-    ObjectLockLegalHoldStatus m_objectLockLegalHoldStatus; 
+
+    ObjectLockMode m_objectLockMode;
+
+    Aws::Utils::DateTime m_objectLockRetainUntilDate;
+
+    ObjectLockLegalHoldStatus m_objectLockLegalHoldStatus;
   };
 
 } // namespace Model

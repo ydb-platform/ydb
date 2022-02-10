@@ -58,13 +58,13 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL">Canned
      * ACL</a>.</p>
      */
-    inline bool ACLHasBeenSet() const { return m_aCLHasBeenSet; } 
- 
-    /** 
+    inline bool ACLHasBeenSet() const { return m_aCLHasBeenSet; }
+
+    /**
      * <p>The canned ACL to apply to the object. For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL">Canned
      * ACL</a>.</p>
-     */ 
+     */
     inline void SetACL(const ObjectCannedACL& value) { m_aCLHasBeenSet = true; m_aCL = value; }
 
     /**
@@ -89,44 +89,44 @@ namespace Model
     inline PutObjectAclRequest& WithACL(ObjectCannedACL&& value) { SetACL(std::move(value)); return *this;}
 
 
-    /** 
+    /**
      * <p>Contains the elements that set the ACL permissions for an object per
      * grantee.</p>
-     */ 
+     */
     inline const AccessControlPolicy& GetAccessControlPolicy() const{ return m_accessControlPolicy; }
 
-    /** 
+    /**
      * <p>Contains the elements that set the ACL permissions for an object per
      * grantee.</p>
-     */ 
-    inline bool AccessControlPolicyHasBeenSet() const { return m_accessControlPolicyHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool AccessControlPolicyHasBeenSet() const { return m_accessControlPolicyHasBeenSet; }
+
+    /**
      * <p>Contains the elements that set the ACL permissions for an object per
      * grantee.</p>
-     */ 
+     */
     inline void SetAccessControlPolicy(const AccessControlPolicy& value) { m_accessControlPolicyHasBeenSet = true; m_accessControlPolicy = value; }
 
-    /** 
+    /**
      * <p>Contains the elements that set the ACL permissions for an object per
      * grantee.</p>
-     */ 
+     */
     inline void SetAccessControlPolicy(AccessControlPolicy&& value) { m_accessControlPolicyHasBeenSet = true; m_accessControlPolicy = std::move(value); }
 
-    /** 
+    /**
      * <p>Contains the elements that set the ACL permissions for an object per
      * grantee.</p>
-     */ 
+     */
     inline PutObjectAclRequest& WithAccessControlPolicy(const AccessControlPolicy& value) { SetAccessControlPolicy(value); return *this;}
 
-    /** 
+    /**
      * <p>Contains the elements that set the ACL permissions for an object per
      * grantee.</p>
-     */ 
+     */
     inline PutObjectAclRequest& WithAccessControlPolicy(AccessControlPolicy&& value) { SetAccessControlPolicy(std::move(value)); return *this;}
 
 
-    /** 
+    /**
      * <p>The bucket name that contains the object to which you want to attach the ACL.
      * </p> <p>When using this API with an access point, you must direct requests to
      * the access point hostname. The access point hostname takes the form
@@ -137,10 +137,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
      * Access Points</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
-    /** 
+    /**
      * <p>The bucket name that contains the object to which you want to attach the ACL.
      * </p> <p>When using this API with an access point, you must direct requests to
      * the access point hostname. The access point hostname takes the form
@@ -151,10 +151,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
      * Access Points</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
+
+    /**
      * <p>The bucket name that contains the object to which you want to attach the ACL.
      * </p> <p>When using this API with an access point, you must direct requests to
      * the access point hostname. The access point hostname takes the form
@@ -165,10 +165,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
      * Access Points</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
-    /** 
+    /**
      * <p>The bucket name that contains the object to which you want to attach the ACL.
      * </p> <p>When using this API with an access point, you must direct requests to
      * the access point hostname. The access point hostname takes the form
@@ -179,10 +179,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
      * Access Points</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
-    /** 
+    /**
      * <p>The bucket name that contains the object to which you want to attach the ACL.
      * </p> <p>When using this API with an access point, you must direct requests to
      * the access point hostname. The access point hostname takes the form
@@ -193,10 +193,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
      * Access Points</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
-    /** 
+    /**
      * <p>The bucket name that contains the object to which you want to attach the ACL.
      * </p> <p>When using this API with an access point, you must direct requests to
      * the access point hostname. The access point hostname takes the form
@@ -207,10 +207,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
      * Access Points</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline PutObjectAclRequest& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
-    /** 
+    /**
      * <p>The bucket name that contains the object to which you want to attach the ACL.
      * </p> <p>When using this API with an access point, you must direct requests to
      * the access point hostname. The access point hostname takes the form
@@ -221,10 +221,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
      * Access Points</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline PutObjectAclRequest& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>The bucket name that contains the object to which you want to attach the ACL.
      * </p> <p>When using this API with an access point, you must direct requests to
      * the access point hostname. The access point hostname takes the form
@@ -235,88 +235,88 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
      * Access Points</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline PutObjectAclRequest& WithBucket(const char* value) { SetBucket(value); return *this;}
 
 
-    /** 
+    /**
      * <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used
      * as a message integrity check to verify that the request body was not corrupted
      * in transit. For more information, go to <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.&gt;</a> </p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline const Aws::String& GetContentMD5() const{ return m_contentMD5; }
 
-    /** 
+    /**
      * <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used
      * as a message integrity check to verify that the request body was not corrupted
      * in transit. For more information, go to <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.&gt;</a> </p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
-    inline bool ContentMD5HasBeenSet() const { return m_contentMD5HasBeenSet; } 
- 
-    /** 
+     */
+    inline bool ContentMD5HasBeenSet() const { return m_contentMD5HasBeenSet; }
+
+    /**
      * <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used
      * as a message integrity check to verify that the request body was not corrupted
      * in transit. For more information, go to <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.&gt;</a> </p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline void SetContentMD5(const Aws::String& value) { m_contentMD5HasBeenSet = true; m_contentMD5 = value; }
 
-    /** 
+    /**
      * <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used
      * as a message integrity check to verify that the request body was not corrupted
      * in transit. For more information, go to <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.&gt;</a> </p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline void SetContentMD5(Aws::String&& value) { m_contentMD5HasBeenSet = true; m_contentMD5 = std::move(value); }
 
-    /** 
+    /**
      * <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used
      * as a message integrity check to verify that the request body was not corrupted
      * in transit. For more information, go to <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.&gt;</a> </p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline void SetContentMD5(const char* value) { m_contentMD5HasBeenSet = true; m_contentMD5.assign(value); }
 
-    /** 
+    /**
      * <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used
      * as a message integrity check to verify that the request body was not corrupted
      * in transit. For more information, go to <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.&gt;</a> </p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline PutObjectAclRequest& WithContentMD5(const Aws::String& value) { SetContentMD5(value); return *this;}
 
-    /** 
+    /**
      * <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used
      * as a message integrity check to verify that the request body was not corrupted
      * in transit. For more information, go to <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.&gt;</a> </p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline PutObjectAclRequest& WithContentMD5(Aws::String&& value) { SetContentMD5(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used
      * as a message integrity check to verify that the request body was not corrupted
      * in transit. For more information, go to <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.&gt;</a> </p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline PutObjectAclRequest& WithContentMD5(const char* value) { SetContentMD5(value); return *this;}
 
 
@@ -330,12 +330,12 @@ namespace Model
      * <p>Allows grantee the read, write, read ACP, and write ACP permissions on the
      * bucket.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
      */
-    inline bool GrantFullControlHasBeenSet() const { return m_grantFullControlHasBeenSet; } 
- 
-    /** 
-     * <p>Allows grantee the read, write, read ACP, and write ACP permissions on the 
+    inline bool GrantFullControlHasBeenSet() const { return m_grantFullControlHasBeenSet; }
+
+    /**
+     * <p>Allows grantee the read, write, read ACP, and write ACP permissions on the
      * bucket.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
-     */ 
+     */
     inline void SetGrantFullControl(const Aws::String& value) { m_grantFullControlHasBeenSet = true; m_grantFullControl = value; }
 
     /**
@@ -379,12 +379,12 @@ namespace Model
      * <p>Allows grantee to list the objects in the bucket.</p> <p>This action is not
      * supported by Amazon S3 on Outposts.</p>
      */
-    inline bool GrantReadHasBeenSet() const { return m_grantReadHasBeenSet; } 
- 
-    /** 
+    inline bool GrantReadHasBeenSet() const { return m_grantReadHasBeenSet; }
+
+    /**
      * <p>Allows grantee to list the objects in the bucket.</p> <p>This action is not
      * supported by Amazon S3 on Outposts.</p>
-     */ 
+     */
     inline void SetGrantRead(const Aws::String& value) { m_grantReadHasBeenSet = true; m_grantRead = value; }
 
     /**
@@ -428,12 +428,12 @@ namespace Model
      * <p>Allows grantee to read the bucket ACL.</p> <p>This action is not supported by
      * Amazon S3 on Outposts.</p>
      */
-    inline bool GrantReadACPHasBeenSet() const { return m_grantReadACPHasBeenSet; } 
- 
-    /** 
+    inline bool GrantReadACPHasBeenSet() const { return m_grantReadACPHasBeenSet; }
+
+    /**
      * <p>Allows grantee to read the bucket ACL.</p> <p>This action is not supported by
      * Amazon S3 on Outposts.</p>
-     */ 
+     */
     inline void SetGrantReadACP(const Aws::String& value) { m_grantReadACPHasBeenSet = true; m_grantReadACP = value; }
 
     /**
@@ -475,11 +475,11 @@ namespace Model
     /**
      * <p>Allows grantee to create, overwrite, and delete any object in the bucket.</p>
      */
-    inline bool GrantWriteHasBeenSet() const { return m_grantWriteHasBeenSet; } 
- 
-    /** 
-     * <p>Allows grantee to create, overwrite, and delete any object in the bucket.</p> 
-     */ 
+    inline bool GrantWriteHasBeenSet() const { return m_grantWriteHasBeenSet; }
+
+    /**
+     * <p>Allows grantee to create, overwrite, and delete any object in the bucket.</p>
+     */
     inline void SetGrantWrite(const Aws::String& value) { m_grantWriteHasBeenSet = true; m_grantWrite = value; }
 
     /**
@@ -518,12 +518,12 @@ namespace Model
      * <p>Allows grantee to write the ACL for the applicable bucket.</p> <p>This action
      * is not supported by Amazon S3 on Outposts.</p>
      */
-    inline bool GrantWriteACPHasBeenSet() const { return m_grantWriteACPHasBeenSet; } 
- 
-    /** 
+    inline bool GrantWriteACPHasBeenSet() const { return m_grantWriteACPHasBeenSet; }
+
+    /**
      * <p>Allows grantee to write the ACL for the applicable bucket.</p> <p>This action
      * is not supported by Amazon S3 on Outposts.</p>
-     */ 
+     */
     inline void SetGrantWriteACP(const Aws::String& value) { m_grantWriteACPHasBeenSet = true; m_grantWriteACP = value; }
 
     /**
@@ -557,7 +557,7 @@ namespace Model
     inline PutObjectAclRequest& WithGrantWriteACP(const char* value) { SetGrantWriteACP(value); return *this;}
 
 
-    /** 
+    /**
      * <p>Key for which the PUT operation was initiated.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -577,10 +577,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline const Aws::String& GetKey() const{ return m_key; }
 
-    /** 
+    /**
      * <p>Key for which the PUT operation was initiated.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -600,10 +600,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
-    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; }
+
+    /**
      * <p>Key for which the PUT operation was initiated.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -623,10 +623,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetKey(const Aws::String& value) { m_keyHasBeenSet = true; m_key = value; }
 
-    /** 
+    /**
      * <p>Key for which the PUT operation was initiated.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -646,10 +646,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetKey(Aws::String&& value) { m_keyHasBeenSet = true; m_key = std::move(value); }
 
-    /** 
+    /**
      * <p>Key for which the PUT operation was initiated.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -669,10 +669,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetKey(const char* value) { m_keyHasBeenSet = true; m_key.assign(value); }
 
-    /** 
+    /**
      * <p>Key for which the PUT operation was initiated.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -692,10 +692,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline PutObjectAclRequest& WithKey(const Aws::String& value) { SetKey(value); return *this;}
 
-    /** 
+    /**
      * <p>Key for which the PUT operation was initiated.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -715,10 +715,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline PutObjectAclRequest& WithKey(Aws::String&& value) { SetKey(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>Key for which the PUT operation was initiated.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -738,7 +738,7 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline PutObjectAclRequest& WithKey(const char* value) { SetKey(value); return *this;}
 
 
@@ -746,9 +746,9 @@ namespace Model
     inline const RequestPayer& GetRequestPayer() const{ return m_requestPayer; }
 
     
-    inline bool RequestPayerHasBeenSet() const { return m_requestPayerHasBeenSet; } 
- 
-     
+    inline bool RequestPayerHasBeenSet() const { return m_requestPayerHasBeenSet; }
+
+    
     inline void SetRequestPayer(const RequestPayer& value) { m_requestPayerHasBeenSet = true; m_requestPayer = value; }
 
     
@@ -769,11 +769,11 @@ namespace Model
     /**
      * <p>VersionId used to reference a specific version of the object.</p>
      */
-    inline bool VersionIdHasBeenSet() const { return m_versionIdHasBeenSet; } 
- 
-    /** 
-     * <p>VersionId used to reference a specific version of the object.</p> 
-     */ 
+    inline bool VersionIdHasBeenSet() const { return m_versionIdHasBeenSet; }
+
+    /**
+     * <p>VersionId used to reference a specific version of the object.</p>
+     */
     inline void SetVersionId(const Aws::String& value) { m_versionIdHasBeenSet = true; m_versionId = value; }
 
     /**
@@ -863,9 +863,9 @@ namespace Model
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
- 
-     
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
+
+    
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     

@@ -43,7 +43,7 @@ namespace Model
     Aws::Http::HeaderValueCollection GetRequestSpecificHeaders() const override;
 
 
-    /** 
+    /**
      * <p>The bucket name.</p> <p>When using this API with an access point, you must
      * direct requests to the access point hostname. The access point hostname takes
      * the form
@@ -63,10 +63,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
-    /** 
+    /**
      * <p>The bucket name.</p> <p>When using this API with an access point, you must
      * direct requests to the access point hostname. The access point hostname takes
      * the form
@@ -86,10 +86,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
+
+    /**
      * <p>The bucket name.</p> <p>When using this API with an access point, you must
      * direct requests to the access point hostname. The access point hostname takes
      * the form
@@ -109,10 +109,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
-    /** 
+    /**
      * <p>The bucket name.</p> <p>When using this API with an access point, you must
      * direct requests to the access point hostname. The access point hostname takes
      * the form
@@ -132,10 +132,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
-    /** 
+    /**
      * <p>The bucket name.</p> <p>When using this API with an access point, you must
      * direct requests to the access point hostname. The access point hostname takes
      * the form
@@ -155,10 +155,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
-    /** 
+    /**
      * <p>The bucket name.</p> <p>When using this API with an access point, you must
      * direct requests to the access point hostname. The access point hostname takes
      * the form
@@ -178,10 +178,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline UploadPartCopyRequest& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
-    /** 
+    /**
      * <p>The bucket name.</p> <p>When using this API with an access point, you must
      * direct requests to the access point hostname. The access point hostname takes
      * the form
@@ -201,10 +201,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline UploadPartCopyRequest& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>The bucket name.</p> <p>When using this API with an access point, you must
      * direct requests to the access point hostname. The access point hostname takes
      * the form
@@ -224,7 +224,7 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline UploadPartCopyRequest& WithBucket(const char* value) { SetBucket(value); return *this;}
 
 
@@ -298,9 +298,9 @@ namespace Model
      * If you don't specify a version ID, Amazon S3 copies the latest version of the
      * source object.</p>
      */
-    inline bool CopySourceHasBeenSet() const { return m_copySourceHasBeenSet; } 
- 
-    /** 
+    inline bool CopySourceHasBeenSet() const { return m_copySourceHasBeenSet; }
+
+    /**
      * <p>Specifies the source object for the copy operation. You specify the value in
      * one of two formats, depending on whether you want to access the source object
      * through an <a
@@ -333,7 +333,7 @@ namespace Model
      * <code>awsexamplebucket/reports/january.pdf?versionId=QUpfdndhfd8438MNFDN93jdnJFkdmqnh893</code>).
      * If you don't specify a version ID, Amazon S3 copies the latest version of the
      * source object.</p>
-     */ 
+     */
     inline void SetCopySource(const Aws::String& value) { m_copySourceHasBeenSet = true; m_copySource = value; }
 
     /**
@@ -525,11 +525,11 @@ namespace Model
     /**
      * <p>Copies the object if its entity tag (ETag) matches the specified tag.</p>
      */
-    inline bool CopySourceIfMatchHasBeenSet() const { return m_copySourceIfMatchHasBeenSet; } 
- 
-    /** 
-     * <p>Copies the object if its entity tag (ETag) matches the specified tag.</p> 
-     */ 
+    inline bool CopySourceIfMatchHasBeenSet() const { return m_copySourceIfMatchHasBeenSet; }
+
+    /**
+     * <p>Copies the object if its entity tag (ETag) matches the specified tag.</p>
+     */
     inline void SetCopySourceIfMatch(const Aws::String& value) { m_copySourceIfMatchHasBeenSet = true; m_copySourceIfMatch = value; }
 
     /**
@@ -566,11 +566,11 @@ namespace Model
     /**
      * <p>Copies the object if it has been modified since the specified time.</p>
      */
-    inline bool CopySourceIfModifiedSinceHasBeenSet() const { return m_copySourceIfModifiedSinceHasBeenSet; } 
- 
-    /** 
-     * <p>Copies the object if it has been modified since the specified time.</p> 
-     */ 
+    inline bool CopySourceIfModifiedSinceHasBeenSet() const { return m_copySourceIfModifiedSinceHasBeenSet; }
+
+    /**
+     * <p>Copies the object if it has been modified since the specified time.</p>
+     */
     inline void SetCopySourceIfModifiedSince(const Aws::Utils::DateTime& value) { m_copySourceIfModifiedSinceHasBeenSet = true; m_copySourceIfModifiedSince = value; }
 
     /**
@@ -599,12 +599,12 @@ namespace Model
      * <p>Copies the object if its entity tag (ETag) is different than the specified
      * ETag.</p>
      */
-    inline bool CopySourceIfNoneMatchHasBeenSet() const { return m_copySourceIfNoneMatchHasBeenSet; } 
- 
-    /** 
-     * <p>Copies the object if its entity tag (ETag) is different than the specified 
-     * ETag.</p> 
-     */ 
+    inline bool CopySourceIfNoneMatchHasBeenSet() const { return m_copySourceIfNoneMatchHasBeenSet; }
+
+    /**
+     * <p>Copies the object if its entity tag (ETag) is different than the specified
+     * ETag.</p>
+     */
     inline void SetCopySourceIfNoneMatch(const Aws::String& value) { m_copySourceIfNoneMatchHasBeenSet = true; m_copySourceIfNoneMatch = value; }
 
     /**
@@ -646,11 +646,11 @@ namespace Model
     /**
      * <p>Copies the object if it hasn't been modified since the specified time.</p>
      */
-    inline bool CopySourceIfUnmodifiedSinceHasBeenSet() const { return m_copySourceIfUnmodifiedSinceHasBeenSet; } 
- 
-    /** 
-     * <p>Copies the object if it hasn't been modified since the specified time.</p> 
-     */ 
+    inline bool CopySourceIfUnmodifiedSinceHasBeenSet() const { return m_copySourceIfUnmodifiedSinceHasBeenSet; }
+
+    /**
+     * <p>Copies the object if it hasn't been modified since the specified time.</p>
+     */
     inline void SetCopySourceIfUnmodifiedSince(const Aws::Utils::DateTime& value) { m_copySourceIfUnmodifiedSinceHasBeenSet = true; m_copySourceIfUnmodifiedSince = value; }
 
     /**
@@ -674,7 +674,7 @@ namespace Model
      * the form bytes=first-last, where the first and last are the zero-based byte
      * offsets to copy. For example, bytes=0-9 indicates that you want to copy the
      * first 10 bytes of the source. You can copy a range only if the source object is
-     * greater than 5 MB.</p> 
+     * greater than 5 MB.</p>
      */
     inline const Aws::String& GetCopySourceRange() const{ return m_copySourceRange; }
 
@@ -683,17 +683,17 @@ namespace Model
      * the form bytes=first-last, where the first and last are the zero-based byte
      * offsets to copy. For example, bytes=0-9 indicates that you want to copy the
      * first 10 bytes of the source. You can copy a range only if the source object is
-     * greater than 5 MB.</p> 
+     * greater than 5 MB.</p>
      */
-    inline bool CopySourceRangeHasBeenSet() const { return m_copySourceRangeHasBeenSet; } 
- 
-    /** 
-     * <p>The range of bytes to copy from the source object. The range value must use 
-     * the form bytes=first-last, where the first and last are the zero-based byte 
-     * offsets to copy. For example, bytes=0-9 indicates that you want to copy the 
+    inline bool CopySourceRangeHasBeenSet() const { return m_copySourceRangeHasBeenSet; }
+
+    /**
+     * <p>The range of bytes to copy from the source object. The range value must use
+     * the form bytes=first-last, where the first and last are the zero-based byte
+     * offsets to copy. For example, bytes=0-9 indicates that you want to copy the
      * first 10 bytes of the source. You can copy a range only if the source object is
-     * greater than 5 MB.</p> 
-     */ 
+     * greater than 5 MB.</p>
+     */
     inline void SetCopySourceRange(const Aws::String& value) { m_copySourceRangeHasBeenSet = true; m_copySourceRange = value; }
 
     /**
@@ -701,7 +701,7 @@ namespace Model
      * the form bytes=first-last, where the first and last are the zero-based byte
      * offsets to copy. For example, bytes=0-9 indicates that you want to copy the
      * first 10 bytes of the source. You can copy a range only if the source object is
-     * greater than 5 MB.</p> 
+     * greater than 5 MB.</p>
      */
     inline void SetCopySourceRange(Aws::String&& value) { m_copySourceRangeHasBeenSet = true; m_copySourceRange = std::move(value); }
 
@@ -710,7 +710,7 @@ namespace Model
      * the form bytes=first-last, where the first and last are the zero-based byte
      * offsets to copy. For example, bytes=0-9 indicates that you want to copy the
      * first 10 bytes of the source. You can copy a range only if the source object is
-     * greater than 5 MB.</p> 
+     * greater than 5 MB.</p>
      */
     inline void SetCopySourceRange(const char* value) { m_copySourceRangeHasBeenSet = true; m_copySourceRange.assign(value); }
 
@@ -719,7 +719,7 @@ namespace Model
      * the form bytes=first-last, where the first and last are the zero-based byte
      * offsets to copy. For example, bytes=0-9 indicates that you want to copy the
      * first 10 bytes of the source. You can copy a range only if the source object is
-     * greater than 5 MB.</p> 
+     * greater than 5 MB.</p>
      */
     inline UploadPartCopyRequest& WithCopySourceRange(const Aws::String& value) { SetCopySourceRange(value); return *this;}
 
@@ -728,7 +728,7 @@ namespace Model
      * the form bytes=first-last, where the first and last are the zero-based byte
      * offsets to copy. For example, bytes=0-9 indicates that you want to copy the
      * first 10 bytes of the source. You can copy a range only if the source object is
-     * greater than 5 MB.</p> 
+     * greater than 5 MB.</p>
      */
     inline UploadPartCopyRequest& WithCopySourceRange(Aws::String&& value) { SetCopySourceRange(std::move(value)); return *this;}
 
@@ -737,49 +737,49 @@ namespace Model
      * the form bytes=first-last, where the first and last are the zero-based byte
      * offsets to copy. For example, bytes=0-9 indicates that you want to copy the
      * first 10 bytes of the source. You can copy a range only if the source object is
-     * greater than 5 MB.</p> 
+     * greater than 5 MB.</p>
      */
     inline UploadPartCopyRequest& WithCopySourceRange(const char* value) { SetCopySourceRange(value); return *this;}
 
 
-    /** 
+    /**
      * <p>Object key for which the multipart upload was initiated.</p>
-     */ 
+     */
     inline const Aws::String& GetKey() const{ return m_key; }
 
-    /** 
+    /**
      * <p>Object key for which the multipart upload was initiated.</p>
-     */ 
-    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; }
+
+    /**
      * <p>Object key for which the multipart upload was initiated.</p>
-     */ 
+     */
     inline void SetKey(const Aws::String& value) { m_keyHasBeenSet = true; m_key = value; }
 
-    /** 
+    /**
      * <p>Object key for which the multipart upload was initiated.</p>
-     */ 
+     */
     inline void SetKey(Aws::String&& value) { m_keyHasBeenSet = true; m_key = std::move(value); }
 
-    /** 
+    /**
      * <p>Object key for which the multipart upload was initiated.</p>
-     */ 
+     */
     inline void SetKey(const char* value) { m_keyHasBeenSet = true; m_key.assign(value); }
 
-    /** 
+    /**
      * <p>Object key for which the multipart upload was initiated.</p>
-     */ 
+     */
     inline UploadPartCopyRequest& WithKey(const Aws::String& value) { SetKey(value); return *this;}
 
-    /** 
+    /**
      * <p>Object key for which the multipart upload was initiated.</p>
-     */ 
+     */
     inline UploadPartCopyRequest& WithKey(Aws::String&& value) { SetKey(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>Object key for which the multipart upload was initiated.</p>
-     */ 
+     */
     inline UploadPartCopyRequest& WithKey(const char* value) { SetKey(value); return *this;}
 
 
@@ -793,12 +793,12 @@ namespace Model
      * <p>Part number of part being copied. This is a positive integer between 1 and
      * 10,000.</p>
      */
-    inline bool PartNumberHasBeenSet() const { return m_partNumberHasBeenSet; } 
- 
-    /** 
-     * <p>Part number of part being copied. This is a positive integer between 1 and 
-     * 10,000.</p> 
-     */ 
+    inline bool PartNumberHasBeenSet() const { return m_partNumberHasBeenSet; }
+
+    /**
+     * <p>Part number of part being copied. This is a positive integer between 1 and
+     * 10,000.</p>
+     */
     inline void SetPartNumber(int value) { m_partNumberHasBeenSet = true; m_partNumber = value; }
 
     /**
@@ -816,11 +816,11 @@ namespace Model
     /**
      * <p>Upload ID identifying the multipart upload whose part is being copied.</p>
      */
-    inline bool UploadIdHasBeenSet() const { return m_uploadIdHasBeenSet; } 
- 
-    /** 
-     * <p>Upload ID identifying the multipart upload whose part is being copied.</p> 
-     */ 
+    inline bool UploadIdHasBeenSet() const { return m_uploadIdHasBeenSet; }
+
+    /**
+     * <p>Upload ID identifying the multipart upload whose part is being copied.</p>
+     */
     inline void SetUploadId(const Aws::String& value) { m_uploadIdHasBeenSet = true; m_uploadId = value; }
 
     /**
@@ -859,12 +859,12 @@ namespace Model
      * <p>Specifies the algorithm to use to when encrypting the object (for example,
      * AES256).</p>
      */
-    inline bool SSECustomerAlgorithmHasBeenSet() const { return m_sSECustomerAlgorithmHasBeenSet; } 
- 
-    /** 
+    inline bool SSECustomerAlgorithmHasBeenSet() const { return m_sSECustomerAlgorithmHasBeenSet; }
+
+    /**
      * <p>Specifies the algorithm to use to when encrypting the object (for example,
-     * AES256).</p> 
-     */ 
+     * AES256).</p>
+     */
     inline void SetSSECustomerAlgorithm(const Aws::String& value) { m_sSECustomerAlgorithmHasBeenSet = true; m_sSECustomerAlgorithm = value; }
 
     /**
@@ -918,17 +918,17 @@ namespace Model
      * be the same encryption key specified in the initiate multipart upload
      * request.</p>
      */
-    inline bool SSECustomerKeyHasBeenSet() const { return m_sSECustomerKeyHasBeenSet; } 
- 
-    /** 
-     * <p>Specifies the customer-provided encryption key for Amazon S3 to use in 
-     * encrypting data. This value is used to store the object and then it is 
+    inline bool SSECustomerKeyHasBeenSet() const { return m_sSECustomerKeyHasBeenSet; }
+
+    /**
+     * <p>Specifies the customer-provided encryption key for Amazon S3 to use in
+     * encrypting data. This value is used to store the object and then it is
      * discarded; Amazon S3 does not store the encryption key. The key must be
      * appropriate for use with the algorithm specified in the
      * <code>x-amz-server-side-encryption-customer-algorithm</code> header. This must
      * be the same encryption key specified in the initiate multipart upload
      * request.</p>
-     */ 
+     */
     inline void SetSSECustomerKey(const Aws::String& value) { m_sSECustomerKeyHasBeenSet = true; m_sSECustomerKey = value; }
 
     /**
@@ -999,13 +999,13 @@ namespace Model
      * Amazon S3 uses this header for a message integrity check to ensure that the
      * encryption key was transmitted without error.</p>
      */
-    inline bool SSECustomerKeyMD5HasBeenSet() const { return m_sSECustomerKeyMD5HasBeenSet; } 
- 
-    /** 
-     * <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. 
+    inline bool SSECustomerKeyMD5HasBeenSet() const { return m_sSECustomerKeyMD5HasBeenSet; }
+
+    /**
+     * <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321.
      * Amazon S3 uses this header for a message integrity check to ensure that the
-     * encryption key was transmitted without error.</p> 
-     */ 
+     * encryption key was transmitted without error.</p>
+     */
     inline void SetSSECustomerKeyMD5(const Aws::String& value) { m_sSECustomerKeyMD5HasBeenSet = true; m_sSECustomerKeyMD5 = value; }
 
     /**
@@ -1054,12 +1054,12 @@ namespace Model
      * <p>Specifies the algorithm to use when decrypting the source object (for
      * example, AES256).</p>
      */
-    inline bool CopySourceSSECustomerAlgorithmHasBeenSet() const { return m_copySourceSSECustomerAlgorithmHasBeenSet; } 
- 
-    /** 
+    inline bool CopySourceSSECustomerAlgorithmHasBeenSet() const { return m_copySourceSSECustomerAlgorithmHasBeenSet; }
+
+    /**
      * <p>Specifies the algorithm to use when decrypting the source object (for
      * example, AES256).</p>
-     */ 
+     */
     inline void SetCopySourceSSECustomerAlgorithm(const Aws::String& value) { m_copySourceSSECustomerAlgorithmHasBeenSet = true; m_copySourceSSECustomerAlgorithm = value; }
 
     /**
@@ -1105,13 +1105,13 @@ namespace Model
      * decrypt the source object. The encryption key provided in this header must be
      * one that was used when the source object was created.</p>
      */
-    inline bool CopySourceSSECustomerKeyHasBeenSet() const { return m_copySourceSSECustomerKeyHasBeenSet; } 
- 
-    /** 
-     * <p>Specifies the customer-provided encryption key for Amazon S3 to use to 
-     * decrypt the source object. The encryption key provided in this header must be 
-     * one that was used when the source object was created.</p> 
-     */ 
+    inline bool CopySourceSSECustomerKeyHasBeenSet() const { return m_copySourceSSECustomerKeyHasBeenSet; }
+
+    /**
+     * <p>Specifies the customer-provided encryption key for Amazon S3 to use to
+     * decrypt the source object. The encryption key provided in this header must be
+     * one that was used when the source object was created.</p>
+     */
     inline void SetCopySourceSSECustomerKey(const Aws::String& value) { m_copySourceSSECustomerKeyHasBeenSet = true; m_copySourceSSECustomerKey = value; }
 
     /**
@@ -1162,13 +1162,13 @@ namespace Model
      * Amazon S3 uses this header for a message integrity check to ensure that the
      * encryption key was transmitted without error.</p>
      */
-    inline bool CopySourceSSECustomerKeyMD5HasBeenSet() const { return m_copySourceSSECustomerKeyMD5HasBeenSet; } 
- 
-    /** 
-     * <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. 
+    inline bool CopySourceSSECustomerKeyMD5HasBeenSet() const { return m_copySourceSSECustomerKeyMD5HasBeenSet; }
+
+    /**
+     * <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321.
      * Amazon S3 uses this header for a message integrity check to ensure that the
-     * encryption key was transmitted without error.</p> 
-     */ 
+     * encryption key was transmitted without error.</p>
+     */
     inline void SetCopySourceSSECustomerKeyMD5(const Aws::String& value) { m_copySourceSSECustomerKeyMD5HasBeenSet = true; m_copySourceSSECustomerKeyMD5 = value; }
 
     /**
@@ -1211,9 +1211,9 @@ namespace Model
     inline const RequestPayer& GetRequestPayer() const{ return m_requestPayer; }
 
     
-    inline bool RequestPayerHasBeenSet() const { return m_requestPayerHasBeenSet; } 
- 
-     
+    inline bool RequestPayerHasBeenSet() const { return m_requestPayerHasBeenSet; }
+
+    
     inline void SetRequestPayer(const RequestPayer& value) { m_requestPayerHasBeenSet = true; m_requestPayer = value; }
 
     
@@ -1344,9 +1344,9 @@ namespace Model
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
- 
-     
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
+
+    
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     

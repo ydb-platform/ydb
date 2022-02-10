@@ -25,7 +25,7 @@ GetBucketAccelerateConfigurationRequest::GetBucketAccelerateConfigurationRequest
 
 Aws::String GetBucketAccelerateConfigurationRequest::SerializePayload() const
 {
-  return {}; 
+  return {};
 }
 
 void GetBucketAccelerateConfigurationRequest::AddQueryStringParameters(URI& uri) const

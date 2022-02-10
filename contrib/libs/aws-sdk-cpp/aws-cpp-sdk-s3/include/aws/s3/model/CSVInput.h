@@ -61,9 +61,9 @@ namespace Model
      * header value to identify a column in an expression (<code>SELECT "name" FROM
      * OBJECT</code>). </p> </li> </ul>
      */
-    inline bool FileHeaderInfoHasBeenSet() const { return m_fileHeaderInfoHasBeenSet; } 
- 
-    /** 
+    inline bool FileHeaderInfoHasBeenSet() const { return m_fileHeaderInfoHasBeenSet; }
+
+    /**
      * <p>Describes the first line of input. Valid values are:</p> <ul> <li> <p>
      * <code>NONE</code>: First line is not a header.</p> </li> <li> <p>
      * <code>IGNORE</code>: First line is a header, but you can't use the header values
@@ -72,7 +72,7 @@ namespace Model
      * </li> <li> <p> <code>Use</code>: First line is a header, and you can use the
      * header value to identify a column in an expression (<code>SELECT "name" FROM
      * OBJECT</code>). </p> </li> </ul>
-     */ 
+     */
     inline void SetFileHeaderInfo(const FileHeaderInfo& value) { m_fileHeaderInfoHasBeenSet = true; m_fileHeaderInfo = value; }
 
     /**
@@ -124,13 +124,13 @@ namespace Model
      * character is present at the start of that row. You can specify any character to
      * indicate a comment line.</p>
      */
-    inline bool CommentsHasBeenSet() const { return m_commentsHasBeenSet; } 
- 
-    /** 
+    inline bool CommentsHasBeenSet() const { return m_commentsHasBeenSet; }
+
+    /**
      * <p>A single character used to indicate that a row should be ignored when the
      * character is present at the start of that row. You can specify any character to
      * indicate a comment line.</p>
-     */ 
+     */
     inline void SetComments(const Aws::String& value) { m_commentsHasBeenSet = true; m_comments = value; }
 
     /**
@@ -181,13 +181,13 @@ namespace Model
      * already escaped value. For example, the value """ a , b """ is parsed as " a , b
      * ".</p>
      */
-    inline bool QuoteEscapeCharacterHasBeenSet() const { return m_quoteEscapeCharacterHasBeenSet; } 
- 
-    /** 
+    inline bool QuoteEscapeCharacterHasBeenSet() const { return m_quoteEscapeCharacterHasBeenSet; }
+
+    /**
      * <p>A single character used for escaping the quotation mark character inside an
      * already escaped value. For example, the value """ a , b """ is parsed as " a , b
      * ".</p>
-     */ 
+     */
     inline void SetQuoteEscapeCharacter(const Aws::String& value) { m_quoteEscapeCharacterHasBeenSet = true; m_quoteEscapeCharacter = value; }
 
     /**
@@ -236,12 +236,12 @@ namespace Model
      * <p>A single character used to separate individual records in the input. Instead
      * of the default value, you can specify an arbitrary delimiter.</p>
      */
-    inline bool RecordDelimiterHasBeenSet() const { return m_recordDelimiterHasBeenSet; } 
- 
-    /** 
+    inline bool RecordDelimiterHasBeenSet() const { return m_recordDelimiterHasBeenSet; }
+
+    /**
      * <p>A single character used to separate individual records in the input. Instead
      * of the default value, you can specify an arbitrary delimiter.</p>
-     */ 
+     */
     inline void SetRecordDelimiter(const Aws::String& value) { m_recordDelimiterHasBeenSet = true; m_recordDelimiter = value; }
 
     /**
@@ -285,12 +285,12 @@ namespace Model
      * <p>A single character used to separate individual fields in a record. You can
      * specify an arbitrary delimiter.</p>
      */
-    inline bool FieldDelimiterHasBeenSet() const { return m_fieldDelimiterHasBeenSet; } 
- 
-    /** 
+    inline bool FieldDelimiterHasBeenSet() const { return m_fieldDelimiterHasBeenSet; }
+
+    /**
      * <p>A single character used to separate individual fields in a record. You can
      * specify an arbitrary delimiter.</p>
-     */ 
+     */
     inline void SetFieldDelimiter(const Aws::String& value) { m_fieldDelimiterHasBeenSet = true; m_fieldDelimiter = value; }
 
     /**
@@ -338,14 +338,14 @@ namespace Model
      * field value in quotation marks, as follows: <code>" a , b "</code>.</p> <p>Type:
      * String</p> <p>Default: <code>"</code> </p> <p>Ancestors: <code>CSV</code> </p>
      */
-    inline bool QuoteCharacterHasBeenSet() const { return m_quoteCharacterHasBeenSet; } 
- 
-    /** 
+    inline bool QuoteCharacterHasBeenSet() const { return m_quoteCharacterHasBeenSet; }
+
+    /**
      * <p>A single character used for escaping when the field delimiter is part of the
      * value. For example, if the value is <code>a, b</code>, Amazon S3 wraps this
      * field value in quotation marks, as follows: <code>" a , b "</code>.</p> <p>Type:
      * String</p> <p>Default: <code>"</code> </p> <p>Ancestors: <code>CSV</code> </p>
-     */ 
+     */
     inline void SetQuoteCharacter(const Aws::String& value) { m_quoteCharacterHasBeenSet = true; m_quoteCharacter = value; }
 
     /**
@@ -401,13 +401,13 @@ namespace Model
      * records should be allowed. Default value is FALSE. Setting this value to TRUE
      * may lower performance.</p>
      */
-    inline bool AllowQuotedRecordDelimiterHasBeenSet() const { return m_allowQuotedRecordDelimiterHasBeenSet; } 
- 
-    /** 
-     * <p>Specifies that CSV field values may contain quoted record delimiters and such 
-     * records should be allowed. Default value is FALSE. Setting this value to TRUE 
-     * may lower performance.</p> 
-     */ 
+    inline bool AllowQuotedRecordDelimiterHasBeenSet() const { return m_allowQuotedRecordDelimiterHasBeenSet; }
+
+    /**
+     * <p>Specifies that CSV field values may contain quoted record delimiters and such
+     * records should be allowed. Default value is FALSE. Setting this value to TRUE
+     * may lower performance.</p>
+     */
     inline void SetAllowQuotedRecordDelimiter(bool value) { m_allowQuotedRecordDelimiterHasBeenSet = true; m_allowQuotedRecordDelimiter = value; }
 
     /**

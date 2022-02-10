@@ -53,14 +53,14 @@ namespace Model
      * <li> <p> <code>ASNEEDED</code>: Use quotation marks for output fields when
      * needed.</p> </li> </ul>
      */
-    inline bool QuoteFieldsHasBeenSet() const { return m_quoteFieldsHasBeenSet; } 
- 
-    /** 
+    inline bool QuoteFieldsHasBeenSet() const { return m_quoteFieldsHasBeenSet; }
+
+    /**
      * <p>Indicates whether to use quotation marks around output fields. </p> <ul> <li>
      * <p> <code>ALWAYS</code>: Always use quotation marks for output fields.</p> </li>
      * <li> <p> <code>ASNEEDED</code>: Use quotation marks for output fields when
      * needed.</p> </li> </ul>
-     */ 
+     */
     inline void SetQuoteFields(const QuoteFields& value) { m_quoteFieldsHasBeenSet = true; m_quoteFields = value; }
 
     /**
@@ -98,12 +98,12 @@ namespace Model
      * <p>The single character used for escaping the quote character inside an already
      * escaped value.</p>
      */
-    inline bool QuoteEscapeCharacterHasBeenSet() const { return m_quoteEscapeCharacterHasBeenSet; } 
- 
-    /** 
+    inline bool QuoteEscapeCharacterHasBeenSet() const { return m_quoteEscapeCharacterHasBeenSet; }
+
+    /**
      * <p>The single character used for escaping the quote character inside an already
-     * escaped value.</p> 
-     */ 
+     * escaped value.</p>
+     */
     inline void SetQuoteEscapeCharacter(const Aws::String& value) { m_quoteEscapeCharacterHasBeenSet = true; m_quoteEscapeCharacter = value; }
 
     /**
@@ -147,12 +147,12 @@ namespace Model
      * <p>A single character used to separate individual records in the output. Instead
      * of the default value, you can specify an arbitrary delimiter.</p>
      */
-    inline bool RecordDelimiterHasBeenSet() const { return m_recordDelimiterHasBeenSet; } 
- 
-    /** 
+    inline bool RecordDelimiterHasBeenSet() const { return m_recordDelimiterHasBeenSet; }
+
+    /**
      * <p>A single character used to separate individual records in the output. Instead
      * of the default value, you can specify an arbitrary delimiter.</p>
-     */ 
+     */
     inline void SetRecordDelimiter(const Aws::String& value) { m_recordDelimiterHasBeenSet = true; m_recordDelimiter = value; }
 
     /**
@@ -196,12 +196,12 @@ namespace Model
      * <p>The value used to separate individual fields in a record. You can specify an
      * arbitrary delimiter.</p>
      */
-    inline bool FieldDelimiterHasBeenSet() const { return m_fieldDelimiterHasBeenSet; } 
- 
-    /** 
+    inline bool FieldDelimiterHasBeenSet() const { return m_fieldDelimiterHasBeenSet; }
+
+    /**
      * <p>The value used to separate individual fields in a record. You can specify an
      * arbitrary delimiter.</p>
-     */ 
+     */
     inline void SetFieldDelimiter(const Aws::String& value) { m_fieldDelimiterHasBeenSet = true; m_fieldDelimiter = value; }
 
     /**
@@ -247,13 +247,13 @@ namespace Model
      * value. For example, if the value is <code>a, b</code>, Amazon S3 wraps this
      * field value in quotation marks, as follows: <code>" a , b "</code>.</p>
      */
-    inline bool QuoteCharacterHasBeenSet() const { return m_quoteCharacterHasBeenSet; } 
- 
-    /** 
+    inline bool QuoteCharacterHasBeenSet() const { return m_quoteCharacterHasBeenSet; }
+
+    /**
      * <p>A single character used for escaping when the field delimiter is part of the
      * value. For example, if the value is <code>a, b</code>, Amazon S3 wraps this
      * field value in quotation marks, as follows: <code>" a , b "</code>.</p>
-     */ 
+     */
     inline void SetQuoteCharacter(const Aws::String& value) { m_quoteCharacterHasBeenSet = true; m_quoteCharacter = value; }
 
     /**

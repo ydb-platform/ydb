@@ -22,12 +22,12 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Specifies JSON as object's input serialization format.</p><p><h3>See
    * Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/JSONInput">AWS API 
-   * Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/JSONInput">AWS API
+   * Reference</a></p>
+   */
   class AWS_S3_API JSONInput
   {
   public:
@@ -46,11 +46,11 @@ namespace Model
     /**
      * <p>The type of JSON. Valid values: Document, Lines.</p>
      */
-    inline bool TypeHasBeenSet() const { return m_typeHasBeenSet; } 
- 
-    /** 
-     * <p>The type of JSON. Valid values: Document, Lines.</p> 
-     */ 
+    inline bool TypeHasBeenSet() const { return m_typeHasBeenSet; }
+
+    /**
+     * <p>The type of JSON. Valid values: Document, Lines.</p>
+     */
     inline void SetType(const JSONType& value) { m_typeHasBeenSet = true; m_type = value; }
 
     /**

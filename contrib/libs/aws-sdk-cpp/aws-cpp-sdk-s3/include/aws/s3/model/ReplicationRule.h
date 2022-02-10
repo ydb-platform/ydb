@@ -45,42 +45,42 @@ namespace Model
 
 
     /**
-     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p> 
+     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p>
      */
     inline const Aws::String& GetID() const{ return m_iD; }
 
     /**
-     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p> 
+     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p>
      */
-    inline bool IDHasBeenSet() const { return m_iDHasBeenSet; } 
- 
-    /** 
-     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p> 
-     */ 
+    inline bool IDHasBeenSet() const { return m_iDHasBeenSet; }
+
+    /**
+     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p>
+     */
     inline void SetID(const Aws::String& value) { m_iDHasBeenSet = true; m_iD = value; }
 
     /**
-     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p> 
+     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p>
      */
     inline void SetID(Aws::String&& value) { m_iDHasBeenSet = true; m_iD = std::move(value); }
 
     /**
-     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p> 
+     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p>
      */
     inline void SetID(const char* value) { m_iDHasBeenSet = true; m_iD.assign(value); }
 
     /**
-     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p> 
+     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p>
      */
     inline ReplicationRule& WithID(const Aws::String& value) { SetID(value); return *this;}
 
     /**
-     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p> 
+     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p>
      */
     inline ReplicationRule& WithID(Aws::String&& value) { SetID(std::move(value)); return *this;}
 
     /**
-     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p> 
+     * <p>A unique identifier for the rule. The maximum value is 255 characters.</p>
      */
     inline ReplicationRule& WithID(const char* value) { SetID(value); return *this;}
 
@@ -107,9 +107,9 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication.html">Replication</a>
      * in the <i>Amazon Simple Storage Service Developer Guide</i>.</p>
      */
-    inline bool PriorityHasBeenSet() const { return m_priorityHasBeenSet; } 
- 
-    /** 
+    inline bool PriorityHasBeenSet() const { return m_priorityHasBeenSet; }
+
+    /**
      * <p>The priority indicates which rule has precedence whenever two or more
      * replication rules conflict. Amazon S3 will attempt to replicate objects
      * according to all replication rules. However, if there are two or more rules with
@@ -118,7 +118,7 @@ namespace Model
      * </p> <p>For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication.html">Replication</a>
      * in the <i>Amazon Simple Storage Service Developer Guide</i>.</p>
-     */ 
+     */
     inline void SetPriority(int value) { m_priorityHasBeenSet = true; m_priority = value; }
 
     /**
@@ -138,9 +138,9 @@ namespace Model
     inline const ReplicationRuleFilter& GetFilter() const{ return m_filter; }
 
     
-    inline bool FilterHasBeenSet() const { return m_filterHasBeenSet; } 
- 
-     
+    inline bool FilterHasBeenSet() const { return m_filterHasBeenSet; }
+
+    
     inline void SetFilter(const ReplicationRuleFilter& value) { m_filterHasBeenSet = true; m_filter = value; }
 
     
@@ -161,11 +161,11 @@ namespace Model
     /**
      * <p>Specifies whether the rule is enabled.</p>
      */
-    inline bool StatusHasBeenSet() const { return m_statusHasBeenSet; } 
- 
-    /** 
+    inline bool StatusHasBeenSet() const { return m_statusHasBeenSet; }
+
+    /**
      * <p>Specifies whether the rule is enabled.</p>
-     */ 
+     */
     inline void SetStatus(const ReplicationRuleStatus& value) { m_statusHasBeenSet = true; m_status = value; }
 
     /**
@@ -185,54 +185,54 @@ namespace Model
 
 
     /**
-     * <p>A container that describes additional filters for identifying the source 
-     * objects that you want to replicate. You can choose to enable or disable the 
-     * replication of these objects. Currently, Amazon S3 supports only the filter that 
+     * <p>A container that describes additional filters for identifying the source
+     * objects that you want to replicate. You can choose to enable or disable the
+     * replication of these objects. Currently, Amazon S3 supports only the filter that
      * you can specify for objects created with server-side encryption using a customer
      * master key (CMK) stored in AWS Key Management Service (SSE-KMS).</p>
      */
     inline const SourceSelectionCriteria& GetSourceSelectionCriteria() const{ return m_sourceSelectionCriteria; }
 
     /**
-     * <p>A container that describes additional filters for identifying the source 
-     * objects that you want to replicate. You can choose to enable or disable the 
-     * replication of these objects. Currently, Amazon S3 supports only the filter that 
+     * <p>A container that describes additional filters for identifying the source
+     * objects that you want to replicate. You can choose to enable or disable the
+     * replication of these objects. Currently, Amazon S3 supports only the filter that
      * you can specify for objects created with server-side encryption using a customer
      * master key (CMK) stored in AWS Key Management Service (SSE-KMS).</p>
      */
-    inline bool SourceSelectionCriteriaHasBeenSet() const { return m_sourceSelectionCriteriaHasBeenSet; } 
- 
-    /** 
-     * <p>A container that describes additional filters for identifying the source 
-     * objects that you want to replicate. You can choose to enable or disable the 
-     * replication of these objects. Currently, Amazon S3 supports only the filter that 
+    inline bool SourceSelectionCriteriaHasBeenSet() const { return m_sourceSelectionCriteriaHasBeenSet; }
+
+    /**
+     * <p>A container that describes additional filters for identifying the source
+     * objects that you want to replicate. You can choose to enable or disable the
+     * replication of these objects. Currently, Amazon S3 supports only the filter that
      * you can specify for objects created with server-side encryption using a customer
      * master key (CMK) stored in AWS Key Management Service (SSE-KMS).</p>
-     */ 
+     */
     inline void SetSourceSelectionCriteria(const SourceSelectionCriteria& value) { m_sourceSelectionCriteriaHasBeenSet = true; m_sourceSelectionCriteria = value; }
 
     /**
-     * <p>A container that describes additional filters for identifying the source 
-     * objects that you want to replicate. You can choose to enable or disable the 
-     * replication of these objects. Currently, Amazon S3 supports only the filter that 
+     * <p>A container that describes additional filters for identifying the source
+     * objects that you want to replicate. You can choose to enable or disable the
+     * replication of these objects. Currently, Amazon S3 supports only the filter that
      * you can specify for objects created with server-side encryption using a customer
      * master key (CMK) stored in AWS Key Management Service (SSE-KMS).</p>
      */
     inline void SetSourceSelectionCriteria(SourceSelectionCriteria&& value) { m_sourceSelectionCriteriaHasBeenSet = true; m_sourceSelectionCriteria = std::move(value); }
 
     /**
-     * <p>A container that describes additional filters for identifying the source 
-     * objects that you want to replicate. You can choose to enable or disable the 
-     * replication of these objects. Currently, Amazon S3 supports only the filter that 
+     * <p>A container that describes additional filters for identifying the source
+     * objects that you want to replicate. You can choose to enable or disable the
+     * replication of these objects. Currently, Amazon S3 supports only the filter that
      * you can specify for objects created with server-side encryption using a customer
      * master key (CMK) stored in AWS Key Management Service (SSE-KMS).</p>
      */
     inline ReplicationRule& WithSourceSelectionCriteria(const SourceSelectionCriteria& value) { SetSourceSelectionCriteria(value); return *this;}
 
     /**
-     * <p>A container that describes additional filters for identifying the source 
-     * objects that you want to replicate. You can choose to enable or disable the 
-     * replication of these objects. Currently, Amazon S3 supports only the filter that 
+     * <p>A container that describes additional filters for identifying the source
+     * objects that you want to replicate. You can choose to enable or disable the
+     * replication of these objects. Currently, Amazon S3 supports only the filter that
      * you can specify for objects created with server-side encryption using a customer
      * master key (CMK) stored in AWS Key Management Service (SSE-KMS).</p>
      */
@@ -280,12 +280,12 @@ namespace Model
      * <p>A container for information about the replication destination and its
      * configurations including enabling the S3 Replication Time Control (S3 RTC).</p>
      */
-    inline bool DestinationHasBeenSet() const { return m_destinationHasBeenSet; } 
- 
-    /** 
+    inline bool DestinationHasBeenSet() const { return m_destinationHasBeenSet; }
+
+    /**
      * <p>A container for information about the replication destination and its
      * configurations including enabling the S3 Replication Time Control (S3 RTC).</p>
-     */ 
+     */
     inline void SetDestination(const Destination& value) { m_destinationHasBeenSet = true; m_destination = value; }
 
     /**
@@ -311,9 +311,9 @@ namespace Model
     inline const DeleteMarkerReplication& GetDeleteMarkerReplication() const{ return m_deleteMarkerReplication; }
 
     
-    inline bool DeleteMarkerReplicationHasBeenSet() const { return m_deleteMarkerReplicationHasBeenSet; } 
- 
-     
+    inline bool DeleteMarkerReplicationHasBeenSet() const { return m_deleteMarkerReplicationHasBeenSet; }
+
+    
     inline void SetDeleteMarkerReplication(const DeleteMarkerReplication& value) { m_deleteMarkerReplicationHasBeenSet = true; m_deleteMarkerReplication = value; }
 
     

@@ -1,14 +1,14 @@
 /**
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
- */ 
- 
-/* 
- * This file generates exportable implementations for inlineable functions. 
- */ 
- 
-#define AWS_STATIC_IMPL AWS_COMMON_API 
- 
+ */
+
+/*
+ * This file generates exportable implementations for inlineable functions.
+ */
+
+#define AWS_STATIC_IMPL AWS_COMMON_API
+
 #include <aws/common/array_list.inl>
 #include <aws/common/atomics.inl>
 #include <aws/common/byte_order.inl>

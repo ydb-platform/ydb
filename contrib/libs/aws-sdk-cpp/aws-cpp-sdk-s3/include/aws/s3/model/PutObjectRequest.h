@@ -14,8 +14,8 @@
 #include <aws/s3/model/ServerSideEncryption.h>
 #include <aws/s3/model/StorageClass.h>
 #include <aws/s3/model/RequestPayer.h>
-#include <aws/s3/model/ObjectLockMode.h> 
-#include <aws/s3/model/ObjectLockLegalHoldStatus.h> 
+#include <aws/s3/model/ObjectLockMode.h>
+#include <aws/s3/model/ObjectLockLegalHoldStatus.h>
 #include <utility>
 
 namespace Aws
@@ -59,13 +59,13 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL">Canned
      * ACL</a>.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
      */
-    inline bool ACLHasBeenSet() const { return m_aCLHasBeenSet; } 
- 
-    /** 
+    inline bool ACLHasBeenSet() const { return m_aCLHasBeenSet; }
+
+    /**
      * <p>The canned ACL to apply to the object. For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL">Canned
      * ACL</a>.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
-     */ 
+     */
     inline void SetACL(const ObjectCannedACL& value) { m_aCLHasBeenSet = true; m_aCL = value; }
 
     /**
@@ -134,9 +134,9 @@ namespace Model
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
      */
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
- 
-    /** 
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
+
+    /**
      * <p>The bucket name to which the PUT operation was initiated. </p> <p>When using
      * this API with an access point, you must direct requests to the access point
      * hostname. The access point hostname takes the form
@@ -156,7 +156,7 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
     /**
@@ -287,13 +287,13 @@ namespace Model
      * more information, see <a
      * href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9</a>.</p>
      */
-    inline bool CacheControlHasBeenSet() const { return m_cacheControlHasBeenSet; } 
- 
-    /** 
+    inline bool CacheControlHasBeenSet() const { return m_cacheControlHasBeenSet; }
+
+    /**
      * <p> Can be used to specify caching behavior along the request/reply chain. For
      * more information, see <a
      * href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9</a>.</p>
-     */ 
+     */
     inline void SetCacheControl(const Aws::String& value) { m_cacheControlHasBeenSet = true; m_cacheControl = value; }
 
     /**
@@ -344,13 +344,13 @@ namespace Model
      * see <a
      * href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec19.html#sec19.5.1">http://www.w3.org/Protocols/rfc2616/rfc2616-sec19.html#sec19.5.1</a>.</p>
      */
-    inline bool ContentDispositionHasBeenSet() const { return m_contentDispositionHasBeenSet; } 
- 
-    /** 
+    inline bool ContentDispositionHasBeenSet() const { return m_contentDispositionHasBeenSet; }
+
+    /**
      * <p>Specifies presentational information for the object. For more information,
      * see <a
      * href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec19.html#sec19.5.1">http://www.w3.org/Protocols/rfc2616/rfc2616-sec19.html#sec19.5.1</a>.</p>
-     */ 
+     */
     inline void SetContentDisposition(const Aws::String& value) { m_contentDispositionHasBeenSet = true; m_contentDisposition = value; }
 
     /**
@@ -403,14 +403,14 @@ namespace Model
      * the Content-Type header field. For more information, see <a
      * href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.11">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.11</a>.</p>
      */
-    inline bool ContentEncodingHasBeenSet() const { return m_contentEncodingHasBeenSet; } 
- 
-    /** 
-     * <p>Specifies what content encodings have been applied to the object and thus 
-     * what decoding mechanisms must be applied to obtain the media-type referenced by 
+    inline bool ContentEncodingHasBeenSet() const { return m_contentEncodingHasBeenSet; }
+
+    /**
+     * <p>Specifies what content encodings have been applied to the object and thus
+     * what decoding mechanisms must be applied to obtain the media-type referenced by
      * the Content-Type header field. For more information, see <a
      * href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.11">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.11</a>.</p>
-     */ 
+     */
     inline void SetContentEncoding(const Aws::String& value) { m_contentEncodingHasBeenSet = true; m_contentEncoding = value; }
 
     /**
@@ -462,11 +462,11 @@ namespace Model
     /**
      * <p>The language the content is in.</p>
      */
-    inline bool ContentLanguageHasBeenSet() const { return m_contentLanguageHasBeenSet; } 
- 
-    /** 
-     * <p>The language the content is in.</p> 
-     */ 
+    inline bool ContentLanguageHasBeenSet() const { return m_contentLanguageHasBeenSet; }
+
+    /**
+     * <p>The language the content is in.</p>
+     */
     inline void SetContentLanguage(const Aws::String& value) { m_contentLanguageHasBeenSet = true; m_contentLanguage = value; }
 
     /**
@@ -507,13 +507,13 @@ namespace Model
      * cannot be determined automatically. For more information, see <a
      * href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.13">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.13</a>.</p>
      */
-    inline bool ContentLengthHasBeenSet() const { return m_contentLengthHasBeenSet; } 
- 
-    /** 
-     * <p>Size of the body in bytes. This parameter is useful when the size of the body 
+    inline bool ContentLengthHasBeenSet() const { return m_contentLengthHasBeenSet; }
+
+    /**
+     * <p>Size of the body in bytes. This parameter is useful when the size of the body
      * cannot be determined automatically. For more information, see <a
      * href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.13">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.13</a>.</p>
-     */ 
+     */
     inline void SetContentLength(long long value) { m_contentLengthHasBeenSet = true; m_contentLength = value; }
 
     /**
@@ -544,9 +544,9 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html">REST
      * Authentication</a>.</p>
      */
-    inline bool ContentMD5HasBeenSet() const { return m_contentMD5HasBeenSet; } 
- 
-    /** 
+    inline bool ContentMD5HasBeenSet() const { return m_contentMD5HasBeenSet; }
+
+    /**
      * <p>The base64-encoded 128-bit MD5 digest of the message (without the headers)
      * according to RFC 1864. This header can be used as a message integrity check to
      * verify that the data is the same data that was originally sent. Although it is
@@ -554,7 +554,7 @@ namespace Model
      * integrity check. For more information about REST request authentication, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html">REST
      * Authentication</a>.</p>
-     */ 
+     */
     inline void SetContentMD5(const Aws::String& value) { m_contentMD5HasBeenSet = true; m_contentMD5 = value; }
 
     /**
@@ -625,13 +625,13 @@ namespace Model
      * information, see <a
      * href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.21">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.21</a>.</p>
      */
-    inline bool ExpiresHasBeenSet() const { return m_expiresHasBeenSet; } 
- 
-    /** 
+    inline bool ExpiresHasBeenSet() const { return m_expiresHasBeenSet; }
+
+    /**
      * <p>The date and time at which the object is no longer cacheable. For more
      * information, see <a
      * href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.21">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.21</a>.</p>
-     */ 
+     */
     inline void SetExpires(const Aws::Utils::DateTime& value) { m_expiresHasBeenSet = true; m_expires = value; }
 
     /**
@@ -666,12 +666,12 @@ namespace Model
      * <p>Gives the grantee READ, READ_ACP, and WRITE_ACP permissions on the
      * object.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
      */
-    inline bool GrantFullControlHasBeenSet() const { return m_grantFullControlHasBeenSet; } 
- 
-    /** 
-     * <p>Gives the grantee READ, READ_ACP, and WRITE_ACP permissions on the 
+    inline bool GrantFullControlHasBeenSet() const { return m_grantFullControlHasBeenSet; }
+
+    /**
+     * <p>Gives the grantee READ, READ_ACP, and WRITE_ACP permissions on the
      * object.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
-     */ 
+     */
     inline void SetGrantFullControl(const Aws::String& value) { m_grantFullControlHasBeenSet = true; m_grantFullControl = value; }
 
     /**
@@ -715,12 +715,12 @@ namespace Model
      * <p>Allows grantee to read the object data and its metadata.</p> <p>This action
      * is not supported by Amazon S3 on Outposts.</p>
      */
-    inline bool GrantReadHasBeenSet() const { return m_grantReadHasBeenSet; } 
- 
-    /** 
+    inline bool GrantReadHasBeenSet() const { return m_grantReadHasBeenSet; }
+
+    /**
      * <p>Allows grantee to read the object data and its metadata.</p> <p>This action
      * is not supported by Amazon S3 on Outposts.</p>
-     */ 
+     */
     inline void SetGrantRead(const Aws::String& value) { m_grantReadHasBeenSet = true; m_grantRead = value; }
 
     /**
@@ -764,12 +764,12 @@ namespace Model
      * <p>Allows grantee to read the object ACL.</p> <p>This action is not supported by
      * Amazon S3 on Outposts.</p>
      */
-    inline bool GrantReadACPHasBeenSet() const { return m_grantReadACPHasBeenSet; } 
- 
-    /** 
+    inline bool GrantReadACPHasBeenSet() const { return m_grantReadACPHasBeenSet; }
+
+    /**
      * <p>Allows grantee to read the object ACL.</p> <p>This action is not supported by
      * Amazon S3 on Outposts.</p>
-     */ 
+     */
     inline void SetGrantReadACP(const Aws::String& value) { m_grantReadACPHasBeenSet = true; m_grantReadACP = value; }
 
     /**
@@ -813,12 +813,12 @@ namespace Model
      * <p>Allows grantee to write the ACL for the applicable object.</p> <p>This action
      * is not supported by Amazon S3 on Outposts.</p>
      */
-    inline bool GrantWriteACPHasBeenSet() const { return m_grantWriteACPHasBeenSet; } 
- 
-    /** 
+    inline bool GrantWriteACPHasBeenSet() const { return m_grantWriteACPHasBeenSet; }
+
+    /**
      * <p>Allows grantee to write the ACL for the applicable object.</p> <p>This action
      * is not supported by Amazon S3 on Outposts.</p>
-     */ 
+     */
     inline void SetGrantWriteACP(const Aws::String& value) { m_grantWriteACPHasBeenSet = true; m_grantWriteACP = value; }
 
     /**
@@ -860,11 +860,11 @@ namespace Model
     /**
      * <p>Object key for which the PUT operation was initiated.</p>
      */
-    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; } 
- 
-    /** 
-     * <p>Object key for which the PUT operation was initiated.</p> 
-     */ 
+    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; }
+
+    /**
+     * <p>Object key for which the PUT operation was initiated.</p>
+     */
     inline void SetKey(const Aws::String& value) { m_keyHasBeenSet = true; m_key = value; }
 
     /**
@@ -901,11 +901,11 @@ namespace Model
     /**
      * <p>A map of metadata to store with the object in S3.</p>
      */
-    inline bool MetadataHasBeenSet() const { return m_metadataHasBeenSet; } 
- 
-    /** 
-     * <p>A map of metadata to store with the object in S3.</p> 
-     */ 
+    inline bool MetadataHasBeenSet() const { return m_metadataHasBeenSet; }
+
+    /**
+     * <p>A map of metadata to store with the object in S3.</p>
+     */
     inline void SetMetadata(const Aws::Map<Aws::String, Aws::String>& value) { m_metadataHasBeenSet = true; m_metadata = value; }
 
     /**
@@ -969,12 +969,12 @@ namespace Model
      * <p>The server-side encryption algorithm used when storing this object in Amazon
      * S3 (for example, AES256, aws:kms).</p>
      */
-    inline bool ServerSideEncryptionHasBeenSet() const { return m_serverSideEncryptionHasBeenSet; } 
- 
-    /** 
+    inline bool ServerSideEncryptionHasBeenSet() const { return m_serverSideEncryptionHasBeenSet; }
+
+    /**
      * <p>The server-side encryption algorithm used when storing this object in Amazon
      * S3 (for example, AES256, aws:kms).</p>
-     */ 
+     */
     inline void SetServerSideEncryption(const ServerSideEncryption& value) { m_serverSideEncryptionHasBeenSet = true; m_serverSideEncryption = value; }
 
     /**
@@ -1016,9 +1016,9 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html">Storage
      * Classes</a> in the <i>Amazon S3 Service Developer Guide</i>.</p>
      */
-    inline bool StorageClassHasBeenSet() const { return m_storageClassHasBeenSet; } 
- 
-    /** 
+    inline bool StorageClassHasBeenSet() const { return m_storageClassHasBeenSet; }
+
+    /**
      * <p>By default, Amazon S3 uses the STANDARD Storage Class to store newly created
      * objects. The STANDARD storage class provides high durability and high
      * availability. Depending on performance needs, you can specify a different
@@ -1026,7 +1026,7 @@ namespace Model
      * more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html">Storage
      * Classes</a> in the <i>Amazon S3 Service Developer Guide</i>.</p>
-     */ 
+     */
     inline void SetStorageClass(const StorageClass& value) { m_storageClassHasBeenSet = true; m_storageClass = value; }
 
     /**
@@ -1101,11 +1101,11 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/how-to-page-redirect.html">How
      * to Configure Website Page Redirects</a>. </p>
      */
-    inline bool WebsiteRedirectLocationHasBeenSet() const { return m_websiteRedirectLocationHasBeenSet; } 
- 
-    /** 
-     * <p>If the bucket is configured as a website, redirects requests for this object 
-     * to another object in the same bucket or to an external URL. Amazon S3 stores the 
+    inline bool WebsiteRedirectLocationHasBeenSet() const { return m_websiteRedirectLocationHasBeenSet; }
+
+    /**
+     * <p>If the bucket is configured as a website, redirects requests for this object
+     * to another object in the same bucket or to an external URL. Amazon S3 stores the
      * value of this header in the object metadata. For information about object
      * metadata, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingMetadata.html">Object
@@ -1120,7 +1120,7 @@ namespace Model
      * Websites on Amazon S3</a> and <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/how-to-page-redirect.html">How
      * to Configure Website Page Redirects</a>. </p>
-     */ 
+     */
     inline void SetWebsiteRedirectLocation(const Aws::String& value) { m_websiteRedirectLocationHasBeenSet = true; m_websiteRedirectLocation = value; }
 
     /**
@@ -1234,12 +1234,12 @@ namespace Model
      * <p>Specifies the algorithm to use to when encrypting the object (for example,
      * AES256).</p>
      */
-    inline bool SSECustomerAlgorithmHasBeenSet() const { return m_sSECustomerAlgorithmHasBeenSet; } 
- 
-    /** 
+    inline bool SSECustomerAlgorithmHasBeenSet() const { return m_sSECustomerAlgorithmHasBeenSet; }
+
+    /**
      * <p>Specifies the algorithm to use to when encrypting the object (for example,
-     * AES256).</p> 
-     */ 
+     * AES256).</p>
+     */
     inline void SetSSECustomerAlgorithm(const Aws::String& value) { m_sSECustomerAlgorithmHasBeenSet = true; m_sSECustomerAlgorithm = value; }
 
     /**
@@ -1289,15 +1289,15 @@ namespace Model
      * appropriate for use with the algorithm specified in the
      * <code>x-amz-server-side-encryption-customer-algorithm</code> header.</p>
      */
-    inline bool SSECustomerKeyHasBeenSet() const { return m_sSECustomerKeyHasBeenSet; } 
- 
-    /** 
-     * <p>Specifies the customer-provided encryption key for Amazon S3 to use in 
-     * encrypting data. This value is used to store the object and then it is 
+    inline bool SSECustomerKeyHasBeenSet() const { return m_sSECustomerKeyHasBeenSet; }
+
+    /**
+     * <p>Specifies the customer-provided encryption key for Amazon S3 to use in
+     * encrypting data. This value is used to store the object and then it is
      * discarded; Amazon S3 does not store the encryption key. The key must be
      * appropriate for use with the algorithm specified in the
      * <code>x-amz-server-side-encryption-customer-algorithm</code> header.</p>
-     */ 
+     */
     inline void SetSSECustomerKey(const Aws::String& value) { m_sSECustomerKeyHasBeenSet = true; m_sSECustomerKey = value; }
 
     /**
@@ -1358,13 +1358,13 @@ namespace Model
      * Amazon S3 uses this header for a message integrity check to ensure that the
      * encryption key was transmitted without error.</p>
      */
-    inline bool SSECustomerKeyMD5HasBeenSet() const { return m_sSECustomerKeyMD5HasBeenSet; } 
- 
-    /** 
-     * <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. 
+    inline bool SSECustomerKeyMD5HasBeenSet() const { return m_sSECustomerKeyMD5HasBeenSet; }
+
+    /**
+     * <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321.
      * Amazon S3 uses this header for a message integrity check to ensure that the
-     * encryption key was transmitted without error.</p> 
-     */ 
+     * encryption key was transmitted without error.</p>
+     */
     inline void SetSSECustomerKeyMD5(const Aws::String& value) { m_sSECustomerKeyMD5HasBeenSet = true; m_sSECustomerKeyMD5 = value; }
 
     /**
@@ -1429,9 +1429,9 @@ namespace Model
      * x-amz-server-side-encryption-aws-kms-key-id</code>, Amazon S3 uses the AWS
      * managed CMK in AWS to protect the data.</p>
      */
-    inline bool SSEKMSKeyIdHasBeenSet() const { return m_sSEKMSKeyIdHasBeenSet; } 
- 
-    /** 
+    inline bool SSEKMSKeyIdHasBeenSet() const { return m_sSEKMSKeyIdHasBeenSet; }
+
+    /**
      * <p>If <code>x-amz-server-side-encryption</code> is present and has the value of
      * <code>aws:kms</code>, this header specifies the ID of the AWS Key Management
      * Service (AWS KMS) symmetrical customer managed customer master key (CMK) that
@@ -1442,7 +1442,7 @@ namespace Model
      * <code>x-amz-server-side-encryption:aws:kms</code>, but do not provide<code>
      * x-amz-server-side-encryption-aws-kms-key-id</code>, Amazon S3 uses the AWS
      * managed CMK in AWS to protect the data.</p>
-     */ 
+     */
     inline void SetSSEKMSKeyId(const Aws::String& value) { m_sSEKMSKeyIdHasBeenSet = true; m_sSEKMSKeyId = value; }
 
     /**
@@ -1614,9 +1614,9 @@ namespace Model
     inline const RequestPayer& GetRequestPayer() const{ return m_requestPayer; }
 
     
-    inline bool RequestPayerHasBeenSet() const { return m_requestPayerHasBeenSet; } 
- 
-     
+    inline bool RequestPayerHasBeenSet() const { return m_requestPayerHasBeenSet; }
+
+    
     inline void SetRequestPayer(const RequestPayer& value) { m_requestPayerHasBeenSet = true; m_requestPayer = value; }
 
     
@@ -1631,164 +1631,164 @@ namespace Model
 
     /**
      * <p>The tag-set for the object. The tag-set must be encoded as URL Query
-     * parameters. (For example, "Key1=Value1")</p> 
+     * parameters. (For example, "Key1=Value1")</p>
      */
     inline const Aws::String& GetTagging() const{ return m_tagging; }
 
     /**
      * <p>The tag-set for the object. The tag-set must be encoded as URL Query
-     * parameters. (For example, "Key1=Value1")</p> 
+     * parameters. (For example, "Key1=Value1")</p>
      */
-    inline bool TaggingHasBeenSet() const { return m_taggingHasBeenSet; } 
- 
-    /** 
-     * <p>The tag-set for the object. The tag-set must be encoded as URL Query 
-     * parameters. (For example, "Key1=Value1")</p> 
-     */ 
+    inline bool TaggingHasBeenSet() const { return m_taggingHasBeenSet; }
+
+    /**
+     * <p>The tag-set for the object. The tag-set must be encoded as URL Query
+     * parameters. (For example, "Key1=Value1")</p>
+     */
     inline void SetTagging(const Aws::String& value) { m_taggingHasBeenSet = true; m_tagging = value; }
 
     /**
      * <p>The tag-set for the object. The tag-set must be encoded as URL Query
-     * parameters. (For example, "Key1=Value1")</p> 
+     * parameters. (For example, "Key1=Value1")</p>
      */
     inline void SetTagging(Aws::String&& value) { m_taggingHasBeenSet = true; m_tagging = std::move(value); }
 
     /**
      * <p>The tag-set for the object. The tag-set must be encoded as URL Query
-     * parameters. (For example, "Key1=Value1")</p> 
+     * parameters. (For example, "Key1=Value1")</p>
      */
     inline void SetTagging(const char* value) { m_taggingHasBeenSet = true; m_tagging.assign(value); }
 
     /**
      * <p>The tag-set for the object. The tag-set must be encoded as URL Query
-     * parameters. (For example, "Key1=Value1")</p> 
+     * parameters. (For example, "Key1=Value1")</p>
      */
     inline PutObjectRequest& WithTagging(const Aws::String& value) { SetTagging(value); return *this;}
 
     /**
      * <p>The tag-set for the object. The tag-set must be encoded as URL Query
-     * parameters. (For example, "Key1=Value1")</p> 
+     * parameters. (For example, "Key1=Value1")</p>
      */
     inline PutObjectRequest& WithTagging(Aws::String&& value) { SetTagging(std::move(value)); return *this;}
 
     /**
      * <p>The tag-set for the object. The tag-set must be encoded as URL Query
-     * parameters. (For example, "Key1=Value1")</p> 
+     * parameters. (For example, "Key1=Value1")</p>
      */
     inline PutObjectRequest& WithTagging(const char* value) { SetTagging(value); return *this;}
 
 
-    /** 
-     * <p>The Object Lock mode that you want to apply to this object.</p> 
-     */ 
-    inline const ObjectLockMode& GetObjectLockMode() const{ return m_objectLockMode; } 
- 
-    /** 
-     * <p>The Object Lock mode that you want to apply to this object.</p> 
-     */ 
-    inline bool ObjectLockModeHasBeenSet() const { return m_objectLockModeHasBeenSet; } 
- 
-    /** 
-     * <p>The Object Lock mode that you want to apply to this object.</p> 
-     */ 
-    inline void SetObjectLockMode(const ObjectLockMode& value) { m_objectLockModeHasBeenSet = true; m_objectLockMode = value; } 
- 
-    /** 
-     * <p>The Object Lock mode that you want to apply to this object.</p> 
-     */ 
-    inline void SetObjectLockMode(ObjectLockMode&& value) { m_objectLockModeHasBeenSet = true; m_objectLockMode = std::move(value); } 
- 
-    /** 
-     * <p>The Object Lock mode that you want to apply to this object.</p> 
-     */ 
-    inline PutObjectRequest& WithObjectLockMode(const ObjectLockMode& value) { SetObjectLockMode(value); return *this;} 
- 
-    /** 
-     * <p>The Object Lock mode that you want to apply to this object.</p> 
-     */ 
-    inline PutObjectRequest& WithObjectLockMode(ObjectLockMode&& value) { SetObjectLockMode(std::move(value)); return *this;} 
- 
- 
-    /** 
-     * <p>The date and time when you want this object's Object Lock to expire.</p> 
-     */ 
-    inline const Aws::Utils::DateTime& GetObjectLockRetainUntilDate() const{ return m_objectLockRetainUntilDate; } 
- 
-    /** 
-     * <p>The date and time when you want this object's Object Lock to expire.</p> 
-     */ 
-    inline bool ObjectLockRetainUntilDateHasBeenSet() const { return m_objectLockRetainUntilDateHasBeenSet; } 
- 
-    /** 
-     * <p>The date and time when you want this object's Object Lock to expire.</p> 
-     */ 
-    inline void SetObjectLockRetainUntilDate(const Aws::Utils::DateTime& value) { m_objectLockRetainUntilDateHasBeenSet = true; m_objectLockRetainUntilDate = value; } 
- 
-    /** 
-     * <p>The date and time when you want this object's Object Lock to expire.</p> 
-     */ 
-    inline void SetObjectLockRetainUntilDate(Aws::Utils::DateTime&& value) { m_objectLockRetainUntilDateHasBeenSet = true; m_objectLockRetainUntilDate = std::move(value); } 
- 
-    /** 
-     * <p>The date and time when you want this object's Object Lock to expire.</p> 
-     */ 
-    inline PutObjectRequest& WithObjectLockRetainUntilDate(const Aws::Utils::DateTime& value) { SetObjectLockRetainUntilDate(value); return *this;} 
- 
-    /** 
-     * <p>The date and time when you want this object's Object Lock to expire.</p> 
-     */ 
-    inline PutObjectRequest& WithObjectLockRetainUntilDate(Aws::Utils::DateTime&& value) { SetObjectLockRetainUntilDate(std::move(value)); return *this;} 
- 
- 
-    /** 
+    /**
+     * <p>The Object Lock mode that you want to apply to this object.</p>
+     */
+    inline const ObjectLockMode& GetObjectLockMode() const{ return m_objectLockMode; }
+
+    /**
+     * <p>The Object Lock mode that you want to apply to this object.</p>
+     */
+    inline bool ObjectLockModeHasBeenSet() const { return m_objectLockModeHasBeenSet; }
+
+    /**
+     * <p>The Object Lock mode that you want to apply to this object.</p>
+     */
+    inline void SetObjectLockMode(const ObjectLockMode& value) { m_objectLockModeHasBeenSet = true; m_objectLockMode = value; }
+
+    /**
+     * <p>The Object Lock mode that you want to apply to this object.</p>
+     */
+    inline void SetObjectLockMode(ObjectLockMode&& value) { m_objectLockModeHasBeenSet = true; m_objectLockMode = std::move(value); }
+
+    /**
+     * <p>The Object Lock mode that you want to apply to this object.</p>
+     */
+    inline PutObjectRequest& WithObjectLockMode(const ObjectLockMode& value) { SetObjectLockMode(value); return *this;}
+
+    /**
+     * <p>The Object Lock mode that you want to apply to this object.</p>
+     */
+    inline PutObjectRequest& WithObjectLockMode(ObjectLockMode&& value) { SetObjectLockMode(std::move(value)); return *this;}
+
+
+    /**
+     * <p>The date and time when you want this object's Object Lock to expire.</p>
+     */
+    inline const Aws::Utils::DateTime& GetObjectLockRetainUntilDate() const{ return m_objectLockRetainUntilDate; }
+
+    /**
+     * <p>The date and time when you want this object's Object Lock to expire.</p>
+     */
+    inline bool ObjectLockRetainUntilDateHasBeenSet() const { return m_objectLockRetainUntilDateHasBeenSet; }
+
+    /**
+     * <p>The date and time when you want this object's Object Lock to expire.</p>
+     */
+    inline void SetObjectLockRetainUntilDate(const Aws::Utils::DateTime& value) { m_objectLockRetainUntilDateHasBeenSet = true; m_objectLockRetainUntilDate = value; }
+
+    /**
+     * <p>The date and time when you want this object's Object Lock to expire.</p>
+     */
+    inline void SetObjectLockRetainUntilDate(Aws::Utils::DateTime&& value) { m_objectLockRetainUntilDateHasBeenSet = true; m_objectLockRetainUntilDate = std::move(value); }
+
+    /**
+     * <p>The date and time when you want this object's Object Lock to expire.</p>
+     */
+    inline PutObjectRequest& WithObjectLockRetainUntilDate(const Aws::Utils::DateTime& value) { SetObjectLockRetainUntilDate(value); return *this;}
+
+    /**
+     * <p>The date and time when you want this object's Object Lock to expire.</p>
+     */
+    inline PutObjectRequest& WithObjectLockRetainUntilDate(Aws::Utils::DateTime&& value) { SetObjectLockRetainUntilDate(std::move(value)); return *this;}
+
+
+    /**
      * <p>Specifies whether a legal hold will be applied to this object. For more
      * information about S3 Object Lock, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>.</p>
-     */ 
-    inline const ObjectLockLegalHoldStatus& GetObjectLockLegalHoldStatus() const{ return m_objectLockLegalHoldStatus; } 
- 
-    /** 
+     */
+    inline const ObjectLockLegalHoldStatus& GetObjectLockLegalHoldStatus() const{ return m_objectLockLegalHoldStatus; }
+
+    /**
      * <p>Specifies whether a legal hold will be applied to this object. For more
      * information about S3 Object Lock, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>.</p>
-     */ 
-    inline bool ObjectLockLegalHoldStatusHasBeenSet() const { return m_objectLockLegalHoldStatusHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool ObjectLockLegalHoldStatusHasBeenSet() const { return m_objectLockLegalHoldStatusHasBeenSet; }
+
+    /**
      * <p>Specifies whether a legal hold will be applied to this object. For more
      * information about S3 Object Lock, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>.</p>
-     */ 
-    inline void SetObjectLockLegalHoldStatus(const ObjectLockLegalHoldStatus& value) { m_objectLockLegalHoldStatusHasBeenSet = true; m_objectLockLegalHoldStatus = value; } 
- 
-    /** 
+     */
+    inline void SetObjectLockLegalHoldStatus(const ObjectLockLegalHoldStatus& value) { m_objectLockLegalHoldStatusHasBeenSet = true; m_objectLockLegalHoldStatus = value; }
+
+    /**
      * <p>Specifies whether a legal hold will be applied to this object. For more
      * information about S3 Object Lock, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>.</p>
-     */ 
-    inline void SetObjectLockLegalHoldStatus(ObjectLockLegalHoldStatus&& value) { m_objectLockLegalHoldStatusHasBeenSet = true; m_objectLockLegalHoldStatus = std::move(value); } 
- 
-    /** 
+     */
+    inline void SetObjectLockLegalHoldStatus(ObjectLockLegalHoldStatus&& value) { m_objectLockLegalHoldStatusHasBeenSet = true; m_objectLockLegalHoldStatus = std::move(value); }
+
+    /**
      * <p>Specifies whether a legal hold will be applied to this object. For more
      * information about S3 Object Lock, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>.</p>
-     */ 
-    inline PutObjectRequest& WithObjectLockLegalHoldStatus(const ObjectLockLegalHoldStatus& value) { SetObjectLockLegalHoldStatus(value); return *this;} 
- 
-    /** 
+     */
+    inline PutObjectRequest& WithObjectLockLegalHoldStatus(const ObjectLockLegalHoldStatus& value) { SetObjectLockLegalHoldStatus(value); return *this;}
+
+    /**
      * <p>Specifies whether a legal hold will be applied to this object. For more
      * information about S3 Object Lock, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object
      * Lock</a>.</p>
-     */ 
-    inline PutObjectRequest& WithObjectLockLegalHoldStatus(ObjectLockLegalHoldStatus&& value) { SetObjectLockLegalHoldStatus(std::move(value)); return *this;} 
- 
- 
+     */
+    inline PutObjectRequest& WithObjectLockLegalHoldStatus(ObjectLockLegalHoldStatus&& value) { SetObjectLockLegalHoldStatus(std::move(value)); return *this;}
+
+
     /**
      * <p>The account id of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
@@ -1850,9 +1850,9 @@ namespace Model
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
- 
-     
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
+
+    
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     
@@ -1966,15 +1966,15 @@ namespace Model
     Aws::String m_tagging;
     bool m_taggingHasBeenSet;
 
-    ObjectLockMode m_objectLockMode; 
-    bool m_objectLockModeHasBeenSet; 
- 
-    Aws::Utils::DateTime m_objectLockRetainUntilDate; 
-    bool m_objectLockRetainUntilDateHasBeenSet; 
- 
-    ObjectLockLegalHoldStatus m_objectLockLegalHoldStatus; 
-    bool m_objectLockLegalHoldStatusHasBeenSet; 
- 
+    ObjectLockMode m_objectLockMode;
+    bool m_objectLockModeHasBeenSet;
+
+    Aws::Utils::DateTime m_objectLockRetainUntilDate;
+    bool m_objectLockRetainUntilDateHasBeenSet;
+
+    ObjectLockLegalHoldStatus m_objectLockLegalHoldStatus;
+    bool m_objectLockLegalHoldStatusHasBeenSet;
+
     Aws::String m_expectedBucketOwner;
     bool m_expectedBucketOwnerHasBeenSet;
 

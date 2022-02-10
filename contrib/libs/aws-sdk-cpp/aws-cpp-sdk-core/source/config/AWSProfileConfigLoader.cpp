@@ -139,7 +139,7 @@ namespace Aws
                     }
                 }
 
-                FlushProfileAndReset(line, std::string::npos, std::string::npos); 
+                FlushProfileAndReset(line, std::string::npos, std::string::npos);
             }
 
         private:
@@ -204,13 +204,13 @@ namespace Aws
                         AWS_LOGSTREAM_DEBUG(PARSER_TAG, "found source profile " << sourceProfileIter->second);
                         profile.SetSourceProfile(sourceProfileIter->second);
                     }
- 
-                    auto credentialProcessIter = m_profileKeyValuePairs.find(CREDENTIAL_PROCESS_COMMAND); 
-                    if (credentialProcessIter != m_profileKeyValuePairs.end()) 
-                    { 
-                        AWS_LOGSTREAM_DEBUG(PARSER_TAG, "found credential process " << credentialProcessIter->second); 
-                        profile.SetCredentialProcess(credentialProcessIter->second); 
-                    } 
+
+                    auto credentialProcessIter = m_profileKeyValuePairs.find(CREDENTIAL_PROCESS_COMMAND);
+                    if (credentialProcessIter != m_profileKeyValuePairs.end())
+                    {
+                        AWS_LOGSTREAM_DEBUG(PARSER_TAG, "found credential process " << credentialProcessIter->second);
+                        profile.SetCredentialProcess(credentialProcessIter->second);
+                    }
                     profile.SetAllKeyValPairs(m_profileKeyValuePairs);
 
                     m_foundProfiles[profile.GetName()] = std::move(profile);

@@ -37,14 +37,14 @@ namespace Model
 
 
 
-    /** 
+    /**
      * <p>A Bencoded dictionary as defined by the BitTorrent specification</p>
-     */ 
+     */
     inline Aws::IOStream& GetBody() { return m_body.GetUnderlyingStream(); }
 
-    /** 
+    /**
      * <p>A Bencoded dictionary as defined by the BitTorrent specification</p>
-     */ 
+     */
     inline void ReplaceBody(Aws::IOStream* body) { m_body = Aws::Utils::Stream::ResponseStream(body); }
 
 

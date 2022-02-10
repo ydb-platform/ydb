@@ -23,8 +23,8 @@ namespace Model
 {
 
   /**
-   * <p>A container for filter information for the selection of S3 objects encrypted 
-   * with AWS KMS.</p><p><h3>See Also:</h3>   <a 
+   * <p>A container for filter information for the selection of S3 objects encrypted
+   * with AWS KMS.</p><p><h3>See Also:</h3>   <a
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/SseKmsEncryptedObjects">AWS
    * API Reference</a></p>
    */
@@ -50,13 +50,13 @@ namespace Model
      * encryption using a customer master key (CMK) stored in AWS Key Management
      * Service.</p>
      */
-    inline bool StatusHasBeenSet() const { return m_statusHasBeenSet; } 
- 
-    /** 
+    inline bool StatusHasBeenSet() const { return m_statusHasBeenSet; }
+
+    /**
      * <p>Specifies whether Amazon S3 replicates objects created with server-side
      * encryption using a customer master key (CMK) stored in AWS Key Management
      * Service.</p>
-     */ 
+     */
     inline void SetStatus(const SseKmsEncryptedObjectsStatus& value) { m_statusHasBeenSet = true; m_status = value; }
 
     /**

@@ -25,7 +25,7 @@ DeleteBucketLifecycleRequest::DeleteBucketLifecycleRequest() :
 
 Aws::String DeleteBucketLifecycleRequest::SerializePayload() const
 {
-  return {}; 
+  return {};
 }
 
 void DeleteBucketLifecycleRequest::AddQueryStringParameters(URI& uri) const

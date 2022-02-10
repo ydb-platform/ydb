@@ -41,7 +41,7 @@ Aws::String CompleteMultipartUploadRequest::SerializePayload() const
     return payloadDoc.ConvertToString();
   }
 
-  return {}; 
+  return {};
 }
 
 void CompleteMultipartUploadRequest::AddQueryStringParameters(URI& uri) const

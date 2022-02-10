@@ -25,7 +25,7 @@ GetBucketPolicyRequest::GetBucketPolicyRequest() :
 
 Aws::String GetBucketPolicyRequest::SerializePayload() const
 {
-  return {}; 
+  return {};
 }
 
 void GetBucketPolicyRequest::AddQueryStringParameters(URI& uri) const

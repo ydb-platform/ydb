@@ -17,7 +17,7 @@ Aws::String PathUtils::GetFileNameFromPathWithoutExt(const Aws::String& path)
     } 
     if (endPos == 0) // fileName is "."
     {
-        return {}; 
+        return {};
     }
 
     return fileName.substr(0, endPos);
@@ -33,7 +33,7 @@ Aws::String PathUtils::GetFileNameFromPathWithExt(const Aws::String& path)
     size_t startPos = path.find_last_of(Aws::FileSystem::PATH_DELIM);
     if (startPos == path.size() - 1)
     {
-        return {}; 
+        return {};
     }
 
     if (startPos == std::string::npos)
@@ -48,4 +48,4 @@ Aws::String PathUtils::GetFileNameFromPathWithExt(const Aws::String& path)
     size_t endPos = path.size() - 1;
     
     return path.substr(startPos, endPos - startPos + 1);
-} 
+}

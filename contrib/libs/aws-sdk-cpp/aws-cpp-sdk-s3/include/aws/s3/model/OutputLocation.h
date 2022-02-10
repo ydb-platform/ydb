@@ -48,12 +48,12 @@ namespace Model
      * <p>Describes an S3 location that will receive the results of the restore
      * request.</p>
      */
-    inline bool S3HasBeenSet() const { return m_s3HasBeenSet; } 
- 
-    /** 
-     * <p>Describes an S3 location that will receive the results of the restore 
-     * request.</p> 
-     */ 
+    inline bool S3HasBeenSet() const { return m_s3HasBeenSet; }
+
+    /**
+     * <p>Describes an S3 location that will receive the results of the restore
+     * request.</p>
+     */
     inline void SetS3(const S3Location& value) { m_s3HasBeenSet = true; m_s3 = value; }
 
     /**

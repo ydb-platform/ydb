@@ -49,12 +49,12 @@ namespace Model
      * <p>Container for information about a particular server-side encryption
      * configuration rule.</p>
      */
-    inline bool RulesHasBeenSet() const { return m_rulesHasBeenSet; } 
- 
-    /** 
-     * <p>Container for information about a particular server-side encryption 
-     * configuration rule.</p> 
-     */ 
+    inline bool RulesHasBeenSet() const { return m_rulesHasBeenSet; }
+
+    /**
+     * <p>Container for information about a particular server-side encryption
+     * configuration rule.</p>
+     */
     inline void SetRules(const Aws::Vector<ServerSideEncryptionRule>& value) { m_rulesHasBeenSet = true; m_rules = value; }
 
     /**

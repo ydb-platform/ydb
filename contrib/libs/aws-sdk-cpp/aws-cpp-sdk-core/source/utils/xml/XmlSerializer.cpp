@@ -125,7 +125,7 @@ Aws::String XmlNode::GetText() const
         return printer.CStr();
     }
 
-    return {}; 
+    return {};
 }
 
 void XmlNode::SetText(const Aws::String& textValue)

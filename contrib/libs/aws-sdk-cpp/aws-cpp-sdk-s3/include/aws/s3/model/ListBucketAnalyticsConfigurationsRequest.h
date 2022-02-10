@@ -49,11 +49,11 @@ namespace Model
     /**
      * <p>The name of the bucket from which analytics configurations are retrieved.</p>
      */
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
- 
-    /** 
-     * <p>The name of the bucket from which analytics configurations are retrieved.</p> 
-     */ 
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
+
+    /**
+     * <p>The name of the bucket from which analytics configurations are retrieved.</p>
+     */
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
     /**
@@ -92,12 +92,12 @@ namespace Model
      * <p>The ContinuationToken that represents a placeholder from where this request
      * should begin.</p>
      */
-    inline bool ContinuationTokenHasBeenSet() const { return m_continuationTokenHasBeenSet; } 
- 
-    /** 
-     * <p>The ContinuationToken that represents a placeholder from where this request 
-     * should begin.</p> 
-     */ 
+    inline bool ContinuationTokenHasBeenSet() const { return m_continuationTokenHasBeenSet; }
+
+    /**
+     * <p>The ContinuationToken that represents a placeholder from where this request
+     * should begin.</p>
+     */
     inline void SetContinuationToken(const Aws::String& value) { m_continuationTokenHasBeenSet = true; m_continuationToken = value; }
 
     /**
@@ -192,9 +192,9 @@ namespace Model
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
- 
-     
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
+
+    
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     

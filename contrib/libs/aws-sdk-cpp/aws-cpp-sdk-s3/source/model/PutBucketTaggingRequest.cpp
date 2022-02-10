@@ -38,7 +38,7 @@ Aws::String PutBucketTaggingRequest::SerializePayload() const
     return payloadDoc.ConvertToString();
   }
 
-  return {}; 
+  return {};
 }
 
 void PutBucketTaggingRequest::AddQueryStringParameters(URI& uri) const

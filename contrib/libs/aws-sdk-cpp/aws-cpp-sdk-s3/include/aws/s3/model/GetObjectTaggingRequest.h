@@ -41,7 +41,7 @@ namespace Model
     Aws::Http::HeaderValueCollection GetRequestSpecificHeaders() const override;
 
 
-    /** 
+    /**
      * <p>The bucket name containing the object for which to get the tagging
      * information. </p> <p>When using this API with an access point, you must direct
      * requests to the access point hostname. The access point hostname takes the form
@@ -61,10 +61,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
-    /** 
+    /**
      * <p>The bucket name containing the object for which to get the tagging
      * information. </p> <p>When using this API with an access point, you must direct
      * requests to the access point hostname. The access point hostname takes the form
@@ -84,10 +84,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
+
+    /**
      * <p>The bucket name containing the object for which to get the tagging
      * information. </p> <p>When using this API with an access point, you must direct
      * requests to the access point hostname. The access point hostname takes the form
@@ -107,10 +107,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
-    /** 
+    /**
      * <p>The bucket name containing the object for which to get the tagging
      * information. </p> <p>When using this API with an access point, you must direct
      * requests to the access point hostname. The access point hostname takes the form
@@ -130,10 +130,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
-    /** 
+    /**
      * <p>The bucket name containing the object for which to get the tagging
      * information. </p> <p>When using this API with an access point, you must direct
      * requests to the access point hostname. The access point hostname takes the form
@@ -153,10 +153,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
-    /** 
+    /**
      * <p>The bucket name containing the object for which to get the tagging
      * information. </p> <p>When using this API with an access point, you must direct
      * requests to the access point hostname. The access point hostname takes the form
@@ -176,10 +176,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline GetObjectTaggingRequest& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
-    /** 
+    /**
      * <p>The bucket name containing the object for which to get the tagging
      * information. </p> <p>When using this API with an access point, you must direct
      * requests to the access point hostname. The access point hostname takes the form
@@ -199,10 +199,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline GetObjectTaggingRequest& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>The bucket name containing the object for which to get the tagging
      * information. </p> <p>When using this API with an access point, you must direct
      * requests to the access point hostname. The access point hostname takes the form
@@ -222,89 +222,89 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline GetObjectTaggingRequest& WithBucket(const char* value) { SetBucket(value); return *this;}
 
 
-    /** 
+    /**
      * <p>Object key for which to get the tagging information.</p>
-     */ 
+     */
     inline const Aws::String& GetKey() const{ return m_key; }
 
-    /** 
+    /**
      * <p>Object key for which to get the tagging information.</p>
-     */ 
-    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; }
+
+    /**
      * <p>Object key for which to get the tagging information.</p>
-     */ 
+     */
     inline void SetKey(const Aws::String& value) { m_keyHasBeenSet = true; m_key = value; }
 
-    /** 
+    /**
      * <p>Object key for which to get the tagging information.</p>
-     */ 
+     */
     inline void SetKey(Aws::String&& value) { m_keyHasBeenSet = true; m_key = std::move(value); }
 
-    /** 
+    /**
      * <p>Object key for which to get the tagging information.</p>
-     */ 
+     */
     inline void SetKey(const char* value) { m_keyHasBeenSet = true; m_key.assign(value); }
 
-    /** 
+    /**
      * <p>Object key for which to get the tagging information.</p>
-     */ 
+     */
     inline GetObjectTaggingRequest& WithKey(const Aws::String& value) { SetKey(value); return *this;}
 
-    /** 
+    /**
      * <p>Object key for which to get the tagging information.</p>
-     */ 
+     */
     inline GetObjectTaggingRequest& WithKey(Aws::String&& value) { SetKey(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>Object key for which to get the tagging information.</p>
-     */ 
+     */
     inline GetObjectTaggingRequest& WithKey(const char* value) { SetKey(value); return *this;}
 
 
-    /** 
+    /**
      * <p>The versionId of the object for which to get the tagging information.</p>
-     */ 
+     */
     inline const Aws::String& GetVersionId() const{ return m_versionId; }
 
-    /** 
+    /**
      * <p>The versionId of the object for which to get the tagging information.</p>
-     */ 
-    inline bool VersionIdHasBeenSet() const { return m_versionIdHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool VersionIdHasBeenSet() const { return m_versionIdHasBeenSet; }
+
+    /**
      * <p>The versionId of the object for which to get the tagging information.</p>
-     */ 
+     */
     inline void SetVersionId(const Aws::String& value) { m_versionIdHasBeenSet = true; m_versionId = value; }
 
-    /** 
+    /**
      * <p>The versionId of the object for which to get the tagging information.</p>
-     */ 
+     */
     inline void SetVersionId(Aws::String&& value) { m_versionIdHasBeenSet = true; m_versionId = std::move(value); }
 
-    /** 
+    /**
      * <p>The versionId of the object for which to get the tagging information.</p>
-     */ 
+     */
     inline void SetVersionId(const char* value) { m_versionIdHasBeenSet = true; m_versionId.assign(value); }
 
-    /** 
+    /**
      * <p>The versionId of the object for which to get the tagging information.</p>
-     */ 
+     */
     inline GetObjectTaggingRequest& WithVersionId(const Aws::String& value) { SetVersionId(value); return *this;}
 
-    /** 
+    /**
      * <p>The versionId of the object for which to get the tagging information.</p>
-     */ 
+     */
     inline GetObjectTaggingRequest& WithVersionId(Aws::String&& value) { SetVersionId(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>The versionId of the object for which to get the tagging information.</p>
-     */ 
+     */
     inline GetObjectTaggingRequest& WithVersionId(const char* value) { SetVersionId(value); return *this;}
 
 
@@ -369,9 +369,9 @@ namespace Model
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
- 
-     
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
+
+    
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     

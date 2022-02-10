@@ -23,12 +23,12 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Specifies a cross-origin access rule for an Amazon S3 bucket.</p><p><h3>See
    * Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/CORSRule">AWS API 
-   * Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/CORSRule">AWS API
+   * Reference</a></p>
+   */
   class AWS_S3_API CORSRule
   {
   public:
@@ -53,14 +53,14 @@ namespace Model
      * any preflight OPTIONS request, Amazon S3 returns any requested headers that are
      * allowed.</p>
      */
-    inline bool AllowedHeadersHasBeenSet() const { return m_allowedHeadersHasBeenSet; } 
- 
-    /** 
+    inline bool AllowedHeadersHasBeenSet() const { return m_allowedHeadersHasBeenSet; }
+
+    /**
      * <p>Headers that are specified in the <code>Access-Control-Request-Headers</code>
      * header. These headers are allowed in a preflight OPTIONS request. In response to
      * any preflight OPTIONS request, Amazon S3 returns any requested headers that are
      * allowed.</p>
-     */ 
+     */
     inline void SetAllowedHeaders(const Aws::Vector<Aws::String>& value) { m_allowedHeadersHasBeenSet = true; m_allowedHeaders = value; }
 
     /**
@@ -124,13 +124,13 @@ namespace Model
      * <code>GET</code>, <code>PUT</code>, <code>HEAD</code>, <code>POST</code>, and
      * <code>DELETE</code>.</p>
      */
-    inline bool AllowedMethodsHasBeenSet() const { return m_allowedMethodsHasBeenSet; } 
- 
-    /** 
+    inline bool AllowedMethodsHasBeenSet() const { return m_allowedMethodsHasBeenSet; }
+
+    /**
      * <p>An HTTP method that you allow the origin to execute. Valid values are
      * <code>GET</code>, <code>PUT</code>, <code>HEAD</code>, <code>POST</code>, and
      * <code>DELETE</code>.</p>
-     */ 
+     */
     inline void SetAllowedMethods(const Aws::Vector<Aws::String>& value) { m_allowedMethodsHasBeenSet = true; m_allowedMethods = value; }
 
     /**
@@ -186,12 +186,12 @@ namespace Model
      * <p>One or more origins you want customers to be able to access the bucket
      * from.</p>
      */
-    inline bool AllowedOriginsHasBeenSet() const { return m_allowedOriginsHasBeenSet; } 
- 
-    /** 
-     * <p>One or more origins you want customers to be able to access the bucket 
-     * from.</p> 
-     */ 
+    inline bool AllowedOriginsHasBeenSet() const { return m_allowedOriginsHasBeenSet; }
+
+    /**
+     * <p>One or more origins you want customers to be able to access the bucket
+     * from.</p>
+     */
     inline void SetAllowedOrigins(const Aws::Vector<Aws::String>& value) { m_allowedOriginsHasBeenSet = true; m_allowedOrigins = value; }
 
     /**
@@ -243,13 +243,13 @@ namespace Model
      * access from their applications (for example, from a JavaScript
      * <code>XMLHttpRequest</code> object).</p>
      */
-    inline bool ExposeHeadersHasBeenSet() const { return m_exposeHeadersHasBeenSet; } 
- 
-    /** 
-     * <p>One or more headers in the response that you want customers to be able to 
+    inline bool ExposeHeadersHasBeenSet() const { return m_exposeHeadersHasBeenSet; }
+
+    /**
+     * <p>One or more headers in the response that you want customers to be able to
      * access from their applications (for example, from a JavaScript
      * <code>XMLHttpRequest</code> object).</p>
-     */ 
+     */
     inline void SetExposeHeaders(const Aws::Vector<Aws::String>& value) { m_exposeHeadersHasBeenSet = true; m_exposeHeaders = value; }
 
     /**
@@ -305,12 +305,12 @@ namespace Model
      * <p>The time in seconds that your browser is to cache the preflight response for
      * the specified resource.</p>
      */
-    inline bool MaxAgeSecondsHasBeenSet() const { return m_maxAgeSecondsHasBeenSet; } 
- 
-    /** 
-     * <p>The time in seconds that your browser is to cache the preflight response for 
-     * the specified resource.</p> 
-     */ 
+    inline bool MaxAgeSecondsHasBeenSet() const { return m_maxAgeSecondsHasBeenSet; }
+
+    /**
+     * <p>The time in seconds that your browser is to cache the preflight response for
+     * the specified resource.</p>
+     */
     inline void SetMaxAgeSeconds(int value) { m_maxAgeSecondsHasBeenSet = true; m_maxAgeSeconds = value; }
 
     /**

@@ -25,7 +25,7 @@ DeleteBucketPolicyRequest::DeleteBucketPolicyRequest() :
 
 Aws::String DeleteBucketPolicyRequest::SerializePayload() const
 {
-  return {}; 
+  return {};
 }
 
 void DeleteBucketPolicyRequest::AddQueryStringParameters(URI& uri) const

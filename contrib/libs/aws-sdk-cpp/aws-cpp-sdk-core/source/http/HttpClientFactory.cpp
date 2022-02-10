@@ -100,7 +100,7 @@ namespace Aws
                 // to error by -Werror) about the unused clientConfiguration parameter. We
                 // prevent that warning with AWS_UNREFERENCED_PARAM.
                 AWS_UNREFERENCED_PARAM(clientConfiguration);
-                AWS_LOGSTREAM_WARN(HTTP_CLIENT_FACTORY_ALLOCATION_TAG, "SDK was built without an Http implementation, default http client factory can't create an Http client instance."); 
+                AWS_LOGSTREAM_WARN(HTTP_CLIENT_FACTORY_ALLOCATION_TAG, "SDK was built without an Http implementation, default http client factory can't create an Http client instance.");
                 return nullptr;
 #endif
             }

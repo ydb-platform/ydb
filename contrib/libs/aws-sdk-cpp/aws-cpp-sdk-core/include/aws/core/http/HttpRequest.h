@@ -419,31 +419,31 @@ namespace Aws
             {
                 SetHeaderValue(VIA_HEADER, value);
             }
- 
+
             /**
-             * Has Api version header x-amz-api-version 
-             */ 
-            inline bool HasApiVersion() const 
-            { 
-                return HasHeader(API_VERSION_HEADER); 
-            } 
- 
-            /** 
-            * Gets Api version header x-amz-api-version. 
-            */ 
-            inline const Aws::String& GetApiVersion() const 
-            { 
-                return GetHeaderValue(API_VERSION_HEADER); 
-            } 
-            /** 
-             * Sets Api version header x-amz-api-version. 
-             */ 
-            inline void SetApiVersion(const Aws::String& value) 
-            { 
-                SetHeaderValue(API_VERSION_HEADER, value); 
-            } 
- 
-            /** 
+             * Has Api version header x-amz-api-version
+             */
+            inline bool HasApiVersion() const
+            {
+                return HasHeader(API_VERSION_HEADER);
+            }
+
+            /**
+            * Gets Api version header x-amz-api-version.
+            */
+            inline const Aws::String& GetApiVersion() const
+            {
+                return GetHeaderValue(API_VERSION_HEADER);
+            }
+            /**
+             * Sets Api version header x-amz-api-version.
+             */
+            inline void SetApiVersion(const Aws::String& value)
+            {
+                SetHeaderValue(API_VERSION_HEADER, value);
+            }
+
+            /**
              * Sets the closure for receiving events when data is received from the server.
              */
             inline void SetDataReceivedEventHandler(const DataReceivedEventHandler& dataReceivedEventHandler) { m_onDataReceived = dataReceivedEventHandler; }
@@ -514,15 +514,15 @@ namespace Aws
             */
             virtual const Aws::Monitoring::HttpClientMetricsCollection& GetRequestMetrics() const { return m_httpRequestMetrics; }
 
-            /** 
-             * Returns the IP address of the remote host the request was made out to. 
-             * This value is populated after the request is made and when the HTTP client supports retrieving such 
-             * information. 
-             * If the information is not available, an empty string is returned. 
-             */ 
-            Aws::String GetResolvedRemoteHost() const { return m_resolvedRemoteHost; } 
-            void SetResolvedRemoteHost(const Aws::String& ip) { m_resolvedRemoteHost = ip; } 
- 
+            /**
+             * Returns the IP address of the remote host the request was made out to.
+             * This value is populated after the request is made and when the HTTP client supports retrieving such
+             * information.
+             * If the information is not available, an empty string is returned.
+             */
+            Aws::String GetResolvedRemoteHost() const { return m_resolvedRemoteHost; }
+            void SetResolvedRemoteHost(const Aws::String& ip) { m_resolvedRemoteHost = ip; }
+
             bool IsEventStreamRequest() { return m_isEvenStreamRequest; }
             void SetEventStreamRequest(bool eventStreamRequest) { m_isEvenStreamRequest = eventStreamRequest; }
         private:
@@ -534,7 +534,7 @@ namespace Aws
             ContinueRequestHandler m_continueRequest;
             Aws::String m_signingRegion;
             Aws::String m_signingAccessKey;
-            Aws::String m_resolvedRemoteHost; 
+            Aws::String m_resolvedRemoteHost;
             Aws::Monitoring::HttpClientMetricsCollection m_httpRequestMetrics;
         };
 

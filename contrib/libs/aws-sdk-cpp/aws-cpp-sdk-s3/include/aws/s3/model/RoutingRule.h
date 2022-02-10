@@ -23,15 +23,15 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Specifies the redirect behavior and when a redirect is applied. For more
    * information about routing rules, see <a
    * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/how-to-page-redirect.html#advanced-conditional-redirects">Configuring
    * advanced conditional redirects</a> in the <i>Amazon Simple Storage Service
    * Developer Guide</i>.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/RoutingRule">AWS API 
-   * Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/RoutingRule">AWS API
+   * Reference</a></p>
+   */
   class AWS_S3_API RoutingRule
   {
   public:
@@ -58,15 +58,15 @@ namespace Model
      * request results in HTTP error 4xx, redirect request to another host where you
      * might process the error.</p>
      */
-    inline bool ConditionHasBeenSet() const { return m_conditionHasBeenSet; } 
- 
-    /** 
-     * <p>A container for describing a condition that must be met for the specified 
+    inline bool ConditionHasBeenSet() const { return m_conditionHasBeenSet; }
+
+    /**
+     * <p>A container for describing a condition that must be met for the specified
      * redirect to apply. For example, 1. If request is for pages in the
      * <code>/docs</code> folder, redirect to the <code>/documents</code> folder. 2. If
      * request results in HTTP error 4xx, redirect request to another host where you
      * might process the error.</p>
-     */ 
+     */
     inline void SetCondition(const Condition& value) { m_conditionHasBeenSet = true; m_condition = value; }
 
     /**
@@ -100,42 +100,42 @@ namespace Model
     /**
      * <p>Container for redirect information. You can redirect requests to another
      * host, to another page, or with another protocol. In the event of an error, you
-     * can specify a different error code to return.</p> 
+     * can specify a different error code to return.</p>
      */
     inline const Redirect& GetRedirect() const{ return m_redirect; }
 
     /**
      * <p>Container for redirect information. You can redirect requests to another
      * host, to another page, or with another protocol. In the event of an error, you
-     * can specify a different error code to return.</p> 
+     * can specify a different error code to return.</p>
      */
-    inline bool RedirectHasBeenSet() const { return m_redirectHasBeenSet; } 
- 
-    /** 
-     * <p>Container for redirect information. You can redirect requests to another 
-     * host, to another page, or with another protocol. In the event of an error, you 
-     * can specify a different error code to return.</p> 
-     */ 
+    inline bool RedirectHasBeenSet() const { return m_redirectHasBeenSet; }
+
+    /**
+     * <p>Container for redirect information. You can redirect requests to another
+     * host, to another page, or with another protocol. In the event of an error, you
+     * can specify a different error code to return.</p>
+     */
     inline void SetRedirect(const Redirect& value) { m_redirectHasBeenSet = true; m_redirect = value; }
 
     /**
      * <p>Container for redirect information. You can redirect requests to another
      * host, to another page, or with another protocol. In the event of an error, you
-     * can specify a different error code to return.</p> 
+     * can specify a different error code to return.</p>
      */
     inline void SetRedirect(Redirect&& value) { m_redirectHasBeenSet = true; m_redirect = std::move(value); }
 
     /**
      * <p>Container for redirect information. You can redirect requests to another
      * host, to another page, or with another protocol. In the event of an error, you
-     * can specify a different error code to return.</p> 
+     * can specify a different error code to return.</p>
      */
     inline RoutingRule& WithRedirect(const Redirect& value) { SetRedirect(value); return *this;}
 
     /**
      * <p>Container for redirect information. You can redirect requests to another
      * host, to another page, or with another protocol. In the event of an error, you
-     * can specify a different error code to return.</p> 
+     * can specify a different error code to return.</p>
      */
     inline RoutingRule& WithRedirect(Redirect&& value) { SetRedirect(std::move(value)); return *this;}
 

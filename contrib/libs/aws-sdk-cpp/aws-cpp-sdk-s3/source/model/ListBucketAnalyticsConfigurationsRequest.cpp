@@ -26,7 +26,7 @@ ListBucketAnalyticsConfigurationsRequest::ListBucketAnalyticsConfigurationsReque
 
 Aws::String ListBucketAnalyticsConfigurationsRequest::SerializePayload() const
 {
-  return {}; 
+  return {};
 }
 
 void ListBucketAnalyticsConfigurationsRequest::AddQueryStringParameters(URI& uri) const

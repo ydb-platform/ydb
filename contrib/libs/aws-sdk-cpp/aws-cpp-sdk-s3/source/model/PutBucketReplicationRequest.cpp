@@ -39,7 +39,7 @@ Aws::String PutBucketReplicationRequest::SerializePayload() const
     return payloadDoc.ConvertToString();
   }
 
-  return {}; 
+  return {};
 }
 
 void PutBucketReplicationRequest::AddQueryStringParameters(URI& uri) const

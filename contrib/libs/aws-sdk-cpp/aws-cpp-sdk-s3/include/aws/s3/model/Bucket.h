@@ -23,13 +23,13 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p> In terms of implementation, a Bucket is a resource. An Amazon S3 bucket name
    * is globally unique, and the namespace is shared by all AWS accounts.
    * </p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Bucket">AWS API 
-   * Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Bucket">AWS API
+   * Reference</a></p>
+   */
   class AWS_S3_API Bucket
   {
   public:
@@ -48,11 +48,11 @@ namespace Model
     /**
      * <p>The name of the bucket.</p>
      */
-    inline bool NameHasBeenSet() const { return m_nameHasBeenSet; } 
- 
-    /** 
-     * <p>The name of the bucket.</p> 
-     */ 
+    inline bool NameHasBeenSet() const { return m_nameHasBeenSet; }
+
+    /**
+     * <p>The name of the bucket.</p>
+     */
     inline void SetName(const Aws::String& value) { m_nameHasBeenSet = true; m_name = value; }
 
     /**
@@ -91,12 +91,12 @@ namespace Model
      * <p>Date the bucket was created. This date can change when making changes to your
      * bucket, such as editing its bucket policy.</p>
      */
-    inline bool CreationDateHasBeenSet() const { return m_creationDateHasBeenSet; } 
- 
-    /** 
+    inline bool CreationDateHasBeenSet() const { return m_creationDateHasBeenSet; }
+
+    /**
      * <p>Date the bucket was created. This date can change when making changes to your
      * bucket, such as editing its bucket policy.</p>
-     */ 
+     */
     inline void SetCreationDate(const Aws::Utils::DateTime& value) { m_creationDateHasBeenSet = true; m_creationDate = value; }
 
     /**

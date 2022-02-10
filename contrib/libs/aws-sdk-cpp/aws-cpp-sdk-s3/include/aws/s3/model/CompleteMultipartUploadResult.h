@@ -34,43 +34,43 @@ namespace Model
     CompleteMultipartUploadResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
-    /** 
+    /**
      * <p>The URI that identifies the newly created object.</p>
-     */ 
+     */
     inline const Aws::String& GetLocation() const{ return m_location; }
 
-    /** 
+    /**
      * <p>The URI that identifies the newly created object.</p>
-     */ 
+     */
     inline void SetLocation(const Aws::String& value) { m_location = value; }
 
-    /** 
+    /**
      * <p>The URI that identifies the newly created object.</p>
-     */ 
+     */
     inline void SetLocation(Aws::String&& value) { m_location = std::move(value); }
 
-    /** 
+    /**
      * <p>The URI that identifies the newly created object.</p>
-     */ 
+     */
     inline void SetLocation(const char* value) { m_location.assign(value); }
 
-    /** 
+    /**
      * <p>The URI that identifies the newly created object.</p>
-     */ 
+     */
     inline CompleteMultipartUploadResult& WithLocation(const Aws::String& value) { SetLocation(value); return *this;}
 
-    /** 
+    /**
      * <p>The URI that identifies the newly created object.</p>
-     */ 
+     */
     inline CompleteMultipartUploadResult& WithLocation(Aws::String&& value) { SetLocation(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>The URI that identifies the newly created object.</p>
-     */ 
+     */
     inline CompleteMultipartUploadResult& WithLocation(const char* value) { SetLocation(value); return *this;}
 
 
-    /** 
+    /**
      * <p>The name of the bucket that contains the newly created object.</p> <p>When
      * using this API with an access point, you must direct requests to the access
      * point hostname. The access point hostname takes the form
@@ -90,10 +90,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
-    /** 
+    /**
      * <p>The name of the bucket that contains the newly created object.</p> <p>When
      * using this API with an access point, you must direct requests to the access
      * point hostname. The access point hostname takes the form
@@ -113,10 +113,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(const Aws::String& value) { m_bucket = value; }
 
-    /** 
+    /**
      * <p>The name of the bucket that contains the newly created object.</p> <p>When
      * using this API with an access point, you must direct requests to the access
      * point hostname. The access point hostname takes the form
@@ -136,10 +136,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(Aws::String&& value) { m_bucket = std::move(value); }
 
-    /** 
+    /**
      * <p>The name of the bucket that contains the newly created object.</p> <p>When
      * using this API with an access point, you must direct requests to the access
      * point hostname. The access point hostname takes the form
@@ -159,10 +159,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline void SetBucket(const char* value) { m_bucket.assign(value); }
 
-    /** 
+    /**
      * <p>The name of the bucket that contains the newly created object.</p> <p>When
      * using this API with an access point, you must direct requests to the access
      * point hostname. The access point hostname takes the form
@@ -182,10 +182,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline CompleteMultipartUploadResult& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
-    /** 
+    /**
      * <p>The name of the bucket that contains the newly created object.</p> <p>When
      * using this API with an access point, you must direct requests to the access
      * point hostname. The access point hostname takes the form
@@ -205,10 +205,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline CompleteMultipartUploadResult& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>The name of the bucket that contains the newly created object.</p> <p>When
      * using this API with an access point, you must direct requests to the access
      * point hostname. The access point hostname takes the form
@@ -228,43 +228,43 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */ 
+     */
     inline CompleteMultipartUploadResult& WithBucket(const char* value) { SetBucket(value); return *this;}
 
 
-    /** 
+    /**
      * <p>The object key of the newly created object.</p>
-     */ 
+     */
     inline const Aws::String& GetKey() const{ return m_key; }
 
-    /** 
+    /**
      * <p>The object key of the newly created object.</p>
-     */ 
+     */
     inline void SetKey(const Aws::String& value) { m_key = value; }
 
-    /** 
+    /**
      * <p>The object key of the newly created object.</p>
-     */ 
+     */
     inline void SetKey(Aws::String&& value) { m_key = std::move(value); }
 
-    /** 
+    /**
      * <p>The object key of the newly created object.</p>
-     */ 
+     */
     inline void SetKey(const char* value) { m_key.assign(value); }
 
-    /** 
+    /**
      * <p>The object key of the newly created object.</p>
-     */ 
+     */
     inline CompleteMultipartUploadResult& WithKey(const Aws::String& value) { SetKey(value); return *this;}
 
-    /** 
+    /**
      * <p>The object key of the newly created object.</p>
-     */ 
+     */
     inline CompleteMultipartUploadResult& WithKey(Aws::String&& value) { SetKey(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>The object key of the newly created object.</p>
-     */ 
+     */
     inline CompleteMultipartUploadResult& WithKey(const char* value) { SetKey(value); return *this;}
 
 

@@ -24,11 +24,11 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Information about the delete marker.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/DeleteMarkerEntry">AWS 
-   * API Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/DeleteMarkerEntry">AWS
+   * API Reference</a></p>
+   */
   class AWS_S3_API DeleteMarkerEntry
   {
   public:
@@ -39,34 +39,34 @@ namespace Model
     void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
-    /** 
+    /**
      * <p>The account that created the delete marker.&gt;</p>
-     */ 
+     */
     inline const Owner& GetOwner() const{ return m_owner; }
 
-    /** 
+    /**
      * <p>The account that created the delete marker.&gt;</p>
-     */ 
-    inline bool OwnerHasBeenSet() const { return m_ownerHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool OwnerHasBeenSet() const { return m_ownerHasBeenSet; }
+
+    /**
      * <p>The account that created the delete marker.&gt;</p>
-     */ 
+     */
     inline void SetOwner(const Owner& value) { m_ownerHasBeenSet = true; m_owner = value; }
 
-    /** 
+    /**
      * <p>The account that created the delete marker.&gt;</p>
-     */ 
+     */
     inline void SetOwner(Owner&& value) { m_ownerHasBeenSet = true; m_owner = std::move(value); }
 
-    /** 
+    /**
      * <p>The account that created the delete marker.&gt;</p>
-     */ 
+     */
     inline DeleteMarkerEntry& WithOwner(const Owner& value) { SetOwner(value); return *this;}
 
-    /** 
+    /**
      * <p>The account that created the delete marker.&gt;</p>
-     */ 
+     */
     inline DeleteMarkerEntry& WithOwner(Owner&& value) { SetOwner(std::move(value)); return *this;}
 
 
@@ -78,11 +78,11 @@ namespace Model
     /**
      * <p>The object key.</p>
      */
-    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; } 
- 
-    /** 
-     * <p>The object key.</p> 
-     */ 
+    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; }
+
+    /**
+     * <p>The object key.</p>
+     */
     inline void SetKey(const Aws::String& value) { m_keyHasBeenSet = true; m_key = value; }
 
     /**
@@ -119,11 +119,11 @@ namespace Model
     /**
      * <p>Version ID of an object.</p>
      */
-    inline bool VersionIdHasBeenSet() const { return m_versionIdHasBeenSet; } 
- 
-    /** 
-     * <p>Version ID of an object.</p> 
-     */ 
+    inline bool VersionIdHasBeenSet() const { return m_versionIdHasBeenSet; }
+
+    /**
+     * <p>Version ID of an object.</p>
+     */
     inline void SetVersionId(const Aws::String& value) { m_versionIdHasBeenSet = true; m_versionId = value; }
 
     /**
@@ -162,12 +162,12 @@ namespace Model
      * <p>Specifies whether the object is (true) or is not (false) the latest version
      * of an object.</p>
      */
-    inline bool IsLatestHasBeenSet() const { return m_isLatestHasBeenSet; } 
- 
-    /** 
-     * <p>Specifies whether the object is (true) or is not (false) the latest version 
-     * of an object.</p> 
-     */ 
+    inline bool IsLatestHasBeenSet() const { return m_isLatestHasBeenSet; }
+
+    /**
+     * <p>Specifies whether the object is (true) or is not (false) the latest version
+     * of an object.</p>
+     */
     inline void SetIsLatest(bool value) { m_isLatestHasBeenSet = true; m_isLatest = value; }
 
     /**
@@ -185,11 +185,11 @@ namespace Model
     /**
      * <p>Date and time the object was last modified.</p>
      */
-    inline bool LastModifiedHasBeenSet() const { return m_lastModifiedHasBeenSet; } 
- 
-    /** 
-     * <p>Date and time the object was last modified.</p> 
-     */ 
+    inline bool LastModifiedHasBeenSet() const { return m_lastModifiedHasBeenSet; }
+
+    /**
+     * <p>Date and time the object was last modified.</p>
+     */
     inline void SetLastModified(const Aws::Utils::DateTime& value) { m_lastModifiedHasBeenSet = true; m_lastModified = value; }
 
     /**

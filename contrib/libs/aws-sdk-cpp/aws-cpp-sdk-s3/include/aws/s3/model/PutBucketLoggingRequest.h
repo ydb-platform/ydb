@@ -44,132 +44,132 @@ namespace Model
     inline bool ShouldComputeContentMd5() const override { return true; }
 
 
-    /** 
+    /**
      * <p>The name of the bucket for which to set the logging parameters.</p>
-     */ 
+     */
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
-    /** 
+    /**
      * <p>The name of the bucket for which to set the logging parameters.</p>
-     */ 
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
+
+    /**
      * <p>The name of the bucket for which to set the logging parameters.</p>
-     */ 
+     */
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
-    /** 
+    /**
      * <p>The name of the bucket for which to set the logging parameters.</p>
-     */ 
+     */
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
-    /** 
+    /**
      * <p>The name of the bucket for which to set the logging parameters.</p>
-     */ 
+     */
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
-    /** 
+    /**
      * <p>The name of the bucket for which to set the logging parameters.</p>
-     */ 
+     */
     inline PutBucketLoggingRequest& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
-    /** 
+    /**
      * <p>The name of the bucket for which to set the logging parameters.</p>
-     */ 
+     */
     inline PutBucketLoggingRequest& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>The name of the bucket for which to set the logging parameters.</p>
-     */ 
+     */
     inline PutBucketLoggingRequest& WithBucket(const char* value) { SetBucket(value); return *this;}
 
 
-    /** 
+    /**
      * <p>Container for logging status information.</p>
-     */ 
+     */
     inline const BucketLoggingStatus& GetBucketLoggingStatus() const{ return m_bucketLoggingStatus; }
 
-    /** 
+    /**
      * <p>Container for logging status information.</p>
-     */ 
-    inline bool BucketLoggingStatusHasBeenSet() const { return m_bucketLoggingStatusHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool BucketLoggingStatusHasBeenSet() const { return m_bucketLoggingStatusHasBeenSet; }
+
+    /**
      * <p>Container for logging status information.</p>
-     */ 
+     */
     inline void SetBucketLoggingStatus(const BucketLoggingStatus& value) { m_bucketLoggingStatusHasBeenSet = true; m_bucketLoggingStatus = value; }
 
-    /** 
+    /**
      * <p>Container for logging status information.</p>
-     */ 
+     */
     inline void SetBucketLoggingStatus(BucketLoggingStatus&& value) { m_bucketLoggingStatusHasBeenSet = true; m_bucketLoggingStatus = std::move(value); }
 
-    /** 
+    /**
      * <p>Container for logging status information.</p>
-     */ 
+     */
     inline PutBucketLoggingRequest& WithBucketLoggingStatus(const BucketLoggingStatus& value) { SetBucketLoggingStatus(value); return *this;}
 
-    /** 
+    /**
      * <p>Container for logging status information.</p>
-     */ 
+     */
     inline PutBucketLoggingRequest& WithBucketLoggingStatus(BucketLoggingStatus&& value) { SetBucketLoggingStatus(std::move(value)); return *this;}
 
 
-    /** 
+    /**
      * <p>The MD5 hash of the <code>PutBucketLogging</code> request body.</p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline const Aws::String& GetContentMD5() const{ return m_contentMD5; }
 
-    /** 
+    /**
      * <p>The MD5 hash of the <code>PutBucketLogging</code> request body.</p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
-    inline bool ContentMD5HasBeenSet() const { return m_contentMD5HasBeenSet; } 
- 
-    /** 
+     */
+    inline bool ContentMD5HasBeenSet() const { return m_contentMD5HasBeenSet; }
+
+    /**
      * <p>The MD5 hash of the <code>PutBucketLogging</code> request body.</p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline void SetContentMD5(const Aws::String& value) { m_contentMD5HasBeenSet = true; m_contentMD5 = value; }
 
-    /** 
+    /**
      * <p>The MD5 hash of the <code>PutBucketLogging</code> request body.</p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline void SetContentMD5(Aws::String&& value) { m_contentMD5HasBeenSet = true; m_contentMD5 = std::move(value); }
 
-    /** 
+    /**
      * <p>The MD5 hash of the <code>PutBucketLogging</code> request body.</p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline void SetContentMD5(const char* value) { m_contentMD5HasBeenSet = true; m_contentMD5.assign(value); }
 
-    /** 
+    /**
      * <p>The MD5 hash of the <code>PutBucketLogging</code> request body.</p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline PutBucketLoggingRequest& WithContentMD5(const Aws::String& value) { SetContentMD5(value); return *this;}
 
-    /** 
+    /**
      * <p>The MD5 hash of the <code>PutBucketLogging</code> request body.</p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline PutBucketLoggingRequest& WithContentMD5(Aws::String&& value) { SetContentMD5(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>The MD5 hash of the <code>PutBucketLogging</code> request body.</p> <p>For
      * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
      * is calculated automatically.</p>
-     */ 
+     */
     inline PutBucketLoggingRequest& WithContentMD5(const char* value) { SetContentMD5(value); return *this;}
 
 
@@ -234,9 +234,9 @@ namespace Model
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
- 
-     
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
+
+    
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     

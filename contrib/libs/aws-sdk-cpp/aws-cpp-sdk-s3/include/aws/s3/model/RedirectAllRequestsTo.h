@@ -23,12 +23,12 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Specifies the redirect behavior of all requests to a website endpoint of an
    * Amazon S3 bucket.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/RedirectAllRequestsTo">AWS 
-   * API Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/RedirectAllRequestsTo">AWS
+   * API Reference</a></p>
+   */
   class AWS_S3_API RedirectAllRequestsTo
   {
   public:
@@ -47,11 +47,11 @@ namespace Model
     /**
      * <p>Name of the host where requests are redirected.</p>
      */
-    inline bool HostNameHasBeenSet() const { return m_hostNameHasBeenSet; } 
- 
-    /** 
+    inline bool HostNameHasBeenSet() const { return m_hostNameHasBeenSet; }
+
+    /**
      * <p>Name of the host where requests are redirected.</p>
-     */ 
+     */
     inline void SetHostName(const Aws::String& value) { m_hostNameHasBeenSet = true; m_hostName = value; }
 
     /**
@@ -90,12 +90,12 @@ namespace Model
      * <p>Protocol to use when redirecting requests. The default is the protocol that
      * is used in the original request.</p>
      */
-    inline bool ProtocolHasBeenSet() const { return m_protocolHasBeenSet; } 
- 
-    /** 
+    inline bool ProtocolHasBeenSet() const { return m_protocolHasBeenSet; }
+
+    /**
      * <p>Protocol to use when redirecting requests. The default is the protocol that
      * is used in the original request.</p>
-     */ 
+     */
     inline void SetProtocol(const Protocol& value) { m_protocolHasBeenSet = true; m_protocol = value; }
 
     /**

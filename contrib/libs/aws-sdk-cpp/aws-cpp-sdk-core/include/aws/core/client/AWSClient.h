@@ -15,8 +15,8 @@
 #include <memory>
 #include <atomic>
 
-struct aws_array_list; 
- 
+struct aws_array_list;
+
 namespace Aws
 {
     namespace Utils
@@ -146,7 +146,7 @@ namespace Aws
 
             Aws::String GeneratePresignedUrl(const Aws::AmazonWebServiceRequest& request, Aws::Http::URI& uri, Aws::Http::HttpMethod method, const char* region, const char* serviceName,
                 const Aws::Http::QueryStringParameterCollection& extraParams = Aws::Http::QueryStringParameterCollection(), long long expirationInSeconds = 0) const;
- 
+
             Aws::String GeneratePresignedUrl(const Aws::AmazonWebServiceRequest& request, Aws::Http::URI& uri, Aws::Http::HttpMethod method, const char* region,
                 const Aws::Http::QueryStringParameterCollection& extraParams = Aws::Http::QueryStringParameterCollection(), long long expirationInSeconds = 0) const;
 
@@ -266,23 +266,23 @@ namespace Aws
              * Gets the corresponding signer from the signers map by name.
              */
             Aws::Client::AWSAuthSigner* GetSignerByName(const char* name) const;
-        protected: 
+        protected:
 
-            /** 
-              * Creates an HttpRequest instance with the given URI and sets the proper headers from the 
-              * AmazonWebRequest, and finally signs that request with the given the signer. 
-              * The similar member function BuildHttpRequest() does not sign the request. 
-              * This member function is used internally only by clients that perform requests (input operations) using 
-              * event-streams. 
-              */ 
-            std::shared_ptr<Aws::Http::HttpRequest> BuildAndSignHttpRequest(const Aws::Http::URI& uri, 
-                                                    const Aws::AmazonWebServiceRequest& request, 
-                                                    Http::HttpMethod method, const char* signerName) const; 
- 
-            /** 
-             * Performs the HTTP request via the HTTP client while enforcing rate limiters 
-             */ 
-            std::shared_ptr<Aws::Http::HttpResponse> MakeHttpRequest(std::shared_ptr<Aws::Http::HttpRequest>& request) const; 
+            /**
+              * Creates an HttpRequest instance with the given URI and sets the proper headers from the
+              * AmazonWebRequest, and finally signs that request with the given the signer.
+              * The similar member function BuildHttpRequest() does not sign the request.
+              * This member function is used internally only by clients that perform requests (input operations) using
+              * event-streams.
+              */
+            std::shared_ptr<Aws::Http::HttpRequest> BuildAndSignHttpRequest(const Aws::Http::URI& uri,
+                                                    const Aws::AmazonWebServiceRequest& request,
+                                                    Http::HttpMethod method, const char* signerName) const;
+
+            /**
+             * Performs the HTTP request via the HTTP client while enforcing rate limiters
+             */
+            std::shared_ptr<Aws::Http::HttpResponse> MakeHttpRequest(std::shared_ptr<Aws::Http::HttpRequest>& request) const;
             Aws::String m_region;
         private:
             /**
@@ -374,8 +374,8 @@ namespace Aws
                 const char* requestName = "",
                 const char* signerRegionOverride = nullptr,
                 const char* signerServiceNameOverride = nullptr) const;
- 
-            JsonOutcome MakeEventStreamRequest(std::shared_ptr<Aws::Http::HttpRequest>& request) const; 
+
+            JsonOutcome MakeEventStreamRequest(std::shared_ptr<Aws::Http::HttpRequest>& request) const;
         };
 
         typedef Utils::Outcome<AmazonWebServiceResult<Utils::Xml::XmlDocument>, AWSError<CoreErrors>> XmlOutcome;
@@ -435,25 +435,25 @@ namespace Aws
                 const char* requestName = "",
                 const char* signerRegionOverride = nullptr,
                 const char* signerServiceNameOverride = nullptr) const;
- 
-            /** 
-            * This is used for event stream response. 
-            */ 
-            XmlOutcome MakeRequestWithEventStream(const Aws::Http::URI& uri, 
-                const Aws::AmazonWebServiceRequest& request, 
-                Http::HttpMethod method = Http::HttpMethod::HTTP_POST, 
+
+            /**
+            * This is used for event stream response.
+            */
+            XmlOutcome MakeRequestWithEventStream(const Aws::Http::URI& uri,
+                const Aws::AmazonWebServiceRequest& request,
+                Http::HttpMethod method = Http::HttpMethod::HTTP_POST,
                 const char* singerName = Aws::Auth::SIGV4_SIGNER,
                 const char* signerRegionOverride = nullptr,
                 const char* signerServiceNameOverride = nullptr) const;
- 
-            /** 
-            * This is used for event stream response. 
+
+            /**
+            * This is used for event stream response.
             * requestName is used for metrics and defaults to empty string, to avoid empty names in metrics provide a valid
             * name.
-            */ 
-            XmlOutcome MakeRequestWithEventStream(const Aws::Http::URI& uri, 
-                Http::HttpMethod method = Http::HttpMethod::HTTP_POST, 
-                const char* signerName = Aws::Auth::SIGV4_SIGNER, 
+            */
+            XmlOutcome MakeRequestWithEventStream(const Aws::Http::URI& uri,
+                Http::HttpMethod method = Http::HttpMethod::HTTP_POST,
+                const char* signerName = Aws::Auth::SIGV4_SIGNER,
                 const char* requestName = "",
                 const char* signerRegionOverride = nullptr,
                 const char* signerServiceNameOverride = nullptr) const;

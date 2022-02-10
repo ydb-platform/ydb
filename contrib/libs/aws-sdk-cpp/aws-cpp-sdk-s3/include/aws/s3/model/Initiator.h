@@ -22,12 +22,12 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Container element that identifies who initiated the multipart upload.
    * </p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Initiator">AWS API 
-   * Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Initiator">AWS API
+   * Reference</a></p>
+   */
   class AWS_S3_API Initiator
   {
   public:
@@ -48,12 +48,12 @@ namespace Model
      * <p>If the principal is an AWS account, it provides the Canonical User ID. If the
      * principal is an IAM User, it provides a user ARN value.</p>
      */
-    inline bool IDHasBeenSet() const { return m_iDHasBeenSet; } 
- 
-    /** 
-     * <p>If the principal is an AWS account, it provides the Canonical User ID. If the 
-     * principal is an IAM User, it provides a user ARN value.</p> 
-     */ 
+    inline bool IDHasBeenSet() const { return m_iDHasBeenSet; }
+
+    /**
+     * <p>If the principal is an AWS account, it provides the Canonical User ID. If the
+     * principal is an IAM User, it provides a user ARN value.</p>
+     */
     inline void SetID(const Aws::String& value) { m_iDHasBeenSet = true; m_iD = value; }
 
     /**
@@ -95,11 +95,11 @@ namespace Model
     /**
      * <p>Name of the Principal.</p>
      */
-    inline bool DisplayNameHasBeenSet() const { return m_displayNameHasBeenSet; } 
- 
-    /** 
-     * <p>Name of the Principal.</p> 
-     */ 
+    inline bool DisplayNameHasBeenSet() const { return m_displayNameHasBeenSet; }
+
+    /**
+     * <p>Name of the Principal.</p>
+     */
     inline void SetDisplayName(const Aws::String& value) { m_displayNameHasBeenSet = true; m_displayName = value; }
 
     /**

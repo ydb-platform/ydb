@@ -62,12 +62,12 @@ namespace Model
      * <p>Indicates whether to replicate delete markers.</p>  <p>Indicates
      * whether to replicate delete markers.</p> 
      */
-    inline bool StatusHasBeenSet() const { return m_statusHasBeenSet; } 
- 
-    /** 
+    inline bool StatusHasBeenSet() const { return m_statusHasBeenSet; }
+
+    /**
      * <p>Indicates whether to replicate delete markers.</p>  <p>Indicates
      * whether to replicate delete markers.</p> 
-     */ 
+     */
     inline void SetStatus(const DeleteMarkerReplicationStatus& value) { m_statusHasBeenSet = true; m_status = value; }
 
     /**

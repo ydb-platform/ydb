@@ -26,7 +26,7 @@ DeleteBucketMetricsConfigurationRequest::DeleteBucketMetricsConfigurationRequest
 
 Aws::String DeleteBucketMetricsConfigurationRequest::SerializePayload() const
 {
-  return {}; 
+  return {};
 }
 
 void DeleteBucketMetricsConfigurationRequest::AddQueryStringParameters(URI& uri) const

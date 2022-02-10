@@ -23,11 +23,11 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Container for all response elements.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/CopyPartResult">AWS 
-   * API Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/CopyPartResult">AWS
+   * API Reference</a></p>
+   */
   class AWS_S3_API CopyPartResult
   {
   public:
@@ -46,11 +46,11 @@ namespace Model
     /**
      * <p>Entity tag of the object.</p>
      */
-    inline bool ETagHasBeenSet() const { return m_eTagHasBeenSet; } 
- 
-    /** 
-     * <p>Entity tag of the object.</p> 
-     */ 
+    inline bool ETagHasBeenSet() const { return m_eTagHasBeenSet; }
+
+    /**
+     * <p>Entity tag of the object.</p>
+     */
     inline void SetETag(const Aws::String& value) { m_eTagHasBeenSet = true; m_eTag = value; }
 
     /**
@@ -87,11 +87,11 @@ namespace Model
     /**
      * <p>Date and time at which the object was uploaded.</p>
      */
-    inline bool LastModifiedHasBeenSet() const { return m_lastModifiedHasBeenSet; } 
- 
-    /** 
-     * <p>Date and time at which the object was uploaded.</p> 
-     */ 
+    inline bool LastModifiedHasBeenSet() const { return m_lastModifiedHasBeenSet; }
+
+    /**
+     * <p>Date and time at which the object was uploaded.</p>
+     */
     inline void SetLastModified(const Aws::Utils::DateTime& value) { m_lastModifiedHasBeenSet = true; m_lastModified = value; }
 
     /**

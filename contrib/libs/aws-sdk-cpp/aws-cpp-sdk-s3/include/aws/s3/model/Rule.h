@@ -28,7 +28,7 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Specifies lifecycle rules for an Amazon S3 bucket. For more information, see
    * <a
    * href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTlifecycle.html">Put
@@ -36,9 +36,9 @@ namespace Model
    * Reference</i>. For examples, see <a
    * href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycleConfiguration.html#API_PutBucketLifecycleConfiguration_Examples">Put
    * Bucket Lifecycle Configuration Examples</a> </p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Rule">AWS API 
-   * Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Rule">AWS API
+   * Reference</a></p>
+   */
   class AWS_S3_API Rule
   {
   public:
@@ -49,34 +49,34 @@ namespace Model
     void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
-    /** 
+    /**
      * <p>Specifies the expiration for the lifecycle of the object.</p>
-     */ 
+     */
     inline const LifecycleExpiration& GetExpiration() const{ return m_expiration; }
 
-    /** 
+    /**
      * <p>Specifies the expiration for the lifecycle of the object.</p>
-     */ 
-    inline bool ExpirationHasBeenSet() const { return m_expirationHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool ExpirationHasBeenSet() const { return m_expirationHasBeenSet; }
+
+    /**
      * <p>Specifies the expiration for the lifecycle of the object.</p>
-     */ 
+     */
     inline void SetExpiration(const LifecycleExpiration& value) { m_expirationHasBeenSet = true; m_expiration = value; }
 
-    /** 
+    /**
      * <p>Specifies the expiration for the lifecycle of the object.</p>
-     */ 
+     */
     inline void SetExpiration(LifecycleExpiration&& value) { m_expirationHasBeenSet = true; m_expiration = std::move(value); }
 
-    /** 
+    /**
      * <p>Specifies the expiration for the lifecycle of the object.</p>
-     */ 
+     */
     inline Rule& WithExpiration(const LifecycleExpiration& value) { SetExpiration(value); return *this;}
 
-    /** 
+    /**
      * <p>Specifies the expiration for the lifecycle of the object.</p>
-     */ 
+     */
     inline Rule& WithExpiration(LifecycleExpiration&& value) { SetExpiration(std::move(value)); return *this;}
 
 
@@ -90,12 +90,12 @@ namespace Model
      * <p>Unique identifier for the rule. The value can't be longer than 255
      * characters.</p>
      */
-    inline bool IDHasBeenSet() const { return m_iDHasBeenSet; } 
- 
-    /** 
+    inline bool IDHasBeenSet() const { return m_iDHasBeenSet; }
+
+    /**
      * <p>Unique identifier for the rule. The value can't be longer than 255
-     * characters.</p> 
-     */ 
+     * characters.</p>
+     */
     inline void SetID(const Aws::String& value) { m_iDHasBeenSet = true; m_iD = value; }
 
     /**
@@ -139,12 +139,12 @@ namespace Model
      * <p>Object key prefix that identifies one or more objects to which this rule
      * applies.</p>
      */
-    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; } 
- 
-    /** 
+    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; }
+
+    /**
      * <p>Object key prefix that identifies one or more objects to which this rule
      * applies.</p>
-     */ 
+     */
     inline void SetPrefix(const Aws::String& value) { m_prefixHasBeenSet = true; m_prefix = value; }
 
     /**
@@ -188,12 +188,12 @@ namespace Model
      * <p>If <code>Enabled</code>, the rule is currently being applied. If
      * <code>Disabled</code>, the rule is not currently being applied.</p>
      */
-    inline bool StatusHasBeenSet() const { return m_statusHasBeenSet; } 
- 
-    /** 
+    inline bool StatusHasBeenSet() const { return m_statusHasBeenSet; }
+
+    /**
      * <p>If <code>Enabled</code>, the rule is currently being applied. If
      * <code>Disabled</code>, the rule is not currently being applied.</p>
-     */ 
+     */
     inline void SetStatus(const ExpirationStatus& value) { m_statusHasBeenSet = true; m_status = value; }
 
     /**
@@ -215,58 +215,58 @@ namespace Model
     inline Rule& WithStatus(ExpirationStatus&& value) { SetStatus(std::move(value)); return *this;}
 
 
-    /** 
+    /**
      * <p>Specifies when an object transitions to a specified storage class. For more
      * information about Amazon S3 lifecycle configuration rules, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/lifecycle-transition-general-considerations.html">Transitioning
      * Objects Using Amazon S3 Lifecycle</a> in the <i>Amazon Simple Storage Service
      * Developer Guide</i>.</p>
-     */ 
+     */
     inline const Transition& GetTransition() const{ return m_transition; }
 
-    /** 
+    /**
      * <p>Specifies when an object transitions to a specified storage class. For more
      * information about Amazon S3 lifecycle configuration rules, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/lifecycle-transition-general-considerations.html">Transitioning
      * Objects Using Amazon S3 Lifecycle</a> in the <i>Amazon Simple Storage Service
      * Developer Guide</i>.</p>
-     */ 
-    inline bool TransitionHasBeenSet() const { return m_transitionHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool TransitionHasBeenSet() const { return m_transitionHasBeenSet; }
+
+    /**
      * <p>Specifies when an object transitions to a specified storage class. For more
      * information about Amazon S3 lifecycle configuration rules, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/lifecycle-transition-general-considerations.html">Transitioning
      * Objects Using Amazon S3 Lifecycle</a> in the <i>Amazon Simple Storage Service
      * Developer Guide</i>.</p>
-     */ 
+     */
     inline void SetTransition(const Transition& value) { m_transitionHasBeenSet = true; m_transition = value; }
 
-    /** 
+    /**
      * <p>Specifies when an object transitions to a specified storage class. For more
      * information about Amazon S3 lifecycle configuration rules, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/lifecycle-transition-general-considerations.html">Transitioning
      * Objects Using Amazon S3 Lifecycle</a> in the <i>Amazon Simple Storage Service
      * Developer Guide</i>.</p>
-     */ 
+     */
     inline void SetTransition(Transition&& value) { m_transitionHasBeenSet = true; m_transition = std::move(value); }
 
-    /** 
+    /**
      * <p>Specifies when an object transitions to a specified storage class. For more
      * information about Amazon S3 lifecycle configuration rules, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/lifecycle-transition-general-considerations.html">Transitioning
      * Objects Using Amazon S3 Lifecycle</a> in the <i>Amazon Simple Storage Service
      * Developer Guide</i>.</p>
-     */ 
+     */
     inline Rule& WithTransition(const Transition& value) { SetTransition(value); return *this;}
 
-    /** 
+    /**
      * <p>Specifies when an object transitions to a specified storage class. For more
      * information about Amazon S3 lifecycle configuration rules, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/lifecycle-transition-general-considerations.html">Transitioning
      * Objects Using Amazon S3 Lifecycle</a> in the <i>Amazon Simple Storage Service
      * Developer Guide</i>.</p>
-     */ 
+     */
     inline Rule& WithTransition(Transition&& value) { SetTransition(std::move(value)); return *this;}
 
 
@@ -274,9 +274,9 @@ namespace Model
     inline const NoncurrentVersionTransition& GetNoncurrentVersionTransition() const{ return m_noncurrentVersionTransition; }
 
     
-    inline bool NoncurrentVersionTransitionHasBeenSet() const { return m_noncurrentVersionTransitionHasBeenSet; } 
- 
-     
+    inline bool NoncurrentVersionTransitionHasBeenSet() const { return m_noncurrentVersionTransitionHasBeenSet; }
+
+    
     inline void SetNoncurrentVersionTransition(const NoncurrentVersionTransition& value) { m_noncurrentVersionTransitionHasBeenSet = true; m_noncurrentVersionTransition = value; }
 
     
@@ -293,9 +293,9 @@ namespace Model
     inline const NoncurrentVersionExpiration& GetNoncurrentVersionExpiration() const{ return m_noncurrentVersionExpiration; }
 
     
-    inline bool NoncurrentVersionExpirationHasBeenSet() const { return m_noncurrentVersionExpirationHasBeenSet; } 
- 
-     
+    inline bool NoncurrentVersionExpirationHasBeenSet() const { return m_noncurrentVersionExpirationHasBeenSet; }
+
+    
     inline void SetNoncurrentVersionExpiration(const NoncurrentVersionExpiration& value) { m_noncurrentVersionExpirationHasBeenSet = true; m_noncurrentVersionExpiration = value; }
 
     
@@ -312,9 +312,9 @@ namespace Model
     inline const AbortIncompleteMultipartUpload& GetAbortIncompleteMultipartUpload() const{ return m_abortIncompleteMultipartUpload; }
 
     
-    inline bool AbortIncompleteMultipartUploadHasBeenSet() const { return m_abortIncompleteMultipartUploadHasBeenSet; } 
- 
-     
+    inline bool AbortIncompleteMultipartUploadHasBeenSet() const { return m_abortIncompleteMultipartUploadHasBeenSet; }
+
+    
     inline void SetAbortIncompleteMultipartUpload(const AbortIncompleteMultipartUpload& value) { m_abortIncompleteMultipartUploadHasBeenSet = true; m_abortIncompleteMultipartUpload = value; }
 
     

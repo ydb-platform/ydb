@@ -33,39 +33,39 @@ namespace Model
     GetBucketTaggingResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
-    /** 
+    /**
      * <p>Contains the tag set.</p>
-     */ 
+     */
     inline const Aws::Vector<Tag>& GetTagSet() const{ return m_tagSet; }
 
-    /** 
+    /**
      * <p>Contains the tag set.</p>
-     */ 
+     */
     inline void SetTagSet(const Aws::Vector<Tag>& value) { m_tagSet = value; }
 
-    /** 
+    /**
      * <p>Contains the tag set.</p>
-     */ 
+     */
     inline void SetTagSet(Aws::Vector<Tag>&& value) { m_tagSet = std::move(value); }
 
-    /** 
+    /**
      * <p>Contains the tag set.</p>
-     */ 
+     */
     inline GetBucketTaggingResult& WithTagSet(const Aws::Vector<Tag>& value) { SetTagSet(value); return *this;}
 
-    /** 
+    /**
      * <p>Contains the tag set.</p>
-     */ 
+     */
     inline GetBucketTaggingResult& WithTagSet(Aws::Vector<Tag>&& value) { SetTagSet(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>Contains the tag set.</p>
-     */ 
+     */
     inline GetBucketTaggingResult& AddTagSet(const Tag& value) { m_tagSet.push_back(value); return *this; }
 
-    /** 
+    /**
      * <p>Contains the tag set.</p>
-     */ 
+     */
     inline GetBucketTaggingResult& AddTagSet(Tag&& value) { m_tagSet.push_back(std::move(value)); return *this; }
 
   private:

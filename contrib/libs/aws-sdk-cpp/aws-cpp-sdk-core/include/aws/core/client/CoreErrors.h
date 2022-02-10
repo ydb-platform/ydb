@@ -60,17 +60,17 @@ namespace Aws
              * Finds a CoreErrors member if possible. Otherwise, returns UNKNOWN
              */
             AWS_CORE_API AWSError<CoreErrors> GetErrorForName(const char* errorName);
- 
+
             /**
-             * Build the mapping between predefined exception names and Aws CoreErrors using Aws::Map. 
-             */ 
-            AWS_CORE_API void InitCoreErrorsMapper(); 
- 
-            /** 
-             * Cleanup memory allocated for Aws::Map used by AWS CoreError Mapper. 
-             */ 
-            AWS_CORE_API void CleanupCoreErrorsMapper(); 
-            /** 
+             * Build the mapping between predefined exception names and Aws CoreErrors using Aws::Map.
+             */
+            AWS_CORE_API void InitCoreErrorsMapper();
+
+            /**
+             * Cleanup memory allocated for Aws::Map used by AWS CoreError Mapper.
+             */
+            AWS_CORE_API void CleanupCoreErrorsMapper();
+            /**
              * Finds a CoreErrors member if possible by HTTP response code
              */
             AWS_CORE_API AWSError<CoreErrors> GetErrorForHttpResponseCode(Aws::Http::HttpResponseCode code);

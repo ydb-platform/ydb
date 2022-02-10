@@ -5,7 +5,7 @@
 
 #include <aws/core/utils/logging/LogMacros.h>
 #include <aws/core/utils/HashingUtils.h>
-#include <aws/core/utils/StringUtils.h> 
+#include <aws/core/utils/StringUtils.h>
 #include <aws/core/utils/base64/Base64.h>
 #include <aws/core/utils/crypto/Sha256.h>
 #include <aws/core/utils/crypto/Sha256HMAC.h>
@@ -139,16 +139,16 @@ ByteBuffer HashingUtils::CalculateSHA256TreeHash(Aws::IOStream& stream)
 
 Aws::String HashingUtils::HexEncode(const ByteBuffer& message)
 {
-    Aws::String encoded; 
-    encoded.reserve(2 * message.GetLength()); 
+    Aws::String encoded;
+    encoded.reserve(2 * message.GetLength());
 
     for (unsigned i = 0; i < message.GetLength(); ++i)
     {
-        encoded.push_back("0123456789abcdef"[message[i] >> 4]); 
-        encoded.push_back("0123456789abcdef"[message[i] & 0x0f]); 
+        encoded.push_back("0123456789abcdef"[message[i] >> 4]);
+        encoded.push_back("0123456789abcdef"[message[i] & 0x0f]);
     }
 
-    return encoded; 
+    return encoded;
 }
 
 ByteBuffer HashingUtils::HexDecode(const Aws::String& str)
@@ -176,7 +176,7 @@ ByteBuffer HashingUtils::HexDecode(const Aws::String& str)
 
     for (size_t i = readIndex; i < str.length(); i += 2)
     {
-        if(!StringUtils::IsAlnum(str[i]) || !StringUtils::IsAlnum(str[i + 1])) 
+        if(!StringUtils::IsAlnum(str[i]) || !StringUtils::IsAlnum(str[i + 1]))
         {
             //contains non-hex characters
             assert(0);
@@ -226,7 +226,7 @@ int HashingUtils::HashString(const char* strToHash)
     if (!strToHash)
         return 0;
 
-    unsigned hash = 0; 
+    unsigned hash = 0;
     while (char charValue = *strToHash++)
     {
         hash = charValue + 31 * hash;    

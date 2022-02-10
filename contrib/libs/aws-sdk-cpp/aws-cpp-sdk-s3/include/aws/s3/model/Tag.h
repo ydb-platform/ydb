@@ -22,11 +22,11 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>A container of a key value name pair.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Tag">AWS API 
-   * Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Tag">AWS API
+   * Reference</a></p>
+   */
   class AWS_S3_API Tag
   {
   public:
@@ -45,11 +45,11 @@ namespace Model
     /**
      * <p>Name of the object key.</p>
      */
-    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; } 
- 
-    /** 
+    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; }
+
+    /**
      * <p>Name of the object key.</p>
-     */ 
+     */
     inline void SetKey(const Aws::String& value) { m_keyHasBeenSet = true; m_key = value; }
 
     /**
@@ -86,11 +86,11 @@ namespace Model
     /**
      * <p>Value of the tag.</p>
      */
-    inline bool ValueHasBeenSet() const { return m_valueHasBeenSet; } 
- 
-    /** 
-     * <p>Value of the tag.</p> 
-     */ 
+    inline bool ValueHasBeenSet() const { return m_valueHasBeenSet; }
+
+    /**
+     * <p>Value of the tag.</p>
+     */
     inline void SetValue(const Aws::String& value) { m_valueHasBeenSet = true; m_value = value; }
 
     /**

@@ -13,8 +13,8 @@
 #include <aws/core/utils/memory/stl/AWSString.h>
 #include <aws/core/utils/threading/ReaderWriterLock.h>
 #include <aws/core/internal/AWSHttpResourceClient.h>
-#include <aws/core/auth/AWSCredentials.h> 
-#include <aws/core/config/AWSProfileConfigLoader.h> 
+#include <aws/core/auth/AWSCredentials.h>
+#include <aws/core/config/AWSProfileConfigLoader.h>
 #include <aws/core/client/RetryStrategy.h>
 #include <memory>
 
@@ -185,7 +185,7 @@ namespace Aws
             void RefreshIfExpired();
 
             Aws::String m_profileToUse;
-            Aws::Config::AWSConfigFileProfileConfigLoader m_credentialsFileLoader; 
+            Aws::Config::AWSConfigFileProfileConfigLoader m_credentialsFileLoader;
             long m_loadFrequencyMs;
         };
 
@@ -271,46 +271,46 @@ namespace Aws
             Aws::Auth::AWSCredentials m_credentials;
         };
 
-        /** 
-         * Process credentials provider that loads credentials by running another command (or program) configured in config file 
-         * The configuration format is as following: 
-         * credential_process = command_path <arguments_list> 
-         * Each time the credentials needs to be refreshed, this command will be executed with configured arguments. 
-         * The default profile name to look up this configuration is "default", same as normal aws credentials configuration and other configurations. 
-         * The expected valid output of the command is a Json doc output to stdout: 
-         * {"Version": 1, "AccessKeyId": "AccessKey123", "SecretAccessKey": "SecretKey321", "SessionToken": "Token123", "Expiration": "1970-01-01T00:00:01Z"} 
+        /**
+         * Process credentials provider that loads credentials by running another command (or program) configured in config file
+         * The configuration format is as following:
+         * credential_process = command_path <arguments_list>
+         * Each time the credentials needs to be refreshed, this command will be executed with configured arguments.
+         * The default profile name to look up this configuration is "default", same as normal aws credentials configuration and other configurations.
+         * The expected valid output of the command is a Json doc output to stdout:
+         * {"Version": 1, "AccessKeyId": "AccessKey123", "SecretAccessKey": "SecretKey321", "SessionToken": "Token123", "Expiration": "1970-01-01T00:00:01Z"}
          * The Version key specifies the version of the JSON payload and must be set to 1 for now (as an integer type).
-         * If the Version key is bumped to 2, SDKs would support both versions of the returned payload. 
-         * Value of Expiration field should be an valid ISO8601 formatted date string as above example. 
-         * The expected error message of the command is a string to output to stderr. 
-         */ 
-        class AWS_CORE_API ProcessCredentialsProvider : public AWSCredentialsProvider 
-        { 
-        public: 
-            /** 
-             * Initializes the provider by checking default profile 
-             */ 
-            ProcessCredentialsProvider(); 
- 
-            /** 
-             * Initializes the provider by checking specified profile 
-             * @param profile which profile in config file to use. 
-             */ 
-            ProcessCredentialsProvider(const Aws::String& profile); 
- 
-            /** 
-             * Retrieves the credentials if found, otherwise returns empty credential set. 
-             */ 
-            AWSCredentials GetAWSCredentials() override; 
- 
-        protected: 
-            void Reload() override; 
-        private: 
-            void RefreshIfExpired(); 
- 
-        private: 
-            Aws::String m_profileToUse; 
-            Aws::Auth::AWSCredentials m_credentials; 
-        }; 
+         * If the Version key is bumped to 2, SDKs would support both versions of the returned payload.
+         * Value of Expiration field should be an valid ISO8601 formatted date string as above example.
+         * The expected error message of the command is a string to output to stderr.
+         */
+        class AWS_CORE_API ProcessCredentialsProvider : public AWSCredentialsProvider
+        {
+        public:
+            /**
+             * Initializes the provider by checking default profile
+             */
+            ProcessCredentialsProvider();
+
+            /**
+             * Initializes the provider by checking specified profile
+             * @param profile which profile in config file to use.
+             */
+            ProcessCredentialsProvider(const Aws::String& profile);
+
+            /**
+             * Retrieves the credentials if found, otherwise returns empty credential set.
+             */
+            AWSCredentials GetAWSCredentials() override;
+
+        protected:
+            void Reload() override;
+        private:
+            void RefreshIfExpired();
+
+        private:
+            Aws::String m_profileToUse;
+            Aws::Auth::AWSCredentials m_credentials;
+        };
     } // namespace Auth
 } // namespace Aws

@@ -23,7 +23,7 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Specifies a metrics configuration for the CloudWatch request metrics
    * (specified by the metrics configuration ID) from an Amazon S3 bucket. If you're
    * updating an existing metrics configuration, note that this is a full replacement
@@ -32,9 +32,9 @@ namespace Model
    * href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTMetricConfiguration.html">
    * PUT Bucket metrics</a> in the <i>Amazon Simple Storage Service API
    * Reference</i>.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/MetricsConfiguration">AWS 
-   * API Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/MetricsConfiguration">AWS
+   * API Reference</a></p>
+   */
   class AWS_S3_API MetricsConfiguration
   {
   public:
@@ -53,11 +53,11 @@ namespace Model
     /**
      * <p>The ID used to identify the metrics configuration.</p>
      */
-    inline bool IdHasBeenSet() const { return m_idHasBeenSet; } 
- 
-    /** 
-     * <p>The ID used to identify the metrics configuration.</p> 
-     */ 
+    inline bool IdHasBeenSet() const { return m_idHasBeenSet; }
+
+    /**
+     * <p>The ID used to identify the metrics configuration.</p>
+     */
     inline void SetId(const Aws::String& value) { m_idHasBeenSet = true; m_id = value; }
 
     /**
@@ -98,13 +98,13 @@ namespace Model
      * include objects that meet the filter's criteria. A filter must be a prefix, a
      * tag, or a conjunction (MetricsAndOperator).</p>
      */
-    inline bool FilterHasBeenSet() const { return m_filterHasBeenSet; } 
- 
-    /** 
-     * <p>Specifies a metrics configuration filter. The metrics configuration will only 
-     * include objects that meet the filter's criteria. A filter must be a prefix, a 
-     * tag, or a conjunction (MetricsAndOperator).</p> 
-     */ 
+    inline bool FilterHasBeenSet() const { return m_filterHasBeenSet; }
+
+    /**
+     * <p>Specifies a metrics configuration filter. The metrics configuration will only
+     * include objects that meet the filter's criteria. A filter must be a prefix, a
+     * tag, or a conjunction (MetricsAndOperator).</p>
+     */
     inline void SetFilter(const MetricsFilter& value) { m_filterHasBeenSet = true; m_filter = value; }
 
     /**

@@ -22,12 +22,12 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Object Identifier is unique value to identify objects.</p><p><h3>See
    * Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/ObjectIdentifier">AWS 
-   * API Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/ObjectIdentifier">AWS
+   * API Reference</a></p>
+   */
   class AWS_S3_API ObjectIdentifier
   {
   public:
@@ -46,11 +46,11 @@ namespace Model
     /**
      * <p>Key name of the object to delete.</p>
      */
-    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; } 
- 
-    /** 
-     * <p>Key name of the object to delete.</p> 
-     */ 
+    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; }
+
+    /**
+     * <p>Key name of the object to delete.</p>
+     */
     inline void SetKey(const Aws::String& value) { m_keyHasBeenSet = true; m_key = value; }
 
     /**
@@ -87,11 +87,11 @@ namespace Model
     /**
      * <p>VersionId for the specific version of the object to delete.</p>
      */
-    inline bool VersionIdHasBeenSet() const { return m_versionIdHasBeenSet; } 
- 
-    /** 
-     * <p>VersionId for the specific version of the object to delete.</p> 
-     */ 
+    inline bool VersionIdHasBeenSet() const { return m_versionIdHasBeenSet; }
+
+    /**
+     * <p>VersionId for the specific version of the object to delete.</p>
+     */
     inline void SetVersionId(const Aws::String& value) { m_versionIdHasBeenSet = true; m_versionId = value; }
 
     /**

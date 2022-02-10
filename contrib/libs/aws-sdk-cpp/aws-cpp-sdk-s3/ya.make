@@ -19,7 +19,7 @@ PEERDIR(
 )
 
 ADDINCL(
-    GLOBAL contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include 
+    GLOBAL contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include
 )
 
@@ -39,8 +39,8 @@ CFLAGS(
     -DAWS_USE_EPOLL
     -DENABLE_CURL_CLIENT
     -DENABLE_OPENSSL_ENCRYPTION
-    -DHAS_PATHCONF 
-    -DHAS_UMASK 
+    -DHAS_PATHCONF
+    -DHAS_UMASK
     -DS2N_ADX
     -DS2N_CPUID_AVAILABLE
     -DS2N_HAVE_EXECINFO
@@ -95,7 +95,7 @@ SRCS(
     source/model/CreateBucketResult.cpp
     source/model/CreateMultipartUploadRequest.cpp
     source/model/CreateMultipartUploadResult.cpp
-    source/model/DefaultRetention.cpp 
+    source/model/DefaultRetention.cpp
     source/model/Delete.cpp
     source/model/DeleteBucketAnalyticsConfigurationRequest.cpp
     source/model/DeleteBucketCorsRequest.cpp
@@ -119,7 +119,7 @@ SRCS(
     source/model/DeleteObjectTaggingResult.cpp
     source/model/DeleteObjectsRequest.cpp
     source/model/DeleteObjectsResult.cpp
-    source/model/DeletePublicAccessBlockRequest.cpp 
+    source/model/DeletePublicAccessBlockRequest.cpp
     source/model/DeletedObject.cpp
     source/model/Destination.cpp
     source/model/EncodingType.cpp
@@ -163,8 +163,8 @@ SRCS(
     source/model/GetBucketOwnershipControlsResult.cpp
     source/model/GetBucketPolicyRequest.cpp
     source/model/GetBucketPolicyResult.cpp
-    source/model/GetBucketPolicyStatusRequest.cpp 
-    source/model/GetBucketPolicyStatusResult.cpp 
+    source/model/GetBucketPolicyStatusRequest.cpp
+    source/model/GetBucketPolicyStatusResult.cpp
     source/model/GetBucketReplicationRequest.cpp
     source/model/GetBucketReplicationResult.cpp
     source/model/GetBucketRequestPaymentRequest.cpp
@@ -177,20 +177,20 @@ SRCS(
     source/model/GetBucketWebsiteResult.cpp
     source/model/GetObjectAclRequest.cpp
     source/model/GetObjectAclResult.cpp
-    source/model/GetObjectLegalHoldRequest.cpp 
-    source/model/GetObjectLegalHoldResult.cpp 
-    source/model/GetObjectLockConfigurationRequest.cpp 
-    source/model/GetObjectLockConfigurationResult.cpp 
+    source/model/GetObjectLegalHoldRequest.cpp
+    source/model/GetObjectLegalHoldResult.cpp
+    source/model/GetObjectLockConfigurationRequest.cpp
+    source/model/GetObjectLockConfigurationResult.cpp
     source/model/GetObjectRequest.cpp
     source/model/GetObjectResult.cpp
-    source/model/GetObjectRetentionRequest.cpp 
-    source/model/GetObjectRetentionResult.cpp 
+    source/model/GetObjectRetentionRequest.cpp
+    source/model/GetObjectRetentionResult.cpp
     source/model/GetObjectTaggingRequest.cpp
     source/model/GetObjectTaggingResult.cpp
     source/model/GetObjectTorrentRequest.cpp
     source/model/GetObjectTorrentResult.cpp
-    source/model/GetPublicAccessBlockRequest.cpp 
-    source/model/GetPublicAccessBlockResult.cpp 
+    source/model/GetPublicAccessBlockRequest.cpp
+    source/model/GetPublicAccessBlockResult.cpp
     source/model/GlacierJobParameters.cpp
     source/model/Grant.cpp
     source/model/Grantee.cpp
@@ -263,14 +263,14 @@ SRCS(
     source/model/Object.cpp
     source/model/ObjectCannedACL.cpp
     source/model/ObjectIdentifier.cpp
-    source/model/ObjectLockConfiguration.cpp 
-    source/model/ObjectLockEnabled.cpp 
-    source/model/ObjectLockLegalHold.cpp 
-    source/model/ObjectLockLegalHoldStatus.cpp 
-    source/model/ObjectLockMode.cpp 
-    source/model/ObjectLockRetention.cpp 
-    source/model/ObjectLockRetentionMode.cpp 
-    source/model/ObjectLockRule.cpp 
+    source/model/ObjectLockConfiguration.cpp
+    source/model/ObjectLockEnabled.cpp
+    source/model/ObjectLockLegalHold.cpp
+    source/model/ObjectLockLegalHoldStatus.cpp
+    source/model/ObjectLockMode.cpp
+    source/model/ObjectLockRetention.cpp
+    source/model/ObjectLockRetentionMode.cpp
+    source/model/ObjectLockRule.cpp
     source/model/ObjectOwnership.cpp
     source/model/ObjectStorageClass.cpp
     source/model/ObjectVersion.cpp
@@ -285,11 +285,11 @@ SRCS(
     source/model/Part.cpp
     source/model/Payer.cpp
     source/model/Permission.cpp
-    source/model/PolicyStatus.cpp 
-    source/model/Progress.cpp 
-    source/model/ProgressEvent.cpp 
+    source/model/PolicyStatus.cpp
+    source/model/Progress.cpp
+    source/model/ProgressEvent.cpp
     source/model/Protocol.cpp
-    source/model/PublicAccessBlockConfiguration.cpp 
+    source/model/PublicAccessBlockConfiguration.cpp
     source/model/PutBucketAccelerateConfigurationRequest.cpp
     source/model/PutBucketAclRequest.cpp
     source/model/PutBucketAnalyticsConfigurationRequest.cpp
@@ -310,17 +310,17 @@ SRCS(
     source/model/PutBucketWebsiteRequest.cpp
     source/model/PutObjectAclRequest.cpp
     source/model/PutObjectAclResult.cpp
-    source/model/PutObjectLegalHoldRequest.cpp 
-    source/model/PutObjectLegalHoldResult.cpp 
-    source/model/PutObjectLockConfigurationRequest.cpp 
-    source/model/PutObjectLockConfigurationResult.cpp 
+    source/model/PutObjectLegalHoldRequest.cpp
+    source/model/PutObjectLegalHoldResult.cpp
+    source/model/PutObjectLockConfigurationRequest.cpp
+    source/model/PutObjectLockConfigurationResult.cpp
     source/model/PutObjectRequest.cpp
     source/model/PutObjectResult.cpp
-    source/model/PutObjectRetentionRequest.cpp 
-    source/model/PutObjectRetentionResult.cpp 
+    source/model/PutObjectRetentionRequest.cpp
+    source/model/PutObjectRetentionResult.cpp
     source/model/PutObjectTaggingRequest.cpp
     source/model/PutObjectTaggingResult.cpp
-    source/model/PutPublicAccessBlockRequest.cpp 
+    source/model/PutPublicAccessBlockRequest.cpp
     source/model/QueueConfiguration.cpp
     source/model/QueueConfigurationDeprecated.cpp
     source/model/QuoteFields.cpp
@@ -340,7 +340,7 @@ SRCS(
     source/model/RequestCharged.cpp
     source/model/RequestPayer.cpp
     source/model/RequestPaymentConfiguration.cpp
-    source/model/RequestProgress.cpp 
+    source/model/RequestProgress.cpp
     source/model/RestoreObjectRequest.cpp
     source/model/RestoreObjectResult.cpp
     source/model/RestoreRequest.cpp
@@ -352,8 +352,8 @@ SRCS(
     source/model/SSEKMS.cpp
     source/model/SSES3.cpp
     source/model/ScanRange.cpp
-    source/model/SelectObjectContentHandler.cpp 
-    source/model/SelectObjectContentRequest.cpp 
+    source/model/SelectObjectContentHandler.cpp
+    source/model/SelectObjectContentRequest.cpp
     source/model/SelectParameters.cpp
     source/model/ServerSideEncryption.cpp
     source/model/ServerSideEncryptionByDefault.cpp
@@ -362,8 +362,8 @@ SRCS(
     source/model/SourceSelectionCriteria.cpp
     source/model/SseKmsEncryptedObjects.cpp
     source/model/SseKmsEncryptedObjectsStatus.cpp
-    source/model/Stats.cpp 
-    source/model/StatsEvent.cpp 
+    source/model/Stats.cpp
+    source/model/StatsEvent.cpp
     source/model/StorageClass.cpp
     source/model/StorageClassAnalysis.cpp
     source/model/StorageClassAnalysisDataExport.cpp

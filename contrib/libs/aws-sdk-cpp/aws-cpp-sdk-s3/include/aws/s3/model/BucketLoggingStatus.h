@@ -22,11 +22,11 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Container for logging status information.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/BucketLoggingStatus">AWS 
-   * API Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/BucketLoggingStatus">AWS
+   * API Reference</a></p>
+   */
   class AWS_S3_API BucketLoggingStatus
   {
   public:
@@ -41,9 +41,9 @@ namespace Model
     inline const LoggingEnabled& GetLoggingEnabled() const{ return m_loggingEnabled; }
 
     
-    inline bool LoggingEnabledHasBeenSet() const { return m_loggingEnabledHasBeenSet; } 
- 
-     
+    inline bool LoggingEnabledHasBeenSet() const { return m_loggingEnabledHasBeenSet; }
+
+    
     inline void SetLoggingEnabled(const LoggingEnabled& value) { m_loggingEnabledHasBeenSet = true; m_loggingEnabled = value; }
 
     

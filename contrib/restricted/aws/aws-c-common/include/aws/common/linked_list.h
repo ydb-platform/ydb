@@ -1,28 +1,28 @@
-#ifndef AWS_COMMON_LINKED_LIST_H 
-#define AWS_COMMON_LINKED_LIST_H 
- 
+#ifndef AWS_COMMON_LINKED_LIST_H
+#define AWS_COMMON_LINKED_LIST_H
+
 /**
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
- */ 
- 
-#include <aws/common/common.h> 
- 
-#include <stddef.h> 
- 
-struct aws_linked_list_node { 
-    struct aws_linked_list_node *next; 
-    struct aws_linked_list_node *prev; 
-}; 
- 
-struct aws_linked_list { 
-    struct aws_linked_list_node head; 
-    struct aws_linked_list_node tail; 
-}; 
- 
+ */
+
+#include <aws/common/common.h>
+
+#include <stddef.h>
+
+struct aws_linked_list_node {
+    struct aws_linked_list_node *next;
+    struct aws_linked_list_node *prev;
+};
+
+struct aws_linked_list {
+    struct aws_linked_list_node head;
+    struct aws_linked_list_node tail;
+};
+
 AWS_EXTERN_C_BEGIN
 
-/** 
+/**
  * Set node's next and prev pointers to NULL.
  */
 AWS_STATIC_IMPL void aws_linked_list_node_reset(struct aws_linked_list_node *node);
@@ -69,99 +69,99 @@ AWS_STATIC_IMPL bool aws_linked_list_node_prev_is_valid(const struct aws_linked_
 AWS_STATIC_IMPL bool aws_linked_list_is_valid_deep(const struct aws_linked_list *list);
 
 /**
- * Initializes the list. List will be empty after this call. 
- */ 
+ * Initializes the list. List will be empty after this call.
+ */
 AWS_STATIC_IMPL void aws_linked_list_init(struct aws_linked_list *list);
- 
-/** 
- * Returns an iteration pointer for the first element in the list. 
- */ 
+
+/**
+ * Returns an iteration pointer for the first element in the list.
+ */
 AWS_STATIC_IMPL struct aws_linked_list_node *aws_linked_list_begin(const struct aws_linked_list *list);
- 
-/** 
- * Returns an iteration pointer for one past the last element in the list. 
- */ 
+
+/**
+ * Returns an iteration pointer for one past the last element in the list.
+ */
 AWS_STATIC_IMPL const struct aws_linked_list_node *aws_linked_list_end(const struct aws_linked_list *list);
- 
-/** 
- * Returns a pointer for the last element in the list. 
- * Used to begin iterating the list in reverse. Ex: 
- *   for (i = aws_linked_list_rbegin(list); i != aws_linked_list_rend(list); i = aws_linked_list_prev(i)) {...} 
- */ 
+
+/**
+ * Returns a pointer for the last element in the list.
+ * Used to begin iterating the list in reverse. Ex:
+ *   for (i = aws_linked_list_rbegin(list); i != aws_linked_list_rend(list); i = aws_linked_list_prev(i)) {...}
+ */
 AWS_STATIC_IMPL struct aws_linked_list_node *aws_linked_list_rbegin(const struct aws_linked_list *list);
- 
-/** 
- * Returns the pointer to one before the first element in the list. 
- * Used to end iterating the list in reverse. 
- */ 
+
+/**
+ * Returns the pointer to one before the first element in the list.
+ * Used to end iterating the list in reverse.
+ */
 AWS_STATIC_IMPL const struct aws_linked_list_node *aws_linked_list_rend(const struct aws_linked_list *list);
- 
-/** 
- * Returns the next element in the list. 
- */ 
+
+/**
+ * Returns the next element in the list.
+ */
 AWS_STATIC_IMPL struct aws_linked_list_node *aws_linked_list_next(const struct aws_linked_list_node *node);
- 
-/** 
- * Returns the previous element in the list. 
- */ 
+
+/**
+ * Returns the previous element in the list.
+ */
 AWS_STATIC_IMPL struct aws_linked_list_node *aws_linked_list_prev(const struct aws_linked_list_node *node);
- 
-/** 
- * Inserts to_add immediately after after. 
- */ 
-AWS_STATIC_IMPL void aws_linked_list_insert_after( 
-    struct aws_linked_list_node *after, 
+
+/**
+ * Inserts to_add immediately after after.
+ */
+AWS_STATIC_IMPL void aws_linked_list_insert_after(
+    struct aws_linked_list_node *after,
     struct aws_linked_list_node *to_add);
 /**
  * Swaps the order two nodes in the linked list.
  */
 AWS_STATIC_IMPL void aws_linked_list_swap_nodes(struct aws_linked_list_node *a, struct aws_linked_list_node *b);
- 
-/** 
- * Inserts to_add immediately before before. 
- */ 
-AWS_STATIC_IMPL void aws_linked_list_insert_before( 
-    struct aws_linked_list_node *before, 
+
+/**
+ * Inserts to_add immediately before before.
+ */
+AWS_STATIC_IMPL void aws_linked_list_insert_before(
+    struct aws_linked_list_node *before,
     struct aws_linked_list_node *to_add);
- 
-/** 
- * Removes the specified node from the list (prev/next point to each other) and 
- * returns the next node in the list. 
- */ 
+
+/**
+ * Removes the specified node from the list (prev/next point to each other) and
+ * returns the next node in the list.
+ */
 AWS_STATIC_IMPL void aws_linked_list_remove(struct aws_linked_list_node *node);
- 
-/** 
- * Append new_node. 
- */ 
+
+/**
+ * Append new_node.
+ */
 AWS_STATIC_IMPL void aws_linked_list_push_back(struct aws_linked_list *list, struct aws_linked_list_node *node);
- 
-/** 
- * Returns the element in the back of the list. 
- */ 
+
+/**
+ * Returns the element in the back of the list.
+ */
 AWS_STATIC_IMPL struct aws_linked_list_node *aws_linked_list_back(const struct aws_linked_list *list);
- 
-/** 
- * Returns the element in the back of the list and removes it 
- */ 
+
+/**
+ * Returns the element in the back of the list and removes it
+ */
 AWS_STATIC_IMPL struct aws_linked_list_node *aws_linked_list_pop_back(struct aws_linked_list *list);
- 
-/** 
- * Prepend new_node. 
- */ 
+
+/**
+ * Prepend new_node.
+ */
 AWS_STATIC_IMPL void aws_linked_list_push_front(struct aws_linked_list *list, struct aws_linked_list_node *node);
-/** 
- * Returns the element in the front of the list. 
- */ 
+/**
+ * Returns the element in the front of the list.
+ */
 AWS_STATIC_IMPL struct aws_linked_list_node *aws_linked_list_front(const struct aws_linked_list *list);
-/** 
- * Returns the element in the front of the list and removes it 
- */ 
+/**
+ * Returns the element in the front of the list and removes it
+ */
 AWS_STATIC_IMPL struct aws_linked_list_node *aws_linked_list_pop_front(struct aws_linked_list *list);
- 
+
 AWS_STATIC_IMPL void aws_linked_list_swap_contents(
     struct aws_linked_list *AWS_RESTRICT a,
     struct aws_linked_list *AWS_RESTRICT b);
- 
+
 /**
  * Remove all nodes from one list, and add them to the back of another.
  *
@@ -170,7 +170,7 @@ AWS_STATIC_IMPL void aws_linked_list_swap_contents(
 AWS_STATIC_IMPL void aws_linked_list_move_all_back(
     struct aws_linked_list *AWS_RESTRICT dst,
     struct aws_linked_list *AWS_RESTRICT src);
- 
+
 /**
  * Remove all nodes from one list, and add them to the front of another.
  *
@@ -179,10 +179,10 @@ AWS_STATIC_IMPL void aws_linked_list_move_all_back(
 AWS_STATIC_IMPL void aws_linked_list_move_all_front(
     struct aws_linked_list *AWS_RESTRICT dst,
     struct aws_linked_list *AWS_RESTRICT src);
- 
+
 #ifndef AWS_NO_STATIC_IMPL
 #    include <aws/common/linked_list.inl>
 #endif /* AWS_NO_STATIC_IMPL */
 AWS_EXTERN_C_END
 
-#endif /* AWS_COMMON_LINKED_LIST_H */ 
+#endif /* AWS_COMMON_LINKED_LIST_H */

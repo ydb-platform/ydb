@@ -23,15 +23,15 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Specifies when an object transitions to a specified storage class. For more
    * information about Amazon S3 lifecycle configuration rules, see <a
    * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/lifecycle-transition-general-considerations.html">Transitioning
    * Objects Using Amazon S3 Lifecycle</a> in the <i>Amazon Simple Storage Service
    * Developer Guide</i>.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Transition">AWS API 
-   * Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Transition">AWS API
+   * Reference</a></p>
+   */
   class AWS_S3_API Transition
   {
   public:
@@ -52,12 +52,12 @@ namespace Model
      * <p>Indicates when objects are transitioned to the specified storage class. The
      * date value must be in ISO 8601 format. The time is always midnight UTC.</p>
      */
-    inline bool DateHasBeenSet() const { return m_dateHasBeenSet; } 
- 
-    /** 
+    inline bool DateHasBeenSet() const { return m_dateHasBeenSet; }
+
+    /**
      * <p>Indicates when objects are transitioned to the specified storage class. The
      * date value must be in ISO 8601 format. The time is always midnight UTC.</p>
-     */ 
+     */
     inline void SetDate(const Aws::Utils::DateTime& value) { m_dateHasBeenSet = true; m_date = value; }
 
     /**
@@ -89,12 +89,12 @@ namespace Model
      * <p>Indicates the number of days after creation when objects are transitioned to
      * the specified storage class. The value must be a positive integer.</p>
      */
-    inline bool DaysHasBeenSet() const { return m_daysHasBeenSet; } 
- 
-    /** 
+    inline bool DaysHasBeenSet() const { return m_daysHasBeenSet; }
+
+    /**
      * <p>Indicates the number of days after creation when objects are transitioned to
      * the specified storage class. The value must be a positive integer.</p>
-     */ 
+     */
     inline void SetDays(int value) { m_daysHasBeenSet = true; m_days = value; }
 
     /**
@@ -112,11 +112,11 @@ namespace Model
     /**
      * <p>The storage class to which you want the object to transition.</p>
      */
-    inline bool StorageClassHasBeenSet() const { return m_storageClassHasBeenSet; } 
- 
-    /** 
+    inline bool StorageClassHasBeenSet() const { return m_storageClassHasBeenSet; }
+
+    /**
      * <p>The storage class to which you want the object to transition.</p>
-     */ 
+     */
     inline void SetStorageClass(const TransitionStorageClass& value) { m_storageClassHasBeenSet = true; m_storageClass = value; }
 
     /**

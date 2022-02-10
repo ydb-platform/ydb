@@ -22,15 +22,15 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>A container for describing a condition that must be met for the specified
    * redirect to apply. For example, 1. If request is for pages in the
    * <code>/docs</code> folder, redirect to the <code>/documents</code> folder. 2. If
    * request results in HTTP error 4xx, redirect request to another host where you
    * might process the error.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Condition">AWS API 
-   * Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Condition">AWS API
+   * Reference</a></p>
+   */
   class AWS_S3_API Condition
   {
   public:
@@ -57,15 +57,15 @@ namespace Model
      * <code>KeyPrefixEquals</code> is not specified. If both are specified, then both
      * must be true for the redirect to be applied.</p>
      */
-    inline bool HttpErrorCodeReturnedEqualsHasBeenSet() const { return m_httpErrorCodeReturnedEqualsHasBeenSet; } 
- 
-    /** 
-     * <p>The HTTP error code when the redirect is applied. In the event of an error, 
-     * if the error code equals this value, then the specified redirect is applied. 
+    inline bool HttpErrorCodeReturnedEqualsHasBeenSet() const { return m_httpErrorCodeReturnedEqualsHasBeenSet; }
+
+    /**
+     * <p>The HTTP error code when the redirect is applied. In the event of an error,
+     * if the error code equals this value, then the specified redirect is applied.
      * Required when parent element <code>Condition</code> is specified and sibling
      * <code>KeyPrefixEquals</code> is not specified. If both are specified, then both
      * must be true for the redirect to be applied.</p>
-     */ 
+     */
     inline void SetHttpErrorCodeReturnedEquals(const Aws::String& value) { m_httpErrorCodeReturnedEqualsHasBeenSet = true; m_httpErrorCodeReturnedEquals = value; }
 
     /**
@@ -136,10 +136,10 @@ namespace Model
      * <code>HttpErrorCodeReturnedEquals</code> is not specified. If both conditions
      * are specified, both must be true for the redirect to be applied.</p>
      */
-    inline bool KeyPrefixEqualsHasBeenSet() const { return m_keyPrefixEqualsHasBeenSet; } 
- 
-    /** 
-     * <p>The object key name prefix when the redirect is applied. For example, to 
+    inline bool KeyPrefixEqualsHasBeenSet() const { return m_keyPrefixEqualsHasBeenSet; }
+
+    /**
+     * <p>The object key name prefix when the redirect is applied. For example, to
      * redirect requests for <code>ExamplePage.html</code>, the key prefix will be
      * <code>ExamplePage.html</code>. To redirect request for all pages with the prefix
      * <code>docs/</code>, the key prefix will be <code>/docs</code>, which identifies
@@ -147,7 +147,7 @@ namespace Model
      * <code>Condition</code> is specified and sibling
      * <code>HttpErrorCodeReturnedEquals</code> is not specified. If both conditions
      * are specified, both must be true for the redirect to be applied.</p>
-     */ 
+     */
     inline void SetKeyPrefixEquals(const Aws::String& value) { m_keyPrefixEqualsHasBeenSet = true; m_keyPrefixEquals = value; }
 
     /**

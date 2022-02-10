@@ -38,7 +38,7 @@ Aws::String PutBucketEncryptionRequest::SerializePayload() const
     return payloadDoc.ConvertToString();
   }
 
-  return {}; 
+  return {};
 }
 
 void PutBucketEncryptionRequest::AddQueryStringParameters(URI& uri) const

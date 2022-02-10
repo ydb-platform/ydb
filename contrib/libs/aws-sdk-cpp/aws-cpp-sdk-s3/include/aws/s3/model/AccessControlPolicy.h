@@ -24,12 +24,12 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Contains the elements that set the ACL permissions for an object per
    * grantee.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AccessControlPolicy">AWS 
-   * API Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AccessControlPolicy">AWS
+   * API Reference</a></p>
+   */
   class AWS_S3_API AccessControlPolicy
   {
   public:
@@ -48,11 +48,11 @@ namespace Model
     /**
      * <p>A list of grants.</p>
      */
-    inline bool GrantsHasBeenSet() const { return m_grantsHasBeenSet; } 
- 
-    /** 
-     * <p>A list of grants.</p> 
-     */ 
+    inline bool GrantsHasBeenSet() const { return m_grantsHasBeenSet; }
+
+    /**
+     * <p>A list of grants.</p>
+     */
     inline void SetGrants(const Aws::Vector<Grant>& value) { m_grantsHasBeenSet = true; m_grants = value; }
 
     /**
@@ -81,34 +81,34 @@ namespace Model
     inline AccessControlPolicy& AddGrants(Grant&& value) { m_grantsHasBeenSet = true; m_grants.push_back(std::move(value)); return *this; }
 
 
-    /** 
+    /**
      * <p>Container for the bucket owner's display name and ID.</p>
-     */ 
+     */
     inline const Owner& GetOwner() const{ return m_owner; }
 
-    /** 
+    /**
      * <p>Container for the bucket owner's display name and ID.</p>
-     */ 
-    inline bool OwnerHasBeenSet() const { return m_ownerHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool OwnerHasBeenSet() const { return m_ownerHasBeenSet; }
+
+    /**
      * <p>Container for the bucket owner's display name and ID.</p>
-     */ 
+     */
     inline void SetOwner(const Owner& value) { m_ownerHasBeenSet = true; m_owner = value; }
 
-    /** 
+    /**
      * <p>Container for the bucket owner's display name and ID.</p>
-     */ 
+     */
     inline void SetOwner(Owner&& value) { m_ownerHasBeenSet = true; m_owner = std::move(value); }
 
-    /** 
+    /**
      * <p>Container for the bucket owner's display name and ID.</p>
-     */ 
+     */
     inline AccessControlPolicy& WithOwner(const Owner& value) { SetOwner(value); return *this;}
 
-    /** 
+    /**
      * <p>Container for the bucket owner's display name and ID.</p>
-     */ 
+     */
     inline AccessControlPolicy& WithOwner(Owner&& value) { SetOwner(std::move(value)); return *this;}
 
   private:

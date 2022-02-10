@@ -1,41 +1,41 @@
 /**
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
- */ 
- 
-#include <aws/common/system_info.h> 
- 
+ */
+
+#include <aws/common/system_info.h>
+
 #include <aws/common/byte_buf.h>
 #include <aws/common/logging.h>
 #include <aws/common/platform.h>
 
-#if defined(__FreeBSD__) || defined(__NetBSD__) 
-#    define __BSD_VISIBLE 1 
-#endif 
- 
-#include <unistd.h> 
- 
-#if defined(HAVE_SYSCONF) 
-size_t aws_system_info_processor_count(void) { 
-    long nprocs = sysconf(_SC_NPROCESSORS_ONLN); 
-    if (AWS_LIKELY(nprocs >= 0)) { 
-        return (size_t)nprocs; 
-    } 
- 
+#if defined(__FreeBSD__) || defined(__NetBSD__)
+#    define __BSD_VISIBLE 1
+#endif
+
+#include <unistd.h>
+
+#if defined(HAVE_SYSCONF)
+size_t aws_system_info_processor_count(void) {
+    long nprocs = sysconf(_SC_NPROCESSORS_ONLN);
+    if (AWS_LIKELY(nprocs >= 0)) {
+        return (size_t)nprocs;
+    }
+
     AWS_FATAL_POSTCONDITION(nprocs >= 0);
-    return 0; 
-} 
-#else 
-size_t aws_system_info_processor_count(void) { 
-#    if defined(AWS_NUM_CPU_CORES) 
+    return 0;
+}
+#else
+size_t aws_system_info_processor_count(void) {
+#    if defined(AWS_NUM_CPU_CORES)
     AWS_FATAL_PRECONDITION(AWS_NUM_CPU_CORES > 0);
-    return AWS_NUM_CPU_CORES; 
-#    else 
-    return 1; 
-#    endif 
-} 
-#endif 
- 
+    return AWS_NUM_CPU_CORES;
+#    else
+    return 1;
+#    endif
+}
+#endif
+
 #include <ctype.h>
 #include <fcntl.h>
 
@@ -72,37 +72,37 @@ bool aws_is_debugger_present(void) {
     return false;
 }
 
-#include <signal.h> 
- 
-#ifndef __has_builtin 
-#    define __has_builtin(x) 0 
-#endif 
- 
-void aws_debug_break(void) { 
-#ifdef DEBUG_BUILD 
+#include <signal.h>
+
+#ifndef __has_builtin
+#    define __has_builtin(x) 0
+#endif
+
+void aws_debug_break(void) {
+#ifdef DEBUG_BUILD
     if (aws_is_debugger_present()) {
-#    if __has_builtin(__builtin_debugtrap) 
+#    if __has_builtin(__builtin_debugtrap)
         __builtin_debugtrap();
-#    else 
+#    else
         raise(SIGTRAP);
-#    endif 
+#    endif
     }
-#endif /* DEBUG_BUILD */ 
-} 
- 
-#if defined(AWS_HAVE_EXECINFO) 
-#    include <execinfo.h> 
-#    include <limits.h> 
- 
-#    define AWS_BACKTRACE_DEPTH 128 
- 
-struct aws_stack_frame_info { 
-    char exe[PATH_MAX]; 
-    char addr[32]; 
-    char base[32]; /* base addr for dylib/exe */ 
-    char function[128]; 
-}; 
- 
+#endif /* DEBUG_BUILD */
+}
+
+#if defined(AWS_HAVE_EXECINFO)
+#    include <execinfo.h>
+#    include <limits.h>
+
+#    define AWS_BACKTRACE_DEPTH 128
+
+struct aws_stack_frame_info {
+    char exe[PATH_MAX];
+    char addr[32];
+    char base[32]; /* base addr for dylib/exe */
+    char function[128];
+};
+
 /* Ensure only safe characters in a path buffer in case someone tries to
    rename the exe and trigger shell execution via the sub commands used to
    resolve symbols */
@@ -119,95 +119,95 @@ char *s_whitelist_chars(char *path) {
     return path;
 }
 
-#    if defined(__APPLE__) 
-#        include <ctype.h> 
-#        include <dlfcn.h> 
-#        include <mach-o/dyld.h> 
-static char s_exe_path[PATH_MAX]; 
-const char *s_get_executable_path() { 
-    static const char *s_exe = NULL; 
-    if (AWS_LIKELY(s_exe)) { 
-        return s_exe; 
-    } 
-    uint32_t len = sizeof(s_exe_path); 
-    if (!_NSGetExecutablePath(s_exe_path, &len)) { 
-        s_exe = s_exe_path; 
-    } 
-    return s_exe; 
-} 
-int s_parse_symbol(const char *symbol, void *addr, struct aws_stack_frame_info *frame) { 
-    /* symbols look like: <frame_idx>   <exe-or-shared-lib>         <addr> <function> + <offset> 
-     */ 
-    const char *current_exe = s_get_executable_path(); 
-    /* parse exe/shared lib */ 
-    const char *exe_start = strstr(symbol, " "); 
-    while (aws_isspace(*exe_start)) {
-        ++exe_start; 
+#    if defined(__APPLE__)
+#        include <ctype.h>
+#        include <dlfcn.h>
+#        include <mach-o/dyld.h>
+static char s_exe_path[PATH_MAX];
+const char *s_get_executable_path() {
+    static const char *s_exe = NULL;
+    if (AWS_LIKELY(s_exe)) {
+        return s_exe;
     }
-    const char *exe_end = strstr(exe_start, " "); 
-    strncpy(frame->exe, exe_start, exe_end - exe_start); 
-    /* executables get basename'd, so restore the path */ 
-    if (strstr(current_exe, frame->exe)) { 
-        strncpy(frame->exe, current_exe, strlen(current_exe)); 
-    } 
+    uint32_t len = sizeof(s_exe_path);
+    if (!_NSGetExecutablePath(s_exe_path, &len)) {
+        s_exe = s_exe_path;
+    }
+    return s_exe;
+}
+int s_parse_symbol(const char *symbol, void *addr, struct aws_stack_frame_info *frame) {
+    /* symbols look like: <frame_idx>   <exe-or-shared-lib>         <addr> <function> + <offset>
+     */
+    const char *current_exe = s_get_executable_path();
+    /* parse exe/shared lib */
+    const char *exe_start = strstr(symbol, " ");
+    while (aws_isspace(*exe_start)) {
+        ++exe_start;
+    }
+    const char *exe_end = strstr(exe_start, " ");
+    strncpy(frame->exe, exe_start, exe_end - exe_start);
+    /* executables get basename'd, so restore the path */
+    if (strstr(current_exe, frame->exe)) {
+        strncpy(frame->exe, current_exe, strlen(current_exe));
+    }
     s_whitelist_chars(frame->exe);
- 
-    /* parse addr */ 
-    const char *addr_start = strstr(exe_end, "0x"); 
-    const char *addr_end = strstr(addr_start, " "); 
-    strncpy(frame->addr, addr_start, addr_end - addr_start); 
- 
-    /* parse function */ 
-    const char *function_start = strstr(addr_end, " ") + 1; 
-    const char *function_end = strstr(function_start, " "); 
+
+    /* parse addr */
+    const char *addr_start = strstr(exe_end, "0x");
+    const char *addr_end = strstr(addr_start, " ");
+    strncpy(frame->addr, addr_start, addr_end - addr_start);
+
+    /* parse function */
+    const char *function_start = strstr(addr_end, " ") + 1;
+    const char *function_end = strstr(function_start, " ");
     /* truncate function name if needed */
     size_t function_len = function_end - function_start;
     if (function_len >= (sizeof(frame->function) - 1)) {
         function_len = sizeof(frame->function) - 1;
     }
-    strncpy(frame->function, function_start, function_end - function_start); 
- 
-    /* find base addr for library/exe */ 
-    Dl_info addr_info; 
-    dladdr(addr, &addr_info); 
-    snprintf(frame->base, sizeof(frame->base), "0x%p", addr_info.dli_fbase); 
- 
-    return AWS_OP_SUCCESS; 
-} 
- 
-void s_resolve_cmd(char *cmd, size_t len, struct aws_stack_frame_info *frame) { 
-    snprintf(cmd, len, "atos -o %s -l %s %s", frame->exe, frame->base, frame->addr); 
-} 
-#    else 
-int s_parse_symbol(const char *symbol, void *addr, struct aws_stack_frame_info *frame) { 
+    strncpy(frame->function, function_start, function_end - function_start);
+
+    /* find base addr for library/exe */
+    Dl_info addr_info;
+    dladdr(addr, &addr_info);
+    snprintf(frame->base, sizeof(frame->base), "0x%p", addr_info.dli_fbase);
+
+    return AWS_OP_SUCCESS;
+}
+
+void s_resolve_cmd(char *cmd, size_t len, struct aws_stack_frame_info *frame) {
+    snprintf(cmd, len, "atos -o %s -l %s %s", frame->exe, frame->base, frame->addr);
+}
+#    else
+int s_parse_symbol(const char *symbol, void *addr, struct aws_stack_frame_info *frame) {
     /* symbols look like: <exe-or-shared-lib>(<function>+<addr>) [0x<addr>]
-     *                or: <exe-or-shared-lib> [0x<addr>] 
+     *                or: <exe-or-shared-lib> [0x<addr>]
      *                or: [0x<addr>]
-     */ 
-    (void)addr; 
-    const char *open_paren = strstr(symbol, "("); 
-    const char *close_paren = strstr(symbol, ")"); 
-    const char *exe_end = open_paren; 
-    /* there may not be a function in parens, or parens at all */ 
-    if (open_paren == NULL || close_paren == NULL) { 
+     */
+    (void)addr;
+    const char *open_paren = strstr(symbol, "(");
+    const char *close_paren = strstr(symbol, ")");
+    const char *exe_end = open_paren;
+    /* there may not be a function in parens, or parens at all */
+    if (open_paren == NULL || close_paren == NULL) {
         exe_end = strstr(symbol, "[");
-        if (!exe_end) { 
-            return AWS_OP_ERR; 
-        } 
+        if (!exe_end) {
+            return AWS_OP_ERR;
+        }
         /* if exe_end == symbol, there's no exe */
         if (exe_end != symbol) {
             exe_end -= 1;
         }
-    } 
- 
-    ptrdiff_t exe_len = exe_end - symbol; 
+    }
+
+    ptrdiff_t exe_len = exe_end - symbol;
     if (exe_len > 0) {
         strncpy(frame->exe, symbol, exe_len);
-    } 
+    }
     s_whitelist_chars(frame->exe);
- 
-    long function_len = (open_paren && close_paren) ? close_paren - open_paren - 1 : 0; 
-    if (function_len > 0) { /* dynamic symbol was found */ 
+
+    long function_len = (open_paren && close_paren) ? close_paren - open_paren - 1 : 0;
+    if (function_len > 0) { /* dynamic symbol was found */
         /* there might be (<function>+<addr>) or just (<function>) */
         const char *function_start = open_paren + 1;
         const char *plus = strstr(function_start, "+");
@@ -219,7 +219,7 @@ int s_parse_symbol(const char *symbol, void *addr, struct aws_stack_frame_info *
             long addr_len = close_paren - plus - 1;
             strncpy(frame->addr, plus + 1, addr_len);
         }
-    } 
+    }
     if (frame->addr[0] == 0) {
         /* use the address in []'s, since it's all we have */
         const char *addr_start = strstr(exe_end, "[") + 1;
@@ -229,14 +229,14 @@ int s_parse_symbol(const char *symbol, void *addr, struct aws_stack_frame_info *
         }
         strncpy(frame->addr, addr_start, addr_end - addr_start);
     }
- 
-    return AWS_OP_SUCCESS; 
-} 
-void s_resolve_cmd(char *cmd, size_t len, struct aws_stack_frame_info *frame) { 
-    snprintf(cmd, len, "addr2line -afips -e %s %s", frame->exe, frame->addr); 
-} 
-#    endif 
- 
+
+    return AWS_OP_SUCCESS;
+}
+void s_resolve_cmd(char *cmd, size_t len, struct aws_stack_frame_info *frame) {
+    snprintf(cmd, len, "addr2line -afips -e %s %s", frame->exe, frame->addr);
+}
+#    endif
+
 size_t aws_backtrace(void **stack_frames, size_t num_frames) {
     return backtrace(stack_frames, (int)aws_min_size(num_frames, INT_MAX));
 }
@@ -294,58 +294,58 @@ char **aws_backtrace_addr2line(void *const *stack_frames, size_t stack_depth) {
     return (char **)lines.buffer; /* caller is responsible for freeing */
 }
 
-void aws_backtrace_print(FILE *fp, void *call_site_data) { 
-    siginfo_t *siginfo = call_site_data; 
-    if (siginfo) { 
-        fprintf(fp, "Signal received: %d, errno: %d\n", siginfo->si_signo, siginfo->si_errno); 
-        if (siginfo->si_signo == SIGSEGV) { 
-            fprintf(fp, "  SIGSEGV @ 0x%p\n", siginfo->si_addr); 
-        } 
-    } 
- 
-    void *stack_frames[AWS_BACKTRACE_DEPTH]; 
+void aws_backtrace_print(FILE *fp, void *call_site_data) {
+    siginfo_t *siginfo = call_site_data;
+    if (siginfo) {
+        fprintf(fp, "Signal received: %d, errno: %d\n", siginfo->si_signo, siginfo->si_errno);
+        if (siginfo->si_signo == SIGSEGV) {
+            fprintf(fp, "  SIGSEGV @ 0x%p\n", siginfo->si_addr);
+        }
+    }
+
+    void *stack_frames[AWS_BACKTRACE_DEPTH];
     size_t stack_depth = aws_backtrace(stack_frames, AWS_BACKTRACE_DEPTH);
     char **symbols = aws_backtrace_symbols(stack_frames, stack_depth);
-    if (symbols == NULL) { 
-        fprintf(fp, "Unable to decode backtrace via backtrace_symbols\n"); 
-        return; 
-    } 
- 
+    if (symbols == NULL) {
+        fprintf(fp, "Unable to decode backtrace via backtrace_symbols\n");
+        return;
+    }
+
     fprintf(fp, "################################################################################\n");
     fprintf(fp, "Resolved stacktrace:\n");
     fprintf(fp, "################################################################################\n");
     /* symbols look like: <exe-or-shared-lib>(<function>+<addr>) [0x<addr>]
-     *                or: <exe-or-shared-lib> [0x<addr>] 
+     *                or: <exe-or-shared-lib> [0x<addr>]
      *                or: [0x<addr>]
-     * start at 1 to skip the current frame (this function) */ 
+     * start at 1 to skip the current frame (this function) */
     for (size_t frame_idx = 1; frame_idx < stack_depth; ++frame_idx) {
-        struct aws_stack_frame_info frame; 
-        AWS_ZERO_STRUCT(frame); 
-        const char *symbol = symbols[frame_idx]; 
-        if (s_parse_symbol(symbol, stack_frames[frame_idx], &frame)) { 
-            goto parse_failed; 
-        } 
- 
-        /* TODO: Emulate libunwind */ 
-        char cmd[sizeof(struct aws_stack_frame_info)] = {0}; 
-        s_resolve_cmd(cmd, sizeof(cmd), &frame); 
-        FILE *out = popen(cmd, "r"); 
-        if (!out) { 
-            goto parse_failed; 
-        } 
-        char output[1024]; 
-        if (fgets(output, sizeof(output), out)) { 
-            /* if addr2line or atos don't know what to do with an address, they just echo it */ 
-            /* if there are spaces in the output, then they resolved something */ 
-            if (strstr(output, " ")) { 
-                symbol = output; 
-            } 
-        } 
-        pclose(out); 
- 
-    parse_failed: 
-        fprintf(fp, "%s%s", symbol, (symbol == symbols[frame_idx]) ? "\n" : ""); 
-    } 
+        struct aws_stack_frame_info frame;
+        AWS_ZERO_STRUCT(frame);
+        const char *symbol = symbols[frame_idx];
+        if (s_parse_symbol(symbol, stack_frames[frame_idx], &frame)) {
+            goto parse_failed;
+        }
+
+        /* TODO: Emulate libunwind */
+        char cmd[sizeof(struct aws_stack_frame_info)] = {0};
+        s_resolve_cmd(cmd, sizeof(cmd), &frame);
+        FILE *out = popen(cmd, "r");
+        if (!out) {
+            goto parse_failed;
+        }
+        char output[1024];
+        if (fgets(output, sizeof(output), out)) {
+            /* if addr2line or atos don't know what to do with an address, they just echo it */
+            /* if there are spaces in the output, then they resolved something */
+            if (strstr(output, " ")) {
+                symbol = output;
+            }
+        }
+        pclose(out);
+
+    parse_failed:
+        fprintf(fp, "%s%s", symbol, (symbol == symbols[frame_idx]) ? "\n" : "");
+    }
 
     fprintf(fp, "################################################################################\n");
     fprintf(fp, "Raw stacktrace:\n");
@@ -356,14 +356,14 @@ void aws_backtrace_print(FILE *fp, void *call_site_data) {
     }
     fflush(fp);
 
-    free(symbols); 
-} 
- 
-#else 
-void aws_backtrace_print(FILE *fp, void *call_site_data) { 
+    free(symbols);
+}
+
+#else
+void aws_backtrace_print(FILE *fp, void *call_site_data) {
     (void)call_site_data;
-    fprintf(fp, "No call stack information available\n"); 
-} 
+    fprintf(fp, "No call stack information available\n");
+}
 
 size_t aws_backtrace(void **stack_frames, size_t size) {
     (void)stack_frames;
@@ -382,7 +382,7 @@ char **aws_backtrace_addr2line(void *const *stack_frames, size_t stack_depth) {
     (void)stack_depth;
     return NULL;
 }
-#endif /* AWS_HAVE_EXECINFO */ 
+#endif /* AWS_HAVE_EXECINFO */
 
 void aws_backtrace_log() {
     void *stack_frames[1024];

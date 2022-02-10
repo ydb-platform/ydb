@@ -123,10 +123,10 @@ protected:
         Zero(*static_cast<TDerived*>(this));
     }
 };
- 
-struct TIdentity { 
-    template <class T> 
-    constexpr decltype(auto) operator()(T&& x) const noexcept { 
-        return std::forward<T>(x); 
-    } 
-}; 
+
+struct TIdentity {
+    template <class T>
+    constexpr decltype(auto) operator()(T&& x) const noexcept {
+        return std::forward<T>(x);
+    }
+};

@@ -26,9 +26,9 @@ GetObjectResult::GetObjectResult() :
     m_requestCharged(RequestCharged::NOT_SET),
     m_replicationStatus(ReplicationStatus::NOT_SET),
     m_partsCount(0),
-    m_tagCount(0), 
-    m_objectLockMode(ObjectLockMode::NOT_SET), 
-    m_objectLockLegalHoldStatus(ObjectLockLegalHoldStatus::NOT_SET) 
+    m_tagCount(0),
+    m_objectLockMode(ObjectLockMode::NOT_SET),
+    m_objectLockLegalHoldStatus(ObjectLockLegalHoldStatus::NOT_SET)
 {
 }
 
@@ -62,9 +62,9 @@ GetObjectResult::GetObjectResult(GetObjectResult&& toMove) :
     m_replicationStatus(toMove.m_replicationStatus),
     m_partsCount(toMove.m_partsCount),
     m_tagCount(toMove.m_tagCount),
-    m_objectLockMode(toMove.m_objectLockMode), 
-    m_objectLockRetainUntilDate(std::move(toMove.m_objectLockRetainUntilDate)), 
-    m_objectLockLegalHoldStatus(toMove.m_objectLockLegalHoldStatus), 
+    m_objectLockMode(toMove.m_objectLockMode),
+    m_objectLockRetainUntilDate(std::move(toMove.m_objectLockRetainUntilDate)),
+    m_objectLockLegalHoldStatus(toMove.m_objectLockLegalHoldStatus),
     m_id2(std::move(toMove.m_id2)),
     m_requestId(std::move(toMove.m_requestId))
 {
@@ -106,9 +106,9 @@ GetObjectResult& GetObjectResult::operator=(GetObjectResult&& toMove)
    m_replicationStatus = toMove.m_replicationStatus;
    m_partsCount = toMove.m_partsCount;
    m_tagCount = toMove.m_tagCount;
-   m_objectLockMode = toMove.m_objectLockMode; 
-   m_objectLockRetainUntilDate = std::move(toMove.m_objectLockRetainUntilDate); 
-   m_objectLockLegalHoldStatus = toMove.m_objectLockLegalHoldStatus; 
+   m_objectLockMode = toMove.m_objectLockMode;
+   m_objectLockRetainUntilDate = std::move(toMove.m_objectLockRetainUntilDate);
+   m_objectLockLegalHoldStatus = toMove.m_objectLockLegalHoldStatus;
    m_id2 = std::move(toMove.m_id2);
    m_requestId = std::move(toMove.m_requestId);
 
@@ -125,9 +125,9 @@ GetObjectResult::GetObjectResult(Aws::AmazonWebServiceResult<ResponseStream>&& r
     m_requestCharged(RequestCharged::NOT_SET),
     m_replicationStatus(ReplicationStatus::NOT_SET),
     m_partsCount(0),
-    m_tagCount(0), 
-    m_objectLockMode(ObjectLockMode::NOT_SET), 
-    m_objectLockLegalHoldStatus(ObjectLockLegalHoldStatus::NOT_SET) 
+    m_tagCount(0),
+    m_objectLockMode(ObjectLockMode::NOT_SET),
+    m_objectLockLegalHoldStatus(ObjectLockLegalHoldStatus::NOT_SET)
 {
   *this = std::move(result);
 }
@@ -310,24 +310,24 @@ GetObjectResult& GetObjectResult::operator =(Aws::AmazonWebServiceResult<Respons
      m_tagCount = StringUtils::ConvertToInt32(tagCountIter->second.c_str());
   }
 
-  const auto& objectLockModeIter = headers.find("x-amz-object-lock-mode"); 
-  if(objectLockModeIter != headers.end()) 
-  { 
-    m_objectLockMode = ObjectLockModeMapper::GetObjectLockModeForName(objectLockModeIter->second); 
-  } 
- 
-  const auto& objectLockRetainUntilDateIter = headers.find("x-amz-object-lock-retain-until-date"); 
-  if(objectLockRetainUntilDateIter != headers.end()) 
-  { 
-    m_objectLockRetainUntilDate = DateTime(objectLockRetainUntilDateIter->second, DateFormat::RFC822); 
-  } 
- 
-  const auto& objectLockLegalHoldStatusIter = headers.find("x-amz-object-lock-legal-hold"); 
-  if(objectLockLegalHoldStatusIter != headers.end()) 
-  { 
-    m_objectLockLegalHoldStatus = ObjectLockLegalHoldStatusMapper::GetObjectLockLegalHoldStatusForName(objectLockLegalHoldStatusIter->second); 
-  } 
- 
+  const auto& objectLockModeIter = headers.find("x-amz-object-lock-mode");
+  if(objectLockModeIter != headers.end())
+  {
+    m_objectLockMode = ObjectLockModeMapper::GetObjectLockModeForName(objectLockModeIter->second);
+  }
+
+  const auto& objectLockRetainUntilDateIter = headers.find("x-amz-object-lock-retain-until-date");
+  if(objectLockRetainUntilDateIter != headers.end())
+  {
+    m_objectLockRetainUntilDate = DateTime(objectLockRetainUntilDateIter->second, DateFormat::RFC822);
+  }
+
+  const auto& objectLockLegalHoldStatusIter = headers.find("x-amz-object-lock-legal-hold");
+  if(objectLockLegalHoldStatusIter != headers.end())
+  {
+    m_objectLockLegalHoldStatus = ObjectLockLegalHoldStatusMapper::GetObjectLockLegalHoldStatusForName(objectLockLegalHoldStatusIter->second);
+  }
+
   const auto& id2Iter = headers.find("x-amz-id-2");
   if(id2Iter != headers.end())
   {

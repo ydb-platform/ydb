@@ -47,7 +47,7 @@ namespace Aws
             int retryCount = 0;
             bool lastAttemptSucceeded = false;
             bool lastErrorRetryable = false; //doesn't apply if last attempt succeeded.
-            const Aws::Client::HttpResponseOutcome* outcome = nullptr; 
+            const Aws::Client::HttpResponseOutcome* outcome = nullptr;
         };
 
         static inline void FillRequiredFieldsToJson(Json::JsonValue& json,
@@ -56,15 +56,15 @@ namespace Aws
             const Aws::String& api,
             const Aws::String& clientId,
             const DateTime& timestamp,
-            int version, 
-            const Aws::String& userAgent) 
+            int version,
+            const Aws::String& userAgent)
         {
             json.WithString("Type", type)
                 .WithString("Service", service)
                 .WithString("Api", api)
                 .WithString("ClientId", clientId.substr(0, CLIENT_ID_LENGTH_LIMIT))
                 .WithInt64("Timestamp", timestamp.Millis())
-                .WithInteger("Version", version) 
+                .WithInteger("Version", version)
                 .WithString("UserAgent", userAgent.substr(0, USER_AGENT_LENGTH_LIMIT));
         }
 
@@ -106,30 +106,30 @@ namespace Aws
         }
 
         static inline void FillOptionalApiCallFieldsToJson(Json::JsonValue& json,
-                const Aws::Http::HttpRequest* request, 
-                const Aws::Client::HttpResponseOutcome& outcome) 
+                const Aws::Http::HttpRequest* request,
+                const Aws::Client::HttpResponseOutcome& outcome)
         {
             if (!request->GetSigningRegion().empty())
             {
                 json.WithString("Region", request->GetSigningRegion());
             }
-            if (!outcome.IsSuccess()) 
-            { 
+            if (!outcome.IsSuccess())
+            {
                 if (outcome.GetError().GetExceptionName().empty()) // Not Aws Exception
-                { 
-                    json.WithString("FinalSdkExceptionMessage", outcome.GetError().GetMessage().substr(0, ERROR_MESSAGE_LENGTH_LIMIT)); 
-                } 
-                else // Aws Exception 
-                { 
-                    json.WithString("FinalAwsException", outcome.GetError().GetExceptionName()) 
-                        .WithString("FinalAwsExceptionMessage", outcome.GetError().GetMessage().substr(0, ERROR_MESSAGE_LENGTH_LIMIT)); 
-                } 
-                json.WithInteger("FinalHttpStatusCode", static_cast<int>(outcome.GetError().GetResponseCode())); 
-            } 
+                {
+                    json.WithString("FinalSdkExceptionMessage", outcome.GetError().GetMessage().substr(0, ERROR_MESSAGE_LENGTH_LIMIT));
+                }
+                else // Aws Exception
+                {
+                    json.WithString("FinalAwsException", outcome.GetError().GetExceptionName())
+                        .WithString("FinalAwsExceptionMessage", outcome.GetError().GetMessage().substr(0, ERROR_MESSAGE_LENGTH_LIMIT));
+                }
+                json.WithInteger("FinalHttpStatusCode", static_cast<int>(outcome.GetError().GetResponseCode()));
+            }
             else
-            { 
-                json.WithInteger("FinalHttpStatusCode", static_cast<int>(outcome.GetResult()->GetResponseCode())); 
-            } 
+            {
+                json.WithInteger("FinalHttpStatusCode", static_cast<int>(outcome.GetResult()->GetResponseCode()));
+            }
         }
 
         static inline void FillOptionalApiAttemptFieldsToJson(Json::JsonValue& json,
@@ -164,19 +164,19 @@ namespace Aws
             {
                 if (outcome.GetError().GetExceptionName().empty()) // Not Aws Exception
                 {
-                    json.WithString("SdkExceptionMessage", outcome.GetError().GetMessage().substr(0, ERROR_MESSAGE_LENGTH_LIMIT)); 
+                    json.WithString("SdkExceptionMessage", outcome.GetError().GetMessage().substr(0, ERROR_MESSAGE_LENGTH_LIMIT));
                 }
                 else // Aws Exception
                 {
-                    json.WithString("AwsException", outcome.GetError().GetExceptionName()) 
-                        .WithString("AwsExceptionMessage", outcome.GetError().GetMessage().substr(0, ERROR_MESSAGE_LENGTH_LIMIT)); 
+                    json.WithString("AwsException", outcome.GetError().GetExceptionName())
+                        .WithString("AwsExceptionMessage", outcome.GetError().GetMessage().substr(0, ERROR_MESSAGE_LENGTH_LIMIT));
                 }
-                json.WithInteger("HttpStatusCode", static_cast<int>(outcome.GetError().GetResponseCode())); 
+                json.WithInteger("HttpStatusCode", static_cast<int>(outcome.GetError().GetResponseCode()));
             }
             else
-            { 
-                json.WithInteger("HttpStatusCode", static_cast<int>(outcome.GetResult()->GetResponseCode())); 
-            } 
+            {
+                json.WithInteger("HttpStatusCode", static_cast<int>(outcome.GetResult()->GetResponseCode()));
+            }
 
             // Optional MetricsCollectedFromCore
             ExportHttpMetricsToJson(json, metricsFromCore.httpClientMetrics, HttpClientMetricsType::AcquireConnectionLatency);
@@ -238,11 +238,11 @@ namespace Aws
             AWS_UNREFERENCED_PARAM(request);
             AWS_LOGSTREAM_DEBUG(DEFAULT_MONITORING_ALLOC_TAG, "OnRequestFinish Service: " << serviceName << "Request: " << requestName);
 
-            DefaultContext* defaultContext = static_cast<DefaultContext*>(context); 
+            DefaultContext* defaultContext = static_cast<DefaultContext*>(context);
             Aws::Utils::Json::JsonValue json;
-            FillRequiredFieldsToJson(json, "ApiCall", serviceName, requestName, m_clientId, defaultContext->apiCallStartTime, DEFAULT_MONITORING_VERSION, request->GetUserAgent()); 
+            FillRequiredFieldsToJson(json, "ApiCall", serviceName, requestName, m_clientId, defaultContext->apiCallStartTime, DEFAULT_MONITORING_VERSION, request->GetUserAgent());
             FillRequiredApiCallFieldsToJson(json, defaultContext->retryCount + 1, (DateTime::Now() - defaultContext->apiCallStartTime).count(), (!defaultContext->lastAttemptSucceeded && defaultContext->lastErrorRetryable));
-            FillOptionalApiCallFieldsToJson(json, request.get(), *(defaultContext->outcome)); 
+            FillOptionalApiCallFieldsToJson(json, request.get(), *(defaultContext->outcome));
             Aws::String compactData = json.View().WriteCompact();
             m_udp.SendData(reinterpret_cast<const uint8_t*>(compactData.c_str()), static_cast<int>(compactData.size()));
             AWS_LOGSTREAM_DEBUG(DEFAULT_MONITORING_ALLOC_TAG, "Send API Metrics: \n" << json.View().WriteReadable());
@@ -253,13 +253,13 @@ namespace Aws
             const std::shared_ptr<const Aws::Http::HttpRequest>& request, const Aws::Client::HttpResponseOutcome& outcome,
             const CoreMetricsCollection& metricsFromCore, void* context) const
         {
-            DefaultContext* defaultContext = static_cast<DefaultContext*>(context); 
-            defaultContext->outcome = &outcome; 
+            DefaultContext* defaultContext = static_cast<DefaultContext*>(context);
+            defaultContext->outcome = &outcome;
             defaultContext->lastAttemptSucceeded = outcome.IsSuccess() ? true : false;
             defaultContext->lastErrorRetryable = (!outcome.IsSuccess() && outcome.GetError().ShouldRetry()) ? true : false;
             Aws::Utils::Json::JsonValue json;
-            FillRequiredFieldsToJson(json, "ApiCallAttempt", serviceName, requestName, m_clientId, defaultContext->attemptStartTime, DEFAULT_MONITORING_VERSION, request->GetUserAgent()); 
-            FillRequiredApiAttemptFieldsToJson(json, request->GetUri().GetAuthority(), (DateTime::Now() - defaultContext->attemptStartTime).count()); 
+            FillRequiredFieldsToJson(json, "ApiCallAttempt", serviceName, requestName, m_clientId, defaultContext->attemptStartTime, DEFAULT_MONITORING_VERSION, request->GetUserAgent());
+            FillRequiredApiAttemptFieldsToJson(json, request->GetUri().GetAuthority(), (DateTime::Now() - defaultContext->attemptStartTime).count());
             FillOptionalApiAttemptFieldsToJson(json, request.get(), outcome, metricsFromCore);
             Aws::String compactData = json.View().WriteCompact();
             AWS_LOGSTREAM_DEBUG(DEFAULT_MONITORING_ALLOC_TAG, "Send Attempt Metrics: \n" << json.View().WriteReadable());

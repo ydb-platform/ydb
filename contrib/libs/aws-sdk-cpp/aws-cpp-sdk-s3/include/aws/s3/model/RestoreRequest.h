@@ -54,13 +54,13 @@ namespace Model
      * <code>OutputLocation</code>.</p> <p>The Days element is required for regular
      * restores, and must not be provided for select requests.</p>
      */
-    inline bool DaysHasBeenSet() const { return m_daysHasBeenSet; } 
- 
-    /** 
-     * <p>Lifetime of the active copy in days. Do not use with restores that specify 
+    inline bool DaysHasBeenSet() const { return m_daysHasBeenSet; }
+
+    /**
+     * <p>Lifetime of the active copy in days. Do not use with restores that specify
      * <code>OutputLocation</code>.</p> <p>The Days element is required for regular
      * restores, and must not be provided for select requests.</p>
-     */ 
+     */
     inline void SetDays(int value) { m_daysHasBeenSet = true; m_days = value; }
 
     /**
@@ -81,12 +81,12 @@ namespace Model
      * <p>S3 Glacier related parameters pertaining to this job. Do not use with
      * restores that specify <code>OutputLocation</code>.</p>
      */
-    inline bool GlacierJobParametersHasBeenSet() const { return m_glacierJobParametersHasBeenSet; } 
- 
-    /** 
+    inline bool GlacierJobParametersHasBeenSet() const { return m_glacierJobParametersHasBeenSet; }
+
+    /**
      * <p>S3 Glacier related parameters pertaining to this job. Do not use with
      * restores that specify <code>OutputLocation</code>.</p>
-     */ 
+     */
     inline void SetGlacierJobParameters(const GlacierJobParameters& value) { m_glacierJobParametersHasBeenSet = true; m_glacierJobParameters = value; }
 
     /**
@@ -116,11 +116,11 @@ namespace Model
     /**
      * <p>Type of restore request.</p>
      */
-    inline bool TypeHasBeenSet() const { return m_typeHasBeenSet; } 
- 
-    /** 
-     * <p>Type of restore request.</p> 
-     */ 
+    inline bool TypeHasBeenSet() const { return m_typeHasBeenSet; }
+
+    /**
+     * <p>Type of restore request.</p>
+     */
     inline void SetType(const RestoreRequestType& value) { m_typeHasBeenSet = true; m_type = value; }
 
     /**
@@ -147,11 +147,11 @@ namespace Model
     /**
      * <p>Retrieval tier at which the restore will be processed.</p>
      */
-    inline bool TierHasBeenSet() const { return m_tierHasBeenSet; } 
- 
-    /** 
+    inline bool TierHasBeenSet() const { return m_tierHasBeenSet; }
+
+    /**
      * <p>Retrieval tier at which the restore will be processed.</p>
-     */ 
+     */
     inline void SetTier(const Tier& value) { m_tierHasBeenSet = true; m_tier = value; }
 
     /**
@@ -178,11 +178,11 @@ namespace Model
     /**
      * <p>The optional description for the job.</p>
      */
-    inline bool DescriptionHasBeenSet() const { return m_descriptionHasBeenSet; } 
- 
-    /** 
-     * <p>The optional description for the job.</p> 
-     */ 
+    inline bool DescriptionHasBeenSet() const { return m_descriptionHasBeenSet; }
+
+    /**
+     * <p>The optional description for the job.</p>
+     */
     inline void SetDescription(const Aws::String& value) { m_descriptionHasBeenSet = true; m_description = value; }
 
     /**
@@ -219,11 +219,11 @@ namespace Model
     /**
      * <p>Describes the parameters for Select job types.</p>
      */
-    inline bool SelectParametersHasBeenSet() const { return m_selectParametersHasBeenSet; } 
- 
-    /** 
-     * <p>Describes the parameters for Select job types.</p> 
-     */ 
+    inline bool SelectParametersHasBeenSet() const { return m_selectParametersHasBeenSet; }
+
+    /**
+     * <p>Describes the parameters for Select job types.</p>
+     */
     inline void SetSelectParameters(const SelectParameters& value) { m_selectParametersHasBeenSet = true; m_selectParameters = value; }
 
     /**
@@ -250,11 +250,11 @@ namespace Model
     /**
      * <p>Describes the location where the restore job's output is stored.</p>
      */
-    inline bool OutputLocationHasBeenSet() const { return m_outputLocationHasBeenSet; } 
- 
-    /** 
-     * <p>Describes the location where the restore job's output is stored.</p> 
-     */ 
+    inline bool OutputLocationHasBeenSet() const { return m_outputLocationHasBeenSet; }
+
+    /**
+     * <p>Describes the location where the restore job's output is stored.</p>
+     */
     inline void SetOutputLocation(const OutputLocation& value) { m_outputLocationHasBeenSet = true; m_outputLocation = value; }
 
     /**

@@ -30,8 +30,8 @@ namespace Aws
         static const int s3_ObjectRemoved_Delete_HASH = HashingUtils::HashString("s3:ObjectRemoved:Delete");
         static const int s3_ObjectRemoved_DeleteMarkerCreated_HASH = HashingUtils::HashString("s3:ObjectRemoved:DeleteMarkerCreated");
         static const int s3_ObjectRestore_HASH = HashingUtils::HashString("s3:ObjectRestore:*");
-        static const int s3_ObjectRestore_Post_HASH = HashingUtils::HashString("s3:ObjectRestore:Post"); 
-        static const int s3_ObjectRestore_Completed_HASH = HashingUtils::HashString("s3:ObjectRestore:Completed"); 
+        static const int s3_ObjectRestore_Post_HASH = HashingUtils::HashString("s3:ObjectRestore:Post");
+        static const int s3_ObjectRestore_Completed_HASH = HashingUtils::HashString("s3:ObjectRestore:Completed");
         static const int s3_Replication_HASH = HashingUtils::HashString("s3:Replication:*");
         static const int s3_Replication_OperationFailedReplication_HASH = HashingUtils::HashString("s3:Replication:OperationFailedReplication");
         static const int s3_Replication_OperationNotTracked_HASH = HashingUtils::HashString("s3:Replication:OperationNotTracked");
@@ -82,14 +82,14 @@ namespace Aws
           {
             return Event::s3_ObjectRestore;
           }
-          else if (hashCode == s3_ObjectRestore_Post_HASH) 
-          { 
-            return Event::s3_ObjectRestore_Post; 
-          } 
-          else if (hashCode == s3_ObjectRestore_Completed_HASH) 
-          { 
-            return Event::s3_ObjectRestore_Completed; 
-          } 
+          else if (hashCode == s3_ObjectRestore_Post_HASH)
+          {
+            return Event::s3_ObjectRestore_Post;
+          }
+          else if (hashCode == s3_ObjectRestore_Completed_HASH)
+          {
+            return Event::s3_ObjectRestore_Completed;
+          }
           else if (hashCode == s3_Replication_HASH)
           {
             return Event::s3_Replication;
@@ -144,10 +144,10 @@ namespace Aws
             return "s3:ObjectRemoved:DeleteMarkerCreated";
           case Event::s3_ObjectRestore:
             return "s3:ObjectRestore:*";
-          case Event::s3_ObjectRestore_Post: 
-            return "s3:ObjectRestore:Post"; 
-          case Event::s3_ObjectRestore_Completed: 
-            return "s3:ObjectRestore:Completed"; 
+          case Event::s3_ObjectRestore_Post:
+            return "s3:ObjectRestore:Post";
+          case Event::s3_ObjectRestore_Completed:
+            return "s3:ObjectRestore:Completed";
           case Event::s3_Replication:
             return "s3:Replication:*";
           case Event::s3_Replication_OperationFailedReplication:
@@ -165,7 +165,7 @@ namespace Aws
               return overflowContainer->RetrieveOverflow(static_cast<int>(enumValue));
             }
 
-            return {}; 
+            return {};
           }
         }
 

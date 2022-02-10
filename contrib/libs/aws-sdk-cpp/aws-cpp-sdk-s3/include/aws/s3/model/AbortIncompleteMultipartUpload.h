@@ -51,12 +51,12 @@ namespace Model
      * <p>Specifies the number of days after which Amazon S3 aborts an incomplete
      * multipart upload.</p>
      */
-    inline bool DaysAfterInitiationHasBeenSet() const { return m_daysAfterInitiationHasBeenSet; } 
- 
-    /** 
+    inline bool DaysAfterInitiationHasBeenSet() const { return m_daysAfterInitiationHasBeenSet; }
+
+    /**
      * <p>Specifies the number of days after which Amazon S3 aborts an incomplete
      * multipart upload.</p>
-     */ 
+     */
     inline void SetDaysAfterInitiation(int value) { m_daysAfterInitiationHasBeenSet = true; m_daysAfterInitiation = value; }
 
     /**

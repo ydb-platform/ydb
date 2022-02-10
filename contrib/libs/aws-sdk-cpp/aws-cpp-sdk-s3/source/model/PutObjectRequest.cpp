@@ -50,11 +50,11 @@ PutObjectRequest::PutObjectRequest() :
     m_requestPayer(RequestPayer::NOT_SET),
     m_requestPayerHasBeenSet(false),
     m_taggingHasBeenSet(false),
-    m_objectLockMode(ObjectLockMode::NOT_SET), 
-    m_objectLockModeHasBeenSet(false), 
-    m_objectLockRetainUntilDateHasBeenSet(false), 
-    m_objectLockLegalHoldStatus(ObjectLockLegalHoldStatus::NOT_SET), 
-    m_objectLockLegalHoldStatusHasBeenSet(false), 
+    m_objectLockMode(ObjectLockMode::NOT_SET),
+    m_objectLockModeHasBeenSet(false),
+    m_objectLockRetainUntilDateHasBeenSet(false),
+    m_objectLockLegalHoldStatus(ObjectLockLegalHoldStatus::NOT_SET),
+    m_objectLockLegalHoldStatusHasBeenSet(false),
     m_expectedBucketOwnerHasBeenSet(false),
     m_customizedAccessLogTagHasBeenSet(false)
 {
@@ -248,21 +248,21 @@ Aws::Http::HeaderValueCollection PutObjectRequest::GetRequestSpecificHeaders() c
     ss.str("");
   }
 
-  if(m_objectLockModeHasBeenSet) 
-  { 
-    headers.emplace("x-amz-object-lock-mode", ObjectLockModeMapper::GetNameForObjectLockMode(m_objectLockMode)); 
-  } 
- 
-  if(m_objectLockRetainUntilDateHasBeenSet) 
-  { 
-    headers.emplace("x-amz-object-lock-retain-until-date", m_objectLockRetainUntilDate.ToGmtString(DateFormat::RFC822)); 
-  } 
- 
-  if(m_objectLockLegalHoldStatusHasBeenSet) 
-  { 
-    headers.emplace("x-amz-object-lock-legal-hold", ObjectLockLegalHoldStatusMapper::GetNameForObjectLockLegalHoldStatus(m_objectLockLegalHoldStatus)); 
-  } 
- 
+  if(m_objectLockModeHasBeenSet)
+  {
+    headers.emplace("x-amz-object-lock-mode", ObjectLockModeMapper::GetNameForObjectLockMode(m_objectLockMode));
+  }
+
+  if(m_objectLockRetainUntilDateHasBeenSet)
+  {
+    headers.emplace("x-amz-object-lock-retain-until-date", m_objectLockRetainUntilDate.ToGmtString(DateFormat::RFC822));
+  }
+
+  if(m_objectLockLegalHoldStatusHasBeenSet)
+  {
+    headers.emplace("x-amz-object-lock-legal-hold", ObjectLockLegalHoldStatusMapper::GetNameForObjectLockLegalHoldStatus(m_objectLockLegalHoldStatus));
+  }
+
   if(m_expectedBucketOwnerHasBeenSet)
   {
     ss << m_expectedBucketOwner;

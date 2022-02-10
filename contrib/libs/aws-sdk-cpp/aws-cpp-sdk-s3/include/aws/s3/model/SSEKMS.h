@@ -50,13 +50,13 @@ namespace Model
      * customer managed customer master key (CMK) to use for encrypting inventory
      * reports.</p>
      */
-    inline bool KeyIdHasBeenSet() const { return m_keyIdHasBeenSet; } 
- 
-    /** 
+    inline bool KeyIdHasBeenSet() const { return m_keyIdHasBeenSet; }
+
+    /**
      * <p>Specifies the ID of the AWS Key Management Service (AWS KMS) symmetric
      * customer managed customer master key (CMK) to use for encrypting inventory
      * reports.</p>
-     */ 
+     */
     inline void SetKeyId(const Aws::String& value) { m_keyIdHasBeenSet = true; m_keyId = value; }
 
     /**

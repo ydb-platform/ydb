@@ -39,7 +39,7 @@ HeadObjectRequest::HeadObjectRequest() :
 
 Aws::String HeadObjectRequest::SerializePayload() const
 {
-  return {}; 
+  return {};
 }
 
 void HeadObjectRequest::AddQueryStringParameters(URI& uri) const

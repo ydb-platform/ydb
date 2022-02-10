@@ -23,11 +23,11 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Container for the person being granted permissions.</p><p><h3>See Also:</h3> 
    * <a href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Grantee">AWS API
-   * Reference</a></p> 
-   */ 
+   * Reference</a></p>
+   */
   class AWS_S3_API Grantee
   {
   public:
@@ -46,11 +46,11 @@ namespace Model
     /**
      * <p>Screen name of the grantee.</p>
      */
-    inline bool DisplayNameHasBeenSet() const { return m_displayNameHasBeenSet; } 
- 
-    /** 
-     * <p>Screen name of the grantee.</p> 
-     */ 
+    inline bool DisplayNameHasBeenSet() const { return m_displayNameHasBeenSet; }
+
+    /**
+     * <p>Screen name of the grantee.</p>
+     */
     inline void SetDisplayName(const Aws::String& value) { m_displayNameHasBeenSet = true; m_displayName = value; }
 
     /**
@@ -103,9 +103,9 @@ namespace Model
      * href="https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region">Regions
      * and Endpoints</a> in the AWS General Reference.</p> 
      */
-    inline bool EmailAddressHasBeenSet() const { return m_emailAddressHasBeenSet; } 
- 
-    /** 
+    inline bool EmailAddressHasBeenSet() const { return m_emailAddressHasBeenSet; }
+
+    /**
      * <p>Email address of the grantee.</p>  <p>Using email addresses to specify
      * a grantee is only supported in the following AWS Regions: </p> <ul> <li> <p>US
      * East (N. Virginia)</p> </li> <li> <p>US West (N. California)</p> </li> <li> <p>
@@ -115,7 +115,7 @@ namespace Model
      * <p>For a list of all the Amazon S3 supported Regions and endpoints, see <a
      * href="https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region">Regions
      * and Endpoints</a> in the AWS General Reference.</p> 
-     */ 
+     */
     inline void SetEmailAddress(const Aws::String& value) { m_emailAddressHasBeenSet = true; m_emailAddress = value; }
 
     /**
@@ -192,11 +192,11 @@ namespace Model
     /**
      * <p>The canonical user ID of the grantee.</p>
      */
-    inline bool IDHasBeenSet() const { return m_iDHasBeenSet; } 
- 
-    /** 
-     * <p>The canonical user ID of the grantee.</p> 
-     */ 
+    inline bool IDHasBeenSet() const { return m_iDHasBeenSet; }
+
+    /**
+     * <p>The canonical user ID of the grantee.</p>
+     */
     inline void SetID(const Aws::String& value) { m_iDHasBeenSet = true; m_iD = value; }
 
     /**
@@ -233,11 +233,11 @@ namespace Model
     /**
      * <p>Type of grantee</p>
      */
-    inline bool TypeHasBeenSet() const { return m_typeHasBeenSet; } 
- 
-    /** 
-     * <p>Type of grantee</p> 
-     */ 
+    inline bool TypeHasBeenSet() const { return m_typeHasBeenSet; }
+
+    /**
+     * <p>Type of grantee</p>
+     */
     inline void SetType(const Type& value) { m_typeHasBeenSet = true; m_type = value; }
 
     /**
@@ -264,11 +264,11 @@ namespace Model
     /**
      * <p>URI of the grantee group.</p>
      */
-    inline bool URIHasBeenSet() const { return m_uRIHasBeenSet; } 
- 
-    /** 
-     * <p>URI of the grantee group.</p> 
-     */ 
+    inline bool URIHasBeenSet() const { return m_uRIHasBeenSet; }
+
+    /**
+     * <p>URI of the grantee group.</p>
+     */
     inline void SetURI(const Aws::String& value) { m_uRIHasBeenSet = true; m_uRI = value; }
 
     /**

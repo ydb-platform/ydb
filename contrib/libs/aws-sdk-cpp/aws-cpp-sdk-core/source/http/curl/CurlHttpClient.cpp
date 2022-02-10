@@ -572,10 +572,10 @@ std::shared_ptr<HttpResponse> CurlHttpClient::MakeRequest(const std::shared_ptr<
             curl_easy_setopt(connectionHandle, CURLOPT_FOLLOWLOCATION, 0L);
         }
 
-#ifdef ENABLE_CURL_LOGGING 
-        curl_easy_setopt(connectionHandle, CURLOPT_VERBOSE, 1); 
-        curl_easy_setopt(connectionHandle, CURLOPT_DEBUGFUNCTION, CurlDebugCallback); 
-#endif 
+#ifdef ENABLE_CURL_LOGGING
+        curl_easy_setopt(connectionHandle, CURLOPT_VERBOSE, 1);
+        curl_easy_setopt(connectionHandle, CURLOPT_DEBUGFUNCTION, CurlDebugCallback);
+#endif
         if (m_isUsingProxy)
         {
             Aws::StringStream ss;
@@ -590,11 +590,11 @@ std::shared_ptr<HttpResponse> CurlHttpClient::MakeRequest(const std::shared_ptr<
             {
                 curl_easy_setopt(connectionHandle, CURLOPT_PROXY_CAINFO, m_proxyCaFile.c_str());
             }
-            if (!m_proxyUserName.empty() || !m_proxyPassword.empty()) 
-            { 
-                curl_easy_setopt(connectionHandle, CURLOPT_PROXYUSERNAME, m_proxyUserName.c_str()); 
-                curl_easy_setopt(connectionHandle, CURLOPT_PROXYPASSWORD, m_proxyPassword.c_str()); 
-            } 
+            if (!m_proxyUserName.empty() || !m_proxyPassword.empty())
+            {
+                curl_easy_setopt(connectionHandle, CURLOPT_PROXYUSERNAME, m_proxyUserName.c_str());
+                curl_easy_setopt(connectionHandle, CURLOPT_PROXYPASSWORD, m_proxyPassword.c_str());
+            }
 #ifdef CURL_HAS_TLS_PROXY
             if (!m_proxySSLCertPath.empty())
             {
@@ -702,12 +702,12 @@ std::shared_ptr<HttpResponse> CurlHttpClient::MakeRequest(const std::shared_ptr<
             request->AddRequestMetric(GetHttpClientMetricNameByType(HttpClientMetricsType::SslLatency), static_cast<int64_t>(timep * 1000));
         }
 
-        const char* ip = nullptr; 
-        auto curlGetInfoResult = curl_easy_getinfo(connectionHandle, CURLINFO_PRIMARY_IP, &ip); // Get the IP address of the remote endpoint 
-        if (curlGetInfoResult == CURLE_OK && ip) 
-        { 
+        const char* ip = nullptr;
+        auto curlGetInfoResult = curl_easy_getinfo(connectionHandle, CURLINFO_PRIMARY_IP, &ip); // Get the IP address of the remote endpoint
+        if (curlGetInfoResult == CURLE_OK && ip)
+        {
             request->SetResolvedRemoteHost(ip);
-        } 
+        }
         if (curlResponseCode != CURLE_OK)
         {
             m_curlHandleContainer.DestroyCurlHandle(connectionHandle);

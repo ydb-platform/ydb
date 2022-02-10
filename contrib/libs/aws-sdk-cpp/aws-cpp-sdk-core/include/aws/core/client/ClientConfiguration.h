@@ -187,7 +187,7 @@ namespace Aws
             /**
              * If you certificate file is different from the default, you can tell clients that
              * aren't using the default trust store where to find your ca file.
-             * If you are on windows or apple, you likely don't want this. 
+             * If you are on windows or apple, you likely don't want this.
              */
              Aws::String caFile;
             /**
@@ -218,7 +218,7 @@ namespace Aws
              * payload to wire if server respond error immediately after receiving the header.
              * Set this option to true will tell Curl to send http request header and body together.
              * This can save one round-trip time and especially useful when the payload is small and network latency is more important.
-             * But be careful when Http request has large payload such S3 PutObject. You don't want to spend long time sending a large payload just getting a error response for server. 
+             * But be careful when Http request has large payload such S3 PutObject. You don't want to spend long time sending a large payload just getting a error response for server.
              * The default value will be false.
              */
             bool disableExpectHeader;
@@ -227,22 +227,22 @@ namespace Aws
              * If set to true clock skew will be adjusted after each http attempt, default to true.
              */
             bool enableClockSkewAdjustment;
- 
-            /** 
+
+            /**
              * Enable host prefix injection.
-             * For services whose endpoint is injectable. e.g. servicediscovery, you can modify the http host's prefix so as to add "data-" prefix for DiscoverInstances request. 
+             * For services whose endpoint is injectable. e.g. servicediscovery, you can modify the http host's prefix so as to add "data-" prefix for DiscoverInstances request.
              * Default to true, enabled. You can disable it for testing purpose.
-             */ 
-            bool enableHostPrefixInjection; 
- 
-            /** 
+             */
+            bool enableHostPrefixInjection;
+
+            /**
              * Enable endpoint discovery
              * For some services to dynamically set up their endpoints for different requests.
-             * Defaults to false, it's an opt-in feature. 
-             * If disabled, regional or overriden endpoint will be used instead. 
-             * If a request requires endpoint discovery but you disabled it. The request will never succeed. 
-             */ 
-            bool enableEndpointDiscovery; 
+             * Defaults to false, it's an opt-in feature.
+             * If disabled, regional or overriden endpoint will be used instead.
+             * If a request requires endpoint discovery but you disabled it. The request will never succeed.
+             */
+            bool enableEndpointDiscovery;
 
             /**
              * profileName in config file that will be used by this object to reslove more configurations.

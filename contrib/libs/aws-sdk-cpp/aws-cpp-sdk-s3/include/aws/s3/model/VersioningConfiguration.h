@@ -23,15 +23,15 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Describes the versioning state of an Amazon S3 bucket. For more information,
    * see <a
    * href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTVersioningStatus.html">PUT
    * Bucket versioning</a> in the <i>Amazon Simple Storage Service API
    * Reference</i>.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/VersioningConfiguration">AWS 
-   * API Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/VersioningConfiguration">AWS
+   * API Reference</a></p>
+   */
   class AWS_S3_API VersioningConfiguration
   {
   public:
@@ -56,14 +56,14 @@ namespace Model
      * with MFA delete. If the bucket has never been so configured, this element is not
      * returned.</p>
      */
-    inline bool MFADeleteHasBeenSet() const { return m_mFADeleteHasBeenSet; } 
- 
-    /** 
-     * <p>Specifies whether MFA delete is enabled in the bucket versioning 
-     * configuration. This element is only returned if the bucket has been configured 
-     * with MFA delete. If the bucket has never been so configured, this element is not 
-     * returned.</p> 
-     */ 
+    inline bool MFADeleteHasBeenSet() const { return m_mFADeleteHasBeenSet; }
+
+    /**
+     * <p>Specifies whether MFA delete is enabled in the bucket versioning
+     * configuration. This element is only returned if the bucket has been configured
+     * with MFA delete. If the bucket has never been so configured, this element is not
+     * returned.</p>
+     */
     inline void SetMFADelete(const MFADelete& value) { m_mFADeleteHasBeenSet = true; m_mFADelete = value; }
 
     /**
@@ -99,11 +99,11 @@ namespace Model
     /**
      * <p>The versioning state of the bucket.</p>
      */
-    inline bool StatusHasBeenSet() const { return m_statusHasBeenSet; } 
- 
-    /** 
-     * <p>The versioning state of the bucket.</p> 
-     */ 
+    inline bool StatusHasBeenSet() const { return m_statusHasBeenSet; }
+
+    /**
+     * <p>The versioning state of the bucket.</p>
+     */
     inline void SetStatus(const BucketVersioningStatus& value) { m_statusHasBeenSet = true; m_status = value; }
 
     /**

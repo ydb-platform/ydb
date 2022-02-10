@@ -22,15 +22,15 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>Configures the transfer acceleration state for an Amazon S3 bucket. For more
    * information, see <a
    * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/transfer-acceleration.html">Amazon
    * S3 Transfer Acceleration</a> in the <i>Amazon Simple Storage Service Developer
    * Guide</i>.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AccelerateConfiguration">AWS 
-   * API Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AccelerateConfiguration">AWS
+   * API Reference</a></p>
+   */
   class AWS_S3_API AccelerateConfiguration
   {
   public:
@@ -49,11 +49,11 @@ namespace Model
     /**
      * <p>Specifies the transfer acceleration status of the bucket.</p>
      */
-    inline bool StatusHasBeenSet() const { return m_statusHasBeenSet; } 
- 
-    /** 
+    inline bool StatusHasBeenSet() const { return m_statusHasBeenSet; }
+
+    /**
      * <p>Specifies the transfer acceleration status of the bucket.</p>
-     */ 
+     */
     inline void SetStatus(const BucketAccelerateStatus& value) { m_statusHasBeenSet = true; m_status = value; }
 
     /**

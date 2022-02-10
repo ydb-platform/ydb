@@ -25,7 +25,7 @@ GetBucketLocationRequest::GetBucketLocationRequest() :
 
 Aws::String GetBucketLocationRequest::SerializePayload() const
 {
-  return {}; 
+  return {};
 }
 
 void GetBucketLocationRequest::AddQueryStringParameters(URI& uri) const

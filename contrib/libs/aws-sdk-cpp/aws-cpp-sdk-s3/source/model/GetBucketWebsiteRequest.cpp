@@ -25,7 +25,7 @@ GetBucketWebsiteRequest::GetBucketWebsiteRequest() :
 
 Aws::String GetBucketWebsiteRequest::SerializePayload() const
 {
-  return {}; 
+  return {};
 }
 
 void GetBucketWebsiteRequest::AddQueryStringParameters(URI& uri) const

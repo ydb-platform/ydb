@@ -48,11 +48,11 @@ namespace Model
     /**
      * <p>Describes the serialization format of the object.</p>
      */
-    inline bool InputSerializationHasBeenSet() const { return m_inputSerializationHasBeenSet; } 
- 
-    /** 
-     * <p>Describes the serialization format of the object.</p> 
-     */ 
+    inline bool InputSerializationHasBeenSet() const { return m_inputSerializationHasBeenSet; }
+
+    /**
+     * <p>Describes the serialization format of the object.</p>
+     */
     inline void SetInputSerialization(const InputSerialization& value) { m_inputSerializationHasBeenSet = true; m_inputSerialization = value; }
 
     /**
@@ -79,11 +79,11 @@ namespace Model
     /**
      * <p>The type of the provided expression (for example, SQL).</p>
      */
-    inline bool ExpressionTypeHasBeenSet() const { return m_expressionTypeHasBeenSet; } 
- 
-    /** 
+    inline bool ExpressionTypeHasBeenSet() const { return m_expressionTypeHasBeenSet; }
+
+    /**
      * <p>The type of the provided expression (for example, SQL).</p>
-     */ 
+     */
     inline void SetExpressionType(const ExpressionType& value) { m_expressionTypeHasBeenSet = true; m_expressionType = value; }
 
     /**
@@ -110,11 +110,11 @@ namespace Model
     /**
      * <p>The expression that is used to query the object.</p>
      */
-    inline bool ExpressionHasBeenSet() const { return m_expressionHasBeenSet; } 
- 
-    /** 
-     * <p>The expression that is used to query the object.</p> 
-     */ 
+    inline bool ExpressionHasBeenSet() const { return m_expressionHasBeenSet; }
+
+    /**
+     * <p>The expression that is used to query the object.</p>
+     */
     inline void SetExpression(const Aws::String& value) { m_expressionHasBeenSet = true; m_expression = value; }
 
     /**
@@ -151,11 +151,11 @@ namespace Model
     /**
      * <p>Describes how the results of the Select job are serialized.</p>
      */
-    inline bool OutputSerializationHasBeenSet() const { return m_outputSerializationHasBeenSet; } 
- 
-    /** 
-     * <p>Describes how the results of the Select job are serialized.</p> 
-     */ 
+    inline bool OutputSerializationHasBeenSet() const { return m_outputSerializationHasBeenSet; }
+
+    /**
+     * <p>Describes how the results of the Select job are serialized.</p>
+     */
     inline void SetOutputSerialization(const OutputSerialization& value) { m_outputSerializationHasBeenSet = true; m_outputSerialization = value; }
 
     /**

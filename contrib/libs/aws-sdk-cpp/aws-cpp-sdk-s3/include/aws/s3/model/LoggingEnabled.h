@@ -61,16 +61,16 @@ namespace Model
      * different <code>TargetPrefix</code> for each source bucket so that the delivered
      * log files can be distinguished by key.</p>
      */
-    inline bool TargetBucketHasBeenSet() const { return m_targetBucketHasBeenSet; } 
- 
-    /** 
-     * <p>Specifies the bucket where you want Amazon S3 to store server access logs. 
-     * You can have your logs delivered to any bucket that you own, including the same 
-     * bucket that is being logged. You can also configure multiple buckets to deliver 
+    inline bool TargetBucketHasBeenSet() const { return m_targetBucketHasBeenSet; }
+
+    /**
+     * <p>Specifies the bucket where you want Amazon S3 to store server access logs.
+     * You can have your logs delivered to any bucket that you own, including the same
+     * bucket that is being logged. You can also configure multiple buckets to deliver
      * their logs to the same target bucket. In this case, you should choose a
      * different <code>TargetPrefix</code> for each source bucket so that the delivered
      * log files can be distinguished by key.</p>
-     */ 
+     */
     inline void SetTargetBucket(const Aws::String& value) { m_targetBucketHasBeenSet = true; m_targetBucket = value; }
 
     /**
@@ -124,44 +124,44 @@ namespace Model
     inline LoggingEnabled& WithTargetBucket(const char* value) { SetTargetBucket(value); return *this;}
 
 
-    /** 
+    /**
      * <p>Container for granting information.</p>
-     */ 
+     */
     inline const Aws::Vector<TargetGrant>& GetTargetGrants() const{ return m_targetGrants; }
 
-    /** 
+    /**
      * <p>Container for granting information.</p>
-     */ 
-    inline bool TargetGrantsHasBeenSet() const { return m_targetGrantsHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool TargetGrantsHasBeenSet() const { return m_targetGrantsHasBeenSet; }
+
+    /**
      * <p>Container for granting information.</p>
-     */ 
+     */
     inline void SetTargetGrants(const Aws::Vector<TargetGrant>& value) { m_targetGrantsHasBeenSet = true; m_targetGrants = value; }
 
-    /** 
+    /**
      * <p>Container for granting information.</p>
-     */ 
+     */
     inline void SetTargetGrants(Aws::Vector<TargetGrant>&& value) { m_targetGrantsHasBeenSet = true; m_targetGrants = std::move(value); }
 
-    /** 
+    /**
      * <p>Container for granting information.</p>
-     */ 
+     */
     inline LoggingEnabled& WithTargetGrants(const Aws::Vector<TargetGrant>& value) { SetTargetGrants(value); return *this;}
 
-    /** 
+    /**
      * <p>Container for granting information.</p>
-     */ 
+     */
     inline LoggingEnabled& WithTargetGrants(Aws::Vector<TargetGrant>&& value) { SetTargetGrants(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>Container for granting information.</p>
-     */ 
+     */
     inline LoggingEnabled& AddTargetGrants(const TargetGrant& value) { m_targetGrantsHasBeenSet = true; m_targetGrants.push_back(value); return *this; }
 
-    /** 
+    /**
      * <p>Container for granting information.</p>
-     */ 
+     */
     inline LoggingEnabled& AddTargetGrants(TargetGrant&& value) { m_targetGrantsHasBeenSet = true; m_targetGrants.push_back(std::move(value)); return *this; }
 
 
@@ -177,13 +177,13 @@ namespace Model
      * S3 buckets in a single bucket, you can use a prefix to distinguish which log
      * files came from which bucket.</p>
      */
-    inline bool TargetPrefixHasBeenSet() const { return m_targetPrefixHasBeenSet; } 
- 
-    /** 
+    inline bool TargetPrefixHasBeenSet() const { return m_targetPrefixHasBeenSet; }
+
+    /**
      * <p>A prefix for all log object keys. If you store log files from multiple Amazon
      * S3 buckets in a single bucket, you can use a prefix to distinguish which log
      * files came from which bucket.</p>
-     */ 
+     */
     inline void SetTargetPrefix(const Aws::String& value) { m_targetPrefixHasBeenSet = true; m_targetPrefix = value; }
 
     /**

@@ -47,11 +47,11 @@ namespace Model
     /**
      * <p>Describes the serialization of CSV-encoded Select results.</p>
      */
-    inline bool CSVHasBeenSet() const { return m_cSVHasBeenSet; } 
- 
-    /** 
-     * <p>Describes the serialization of CSV-encoded Select results.</p> 
-     */ 
+    inline bool CSVHasBeenSet() const { return m_cSVHasBeenSet; }
+
+    /**
+     * <p>Describes the serialization of CSV-encoded Select results.</p>
+     */
     inline void SetCSV(const CSVOutput& value) { m_cSVHasBeenSet = true; m_cSV = value; }
 
     /**
@@ -78,11 +78,11 @@ namespace Model
     /**
      * <p>Specifies JSON as request's output serialization format.</p>
      */
-    inline bool JSONHasBeenSet() const { return m_jSONHasBeenSet; } 
- 
-    /** 
-     * <p>Specifies JSON as request's output serialization format.</p> 
-     */ 
+    inline bool JSONHasBeenSet() const { return m_jSONHasBeenSet; }
+
+    /**
+     * <p>Specifies JSON as request's output serialization format.</p>
+     */
     inline void SetJSON(const JSONOutput& value) { m_jSONHasBeenSet = true; m_jSON = value; }
 
     /**

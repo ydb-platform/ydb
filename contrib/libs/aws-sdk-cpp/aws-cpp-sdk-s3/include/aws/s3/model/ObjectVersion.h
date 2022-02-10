@@ -25,11 +25,11 @@ namespace S3
 namespace Model
 {
 
-  /** 
+  /**
    * <p>The version of an object.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/ObjectVersion">AWS 
-   * API Reference</a></p> 
-   */ 
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/ObjectVersion">AWS
+   * API Reference</a></p>
+   */
   class AWS_S3_API ObjectVersion
   {
   public:
@@ -40,44 +40,44 @@ namespace Model
     void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
-    /** 
+    /**
      * <p>The entity tag is an MD5 hash of that version of the object.</p>
-     */ 
+     */
     inline const Aws::String& GetETag() const{ return m_eTag; }
 
-    /** 
+    /**
      * <p>The entity tag is an MD5 hash of that version of the object.</p>
-     */ 
-    inline bool ETagHasBeenSet() const { return m_eTagHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool ETagHasBeenSet() const { return m_eTagHasBeenSet; }
+
+    /**
      * <p>The entity tag is an MD5 hash of that version of the object.</p>
-     */ 
+     */
     inline void SetETag(const Aws::String& value) { m_eTagHasBeenSet = true; m_eTag = value; }
 
-    /** 
+    /**
      * <p>The entity tag is an MD5 hash of that version of the object.</p>
-     */ 
+     */
     inline void SetETag(Aws::String&& value) { m_eTagHasBeenSet = true; m_eTag = std::move(value); }
 
-    /** 
+    /**
      * <p>The entity tag is an MD5 hash of that version of the object.</p>
-     */ 
+     */
     inline void SetETag(const char* value) { m_eTagHasBeenSet = true; m_eTag.assign(value); }
 
-    /** 
+    /**
      * <p>The entity tag is an MD5 hash of that version of the object.</p>
-     */ 
+     */
     inline ObjectVersion& WithETag(const Aws::String& value) { SetETag(value); return *this;}
 
-    /** 
+    /**
      * <p>The entity tag is an MD5 hash of that version of the object.</p>
-     */ 
+     */
     inline ObjectVersion& WithETag(Aws::String&& value) { SetETag(std::move(value)); return *this;}
 
-    /** 
+    /**
      * <p>The entity tag is an MD5 hash of that version of the object.</p>
-     */ 
+     */
     inline ObjectVersion& WithETag(const char* value) { SetETag(value); return *this;}
 
 
@@ -89,11 +89,11 @@ namespace Model
     /**
      * <p>Size in bytes of the object.</p>
      */
-    inline bool SizeHasBeenSet() const { return m_sizeHasBeenSet; } 
- 
-    /** 
-     * <p>Size in bytes of the object.</p> 
-     */ 
+    inline bool SizeHasBeenSet() const { return m_sizeHasBeenSet; }
+
+    /**
+     * <p>Size in bytes of the object.</p>
+     */
     inline void SetSize(long long value) { m_sizeHasBeenSet = true; m_size = value; }
 
     /**
@@ -110,11 +110,11 @@ namespace Model
     /**
      * <p>The class of storage used to store the object.</p>
      */
-    inline bool StorageClassHasBeenSet() const { return m_storageClassHasBeenSet; } 
- 
-    /** 
-     * <p>The class of storage used to store the object.</p> 
-     */ 
+    inline bool StorageClassHasBeenSet() const { return m_storageClassHasBeenSet; }
+
+    /**
+     * <p>The class of storage used to store the object.</p>
+     */
     inline void SetStorageClass(const ObjectVersionStorageClass& value) { m_storageClassHasBeenSet = true; m_storageClass = value; }
 
     /**
@@ -141,11 +141,11 @@ namespace Model
     /**
      * <p>The object key.</p>
      */
-    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; } 
- 
-    /** 
-     * <p>The object key.</p> 
-     */ 
+    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; }
+
+    /**
+     * <p>The object key.</p>
+     */
     inline void SetKey(const Aws::String& value) { m_keyHasBeenSet = true; m_key = value; }
 
     /**
@@ -182,11 +182,11 @@ namespace Model
     /**
      * <p>Version ID of an object.</p>
      */
-    inline bool VersionIdHasBeenSet() const { return m_versionIdHasBeenSet; } 
- 
-    /** 
-     * <p>Version ID of an object.</p> 
-     */ 
+    inline bool VersionIdHasBeenSet() const { return m_versionIdHasBeenSet; }
+
+    /**
+     * <p>Version ID of an object.</p>
+     */
     inline void SetVersionId(const Aws::String& value) { m_versionIdHasBeenSet = true; m_versionId = value; }
 
     /**
@@ -225,12 +225,12 @@ namespace Model
      * <p>Specifies whether the object is (true) or is not (false) the latest version
      * of an object.</p>
      */
-    inline bool IsLatestHasBeenSet() const { return m_isLatestHasBeenSet; } 
- 
-    /** 
-     * <p>Specifies whether the object is (true) or is not (false) the latest version 
-     * of an object.</p> 
-     */ 
+    inline bool IsLatestHasBeenSet() const { return m_isLatestHasBeenSet; }
+
+    /**
+     * <p>Specifies whether the object is (true) or is not (false) the latest version
+     * of an object.</p>
+     */
     inline void SetIsLatest(bool value) { m_isLatestHasBeenSet = true; m_isLatest = value; }
 
     /**
@@ -248,11 +248,11 @@ namespace Model
     /**
      * <p>Date and time the object was last modified.</p>
      */
-    inline bool LastModifiedHasBeenSet() const { return m_lastModifiedHasBeenSet; } 
- 
-    /** 
-     * <p>Date and time the object was last modified.</p> 
-     */ 
+    inline bool LastModifiedHasBeenSet() const { return m_lastModifiedHasBeenSet; }
+
+    /**
+     * <p>Date and time the object was last modified.</p>
+     */
     inline void SetLastModified(const Aws::Utils::DateTime& value) { m_lastModifiedHasBeenSet = true; m_lastModified = value; }
 
     /**
@@ -271,34 +271,34 @@ namespace Model
     inline ObjectVersion& WithLastModified(Aws::Utils::DateTime&& value) { SetLastModified(std::move(value)); return *this;}
 
 
-    /** 
+    /**
      * <p>Specifies the owner of the object.</p>
-     */ 
+     */
     inline const Owner& GetOwner() const{ return m_owner; }
 
-    /** 
+    /**
      * <p>Specifies the owner of the object.</p>
-     */ 
-    inline bool OwnerHasBeenSet() const { return m_ownerHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool OwnerHasBeenSet() const { return m_ownerHasBeenSet; }
+
+    /**
      * <p>Specifies the owner of the object.</p>
-     */ 
+     */
     inline void SetOwner(const Owner& value) { m_ownerHasBeenSet = true; m_owner = value; }
 
-    /** 
+    /**
      * <p>Specifies the owner of the object.</p>
-     */ 
+     */
     inline void SetOwner(Owner&& value) { m_ownerHasBeenSet = true; m_owner = std::move(value); }
 
-    /** 
+    /**
      * <p>Specifies the owner of the object.</p>
-     */ 
+     */
     inline ObjectVersion& WithOwner(const Owner& value) { SetOwner(value); return *this;}
 
-    /** 
+    /**
      * <p>Specifies the owner of the object.</p>
-     */ 
+     */
     inline ObjectVersion& WithOwner(Owner&& value) { SetOwner(std::move(value)); return *this;}
 
   private:

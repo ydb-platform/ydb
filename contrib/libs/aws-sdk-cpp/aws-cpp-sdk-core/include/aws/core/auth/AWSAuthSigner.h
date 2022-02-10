@@ -13,8 +13,8 @@
 #include <aws/core/utils/DateTime.h>
 #include <aws/core/utils/Array.h>
 #include <aws/core/utils/threading/ReaderWriterLock.h>
-#include <aws/core/utils/crypto/Sha256.h> 
-#include <aws/core/utils/crypto/Sha256HMAC.h> 
+#include <aws/core/utils/crypto/Sha256.h>
+#include <aws/core/utils/crypto/Sha256HMAC.h>
 
 #include <memory>
 #include <atomic>
@@ -30,10 +30,10 @@ namespace Aws
 
     namespace Utils
     {
-        namespace Event 
-        { 
-            class Message; 
-        } 
+        namespace Event
+        {
+            class Message;
+        }
     } // namespace Utils
 
     namespace Auth
@@ -41,8 +41,8 @@ namespace Aws
         class AWSCredentials;
         class AWSCredentialsProvider;
         AWS_CORE_API extern const char SIGV4_SIGNER[];
-        AWS_CORE_API extern const char EVENTSTREAM_SIGV4_SIGNER[]; 
-        AWS_CORE_API extern const char SIGNATURE[]; 
+        AWS_CORE_API extern const char EVENTSTREAM_SIGV4_SIGNER[];
+        AWS_CORE_API extern const char SIGNATURE[];
         AWS_CORE_API extern const char NULL_SIGNER[];
     } // namespace Auth
 
@@ -104,20 +104,20 @@ namespace Aws
             }
 
             /**
-             * Signs a single event message in an event stream. 
-             * The input message buffer is copied and signed. The message's input buffer will be deallocated and a new 
-             * buffer will be assigned. The new buffer encodes the original message with its headers as the payload of 
-             * the new message. The signature of the original message will be added as a header to the new message. 
-             * 
-             * A Hex encoded signature of the previous event (or of the HTTP request headers in case of the first event) 
-             * is provided as the 'priorSignature' parameter. 'priorSignature' will contain the value of the new 
-             * signature after this call returns successfully. 
-             * 
-             * The function returns true if the message is successfully signed. 
-             */ 
-            virtual bool SignEventMessage(Aws::Utils::Event::Message&, Aws::String& /* priorSignature */) const { return false; } 
- 
-            /** 
+             * Signs a single event message in an event stream.
+             * The input message buffer is copied and signed. The message's input buffer will be deallocated and a new
+             * buffer will be assigned. The new buffer encodes the original message with its headers as the payload of
+             * the new message. The signature of the original message will be added as a header to the new message.
+             *
+             * A Hex encoded signature of the previous event (or of the HTTP request headers in case of the first event)
+             * is provided as the 'priorSignature' parameter. 'priorSignature' will contain the value of the new
+             * signature after this call returns successfully.
+             *
+             * The function returns true if the message is successfully signed.
+             */
+            virtual bool SignEventMessage(Aws::Utils::Event::Message&, Aws::String& /* priorSignature */) const { return false; }
+
+            /**
              * Takes a request and signs the URI based on the HttpMethod, URI and other info from the request.
              * The URI can then be used in a normal HTTP call until expiration.
              */
@@ -271,12 +271,12 @@ namespace Aws
             */
             bool PresignRequest(Aws::Http::HttpRequest& request, const char* region, const char* serviceName, long long expirationInSeconds = 0) const override;
 
-            Aws::String GetServiceName() const { return m_serviceName; } 
-            Aws::String GetRegion() const { return m_region; } 
-            Aws::String GenerateSignature(const Aws::Auth::AWSCredentials& credentials, 
-                    const Aws::String& stringToSign, const Aws::String& simpleDate) const; 
-            bool ShouldSignHeader(const Aws::String& header) const; 
- 
+            Aws::String GetServiceName() const { return m_serviceName; }
+            Aws::String GetRegion() const { return m_region; }
+            Aws::String GenerateSignature(const Aws::Auth::AWSCredentials& credentials,
+                    const Aws::String& stringToSign, const Aws::String& simpleDate) const;
+            bool ShouldSignHeader(const Aws::String& header) const;
+
         protected:
             bool m_includeSha256HashHeader;
 
@@ -316,26 +316,26 @@ namespace Aws
             bool m_urlEscapePath;
         };
 
-        class AWS_CORE_API AWSAuthEventStreamV4Signer : public AWSAuthSigner 
-        { 
-        public: 
-            AWSAuthEventStreamV4Signer(const std::shared_ptr<Auth::AWSCredentialsProvider>& credentialsProvider, 
-                    const char* serviceName, const Aws::String& region); 
+        class AWS_CORE_API AWSAuthEventStreamV4Signer : public AWSAuthSigner
+        {
+        public:
+            AWSAuthEventStreamV4Signer(const std::shared_ptr<Auth::AWSCredentialsProvider>& credentialsProvider,
+                    const char* serviceName, const Aws::String& region);
 
-            const char* GetName() const override { return Aws::Auth::EVENTSTREAM_SIGV4_SIGNER; } 
- 
-            bool SignEventMessage(Aws::Utils::Event::Message&, Aws::String& priorSignature) const override; 
- 
+            const char* GetName() const override { return Aws::Auth::EVENTSTREAM_SIGV4_SIGNER; }
+
+            bool SignEventMessage(Aws::Utils::Event::Message&, Aws::String& priorSignature) const override;
+
             bool SignRequest(Aws::Http::HttpRequest& request) const override
-            { 
+            {
                 return SignRequest(request, m_region.c_str(), m_serviceName.c_str(), true);
-            } 
- 
+            }
+
             bool SignRequest(Aws::Http::HttpRequest& request, bool signBody) const override
             {
                 return SignRequest(request, m_region.c_str(), m_serviceName.c_str(), signBody);
             }
- 
+
             bool SignRequest(Aws::Http::HttpRequest& request, const char* region, bool signBody) const override
             {
                 return SignRequest(request, region, m_serviceName.c_str(), signBody);
@@ -343,45 +343,45 @@ namespace Aws
 
             bool SignRequest(Aws::Http::HttpRequest& request, const char* region, const char* serviceName, bool signBody) const override;
 
-            /** 
-             * Do nothing 
-             */ 
-            bool PresignRequest(Aws::Http::HttpRequest&, long long) const override { return false; } 
- 
-            /** 
-             * Do nothing 
-             */ 
-            bool PresignRequest(Aws::Http::HttpRequest&, const char*, long long) const override { return false; } 
- 
-            /** 
-             * Do nothing 
-             */ 
-            bool PresignRequest(Aws::Http::HttpRequest&, const char*, const char*, long long) const override { return false; } 
- 
-            bool ShouldSignHeader(const Aws::String& header) const; 
-        private: 
-            Utils::ByteBuffer GenerateSignature(const Aws::Auth::AWSCredentials& credentials, 
+            /**
+             * Do nothing
+             */
+            bool PresignRequest(Aws::Http::HttpRequest&, long long) const override { return false; }
+
+            /**
+             * Do nothing
+             */
+            bool PresignRequest(Aws::Http::HttpRequest&, const char*, long long) const override { return false; }
+
+            /**
+             * Do nothing
+             */
+            bool PresignRequest(Aws::Http::HttpRequest&, const char*, const char*, long long) const override { return false; }
+
+            bool ShouldSignHeader(const Aws::String& header) const;
+        private:
+            Utils::ByteBuffer GenerateSignature(const Aws::Auth::AWSCredentials& credentials,
                     const Aws::String& stringToSign, const Aws::String& simpleDate, const Aws::String& region, const Aws::String& serviceName) const;
-            Utils::ByteBuffer GenerateSignature(const Aws::String& stringToSign, const Aws::Utils::ByteBuffer& key) const; 
-            Aws::String GenerateStringToSign(const Aws::String& dateValue, const Aws::String& simpleDate, 
-                    const Aws::String& canonicalRequestHash, const Aws::String& region, 
-                    const Aws::String& serviceName) const; 
-            Aws::Utils::ByteBuffer ComputeHash(const Aws::String& secretKey, const Aws::String& simpleDate) const; 
-            Aws::Utils::ByteBuffer ComputeHash(const Aws::String& secretKey, 
-                    const Aws::String& simpleDate, const Aws::String& region, const Aws::String& serviceName) const; 
-            const Aws::String m_serviceName; 
-            const Aws::String m_region; 
-            mutable Aws::Utils::Crypto::Sha256 m_hash; 
-            mutable Aws::Utils::Crypto::Sha256HMAC m_HMAC; 
-            mutable Utils::Threading::ReaderWriterLock m_derivedKeyLock; 
-            mutable Aws::Utils::ByteBuffer m_derivedKey; 
-            mutable Aws::String m_currentDateStr; 
-            mutable Aws::String m_currentSecretKey; 
-            Aws::Vector<Aws::String> m_unsignedHeaders; 
-            std::shared_ptr<Auth::AWSCredentialsProvider> m_credentialsProvider; 
-        }; 
- 
- 
+            Utils::ByteBuffer GenerateSignature(const Aws::String& stringToSign, const Aws::Utils::ByteBuffer& key) const;
+            Aws::String GenerateStringToSign(const Aws::String& dateValue, const Aws::String& simpleDate,
+                    const Aws::String& canonicalRequestHash, const Aws::String& region,
+                    const Aws::String& serviceName) const;
+            Aws::Utils::ByteBuffer ComputeHash(const Aws::String& secretKey, const Aws::String& simpleDate) const;
+            Aws::Utils::ByteBuffer ComputeHash(const Aws::String& secretKey,
+                    const Aws::String& simpleDate, const Aws::String& region, const Aws::String& serviceName) const;
+            const Aws::String m_serviceName;
+            const Aws::String m_region;
+            mutable Aws::Utils::Crypto::Sha256 m_hash;
+            mutable Aws::Utils::Crypto::Sha256HMAC m_HMAC;
+            mutable Utils::Threading::ReaderWriterLock m_derivedKeyLock;
+            mutable Aws::Utils::ByteBuffer m_derivedKey;
+            mutable Aws::String m_currentDateStr;
+            mutable Aws::String m_currentSecretKey;
+            Aws::Vector<Aws::String> m_unsignedHeaders;
+            std::shared_ptr<Auth::AWSCredentialsProvider> m_credentialsProvider;
+        };
+
+
         /**
          * A no-op implementation of the AWSAuthSigner interface
          */
@@ -402,11 +402,11 @@ namespace Aws
             /**
              * Do nothing
              */
-            bool SignEventMessage(Aws::Utils::Event::Message&, Aws::String& /* priorSignature */) const override { return true; } 
- 
-            /** 
-             * Do nothing 
-             */ 
+            bool SignEventMessage(Aws::Utils::Event::Message&, Aws::String& /* priorSignature */) const override { return true; }
+
+            /**
+             * Do nothing
+             */
             bool PresignRequest(Aws::Http::HttpRequest&, long long) const override { return false; }
 
             /**

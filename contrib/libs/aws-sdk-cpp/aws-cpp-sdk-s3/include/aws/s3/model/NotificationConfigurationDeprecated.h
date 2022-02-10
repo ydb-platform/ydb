@@ -34,120 +34,120 @@ namespace Model
     void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
-    /** 
+    /**
      * <p>This data type is deprecated. A container for specifying the configuration
      * for publication of messages to an Amazon Simple Notification Service (Amazon
      * SNS) topic when Amazon S3 detects specified events. </p>
-     */ 
+     */
     inline const TopicConfigurationDeprecated& GetTopicConfiguration() const{ return m_topicConfiguration; }
 
-    /** 
+    /**
      * <p>This data type is deprecated. A container for specifying the configuration
      * for publication of messages to an Amazon Simple Notification Service (Amazon
      * SNS) topic when Amazon S3 detects specified events. </p>
-     */ 
-    inline bool TopicConfigurationHasBeenSet() const { return m_topicConfigurationHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool TopicConfigurationHasBeenSet() const { return m_topicConfigurationHasBeenSet; }
+
+    /**
      * <p>This data type is deprecated. A container for specifying the configuration
      * for publication of messages to an Amazon Simple Notification Service (Amazon
      * SNS) topic when Amazon S3 detects specified events. </p>
-     */ 
+     */
     inline void SetTopicConfiguration(const TopicConfigurationDeprecated& value) { m_topicConfigurationHasBeenSet = true; m_topicConfiguration = value; }
 
-    /** 
+    /**
      * <p>This data type is deprecated. A container for specifying the configuration
      * for publication of messages to an Amazon Simple Notification Service (Amazon
      * SNS) topic when Amazon S3 detects specified events. </p>
-     */ 
+     */
     inline void SetTopicConfiguration(TopicConfigurationDeprecated&& value) { m_topicConfigurationHasBeenSet = true; m_topicConfiguration = std::move(value); }
 
-    /** 
+    /**
      * <p>This data type is deprecated. A container for specifying the configuration
      * for publication of messages to an Amazon Simple Notification Service (Amazon
      * SNS) topic when Amazon S3 detects specified events. </p>
-     */ 
+     */
     inline NotificationConfigurationDeprecated& WithTopicConfiguration(const TopicConfigurationDeprecated& value) { SetTopicConfiguration(value); return *this;}
 
-    /** 
+    /**
      * <p>This data type is deprecated. A container for specifying the configuration
      * for publication of messages to an Amazon Simple Notification Service (Amazon
      * SNS) topic when Amazon S3 detects specified events. </p>
-     */ 
+     */
     inline NotificationConfigurationDeprecated& WithTopicConfiguration(TopicConfigurationDeprecated&& value) { SetTopicConfiguration(std::move(value)); return *this;}
 
 
-    /** 
+    /**
      * <p>This data type is deprecated. This data type specifies the configuration for
      * publishing messages to an Amazon Simple Queue Service (Amazon SQS) queue when
      * Amazon S3 detects specified events. </p>
-     */ 
+     */
     inline const QueueConfigurationDeprecated& GetQueueConfiguration() const{ return m_queueConfiguration; }
 
-    /** 
+    /**
      * <p>This data type is deprecated. This data type specifies the configuration for
      * publishing messages to an Amazon Simple Queue Service (Amazon SQS) queue when
      * Amazon S3 detects specified events. </p>
-     */ 
-    inline bool QueueConfigurationHasBeenSet() const { return m_queueConfigurationHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool QueueConfigurationHasBeenSet() const { return m_queueConfigurationHasBeenSet; }
+
+    /**
      * <p>This data type is deprecated. This data type specifies the configuration for
      * publishing messages to an Amazon Simple Queue Service (Amazon SQS) queue when
      * Amazon S3 detects specified events. </p>
-     */ 
+     */
     inline void SetQueueConfiguration(const QueueConfigurationDeprecated& value) { m_queueConfigurationHasBeenSet = true; m_queueConfiguration = value; }
 
-    /** 
+    /**
      * <p>This data type is deprecated. This data type specifies the configuration for
      * publishing messages to an Amazon Simple Queue Service (Amazon SQS) queue when
      * Amazon S3 detects specified events. </p>
-     */ 
+     */
     inline void SetQueueConfiguration(QueueConfigurationDeprecated&& value) { m_queueConfigurationHasBeenSet = true; m_queueConfiguration = std::move(value); }
 
-    /** 
+    /**
      * <p>This data type is deprecated. This data type specifies the configuration for
      * publishing messages to an Amazon Simple Queue Service (Amazon SQS) queue when
      * Amazon S3 detects specified events. </p>
-     */ 
+     */
     inline NotificationConfigurationDeprecated& WithQueueConfiguration(const QueueConfigurationDeprecated& value) { SetQueueConfiguration(value); return *this;}
 
-    /** 
+    /**
      * <p>This data type is deprecated. This data type specifies the configuration for
      * publishing messages to an Amazon Simple Queue Service (Amazon SQS) queue when
      * Amazon S3 detects specified events. </p>
-     */ 
+     */
     inline NotificationConfigurationDeprecated& WithQueueConfiguration(QueueConfigurationDeprecated&& value) { SetQueueConfiguration(std::move(value)); return *this;}
 
 
-    /** 
+    /**
      * <p>Container for specifying the AWS Lambda notification configuration.</p>
-     */ 
+     */
     inline const CloudFunctionConfiguration& GetCloudFunctionConfiguration() const{ return m_cloudFunctionConfiguration; }
 
-    /** 
+    /**
      * <p>Container for specifying the AWS Lambda notification configuration.</p>
-     */ 
-    inline bool CloudFunctionConfigurationHasBeenSet() const { return m_cloudFunctionConfigurationHasBeenSet; } 
- 
-    /** 
+     */
+    inline bool CloudFunctionConfigurationHasBeenSet() const { return m_cloudFunctionConfigurationHasBeenSet; }
+
+    /**
      * <p>Container for specifying the AWS Lambda notification configuration.</p>
-     */ 
+     */
     inline void SetCloudFunctionConfiguration(const CloudFunctionConfiguration& value) { m_cloudFunctionConfigurationHasBeenSet = true; m_cloudFunctionConfiguration = value; }
 
-    /** 
+    /**
      * <p>Container for specifying the AWS Lambda notification configuration.</p>
-     */ 
+     */
     inline void SetCloudFunctionConfiguration(CloudFunctionConfiguration&& value) { m_cloudFunctionConfigurationHasBeenSet = true; m_cloudFunctionConfiguration = std::move(value); }
 
-    /** 
+    /**
      * <p>Container for specifying the AWS Lambda notification configuration.</p>
-     */ 
+     */
     inline NotificationConfigurationDeprecated& WithCloudFunctionConfiguration(const CloudFunctionConfiguration& value) { SetCloudFunctionConfiguration(value); return *this;}
 
-    /** 
+    /**
      * <p>Container for specifying the AWS Lambda notification configuration.</p>
-     */ 
+     */
     inline NotificationConfigurationDeprecated& WithCloudFunctionConfiguration(CloudFunctionConfiguration&& value) { SetCloudFunctionConfiguration(std::move(value)); return *this;}
 
   private:

@@ -94,11 +94,11 @@ TActorId TStateStorageInfo::TRing::SelectReplica(ui32 hash) const {
         return Replicas[0];
 
     Y_VERIFY(!Replicas.empty());
-    if (UseRingSpecificNodeSelection) { 
-        return Replicas[CombineHashes(hash, ContentHash()) % Replicas.size()]; 
-    } else { 
-        return Replicas[hash % Replicas.size()]; 
-    } 
+    if (UseRingSpecificNodeSelection) {
+        return Replicas[CombineHashes(hash, ContentHash()) % Replicas.size()];
+    } else {
+        return Replicas[hash % Replicas.size()];
+    }
 }
 
 TList<TActorId> TStateStorageInfo::SelectAllReplicas() const {
@@ -202,22 +202,22 @@ static void CopyStateStorageRingInfo(
             serviceId[depth] = (iring + 1);
 
             const NKikimrConfig::TDomainsConfig::TStateStorage::TRing &ring = source.GetRing(iring);
-            info->Rings[iring].UseRingSpecificNodeSelection = ring.GetUseRingSpecificNodeSelection(); 
-            if (ring.GetUseSingleNodeActorId()) { 
-                Y_VERIFY(ring.NodeSize() == 1); 
+            info->Rings[iring].UseRingSpecificNodeSelection = ring.GetUseRingSpecificNodeSelection();
+            if (ring.GetUseSingleNodeActorId()) {
+                Y_VERIFY(ring.NodeSize() == 1);
 
-                const TActorId replicaActorID = TActorId(ring.GetNode(0), TStringBuf(serviceId, serviceId + 12)); 
+                const TActorId replicaActorID = TActorId(ring.GetNode(0), TStringBuf(serviceId, serviceId + 12));
                 info->Rings[iring].Replicas.push_back(replicaActorID);
             }
-            else { 
-               Y_VERIFY(ring.NodeSize() > 0); 
+            else {
+               Y_VERIFY(ring.NodeSize() > 0);
 
-               for (ui32 inode = 0, enode = ring.NodeSize(); inode != enode; ++inode) { 
-                    serviceId[depth + 1] = (inode + 1); 
-                    const TActorId replicaActorID = TActorId(ring.GetNode(inode), TStringBuf(serviceId, serviceId + 12)); 
-                    info->Rings[iring].Replicas.push_back(replicaActorID); 
-               } 
-            } 
+               for (ui32 inode = 0, enode = ring.NodeSize(); inode != enode; ++inode) {
+                    serviceId[depth + 1] = (inode + 1);
+                    const TActorId replicaActorID = TActorId(ring.GetNode(inode), TStringBuf(serviceId, serviceId + 12));
+                    info->Rings[iring].Replicas.push_back(replicaActorID);
+               }
+            }
             // reset for next ring
             serviceId[depth + 1] = char();
         }

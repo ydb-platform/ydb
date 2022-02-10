@@ -160,8 +160,8 @@ message TDomainsConfig {
             optional uint32 NToSelect = 1;
             repeated TRing Ring = 2;
             repeated uint32 Node = 3;
-            optional bool UseSingleNodeActorId = 4; 
-            optional bool UseRingSpecificNodeSelection = 5; 
+            optional bool UseSingleNodeActorId = 4;
+            optional bool UseRingSpecificNodeSelection = 5;
         }
 
         optional uint32 SSId = 1;

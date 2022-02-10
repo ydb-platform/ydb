@@ -1017,10 +1017,10 @@ ALLOW load/projects/pandora -> vendor/github.com/magiconair/properties/assert
 ALLOW transfer_manager/go/pkg/source/eventhub -> vendor/github.com/Azure/azure-event-hubs-go/v3
 ALLOW transfer_manager/go/pkg/source/eventhub -> vendor/github.com/Azure/azure-amqp-common-go/v3/sas
 
-# CONTRIB-2347
-ALLOW trust/psp/core/go -> vendor/github.com/gorilla/mux
-ALLOW trust/psp/core/handler -> vendor/github.com/gorilla/mux
-
+# CONTRIB-2347 
+ALLOW trust/psp/core/go -> vendor/github.com/gorilla/mux 
+ALLOW trust/psp/core/handler -> vendor/github.com/gorilla/mux 
+ 
 # CONTRIB-2337 Cloud GPU migration: validator for structs and fields
 ALLOW cloud/compute/go-common/pkg/validation -> vendor/github.com/go-playground/validator/v10
 

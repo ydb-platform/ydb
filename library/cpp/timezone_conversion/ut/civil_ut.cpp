@@ -4,17 +4,17 @@
 
 #include <util/stream/str.h>
 
-namespace NDatetime { 
+namespace NDatetime {
     inline bool operator==(const NDatetime::TCivilDiff& x, const NDatetime::TCivilDiff& y) {
-        return x.Unit == y.Unit && x.Value == y.Value; 
-    } 
+        return x.Unit == y.Unit && x.Value == y.Value;
+    }
 }
- 
-template <> 
-inline void Out<NDatetime::TCivilDiff>(IOutputStream& out, const NDatetime::TCivilDiff& diff) { 
-    out << "(" << diff.Value << "," << diff.Unit << ")"; 
-} 
- 
+
+template <>
+inline void Out<NDatetime::TCivilDiff>(IOutputStream& out, const NDatetime::TCivilDiff& diff) {
+    out << "(" << diff.Value << "," << diff.Unit << ")";
+}
+
 Y_UNIT_TEST_SUITE(DateTime) {
     Y_UNIT_TEST(Calc) {
         NDatetime::TCivilSecond s(2017, 2, 1, 10, 12, 9);
@@ -83,40 +83,40 @@ Y_UNIT_TEST_SUITE(DateTime) {
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::WeekdayOnTheWeek(d, NDatetime::TWeekday::friday), NDatetime::TCivilDay(2013, 1, 4));
     }
     Y_UNIT_TEST(CivilUnit) {
-        using namespace NDatetime; 
- 
-        UNIT_ASSERT_VALUES_EQUAL(GetCivilUnit<TCivilMonth>(), ECivilUnit::Month); 
-        UNIT_ASSERT_VALUES_EQUAL(GetCivilUnit(TCivilHour{}), ECivilUnit::Hour); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(TCivilTime<ECivilUnit::Day>(2017, 1, 11), TCivilDay(2017, 1, 11)); 
- 
-        NDatetime::TCivilSecond s(2017, 2, 1, 10, 12, 9); 
- 
-        UNIT_ASSERT_VALUES_EQUAL( 
-            NDatetime::AddCivil(s, TCivilDiff{2, ECivilUnit::Day}), 
-            NDatetime::AddDays(s, 2)); 
-        UNIT_ASSERT_VALUES_EQUAL( 
-            NDatetime::AddCivil(s, TCivilDiff{-2, ECivilUnit::Month}), 
-            NDatetime::AddMonths(s, -2)); 
-        UNIT_ASSERT_VALUES_EQUAL( 
-            NDatetime::AddCivil(s, TCivilDiff{-55, ECivilUnit::Year}), 
-            NDatetime::AddYears(s, -55)); 
-        UNIT_ASSERT_VALUES_EQUAL( 
-            NDatetime::AddCivil(s, TCivilDiff{40, ECivilUnit::Hour}), 
-            NDatetime::AddHours(s, 40)); 
- 
-        UNIT_ASSERT_VALUES_EQUAL( 
-            GetCivilDiff(TCivilSecond(2017, 10), TCivilSecond(2017, 7), ECivilUnit::Month), 
-            TCivilDiff(3, ECivilUnit::Month)); 
- 
-        UNIT_ASSERT_VALUES_EQUAL( 
-            GetCivilDiff(TCivilSecond(2017, 10, 1), TCivilSecond(2017, 9, 30), ECivilUnit::Month), 
-            TCivilDiff(1, ECivilUnit::Month)); 
- 
-        UNIT_ASSERT_VALUES_EQUAL( 
-            GetCivilDiff(TCivilSecond(2017, 10, 1), TCivilSecond(2017, 9, 31), ECivilUnit::Month), 
-            TCivilDiff(0, ECivilUnit::Month)); 
-    } 
+        using namespace NDatetime;
+
+        UNIT_ASSERT_VALUES_EQUAL(GetCivilUnit<TCivilMonth>(), ECivilUnit::Month);
+        UNIT_ASSERT_VALUES_EQUAL(GetCivilUnit(TCivilHour{}), ECivilUnit::Hour);
+
+        UNIT_ASSERT_VALUES_EQUAL(TCivilTime<ECivilUnit::Day>(2017, 1, 11), TCivilDay(2017, 1, 11));
+
+        NDatetime::TCivilSecond s(2017, 2, 1, 10, 12, 9);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            NDatetime::AddCivil(s, TCivilDiff{2, ECivilUnit::Day}),
+            NDatetime::AddDays(s, 2));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NDatetime::AddCivil(s, TCivilDiff{-2, ECivilUnit::Month}),
+            NDatetime::AddMonths(s, -2));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NDatetime::AddCivil(s, TCivilDiff{-55, ECivilUnit::Year}),
+            NDatetime::AddYears(s, -55));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NDatetime::AddCivil(s, TCivilDiff{40, ECivilUnit::Hour}),
+            NDatetime::AddHours(s, 40));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCivilDiff(TCivilSecond(2017, 10), TCivilSecond(2017, 7), ECivilUnit::Month),
+            TCivilDiff(3, ECivilUnit::Month));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCivilDiff(TCivilSecond(2017, 10, 1), TCivilSecond(2017, 9, 30), ECivilUnit::Month),
+            TCivilDiff(1, ECivilUnit::Month));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCivilDiff(TCivilSecond(2017, 10, 1), TCivilSecond(2017, 9, 31), ECivilUnit::Month),
+            TCivilDiff(0, ECivilUnit::Month));
+    }
 
     Y_UNIT_TEST(TestYearWeekNmb) {
 

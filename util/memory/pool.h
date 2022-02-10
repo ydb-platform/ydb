@@ -388,9 +388,9 @@ public:
         return size_type(-1) / sizeof(T);
     }
 
-    template <typename... Args> 
-    inline void construct(pointer p, Args&&... args) { 
-        new (p) T(std::forward<Args>(args)...); 
+    template <typename... Args>
+    inline void construct(pointer p, Args&&... args) {
+        new (p) T(std::forward<Args>(args)...);
     }
 
     inline void destroy(pointer p) noexcept {

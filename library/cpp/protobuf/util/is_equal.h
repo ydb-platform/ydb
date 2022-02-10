@@ -5,13 +5,13 @@
 namespace google {
     namespace protobuf {
         class Message;
-        class FieldDescriptor; 
+        class FieldDescriptor;
     }
 }
 
 namespace NProtoBuf {
     using ::google::protobuf::FieldDescriptor;
-    using ::google::protobuf::Message; 
+    using ::google::protobuf::Message;
 }
 
 namespace NProtoBuf {
@@ -27,7 +27,7 @@ namespace NProtoBuf {
     // Non-strict version: optional field without explicit value is compared
     // using its default value.
     bool IsEqualDefault(const Message& m1, const Message& m2);
- 
+
     bool IsEqualFieldDefault(const Message& m1, const Message& m2, const FieldDescriptor& field);
 
 }

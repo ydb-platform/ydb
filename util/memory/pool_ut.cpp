@@ -50,39 +50,39 @@ private:
     size_t Frees_;
 };
 
-class TErrorOnCopy { 
-public: 
-    TErrorOnCopy() = default; 
-    TErrorOnCopy(TErrorOnCopy&&) = default; 
- 
-    TErrorOnCopy(const TErrorOnCopy&) { 
-        UNIT_ASSERT(false); 
-    } 
-}; 
- 
-class TNoCopy { 
-public: 
-    TNoCopy() = default; 
-    TNoCopy(TNoCopy&&) = default; 
- 
-    TNoCopy(const TNoCopy&) = delete; 
-}; 
- 
-class TNoMove { 
-public: 
-    TNoMove() = default; 
-    TNoMove(const TNoMove&) = default; 
- 
-    TNoMove(TNoMove&&) = delete; 
-}; 
- 
+class TErrorOnCopy {
+public:
+    TErrorOnCopy() = default;
+    TErrorOnCopy(TErrorOnCopy&&) = default;
+
+    TErrorOnCopy(const TErrorOnCopy&) {
+        UNIT_ASSERT(false);
+    }
+};
+
+class TNoCopy {
+public:
+    TNoCopy() = default;
+    TNoCopy(TNoCopy&&) = default;
+
+    TNoCopy(const TNoCopy&) = delete;
+};
+
+class TNoMove {
+public:
+    TNoMove() = default;
+    TNoMove(const TNoMove&) = default;
+
+    TNoMove(TNoMove&&) = delete;
+};
+
 class TMemPoolTest: public TTestBase {
     UNIT_TEST_SUITE(TMemPoolTest);
     UNIT_TEST(TestMemPool)
     UNIT_TEST(TestAlign)
     UNIT_TEST(TestZeroArray)
     UNIT_TEST(TestLargeStartingAlign)
-    UNIT_TEST(TestMoveAlloc) 
+    UNIT_TEST(TestMoveAlloc)
     UNIT_TEST(TestRoundUpToNextPowerOfTwoOption)
     UNIT_TEST_SUITE_END();
 
@@ -223,22 +223,22 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned4k1) & 4095, 0);
         UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned4k2) & 4095, 0);
     }
- 
-    template <typename T> 
-    void CheckMoveAlloc() { 
-        TMemoryPool pool(10 * sizeof(T)); 
- 
+
+    template <typename T>
+    void CheckMoveAlloc() {
+        TMemoryPool pool(10 * sizeof(T));
+
         TVector<T, TPoolAllocator> elems(&pool);
-        elems.reserve(1); 
-        elems.emplace_back(); 
-        elems.resize(100); 
+        elems.reserve(1);
+        elems.emplace_back();
+        elems.resize(100);
     }
- 
-    void TestMoveAlloc() { 
-        CheckMoveAlloc<TNoMove>(); 
-        CheckMoveAlloc<TNoCopy>(); 
-        CheckMoveAlloc<TErrorOnCopy>(); 
-    } 
+
+    void TestMoveAlloc() {
+        CheckMoveAlloc<TNoMove>();
+        CheckMoveAlloc<TNoCopy>();
+        CheckMoveAlloc<TErrorOnCopy>();
+    }
 
     void TestRoundUpToNextPowerOfTwoOption() {
         const size_t MEMORY_POOL_BLOCK_SIZE = (1024 - 16) * 4096 - 16 - 16 - 32;

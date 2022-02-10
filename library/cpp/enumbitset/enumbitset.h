@@ -11,12 +11,12 @@
 // Stack memory bitmask for TEnum values [begin, end).
 // @end value is not included in the mask and is not necessarily defined as enum value.
 // For example: enum EType { A, B, C } ==> TEnumBitSet<EType, A, C + 1>
-template <typename TEnum, int mbegin, int mend> 
+template <typename TEnum, int mbegin, int mend>
 class TEnumBitSet: private TBitMap<mend - mbegin> {
 public:
-    static const int BeginIndex = mbegin; 
-    static const int EndIndex = mend; 
-    static const size_t BitsetSize = EndIndex - BeginIndex; 
+    static const int BeginIndex = mbegin;
+    static const int EndIndex = mend;
+    static const size_t BitsetSize = EndIndex - BeginIndex;
 
     typedef TBitMap<BitsetSize> TParent;
     typedef TEnumBitSet<TEnum, mbegin, mend> TThis;
@@ -57,7 +57,7 @@ public:
     }
 
     static bool IsValid(TEnum c) {
-        return int(c) >= BeginIndex && int(c) < EndIndex; 
+        return int(c) >= BeginIndex && int(c) < EndIndex;
     }
 
     bool Test(TEnum c) const {
@@ -260,7 +260,7 @@ public:
     //serialization to/from stream
     void Save(IOutputStream* buffer) const {
         ::Save(buffer, (ui32)Count());
-        for (TEnum bit : *this) { 
+        for (TEnum bit : *this) {
             ::Save(buffer, (ui32)bit);
         }
     }
@@ -271,7 +271,7 @@ public:
         ui32 sz = 0;
         ::Load(buffer, sz);
 
-        for (ui32 t = 0; t < sz; t++) { 
+        for (ui32 t = 0; t < sz; t++) {
             ui32 bit = 0;
             ::Load(buffer, bit);
 
@@ -350,18 +350,18 @@ public:
 
     class TIterator {
     public:
-        TIterator(TEnum value, const TThis* bitmap) noexcept 
-            : Value(static_cast<int>(value)) 
+        TIterator(TEnum value, const TThis* bitmap) noexcept
+            : Value(static_cast<int>(value))
             , BitMap(bitmap)
         {
         }
 
-        TIterator(const TThis* bitmap) noexcept 
-            : Value(EndIndex) 
-            , BitMap(bitmap) 
-        { 
-        } 
- 
+        TIterator(const TThis* bitmap) noexcept
+            : Value(EndIndex)
+            , BitMap(bitmap)
+        {
+        }
+
         TEnum operator*() const noexcept {
             Y_ASSERT(Value < EndIndex);
             return static_cast<TEnum>(Value);
@@ -373,12 +373,12 @@ public:
 
         TIterator& operator++() noexcept {
             Y_ASSERT(Value < EndIndex);
-            TEnum res; 
-            if (BitMap->FindNext(static_cast<TEnum>(Value), res)) { 
-                Value = static_cast<int>(res); 
-            } else { 
-                Value = EndIndex; 
-            } 
+            TEnum res;
+            if (BitMap->FindNext(static_cast<TEnum>(Value), res)) {
+                Value = static_cast<int>(res);
+            } else {
+                Value = EndIndex;
+            }
 
             return *this;
         }
@@ -389,12 +389,12 @@ public:
     };
 
     TIterator begin() const {
-        TEnum res; 
-        return FindFirst(res) ? TIterator(res, this) : TIterator(this); 
+        TEnum res;
+        return FindFirst(res) ? TIterator(res, this) : TIterator(this);
     }
 
     TIterator end() const {
-        return TIterator(this); 
+        return TIterator(this);
     }
 
 private:
@@ -410,26 +410,26 @@ private:
     bool HasAll(TEnum c) const {
         return Test(c);
     }
- 
-    bool FindFirst(TEnum& result) const { 
-        // finds first set item in bitset (or End if bitset is empty) 
-        const int index = int(this->FirstNonZeroBit()) + BeginIndex; 
-        if (index < EndIndex) { 
-            result = static_cast<TEnum>(index); 
-            return true; 
-        } 
-        return false; 
-    } 
- 
-    bool FindNext(TEnum current, TEnum& result) const { 
-        // finds first set item in bitset (or End if bitset is empty) 
-        const int index = int(this->NextNonZeroBit(int(current) - BeginIndex)) + BeginIndex; 
-        if (index < EndIndex) { 
-            result = static_cast<TEnum>(index); 
-            return true; 
-        } 
-        return false; 
-    } 
+
+    bool FindFirst(TEnum& result) const {
+        // finds first set item in bitset (or End if bitset is empty)
+        const int index = int(this->FirstNonZeroBit()) + BeginIndex;
+        if (index < EndIndex) {
+            result = static_cast<TEnum>(index);
+            return true;
+        }
+        return false;
+    }
+
+    bool FindNext(TEnum current, TEnum& result) const {
+        // finds first set item in bitset (or End if bitset is empty)
+        const int index = int(this->NextNonZeroBit(int(current) - BeginIndex)) + BeginIndex;
+        if (index < EndIndex) {
+            result = static_cast<TEnum>(index);
+            return true;
+        }
+        return false;
+    }
 };
 
 template <typename TEnum, TEnum mbegin, int mend>

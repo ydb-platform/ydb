@@ -158,6 +158,6 @@ namespace NProtoBuf {
 
     bool IsEqualFieldDefault(const Message& m1, const Message& m2, const FieldDescriptor& field) {
         return IsEqualFieldImpl<true>(m1, m2, field, nullptr);
-    } 
- 
-} 
+    }
+
+}

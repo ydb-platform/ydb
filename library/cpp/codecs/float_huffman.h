@@ -47,4 +47,4 @@ namespace NCodecs::NFloatHuff {
     };
 
     TVector<float> Decode(TStringBuf data, size_t sizeHint = 0);
-} 
+}

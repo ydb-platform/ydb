@@ -43,53 +43,53 @@ namespace NDatetime {
     using TYear = cctz::year_t;
     using TMonth = cctz::detail::month_t;
 
-    enum class ECivilUnit : int { 
-        Second = 0, 
-        Minute = 1, 
-        Hour = 2, 
-        Day = 3, 
-        Month = 4, 
-        Year = 5 
-    }; 
- 
-    namespace NDetail { 
-        template <typename T> 
-        struct TGetCivilUnit; 
- 
-        template <ECivilUnit Unit> 
-        struct TGetCivilTime; 
+    enum class ECivilUnit : int {
+        Second = 0,
+        Minute = 1,
+        Hour = 2,
+        Day = 3,
+        Month = 4,
+        Year = 5
+    };
+
+    namespace NDetail {
+        template <typename T>
+        struct TGetCivilUnit;
+
+        template <ECivilUnit Unit>
+        struct TGetCivilTime;
     }
- 
-    template <typename T> 
-    CONSTEXPR_M ECivilUnit GetCivilUnit(const T& = {}) { 
-        return NDetail::TGetCivilUnit<T>::Value; 
-    } 
- 
-    template <ECivilUnit Unit> 
-    using TCivilTime = typename NDetail::TGetCivilTime<Unit>::TResult; 
- 
+
+    template <typename T>
+    CONSTEXPR_M ECivilUnit GetCivilUnit(const T& = {}) {
+        return NDetail::TGetCivilUnit<T>::Value;
+    }
+
+    template <ECivilUnit Unit>
+    using TCivilTime = typename NDetail::TGetCivilTime<Unit>::TResult;
+
     /**
-     * Class with variable unit diff. 
-     */ 
-    struct TCivilDiff { 
-        TDiff Value = 0; 
-        ECivilUnit Unit = ECivilUnit::Second; 
- 
-        TCivilDiff() = default; 
-        TCivilDiff(TDiff value, ECivilUnit unit) 
-            : Value(value) 
-            , Unit(unit) 
-        { 
-        } 
- 
-        /** 
-         * Straightfoward implementation of operators <, == and unit conversions 
-         * can be potentially misleading (e.g. 1 month == 30 days?); 
-         * we leave it to user to implement it properly for each application. 
-         */ 
-    }; 
- 
-    /** 
+     * Class with variable unit diff.
+     */
+    struct TCivilDiff {
+        TDiff Value = 0;
+        ECivilUnit Unit = ECivilUnit::Second;
+
+        TCivilDiff() = default;
+        TCivilDiff(TDiff value, ECivilUnit unit)
+            : Value(value)
+            , Unit(unit)
+        {
+        }
+
+        /**
+         * Straightfoward implementation of operators <, == and unit conversions
+         * can be potentially misleading (e.g. 1 month == 30 days?);
+         * we leave it to user to implement it properly for each application.
+         */
+    };
+
+    /**
      * Gets the time zone by an IANA name.
      * @param name  A name in IANA format (e.g., "Europe/Moscow").
      * @note        After you request a time zone for the first time, it is cached
@@ -150,7 +150,7 @@ namespace NDatetime {
      * @return the calculated T type
      */
     template <typename T, typename S>
-    inline T Calc(const S& tp, TDiff diff) { 
+    inline T Calc(const S& tp, TDiff diff) {
         return T(tp) + diff;
     }
 
@@ -166,24 +166,24 @@ namespace NDatetime {
     TCivilSecond AddMinutes(const TCivilSecond& tp, TDiff diff);
     TCivilSecond AddSeconds(const TCivilSecond& tp, TDiff diff);
 
-    /** Method to add TCivilDiff 
-     * @param[in] tp is a timepoint with which calc will be 
-     * @param[in] diff is quantity of which will be added to the tp 
-     * @return the calculated TCivilSecond object 
-     */ 
-    TCivilSecond AddCivil(const TCivilSecond& tp, TCivilDiff diff); 
- 
-    /** Method to subtract to civil dates/times and get TCivilDiff. 
-     * First casts to unit, then subtracts; 
-     * e.g. GetCivilDiff(2017-10-01, 2017-09-30, Month) = 1. 
-     * 
-     * @param[in] tpX is a timepoint 
-     * @param[in] tpY is a timepoint to subtract from tpX 
-     * @param[in] unit is a civil time unit to use in subtraction 
-     * @return the calculated diff as TCivilDiff object 
-     */ 
-    TCivilDiff GetCivilDiff(const TCivilSecond& tpX, const TCivilSecond& tpY, ECivilUnit unit); 
- 
+    /** Method to add TCivilDiff
+     * @param[in] tp is a timepoint with which calc will be
+     * @param[in] diff is quantity of which will be added to the tp
+     * @return the calculated TCivilSecond object
+     */
+    TCivilSecond AddCivil(const TCivilSecond& tp, TCivilDiff diff);
+
+    /** Method to subtract to civil dates/times and get TCivilDiff.
+     * First casts to unit, then subtracts;
+     * e.g. GetCivilDiff(2017-10-01, 2017-09-30, Month) = 1.
+     *
+     * @param[in] tpX is a timepoint
+     * @param[in] tpY is a timepoint to subtract from tpX
+     * @param[in] unit is a civil time unit to use in subtraction
+     * @return the calculated diff as TCivilDiff object
+     */
+    TCivilDiff GetCivilDiff(const TCivilSecond& tpX, const TCivilSecond& tpY, ECivilUnit unit);
+
     /** Formats the given TimePoint in the given TTimeZone according to
      * the provided format string. Uses strftime()-like formatting options,
      * with the following extensions:
@@ -333,6 +333,6 @@ namespace NDatetime {
      }
 }
 
-#include "civil-inl.h" 
- 
+#include "civil-inl.h"
+
 #undef CONSTEXPR_M

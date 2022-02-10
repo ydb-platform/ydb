@@ -1,11 +1,11 @@
 #pragma once
 
-#include <util/draft/matrix.h> 
+#include <util/draft/matrix.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/vector.h>
-#include <util/system/yassert.h> 
- 
-#include <type_traits> 
+#include <util/system/yassert.h>
+
+#include <type_traits>
 #include <utility>
 
 namespace NLevenshtein {
@@ -41,73 +41,73 @@ namespace NLevenshtein {
 
     using TEditChain = TVector<EEditMoveType>;
 
-    template <typename TArgType> 
-    struct TWeightOneUnaryGetter { 
-        int operator()(const TArgType&) const { 
-            return 1; 
-        } 
-    }; 
- 
-    template <typename TArgType> 
-    struct TWeightOneBinaryGetter { 
-        int operator()(const TArgType&, const TArgType&) const { 
-            return 1; 
-        } 
-    }; 
- 
-    template <typename TStringType> 
-    using TCharType = typename std::decay_t<decltype(std::add_const_t<TStringType>()[0])>; 
- 
+    template <typename TArgType>
+    struct TWeightOneUnaryGetter {
+        int operator()(const TArgType&) const {
+            return 1;
+        }
+    };
+
+    template <typename TArgType>
+    struct TWeightOneBinaryGetter {
+        int operator()(const TArgType&, const TArgType&) const {
+            return 1;
+        }
+    };
+
+    template <typename TStringType>
+    using TCharType = typename std::decay_t<decltype(std::add_const_t<TStringType>()[0])>;
+
     /// Finds sequence of "edit moves" for two strings
-    template <class TStringType, class TWeightType = int, 
-        class TReplaceWeigher = TWeightOneBinaryGetter<TCharType<TStringType>>, 
-        class TDeleteWeigher = TWeightOneUnaryGetter<TCharType<TStringType>>, 
-        class TInsertWeigher = TWeightOneUnaryGetter<TCharType<TStringType>> 
-    > 
-    void GetEditChain(const TStringType& str1, const TStringType& str2, TEditChain& res, TWeightType* weight = nullptr, 
-        const TReplaceWeigher& replaceWeigher = TReplaceWeigher(), 
-        const TDeleteWeigher& deleteWeigher = TDeleteWeigher(), 
-        const TInsertWeigher& insertWeigher = TInsertWeigher()) 
-    { 
+    template <class TStringType, class TWeightType = int,
+        class TReplaceWeigher = TWeightOneBinaryGetter<TCharType<TStringType>>,
+        class TDeleteWeigher = TWeightOneUnaryGetter<TCharType<TStringType>>,
+        class TInsertWeigher = TWeightOneUnaryGetter<TCharType<TStringType>>
+    >
+    void GetEditChain(const TStringType& str1, const TStringType& str2, TEditChain& res, TWeightType* weight = nullptr,
+        const TReplaceWeigher& replaceWeigher = TReplaceWeigher(),
+        const TDeleteWeigher& deleteWeigher = TDeleteWeigher(),
+        const TInsertWeigher& insertWeigher = TInsertWeigher())
+    {
         int l1 = (int)str1.size();
         int l2 = (int)str2.size();
- 
-        TMatrix<std::pair<TWeightType, EEditMoveType>> ma(l1 + 1, l2 + 1); /// ma[i][j].first = diff(str1[0..i-1], str2[0..j-1]) 
+
+        TMatrix<std::pair<TWeightType, EEditMoveType>> ma(l1 + 1, l2 + 1); /// ma[i][j].first = diff(str1[0..i-1], str2[0..j-1])
         ma[0][0] = std::make_pair(0, EMT_SPECIAL);                 // starting point
         for (int i = 1; i <= l1; i++) {
-            ma[i][0] = std::make_pair(ma[i - 1][0].first + deleteWeigher(str1[i - 1]), EMT_DELETE); 
+            ma[i][0] = std::make_pair(ma[i - 1][0].first + deleteWeigher(str1[i - 1]), EMT_DELETE);
         }
         for (int i = 1; i <= l2; i++) {
-            ma[0][i] = std::make_pair(ma[0][i - 1].first + insertWeigher(str2[i - 1]), EMT_INSERT); 
+            ma[0][i] = std::make_pair(ma[0][i - 1].first + insertWeigher(str2[i - 1]), EMT_INSERT);
         }
         // Here goes basic Levestein's algorithm
         for (int i = 1; i <= l1; i++) {
             for (int j = 1; j <= l2; j++) {
-                if (str1[i - 1] == str2[j - 1]) { 
+                if (str1[i - 1] == str2[j - 1]) {
                     ma[i][j] = std::make_pair(ma[i - 1][j - 1].first, EMT_PRESERVE);
-                } else { 
-                    const TWeightType replaceWeight = replaceWeigher(str1[i - 1], str2[j - 1]); 
-                    Y_ASSERT(replaceWeight >= 0); 
-                    ma[i][j] = std::make_pair(ma[i - 1][j - 1].first + replaceWeight, EMT_REPLACE); 
-                } 
- 
-                if (ma[i][j].first > ma[i - 1][j].first) { 
-                    const TWeightType deleteWeight = deleteWeigher(str1[i - 1]); 
-                    Y_ASSERT(deleteWeight >= 0); 
-                    const TWeightType deletePathWeight = ma[i - 1][j].first + deleteWeight; 
-                    if (deletePathWeight <= ma[i][j].first) { 
-                        ma[i][j] = std::make_pair(deletePathWeight, EMT_DELETE); 
-                    } 
-                } 
- 
-                if (ma[i][j].first > ma[i][j - 1].first) { 
-                    const TWeightType insertWeight = insertWeigher(str2[j - 1]); 
-                    Y_ASSERT(insertWeight >= 0); 
-                    const TWeightType insertPathWeight = ma[i][j - 1].first + insertWeight; 
-                    if (insertPathWeight <= ma[i][j].first) { 
-                        ma[i][j] = std::make_pair(insertPathWeight, EMT_INSERT); 
-                    } 
-                } 
+                } else {
+                    const TWeightType replaceWeight = replaceWeigher(str1[i - 1], str2[j - 1]);
+                    Y_ASSERT(replaceWeight >= 0);
+                    ma[i][j] = std::make_pair(ma[i - 1][j - 1].first + replaceWeight, EMT_REPLACE);
+                }
+
+                if (ma[i][j].first > ma[i - 1][j].first) {
+                    const TWeightType deleteWeight = deleteWeigher(str1[i - 1]);
+                    Y_ASSERT(deleteWeight >= 0);
+                    const TWeightType deletePathWeight = ma[i - 1][j].first + deleteWeight;
+                    if (deletePathWeight <= ma[i][j].first) {
+                        ma[i][j] = std::make_pair(deletePathWeight, EMT_DELETE);
+                    }
+                }
+
+                if (ma[i][j].first > ma[i][j - 1].first) {
+                    const TWeightType insertWeight = insertWeigher(str2[j - 1]);
+                    Y_ASSERT(insertWeight >= 0);
+                    const TWeightType insertPathWeight = ma[i][j - 1].first + insertWeight;
+                    if (insertPathWeight <= ma[i][j].first) {
+                        ma[i][j] = std::make_pair(insertPathWeight, EMT_INSERT);
+                    }
+                }
             }
         }
         // Tracing the path from final point
@@ -133,10 +133,10 @@ namespace NLevenshtein {
             }
         }
         std::reverse(res.begin(), res.end());
- 
-        if (weight != nullptr) { 
-            *weight = ma[l1][l2].first; 
-        } 
+
+        if (weight != nullptr) {
+            *weight = ma[l1][l2].first;
+        }
     }
 
     template <class TStringType>

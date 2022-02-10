@@ -81,9 +81,9 @@ public:
     /// показывает объём запакованных данных, а из THttpInput мы будем вычитывать уже распакованные.
     bool ContentEncoded() const noexcept;
 
-    /// Returns true if Content-Length or Transfer-Encoding header received 
-    bool HasContent() const noexcept; 
- 
+    /// Returns true if Content-Length or Transfer-Encoding header received
+    bool HasContent() const noexcept;
+
     bool HasExpect100Continue() const noexcept;
 
 private:

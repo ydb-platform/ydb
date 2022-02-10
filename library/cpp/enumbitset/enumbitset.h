@@ -305,7 +305,7 @@ public:
         return ret;
     }
 
-    void FromString(TStringBuf s) { 
+    void FromString(TStringBuf s) {
         static const size_t chunkSize = sizeof(typename TParent::TChunk) * 8;
         static const size_t numDig = chunkSize / 4;
         static const size_t highChunkBits = (BitsetSize + chunkSize - 1) % chunkSize + 1;
@@ -326,7 +326,7 @@ public:
     }
 
     // TODO: Get rid of exceptions at all
-    bool TryFromString(TStringBuf s) { 
+    bool TryFromString(TStringBuf s) {
         try {
             FromString(s);
         } catch (...) {

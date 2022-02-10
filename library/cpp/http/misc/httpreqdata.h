@@ -13,19 +13,19 @@
 #include <util/system/yassert.h>
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
-#include <util/generic/buffer.h> 
+#include <util/generic/buffer.h>
 
 using THttpHeadersContainer = THashMap<TString, TString, TCIOps, TCIOps>;
 
-class TBaseServerRequestData { 
+class TBaseServerRequestData {
 public:
-    TBaseServerRequestData(SOCKET s = INVALID_SOCKET); 
-    TBaseServerRequestData(const char* qs, SOCKET s = INVALID_SOCKET); 
+    TBaseServerRequestData(SOCKET s = INVALID_SOCKET);
+    TBaseServerRequestData(const char* qs, SOCKET s = INVALID_SOCKET);
 
     void SetHost(const TString& host, ui16 port) {
-        Host = host; 
-        Port = ToString(port); 
-    } 
+        Host = host;
+        Port = ToString(port);
+    }
 
     const TString& ServerName() const {
         return Host;
@@ -100,26 +100,26 @@ private:
     SOCKET Socket;
     ui64 BeginTime;
     mutable TString CurPage;
-    TBuffer ParseBuf; 
-    TBuffer ModifiedQueryString; 
-}; 
+    TBuffer ParseBuf;
+    TBuffer ModifiedQueryString;
+};
 
 class TServerRequestData: public TBaseServerRequestData {
 public:
-    TServerRequestData(SOCKET s = INVALID_SOCKET) 
-        : TBaseServerRequestData(s) 
-    { 
-    } 
-    TServerRequestData(const char* qs, SOCKET s = INVALID_SOCKET) 
-        : TBaseServerRequestData(qs, s) 
-    { 
-        Scan(); 
-    } 
+    TServerRequestData(SOCKET s = INVALID_SOCKET)
+        : TBaseServerRequestData(s)
+    {
+    }
+    TServerRequestData(const char* qs, SOCKET s = INVALID_SOCKET)
+        : TBaseServerRequestData(qs, s)
+    {
+        Scan();
+    }
 
-    void Scan() { 
-        CgiParam.Scan(QueryStringBuf()); 
-    } 
+    void Scan() {
+        CgiParam.Scan(QueryStringBuf());
+    }
 
-public: 
+public:
     TCgiParameters CgiParam;
 };

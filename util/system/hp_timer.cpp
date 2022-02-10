@@ -16,7 +16,7 @@ namespace {
         }
 
         static inline const TFreq& Instance() {
-            return *SingletonWithPriority<TFreq, 1>(); 
+            return *SingletonWithPriority<TFreq, 1>();
         }
 
         static double EstimateCPUClock() {

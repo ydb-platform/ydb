@@ -67,7 +67,7 @@ void TUnbufferedFileOutput::DoWrite(const void* buf, size_t len) {
 void TUnbufferedFileOutput::DoFlush() {
     if (File_.IsOpen()) {
         File_.Flush();
-    } 
+    }
 }
 
 class TMappedFileInput::TImpl: public TBlob {

@@ -283,7 +283,7 @@ void SetSocketTimeout(SOCKET s, long sec, long msec) {
 #endif
 }
 
-void SetLinger(SOCKET s, bool on, unsigned len) { 
+void SetLinger(SOCKET s, bool on, unsigned len) {
 #ifdef SO_LINGER
     struct linger l = {on, (u_short)len};
 
@@ -1162,10 +1162,10 @@ static inline void SetNonBlockSocket(SOCKET fd, int value) {
     unsigned long outbuf = 0;
     DWORD written = 0;
 
-    if (!inbuf) { 
+    if (!inbuf) {
         WSAEventSelect(fd, nullptr, 0);
-    } 
- 
+    }
+
     if (WSAIoctl(fd, FIONBIO, &inbuf, sizeof(inbuf), &outbuf, sizeof(outbuf), &written, 0, 0) == SOCKET_ERROR) {
         ythrow TSystemError() << "can not set non block socket state";
     }

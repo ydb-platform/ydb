@@ -180,7 +180,7 @@ public:
         }
     }
 
-    inline ECharset CharsetByName(TStringBuf name) { 
+    inline ECharset CharsetByName(TStringBuf name) {
         if (!name)
             return CODES_UNKNOWN;
 
@@ -192,11 +192,11 @@ public:
     }
 };
 
-ECharset CharsetByName(TStringBuf name) { 
+ECharset CharsetByName(TStringBuf name) {
     return Singleton<TCodePageHash>()->CharsetByName(name);
 }
 
-ECharset CharsetByNameOrDie(TStringBuf name) { 
+ECharset CharsetByNameOrDie(TStringBuf name) {
     ECharset result = CharsetByName(name);
     if (result == CODES_UNKNOWN)
         ythrow yexception() << "CharsetByNameOrDie: unknown charset '" << name << "'";

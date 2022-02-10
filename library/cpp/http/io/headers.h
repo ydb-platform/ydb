@@ -112,7 +112,7 @@ public:
     /// Записывает все заголовки контейнера в поток.
     /// @details Каждый заголовк записывается в виде "имя параметра: значение\r\n".
     void OutTo(IOutputStream* stream) const;
- 
+
     /// Обменивает наборы заголовков двух контейнеров.
     void Swap(THttpHeaders& headers) noexcept {
         Headers_.swap(headers.Headers_);

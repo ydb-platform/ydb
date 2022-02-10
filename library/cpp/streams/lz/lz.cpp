@@ -41,12 +41,12 @@ public:
          */
         static_assert(sizeof(TCompressor::signature) - 1 == SIGNATURE_SIZE, "expect sizeof(TCompressor::signature) - 1 == SIGNATURE_SIZE");
         Slave_->Write(TCompressor::signature, sizeof(TCompressor::signature) - 1);
- 
+
         /*
          * save version
          */
         this->Save((ui32)1);
- 
+
         /*
          * save block size
          */

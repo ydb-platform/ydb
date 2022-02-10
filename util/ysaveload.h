@@ -23,8 +23,8 @@ public:
     enum {
         IsSerializablePod = TTypeTraits<T>::IsPod && !std::is_pointer<T>::value
     };
-}; 
- 
+};
+
 struct TSerializeException: public yexception {
 };
 

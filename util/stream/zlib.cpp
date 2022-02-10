@@ -356,25 +356,25 @@ TZLibCompress::~TZLibCompress() {
 }
 
 void TZLibCompress::DoWrite(const void* buf, size_t size) {
-    if (!Impl_) { 
+    if (!Impl_) {
         ythrow TZLibCompressorError() << "can not write to finished zlib stream";
-    } 
- 
+    }
+
     Impl_->Write(buf, size);
 }
 
 void TZLibCompress::DoFlush() {
     if (Impl_) {
-        Impl_->Flush(); 
-    } 
+        Impl_->Flush();
+    }
 }
 
 void TZLibCompress::DoFinish() {
-    THolder<TImpl> impl(Impl_.Release()); 
- 
+    THolder<TImpl> impl(Impl_.Release());
+
     if (impl) {
-        impl->Finish(); 
-    } 
+        impl->Finish();
+    }
 }
 
 TBufferedZLibDecompress::~TBufferedZLibDecompress() = default;

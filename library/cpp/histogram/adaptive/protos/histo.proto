@@ -1,17 +1,17 @@
-package NKiwiAggr; 
- 
- 
-// THistoRec represents a value record added to a multihistogram 
-message THistoRec { 
-    optional uint64 Id = 1; // Current histogram identifier 
-    optional double Value = 2; 
+package NKiwiAggr;
+
+
+// THistoRec represents a value record added to a multihistogram
+message THistoRec {
+    optional uint64 Id = 1; // Current histogram identifier
+    optional double Value = 2;
     optional double Weight = 3 [default = 1.0]; // You can set a certain weight to each record or just skip records using Weight=0
-} 
- 
-message THistoRecs { 
-    repeated THistoRec HistoRecs = 1; 
-} 
- 
+}
+
+message THistoRecs {
+    repeated THistoRec HistoRecs = 1;
+}
+
 enum EHistogramType {
     HT_FIXED_BIN_HISTOGRAM = 1;
     HT_ADAPTIVE_DISTANCE_HISTOGRAM = 2;
@@ -20,17 +20,17 @@ enum EHistogramType {
     HT_ADAPTIVE_WARD_HISTOGRAM = 5;
 }
 
-message THistogram { 
-    optional uint64 Id = 1; 
-    optional double MinValue = 2; 
+message THistogram {
+    optional uint64 Id = 1;
+    optional double MinValue = 2;
     optional double BinRange = 4; // for FIXED_BIN_HISTOGRAM only. And it's OK that it is 4 after 2
     repeated float Freq = 5;
     repeated float Position = 6;  // for ADAPTIVE histograms only
     optional double MaxValue = 7;
     optional EHistogramType Type = 8;  // Empty field means FIXED_BIN_HISTOGRAM
-} 
- 
-// Multihistogam 
-message THistograms { 
-    repeated THistogram HistoRecs = 1; 
+}
+
+// Multihistogam
+message THistograms {
+    repeated THistogram HistoRecs = 1;
 }

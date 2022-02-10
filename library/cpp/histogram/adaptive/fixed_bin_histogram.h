@@ -1,26 +1,26 @@
-#pragma once 
- 
+#pragma once
+
 #include "histogram.h"
 
 #include <library/cpp/histogram/adaptive/protos/histo.pb.h>
 
 #include <util/generic/ptr.h>
-#include <util/generic/vector.h> 
+#include <util/generic/vector.h>
 #include <utility>
- 
-namespace NKiwiAggr { 
+
+namespace NKiwiAggr {
     class TFixedBinHistogram: private TNonCopyable, public IHistogram {
     private:
         static const size_t DEFAULT_TRAINING_SET_SIZE = 10000;
         static const size_t DEFAULT_INTERVALS = 100;
- 
+
         typedef std::pair<double, double> TWeightedValue; // value, weight
         THolder<TVector<TWeightedValue>> TrainingSet;
         size_t TrainingSetSize;
 
         bool IsInitialized;
         bool IsEmpty;
- 
+
         ui64 Id;
         double MinValue;
         double MaxValue;
@@ -34,15 +34,15 @@ namespace NKiwiAggr {
         i32 FirstUsedBin;
         i32 LastUsedBin;
         i32 BaseIndex;
- 
+
     public:
         TFixedBinHistogram(size_t intervals, ui64 id = 0, size_t trainingSetSize = DEFAULT_TRAINING_SET_SIZE);
         TFixedBinHistogram(const THistogram& histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, size_t trainingSetSize = DEFAULT_TRAINING_SET_SIZE);
         TFixedBinHistogram(IHistogram* histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, size_t trainingSetSize = DEFAULT_TRAINING_SET_SIZE);
- 
+
         virtual ~TFixedBinHistogram() {
         }
- 
+
         virtual void Clear();
 
         virtual void Add(double value, double weight);

@@ -20,7 +20,7 @@ RECURSE(
     blackbox/tvm2
     bloom
     boost_test
-    bstr 
+    bstr
     build_info
     build_info/ut
     capabilities

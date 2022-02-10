@@ -8,7 +8,7 @@ RECURSE(
     bigram_compiler
     blender
     bmdump
-    bstr 
+    bstr
     c++filt
     calendar_extractor
     check_formula_md5
@@ -85,7 +85,7 @@ RECURSE(
     normalize_requests
     nots
     oauth_token
-    pgmigrate 
+    pgmigrate
     pire
     print_ranking_features
     printcorpus

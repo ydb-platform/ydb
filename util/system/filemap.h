@@ -168,14 +168,14 @@ public:
 
     void Precharge(size_t pos = 0, size_t size = (size_t)-1) const;
 
-    void SetSequential() {
-        Map_.SetSequential();
-    }
-
-    void Evict() {
-        Map_.Evict();
-    }
-
+    void SetSequential() { 
+        Map_.SetSequential(); 
+    } 
+ 
+    void Evict() { 
+        Map_.Evict(); 
+    } 
+ 
 private:
     void Flush(void* ptr, size_t size, bool sync);
 

@@ -715,9 +715,9 @@ ALLOW .* -> vendor/github.com/jinzhu/inflection
 ALLOW .* -> vendor/github.com/coredhcp/coredhcp
 ALLOW .* -> vendor/github.com/insomniacslk/dhcp
 
-# CONTRIB-2094 
-ALLOW .* -> vendor/github.com/osrg/gobgp 
- 
+# CONTRIB-2094
+ALLOW .* -> vendor/github.com/osrg/gobgp
+
 #
 # CONTRIB-2097 QUIC(HTTP/3) implementation library
 #
@@ -726,8 +726,8 @@ ALLOW .* -> vendor/github.com/lucas-clemente/quic-go
 # CONTRIB-2111 distributed lock on redis
 ALLOW .* -> vendor/github.com/go-redsync/redsync/v4
 
-ALLOW library/go/core/log/compat/logrus -> vendor/github.com/sirupsen/logrus 
- 
+ALLOW library/go/core/log/compat/logrus -> vendor/github.com/sirupsen/logrus
+
 # CONTRIB-2127
 ALLOW .* -> vendor/github.com/hashicorp/terraform-plugin-sdk/v2
 
@@ -784,7 +784,7 @@ ALLOW .* -> vendor/github.com/ThalesIgnite/crypto11
 
 # CONTRIB-2396: graphql client library
 ALLOW .* -> vendor/github.com/hasura/go-graphql-client
- 
+
 # CONTRIB-2301: RTSP 1.0 client and server library
 ALLOW .* -> vendor/github.com/aler9/gortsplib
 

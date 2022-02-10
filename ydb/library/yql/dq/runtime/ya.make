@@ -33,7 +33,7 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(dq_tasks_runner.h)
- 
+
 YQL_LAST_ABI_VERSION()
 
 END()

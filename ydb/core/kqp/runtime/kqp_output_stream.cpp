@@ -31,7 +31,7 @@ public:
         MKQL_ENSURE_S(!Partitions.empty());
         MKQL_ENSURE_S(KeyColumnTypes.size() == KeyColumnIndices.size());
 
-        SortPartitions(Partitions, KeyColumnTypes, [](const auto& partition) { return partition.Range; }); 
+        SortPartitions(Partitions, KeyColumnTypes, [](const auto& partition) { return partition.Range; });
     }
 
     bool IsFull() const override {

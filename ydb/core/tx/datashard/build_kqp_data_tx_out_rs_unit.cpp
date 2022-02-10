@@ -36,7 +36,7 @@ TBuildKqpDataTxOutRSUnit::TBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipel
 
 TBuildKqpDataTxOutRSUnit::~TBuildKqpDataTxOutRSUnit() {}
 
-bool TBuildKqpDataTxOutRSUnit::IsReadyToExecute(TOperation::TPtr) const { 
+bool TBuildKqpDataTxOutRSUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
@@ -44,7 +44,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
     const TActorContext& ctx)
 {
     TSetupSysLocks guardLocks(op, DataShard);
-    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
     DataShard.ReleaseCache(*tx);

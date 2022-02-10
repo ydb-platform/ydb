@@ -21,12 +21,12 @@
 
 namespace NYql::NDq {
 
-enum class ERunStatus : ui32 { 
-    Finished, 
+enum class ERunStatus : ui32 {
+    Finished,
     PendingInput,
     PendingOutput
-}; 
- 
+};
+
 class TRunStatusTimeMetrics {
 public:
     void UpdateStatusTime(TDuration computeCpuTime = TDuration::Zero()) {

@@ -11,29 +11,29 @@ using namespace NMiniKQL;
 class TExecuteDataTxUnit : public TExecutionUnit {
 public:
     TExecuteDataTxUnit(TDataShard& dataShard,
-                       TPipeline& pipeline); 
+                       TPipeline& pipeline);
     ~TExecuteDataTxUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
     EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext& txc, 
-                             const TActorContext& ctx) override; 
+                             TTransactionContext& txc,
+                             const TActorContext& ctx) override;
     void Complete(TOperation::TPtr op,
-                  const TActorContext& ctx) override; 
+                  const TActorContext& ctx) override;
 
 private:
     void ExecuteDataTx(TOperation::TPtr op,
-                       TTransactionContext& txc, 
-                       const TActorContext& ctx); 
+                       TTransactionContext& txc,
+                       const TActorContext& ctx);
     void AddLocksToResult(TOperation::TPtr op);
 };
 
 TExecuteDataTxUnit::TExecuteDataTxUnit(TDataShard& dataShard,
-                                       TPipeline& pipeline) 
-    : TExecutionUnit(EExecutionUnitKind::ExecuteDataTx, true, dataShard, pipeline) { 
+                                       TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::ExecuteDataTx, true, dataShard, pipeline) {
 }
 
-TExecuteDataTxUnit::~TExecuteDataTxUnit() { 
+TExecuteDataTxUnit::~TExecuteDataTxUnit() {
 }
 
 bool TExecuteDataTxUnit::IsReadyToExecute(TOperation::TPtr op) const {
@@ -50,7 +50,7 @@ bool TExecuteDataTxUnit::IsReadyToExecute(TOperation::TPtr op) const {
 }
 
 EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
-                                             TTransactionContext& txc, 
+                                             TTransactionContext& txc,
                                              const TActorContext& ctx)
 {
     if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
@@ -67,7 +67,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     }
 
     TSetupSysLocks guardLocks(op, DataShard);
-    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
     if (tx->IsTxDataReleased()) {
@@ -94,7 +94,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         }
     }
 
-    IEngineFlat* engine = tx->GetDataTx()->GetEngine(); 
+    IEngineFlat* engine = tx->GetDataTx()->GetEngine();
     Y_VERIFY_S(engine, "missing engine for " << *op << " at " << DataShard.TabletID());
 
     if (op->IsImmediate() && !tx->ReValidateKeys()) {
@@ -132,7 +132,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
             engine->PinPages(pageFaultCount);
             throw;
         }
-    } catch (const TMemoryLimitExceededException&) { 
+    } catch (const TMemoryLimitExceededException&) {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << DataShard.TabletID()
             << " exceeded memory limit " << txc.GetMemoryLimit()
             << " and requests " << txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR
@@ -170,9 +170,9 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 
 void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
                                        TTransactionContext& txc,
-                                       const TActorContext& ctx) { 
-    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
-    IEngineFlat* engine = tx->GetDataTx()->GetEngine(); 
+                                       const TActorContext& ctx) {
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
+    IEngineFlat* engine = tx->GetDataTx()->GetEngine();
 
     DataShard.ReleaseCache(*tx);
     tx->GetDataTx()->ResetCounters();
@@ -187,8 +187,8 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
         engine->AfterOutgoingReadsetsExtracted();
     }
 
-    for (auto& rs : op->InReadSets()) { 
-        for (auto& rsdata : rs.second) { 
+    for (auto& rs : op->InReadSets()) {
+        for (auto& rsdata : rs.second) {
             engine->AddIncomingReadset(rsdata.Body);
         }
     }
@@ -199,35 +199,35 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
 
     IEngineFlat::EResult engineResult = engine->Execute();
     if (engineResult != IEngineFlat::EResult::Ok) {
-        TString errorMessage = TStringBuilder() << "Datashard execution error for " << *op << " at " 
-                                                << DataShard.TabletID() << ": " << engine->GetErrors(); 
+        TString errorMessage = TStringBuilder() << "Datashard execution error for " << *op << " at "
+                                                << DataShard.TabletID() << ": " << engine->GetErrors();
 
         switch (engineResult) {
-            case IEngineFlat::EResult::ResultTooBig: 
-                LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage); 
-                break; 
-            case IEngineFlat::EResult::Cancelled: 
-                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage); 
+            case IEngineFlat::EResult::ResultTooBig:
+                LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage);
+                break;
+            case IEngineFlat::EResult::Cancelled:
+                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage);
                 Y_VERIFY(tx->GetDataTx()->CanCancel());
-                break; 
-            default: 
-                if (op->IsReadOnly() || op->IsImmediate()) { 
-                    LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage); 
-                } else { 
-                    // TODO: Kill only current datashard tablet. 
-                    Y_FAIL_S("Unexpected execution error in read-write transaction: " 
-                             << errorMessage); 
-                } 
-                break; 
+                break;
+            default:
+                if (op->IsReadOnly() || op->IsImmediate()) {
+                    LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage);
+                } else {
+                    // TODO: Kill only current datashard tablet.
+                    Y_FAIL_S("Unexpected execution error in read-write transaction: "
+                             << errorMessage);
+                }
+                break;
         }
     }
 
     if (engineResult == IEngineFlat::EResult::Cancelled)
         DataShard.IncCounter(op->IsImmediate()
-                                 ? COUNTER_IMMEDIATE_TX_CANCELLED 
-                                 : COUNTER_PLANNED_TX_CANCELLED); 
+                                 ? COUNTER_IMMEDIATE_TX_CANCELLED
+                                 : COUNTER_PLANNED_TX_CANCELLED);
 
-    auto& result = BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE); 
+    auto& result = BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     result->Record.SetOrderId(op->GetTxId());
     if (!op->IsImmediate())
         result->Record.SetStep(op->GetStep());
@@ -250,13 +250,13 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
 
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Executed operation " << *op << " at tablet " << DataShard.TabletID()
-                                      << " with status " << result->GetStatus()); 
+                                      << " with status " << result->GetStatus());
 
-    auto& counters = tx->GetDataTx()->GetCounters(); 
+    auto& counters = tx->GetDataTx()->GetCounters();
 
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Datashard execution counters for " << *op << " at "
-                                                    << DataShard.TabletID() << ": " << counters.ToString()); 
+                                                    << DataShard.TabletID() << ": " << counters.ToString());
 
     KqpUpdateDataShardStatCounters(DataShard, counters);
     if (tx->GetDataTx()->CollectStats()) {
@@ -272,20 +272,20 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
     Pipeline.AddCommittingOp(op);
 }
 
-void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op) { 
+void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op) {
     auto locks = DataShard.SysLocksTable().ApplyLocks();
     for (const auto& lock : locks) {
         if (lock.IsError()) {
             LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
                          "Lock is not set for " << *op << " at " << DataShard.TabletID()
-                                                << " lock " << lock); 
+                                                << " lock " << lock);
         }
         op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
                                 lock.SchemeShard, lock.PathId);
     }
 }
 
-void TExecuteDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) { 
+void TExecuteDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {
 }
 
 THolder<TExecutionUnit> CreateExecuteDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) {

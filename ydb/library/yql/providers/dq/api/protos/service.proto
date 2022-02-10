@@ -21,10 +21,10 @@ message ResponseMetric {
     int64 Count = 6;
 }
 
-message ExecuteQueryResult { 
-    Ydb.ResultSet result = 1; 
+message ExecuteQueryResult {
+    Ydb.ResultSet result = 1;
     bytes yson = 2;
-} 
+}
 
 message TFile {
     enum EFileType {

@@ -29,7 +29,7 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
             return TStringBuf("208 Already reported");
         case HTTP_IM_USED:
             return TStringBuf("226 IM used");
- 
+
         case HTTP_MULTIPLE_CHOICES:
             return TStringBuf("300 Multiple choices");
         case HTTP_MOVED_PERMANENTLY:

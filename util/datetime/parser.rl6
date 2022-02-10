@@ -4,55 +4,55 @@
 #include <cctype>
 #include <ctime>
 #include <numeric>
- 
+
 #include <util/datetime/parser.h>
 #include <util/generic/ymath.h>
 
- 
+
 %%{
- 
+
 machine DateTimeParserCommon;
- 
+
 sp  = ' ';
 
-action clear_int { 
+action clear_int {
     I = 0;
     Dc = 0;
-} 
- 
-action update_int { 
+}
+
+action update_int {
     I = I * 10 + (fc - '0');
     ++Dc;
-} 
- 
+}
+
 int = (digit+)
     >clear_int
     $update_int;
- 
-int1 = digit 
-    >clear_int
-    $update_int; 
 
-int2 = (digit digit) 
-    >clear_int 
-    $update_int; 
- 
+int1 = digit
+    >clear_int
+    $update_int;
+
+int2 = (digit digit)
+    >clear_int
+    $update_int;
+
 int3 = (digit digit digit)
     >clear_int
     $update_int;
 
-int4 = (digit digit digit digit) 
-    >clear_int 
-    $update_int; 
- 
-int12 = (digit digit?) 
-    >clear_int 
-    $update_int; 
+int4 = (digit digit digit digit)
+    >clear_int
+    $update_int;
+
+int12 = (digit digit?)
+    >clear_int
+    $update_int;
 
 int24 = ( digit digit ( digit digit )? )
-    >clear_int 
-    $update_int; 
- 
+    >clear_int
+    $update_int;
+
 # According to both RFC2822 and RFC2616 dates MUST be case-sensitive,
 # but Andrey fomichev@ wants relaxed parser
 
@@ -97,7 +97,7 @@ ws0 = (space*);
 dow_spec = ( wkday ',' )?;
 
 day  = int12 %set_day;
-year = int24 %set_year; 
+year = int24 %set_year;
 
 # actually it must be from 0 to 23
 hour = int2 %set_hour;
@@ -107,39 +107,39 @@ min  = int2 %set_minute;
 
 # actually it must be from 0 to 59
 sec  = int2 %set_second;
- 
+
 sec_spec  = ( ':' . sec )?;
 
-# so called "military zone offset". I hardly believe someone uses it now, but we MUST respect RFc822 
-action set_mil_offset { 
+# so called "military zone offset". I hardly believe someone uses it now, but we MUST respect RFc822
+action set_mil_offset {
     char c = (char)toupper(fc);
-    if (c == 'Z') 
+    if (c == 'Z')
         DateTimeFields.ZoneOffsetMinutes = 0;
-    else { 
-        if (c <= 'M') { 
-            // ['A'..'M'] \ 'J' 
-            if (c < 'J') 
+    else {
+        if (c <= 'M') {
+            // ['A'..'M'] \ 'J'
+            if (c < 'J')
                 DateTimeFields.ZoneOffsetMinutes = (i32)TDuration::Hours(c - 'A' + 1).Minutes();
-            else 
+            else
                 DateTimeFields.ZoneOffsetMinutes = (i32)TDuration::Hours(c - 'A').Minutes();
-        } else { 
-            // ['N'..'Y'] 
+        } else {
+            // ['N'..'Y']
             DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(c - 'N' + 1).Minutes();
-        } 
-    } 
-} 
- 
-action set_digit_offset { 
+        }
+    }
+}
+
+action set_digit_offset {
     DateTimeFields.ZoneOffsetMinutes = Sign * (i32)(TDuration::Hours(I / 100) + TDuration::Minutes(I % 100)).Minutes();
-} 
- 
-mil_zone = /[A-IK-Za-ik-z]/ $set_mil_offset; 
- 
+}
+
+mil_zone = /[A-IK-Za-ik-z]/ $set_mil_offset;
+
 # actions % were replaced with @ (when the script was migrated to ragel 5.24)
 # because ragel 5.24 does not call to the % action if it  be called at the very end of string.
 # it is a bug in ragel 5 because ragel 6.2 works correctly with % at the end of string.
 # see http://www.complang.org/ragel/ChangeLog.
- 
+
 zone = 'UT' @{ DateTimeFields.ZoneOffsetMinutes = 0; }
     | 'GMT' @{ DateTimeFields.ZoneOffsetMinutes = 0; }
     | 'EST' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(5).Minutes();}
@@ -156,11 +156,11 @@ digit_offset = ('+' | '-') > { Sign = fc == '+' ? 1 : -1; } . int4 @set_digit_of
 offset = ( zone | mil_zone | digit_offset );
 
 rfc822datetime = ws0 . dow_spec . ws0 . day . ws1 . month3 . ws1 . year . ws1 . hour . ':' . min . sec_spec . ws1 . offset . ws0;
- 
+
 main := rfc822datetime;
- 
+
 write data noerror;
- 
+
 }%%
 
 TRfc822DateTimeParserDeprecated::TRfc822DateTimeParserDeprecated() {
@@ -680,7 +680,7 @@ bool ParseRFC822DateTime(const char* input, size_t inputLen, time_t& utcTime) {
         utcTime = ParseUnsafe<TRfc822DateTimeParser, TInstant>(input, inputLen).TimeT();
         return true;
     } catch (const TDateTimeParseException&) {
-        return false; 
+        return false;
     }
 }
 
@@ -690,8 +690,8 @@ bool ParseISO8601DateTime(const char* input, size_t inputLen, time_t& utcTime) {
         return true;
     } catch (const TDateTimeParseException&) {
         return false;
-    } 
-} 
+    }
+}
 
 bool ParseHTTPDateTime(const char* input, size_t inputLen, time_t& utcTime) {
     try {

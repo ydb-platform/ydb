@@ -279,7 +279,7 @@ public:
     inline void Swap(TSocketHolder& r) noexcept {
         DoSwap(Fd_, r.Fd_);
     }
- 
+
     inline bool Closed() const noexcept {
         return Fd_ == INVALID_SOCKET;
     }

@@ -130,7 +130,7 @@ static inline char* Base64EncodeImpl(char* outstr, const unsigned char* instr, s
         if (idx + 1 < len) {
             *outstr++ = base64_etab[GetBase64EncodedIndex1(instr[idx], instr[idx + 1])];
             *outstr++ = base64_etab[GetBase64EncodedIndex2(instr[idx + 1], '\0')];
-        } else { 
+        } else {
             *outstr++ = base64_etab[GetBase64EncodedIndex1(instr[idx], '\0')];
             *outstr++ = pad;
         }

@@ -139,23 +139,23 @@ bool NX86::HaveOSXSAVE() noexcept {
 }
 
 bool NX86::HaveAVX() noexcept {
-#if defined(_x86_)
-    // http://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-optimization-manual.pdf
+#if defined(_x86_) 
+    // http://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-optimization-manual.pdf 
     // https://bugs.chromium.org/p/chromium/issues/detail?id=375968
     return HaveOSXSAVE()                           // implies HaveXSAVE()
            && (_xgetbv(0) & 6u) == 6u              // XMM state and YMM state are enabled by OS
            && ((TX86CpuInfo(0x1).ECX >> 28) & 1u); // AVX bit
 #else
-    return false;
+    return false; 
 #endif
 }
 
 bool NX86::HaveFMA() noexcept {
-    return HaveAVX() && ((TX86CpuInfo(0x1).ECX >> 12) & 1u);
-}
-
+    return HaveAVX() && ((TX86CpuInfo(0x1).ECX >> 12) & 1u); 
+} 
+ 
 bool NX86::HaveAVX2() noexcept {
-    return HaveAVX() && ((TX86CpuInfo(0x7, 0).EBX >> 5) & 1u);
+    return HaveAVX() && ((TX86CpuInfo(0x7, 0).EBX >> 5) & 1u); 
 }
 
 bool NX86::HaveBMI1() noexcept {
@@ -167,80 +167,80 @@ bool NX86::HaveBMI2() noexcept {
 }
 
 bool NX86::HaveAVX512F() noexcept {
-#if defined(_x86_)
-    // https://software.intel.com/en-us/articles/how-to-detect-knl-instruction-support
+#if defined(_x86_) 
+    // https://software.intel.com/en-us/articles/how-to-detect-knl-instruction-support 
     return HaveOSXSAVE()                           // implies HaveXSAVE()
            && (_xgetbv(0) & 6u) == 6u              // XMM state and YMM state are enabled by OS
            && ((_xgetbv(0) >> 5) & 7u) == 7u       // ZMM state is enabled by OS
            && TX86CpuInfo(0x0).EAX >= 0x7          // leaf 7 is present
            && ((TX86CpuInfo(0x7).EBX >> 16) & 1u); // AVX512F bit
-#else
-    return false;
-#endif
+#else 
+    return false; 
+#endif 
 }
 
 bool NX86::HaveAVX512DQ() noexcept {
-    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 17) & 1u);
+    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 17) & 1u); 
 }
 
 bool NX86::HaveRDSEED() noexcept {
-    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).EBX >> 18) & 1u);
+    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).EBX >> 18) & 1u); 
 }
 
 bool NX86::HaveADX() noexcept {
-    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).EBX >> 19) & 1u);
+    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).EBX >> 19) & 1u); 
 }
 
 bool NX86::HaveAVX512IFMA() noexcept {
-    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 21) & 1u);
+    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 21) & 1u); 
 }
 
 bool NX86::HavePCOMMIT() noexcept {
-    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).EBX >> 22) & 1u);
+    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).EBX >> 22) & 1u); 
 }
 
 bool NX86::HaveCLFLUSHOPT() noexcept {
-    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).EBX >> 23) & 1u);
+    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).EBX >> 23) & 1u); 
 }
 
 bool NX86::HaveCLWB() noexcept {
-    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).EBX >> 24) & 1u);
+    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).EBX >> 24) & 1u); 
 }
 
 bool NX86::HaveAVX512PF() noexcept {
-    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 26) & 1u);
+    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 26) & 1u); 
 }
 
 bool NX86::HaveAVX512ER() noexcept {
-    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 27) & 1u);
+    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 27) & 1u); 
 }
 
 bool NX86::HaveAVX512CD() noexcept {
-    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 28) & 1u);
+    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 28) & 1u); 
 }
 
 bool NX86::HaveSHA() noexcept {
-    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).EBX >> 29) & 1u);
+    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).EBX >> 29) & 1u); 
 }
 
 bool NX86::HaveAVX512BW() noexcept {
-    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 30) & 1u);
+    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 30) & 1u); 
 }
 
 bool NX86::HaveAVX512VL() noexcept {
-    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 31) & 1u);
+    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).EBX >> 31) & 1u); 
 }
 
 bool NX86::HavePREFETCHWT1() noexcept {
-    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).ECX >> 0) & 1u);
+    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x7, 0).ECX >> 0) & 1u); 
 }
 
 bool NX86::HaveAVX512VBMI() noexcept {
-    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).ECX >> 1) & 1u);
+    return HaveAVX512F() && ((TX86CpuInfo(0x7, 0).ECX >> 1) & 1u); 
 }
 
 bool NX86::HaveRDRAND() noexcept {
-    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x1).ECX >> 30) & 1u);
+    return TX86CpuInfo(0x0).EAX >= 0x7 && ((TX86CpuInfo(0x1).ECX >> 30) & 1u); 
 }
 
 const char* CpuBrand(ui32* store) noexcept {

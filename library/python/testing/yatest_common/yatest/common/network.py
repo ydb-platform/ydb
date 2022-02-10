@@ -71,7 +71,7 @@ class PortManager(object):
             retries -= 1
 
             result_port = self.get_tcp_port()
-            if not self.is_port_free(result_port, socket.SOCK_DGRAM):
+            if not self.is_port_free(result_port, socket.SOCK_DGRAM): 
                 self.release_port(result_port)
             # Don't try to _capture_port(), it's already captured in the get_tcp_port()
             return result_port
@@ -163,7 +163,7 @@ class PortManager(object):
         with self._lock:
             return self._capture_port_no_lock(port, sock_type)
 
-    def is_port_free(self, port, sock_type=socket.SOCK_STREAM):
+    def is_port_free(self, port, sock_type=socket.SOCK_STREAM): 
         sock = socket.socket(socket.AF_INET6, sock_type)
         try:
             sock.bind(('::', port))
@@ -189,14 +189,14 @@ class PortManager(object):
             filelock = library.python.filelock.FileLock(os.path.join(self._sync_dir, str(port)))
             if not filelock.acquire(blocking=False):
                 return False
-            if self.is_port_free(port, sock_type):
+            if self.is_port_free(port, sock_type): 
                 self._filelocks[port] = filelock
                 return True
             else:
                 filelock.release()
                 return False
 
-        if self.is_port_free(port, sock_type):
+        if self.is_port_free(port, sock_type): 
             self._filelocks[port] = filelock
             return True
         if filelock:

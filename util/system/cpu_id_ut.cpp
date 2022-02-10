@@ -163,10 +163,10 @@ void ExecutePOPCNTInstruction() {
 }
 
 void ExecuteBMI1Instruction() {
-    __asm__ __volatile__("tzcnt %%eax, %%eax\n"
+    __asm__ __volatile__("tzcnt %%eax, %%eax\n" 
                          :
                          :
-                         : "eax");
+                         : "eax"); 
 }
 
 void ExecuteBMI2Instruction() {

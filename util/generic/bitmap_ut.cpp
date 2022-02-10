@@ -1,7 +1,7 @@
 #include "bitmap.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #define INIT_BITMAP(bitmap, bits)                                \
     for (size_t i = 0; i < sizeof(bits) / sizeof(size_t); ++i) { \
         bitmap.Set(bits[i]);                                     \
@@ -40,23 +40,23 @@
 Y_UNIT_TEST_SUITE(TBitMapTest) {
     Y_UNIT_TEST(TestBitMap) {
         TBitMap<101> bitmap;
- 
+
         UNIT_ASSERT_EQUAL(bitmap.Size(), 101);
-        UNIT_ASSERT_EQUAL(bitmap.Count(), 0); 
-        UNIT_ASSERT_EQUAL(bitmap.FirstNonZeroBit(), 101); 
- 
+        UNIT_ASSERT_EQUAL(bitmap.Count(), 0);
+        UNIT_ASSERT_EQUAL(bitmap.FirstNonZeroBit(), 101);
+
         size_t initBits[] = {0, 50, 100, 45};
         INIT_BITMAP(bitmap, initBits);
-        bitmap.Reset(45); 
- 
-        UNIT_ASSERT_EQUAL(bitmap.FirstNonZeroBit(), 0); 
+        bitmap.Reset(45);
+
+        UNIT_ASSERT_EQUAL(bitmap.FirstNonZeroBit(), 0);
         size_t setBits[] = {0, 50, 100};
         CHECK_BITMAP(bitmap, setBits);
- 
+
         for (size_t i = 0; i < bitmap.Size(); ++i) {
             UNIT_ASSERT_EQUAL(bitmap.Get(i), bitmap.Test(i));
         }
- 
+
         UNIT_ASSERT_EQUAL(bitmap.Count(), 3);
 
         bitmap.Reset(0);
@@ -87,51 +87,51 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
         CHECK_BITMAP(bitmap, setBits);
 
         for (size_t i = 0; i < bitmap.Size(); ++i) {
-            UNIT_ASSERT_EQUAL(bitmap.Get(i), bitmap.Test(i)); 
+            UNIT_ASSERT_EQUAL(bitmap.Get(i), bitmap.Test(i));
         }
- 
-        UNIT_ASSERT_EQUAL(bitmap.Count(), 3); 
- 
-        bitmap.Reset(0); 
- 
-        UNIT_ASSERT_EQUAL(bitmap.FirstNonZeroBit(), 50); 
- 
-        bitmap.Clear(); 
- 
-        UNIT_ASSERT_EQUAL(bitmap.Count(), 0); 
+
+        UNIT_ASSERT_EQUAL(bitmap.Count(), 3);
+
+        bitmap.Reset(0);
+
+        UNIT_ASSERT_EQUAL(bitmap.FirstNonZeroBit(), 50);
+
+        bitmap.Clear();
+
+        UNIT_ASSERT_EQUAL(bitmap.Count(), 0);
         UNIT_ASSERT_EQUAL(bitmap.Empty(), true);
-    } 
- 
+    }
+
     template <class TBitMapImpl>
     void TestAndImpl() {
         TBitMapImpl bitmap1;
         TBitMapImpl bitmap2;
- 
+
         size_t initBits1[] = {10, 20, 50, 100};
         size_t initBits2[] = {10, 11, 22, 50};
 
         INIT_BITMAP(bitmap1, initBits1);
         INIT_BITMAP(bitmap2, initBits2);
 
-        bitmap1.And(bitmap2); 
- 
-        UNIT_ASSERT_EQUAL(bitmap1.Count(), 2); 
-        UNIT_ASSERT_EQUAL(bitmap2.Count(), 4); 
- 
+        bitmap1.And(bitmap2);
+
+        UNIT_ASSERT_EQUAL(bitmap1.Count(), 2);
+        UNIT_ASSERT_EQUAL(bitmap2.Count(), 4);
+
         size_t resBits[] = {10, 50};
- 
+
         CHECK_BITMAP(bitmap1, resBits);
         CHECK_BITMAP(bitmap2, initBits2);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestAndFixed) {
         TestAndImpl<TBitMap<101>>();
     }
- 
+
     Y_UNIT_TEST(TestAndDyn) {
         TestAndImpl<TDynBitMap>();
     }
- 
+
     template <class TBitMapImpl>
     void TestOrImpl() {
         TBitMapImpl bitmap1;
@@ -143,13 +143,13 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
         INIT_BITMAP(bitmap1, initBits1);
         INIT_BITMAP(bitmap2, initBits2);
 
-        bitmap1.Or(bitmap2); 
- 
-        UNIT_ASSERT_EQUAL(bitmap1.Count(), 7); 
-        UNIT_ASSERT_EQUAL(bitmap2.Count(), 4); 
- 
+        bitmap1.Or(bitmap2);
+
+        UNIT_ASSERT_EQUAL(bitmap1.Count(), 7);
+        UNIT_ASSERT_EQUAL(bitmap2.Count(), 4);
+
         size_t resBits[] = {0, 1, 10, 11, 22, 50, 76};
- 
+
         CHECK_BITMAP(bitmap1, resBits);
         CHECK_BITMAP(bitmap2, initBits2);
 
@@ -548,7 +548,7 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
         bitmapDynamic.Set(128);
         UNIT_ASSERT_UNEQUAL(bitmapFixed.Hash(), bitmapDynamic.Hash());
     }
- 
+
     Y_UNIT_TEST(TestSetResetRange) {
         // Single chunk
         using TBitMap1Chunk = TBitMap<64>;

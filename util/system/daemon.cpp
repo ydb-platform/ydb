@@ -13,13 +13,13 @@
 #endif
 
 #include "daemon.h"
- 
-#ifdef _unix_ 
+
+#ifdef _unix_
 using namespace NDaemonMaker;
- 
+
 static bool Fork(EParent parent) {
     pid_t pid = fork();
- 
+
     if (pid > 0) {
         int status = 0;
         while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
@@ -32,13 +32,13 @@ static bool Fork(EParent parent) {
     } else if (pid < 0) {
         ythrow TSystemError() << "Cannot fork";
     }
- 
+
     if (setsid() < 0) {
         ythrow TSystemError() << "Cannot setsid";
     }
- 
+
     pid = fork();
- 
+
     if (pid > 0) {
         _exit(0);
     } else if (pid < 0) {
@@ -46,7 +46,7 @@ static bool Fork(EParent parent) {
     }
     return false;
 }
- 
+
 #endif
 
 static void CloseFromToExcept(int from, int to, const int* except) {

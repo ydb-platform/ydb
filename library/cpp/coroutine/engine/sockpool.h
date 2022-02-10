@@ -9,9 +9,9 @@
 
 extern void SetCommonSockOpts(SOCKET sock, const struct sockaddr* sa = nullptr);
 
-class TSocketPool; 
- 
-class TPooledSocket { 
+class TSocketPool;
+
+class TPooledSocket {
     class TImpl: public TIntrusiveListItem<TImpl>, public TSimpleRefCount<TImpl, TImpl> {
     public:
         TImpl(SOCKET fd, TSocketPool* pool) noexcept
@@ -102,7 +102,7 @@ public:
     ~TPooledSocket() {
         if (UncaughtException() && !!Impl_) {
             Close();
-        } 
+        }
     }
 
     operator SOCKET() const noexcept {
@@ -119,9 +119,9 @@ public:
 
 private:
     TIntrusivePtr<TImpl> Impl_;
-}; 
- 
-struct TConnectData { 
+};
+
+struct TConnectData {
     TConnectData(TCont* cont, const TInstant& deadLine)
         : Cont(cont)
         , DeadLine(deadLine)
@@ -136,9 +136,9 @@ struct TConnectData {
 
     TCont* Cont;
     const TInstant DeadLine;
-}; 
- 
-class TSocketPool { 
+};
+
+class TSocketPool {
     friend class TPooledSocket::TImpl;
 
 public:
@@ -202,8 +202,8 @@ private:
 
             if (ret->IsOpen()) {
                 return ret.Release();
-            } 
-        } 
+            }
+        }
         return nullptr;
     }
 
@@ -220,12 +220,12 @@ private:
     using TSockets = TIntrusiveListWithAutoDelete<TPooledSocket::TImpl, TDelete>;
     TSockets Pool_;
     TMutex Mutex_;
-}; 
- 
+};
+
 inline void TPooledSocket::TImpl::ReturnToPool() noexcept {
     Pool_->Release(this);
-} 
- 
+}
+
 
 class TContIO: public IInputStream, public IOutputStream {
 public:
@@ -250,4 +250,4 @@ public:
 private:
     SOCKET Fd_;
     TCont* Cont_;
-}; 
+};

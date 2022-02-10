@@ -310,7 +310,7 @@ struct TDynamicBitMapTraits {
 
 template <class TTraits>
 class TBitMapOps {
-public: 
+public:
     using TChunk = typename TTraits::TChunk;
     using TThis = TBitMapOps<TTraits>;
 
@@ -417,21 +417,21 @@ private:
 
 public:
     TBitMapOps() = default;
- 
+
     TBitMapOps(TChunk val) {
         Mask.Data[0] = val;
         Mask.Sanitize();
-    } 
- 
+    }
+
     TBitMapOps(const TThis&) = default;
- 
+
     template <class T>
     TBitMapOps(const TBitMapOps<T>& bitmap)
         : Mask(bitmap.Mask.Data, bitmap.Mask.GetChunkCapacity())
     {
         Mask.Sanitize();
-    } 
- 
+    }
+
     template <class T>
     Y_FORCE_INLINE bool operator==(const TBitMapOps<T>& bitmap) const {
         return Equal(bitmap);
@@ -589,19 +589,19 @@ public:
     }
 
     Y_FORCE_INLINE bool Test(size_t n) const {
-        return Get(n); 
-    } 
- 
+        return Get(n);
+    }
+
     Y_FORCE_INLINE TThis& Push(bool val) {
         LShift(1);
         return val ? Set(0) : *this;
-    } 
- 
+    }
+
     Y_FORCE_INLINE bool Pop() {
         bool val = Get(0);
         return RShift(1), val;
-    } 
- 
+    }
+
     // Clear entire bitmap. Current capacity is kept unchanged
     Y_FORCE_INLINE TThis& Clear() {
         for (size_t i = 0; i < Mask.GetChunkCapacity(); ++i) {
@@ -685,13 +685,13 @@ public:
         for (size_t i = bitmap.Mask.GetChunkCapacity(); i < Mask.GetChunkCapacity(); ++i)
             Mask.Data[i] = 0;
         return *this;
-    } 
- 
+    }
+
     template <class T>
     Y_FORCE_INLINE TThis& And(const TBitMapOps<T>& bitmap) {
         return And(TThis(bitmap));
-    } 
- 
+    }
+
     Y_FORCE_INLINE TThis& And(const TChunk& val) {
         Mask.Data[0] &= val;
         for (size_t i = 1; i < Mask.GetChunkCapacity(); ++i)
@@ -911,7 +911,7 @@ public:
         return l.Compare(r);
     }
 
-    size_t FirstNonZeroBit() const { 
+    size_t FirstNonZeroBit() const {
         for (size_t i = 0; i < Mask.GetChunkCapacity(); ++i) {
             if (Mask.Data[i]) {
                 // CountTrailingZeroBits() expects unsigned types not smaller than unsigned int. So, convert before calling
@@ -937,26 +937,26 @@ public:
                 const TChunk val = Mask.Data[i] & ((~TChunk(0)) << offset);
                 if (val) {
                     return BitsPerChunk * i + CountTrailingZeroBits(TIntType(val));
-                } 
+                }
                 // Continue with other chunks
                 ++i;
-            } 
+            }
 
             for (; i < Mask.GetChunkCapacity(); ++i) {
                 if (Mask.Data[i]) {
                     return BitsPerChunk * i + CountTrailingZeroBits(TIntType(Mask.Data[i]));
                 }
             }
-        } 
+        }
         return Size();
-    } 
- 
+    }
+
     Y_FORCE_INLINE size_t Count() const {
-        size_t count = 0; 
+        size_t count = 0;
         for (size_t i = 0; i < Mask.GetChunkCapacity(); ++i)
             count += ::NBitMapPrivate::CountBitsPrivate(Mask.Data[i]);
-        return count; 
-    } 
+        return count;
+    }
 
     void Save(IOutputStream* out) const {
         ::Save(out, ui8(sizeof(TChunk)));
@@ -1008,7 +1008,7 @@ public:
     constexpr size_t GetChunkCount() const noexcept {
         return Mask.GetChunkCapacity();
     }
-}; 
+};
 
 template <class X, class Y>
 inline TBitMapOps<X> operator&(const TBitMapOps<X>& x, const TBitMapOps<Y>& y) {

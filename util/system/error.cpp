@@ -84,9 +84,9 @@ void LastSystemErrorText(char* str, size_t size, int code) {
     FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, code, 0, str, DWORD(size), 0);
     Strip(str);
 #elif defined(_sun_)
-    strfcpy(str, strerror(code), size); 
+    strfcpy(str, strerror(code), size);
 #elif defined(_freebsd_) || defined(_darwin_) || defined(_musl_) || defined(_bionic_)
-    strerror_r(code, str, size); 
+    strerror_r(code, str, size);
 #elif defined(_linux_) | defined(_cygwin_)
     char* msg = strerror_r(code, str, size);
     strncpy(str, msg, size);

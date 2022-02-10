@@ -11,7 +11,7 @@ RECURSE(
     aws
     blis
     boost
-    cityhash-1.0.2 
+    cityhash-1.0.2
     cmph
     cpuinfo
     exiv2

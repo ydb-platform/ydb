@@ -18,11 +18,11 @@ T RandomNumber();
  */
 template <class T>
 T RandomNumber(T max);
- 
-/* 
- * Re-initialize random state - useful after forking in multi-process programs. 
- */ 
-void ResetRandomState(); 
+
+/*
+ * Re-initialize random state - useful after forking in multi-process programs.
+ */
+void ResetRandomState();
 
 /*
  * Set random SEED

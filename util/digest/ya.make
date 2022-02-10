@@ -1,7 +1,7 @@
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
- 
-PROVIDES(cityhash) 
+
+PROVIDES(cityhash)
 
 RECURSE(
     benchmark

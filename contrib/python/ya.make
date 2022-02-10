@@ -817,7 +817,7 @@ RECURSE(
     pyfst
     pygit2
     PyGithub
-    Pygments 
+    Pygments
     pygrib
     pygtrie
     PyHamcrest

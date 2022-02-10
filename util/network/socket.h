@@ -236,7 +236,7 @@ private:
 
 class TSocket;
 
-class TSocketHolder: public TMoveOnly { 
+class TSocketHolder: public TMoveOnly {
 public:
     inline TSocketHolder()
         : Fd_(INVALID_SOCKET)
@@ -249,10 +249,10 @@ public:
     }
 
     inline TSocketHolder(TSocketHolder&& other) noexcept {
-        Fd_ = other.Fd_; 
-        other.Fd_ = INVALID_SOCKET; 
-    } 
- 
+        Fd_ = other.Fd_;
+        other.Fd_ = INVALID_SOCKET;
+    }
+
     inline TSocketHolder& operator=(TSocketHolder&& other) noexcept {
         Close();
         Swap(other);

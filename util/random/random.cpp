@@ -86,8 +86,8 @@ DEF_RND(unsigned long)
 DEF_RND(unsigned short)
 DEF_RND(unsigned long long)
 
-#undef DEF_RND 
- 
+#undef DEF_RND
+
 template <>
 bool RandomNumber<bool>() {
     return RandomNumber<ui8>() % 2 == 0;
@@ -113,11 +113,11 @@ template <>
 long double RandomNumber<long double>() {
     return RandomNumber<double>();
 }
- 
-void ResetRandomState() { 
-    *GetRndGen<ui32>() = TRndGen<ui32>(); 
-    *GetRndGen<ui64>() = TRndGen<ui64>(); 
-} 
+
+void ResetRandomState() {
+    *GetRndGen<ui32>() = TRndGen<ui32>();
+    *GetRndGen<ui64>() = TRndGen<ui64>();
+}
 
 void SetRandomSeed(int seed) {
     *GetRndGen<ui32>() = TRndGen<ui32>(seed);

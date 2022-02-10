@@ -16,6 +16,6 @@ IInputStream& EntropyPool();
 IInputStream& Seed();
 
 /*
- * Re-initialize entropy pool - useful after forking in multi-process programs. 
+ * Re-initialize entropy pool - useful after forking in multi-process programs.
  */
-void ResetEntropyPool(); 
+void ResetEntropyPool();

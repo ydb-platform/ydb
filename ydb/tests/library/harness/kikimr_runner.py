@@ -161,8 +161,8 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.sqs_port is not None:
             command.extend(["--sqs-port=%d" % self.sqs_port])
 
-        logger.info('CFG_DIR_PATH="%s"', self.__config_path)
-        logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH'))
+        logger.info('CFG_DIR_PATH="%s"', self.__config_path) 
+        logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH')) 
         return command
 
     def stop(self):

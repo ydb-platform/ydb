@@ -184,7 +184,7 @@ class KikimrConfigGenerator(object):
         self.yaml_config["net_classifier_config"]["net_data_file_path"] = os.path.join(self.__output_path, 'netData.tsv')
         with open(self.yaml_config["net_classifier_config"]["net_data_file_path"], "w") as net_data_file:
             net_data_file.write("")
-
+ 
         if enable_metering:
             self.__set_enable_metering()
 

@@ -60,9 +60,9 @@ message TVolumeConfig {
     optional uint32 PerformanceProfileMaxWriteBandwidth = 23;
     optional uint32 PerformanceProfileMaxWriteIops = 24;
     optional uint32 PerformanceProfileBurstPercentage = 25;
-
-    optional string BaseDiskId = 26;
-    optional string BaseDiskCheckpointId = 27;
+ 
+    optional string BaseDiskId = 26; 
+    optional string BaseDiskCheckpointId = 27; 
 
     optional bool SizeDecreaseAllowed = 28;
 
@@ -93,9 +93,9 @@ message TVolumeConfig {
 
     // Encryption key hash
     optional bytes EncryptionKeyHash = 39;
-
-    // Indicates that volume does not belong to user directly, but used for system needs
-    optional bool IsSystem = 40;
+ 
+    // Indicates that volume does not belong to user directly, but used for system needs 
+    optional bool IsSystem = 40; 
 
     // Channel descriptions for volume tablets
     repeated TChannelProfile VolumeExplicitChannelProfiles = 41;

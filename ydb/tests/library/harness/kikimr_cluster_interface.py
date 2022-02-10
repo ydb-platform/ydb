@@ -65,7 +65,7 @@ class KiKiMRClusterInterface(object):
         pass
 
     @abc.abstractmethod
-    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None):
+    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None): 
         """
         Adds storage pool to the cluster
         :param erasure: Erasure for storage pool

@@ -95,9 +95,9 @@ class KikimrConfigGenerator(object):
             enable_sqs=False,
             domain_name='Root',
             suppress_version_check=True,
-            static_pdisk_size=PDISK_SIZE,
-            dynamic_pdisk_size=PDISK_SIZE,
-            dynamic_pdisks=[],
+            static_pdisk_size=PDISK_SIZE, 
+            dynamic_pdisk_size=PDISK_SIZE, 
+            dynamic_pdisks=[], 
             dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0)],
             n_to_select=None,
             use_log_files=True,
@@ -116,7 +116,7 @@ class KikimrConfigGenerator(object):
         self.use_log_files = use_log_files
         self.suppress_version_check = suppress_version_check
         self._pdisk_store_path = pdisk_store_path
-        self.static_pdisk_size = static_pdisk_size
+        self.static_pdisk_size = static_pdisk_size 
         self.app_config = config_pb2.TAppConfig()
         self.port_allocator = KikimrPortManagerPortAllocator() if port_allocator is None else port_allocator
         erasure = Erasure.NONE if erasure is None else erasure
@@ -154,7 +154,7 @@ class KikimrConfigGenerator(object):
         self.__use_in_memory_pdisks = use_in_memory_pdisks or os.getenv('YDB_USE_IN_MEMORY_PDISKS') == 'true'
         self.static_erasure = erasure
         self.domain_name = domain_name
-        self.__number_of_pdisks_per_node = 1 + len(dynamic_pdisks)
+        self.__number_of_pdisks_per_node = 1 + len(dynamic_pdisks) 
         self.__load_udfs = load_udfs
         self.__udfs_path = udfs_path
         self.__yql_config_path = yql_config_path
@@ -167,11 +167,11 @@ class KikimrConfigGenerator(object):
         self.__additional_log_configs = {} if additional_log_configs is None else additional_log_configs
         self.__additional_log_configs.update(get_additional_log_configs())
 
-        self.dynamic_pdisk_size = dynamic_pdisk_size
-        self.dynamic_storage_pools = dynamic_storage_pools
-
+        self.dynamic_pdisk_size = dynamic_pdisk_size 
+        self.dynamic_storage_pools = dynamic_storage_pools 
+ 
         self.__dynamic_pdisks = dynamic_pdisks
-
+ 
         self.__output_path = output_path or yatest_common.output_path()
 
         self.yaml_config = load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.n_to_select, self.__node_ids, self.__additional_log_configs)

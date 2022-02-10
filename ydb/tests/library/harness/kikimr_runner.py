@@ -107,10 +107,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if pdisk_path.startswith('SectorMap'):
             return
 
-        with open(pdisk_path, "wb") as out:
-            out.seek(disk_size - 1)
+        with open(pdisk_path, "wb") as out: 
+            out.seek(disk_size - 1) 
             out.write(b'\0')
-
+ 
     def __make_run_command(self):
         command = [self.__configurator.binary_path, "server"]
         if self.__common_udfs_dir is not None:
@@ -293,18 +293,18 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self.__add_bs_box()
 
         pools = {}
-
-        for p in self.__configurator.dynamic_storage_pools:
-            self.add_storage_pool(
-                name=p['name'],
-                kind=p['kind'],
-                pdisk_user_kind=p['pdisk_user_kind'],
-            )
+ 
+        for p in self.__configurator.dynamic_storage_pools: 
+            self.add_storage_pool( 
+                name=p['name'], 
+                kind=p['kind'], 
+                pdisk_user_kind=p['pdisk_user_kind'], 
+            ) 
             pools[p['name']] = p['kind']
-
-        self.client.bind_storage_pools(self.domain_name, pools)
+ 
+        self.client.bind_storage_pools(self.domain_name, pools) 
         default_pool_name = list(pools.keys())[0]
-        self.default_channel_bindings = {idx: default_pool_name for idx in range(3)}
+        self.default_channel_bindings = {idx: default_pool_name for idx in range(3)} 
         logger.info("Cluster started and initialized")
 
         self.client.add_config_item(
@@ -480,28 +480,28 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 if retries == 0:
                     raise
 
-    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None):
+    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None): 
         if erasure is None:
             erasure = self.__configurator.static_erasure
         request = bs.TConfigRequest()
         cmd = request.Command.add()
         cmd.DefineStoragePool.BoxId = 1
-
-        pool_id = cmd.DefineStoragePool.StoragePoolId = next(self.__storage_pool_id_allocator)
-        if name is None:
-            name = "dynamic_storage_pool:%s" % pool_id
-        cmd.DefineStoragePool.StoragePoolId = pool_id
-        cmd.DefineStoragePool.Name = name
-        cmd.DefineStoragePool.Kind = kind
+ 
+        pool_id = cmd.DefineStoragePool.StoragePoolId = next(self.__storage_pool_id_allocator) 
+        if name is None: 
+            name = "dynamic_storage_pool:%s" % pool_id 
+        cmd.DefineStoragePool.StoragePoolId = pool_id 
+        cmd.DefineStoragePool.Name = name 
+        cmd.DefineStoragePool.Kind = kind 
         cmd.DefineStoragePool.ErasureSpecies = str(erasure)
         cmd.DefineStoragePool.VDiskKind = "Default"
         cmd.DefineStoragePool.NumGroups = 2
-
-        pdisk_filter = cmd.DefineStoragePool.PDiskFilter.add()
-        pdisk_filter.Property.add().Type = 0
-        pdisk_filter.Property.add().Kind = pdisk_user_kind
+ 
+        pdisk_filter = cmd.DefineStoragePool.PDiskFilter.add() 
+        pdisk_filter.Property.add().Type = 0 
+        pdisk_filter.Property.add().Kind = pdisk_user_kind 
         self._bs_config_invoke(request)
-        return name
+        return name 
 
     def __wait_for_bs_controller_to_start(self):
         monitors = [node.monitor for node in self.nodes.values()]

@@ -41,7 +41,7 @@ RECURSE(
     coturn
     courgette_bsdiff
     cppkafka
-    crcutil 
+    crcutil
     crfsuite
     croaring
     ctemplate

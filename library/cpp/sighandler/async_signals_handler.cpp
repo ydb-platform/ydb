@@ -2,31 +2,31 @@
 
 #include <util/system/platform.h>
 
-#if !defined(_win_) 
+#if !defined(_win_)
 
 #include <errno.h>
-#include <fcntl.h> 
+#include <fcntl.h>
 #include <signal.h>
-#include <string.h> 
+#include <string.h>
 
-#include <unistd.h> 
+#include <unistd.h>
 
 #if defined(_linux_)
 #include <dlfcn.h>
 #endif
 
-#include <util/system/atomic.h> 
-#include <util/system/defaults.h> 
-#include <util/system/event.h> 
-#include <util/system/rwlock.h> 
-#include <util/system/spinlock.h> 
-#include <util/system/thread.h> 
-#include <util/system/yassert.h> 
+#include <util/system/atomic.h>
+#include <util/system/defaults.h>
+#include <util/system/event.h>
+#include <util/system/rwlock.h>
+#include <util/system/spinlock.h>
+#include <util/system/thread.h>
+#include <util/system/yassert.h>
 #include <util/generic/hash.h>
- 
+
 namespace {
     volatile int SIGNAL_PIPE_WRITE_FD = 0; // will be initialized in ctor
- 
+
     void WriteAllOrDie(const int fd, const void* buf, size_t bufsize) {
         size_t totalBytesWritten = 0;
 
@@ -36,14 +36,14 @@ namespace {
             Y_VERIFY(result >= 0 || (result == -1 && errno == EINTR), "write failed: %s (errno = %d)", strerror(errno), errno);
             totalBytesWritten += static_cast<size_t>(result);
         }
-    } 
- 
+    }
+
     void PipeWriterSignalHandler(int, siginfo_t* info, void*) {
         const ui8 signum = static_cast<ui8>(info->si_signo);
 
         WriteAllOrDie(SIGNAL_PIPE_WRITE_FD, &signum, 1);
     }
- 
+
     // Handler for the "asynchronous" unix signals (those which can occur
     // at arbitrary point of execution and have no need to be reacted on instantly
     // and/or to preserve execution context at the point of interrupt).
@@ -60,7 +60,7 @@ namespace {
 
         TAtomic ShouldDie;
         TSystemEvent DieEvent;
- 
+
         static void* ThreadFunc(void* data) {
             reinterpret_cast<TAsyncSignalsHandler*>(data)->RealThreadFunc();
 
@@ -85,7 +85,7 @@ namespace {
                 } else if (bytesRead == -1) {
                     continue;
                 }
- 
+
                 {
                     TReadGuard dnd(HandlersLock);
 
@@ -104,7 +104,7 @@ namespace {
         {
             int filedes[2] = {-1};
 
-#ifdef _linux_ 
+#ifdef _linux_
             int result;
 
             {
@@ -126,22 +126,22 @@ namespace {
             }
 
             if (result != 0 && errno == ENOSYS) { // linux older than 2.6.27 returns "not implemented"
-#endif 
+#endif
                 Y_VERIFY(pipe(filedes) == 0, "pipe failed: %s (errno = %d)", strerror(errno), errno);
- 
+
                 SignalPipeReadFd = filedes[0];
                 SIGNAL_PIPE_WRITE_FD = filedes[1];
 
                 Y_VERIFY(fcntl(SignalPipeReadFd, F_SETFD, FD_CLOEXEC) == 0, "fcntl failed: %s (errno = %d)", strerror(errno), errno);
                 Y_VERIFY(fcntl(SIGNAL_PIPE_WRITE_FD, F_SETFD, FD_CLOEXEC) == 0, "fcntl failed: %s (errno = %d)", strerror(errno), errno);
-#ifdef _linux_ 
+#ifdef _linux_
             } else {
                 Y_VERIFY(result == 0, "pipe2 failed: %s (errno = %d)", strerror(errno), errno);
                 SignalPipeReadFd = filedes[0];
                 SIGNAL_PIPE_WRITE_FD = filedes[1];
             }
-#endif 
- 
+#endif
+
             Thread.Start();
             Thread.Detach();
         }
@@ -154,9 +154,9 @@ namespace {
             DieEvent.WaitT(TDuration::Seconds(15));
 
             /* may cause VERIFY failure in signal handler, propably we should leave it to process clean procedure
-        close(SIGNAL_PIPE_WRITE_FD); 
-        close(SignalPipeReadFd); 
-*/ 
+        close(SIGNAL_PIPE_WRITE_FD);
+        close(SignalPipeReadFd);
+*/
         }
 
         bool DoInstall(int signum, TAutoPtr<TEventHandler> handler) {
@@ -179,7 +179,7 @@ namespace {
 
                 Y_VERIFY(!sigaction(signum, &a, nullptr), "sigaction failed: %s (errno = %d)", strerror(errno), errno);
             }
-        } 
+        }
     };
 
     // This pointer is never deleted - yeah, it's intended memory leak.
@@ -190,27 +190,27 @@ namespace {
     //  - destruct variable, ignoring thread - which will cause data corruption.
     TAsyncSignalsHandler* SIGNALS_HANDLER = nullptr;
 }
- 
+
 void SetAsyncSignalHandler(int signum, TAutoPtr<TEventHandler> handler) {
-    static TAtomic lock; 
+    static TAtomic lock;
 
     if (Y_UNLIKELY(SIGNALS_HANDLER == nullptr)) {
-        TGuard<TAtomic> dnd(lock); 
+        TGuard<TAtomic> dnd(lock);
 
         if (SIGNALS_HANDLER == nullptr) {
-            // NEVERS GETS DESTROYED 
-            SIGNALS_HANDLER = new TAsyncSignalsHandler(); 
-        } 
-    } 
+            // NEVERS GETS DESTROYED
+            SIGNALS_HANDLER = new TAsyncSignalsHandler();
+        }
+    }
 
-    SIGNALS_HANDLER->Install(signum, handler); 
+    SIGNALS_HANDLER->Install(signum, handler);
 }
 
-#else //_win_ 
+#else //_win_
 
-void SetAsyncSignalHandler(int, TAutoPtr<TEventHandler>) { 
-    // TODO: it's really easy to port using _pipe, _read and _write, but it must be tested properly. 
-} 
+void SetAsyncSignalHandler(int, TAutoPtr<TEventHandler>) {
+    // TODO: it's really easy to port using _pipe, _read and _write, but it must be tested properly.
+}
 
 #endif
 
@@ -224,7 +224,7 @@ namespace {
             if (func)
                 Func = func;
         }
- 
+
         int Handle(int signum) override {
             if (Func) {
                 Func(signum);

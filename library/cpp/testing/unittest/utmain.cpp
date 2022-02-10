@@ -269,20 +269,20 @@ public:
     inline void SetForkTests(bool val) {
         ForkTests = val;
     }
- 
+
     inline bool GetForkTests() const override {
         return ForkTests;
     }
- 
+
     inline void SetIsForked(bool val) {
         IsForked = val;
         SetIsTTY(IsForked || CalcIsTTY(stderr));
     }
- 
+
     inline bool GetIsForked() const override {
         return IsForked;
     }
- 
+
     inline void SetLoop(bool loop) {
         Loop = loop;
     }
@@ -469,47 +469,47 @@ private:
 
         TList<TString> args(1, "--is-forked-internal");
         args.push_back(Sprintf("+%s::%s", suite.data(), name));
- 
+
         // stdin is ignored - unittest should not need them...
         TShellCommand cmd(AppName, args,
                           TShellCommandOptions().SetUseShell(false).SetCloseAllFdsOnExec(true).SetAsync(false).SetLatency(1));
         cmd.Run();
- 
+
         const TString& err = cmd.GetError();
         const size_t msgIndex = err.find(ForkCorrectExitMsg);
- 
+
         // everything is printed by parent process except test's result output ("good" or "fail")
         // which is printed by child. If there was no output - parent process prints default message.
         ForkExitedCorrectly = msgIndex != TString::npos;
- 
+
         // TODO: stderr output is always printed after stdout
         Cout.Write(cmd.GetOutput());
         Cerr.Write(err.c_str(), Min(msgIndex, err.size()));
- 
+
         // do not use default case, so gcc will warn if new element in enum will be added
         switch (cmd.GetStatus()) {
-            case TShellCommand::SHELL_FINISHED: { 
-                // test could fail with zero status if it calls exit(0) in the middle. 
-                if (ForkExitedCorrectly) 
-                    break; 
+            case TShellCommand::SHELL_FINISHED: {
+                // test could fail with zero status if it calls exit(0) in the middle.
+                if (ForkExitedCorrectly)
+                    break;
                 [[fallthrough]];
-            } 
-            case TShellCommand::SHELL_ERROR: { 
-                ythrow yexception() << "Forked test failed"; 
-            } 
- 
-            case TShellCommand::SHELL_NONE: { 
-                ythrow yexception() << "Forked test finished with unknown status"; 
-            } 
-            case TShellCommand::SHELL_RUNNING: { 
+            }
+            case TShellCommand::SHELL_ERROR: {
+                ythrow yexception() << "Forked test failed";
+            }
+
+            case TShellCommand::SHELL_NONE: {
+                ythrow yexception() << "Forked test finished with unknown status";
+            }
+            case TShellCommand::SHELL_RUNNING: {
                 Y_VERIFY(false, "This can't happen, we used sync mode, it's a bug!");
-            } 
-            case TShellCommand::SHELL_INTERNAL_ERROR: { 
-                ythrow yexception() << "Forked test failed with internal error: " << cmd.GetInternalError(); 
-            } 
-        } 
+            }
+            case TShellCommand::SHELL_INTERNAL_ERROR: {
+                ythrow yexception() << "Forked test failed with internal error: " << cmd.GetInternalError();
+            }
+        }
     }
- 
+
 private:
     bool PrintBeforeSuite_;
     bool PrintBeforeTest_;
@@ -618,7 +618,7 @@ static int DoUsage(const char* progname) {
          << "  --show-fails          print a list of all failed tests at the end\n"
          << "  --dont-show-fails     do not print a list of all failed tests at the end\n"
          << "  --continue-on-fail    print a message and continue running test suite instead of break\n"
-         << "  --print-times         print wall clock duration of each test\n" 
+         << "  --print-times         print wall clock duration of each test\n"
          << "  --fork-tests          run each test in a separate process\n"
          << "  --trace-path          path to the trace file to be generated\n"
          << "  --trace-path-append   path to the trace file to be appended\n";
@@ -664,7 +664,7 @@ int NUnitTest::RunMain(int argc, char** argv) {
         NPlugin::OnStartMain(argc, argv);
         Y_DEFER { NPlugin::OnStopMain(argc, argv); };
 
-        TColoredProcessor processor(GetExecPath()); 
+        TColoredProcessor processor(GetExecPath());
         IOutputStream* listStream = &Cout;
         THolder<IOutputStream> listFile;
 
@@ -689,10 +689,10 @@ int NUnitTest::RunMain(int argc, char** argv) {
                     processor.SetPrintBeforeSuite(false);
                 } else if (strcmp(name, "--print-before-test=false") == 0) {
                     processor.SetPrintBeforeTest(false);
-                } else if (strcmp(name, "--print-before-suite") == 0) { 
-                    processor.SetPrintBeforeSuite(true); 
-                } else if (strcmp(name, "--print-before-test") == 0) { 
-                    processor.SetPrintBeforeTest(true); 
+                } else if (strcmp(name, "--print-before-suite") == 0) {
+                    processor.SetPrintBeforeSuite(true);
+                } else if (strcmp(name, "--print-before-test") == 0) {
+                    processor.SetPrintBeforeTest(true);
                 } else if (strcmp(name, "--show-fails") == 0) {
                     processor.SetShowFails(true);
                 } else if (strcmp(name, "--dont-show-fails") == 0) {
@@ -707,10 +707,10 @@ int NUnitTest::RunMain(int argc, char** argv) {
                 } else if (strcmp(name, "--to") == 0) {
                     ++i;
                     processor.SetEnd(FromString<size_t>(argv[i]));
-                } else if (strcmp(name, "--fork-tests") == 0) { 
-                    processor.SetForkTests(true); 
+                } else if (strcmp(name, "--fork-tests") == 0) {
+                    processor.SetForkTests(true);
                 } else if (strcmp(name, "--is-forked-internal") == 0) {
-                    processor.SetIsForked(true); 
+                    processor.SetIsForked(true);
                 } else if (strcmp(name, "--loop") == 0) {
                     processor.SetLoop(true);
                 } else if (strcmp(name, "--trace-path") == 0) {

@@ -2,7 +2,7 @@
 
 #include "fwd.h"
 
-#include <util/str_stl.h> 
+#include <util/str_stl.h>
 
 /**
  * UUID generation
@@ -58,13 +58,13 @@ struct TGUIDHash {
     }
 };
 
-template <> 
+template <>
 struct THash<TGUID> {
     constexpr size_t operator()(const TGUID& g) const noexcept {
-        return (unsigned int)TGUIDHash()(g); 
-    } 
-}; 
- 
+        return (unsigned int)TGUIDHash()(g);
+    }
+};
+
 void CreateGuid(TGUID* res);
 TString GetGuidAsString(const TGUID& g);
 TString CreateGuidAsString();

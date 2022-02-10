@@ -148,7 +148,7 @@ namespace NMemInfo {
         }
         struct proc_taskinfo taskInfo;
         const int r = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &taskInfo, sizeof(taskInfo));
- 
+
         if (r != sizeof(taskInfo)) {
             int err = errno;
             TString errtxt = LastSystemErrorText(err);

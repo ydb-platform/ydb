@@ -85,7 +85,7 @@ response_status_line = http_version ws+ status_code reason_phrase? eol %set_stat
 
 ############ request status line #################
 action set_request_uri {
-    if (request_hd && buflen < FETCHER_URL_MAX) {
+    if (request_hd && buflen < FETCHER_URL_MAX) { 
         if (!request_hd->request_uri.empty()) {
             return -2;
         }
@@ -183,7 +183,7 @@ accept_ranges   = "accept-ranges"i def %beg_accept_ranges ar_tokenlist eoh %set_
 action beg_mime { guard(base_hd->mime_type); }
 action set_mime { setguarded(base_hd->mime_type, I); }
 action set_charset {
-    if (buflen < FETCHER_URL_MAX) {
+    if (buflen < FETCHER_URL_MAX) { 
         buf[buflen++] = 0;
         base_hd->charset = EncodingHintByName((const char*)buf);
     }
@@ -252,7 +252,7 @@ action set_location {
     while (buflen > 0 && (buf[buflen - 1] == ' ' || buf[buflen - 1] == '\t')) {
         buflen --;
     }
-    if (hd && buflen < FETCHER_URL_MAX) {
+    if (hd && buflen < FETCHER_URL_MAX) { 
         hd->location = TStringBuf(buf, buflen);
     }
 }
@@ -303,7 +303,7 @@ x_robots_tag = "x-robots-tag"i def >{ AcceptingXRobots = true; } x_robots_value 
 
 ################# rel_canonical ###############
 action set_canonical {
-    if (hd && buflen < FETCHER_URL_MAX) {
+    if (hd && buflen < FETCHER_URL_MAX) { 
         hd->rel_canonical = TStringBuf(buf, buflen);
     }
 }
@@ -368,17 +368,17 @@ qop_auth_option = "auth"i @1 %{if(auth_hd) auth_hd->qop_auth = true; };
 qop_option = ( qop_auth_option @1 ) | (( token-"auth"i) $0 );
 
 auth_good_param = ( "nonce"i /=/ auth_quoted_str )
-                    %{if (auth_hd && buflen < FETCHER_URL_MAX-1) {
+                    %{if (auth_hd && buflen < FETCHER_URL_MAX-1) { 
                         buf[buflen++] = 0;
                         auth_hd->nonce = strdup((const char*)buf);
                      }}
                 | ( "realm"i /=/ auth_quoted_str )
-                    %{if (auth_hd && buflen < FETCHER_URL_MAX-1) {
+                    %{if (auth_hd && buflen < FETCHER_URL_MAX-1) { 
                         buf[buflen++] = 0;
                         auth_hd->realm = strdup((const char*)buf);
                      }}
                 | ( "opaque"i /=/ auth_quoted_str )
-                     %{if (auth_hd && buflen < FETCHER_URL_MAX-1) {
+                     %{if (auth_hd && buflen < FETCHER_URL_MAX-1) { 
                          buf[buflen++] = 0;
                          auth_hd->opaque = strdup((const char*)buf);
                       }}

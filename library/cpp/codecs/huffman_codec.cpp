@@ -235,20 +235,20 @@ namespace NCodecs {
             THuffmanCache(const THuffmanCodec::TImpl& encoder);
 
             void Decode(NBitIO::TBitInput& in, TBuffer& out) const;
-        }; 
- 
+        };
+
         THolder<THuffmanCache> Cache;
- 
+
     public:
         TImpl()
             : SubTablesNum(1)
         {
             Invalid.CodeLength = 255;
         }
- 
+
         ui8 Encode(TStringBuf in, TBuffer& out) const {
             out.Clear();
- 
+
             if (in.empty()) {
                 return 0;
             }
@@ -302,8 +302,8 @@ namespace NCodecs {
                 } else {
                     while (ReadNextChar(bin, out)) {
                     }
-                } 
-            } 
+                }
+            }
         }
 
         Y_FORCE_INLINE int ReadNextChar(NBitIO::TBitInput& bin, TBuffer& out) const {
@@ -517,13 +517,13 @@ namespace NCodecs {
                     DecodeCache.push_back(*it);
                 }
                 totalBits += bits;
-            } 
-        } 
+            }
+        }
         DecodeCache.push_back(0);
         CacheEntries.shrink_to_fit();
         DecodeCache.shrink_to_fit();
-    } 
- 
+    }
+
     void THuffmanCodec::TImpl::THuffmanCache::Decode(NBitIO::TBitInput& bin, TBuffer& out) const {
         int bits = 0;
         ui64 code = 0;
@@ -541,13 +541,13 @@ namespace NCodecs {
                 bin.Back(bits);
                 if (!Original.ReadNextChar(bin, out))
                     break;
- 
+
                 code = 0;
                 bits = 0;
             }
-        } 
-    } 
- 
+        }
+    }
+
     THuffmanCodec::THuffmanCodec()
         : Impl(new TImpl)
     {
@@ -588,5 +588,5 @@ namespace NCodecs {
         Impl->LearnByFreqs(freqs);
         Trained = true;
     }
- 
+
 }

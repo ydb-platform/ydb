@@ -45,5 +45,5 @@ RECURSE(
     solartrie/test
     solartrie/test/tests
     solartrie/ut
-    split 
+    split
 )

@@ -140,17 +140,17 @@ private:
 
         {
             TMultiMap<ui16, ui32> multimap;
-
-            multimap.emplace((ui16)1, 2);
-            multimap.emplace((ui16)2, 3);
-            multimap.emplace((ui16)2, 4);
-            multimap.emplace((ui16)2, 5);
-            multimap.emplace((ui16)3, 6);
-
-            Save(&S_, multimap);
-        }
-
-        {
+ 
+            multimap.emplace((ui16)1, 2); 
+            multimap.emplace((ui16)2, 3); 
+            multimap.emplace((ui16)2, 4); 
+            multimap.emplace((ui16)2, 5); 
+            multimap.emplace((ui16)3, 6); 
+ 
+            Save(&S_, multimap); 
+        } 
+ 
+        { 
             TSaveHelper helper;
 
             Save(&S_, helper);
@@ -271,25 +271,25 @@ private:
 
         {
             TMultiMap<ui16, ui32> multimap;
-
-            Load(&S_, multimap);
-            UNIT_ASSERT_EQUAL(multimap.size(), 5);
-            UNIT_ASSERT_EQUAL(multimap.find((ui16)1)->second, 2);
-            UNIT_ASSERT_EQUAL(multimap.find((ui16)3)->second, 6);
-
+ 
+            Load(&S_, multimap); 
+            UNIT_ASSERT_EQUAL(multimap.size(), 5); 
+            UNIT_ASSERT_EQUAL(multimap.find((ui16)1)->second, 2); 
+            UNIT_ASSERT_EQUAL(multimap.find((ui16)3)->second, 6); 
+ 
             THashSet<ui32> values;
-            auto range = multimap.equal_range((ui16)2);
-            for (auto i = range.first; i != range.second; ++i) {
-                values.insert(i->second);
-            }
-
-            UNIT_ASSERT_EQUAL(values.size(), 3);
+            auto range = multimap.equal_range((ui16)2); 
+            for (auto i = range.first; i != range.second; ++i) { 
+                values.insert(i->second); 
+            } 
+ 
+            UNIT_ASSERT_EQUAL(values.size(), 3); 
             UNIT_ASSERT_EQUAL(values.contains(3), true);
             UNIT_ASSERT_EQUAL(values.contains(4), true);
             UNIT_ASSERT_EQUAL(values.contains(5), true);
-        }
-
-        {
+        } 
+ 
+        { 
             TSaveHelper helper;
 
             Load(&S_, helper);

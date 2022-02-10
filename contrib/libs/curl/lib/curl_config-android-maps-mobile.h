@@ -540,7 +540,7 @@
 /* #undef HAVE_PROTO_BSDSOCKET_H */
 
 /* if you have <pthread.h> */
-#define HAVE_PTHREAD_H 1
+#define HAVE_PTHREAD_H 1 
 
 /* Define to 1 if you have the <pwd.h> header file. */
 #define HAVE_PWD_H 1
@@ -924,7 +924,7 @@
 /* #undef USE_AMISSL */
 
 /* Define to enable c-ares support */
-/* #define USE_ARES 1 */
+/* #define USE_ARES 1 */ 
 
 /* if GnuTLS is enabled */
 /* #undef USE_GNUTLS */
@@ -975,7 +975,7 @@
 /* #undef USE_SECTRANSP */
 
 /* if you want POSIX threaded DNS lookup */
-#define USE_THREADS_POSIX 1
+#define USE_THREADS_POSIX 1 
 
 /* if you want Win32 threaded DNS lookup */
 /* #undef USE_THREADS_WIN32 */

@@ -26,7 +26,7 @@
 #define NGHTTP2_OPTION_H
 
 #ifdef HAVE_CONFIG_H
-#  include <config.h>
+#  include <config.h> 
 #endif /* HAVE_CONFIG_H */
 
 #include <nghttp2/nghttp2.h>
@@ -66,7 +66,7 @@ typedef enum {
   NGHTTP2_OPT_MAX_SEND_HEADER_BLOCK_LENGTH = 1 << 8,
   NGHTTP2_OPT_MAX_DEFLATE_DYNAMIC_TABLE_SIZE = 1 << 9,
   NGHTTP2_OPT_NO_CLOSED_STREAMS = 1 << 10,
-  NGHTTP2_OPT_MAX_OUTBOUND_ACK = 1 << 11,
+  NGHTTP2_OPT_MAX_OUTBOUND_ACK = 1 << 11, 
   NGHTTP2_OPT_MAX_SETTINGS = 1 << 12,
 } nghttp2_option_flag;
 
@@ -83,10 +83,10 @@ struct nghttp2_option {
    */
   size_t max_deflate_dynamic_table_size;
   /**
-   * NGHTTP2_OPT_MAX_OUTBOUND_ACK
-   */
-  size_t max_outbound_ack;
-  /**
+   * NGHTTP2_OPT_MAX_OUTBOUND_ACK 
+   */ 
+  size_t max_outbound_ack; 
+  /** 
    * NGHTTP2_OPT_MAX_SETTINGS
    */
   size_t max_settings;

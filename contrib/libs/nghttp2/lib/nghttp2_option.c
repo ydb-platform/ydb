@@ -86,10 +86,10 @@ void nghttp2_option_set_builtin_recv_extension_type(nghttp2_option *option,
     option->opt_set_mask |= NGHTTP2_OPT_BUILTIN_RECV_EXT_TYPES;
     option->builtin_recv_ext_types |= NGHTTP2_TYPEMASK_ALTSVC;
     return;
-  case NGHTTP2_ORIGIN:
-    option->opt_set_mask |= NGHTTP2_OPT_BUILTIN_RECV_EXT_TYPES;
-    option->builtin_recv_ext_types |= NGHTTP2_TYPEMASK_ORIGIN;
-    return;
+  case NGHTTP2_ORIGIN: 
+    option->opt_set_mask |= NGHTTP2_OPT_BUILTIN_RECV_EXT_TYPES; 
+    option->builtin_recv_ext_types |= NGHTTP2_TYPEMASK_ORIGIN; 
+    return; 
   default:
     return;
   }
@@ -116,11 +116,11 @@ void nghttp2_option_set_no_closed_streams(nghttp2_option *option, int val) {
   option->opt_set_mask |= NGHTTP2_OPT_NO_CLOSED_STREAMS;
   option->no_closed_streams = val;
 }
-
-void nghttp2_option_set_max_outbound_ack(nghttp2_option *option, size_t val) {
-  option->opt_set_mask |= NGHTTP2_OPT_MAX_OUTBOUND_ACK;
-  option->max_outbound_ack = val;
-}
+ 
+void nghttp2_option_set_max_outbound_ack(nghttp2_option *option, size_t val) { 
+  option->opt_set_mask |= NGHTTP2_OPT_MAX_OUTBOUND_ACK; 
+  option->max_outbound_ack = val; 
+} 
 
 void nghttp2_option_set_max_settings(nghttp2_option *option, size_t val) {
   option->opt_set_mask |= NGHTTP2_OPT_MAX_SETTINGS;

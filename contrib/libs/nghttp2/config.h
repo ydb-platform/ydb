@@ -37,8 +37,8 @@
 /* Define to 1 if your system has a working `chown' function. */
 #define HAVE_CHOWN 1
 
-/* define if the compiler supports basic C++14 syntax */
-#define HAVE_CXX14 1
+/* define if the compiler supports basic C++14 syntax */ 
+#define HAVE_CXX14 1 
 
 /* Define to 1 if you have the declaration of `initgroups', and to 0 if you
    don't. */

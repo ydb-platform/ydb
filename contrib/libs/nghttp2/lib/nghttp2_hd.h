@@ -26,7 +26,7 @@
 #define NGHTTP2_HD_H
 
 #ifdef HAVE_CONFIG_H
-#  include <config.h>
+#  include <config.h> 
 #endif /* HAVE_CONFIG_H */
 
 #include <nghttp2/nghttp2.h>
@@ -111,7 +111,7 @@ typedef enum {
   NGHTTP2_TOKEN_KEEP_ALIVE,
   NGHTTP2_TOKEN_PROXY_CONNECTION,
   NGHTTP2_TOKEN_UPGRADE,
-  NGHTTP2_TOKEN__PROTOCOL,
+  NGHTTP2_TOKEN__PROTOCOL, 
 } nghttp2_token;
 
 struct nghttp2_hd_entry;
@@ -430,10 +430,10 @@ ssize_t nghttp2_hd_huff_decode(nghttp2_hd_huff_decode_context *ctx,
                                nghttp2_buf *buf, const uint8_t *src,
                                size_t srclen, int fin);
 
-/*
- * nghttp2_hd_huff_decode_failure_state returns nonzero if |ctx|
- * indicates that huffman decoding context is in failure state.
- */
-int nghttp2_hd_huff_decode_failure_state(nghttp2_hd_huff_decode_context *ctx);
-
+/* 
+ * nghttp2_hd_huff_decode_failure_state returns nonzero if |ctx| 
+ * indicates that huffman decoding context is in failure state. 
+ */ 
+int nghttp2_hd_huff_decode_failure_state(nghttp2_hd_huff_decode_context *ctx); 
+ 
 #endif /* NGHTTP2_HD_H */

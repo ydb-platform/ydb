@@ -37,14 +37,14 @@
 #  define curl_mutex_t           CRITICAL_SECTION
 #  define curl_thread_t          HANDLE
 #  define curl_thread_t_null     (HANDLE)0
-/* The Windows init macro is made to return 0 on success so that it behaves the
-   same as pthreads init which returns 0 on success. */
+/* The Windows init macro is made to return 0 on success so that it behaves the 
+   same as pthreads init which returns 0 on success. */ 
 #  if !defined(_WIN32_WINNT) || !defined(_WIN32_WINNT_VISTA) || \
       (_WIN32_WINNT < _WIN32_WINNT_VISTA) || \
       (defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR))
-#    define Curl_mutex_init(m)   (InitializeCriticalSection(m), 0)
+#    define Curl_mutex_init(m)   (InitializeCriticalSection(m), 0) 
 #  else
-#    define Curl_mutex_init(m)   (!InitializeCriticalSectionEx(m, 0, 1))
+#    define Curl_mutex_init(m)   (!InitializeCriticalSectionEx(m, 0, 1)) 
 #  endif
 #  define Curl_mutex_acquire(m)  EnterCriticalSection(m)
 #  define Curl_mutex_release(m)  LeaveCriticalSection(m)

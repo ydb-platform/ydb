@@ -1249,8 +1249,8 @@ ConnectionExists(struct Curl_easy *data,
       }
 #endif
 
-      DEBUGASSERT(!check->data || GOOD_EASY_HANDLE(check->data));
-
+      DEBUGASSERT(!check->data || GOOD_EASY_HANDLE(check->data)); 
+ 
       if(!canmultiplex && check->data)
         /* this request can't be multiplexed but the checked connection is
            already in use so we skip it */

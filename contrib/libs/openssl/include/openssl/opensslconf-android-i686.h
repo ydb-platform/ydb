@@ -191,9 +191,9 @@ extern "C" {
 #if !defined(OPENSSL_SYS_UEFI)
 # define BN_LLONG
 /* Only one for the following should be defined */
-# undef SIXTY_FOUR_BIT_LONG
+# undef SIXTY_FOUR_BIT_LONG 
 # undef SIXTY_FOUR_BIT
-# define THIRTY_TWO_BIT
+# define THIRTY_TWO_BIT 
 #endif
 
 #define RC4_INT unsigned int

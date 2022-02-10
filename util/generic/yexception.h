@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "bt_exception.h"
 #include "strbuf.h"
 #include "string.h"
@@ -48,7 +48,7 @@ namespace NPrivateException {
 
         const char* what() const noexcept override;
         virtual const TBackTrace* BackTrace() const noexcept;
-
+ 
         template <class T>
         inline void Append(const T& t) {
             TTempBufCuttingWrapperOutput tempBuf(Buf_);
@@ -153,7 +153,7 @@ namespace NPrivate {
 }
 
 void fputs(const std::exception& e, FILE* f = stderr);
-
+ 
 TString CurrentExceptionMessage();
 
 /*

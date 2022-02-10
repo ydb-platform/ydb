@@ -24,7 +24,7 @@ enum MimeTypes {
     MIME_EXCEL = MIME_XLS,
     MIME_PPT = 11,
     MIME_IMAGE_JPG = 12,
-    MIME_IMAGE_PJPG = 13,
+    MIME_IMAGE_PJPG = 13, 
     MIME_IMAGE_PNG = 14,
     MIME_IMAGE_GIF = 15,
     MIME_DOCX = 16,
@@ -62,7 +62,7 @@ enum MimeTypes {
 };
 
 extern const char* MimeNames[MIME_MAX];
-
+ 
 const char* mimetypeByExt(const char* fname, const char* check_ext = nullptr);
 MimeTypes mimeByStr(const char* mimeStr);
 MimeTypes mimeByStr(const TStringBuf& mimeStr);

@@ -25,14 +25,14 @@ public:
     using value_type = typename string_hash<ui32, HashFcn, EqualTo>::value_type;
     using size_type = typename string_hash<ui32, HashFcn, EqualTo>::size_type;
     using pool_size_type = typename string_hash<ui32, HashFcn, EqualTo>::pool_size_type;
-
-    using string_hash<ui32, HashFcn, EqualTo>::pool;
-    using string_hash<ui32, HashFcn, EqualTo>::size;
-    using string_hash<ui32, HashFcn, EqualTo>::find;
-    using string_hash<ui32, HashFcn, EqualTo>::end;
-    using string_hash<ui32, HashFcn, EqualTo>::insert_copy;
-    using string_hash<ui32, HashFcn, EqualTo>::clear_hash;
-
+ 
+    using string_hash<ui32, HashFcn, EqualTo>::pool; 
+    using string_hash<ui32, HashFcn, EqualTo>::size; 
+    using string_hash<ui32, HashFcn, EqualTo>::find; 
+    using string_hash<ui32, HashFcn, EqualTo>::end; 
+    using string_hash<ui32, HashFcn, EqualTo>::insert_copy; 
+    using string_hash<ui32, HashFcn, EqualTo>::clear_hash; 
+ 
     atomizer() {
         order.reserve(HASH_SIZE_DEFAULT);
     }
@@ -104,7 +104,7 @@ public:
             order[(*I).second - 1] = (*I).first;
     }
 };
-
+ 
 template <class T, class HashFcn, class EqualTo>
 class super_atomizer: public string_hash<ui32, HashFcn, EqualTo> {
 private:

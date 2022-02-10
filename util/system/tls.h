@@ -155,7 +155,7 @@ namespace NTls {
     using TDtor = void (*)(void*);
 
     class TKey {
-    public:
+    public: 
         TKey(TDtor dtor);
         TKey(TKey&&) noexcept;
         ~TKey();
@@ -168,7 +168,7 @@ namespace NTls {
     private:
         class TImpl;
         THolder<TImpl> Impl_;
-    };
+    }; 
 
     struct TCleaner {
         inline ~TCleaner() {

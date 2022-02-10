@@ -12,7 +12,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
 #include <util/generic/singleton.h>
-
+ 
 #include <cstdlib>
 
 namespace {

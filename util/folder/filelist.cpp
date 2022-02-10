@@ -3,7 +3,7 @@
 #include "iterator.h"
 
 #include <util/system/defaults.h>
-
+ 
 void TFileEntitiesList::Fill(const TString& dirname, TStringBuf prefix, TStringBuf suffix, int depth, bool sort) {
     TDirIterator::TOptions opts;
     opts.SetMaxLevel(depth);
@@ -34,7 +34,7 @@ void TFileEntitiesList::Fill(const TString& dirname, TStringBuf prefix, TStringB
             ++FileNamesSize;
             FileNames.Append(filename.data(), filename.size() + 1);
         }
-    }
-
+    } 
+ 
     Restart();
-}
+} 

@@ -2,14 +2,14 @@
 
 #include "platform.h"
 
-#if defined _unix_
+#if defined _unix_ 
     #define LOCSLASH_C '/'
     #define LOCSLASH_S "/"
-#else
+#else 
     #define LOCSLASH_C '\\'
     #define LOCSLASH_S "\\"
-#endif // _unix_
-
+#endif // _unix_ 
+ 
 #if defined(__INTEL_COMPILER) && defined(__cplusplus)
     #include <new>
 #endif

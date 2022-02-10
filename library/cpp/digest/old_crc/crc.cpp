@@ -1,10 +1,10 @@
 #include "crc.h"
-
+ 
 #include <library/cpp/digest/old_crc/crc.inc>
 
 #include <util/system/defaults.h>
 
-static const ui64 CRCTAB64[256] = {
+static const ui64 CRCTAB64[256] = { 
     ULL(0x0000000000000000),
     ULL(0xE543279765927881),
     ULL(0x2FC568B9AEB68983),
@@ -261,8 +261,8 @@ static const ui64 CRCTAB64[256] = {
     ULL(0x8B8AF709E5AF8488),
     ULL(0x410CB8272E8B758A),
     ULL(0xA44F9FB04B190D0B),
-};
-
+}; 
+ 
 const ui32* crctab16 = CRCTAB16;
 const ui32* crctab32 = CRCTAB32;
 const ui64* crctab64 = CRCTAB64;

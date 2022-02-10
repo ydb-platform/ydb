@@ -107,7 +107,7 @@ RECURSE(
     json/test
     json/test/py2
     json/test/py3
-    langdetect 
+    langdetect
     langmask
     langs
     luigi

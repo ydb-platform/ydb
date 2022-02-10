@@ -222,14 +222,14 @@ TString MD5::Calc(const TArrayRef<const ui8>& data) {
 
 TString MD5::CalcRaw(TStringBuf data) {
     return CalcRaw(MakeUnsignedArrayRef(data));
-} 
- 
+}
+
 TString MD5::CalcRaw(const TArrayRef<const ui8>& data) {
     TString result;
     result.ReserveAndResize(16);
     MD5().Update(data).Final(reinterpret_cast<ui8*>(result.begin()));
-    return result; 
-} 
+    return result;
+}
 
 ui64 MD5::CalcHalfMix(const char* data, size_t len) {
     return CalcHalfMix(MakeUnsignedArrayRef(data, len));

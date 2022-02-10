@@ -92,28 +92,28 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EQUAL(root.Node("h:text", false, *ctxt).Value<TString>(), "Некоторый текст");
     }
     Y_UNIT_TEST(XmlNodes) {
-        using namespace NXml; 
-        TDocument xml("<?xml version=\"1.0\"?>\n" 
-                      "<root>qq<a><b>asdfg</b></a>ww<c></c></root>", 
-                      NXml::TDocument::String); 
-        TNode root = xml.Root(); 
+        using namespace NXml;
+        TDocument xml("<?xml version=\"1.0\"?>\n"
+                      "<root>qq<a><b>asdfg</b></a>ww<c></c></root>",
+                      NXml::TDocument::String);
+        TNode root = xml.Root();
         UNIT_ASSERT_EQUAL(root.Value<TString>(), "qqasdfgww");
-        TConstNode node = root.FirstChild(); 
-        UNIT_ASSERT_EQUAL(node.IsText(), true); 
+        TConstNode node = root.FirstChild();
+        UNIT_ASSERT_EQUAL(node.IsText(), true);
         UNIT_ASSERT_EQUAL(node.Value<TString>(), "qq");
-        node = node.NextSibling(); 
-        UNIT_ASSERT_EQUAL(node.IsText(), false); 
-        UNIT_ASSERT_EQUAL(node.Name(), "a"); 
+        node = node.NextSibling();
+        UNIT_ASSERT_EQUAL(node.IsText(), false);
+        UNIT_ASSERT_EQUAL(node.Name(), "a");
         UNIT_ASSERT_EQUAL(node.Value<TString>(), "asdfg");
-        node = node.NextSibling(); 
-        UNIT_ASSERT_EQUAL(node.IsText(), true); 
+        node = node.NextSibling();
+        UNIT_ASSERT_EQUAL(node.IsText(), true);
         UNIT_ASSERT_EQUAL(node.Value<TString>(), "ww");
-        node = node.NextSibling(); 
-        UNIT_ASSERT_EQUAL(node.IsText(), false); 
-        UNIT_ASSERT_EQUAL(node.Name(), "c"); 
+        node = node.NextSibling();
+        UNIT_ASSERT_EQUAL(node.IsText(), false);
+        UNIT_ASSERT_EQUAL(node.Name(), "c");
         UNIT_ASSERT_EQUAL(node.Value<TString>(), "");
-        node = node.NextSibling(); 
-        UNIT_ASSERT_EQUAL(node.IsNull(), true); 
+        node = node.NextSibling();
+        UNIT_ASSERT_EQUAL(node.IsNull(), true);
         TStringStream iterLog;
         for (const auto& node2 : root.Nodes("/root/*")) {
             iterLog << node2.Name() << ';';
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EXCEPTION(node.Name(), yexception);
         UNIT_ASSERT_EXCEPTION(node.Value<TString>(), yexception);
         UNIT_ASSERT_EXCEPTION(node.IsText(), yexception);
-    } 
+    }
     Y_UNIT_TEST(DefVal) {
         using namespace NXml;
         TDocument xml("<?xml version=\"1.0\"?>\n"

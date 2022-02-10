@@ -83,7 +83,7 @@ private:
 private:
     T* T_;
 };
- 
+
 /*
  * {
  *     auto guard = Guard(Lock_);

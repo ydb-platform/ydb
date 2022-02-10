@@ -163,7 +163,7 @@
 (let variance_0_1_traits_factory_raw (lambda '(list_type) (Apply variance_traits_factory_raw list_type (Bool '0) (Bool '1))))
 (let variance_1_1_traits_factory_raw (lambda '(list_type) (Apply variance_traits_factory_raw list_type (Bool '1) (Bool '1))))
 
-# list_type:type
+# list_type:type 
 # doesn't support optional values
 (let correlation_traits_factory_raw (lambda '(list_type) (block '(
     (let init (lambda '(value) '((Uint64 '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (* (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))))))
@@ -176,9 +176,9 @@
         (let dividend (* (Nth state '3) (Nth state '0)))
         (let dividend (- dividend (* (Nth state '1) (Nth state '2))))
         (let divisor1 (* (Nth state '4) (Nth state '0)))
-        (let divisor1 (- divisor1 (* (Nth state '1) (Nth state '1))))
+        (let divisor1 (- divisor1 (* (Nth state '1) (Nth state '1)))) 
         (let divisor2 (* (Nth state '5) (Nth state '0)))
-        (let divisor2 (- divisor2 (* (Nth state '2) (Nth state '2))))
+        (let divisor2 (- divisor2 (* (Nth state '2) (Nth state '2)))) 
         (return (/ dividend (Apply (Udf 'Math.Sqrt) (* divisor1 divisor2))))
     ))))
     (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
@@ -205,7 +205,7 @@
 (let covariance_population_traits_factory_raw (lambda '(list_type) (Apply covariance_traits_factory_raw list_type (Bool '0))))
 (let covariance_sample_traits_factory_raw (lambda '(list_type) (Apply covariance_traits_factory_raw list_type (Bool '1))))
 
-# list_type:type histogram:atom value:lambda weight:lambda intervals:integer
+# list_type:type histogram:atom value:lambda weight:lambda intervals:integer 
 # doesn't support optional values
 (let histogram_traits_factory_raw (lambda '(list_type histogram value weight intervals) (block '(
     (let init (lambda '(row parent) (NamedApply (Udf (Combine histogram '_Create)) '((Apply value row) (Apply weight row) intervals) (AsStruct) (DependsOn parent))))
@@ -243,10 +243,10 @@
     (return (AggregationTraits value_type init update save load merge finish (EmptyList)))
 ))))
 
-# list_type:type n:ui32 buffer:ui32
-# doesn't support optional values
-(let topfreq_traits_factory_raw (lambda '(list_type n buffer) (block '(
-    (let value_type (ListItemType list_type))
+# list_type:type n:ui32 buffer:ui32 
+# doesn't support optional values 
+(let topfreq_traits_factory_raw (lambda '(list_type n buffer) (block '( 
+    (let value_type (ListItemType list_type)) 
     (let vector_element_type (TupleType (DataType 'Uint64) value_type))
     (let serialized_type (TupleType (DataType 'Uint32) (DataType 'Uint32) (ListType vector_element_type)))
 
@@ -260,16 +260,16 @@
     (let UdfTopFreqDeserialize (Udf 'TopFreq.TopFreq_Deserialize (Void) (TupleType (TupleType serialized_type) (StructType) value_type)))
     (let UdfTopFreqGet (Udf 'TopFreq.TopFreq_Get (Void) (TupleType (TupleType resource_type (DataType 'Uint32)) (StructType) value_type)))
 
-    (let init (lambda '(value parent) (NamedApply UdfTopFreqCreate '(value buffer) (AsStruct) (DependsOn parent))))
-    (let update (lambda '(value state parent) (NamedApply UdfTopFreqAddValue '(state value) (AsStruct) (DependsOn parent))))
-    (let save (lambda '(state) (Apply UdfTopFreqSerialize state)))
-    (let load (lambda '(state) (Apply UdfTopFreqDeserialize state)))
-    (let merge (lambda '(one two) (Apply UdfTopFreqMerge one two)))
-    (let finish (lambda '(state) (Apply UdfTopFreqGet state n)))
+    (let init (lambda '(value parent) (NamedApply UdfTopFreqCreate '(value buffer) (AsStruct) (DependsOn parent)))) 
+    (let update (lambda '(value state parent) (NamedApply UdfTopFreqAddValue '(state value) (AsStruct) (DependsOn parent)))) 
+    (let save (lambda '(state) (Apply UdfTopFreqSerialize state))) 
+    (let load (lambda '(state) (Apply UdfTopFreqDeserialize state))) 
+    (let merge (lambda '(one two) (Apply UdfTopFreqMerge one two))) 
+    (let finish (lambda '(state) (Apply UdfTopFreqGet state n))) 
 
     (return (AggregationTraits value_type init update save load merge finish (EmptyList)))
-))))
-
+)))) 
+ 
 # list_type:type extractor:lambda count:ui32 is_top:atom
 # doesn't support optional values
 (let top_traits_factory_raw (lambda '(list_type extractor count is_top) (block '(
@@ -576,16 +576,16 @@
 
 # list_type:type n:double
 # support optional values
-(let percentile_traits_factory_opt (lambda '(list_type n) (Apply optional_traits_factory_parent list_type (lambda '(list_type) (Apply percentile_traits_factory_raw list_type n)))))
+(let percentile_traits_factory_opt (lambda '(list_type n) (Apply optional_traits_factory_parent list_type (lambda '(list_type) (Apply percentile_traits_factory_raw list_type n))))) 
 
 # list_type:type count:ui32
 # support optional values
 (let set_traits_factory_opt (lambda '(list_type count) (Apply flatten_traits_factory_parent list_type (lambda '(list_type) (Apply set_traits_factory_raw list_type count)))))
 
-# list_type:type n:ui32 buffer:ui32
-# support optional values
+# list_type:type n:ui32 buffer:ui32 
+# support optional values 
 (let topfreq_traits_factory_opt (lambda '(list_type n buffer) (Apply flatten_traits_factory_parent list_type (lambda '(list_type) (Apply topfreq_traits_factory_raw list_type n buffer)))))
-
+ 
 # list_type:type
 # support optional values
 (let hyperloglog_traits_factory_opt (lambda '(list_type precision) (Apply optional_traits_factory_parent list_type (lambda '(list_type) (Apply hyperloglog_traits_factory_raw list_type precision)))))
@@ -653,16 +653,16 @@
 
 # list_type:type extractor:lambda n:double
 # support optional values
-(let percentile_traits_factory (lambda '(list_type extractor n) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply percentile_traits_factory_opt list_type n)))))
+(let percentile_traits_factory (lambda '(list_type extractor n) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply percentile_traits_factory_opt list_type n))))) 
 
 # list_type:type extractor:lambda count:ui32
 # support optional values
 (let set_traits_factory (lambda '(list_type extractor count) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply set_traits_factory_opt list_type count)))))
 
-# list_type:type extractor:lambda n:ui32 buffer:ui32
-# support optional values
-(let topfreq_traits_factory (lambda '(list_type extractor n buffer) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply topfreq_traits_factory_opt list_type n buffer)))))
-
+# list_type:type extractor:lambda n:ui32 buffer:ui32 
+# support optional values 
+(let topfreq_traits_factory (lambda '(list_type extractor n buffer) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply topfreq_traits_factory_opt list_type n buffer))))) 
+ 
 # list_type:type extractor:lambda precision:ui32
 # support optional values
 (let hyperloglog_traits_factory (lambda '(list_type extractor precision) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply hyperloglog_traits_factory_opt list_type precision)))))
@@ -851,21 +851,21 @@
 # deprecated
 (let min_by_traits_factory (lambda '(list_type first second limit) (Apply compare_by_traits_factory list_type (lambda '(one two) (AggrLess one two)) first second limit)))
 (let max_by_traits_factory (lambda '(list_type first second limit) (Apply compare_by_traits_factory list_type (lambda '(one two) (AggrLess two one)) first second limit)))
-
+ 
 (let min_by_traits_factory1 (lambda '(list_type first second) (Apply compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess one two)) first second (Void))))
 (let max_by_traits_factory1 (lambda '(list_type first second) (Apply compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess two one)) first second (Void))))
 
 (let min_by_traits_factory2 (lambda '(list_type first second limit) (Apply list_compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess one two)) first second limit)))
 (let max_by_traits_factory2 (lambda '(list_type first second limit) (Apply list_compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess two one)) first second limit)))
 
-(let avg_if_traits_factory (lambda '(list_type payload predicate)
-(Apply avg_traits_factory list_type (lambda '(value) (FlatOptionalIf (Coalesce (Apply predicate value) (Bool '0)) (block '(
-    (let pl (Apply payload value))
-    (return (MatchType pl 'Optional (lambda '() pl) (lambda '() (Just pl)))))))))))
-(let sum_if_traits_factory (lambda '(list_type payload predicate)
-(Apply sum_traits_factory list_type (lambda '(value) (FlatOptionalIf (Coalesce (Apply predicate value) (Bool '0)) (block '(
-    (let pl (Apply payload value))
-    (return (MatchType pl 'Optional (lambda '() pl) (lambda '() (Just pl)))))))))))
+(let avg_if_traits_factory (lambda '(list_type payload predicate) 
+(Apply avg_traits_factory list_type (lambda '(value) (FlatOptionalIf (Coalesce (Apply predicate value) (Bool '0)) (block '( 
+    (let pl (Apply payload value)) 
+    (return (MatchType pl 'Optional (lambda '() pl) (lambda '() (Just pl))))))))))) 
+(let sum_if_traits_factory (lambda '(list_type payload predicate) 
+(Apply sum_traits_factory list_type (lambda '(value) (FlatOptionalIf (Coalesce (Apply predicate value) (Bool '0)) (block '( 
+    (let pl (Apply payload value)) 
+    (return (MatchType pl 'Optional (lambda '() pl) (lambda '() (Just pl))))))))))) 
 
 (let top_bottom_traits_factory (lambda '(list_type extractor count is_top)
     (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type)
@@ -891,7 +891,7 @@
 (export min_traits_factory)
 (export max_traits_factory)
 (export sum_traits_factory)
-(export sum_if_traits_factory)
+(export sum_if_traits_factory) 
 (export count_traits_factory)
 (export count_all_traits_factory)
 (export count_if_traits_factory)
@@ -903,7 +903,7 @@
 (export or_traits_factory)
 (export xor_traits_factory)
 (export avg_traits_factory)
-(export avg_if_traits_factory)
+(export avg_if_traits_factory) 
 (export list_traits_factory)
 (export list2_traits_factory)
 (export min_by_traits_factory)
@@ -929,7 +929,7 @@
 (export udaf_traits_factory)
 (export percentile_traits_factory)
 (export set_traits_factory)
-(export topfreq_traits_factory)
+(export topfreq_traits_factory) 
 (export hyperloglog_traits_factory)
 (export top_traits_factory)
 (export bottom_traits_factory)

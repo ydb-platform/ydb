@@ -8165,7 +8165,7 @@ private:
     void AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params);
     TNodePtr PragmaStatement(const TRule_pragma_stmt& stmt, bool& success);
     void AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node);
-
+ 
     TNodePtr Build(const TRule_delete_stmt& stmt);
 
     TNodePtr Build(const TRule_update_stmt& stmt);
@@ -8292,9 +8292,9 @@ TNodePtr TSqlTranslation::DoStatement(const TRule_do_stmt& stmt, bool makeLambda
 
 void TSqlQuery::AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node) {
     blocks.emplace_back(node);
-}
-
-
+} 
+ 
+ 
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core) {
     TString internalStatementName;
     TString humanStatementName;
@@ -8321,7 +8321,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
             if (nodeExpr) {
-                AddStatementToBlocks(blocks, nodeExpr);
+                AddStatementToBlocks(blocks, nodeExpr); 
             }
             break;
         }
@@ -8449,7 +8449,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!updateNode) {
                 return false;
             }
-            AddStatementToBlocks(blocks, updateNode);
+            AddStatementToBlocks(blocks, updateNode); 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore10: {
@@ -9872,8 +9872,8 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
         return nullptr;
     }
 
-    if (!Ctx.PragmaAutoCommit && Ctx.Settings.EndOfQueryCommit && IsQueryMode(Mode)) {
-        AddStatementToBlocks(blocks, BuildCommitClusters(Ctx.Pos()));
+    if (!Ctx.PragmaAutoCommit && Ctx.Settings.EndOfQueryCommit && IsQueryMode(Mode)) { 
+        AddStatementToBlocks(blocks, BuildCommitClusters(Ctx.Pos())); 
     }
 
     auto result = BuildQuery(Ctx.Pos(), blocks, true, Ctx.Scoped);
@@ -10109,7 +10109,7 @@ void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message
 NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst,
     const NSQLTranslation::TTranslationSettings& settings)
 {
-    YQL_ENSURE(IsQueryMode(settings.Mode));
+    YQL_ENSURE(IsQueryMode(settings.Mode)); 
     TAstParseResult res;
     TContext ctx(settings, res.Issues);
     SqlASTToYqlImpl(res, protoAst, ctx);

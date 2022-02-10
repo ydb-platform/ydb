@@ -31,7 +31,7 @@ NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ES
     NSQLTranslation::TTranslationSettings settings;
     settings.ClusterMapping[cluster] = service;
     settings.MaxErrors = maxErrors;
-    settings.Mode = mode;
+    settings.Mode = mode; 
     settings.Arena = &arena;
     settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;
     settings.WarnOnV0 = false;
@@ -42,10 +42,10 @@ NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ES
     return res;
 }
 
-NYql::TAstParseResult SqlToYql(const TString& query, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) {
+NYql::TAstParseResult SqlToYql(const TString& query, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) { 
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider, debug);
-}
-
+} 
+ 
 TString GetPrettyPrint(const NYql::TAstParseResult& res) {
     TStringStream yqlProgram;
     res.Root->PrettyPrintTo(yqlProgram, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
@@ -57,19 +57,19 @@ TString Quote(const char* str) {
 }
 
 class TWordCountHive: public TMap<TString, unsigned> {
-public:
-    TWordCountHive(std::initializer_list<TString> strings) {
-        for (auto& str: strings) {
-            emplace(str, 0);
-        }
-    }
-
-    TWordCountHive(std::initializer_list<std::pair<const TString, unsigned>> list)
+public: 
+    TWordCountHive(std::initializer_list<TString> strings) { 
+        for (auto& str: strings) { 
+            emplace(str, 0); 
+        } 
+    } 
+ 
+    TWordCountHive(std::initializer_list<std::pair<const TString, unsigned>> list) 
         : TMap(list)
-    {
-    }
-};
-
+    { 
+    } 
+}; 
+ 
 typedef std::function<void (const TString& word, const TString& line)> TVerifyLineFunc;
 
 TString VerifyProgram(const NYql::TAstParseResult& res, TWordCountHive& wordCounter, TVerifyLineFunc verifyLine = TVerifyLineFunc()) {

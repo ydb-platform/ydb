@@ -1,10 +1,10 @@
-#include "topfreq.h"
-#include <cmath>
-#include <algorithm>
-
-using namespace NKikimr;
-using namespace NUdf;
-
+#include "topfreq.h" 
+#include <cmath> 
+#include <algorithm> 
+ 
+using namespace NKikimr; 
+using namespace NUdf; 
+ 
 template <typename THash, typename TEquals>
 TTopFreqBase<THash, TEquals>::TTopFreqBase(THash hash, TEquals equals)
     : Indices_(0, hash, equals)
@@ -15,12 +15,12 @@ void TTopFreqBase<THash, TEquals>::Init(const TUnboxedValuePod& value, const ui3
     MinSize_ = minSize;
     MaxSize_ = maxSize;
 
-    Freqs_.reserve(MaxSize_ + 1);
-    Indices_.reserve(MaxSize_ + 1);
+    Freqs_.reserve(MaxSize_ + 1); 
+    Indices_.reserve(MaxSize_ + 1); 
 
     AddValue(value);
-}
-
+} 
+ 
 template <typename THash, typename TEquals>
 void TTopFreqBase<THash, TEquals>::Merge(const TTopFreqBase& topFreq1, const TTopFreqBase& topFreq2) {
     MinSize_ = std::max(topFreq1.MinSize_, topFreq2.MinSize_);
@@ -38,15 +38,15 @@ void TTopFreqBase<THash, TEquals>::Deserialize(const TUnboxedValuePod& serialize
     MinSize_ = serialized.GetElement(0).Get<ui32>();
     MaxSize_ = serialized.GetElement(1).Get<ui32>();
 
-    Freqs_.reserve(MaxSize_ + 1);
-    Indices_.reserve(MaxSize_ + 1);
+    Freqs_.reserve(MaxSize_ + 1); 
+    Indices_.reserve(MaxSize_ + 1); 
 
     const auto listIter = serialized.GetElement(2).GetListIterator();
     for (TUnboxedValue current; listIter.Next(current);) {
         Update(current.GetElement(1), current.GetElement(0).Get<ui64>());
-    }
-}
-
+    } 
+} 
+ 
 template <typename THash, typename TEquals>
 TUnboxedValue TTopFreqBase<THash, TEquals>::Convert(const IValueBuilder* valueBuilder) const {
     TUnboxedValue* values = nullptr;
@@ -63,77 +63,77 @@ TUnboxedValue TTopFreqBase<THash, TEquals>::Convert(const IValueBuilder* valueBu
 template <typename THash, typename TEquals>
 void TTopFreqBase<THash, TEquals>::Add(const TTopFreqBase& otherModeCalc) {
     for (auto& it : otherModeCalc.Freqs_) {
-        Update(it.first, it.second);
-    }
-
-    TryCompress();
-}
-
+        Update(it.first, it.second); 
+    } 
+ 
+    TryCompress(); 
+} 
+ 
 template <typename THash, typename TEquals>
 TUnboxedValue TTopFreqBase<THash, TEquals>::Get(const IValueBuilder* builder, ui32 resultSize) {
-    resultSize = std::min(resultSize, ui32(Freqs_.size()));
-    Compress(resultSize, true);
+    resultSize = std::min(resultSize, ui32(Freqs_.size())); 
+    Compress(resultSize, true); 
     return Convert(builder);
-}
-
+} 
+ 
 template <typename THash, typename TEquals>
 void TTopFreqBase<THash, TEquals>::AddValue(const TUnboxedValuePod& value) {
-    Update(value, 1);
-    TryCompress();
-}
-
+    Update(value, 1); 
+    TryCompress(); 
+} 
+ 
 template <typename THash, typename TEquals>
 void TTopFreqBase<THash, TEquals>::Update(const TUnboxedValuePod& value, ui64 freq) {
-    Freqs_.emplace_back(TUnboxedValuePod(value), freq);
+    Freqs_.emplace_back(TUnboxedValuePod(value), freq); 
     auto mapInsertResult = Indices_.emplace(TUnboxedValuePod(value), Freqs_.size() - 1);
-
-    if (!mapInsertResult.second) {
-        Freqs_[mapInsertResult.first->second].second += freq;
-        Freqs_.pop_back();
-    }
-}
-
+ 
+    if (!mapInsertResult.second) { 
+        Freqs_[mapInsertResult.first->second].second += freq; 
+        Freqs_.pop_back(); 
+    } 
+} 
+ 
 template <typename THash, typename TEquals>
 void TTopFreqBase<THash, TEquals>::TryCompress() {
-    ui32 freqSize = Freqs_.size();
-    if (freqSize > MaxSize_) {
-        Compress(MinSize_);
-    }
-}
-
+    ui32 freqSize = Freqs_.size(); 
+    if (freqSize > MaxSize_) { 
+        Compress(MinSize_); 
+    } 
+} 
+ 
 template <typename THash, typename TEquals>
 void TTopFreqBase<THash, TEquals>::Compress(ui32 newSize, bool sort) {
-    auto compare = [](const TVectorElement& v1, const TVectorElement& v2) {
-        return v1.second > v2.second;
-    };
-
-    if (sort) {
-        std::sort(Freqs_.begin(), Freqs_.end(), compare);
-    } else {
-        std::nth_element(Freqs_.begin(), Freqs_.begin() + newSize - 1, Freqs_.end(), compare);
-    }
-
-    Indices_.clear();
-    Freqs_.resize(newSize);
-
-    for (ui32 i = 0; i < newSize; i++) {
+    auto compare = [](const TVectorElement& v1, const TVectorElement& v2) { 
+        return v1.second > v2.second; 
+    }; 
+ 
+    if (sort) { 
+        std::sort(Freqs_.begin(), Freqs_.end(), compare); 
+    } else { 
+        std::nth_element(Freqs_.begin(), Freqs_.begin() + newSize - 1, Freqs_.end(), compare); 
+    } 
+ 
+    Indices_.clear(); 
+    Freqs_.resize(newSize); 
+ 
+    for (ui32 i = 0; i < newSize; i++) { 
         Indices_[Freqs_[i].first] = i;
-    }
-}
-
+    } 
+} 
+ 
 template <typename THash, typename TEquals>
 TUnboxedValue TTopFreqBase<THash, TEquals>::Serialize(const IValueBuilder* builder) {
-    if (ui32(Freqs_.size()) > MinSize_) {
-        Compress(MinSize_);
-    }
-
+    if (ui32(Freqs_.size()) > MinSize_) { 
+        Compress(MinSize_); 
+    } 
+ 
     TUnboxedValue* items = nullptr;
     auto tuple = builder->NewArray(3U, items);
     items[0] = TUnboxedValuePod(MinSize_);
     items[1] = TUnboxedValuePod(MaxSize_);
     items[2] = Convert(builder);
     return tuple;
-}
+} 
 
 template <EDataSlot Slot>
 TTopFreqData<Slot>::TTopFreqData(const TUnboxedValuePod& value, const ui32 minSize, const ui32 maxSize)

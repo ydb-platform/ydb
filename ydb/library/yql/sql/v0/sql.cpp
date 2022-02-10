@@ -4215,7 +4215,7 @@ private:
     bool AlterTableDropColumn(TVector<TNodePtr>& blocks, const TRule_alter_table_drop_column& node, const TTableRef& tr);
     TNodePtr PragmaStatement(const TRule_pragma_stmt& stmt, bool& success);
     void AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node);
-
+ 
     TNodePtr Build(const TRule_delete_stmt& stmt);
 
     TNodePtr Build(const TRule_update_stmt& stmt);
@@ -4251,9 +4251,9 @@ private:
 
 void TSqlQuery::AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node) {
     blocks.emplace_back(node);
-}
-
-
+} 
+ 
+ 
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core) {
     TString internalStatementName;
     TString humanStatementName;
@@ -4279,7 +4279,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
             if (nodeExpr) {
-                AddStatementToBlocks(blocks, nodeExpr);
+                AddStatementToBlocks(blocks, nodeExpr); 
             }
             break;
         }
@@ -4362,7 +4362,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
             TTableRef tr(SimpleTableRefImpl(rule.GetRule_simple_table_ref4(), Mode, *this));
-            AddStatementToBlocks(blocks, BuildDropTable(Ctx.Pos(), tr));
+            AddStatementToBlocks(blocks, BuildDropTable(Ctx.Pos(), tr)); 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore6: {
@@ -4397,7 +4397,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!updateNode) {
                 return false;
             }
-            AddStatementToBlocks(blocks, updateNode);
+            AddStatementToBlocks(blocks, updateNode); 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore10: {
@@ -5089,8 +5089,8 @@ TNodePtr TSqlQuery::Build(const TSQLParserAST& ast) {
         return nullptr;
     }
 
-    if (!Ctx.PragmaAutoCommit && Ctx.Settings.EndOfQueryCommit && IsQueryMode(Mode)) {
-        AddStatementToBlocks(blocks, BuildCommitClusters(Ctx.Pos()));
+    if (!Ctx.PragmaAutoCommit && Ctx.Settings.EndOfQueryCommit && IsQueryMode(Mode)) { 
+        AddStatementToBlocks(blocks, BuildCommitClusters(Ctx.Pos())); 
     }
     return BuildQuery(Ctx.Pos(), blocks, true);
 }
@@ -5286,14 +5286,14 @@ void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message
 NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst,
     const NSQLTranslation::TTranslationSettings& settings)
 {
-    YQL_ENSURE(IsQueryMode(settings.Mode));
+    YQL_ENSURE(IsQueryMode(settings.Mode)); 
     TAstParseResult res;
     TContext ctx(settings, res.Issues);
     SqlASTToYqlImpl(res, protoAst, ctx);
     return res;
 }
 
-
+ 
 NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules)
 {
     TAstParseResult res;

@@ -33,7 +33,7 @@ NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ES
     settings.ClusterMapping[cluster] = service;
     settings.ClusterMapping["hahn"] = NYql::YtProviderName;
     settings.MaxErrors = maxErrors;
-    settings.Mode = mode;
+    settings.Mode = mode; 
     settings.Arena = &arena;
     settings.AnsiLexer = ansiLexer;
     settings.SyntaxVersion = 1;
@@ -44,10 +44,10 @@ NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ES
     return res;
 }
 
-NYql::TAstParseResult SqlToYql(const TString& query, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) {
+NYql::TAstParseResult SqlToYql(const TString& query, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) { 
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider, debug);
-}
-
+} 
+ 
 NYql::TAstParseResult SqlToYqlWithSettings(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
 }
@@ -82,19 +82,19 @@ TString Quote(const char* str) {
 }
 
 class TWordCountHive: public TMap<TString, unsigned> {
-public:
-    TWordCountHive(std::initializer_list<TString> strings) {
-        for (auto& str: strings) {
-            emplace(str, 0);
-        }
-    }
-
-    TWordCountHive(std::initializer_list<std::pair<const TString, unsigned>> list)
+public: 
+    TWordCountHive(std::initializer_list<TString> strings) { 
+        for (auto& str: strings) { 
+            emplace(str, 0); 
+        } 
+    } 
+ 
+    TWordCountHive(std::initializer_list<std::pair<const TString, unsigned>> list) 
         : TMap(list)
-    {
-    }
-};
-
+    { 
+    } 
+}; 
+ 
 typedef std::function<void (const TString& word, const TString& line)> TVerifyLineFunc;
 
 TString VerifyProgram(const NYql::TAstParseResult& res, TWordCountHive& wordCounter, TVerifyLineFunc verifyLine = TVerifyLineFunc()) {

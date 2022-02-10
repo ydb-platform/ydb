@@ -2286,13 +2286,13 @@ private:
 enum EAggrFuncTypeCallback {
     NORMAL,
     KEY_PAYLOAD,
-    PAYLOAD_PREDICATE,
+    PAYLOAD_PREDICATE, 
     TWO_ARGS,
     COUNT,
     HISTOGRAM,
     LINEAR_HISTOGRAM,
     PERCENTILE,
-    TOPFREQ,
+    TOPFREQ, 
     TOP,
     TOP_BY,
     COUNT_DISTINCT_ESTIMATE,
@@ -2342,9 +2342,9 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
         case KEY_PAYLOAD:
             factory = BuildKeyPayloadFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
             break;
-        case PAYLOAD_PREDICATE:
-            factory = BuildPayloadPredicateFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-            break;
+        case PAYLOAD_PREDICATE: 
+            factory = BuildPayloadPredicateFactoryAggregation(pos, realFunctionName, factoryName, aggMode); 
+            break; 
         case TWO_ARGS:
             factory = BuildTwoArgsFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
             break;
@@ -2360,9 +2360,9 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
         case PERCENTILE:
             factory = BuildPercentileFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
             break;
-        case TOPFREQ:
-            factory = BuildTopFreqFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-            break;
+        case TOPFREQ: 
+            factory = BuildTopFreqFactoryAggregation(pos, realFunctionName, factoryName, aggMode); 
+            break; 
         case TOP:
             factory = BuildTopFactoryAggregation<false>(pos, realFunctionName, factoryName, aggMode);
             break;
@@ -2746,8 +2746,8 @@ struct TBuiltinFuncData {
             {"maxby", BuildAggrFuncFactoryCallback("MaxBy", "max_by_traits_factory", KEY_PAYLOAD)},
 
             {"sum", BuildAggrFuncFactoryCallback("Sum", "sum_traits_factory")},
-            {"sumif", BuildAggrFuncFactoryCallback("SumIf", "sum_if_traits_factory", PAYLOAD_PREDICATE) },
-
+            {"sumif", BuildAggrFuncFactoryCallback("SumIf", "sum_if_traits_factory", PAYLOAD_PREDICATE) }, 
+ 
             {"some", BuildAggrFuncFactoryCallback("Some", "some_traits_factory")},
             {"somevalue", BuildAggrFuncFactoryCallback("SomeValue", "some_traits_factory")},
 
@@ -2764,8 +2764,8 @@ struct TBuiltinFuncData {
             {"bitxor", BuildAggrFuncFactoryCallback("BitXor", "bit_xor_traits_factory")},
 
             {"avg", BuildAggrFuncFactoryCallback("Avg", "avg_traits_factory")},
-            {"avgif", BuildAggrFuncFactoryCallback("AvgIf", "avg_if_traits_factory", PAYLOAD_PREDICATE) },
-
+            {"avgif", BuildAggrFuncFactoryCallback("AvgIf", "avg_if_traits_factory", PAYLOAD_PREDICATE) }, 
+ 
             {"agglist", BuildAggrFuncFactoryCallback("AggregateList", "list2_traits_factory", LIST)},
             {"aggrlist", BuildAggrFuncFactoryCallback("AggregateList", "list2_traits_factory", LIST)},
             {"aggregatelist", BuildAggrFuncFactoryCallback("AggregateList", "list2_traits_factory", LIST)},
@@ -2776,9 +2776,9 @@ struct TBuiltinFuncData {
             {"median", BuildAggrFuncFactoryCallback("Median", "percentile_traits_factory", PERCENTILE)},
             {"percentile", BuildAggrFuncFactoryCallback("Percentile", "percentile_traits_factory", PERCENTILE)},
 
-            {"mode", BuildAggrFuncFactoryCallback("Mode", "topfreq_traits_factory", TOPFREQ) },
-            {"topfreq", BuildAggrFuncFactoryCallback("TopFreq", "topfreq_traits_factory", TOPFREQ) },
-
+            {"mode", BuildAggrFuncFactoryCallback("Mode", "topfreq_traits_factory", TOPFREQ) }, 
+            {"topfreq", BuildAggrFuncFactoryCallback("TopFreq", "topfreq_traits_factory", TOPFREQ) }, 
+ 
             {"top", BuildAggrFuncFactoryCallback("Top", "top_traits_factory", TOP)},
             {"bottom", BuildAggrFuncFactoryCallback("Bottom", "bottom_traits_factory", TOP)},
             {"topby", BuildAggrFuncFactoryCallback("TopBy", "top_by_traits_factory", TOP_BY)},

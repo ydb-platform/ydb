@@ -1297,7 +1297,7 @@ private:
 
     void Visit(const TErrorExprType& type) final {
         Out_ << TStringBuf("Error<");
-        auto pos = type.GetError().Position;
+        auto pos = type.GetError().Position; 
         EscapeArbitraryAtom(pos.File.empty() ? "<main>" : pos.File, '\'', &Out_);
         Out_ << ':';
         if (pos) {

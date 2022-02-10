@@ -181,10 +181,10 @@ public:
     TType* NewTaggedType(TType* baseType, const std::string_view& tag);
     TType* NewBlockType(TType* itemType, TBlockType::EShape shape);
 
-    TType* NewEmptyTupleType();
+    TType* NewEmptyTupleType(); 
     TType* NewTupleType(const TArrayRef<TType* const>& elements);
     TType* NewArrayType(const TArrayRef<TType* const>& elements);
-    TRuntimeNode NewEmptyTuple();
+    TRuntimeNode NewEmptyTuple(); 
     TRuntimeNode NewTuple(TType* tupleType, const TArrayRef<const TRuntimeNode>& elements);
     TRuntimeNode NewTuple(const TArrayRef<const TRuntimeNode>& elements);
     TType* NewResourceType(const std::string_view& tag);

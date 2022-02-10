@@ -66,7 +66,7 @@ public:
             key = L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, View)))));
         }
         if (mode == ITableKeys::EBuildKeysMode::INPUT &&
-            IsQueryMode(ctx.Settings.Mode) &&
+            IsQueryMode(ctx.Settings.Mode) && 
             Service != KikimrProviderName &&
             Service != RtmrProviderName &&
             Service != YdbProviderName) {
@@ -1740,7 +1740,7 @@ public:
             } else {
                 const auto& ref = block->GetLabel();
                 Add(Y("let", ref ? ref : "world", block));
-            }
+            } 
         }
 
         if (TopLevel) {

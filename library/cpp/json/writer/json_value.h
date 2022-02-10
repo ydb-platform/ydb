@@ -170,10 +170,10 @@ namespace NJson {
 
         /// @return true if JSON_UINTEGER or (JSON_INTEGER and Value >= 0)
         bool IsUInteger() const noexcept;
-
+ 
         bool Has(const TStringBuf& key) const noexcept;
         bool Has(size_t key) const noexcept;
-
+ 
         void Scan(IScanCallback& callback);
 
         /// Non-robust comparison.
@@ -182,9 +182,9 @@ namespace NJson {
         bool operator!=(const TJsonValue& rhs) const {
             return !(*this == rhs);
         }
-
+ 
         void Swap(TJsonValue& rhs) noexcept;
-
+ 
         // save using util/ysaveload.h serialization (not to JSON stream)
         void Save(IOutputStream* s) const;
 

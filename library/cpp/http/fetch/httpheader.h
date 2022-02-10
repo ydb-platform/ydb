@@ -4,7 +4,7 @@
 
 #include <library/cpp/mime/types/mime.h>
 
-#include <util/system/defaults.h>
+#include <util/system/defaults.h> 
 #include <util/system/compat.h>
 #include <util/generic/string.h>
 #include <util/generic/ylimits.h>
@@ -20,7 +20,7 @@
 #define FETCHER_URL_MAX 8192
 
 extern const i64 DEFAULT_RETRY_AFTER;       /// == -1
-extern const i64 DEFAULT_IF_MODIFIED_SINCE; /// == -1
+extern const i64 DEFAULT_IF_MODIFIED_SINCE; /// == -1 
 extern const i32 DEFAULT_MAX_AGE;           /// == -1
 extern const i8 DEFAULT_REQUEST_PRIORITY;   /// == -1
 extern const i32 DEFAULT_RESPONSE_TIMEOUT;  /// == -1

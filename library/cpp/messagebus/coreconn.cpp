@@ -3,7 +3,7 @@
 #include "remote_connection.h"
 
 #include <util/datetime/base.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 #include <util/network/socket.h>
 #include <util/string/util.h>
 #include <util/system/thread.h>
@@ -25,6 +25,6 @@ namespace NBus {
         }
 
         ythrow yexception() << "Neither of IPv4/IPv6 is allowed.";
-    }
-
+    } 
+ 
 }

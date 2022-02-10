@@ -56,7 +56,7 @@ namespace NJson {
         const bool ValidateUtf8;
         const bool DontEscapeStrings;
         const bool DontFlushInDestructor;
-
+ 
     public:
         TJsonWriter(IOutputStream* out, bool formatOutput, bool sortkeys = false, bool validateUtf8 = true);
         TJsonWriter(IOutputStream* out, const TJsonWriterConfig& config, bool DontFlushInDestructor = false);

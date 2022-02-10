@@ -17,7 +17,7 @@ PEERDIR(
 SRCS(
     http_digest.cpp
     http_socket.cpp
-    httpheader.cpp
+    httpheader.cpp 
     httpload.cpp
     exthttpcodes.cpp
     httpfsm.rl6

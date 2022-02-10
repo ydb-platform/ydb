@@ -48,7 +48,7 @@ namespace NBus {
         int syserr = LastSystemError();
         return syserr == EAGAIN || syserr == EINPROGRESS || syserr == EWOULDBLOCK || syserr == EINTR;
     }
-
+ 
     class TBusSession;
 
     struct TMaxConnectedException: public yexception {

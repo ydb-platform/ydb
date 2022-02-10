@@ -1,45 +1,45 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "client.h"
+#include "client.h" 
 #include "http_code_extractor.h"
 
 #include <library/cpp/messagebus/rain_check/test/ut/test.h>
 
 #include <library/cpp/messagebus/test/helper/fixed_port.h>
-
+ 
 #include <library/cpp/http/io/stream.h>
 #include <library/cpp/neh/rpc.h>
-
-#include <util/generic/cast.h>
-#include <util/generic/ptr.h>
-#include <util/generic/strbuf.h>
+ 
+#include <util/generic/cast.h> 
+#include <util/generic/ptr.h> 
+#include <util/generic/strbuf.h> 
 #include <util/generic/string.h>
-#include <util/generic/vector.h>
-#include <util/network/ip.h>
+#include <util/generic/vector.h> 
+#include <util/network/ip.h> 
 #include <util/stream/str.h>
 #include <util/string/printf.h>
-#include <util/system/defaults.h>
-#include <util/system/yassert.h>
-
-#include <cstdlib>
+#include <util/system/defaults.h> 
+#include <util/system/yassert.h> 
+ 
+#include <cstdlib> 
 #include <utility>
-
-using namespace NRainCheck;
+ 
+using namespace NRainCheck; 
 using namespace NBus::NTest;
-
-namespace {
+ 
+namespace { 
     class THttpClientEnv: public TTestEnvTemplate<THttpClientEnv> {
     public:
         THttpClientService HttpClientService;
     };
-
+ 
     const TString TEST_SERVICE = "test-service";
     const TString TEST_GET_PARAMS = "p=GET";
     const TString TEST_POST_PARAMS = "p=POST";
     const TString TEST_POST_HEADERS = "Content-Type: application/json\r\n";
     const TString TEST_GET_RECV = "GET was ok.";
     const TString TEST_POST_RECV = "POST was ok.";
-
+ 
     TString BuildServiceLocation(ui32 port) {
         return Sprintf("http://*:%" PRIu32 "/%s", port, TEST_SERVICE.data());
     }
@@ -47,11 +47,11 @@ namespace {
     TString BuildPostServiceLocation(ui32 port) {
         return Sprintf("post://*:%" PRIu32 "/%s", port + 1, TEST_SERVICE.data());
     }
-
+ 
     TString BuildGetTestRequest(ui32 port) {
         return BuildServiceLocation(port) + "?" + TEST_GET_PARAMS;
     }
-
+ 
     class TSimpleServer {
     public:
         inline void ServeRequest(const NNeh::IRequestRef& req) {
@@ -76,16 +76,16 @@ namespace {
         } catch (...) {
             Y_FAIL("Can't run server: %s", CurrentExceptionMessage().data());
         }
-
+ 
         return runner;
-    }
+    } 
     enum ERequestType {
         RT_HTTP_GET = 0,
         RT_HTTP_POST = 1
     };
-
+ 
     using TTaskParam = std::pair<TIpPort, ERequestType>;
-
+ 
     class THttpClientTask: public ISimpleTask {
     public:
         THttpClientTask(THttpClientEnv* env, TTaskParam param)
@@ -118,46 +118,46 @@ namespace {
             }
 
             return &THttpClientTask::GotReplies;
-        }
-
+        } 
+ 
         TContinueFunc GotReplies() {
             const TString& TEST_OK_RECV = (ReqType == RT_HTTP_GET) ? TEST_GET_RECV : TEST_POST_RECV;
             for (size_t i = 0; i < Requests.size(); ++i) {
                 UNIT_ASSERT_EQUAL(Requests[i]->GetHttpCode(), 200);
                 UNIT_ASSERT_EQUAL(Requests[i]->GetResponseBody(), TEST_OK_RECV);
             }
-
+ 
             Env->TestSync.CheckAndIncrement(0);
 
             return nullptr;
-        }
-
+        } 
+ 
         THttpClientEnv* const Env;
         const TIpPort ServerPort;
         const ERequestType ReqType;
-
+ 
         TVector<TSimpleSharedPtr<THttpFuture>> Requests;
     };
-
-} // anonymous namespace
-
+ 
+} // anonymous namespace 
+ 
 Y_UNIT_TEST_SUITE(RainCheckHttpClient) {
-    static const TIpPort SERVER_PORT = 4000;
-
+    static const TIpPort SERVER_PORT = 4000; 
+ 
     Y_UNIT_TEST(Simple) {
         // TODO: randomize port
         if (!IsFixedPortTestAllowed()) {
             return;
         }
 
-        TSimpleServer server;
-        NNeh::IServicesRef runner = RunServer(SERVER_PORT, server);
-
-        THttpClientEnv env;
+        TSimpleServer server; 
+        NNeh::IServicesRef runner = RunServer(SERVER_PORT, server); 
+ 
+        THttpClientEnv env; 
         TIntrusivePtr<TSimpleTaskRunner> task = env.SpawnTask<THttpClientTask>(TTaskParam(SERVER_PORT, RT_HTTP_GET));
-
-        env.TestSync.WaitForAndIncrement(1);
-    }
+ 
+        env.TestSync.WaitForAndIncrement(1); 
+    } 
 
     Y_UNIT_TEST(SimplePost) {
         // TODO: randomize port
@@ -202,4 +202,4 @@ Y_UNIT_TEST_SUITE(RainCheckHttpClient) {
         CHECK_INVALID_LINE(TStringBuf("request failed(HTTP/1.1  3334 Some random message"));
 #undef CHECK_INVALID_LINE
     }
-}
+} 

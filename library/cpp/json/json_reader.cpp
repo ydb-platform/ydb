@@ -1,5 +1,5 @@
-#include "json_reader.h"
-
+#include "json_reader.h" 
+ 
 #include "rapidjson_helpers.h"
 
 #include <contrib/libs/rapidjson/include/rapidjson/error/en.h>
@@ -8,7 +8,7 @@
 
 #include <util/generic/stack.h>
 #include <util/string/cast.h>
-#include <util/system/yassert.h>
+#include <util/system/yassert.h> 
 #include <util/string/builder.h>
 
 namespace NJson {
@@ -94,7 +94,7 @@ namespace NJson {
     bool TParserCallbacks::OnString(const TStringBuf& val) {
         return SetValue(val);
     }
-
+ 
     bool TParserCallbacks::OnDouble(double val) {
         return SetValue(val);
     }
@@ -148,7 +148,7 @@ namespace NJson {
     void TJsonReaderConfig::SetBufferSize(size_t bufferSize) {
         BufferSize = Max((size_t)1, Min(bufferSize, DEFAULT_BUFFER_LEN));
     }
-
+ 
     size_t TJsonReaderConfig::GetBufferSize() const {
         return BufferSize;
     }
@@ -437,7 +437,7 @@ namespace NJson {
                 : Impl(impl)
             {
             }
-
+ 
             bool Null() {
                 return Impl.OnNull();
             }
@@ -445,7 +445,7 @@ namespace NJson {
             bool Bool(bool b) {
                 return Impl.OnBoolean(b);
             }
-
+ 
             template <class U>
             bool ProcessUint(U u) {
                 if (Y_LIKELY(u <= ui64(Max<i64>()))) {

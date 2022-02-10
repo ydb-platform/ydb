@@ -45,7 +45,7 @@ namespace NJson {
             }
         }
     }
-
+ 
     void TJsonWriter::Flush() {
         if (Out) {
             Buf.FlushTo(Out);
@@ -101,7 +101,7 @@ namespace NJson {
     void TJsonWriter::Write(unsigned long long value) {
         Buf.WriteULongLong(value);
     }
-
+ 
     void TJsonWriter::Write(bool value) {
         Buf.WriteBool(value);
     }
@@ -145,5 +145,5 @@ namespace NJson {
         w.Write(val);
         w.Flush();
     }
-
-}
+ 
+} 

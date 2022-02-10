@@ -6,7 +6,7 @@
 
 #include "ybus.h"
 
-#include <util/generic/hash_set.h>
+#include <util/generic/hash_set.h> 
 #include <util/system/hostname.h>
 
 namespace NBus {

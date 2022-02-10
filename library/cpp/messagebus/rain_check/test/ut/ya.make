@@ -16,7 +16,7 @@ SRCS(
     ../../core/sleep_ut.cpp
     ../../core/spawn_ut.cpp
     ../../core/track_ut.cpp
-    ../../http/client_ut.cpp
+    ../../http/client_ut.cpp 
     ../../messagebus/messagebus_client_ut.cpp
     ../../messagebus/messagebus_server_ut.cpp
 )

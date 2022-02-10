@@ -102,15 +102,15 @@ public:
         value_type& operator=(value_type const&) = delete;
 
         /// Returns the field enum, which can be @ref field::unknown
-        field
+        field 
         name() const;
 
         /// Returns the field name as a string
-        string_view
+        string_view 
         name_string() const;
 
         /// Returns the value of the field
-        string_view
+        string_view 
         value() const;
     };
 

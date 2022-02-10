@@ -4,8 +4,8 @@ PY23_LIBRARY()
 
 OWNER(g:yatest)
 
-NO_EXTENDED_SOURCE_SEARCH() 
- 
+NO_EXTENDED_SOURCE_SEARCH()
+
 PY_SRCS(
     TOP_LEVEL
     yatest/__init__.py

@@ -123,20 +123,20 @@ public:
         static IGrowPolicy* Instance() noexcept;
     };
 
-    struct TOptions {
-        bool RoundUpToNextPowerOfTwo;
-        TOptions()
-            : RoundUpToNextPowerOfTwo(true)
-        {
-        }
-    };
-
-    inline TMemoryPool(size_t initial, IGrowPolicy* grow = TExpGrow::Instance(), IAllocator* alloc = TDefaultAllocator::Instance(), const TOptions& options = TOptions())
+    struct TOptions { 
+        bool RoundUpToNextPowerOfTwo; 
+        TOptions() 
+            : RoundUpToNextPowerOfTwo(true) 
+        { 
+        } 
+    }; 
+ 
+    inline TMemoryPool(size_t initial, IGrowPolicy* grow = TExpGrow::Instance(), IAllocator* alloc = TDefaultAllocator::Instance(), const TOptions& options = TOptions()) 
         : Current_(&Empty_)
         , BlockSize_(initial)
         , GrowPolicy_(grow)
         , Alloc_(alloc)
-        , Options_(options)
+        , Options_(options) 
         , Origin_(initial)
         , MemoryAllocatedBeforeCurrent_(0)
         , MemoryWasteBeforeCurrent_(0)
@@ -299,7 +299,7 @@ private:
     size_t BlockSize_;
     IGrowPolicy* GrowPolicy_;
     IAllocator* Alloc_;
-    TOptions Options_;
+    TOptions Options_; 
     TChunkList Chunks_;
     const size_t Origin_;
     size_t MemoryAllocatedBeforeCurrent_;

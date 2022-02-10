@@ -61,7 +61,7 @@ namespace NTvmAuth::NTvmTool {
         return TClientStatus::Ok;
     }
 
-    TThreadedUpdater::TThreadedUpdater(const TString& host, ui16 port, TDuration socketTimeout, TDuration connectTimeout, TLoggerPtr logger)
+    TThreadedUpdater::TThreadedUpdater(const TString& host, ui16 port, TDuration socketTimeout, TDuration connectTimeout, TLoggerPtr logger) 
         : TThreadedUpdaterBase(TDuration::Seconds(5), logger, host, port, socketTimeout, connectTimeout)
         , MetaInfo_(logger)
         , ConfigWarnDelay_(TDuration::Seconds(30))

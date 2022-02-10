@@ -9,8 +9,8 @@ namespace NTvmAuth::NTvmTool {
         : SelfAias_(selfAias)
         , Hostname_("localhost")
         , Port_(1)
-        , SocketTimeout_(TDuration::Seconds(5))
-        , ConnectTimeout_(TDuration::Seconds(30))
+        , SocketTimeout_(TDuration::Seconds(5)) 
+        , ConnectTimeout_(TDuration::Seconds(30)) 
     {
         AuthToken_ = GetEnv("TVMTOOL_LOCAL_AUTHTOKEN");
         if (!AuthToken_) {

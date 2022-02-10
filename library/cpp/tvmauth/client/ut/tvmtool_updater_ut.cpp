@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(ToolUpdater) {
     class TNonInitedUpdater: public TThreadedUpdater {
     public:
         TNonInitedUpdater(const TString& host, ui16 port, TLoggerPtr logger)
-            : TThreadedUpdater(host, port, TDuration::Seconds(5), TDuration::Seconds(30), logger)
+            : TThreadedUpdater(host, port, TDuration::Seconds(5), TDuration::Seconds(30), logger) 
         {
         }
 

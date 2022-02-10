@@ -42,9 +42,9 @@ namespace NBalloc {
             memset(ptr, 0xde, size - signature);
 #endif
             FreeRaw(allocHeader->Block);
-            if (NAllocStats::IsEnabled()) {
-                NAllocStats::DecThreadAllocStats(size - signature);
-            }
+            if (NAllocStats::IsEnabled()) { 
+                NAllocStats::DecThreadAllocStats(size - signature); 
+            } 
         } else if (signature == DISABLED_SIGNATURE) {
             LibcFree(allocHeader->Block);
         } else {

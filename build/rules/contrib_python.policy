@@ -114,12 +114,12 @@ ALLOW contrib/python/jaeger-client -> contrib/python/thrift
 ALLOW search/mon/wabbajack/libs/generated/iss3 -> contrib/python/thrift
 ALLOW search/mon/wabbajack/libs/modlib/api_wrappers/casher -> contrib/python/thrift
 DENY .* -> contrib/python/thrift
- 
+
 ALLOW antiadblock/libs/tornado_redis -> contrib/python/toredis
 ALLOW yabs/amazon/cache_proxy -> contrib/python/toredis
 ALLOW yql/udfs/common/python/python_arc -> contrib/python/toredis
-DENY .* -> contrib/python/toredis 
- 
+DENY .* -> contrib/python/toredis
+
 # contrib/python/MySQL-python dosen't support Python 3, use mysqlclient-python
 # or pymysql instead of this.
 ALLOW adfox/amacs/tests/functional/libs/builders -> contrib/python/MySQL-python
@@ -135,8 +135,8 @@ ALLOW ads/libs/py_core -> contrib/python/MySQL-python
 ALLOW ads/ml_monitoring/alerts/lib -> contrib/python/MySQL-python
 ALLOW ads/ml_monitoring/lib/mysql -> contrib/python/MySQL-python
 ALLOW april/badb -> contrib/python/MySQL-python
-ALLOW contrib/python/MySQL-python/test -> contrib/python/MySQL-python 
-ALLOW contrib/python/MySQL-python -> contrib/python/MySQL-python 
+ALLOW contrib/python/MySQL-python/test -> contrib/python/MySQL-python
+ALLOW contrib/python/MySQL-python -> contrib/python/MySQL-python
 ALLOW dict/ontodb/tools/fields_diff/lib -> contrib/python/MySQL-python
 ALLOW maps/streetview/backoffice/lib -> contrib/python/MySQL-python
 ALLOW market/sre/tools/cs_mysql_monitoring/mysql_monitoring -> contrib/python/MySQL-python
@@ -160,8 +160,8 @@ ALLOW yabs/server/tools/debug_cookie_mysql -> contrib/python/MySQL-python
 ALLOW yweb/antimalware/visual_html_parser/yandex-search-antivirus-common -> contrib/python/MySQL-python
 ALLOW yweb/news/news_back/api/scripts/migrate_scripts_common -> contrib/python/MySQL-python
 ALLOW yweb/news/support/viewer -> contrib/python/MySQL-python
-DENY .* -> contrib/python/MySQL-python 
- 
+DENY .* -> contrib/python/MySQL-python
+
 ALLOW contrib/deprecated/python/mipp/tests -> contrib/deprecated/python/mipp
 ALLOW contrib/deprecated/python/mpop -> contrib/deprecated/python/mipp
 ALLOW contrib/deprecated/python/mpop/mpop/tests -> contrib/deprecated/python/mpop

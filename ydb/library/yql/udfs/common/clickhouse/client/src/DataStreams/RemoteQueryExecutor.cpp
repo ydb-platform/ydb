@@ -1,22 +1,22 @@
 #include <DataStreams/ConnectionCollector.h>
-#include <DataStreams/RemoteQueryExecutor.h> 
+#include <DataStreams/RemoteQueryExecutor.h>
 #include <DataStreams/RemoteQueryExecutorReadContext.h>
- 
-#include <Columns/ColumnConst.h> 
-#include <Common/CurrentThread.h> 
-#include <Processors/Pipe.h> 
-#include <Processors/Sources/SourceFromSingleChunk.h> 
-#include <Storages/IStorage.h> 
+
+#include <Columns/ColumnConst.h>
+#include <Common/CurrentThread.h>
+#include <Processors/Pipe.h>
+#include <Processors/Sources/SourceFromSingleChunk.h>
+#include <Storages/IStorage.h>
 #include <Storages/SelectQueryInfo.h>
-#include <Interpreters/castColumn.h> 
-#include <Interpreters/Cluster.h> 
+#include <Interpreters/castColumn.h>
+#include <Interpreters/Cluster.h>
 #include <Interpreters/Context.h>
-#include <Interpreters/InternalTextLogsQueue.h> 
+#include <Interpreters/InternalTextLogsQueue.h>
 #include <IO/ConnectionTimeoutsContext.h>
 #include <Client/MultiplexedConnections.h>
 #include <Client/HedgedConnections.h>
 #include <Storages/MergeTree/MergeTreeDataPartUUID.h>
- 
+
 
 namespace CurrentMetrics
 {
@@ -24,17 +24,17 @@ namespace CurrentMetrics
     extern const Metric ActiveSyncDrainedConnections;
 }
 
-namespace DB 
-{ 
- 
-namespace ErrorCodes 
-{ 
+namespace DB
+{
+
+namespace ErrorCodes
+{
     extern const int LOGICAL_ERROR;
-    extern const int UNKNOWN_PACKET_FROM_SERVER; 
+    extern const int UNKNOWN_PACKET_FROM_SERVER;
     extern const int DUPLICATED_PART_UUIDS;
-} 
- 
-RemoteQueryExecutor::RemoteQueryExecutor( 
+}
+
+RemoteQueryExecutor::RemoteQueryExecutor(
     const String & query_, const Block & header_, ContextPtr context_,
     const Scalars & scalars_, const Tables & external_tables_,
     QueryProcessingStage::Enum stage_, std::shared_ptr<TaskIterator> task_iterator_)
@@ -43,19 +43,19 @@ RemoteQueryExecutor::RemoteQueryExecutor(
 {}
 
 RemoteQueryExecutor::RemoteQueryExecutor(
-    Connection & connection, 
+    Connection & connection,
     const String & query_, const Block & header_, ContextPtr context_,
     ThrottlerPtr throttler, const Scalars & scalars_, const Tables & external_tables_,
     QueryProcessingStage::Enum stage_, std::shared_ptr<TaskIterator> task_iterator_)
     : RemoteQueryExecutor(query_, header_, context_, scalars_, external_tables_, stage_, task_iterator_)
-{ 
+{
     create_connections = [this, &connection, throttler]()
-    { 
+    {
         return std::make_shared<MultiplexedConnections>(connection, context->getSettingsRef(), throttler);
-    }; 
-} 
- 
-RemoteQueryExecutor::RemoteQueryExecutor( 
+    };
+}
+
+RemoteQueryExecutor::RemoteQueryExecutor(
     std::shared_ptr<Connection> connection_ptr,
     const String & query_, const Block & header_, ContextPtr context_,
     ThrottlerPtr throttler, const Scalars & scalars_, const Tables & external_tables_,
@@ -76,24 +76,24 @@ RemoteQueryExecutor::RemoteQueryExecutor(
     QueryProcessingStage::Enum stage_, std::shared_ptr<TaskIterator> task_iterator_)
     : header(header_), query(query_), context(context_)
     , scalars(scalars_), external_tables(external_tables_), stage(stage_), task_iterator(task_iterator_), pool(pool_)
-{ 
+{
     create_connections = [this, connections_, throttler]() mutable {
         return std::make_shared<MultiplexedConnections>(std::move(connections_), context->getSettingsRef(), throttler);
-    }; 
-} 
- 
-RemoteQueryExecutor::RemoteQueryExecutor( 
+    };
+}
+
+RemoteQueryExecutor::RemoteQueryExecutor(
     const ConnectionPoolWithFailoverPtr & pool_,
     const String & query_, const Block & header_, ContextPtr context_,
     const ThrottlerPtr & throttler, const Scalars & scalars_, const Tables & external_tables_,
     QueryProcessingStage::Enum stage_, std::shared_ptr<TaskIterator> task_iterator_)
     : header(header_), query(query_), context(context_)
     , scalars(scalars_), external_tables(external_tables_), stage(stage_), task_iterator(task_iterator_), pool(pool_)
-{ 
+{
     create_connections = [this, throttler]()->std::shared_ptr<IConnections>
-    { 
+    {
         const Settings & current_settings = context->getSettingsRef();
-        auto timeouts = ConnectionTimeouts::getTCPTimeoutsWithFailover(current_settings); 
+        auto timeouts = ConnectionTimeouts::getTCPTimeoutsWithFailover(current_settings);
 
 #if defined(OS_LINUX)
         if (current_settings.use_hedged_requests)
@@ -107,90 +107,90 @@ RemoteQueryExecutor::RemoteQueryExecutor(
 #endif
 
         std::vector<IConnectionPool::Entry> connection_entries;
-        if (main_table) 
-        { 
-            auto try_results = pool->getManyChecked(timeouts, &current_settings, pool_mode, main_table.getQualifiedName()); 
+        if (main_table)
+        {
+            auto try_results = pool->getManyChecked(timeouts, &current_settings, pool_mode, main_table.getQualifiedName());
             connection_entries.reserve(try_results.size());
-            for (auto & try_result : try_results) 
+            for (auto & try_result : try_results)
                 connection_entries.emplace_back(std::move(try_result.entry));
-        } 
-        else 
+        }
+        else
             connection_entries = pool->getMany(timeouts, &current_settings, pool_mode);
- 
+
         return std::make_shared<MultiplexedConnections>(std::move(connection_entries), current_settings, throttler);
-    }; 
-} 
- 
-RemoteQueryExecutor::~RemoteQueryExecutor() 
-{ 
-    /** If interrupted in the middle of the loop of communication with replicas, then interrupt 
-      * all connections, then read and skip the remaining packets to make sure 
-      * these connections did not remain hanging in the out-of-sync state. 
-      */ 
-    if (established || isQueryPending()) 
+    };
+}
+
+RemoteQueryExecutor::~RemoteQueryExecutor()
+{
+    /** If interrupted in the middle of the loop of communication with replicas, then interrupt
+      * all connections, then read and skip the remaining packets to make sure
+      * these connections did not remain hanging in the out-of-sync state.
+      */
+    if (established || isQueryPending())
         connections->disconnect();
-} 
- 
-/** If we receive a block with slightly different column types, or with excessive columns, 
-  *  we will adapt it to expected structure. 
-  */ 
-static Block adaptBlockStructure(const Block & block, const Block & header) 
-{ 
-    /// Special case when reader doesn't care about result structure. Deprecated and used only in Benchmark, PerformanceTest. 
-    if (!header) 
-        return block; 
- 
-    Block res; 
-    res.info = block.info; 
- 
-    for (const auto & elem : header) 
-    { 
-        ColumnPtr column; 
- 
-        if (elem.column && isColumnConst(*elem.column)) 
-        { 
-            /// We expect constant column in block. 
-            /// If block is not empty, then get value for constant from it, 
-            /// because it may be different for remote server for functions like version(), uptime(), ... 
-            if (block.rows() > 0 && block.has(elem.name)) 
-            { 
-                /// Const column is passed as materialized. Get first value from it. 
-                /// 
-                /// TODO: check that column contains the same value. 
-                /// TODO: serialize const columns. 
-                auto col = block.getByName(elem.name); 
-                col.column = block.getByName(elem.name).column->cut(0, 1); 
- 
-                column = castColumn(col, elem.type); 
- 
-                if (!isColumnConst(*column)) 
-                    column = ColumnConst::create(column, block.rows()); 
-                else 
-                    /// It is not possible now. Just in case we support const columns serialization. 
-                    column = column->cloneResized(block.rows()); 
-            } 
-            else 
-                column = elem.column->cloneResized(block.rows()); 
-        } 
-        else 
-            column = castColumn(block.getByName(elem.name), elem.type); 
- 
-        res.insert({column, elem.type, elem.name}); 
-    } 
-    return res; 
-} 
- 
-void RemoteQueryExecutor::sendQuery() 
-{ 
-    if (sent_query) 
-        return; 
- 
+}
+
+/** If we receive a block with slightly different column types, or with excessive columns,
+  *  we will adapt it to expected structure.
+  */
+static Block adaptBlockStructure(const Block & block, const Block & header)
+{
+    /// Special case when reader doesn't care about result structure. Deprecated and used only in Benchmark, PerformanceTest.
+    if (!header)
+        return block;
+
+    Block res;
+    res.info = block.info;
+
+    for (const auto & elem : header)
+    {
+        ColumnPtr column;
+
+        if (elem.column && isColumnConst(*elem.column))
+        {
+            /// We expect constant column in block.
+            /// If block is not empty, then get value for constant from it,
+            /// because it may be different for remote server for functions like version(), uptime(), ...
+            if (block.rows() > 0 && block.has(elem.name))
+            {
+                /// Const column is passed as materialized. Get first value from it.
+                ///
+                /// TODO: check that column contains the same value.
+                /// TODO: serialize const columns.
+                auto col = block.getByName(elem.name);
+                col.column = block.getByName(elem.name).column->cut(0, 1);
+
+                column = castColumn(col, elem.type);
+
+                if (!isColumnConst(*column))
+                    column = ColumnConst::create(column, block.rows());
+                else
+                    /// It is not possible now. Just in case we support const columns serialization.
+                    column = column->cloneResized(block.rows());
+            }
+            else
+                column = elem.column->cloneResized(block.rows());
+        }
+        else
+            column = castColumn(block.getByName(elem.name), elem.type);
+
+        res.insert({column, elem.type, elem.name});
+    }
+    return res;
+}
+
+void RemoteQueryExecutor::sendQuery()
+{
+    if (sent_query)
+        return;
+
     connections = create_connections();
- 
+
     const auto & settings = context->getSettingsRef();
     if (settings.skip_unavailable_shards && 0 == connections->size())
-        return; 
- 
+        return;
+
     /// Query cannot be canceled in the middle of the send query,
     /// since there are multiple packets:
     /// - Query
@@ -202,17 +202,17 @@ void RemoteQueryExecutor::sendQuery()
     ///
     std::lock_guard guard(was_cancelled_mutex);
 
-    established = true; 
+    established = true;
     was_cancelled = false;
- 
-    auto timeouts = ConnectionTimeouts::getTCPTimeoutsWithFailover(settings); 
+
+    auto timeouts = ConnectionTimeouts::getTCPTimeoutsWithFailover(settings);
     ClientInfo modified_client_info = context->getClientInfo();
-    modified_client_info.query_kind = ClientInfo::QueryKind::SECONDARY_QUERY; 
+    modified_client_info.query_kind = ClientInfo::QueryKind::SECONDARY_QUERY;
     if (CurrentThread::isInitialized())
     {
         modified_client_info.client_trace_context = CurrentThread::get().thread_trace_context;
     }
- 
+
     {
         std::lock_guard lock(duplicated_part_uuids_mutex);
         if (!duplicated_part_uuids.empty())
@@ -220,32 +220,32 @@ void RemoteQueryExecutor::sendQuery()
     }
 
     connections->sendQuery(timeouts, query, query_id, stage, modified_client_info, true);
- 
-    established = false; 
-    sent_query = true; 
- 
-    if (settings.enable_scalar_subquery_optimization) 
-        sendScalars(); 
-    sendExternalTables(); 
-} 
- 
-Block RemoteQueryExecutor::read() 
-{ 
-    if (!sent_query) 
-    { 
-        sendQuery(); 
- 
+
+    established = false;
+    sent_query = true;
+
+    if (settings.enable_scalar_subquery_optimization)
+        sendScalars();
+    sendExternalTables();
+}
+
+Block RemoteQueryExecutor::read()
+{
+    if (!sent_query)
+    {
+        sendQuery();
+
         if (context->getSettingsRef().skip_unavailable_shards && (0 == connections->size()))
-            return {}; 
-    } 
- 
-    while (true) 
-    { 
-        if (was_cancelled) 
-            return Block(); 
- 
+            return {};
+    }
+
+    while (true)
+    {
+        if (was_cancelled)
+            return Block();
+
         Packet packet = connections->receivePacket();
- 
+
         if (auto block = processPacket(std::move(packet)))
             return *block;
         else if (got_duplicated_part_uuids)
@@ -280,7 +280,7 @@ std::variant<Block, int> RemoteQueryExecutor::read(std::unique_ptr<ReadContext> 
             return Block();
 
         if (read_context->is_read_in_progress.load(std::memory_order_relaxed))
-        { 
+        {
             read_context->setTimer();
             return read_context->epoll.getFileDescriptor();
         }
@@ -297,7 +297,7 @@ std::variant<Block, int> RemoteQueryExecutor::read(std::unique_ptr<ReadContext> 
     return read();
 #endif
 }
- 
+
 
 std::variant<Block, int> RemoteQueryExecutor::restartQueryWithoutDuplicatedUUIDs(std::unique_ptr<ReadContext> * read_context)
 {
@@ -339,12 +339,12 @@ std::optional<Block> RemoteQueryExecutor::processPacket(Packet packet)
             if (packet.block && (packet.block.rows() > 0))
                 return adaptBlockStructure(packet.block, header);
             break;  /// If the block is empty - we will receive other packets before EndOfStream.
- 
+
         case Protocol::Server::Exception:
             got_exception_from_replica = true;
             packet.exception->rethrow();
             break;
- 
+
         case Protocol::Server::EndOfStream:
             if (!connections->hasActiveConnections())
             {
@@ -352,7 +352,7 @@ std::optional<Block> RemoteQueryExecutor::processPacket(Packet packet)
                 return Block();
             }
             break;
- 
+
         case Protocol::Server::Progress:
             /** We use the progress from a remote server.
               * We also include in ProcessList,
@@ -363,21 +363,21 @@ std::optional<Block> RemoteQueryExecutor::processPacket(Packet packet)
             if (progress_callback)
                 progress_callback(packet.progress);
             break;
- 
+
         case Protocol::Server::ProfileInfo:
             /// Use own (client-side) info about read bytes, it is more correct info than server-side one.
             if (profile_info_callback)
                 profile_info_callback(packet.profile_info);
             break;
- 
+
         case Protocol::Server::Totals:
             totals = packet.block;
             break;
- 
+
         case Protocol::Server::Extremes:
             extremes = packet.block;
             break;
- 
+
         case Protocol::Server::Log:
             /// Pass logs from remote server to client
             if (auto log_queue = CurrentThread::getInternalTextLogsQueue())
@@ -389,11 +389,11 @@ std::optional<Block> RemoteQueryExecutor::processPacket(Packet packet)
             throw Exception(ErrorCodes::UNKNOWN_PACKET_FROM_SERVER, "Unknown packet {} from one of the following replicas: {}",
                 toString(packet.type),
                 connections->dumpAddresses());
-    } 
+    }
 
     return {};
-} 
- 
+}
+
 bool RemoteQueryExecutor::setPartUUIDs(const std::vector<UUID> & uuids)
 {
     auto query_context = context->getQueryContext();
@@ -417,82 +417,82 @@ void RemoteQueryExecutor::processReadTaskRequest()
 }
 
 void RemoteQueryExecutor::finish(std::unique_ptr<ReadContext> * read_context)
-{ 
-    /** If one of: 
-      * - nothing started to do; 
-      * - received all packets before EndOfStream; 
-      * - received exception from one replica; 
-      * - received an unknown packet from one replica; 
-      * then you do not need to read anything. 
-      */ 
-    if (!isQueryPending() || hasThrownException()) 
-        return; 
- 
-    /** If you have not read all the data yet, but they are no longer needed. 
-      * This may be due to the fact that the data is sufficient (for example, when using LIMIT). 
-      */ 
- 
-    /// Send the request to abort the execution of the request, if not already sent. 
+{
+    /** If one of:
+      * - nothing started to do;
+      * - received all packets before EndOfStream;
+      * - received exception from one replica;
+      * - received an unknown packet from one replica;
+      * then you do not need to read anything.
+      */
+    if (!isQueryPending() || hasThrownException())
+        return;
+
+    /** If you have not read all the data yet, but they are no longer needed.
+      * This may be due to the fact that the data is sufficient (for example, when using LIMIT).
+      */
+
+    /// Send the request to abort the execution of the request, if not already sent.
     tryCancel("Cancelling query because enough data has been read", read_context);
     /// Try to drain connections asynchronously.
     if (auto conn = ConnectionCollector::enqueueConnectionCleanup(pool, connections))
-    { 
+    {
         /// Drain connections synchronously.
         CurrentMetrics::Increment metric_increment(CurrentMetrics::ActiveSyncDrainedConnections);
         ConnectionCollector::drainConnections(*conn);
         CurrentMetrics::add(CurrentMetrics::SyncDrainedConnections, 1);
-    } 
+    }
     finished = true;
-} 
- 
+}
+
 void RemoteQueryExecutor::cancel(std::unique_ptr<ReadContext> * read_context)
-{ 
-    { 
-        std::lock_guard lock(external_tables_mutex); 
- 
-        /// Stop sending external data. 
-        for (auto & vec : external_tables_data) 
-            for (auto & elem : vec) 
-                elem->is_cancelled = true; 
-    } 
- 
-    if (!isQueryPending() || hasThrownException()) 
-        return; 
- 
+{
+    {
+        std::lock_guard lock(external_tables_mutex);
+
+        /// Stop sending external data.
+        for (auto & vec : external_tables_data)
+            for (auto & elem : vec)
+                elem->is_cancelled = true;
+    }
+
+    if (!isQueryPending() || hasThrownException())
+        return;
+
     tryCancel("Cancelling query", read_context);
-} 
- 
-void RemoteQueryExecutor::sendScalars() 
-{ 
+}
+
+void RemoteQueryExecutor::sendScalars()
+{
     connections->sendScalarsData(scalars);
-} 
- 
-void RemoteQueryExecutor::sendExternalTables() 
-{ 
+}
+
+void RemoteQueryExecutor::sendExternalTables()
+{
     size_t count = connections->size();
- 
-    { 
-        std::lock_guard lock(external_tables_mutex); 
- 
+
+    {
+        std::lock_guard lock(external_tables_mutex);
+
         external_tables_data.clear();
-        external_tables_data.reserve(count); 
- 
-        for (size_t i = 0; i < count; ++i) 
-        { 
-            ExternalTablesData res; 
-            for (const auto & table : external_tables) 
-            { 
-                StoragePtr cur = table.second; 
- 
-                auto data = std::make_unique<ExternalTableData>(); 
-                data->table_name = table.first; 
+        external_tables_data.reserve(count);
+
+        for (size_t i = 0; i < count; ++i)
+        {
+            ExternalTablesData res;
+            for (const auto & table : external_tables)
+            {
+                StoragePtr cur = table.second;
+
+                auto data = std::make_unique<ExternalTableData>();
+                data->table_name = table.first;
                 data->creating_pipe_callback = [cur, context = this->context]()
                 {
                     SelectQueryInfo query_info;
                     auto metadata_snapshot = cur->getInMemoryMetadataPtr();
                     QueryProcessingStage::Enum read_from_table_stage = cur->getQueryProcessingStage(
                         context, QueryProcessingStage::Complete, metadata_snapshot, query_info);
- 
+
                     Pipe pipe = cur->read(
                         metadata_snapshot->getColumns().getNamesOfPhysical(),
                         metadata_snapshot, query_info, context,
@@ -501,28 +501,28 @@ void RemoteQueryExecutor::sendExternalTables()
                     if (pipe.empty())
                         return std::make_unique<Pipe>(
                             std::make_shared<SourceFromSingleChunk>(metadata_snapshot->getSampleBlock(), Chunk()));
- 
+
                     return std::make_unique<Pipe>(std::move(pipe));
                 };
 
                 data->pipe = data->creating_pipe_callback();
-                res.emplace_back(std::move(data)); 
-            } 
-            external_tables_data.push_back(std::move(res)); 
-        } 
-    } 
- 
+                res.emplace_back(std::move(data));
+            }
+            external_tables_data.push_back(std::move(res));
+        }
+    }
+
     connections->sendExternalTablesData(external_tables_data);
-} 
- 
+}
+
 void RemoteQueryExecutor::tryCancel(const char * reason, std::unique_ptr<ReadContext> * read_context)
-{ 
+{
     /// Flag was_cancelled is atomic because it is checked in read().
     std::lock_guard guard(was_cancelled_mutex);
- 
+
     if (was_cancelled)
         return;
- 
+
     was_cancelled = true;
 
     if (read_context && *read_context)
@@ -538,21 +538,21 @@ void RemoteQueryExecutor::tryCancel(const char * reason, std::unique_ptr<ReadCon
         (*read_context)->setTimer();
         (*read_context)->cancel();
     }
- 
+
     connections->sendCancel();
 
-    if (log) 
+    if (log)
         LOG_TRACE(log, "({}) {}", connections->dumpAddresses(), reason);
-} 
- 
-bool RemoteQueryExecutor::isQueryPending() const 
-{ 
-    return sent_query && !finished; 
-} 
- 
-bool RemoteQueryExecutor::hasThrownException() const 
-{ 
-    return got_exception_from_replica || got_unknown_packet_from_replica; 
-} 
- 
-} 
+}
+
+bool RemoteQueryExecutor::isQueryPending() const
+{
+    return sent_query && !finished;
+}
+
+bool RemoteQueryExecutor::hasThrownException() const
+{
+    return got_exception_from_replica || got_unknown_packet_from_replica;
+}
+
+}

@@ -12,7 +12,7 @@
     #include <sys/types.h>
     #include <sys/resource.h>
     #include <sys/param.h>
-#elif defined(_win_) 
+#elif defined(_win_)
     #include <util/system/winint.h>
 #endif
 

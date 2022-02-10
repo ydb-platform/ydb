@@ -1,19 +1,19 @@
 /// This code was based on the code by Fedor Korotkiy (prime@yandex-team.ru) for YT product in Yandex.
 
-#include <common/defines.h> 
+#include <common/defines.h>
 
 #if defined(__linux__) && !defined(THREAD_SANITIZER)
     #define USE_PHDR_CACHE 1
 #endif
 
-/// Thread Sanitizer uses dl_iterate_phdr function on initialization and fails if we provide our own. 
-#ifdef USE_PHDR_CACHE 
- 
-#if defined(__clang__) 
-#   pragma clang diagnostic ignored "-Wreserved-id-macro" 
-#   pragma clang diagnostic ignored "-Wunused-macros" 
-#endif 
- 
+/// Thread Sanitizer uses dl_iterate_phdr function on initialization and fails if we provide our own.
+#ifdef USE_PHDR_CACHE
+
+#if defined(__clang__)
+#   pragma clang diagnostic ignored "-Wreserved-id-macro"
+#   pragma clang diagnostic ignored "-Wunused-macros"
+#endif
+
 #define __msan_unpoison(X, Y) // NOLINT
 #if defined(ch_has_feature)
 #    if ch_has_feature(memory_sanitizer)
@@ -61,7 +61,7 @@ extern "C"
 #endif
 int dl_iterate_phdr(int (*callback) (dl_phdr_info * info, size_t size, void * data), void * data)
 {
-    auto * current_phdr_cache = phdr_cache.load(); 
+    auto * current_phdr_cache = phdr_cache.load();
     if (!current_phdr_cache)
     {
         // Cache is not yet populated, pass through to the original function.

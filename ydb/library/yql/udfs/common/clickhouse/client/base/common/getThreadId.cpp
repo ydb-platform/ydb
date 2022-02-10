@@ -6,7 +6,7 @@
 #elif defined(OS_LINUX)
     #include <unistd.h>
     #include <syscall.h>
-#elif defined(OS_FREEBSD) 
+#elif defined(OS_FREEBSD)
     #include <pthread_np.h>
 #else
     #include <pthread.h>
@@ -23,7 +23,7 @@ uint64_t getThreadId()
         current_tid = gettid();
 #elif defined(OS_LINUX)
         current_tid = syscall(SYS_gettid); /// This call is always successful. - man gettid
-#elif defined(OS_FREEBSD) 
+#elif defined(OS_FREEBSD)
         current_tid = pthread_getthreadid_np();
 #elif defined(OS_SUNOS)
         // On Solaris-derived systems, this returns the ID of the LWP, analogous

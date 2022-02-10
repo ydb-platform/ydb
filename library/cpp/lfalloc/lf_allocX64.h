@@ -1679,7 +1679,7 @@ static void DebugTraceMMgr(const char* pszFormat, ...) // __cdecl
 #ifdef _win_
     OutputDebugStringA(buff);
 #else
-    fputs(buff, stderr); 
+    fputs(buff, stderr);
 #endif
 }
 

@@ -15,7 +15,7 @@ exit /b %ERRORLEVEL%
 :find_ya
 call :dbg Searching for ya near ya.bat...
 set YA_BAT_REAL=%~dp0ya
-if exist "%YA_BAT_REAL%" exit /b 0 
+if exist "%YA_BAT_REAL%" exit /b 0
 call :err Ya not found
 exit /b 1
 
